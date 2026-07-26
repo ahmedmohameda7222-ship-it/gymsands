@@ -26,6 +26,7 @@ const metricTargetModes = new Set<WorkoutPrescriptionMetricTargetMode>([
 ]);
 const sides = new Set<WorkoutPrescriptionSide>(["none", "bilateral", "left", "right"]);
 const sideModes = new Set<WorkoutPrescriptionSideMode>(["none", "bilateral", "left", "right", "alternating"]);
+const executionStates = new Set(["planned", "completed", "adjusted", "skipped"] as const);
 
 export type WorkoutPrescriptionSnapshotRow = {
   id: unknown;
@@ -43,6 +44,7 @@ export type WorkoutPrescriptionItemRow = {
   activity_name_snapshot: unknown;
   planned_prescription: unknown;
   planned_sets: unknown;
+  state: unknown;
 };
 
 export type WorkoutPrescriptionSetRow = {
@@ -208,6 +210,7 @@ export function normalizeWorkoutSessionPrescriptionRows(input: {
       activityName: stringValue(row.activity_name_snapshot, "item.activity_name_snapshot")!,
       rawCompatibilityPrescription,
       plannedSets,
+      executionState: enumValue(row.state, executionStates, "item.state"),
       normalizationStatus: "unavailable",
       prescriptionSets: []
     };
@@ -335,7 +338,7 @@ export function normalizeWorkoutSessionPrescriptionRows(input: {
 }
 
 const snapshotSelection = "id,workout_session_id,user_id";
-const itemSelection = "id,snapshot_id,user_id,item_order,source_plan_exercise_id,source_plan_activity_id,activity_name_snapshot,planned_prescription,planned_sets";
+const itemSelection = "id,snapshot_id,user_id,item_order,source_plan_exercise_id,source_plan_activity_id,activity_name_snapshot,planned_prescription,planned_sets,state";
 const setSelection = "id,snapshot_item_id,snapshot_id,workout_session_id,user_id,set_order,performed_order_hint,set_type,target_mode,side_mode,rest_seconds,tempo_target,schema_version,created_at";
 const targetSelection = "id,prescription_set_id,snapshot_item_id,workout_session_id,user_id,metric_key,metric_version,side,target_value,minimum_value,maximum_value,target_mode,created_at";
 const definitionSelection = "metric_key,metric_version,value_kind,minimum_value,maximum_value,supports_side";

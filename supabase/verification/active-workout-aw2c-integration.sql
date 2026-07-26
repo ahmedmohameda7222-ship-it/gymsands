@@ -58,6 +58,10 @@ set constraints all immediate;
 select pg_temp.aw2c_assert(
   (select count(*)=1 from public.workout_session_timeline_events where workout_session_id=:'session_id'::uuid and event_type='session_started'),
   'AW-2C start event is missing.');
+select active_snapshot_item_id as aw2c_active_snapshot_item_id
+from public.workout_session_execution_states
+where workout_session_id = :'session_id'::uuid
+\gset
 select public.start_or_resume_workout_session_atomic(
   :'owner_id'::uuid,'c2c00000-0000-4000-8000-000000000011'::uuid,'c2c00000-0000-4000-8000-000000000014'::uuid
 );
@@ -95,7 +99,18 @@ select public.apply_workout_session_execution_command_atomic(
   :'owner_id'::uuid,:'session_id'::uuid,'c2c00000-0000-4000-8000-000000000107'::uuid,4,'clear_rest','{"view_state":"set_entry","controller_device_id":null}'::jsonb
 );
 select public.apply_workout_session_execution_command_atomic(
-  :'owner_id'::uuid,:'session_id'::uuid,'c2c00000-0000-4000-8000-000000000108'::uuid,5,'move_cursor','{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":2,"view_state":"set_entry","controller_device_id":null}'::jsonb
+  :'owner_id'::uuid,
+  :'session_id'::uuid,
+  'c2c00000-0000-4000-8000-000000000108'::uuid,
+  5,
+  'move_cursor',
+  jsonb_build_object(
+    'active_snapshot_item_id', :'aw2c_active_snapshot_item_id',
+    'active_item_order', 1,
+    'active_set_number', 2,
+    'view_state', 'set_entry',
+    'controller_device_id', null
+  )
 );
 select pg_temp.aw2c_assert(
   (select count(*)=1 from public.workout_session_timeline_events where workout_session_id=:'session_id'::uuid and event_type='session_resumed')

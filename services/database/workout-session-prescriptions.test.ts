@@ -10,7 +10,8 @@ const snapshot = { id: "snapshot-a", workout_session_id: "session-a", user_id: "
 const item = {
   id: "item-a", snapshot_id: "snapshot-a", user_id: "user-a", item_order: 1,
   source_plan_exercise_id: "exercise-a", source_plan_activity_id: "activity-a",
-  activity_name_snapshot: "Frozen Press", planned_prescription: { sets: 1, reps: "8-12" }, planned_sets: 1
+  activity_name_snapshot: "Frozen Press", planned_prescription: { sets: 1, reps: "8-12" }, planned_sets: 1,
+  state: "planned"
 };
 const definitions = [{
   metric_key: "repetitions", metric_version: 1, value_kind: "integer",

@@ -41,13 +41,8 @@ import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { activeWorkoutCacheFromExecution, clearActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
 import { userSafeError } from "@/lib/error-formatting";
 import {
-  completeWorkoutSession,
   getOrStartWorkoutDaySession,
   getWorkoutHistoryDetailed,
-  getWorkoutSessionLogs,
-  replaceWorkoutSessionExercise,
-  saveWorkoutSetLogs,
-  updateWorkoutSessionDuration
 } from "@/services/database/workout-sessions";
 import { createExerciseAlternative, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
 import type { ExerciseLog, FrozenWorkoutPrescriptionSet, UserWorkoutPlanExercise, Workout, WorkoutPerformanceMetricSource, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionPrescriptionItem, WorkoutSessionSummary, WorkoutSetSideMode, WorkoutSetTempoAdherence, WorkoutSetType } from "@/types";
@@ -61,27 +56,20 @@ import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dial
 import { SessionMuscleLoadPanel } from "@/components/workouts/session-muscle-load-panel";
 import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
 import {
-  createWorkoutSessionExecutionWriteQueue,
   executionCursorToIndexes,
-  executionDurationMinutes,
   executionElapsedSeconds,
   executionRestSecondsLeft,
-  executionStartedAtMs,
-  persistCanonicalSetThenExecution,
-  planWorkoutSessionAfterSetCompletion,
-  WorkoutSessionExecutionSyncError
+  executionStartedAtMs
 } from "@/lib/workouts/workout-session-execution";
+import type { WorkoutSessionExecutionCursorRow } from "@/services/database/workout-session-execution";
+import { activeSessionPersistenceAdapter } from "@/services/database/active-session-persistence-adapter";
 import {
-  clearWorkoutSessionRestTimer,
-  getWorkoutSessionExecutionCursorItems,
-  importLegacyWorkoutExecutionCache,
-  persistWorkoutSessionAfterSetCompletion,
-  persistWorkoutSessionCursor,
-  persistWorkoutSessionRestTimer,
-  persistWorkoutSessionTimerReset,
-  requireWorkoutSessionExecutionState,
-  type WorkoutSessionExecutionCursorRow
-} from "@/services/database/workout-session-execution";
+  getActiveSessionStore,
+  type ActiveSessionStore
+} from "@/lib/workouts/active-session-store/store";
+import { activeSessionClock } from "@/lib/workouts/active-session-store/clock";
+import { createSessionCommandId } from "@/lib/workouts/session-engine/commands";
+import { planSessionAfterSetCompletion } from "@/lib/workouts/session-engine/reducer";
 import { frozenLogCompatibility, frozenRepetitionsEntryDefault, frozenRepetitionsProjection } from "@/services/database/workout-session-prescriptions";
 import {
   canUpdateWorkoutSetNote,
@@ -269,6 +257,7 @@ function mockPrescriptionItemsFromPlan(
       ...(exercise.rest_seconds !== null ? { rest_seconds: exercise.rest_seconds } : {})
     },
     plannedSets: exercise.sets,
+    executionState: "planned",
     normalizationStatus: "partial",
     prescriptionSets: Array.from({ length: Math.max(1, exercise.sets ?? 1) }, (_, setIndex) => ({
       id: `mock-prescription-set-${exercise.id}-${setIndex + 1}`,
@@ -672,7 +661,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
   const [executionCursorItems, setExecutionCursorItems] = useState<WorkoutSessionExecutionCursorRow[]>([]);
   const executionHydratedRef = useRef(false);
-  const executionWriteQueueRef = useRef(createWorkoutSessionExecutionWriteQueue());
+  const activeSessionStoreRef = useRef<ActiveSessionStore | null>(null);
+  const restExpiryCommandRef = useRef<string | null>(null);
   const controllerDeviceIdRef = useRef<string | null>(null);
   const setDetailsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const exerciseStatesRef = useRef(exerciseStates);
@@ -680,7 +670,6 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const autosaveCoordinatorRef = useRef<WorkoutSetAutosaveCoordinator | null>(null);
 
   const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
-    executionWriteQueueRef.current.replace(next);
     setExecutionState(next);
     const now = Date.now();
     const derivedStartedAt = executionStartedAtMs(next, now);
@@ -712,20 +701,28 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     }
   }, [day.day_name, day.id, restTimerKey, user, workoutTimerKey]);
 
-  const queueExecutionWrite = useCallback((
-    write: (currentServerState: WorkoutSessionExecutionState) => Promise<WorkoutSessionExecutionState>,
+  const dispatchExecution = useCallback((
+    commandType: Parameters<ActiveSessionStore["dispatch"]>[0]["commandType"],
+    payload: Parameters<ActiveSessionStore["dispatch"]>[0]["payload"],
     options: {
       rollback?: (currentServerState: WorkoutSessionExecutionState | null) => void;
       reportFailure?: boolean;
     } = {}
   ) => {
-    let attemptedState: WorkoutSessionExecutionState | null = null;
-    const operation = executionWriteQueueRef.current.enqueue((currentServerState) => {
-      attemptedState = currentServerState;
-      return write(currentServerState);
-    });
+    const store = activeSessionStoreRef.current;
+    const attemptedState = store?.getSnapshot().executionState ?? null;
+    if (!store || !user?.id || !session?.id) {
+      return Promise.reject(new Error("The workout execution store is unavailable."));
+    }
+    const operation = store.dispatch({
+      userId: user.id,
+      workoutSessionId: session.id,
+      commandId: createSessionCommandId(),
+      commandType,
+      payload
+    } as Parameters<ActiveSessionStore["dispatch"]>[0]);
     void operation.then(
-      (next) => { mirrorExecutionState(next); },
+      (response) => { mirrorExecutionState(response.state); },
       (error) => {
         options.rollback?.(attemptedState);
         if (options.reportFailure === false) return;
@@ -734,8 +731,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         toast({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
       }
     );
-    return operation;
-  }, [mirrorExecutionState, toast, tr]);
+    return operation.then((response) => response.state);
+  }, [mirrorExecutionState, session, toast, tr, user]);
 
   useEffect(() => {
     let active = true;
@@ -757,55 +754,64 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         const storedStartedAt = readStoredTimestamp(workoutTimerKey);
         const storedRestEndsAt = readStoredTimestamp(restTimerKey);
         const exerciseIds = day.exercises.map((exercise) => exercise.id);
-        const [persistedState, cursorItems, existingLogs, workoutHistory, targets, savedAlternatives] = await Promise.all([
-          requireWorkoutSessionExecutionState(user.id, nextSession.id),
-          getWorkoutSessionExecutionCursorItems(user.id, nextSession.id),
-          getWorkoutSessionLogs(nextSession.id),
+        const store = getActiveSessionStore({
+          userId: user.id,
+          workoutSessionId: nextSession.id,
+          adapter: activeSessionPersistenceAdapter,
+          clearCompatibilityCache: () => clearActiveWorkoutState(user.id)
+        });
+        activeSessionStoreRef.current = store;
+        const hydration = store.hydrate({
+          legacyCache: {
+            userId: user.id,
+            sessionId: nextSession.id,
+            startedAtMs: storedStartedAt,
+            restEndsAtMs: storedRestEndsAt,
+            restDurationSeconds: 75,
+            controllerDeviceId: controllerDeviceIdRef.current
+          }
+        });
+        const [, workoutHistory, targets, savedAlternatives] = await Promise.all([
+          hydration,
           getWorkoutHistoryDetailed(user.id, 100),
           getProgressionTargets(user.id, exerciseIds).catch(() => []),
           getExerciseAlternatives(user.id).catch(() => [])
         ]);
-
-        let authoritativeState = persistedState;
-        executionWriteQueueRef.current.replace(authoritativeState);
-        if (persistedState.bootstrap_source === "legacy_backfill" && persistedState.revision === 0) {
-          try {
-            const imported = await importLegacyWorkoutExecutionCache(
-              user.id,
-              nextSession.id,
-              persistedState,
-              storedStartedAt,
-              controllerDeviceIdRef.current,
-              new Date(),
-              { endsAtMs: storedRestEndsAt, durationSeconds: cursorItems[0]?.prescriptionSets[0]?.restSeconds ?? 75 }
-            );
-            authoritativeState = imported.state;
-            executionWriteQueueRef.current.replace(authoritativeState);
-          } catch (error) {
-            console.warn("Plaivra could not import the optional legacy workout timer cache.", error);
-          }
-        }
+        const hydrated = store.getSnapshot();
+        let authoritativeState = hydrated.executionState;
+        const cursorItems = [...hydrated.prescription];
+        const existingLogs = [...hydrated.performedLogs];
+        if (!authoritativeState) throw new Error("The active workout has no execution state.");
 
         if (controllerDeviceIdRef.current && authoritativeState.controller_device_id !== controllerDeviceIdRef.current) {
-          authoritativeState = await queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(
-            user.id,
-            nextSession.id,
-            {
-              snapshotItemId: currentServerState.active_snapshot_item_id,
-              itemOrder: currentServerState.active_item_order,
-              setNumber: currentServerState.active_set_number,
-              controllerDeviceId: controllerDeviceIdRef.current
+          const response = await store.dispatch({
+            userId: user.id,
+            workoutSessionId: nextSession.id,
+            commandId: createSessionCommandId(),
+            commandType: "move_cursor",
+            payload: {
+              active_snapshot_item_id: authoritativeState.active_snapshot_item_id,
+              active_item_order: authoritativeState.active_item_order,
+              active_set_number: authoritativeState.active_set_number,
+              controller_device_id: controllerDeviceIdRef.current
             }
-          ));
+          });
+          authoritativeState = response.state;
         }
 
         if (authoritativeState.view_state === "rest" && executionRestSecondsLeft(authoritativeState) <= 0) {
-          authoritativeState = await queueExecutionWrite(() => clearWorkoutSessionRestTimer(
-            user.id,
-            nextSession.id,
-            "set_entry",
-            controllerDeviceIdRef.current
-          ));
+          const response = await store.dispatch({
+            userId: user.id,
+            workoutSessionId: nextSession.id,
+            commandId: createSessionCommandId(),
+            commandType: "clear_rest",
+            payload: {
+              view_state: "set_entry",
+              completion_reason: "natural_expiration",
+              controller_device_id: controllerDeviceIdRef.current
+            }
+          });
+          authoritativeState = response.state;
         }
 
         if (!active) return;
@@ -841,48 +847,34 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       });
 
     return () => { active = false; };
-  }, [day, mirrorExecutionState, queueExecutionWrite, restTimerKey, toast, tr, user?.id, workoutTimerKey]);
+  }, [day, mirrorExecutionState, restTimerKey, toast, tr, user?.id, workoutTimerKey]);
 
   useEffect(() => {
-    const tick = () => setElapsedSeconds(
-      executionState
-        ? executionElapsedSeconds(executionState)
-        : Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
-    );
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
-  }, [executionState, startedAtMs]);
-
-  useEffect(() => {
-    if (!session) return;
-    const interval = window.setInterval(() => {
-      const authoritativeState = executionWriteQueueRef.current.current();
-      if (!authoritativeState) return;
-      updateWorkoutSessionDuration(
-        session.id,
-        executionDurationMinutes(authoritativeState)
-      ).catch(() => undefined);
-    }, 20000);
-    return () => window.clearInterval(interval);
-  }, [session]);
-
-  useEffect(() => {
-    if (!timerEndsAtMs) return;
     const tick = () => {
-      const nextLeft = Math.max(0, Math.ceil((timerEndsAtMs - Date.now()) / 1000));
+      const now = activeSessionClock.getSnapshot();
+      setElapsedSeconds(
+        executionState
+          ? executionElapsedSeconds(executionState, now)
+          : Math.max(0, Math.floor((now - startedAtMs) / 1000))
+      );
+      const nextLeft = executionState
+        ? executionRestSecondsLeft(executionState, now)
+        : 0;
       setTimerLeft(nextLeft);
-      if (nextLeft <= 0) {
+      setIsTimerRunning(Boolean(executionState?.view_state === "rest" && nextLeft > 0));
+      if (executionState?.view_state === "rest" && nextLeft <= 0) {
+        const expiryKey = `${executionState.revision}:${executionState.rest_ends_at}`;
+        if (restExpiryCommandRef.current === expiryKey) return;
+        restExpiryCommandRef.current = expiryKey;
         setTimerEndsAtMs(null);
         setIsTimerRunning(false);
         clearStoredValue(restTimerKey);
         if (user?.id && session?.id && executionHydratedRef.current) {
-          void queueExecutionWrite(() => clearWorkoutSessionRestTimer(
-            user.id,
-            session.id,
-            "set_entry",
-            controllerDeviceIdRef.current
-          ));
+          void dispatchExecution("clear_rest", {
+            view_state: "set_entry",
+            completion_reason: "natural_expiration",
+            controller_device_id: controllerDeviceIdRef.current
+          });
         }
         toast({ title: tr("notifications.restFinished"), description: tr("notifications.nextSetReady") });
         if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
@@ -890,10 +882,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }
       }
     };
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
-  }, [queueExecutionWrite, restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
+    return activeSessionClock.subscribe(tick);
+  }, [dispatchExecution, executionState, restTimerKey, session?.id, startedAtMs, toast, tr, user?.id]);
 
   useEffect(() => {
     if (!executionHydratedRef.current || !user?.id || !session?.id || !executionState) return;
@@ -909,13 +899,14 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       && executionState.controller_device_id === controllerDeviceIdRef.current
     ) return;
 
-    void queueExecutionWrite(
-      () => persistWorkoutSessionCursor(user.id, session.id, {
-        snapshotItemId: cursorItem?.id ?? null,
-        itemOrder,
-        setNumber,
-        controllerDeviceId: controllerDeviceIdRef.current
-      }),
+    void dispatchExecution(
+      "move_cursor",
+      {
+        active_snapshot_item_id: cursorItem?.id ?? null,
+        active_item_order: itemOrder,
+        active_set_number: setNumber,
+        controller_device_id: controllerDeviceIdRef.current
+      },
       {
         rollback: (currentServerState) => {
           if (!currentServerState) return;
@@ -925,7 +916,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }
       }
     );
-  }, [activeExerciseIndex, activeSetIndex, executionCursorItems, executionState, queueExecutionWrite, session?.id, user?.id]);
+  }, [activeExerciseIndex, activeSetIndex, dispatchExecution, executionCursorItems, executionState, session?.id, user?.id]);
 
   const activeExercise = exerciseStates[activeExerciseIndex];
   const activeSet = activeExercise?.sets[activeSetIndex];
@@ -1082,8 +1073,11 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   async function persistProgress(states = exerciseStates) {
     if (!session) return;
     const rows = buildLogRows(states, { pendingOnly: true });
-    if (rows.length) await saveWorkoutSetLogs(session.id, rows);
-    await updateWorkoutSessionDuration(session.id, Math.max(1, Math.ceil(elapsedSeconds / 60)));
+    if (rows.length) {
+      const store = activeSessionStoreRef.current;
+      if (!store) throw new Error("The workout execution store is unavailable.");
+      await store.saveCanonicalSets(rows);
+    }
     setExerciseStates((current) => {
       const next = acknowledgeSetWrites(current, states);
       exerciseStatesRef.current = next;
@@ -1099,11 +1093,9 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         if (!session) return;
         const rows = buildLogRows(states, { pendingOnly: true, validOnly: true });
         if (!rows.length) return;
-        await saveWorkoutSetLogs(session.id, rows);
-        await updateWorkoutSessionDuration(
-          session.id,
-          Math.max(1, Math.ceil(elapsedSeconds / 60))
-        );
+        const store = activeSessionStoreRef.current;
+        if (!store) throw new Error("The workout execution store is unavailable.");
+        await store.saveCanonicalSets(rows);
       },
       acknowledgeSnapshot: (savedStates) => {
         setExerciseStates((current) => {
@@ -1156,8 +1148,12 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     setIsTimerRunning(true);
     storeTimestamp(restTimerKey, deadline);
     if (user?.id && session?.id && executionHydratedRef.current) {
-      void queueExecutionWrite(
-        () => persistWorkoutSessionRestTimer(user.id, session.id, safeSeconds, controllerDeviceIdRef.current),
+      void dispatchExecution(
+        "start_rest",
+        {
+          duration_seconds: safeSeconds,
+          controller_device_id: controllerDeviceIdRef.current
+        },
         { rollback: () => restoreRestTimer(previous) }
       );
     }
@@ -1170,8 +1166,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     setIsTimerRunning(false);
     clearStoredValue(restTimerKey);
     if (user?.id && session?.id && executionHydratedRef.current) {
-      void queueExecutionWrite(
-        () => clearWorkoutSessionRestTimer(user.id, session.id, "set_entry", controllerDeviceIdRef.current),
+      void dispatchExecution(
+        "clear_rest",
+        {
+          view_state: "set_entry",
+          completion_reason: "user_skipped",
+          controller_device_id: controllerDeviceIdRef.current
+        },
         { rollback: () => restoreRestTimer(previous) }
       );
     }
@@ -1188,10 +1189,12 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   async function reconcileSavedSetAfterExecutionFailure(savedStates: ExerciseState[]) {
     if (!user?.id || !session?.id) return;
-    const [authoritativeState, authoritativeLogs] = await Promise.all([
-      requireWorkoutSessionExecutionState(user.id, session.id),
-      getWorkoutSessionLogs(session.id)
-    ]);
+    const store = activeSessionStoreRef.current;
+    if (!store) throw new Error("The workout execution store is unavailable.");
+    await store.hydrate({ force: true });
+    const authoritativeState = store.getSnapshot().executionState;
+    const authoritativeLogs = [...store.getSnapshot().performedLogs];
+    if (!authoritativeState) throw new Error("The workout execution state is unavailable.");
     const reconciledStates = hydrateStates(savedStates, authoritativeLogs);
     const cursor = executionCursorToIndexes(authoritativeState, executionCursorItems, day.exercises);
     const exerciseIndex = Math.min(Math.max(0, cursor.exerciseIndex), Math.max(0, reconciledStates.length - 1));
@@ -1227,47 +1230,61 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     const previousTimer = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     const completedAt = new Date();
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: completedAt.toISOString() });
-    const transition = planWorkoutSessionAfterSetCompletion({
-      exerciseIndex,
-      setIndex,
-      exerciseSetCounts: nextStates.map((item) => item.sets.length),
-      orderedSnapshotItems: executionCursorItems,
-      dayExercises: nextStates.map((item) => item.exercise),
-      restDurationSeconds: targetSet.plannedRestSeconds ?? timerSeconds,
-      controllerDeviceId: controllerDeviceIdRef.current,
-      now: completedAt
-    });
+    const store = activeSessionStoreRef.current;
+    if (!store) {
+      toast({
+        title: tr("completion.saveFailedTitle"),
+        description: tr("offline.keepOpenRetry")
+      });
+      return;
+    }
+    let transition;
+    try {
+      const canonical = store.getSnapshot();
+      const currentPrescriptionItem = canonical.prescription.find(
+        (item) => item.id === executionCursorItems[exerciseIndex]?.id
+      ) ?? canonical.prescription.find(
+        (item) => item.itemOrder === exerciseIndex + 1
+      );
+      transition = planSessionAfterSetCompletion({
+        userId: user.id,
+        workoutSessionId: session.id,
+        currentSnapshotItemId: currentPrescriptionItem?.id ?? "",
+        currentSetNumber: setIndex + 1,
+        prescription: canonical.prescription,
+        performedLogs: canonical.performedLogs,
+        restDurationSeconds: targetSet.plannedRestSeconds ?? timerSeconds,
+        controllerDeviceId: controllerDeviceIdRef.current
+      });
+    } catch (error) {
+      toast({
+        title: tr("completion.saveFailedTitle"),
+        description: userSafeError(error, tr("offline.keepOpenRetry"))
+      });
+      return;
+    }
 
     setIsSaving(true);
     setExerciseStates(nextStates);
-    let canonicalSetSaved = false;
-
     try {
-      await persistCanonicalSetThenExecution({
-        saveCanonicalSet: async () => {
-          if (!session?.id) throw new Error("The workout session is unavailable.");
-          await saveWorkoutSetLogs(session.id, buildLogRows(nextStates, { pendingOnly: true }));
-          canonicalSetSaved = true;
-        },
-        persistExecutionState: async () => {
-          if (!user?.id || !session?.id || !executionHydratedRef.current) {
-            throw new Error("The workout execution state is unavailable.");
+      const response = await store.completeCanonicalSet({
+        logs: buildLogRows(nextStates, { pendingOnly: true }),
+        executionIntent: {
+          userId: user.id,
+          workoutSessionId: session.id,
+          commandId: createSessionCommandId(),
+          commandType: "complete_set_transition",
+          payload: {
+            active_snapshot_item_id: transition.patch.active_snapshot_item_id,
+            active_item_order: transition.patch.active_item_order,
+            active_set_number: transition.patch.active_set_number,
+            view_state: transition.patch.view_state,
+            rest_duration_seconds: transition.patch.rest_duration_seconds,
+            controller_device_id: transition.patch.controller_device_id
           }
-          return queueExecutionWrite(
-            () => persistWorkoutSessionAfterSetCompletion(user.id, session.id, {
-              activeSnapshotItemId: transition.patch.active_snapshot_item_id,
-              activeItemOrder: transition.patch.active_item_order,
-              activeSetNumber: transition.patch.active_set_number,
-              viewState: transition.patch.view_state,
-              restStartedAt: transition.patch.rest_started_at,
-              restDurationSeconds: transition.patch.rest_duration_seconds,
-              restEndsAt: transition.patch.rest_ends_at,
-              controllerDeviceId: transition.patch.controller_device_id
-            }),
-            { reportFailure: false }
-          );
         }
       });
+      mirrorExecutionState(response.state);
 
       setExerciseStates((current) => acknowledgeSetWrites(current, nextStates));
       setActiveExerciseIndex(transition.nextExerciseIndex);
@@ -1280,12 +1297,6 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       }
       if (transition.nextExerciseIndex !== exerciseIndex && transition.patch.view_state !== "rest") {
         setTimerSeconds(nextStates[transition.nextExerciseIndex]?.sets[transition.nextSetIndex]?.plannedRestSeconds ?? 75);
-      }
-      if (session?.id) {
-        const authoritativeState = executionWriteQueueRef.current.current();
-        if (authoritativeState) {
-          void updateWorkoutSessionDuration(session.id, executionDurationMinutes(authoritativeState)).catch(() => undefined);
-        }
       }
       setMuscleLoadRevision((current) => current + 1);
       setSetFeedbackVariant("info");
@@ -1301,19 +1312,15 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }
       }
     } catch (error) {
-      if (error instanceof WorkoutSessionExecutionSyncError) {
-        setExerciseStates((current) => canonicalSetSaved
-          ? acknowledgeSetWrites(current, nextStates)
-          : current);
+      if (
+        error instanceof Error
+        && "code" in error
+        && error.code === "canonical_set_saved_execution_sync_failed"
+      ) {
+        setExerciseStates((current) => acknowledgeSetWrites(current, nextStates));
         setSetFeedbackVariant("error");
         setSetFeedback(`${tr("set.saved")} ${tr("offline.keepOpenRetry")}`);
-        toast({ title: tr("set.saved"), description: userSafeError(error.cause, tr("offline.keepOpenRetry")) });
-        if (session?.id) {
-          const authoritativeState = executionWriteQueueRef.current.current();
-          if (authoritativeState) {
-            void updateWorkoutSessionDuration(session.id, executionDurationMinutes(authoritativeState)).catch(() => undefined);
-          }
-        }
+        toast({ title: tr("set.saved"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
         try {
           await reconcileSavedSetAfterExecutionFailure(nextStates);
         } catch (reconcileError) {
@@ -1370,12 +1377,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     setFinishOpen(true);
     if (!user?.id) return;
     const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
-    void queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(user.id, session.id, {
-      ...cursor,
-      viewState: "session_review",
-      controllerDeviceId: controllerDeviceIdRef.current,
-      currentState: currentServerState
-    }));
+    void dispatchExecution("move_cursor", {
+      active_snapshot_item_id: cursor.snapshotItemId,
+      active_item_order: cursor.itemOrder,
+      active_set_number: cursor.setNumber,
+      view_state: "session_review",
+      controller_device_id: controllerDeviceIdRef.current
+    });
   }
 
   function handleSessionReviewOpenChange(open: boolean) {
@@ -1386,12 +1394,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     setFinishOpen(false);
     if (!user?.id || !session?.id || !executionHydratedRef.current) return;
     const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
-    void queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(user.id, session.id, {
-      ...cursor,
-      viewState: isFinished ? "exercise_complete" : "set_entry",
-      controllerDeviceId: controllerDeviceIdRef.current,
-      currentState: currentServerState
-    }));
+    void dispatchExecution("move_cursor", {
+      active_snapshot_item_id: cursor.snapshotItemId,
+      active_item_order: cursor.itemOrder,
+      active_set_number: cursor.setNumber,
+      view_state: isFinished ? "exercise_complete" : "set_entry",
+      controller_device_id: controllerDeviceIdRef.current
+    });
   }
 
   async function completeSession() {
@@ -1408,13 +1417,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     try {
       setIsSaving(true);
       const summary = buildSummary(exerciseStates, history, durationMinutes, sessionNotes, tr, formatters);
-      await completeWorkoutSession(
-        session.id,
-        sessionNotes,
+      const store = activeSessionStoreRef.current;
+      if (!store) throw new Error("The workout execution store is unavailable.");
+      await store.completeSession({
+        notes: sessionNotes,
         durationMinutes,
-        buildLogRows(exerciseStates)
-      );
-      if (user?.id) clearActiveWorkoutState(user.id);
+        finalLogs: buildLogRows(exerciseStates)
+      });
       clearStoredValue(workoutTimerKey);
       clearStoredValue(restTimerKey);
       setFinishOpen(false);
@@ -1436,8 +1445,9 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     setElapsedSeconds(0);
     storeTimestamp(workoutTimerKey, nextStartedAt);
     if (user?.id && session?.id && executionHydratedRef.current) {
-      void queueExecutionWrite(
-        () => persistWorkoutSessionTimerReset(user.id, session.id, controllerDeviceIdRef.current),
+      void dispatchExecution(
+        "reset_timer",
+        { controller_device_id: controllerDeviceIdRef.current },
         {
           rollback: () => {
             setStartedAtMs(previousStartedAt);
@@ -1447,15 +1457,19 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }
       );
     }
-    if (session) updateWorkoutSessionDuration(session.id, 1).catch(() => undefined);
   }
 
   async function applyStableReplacement(replacement: Workout) {
     if (!user?.id || !session || !activeExercise) return;
+    const store = activeSessionStoreRef.current;
+    if (!store) return;
     const originalName = activeExercise.exercise.exercise_name;
     setIsSavingAlternative(true);
     try {
-      await replaceWorkoutSessionExercise(user.id, session.id, activeExercise.exercise.id, replacement);
+      await store.replaceExercise({
+        sourcePlanExerciseId: activeExercise.exercise.id,
+        replacement
+      });
       setMuscleLoadRevision((current) => current + 1);
       setExerciseStates((current) => current.map((item, index) => index === activeExerciseIndex
         ? { ...item, exercise: { ...item.exercise, exercise_name: replacement.name } }

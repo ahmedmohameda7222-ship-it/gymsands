@@ -91,6 +91,64 @@ function workoutSessionFixture({ planDayId = null, workoutId = null, workoutName
 async function openScenario({ viewport, scenario, language = "en", route, step = null, theme = "light", catalogScenario = "success", zoom = 1, openPicker = false, openSetDetails = false, keyboardCheck = false, mobileKeyboard = false, variant = "default" }) {
   const renderedViewport = zoom === 1 ? viewport : { ...viewport, width: Math.max(160, Math.floor(viewport.width / zoom)), height: Math.max(284, Math.floor(viewport.height / zoom)) };
   const themeId = theme === "dark" ? "elite-noir" : "olive";
+  const directSession = route.startsWith("/workouts/session/")
+    && !route.startsWith("/workouts/session/day/");
+  const sessionRoot = directSession
+    ? workoutSessionFixture({
+        workoutId: catalogActivityId,
+        workoutName: catalogActivities[0].name
+      })
+    : workoutSessionFixture({ planDayId: activeDayId });
+  const frozenActivities = directSession
+    ? [{
+        sourceId: catalogActivityId,
+        sourceKind: "activity",
+        name: catalogActivities[0].name,
+        sets: 3,
+        reps: "8-10",
+        restSeconds: 90
+      }]
+    : [
+        { sourceId: `${activeDayId.slice(0, -1)}1`, sourceKind: "exercise", name: "Back Squat", sets: 4, reps: "6-8", restSeconds: 120 },
+        { sourceId: `${activeDayId.slice(0, -1)}2`, sourceKind: "exercise", name: "Bench Press", sets: 3, reps: "8-12", restSeconds: 75 },
+        { sourceId: `${activeDayId.slice(0, -1)}3`, sourceKind: "exercise", name: "Row", sets: 3, reps: "8-12", restSeconds: 75 },
+        { sourceId: `${activeDayId.slice(0, -1)}4`, sourceKind: "exercise", name: "Plank", sets: 3, reps: "8-12", restSeconds: 75 }
+      ];
+  const prescriptionSnapshotId = "21000000-0000-4000-8000-000000000001";
+  const prescriptionItems = frozenActivities.map((activity, index) => ({
+    id: `22000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    snapshot_id: prescriptionSnapshotId,
+    user_id: trainMockContract.userId,
+    item_order: index + 1,
+    source_plan_exercise_id: activity.sourceKind === "exercise" ? activity.sourceId : null,
+    source_plan_activity_id: activity.sourceKind === "activity" ? activity.sourceId : null,
+    activity_name_snapshot: activity.name,
+    planned_prescription: {
+      sets: activity.sets,
+      reps: activity.reps,
+      rest_seconds: activity.restSeconds
+    },
+    planned_sets: activity.sets,
+    state: "planned"
+  }));
+  const prescriptionSets = prescriptionItems.flatMap((item, itemIndex) =>
+    Array.from({ length: frozenActivities[itemIndex].sets }, (_, setIndex) => ({
+      id: `23000000-0000-4000-${String(itemIndex + 1).padStart(4, "8")}-${String(setIndex + 1).padStart(12, "0")}`,
+      snapshot_item_id: item.id,
+      snapshot_id: prescriptionSnapshotId,
+      workout_session_id: trainMockContract.activeSessionId,
+      user_id: trainMockContract.userId,
+      set_order: setIndex + 1,
+      performed_order_hint: null,
+      set_type: "other",
+      target_mode: "custom",
+      side_mode: "none",
+      rest_seconds: frozenActivities[itemIndex].restSeconds,
+      tempo_target: null,
+      schema_version: 1,
+      created_at: "2026-07-22T08:00:00.000Z"
+    }))
+  );
   const context = await browser.newContext({ viewport: renderedViewport, reducedMotion: "reduce", colorScheme: theme });
   const setWritePayloads = [];
   await context.addCookies([{ name: "plaivra.language.v1", value: language, url: baseUrl, sameSite: "Lax" }]);
@@ -153,12 +211,59 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     }
     if (method === "GET" && requestUrl.pathname.includes("/rest/v1/workout_sessions")) {
       const wantsObject = (requestRoute.request().headers().accept || "").includes("application/vnd.pgrst.object");
-      const owner = { user_id: trainMockContract.userId };
       await requestRoute.fulfill({
         status: 200,
         contentType: "application/json",
         headers: { "content-range": "0-0/1", "x-plaivra-qa-fixture": "workout-session-owner" },
-        body: JSON.stringify(wantsObject ? owner : [owner])
+        body: JSON.stringify(wantsObject ? sessionRoot : [sessionRoot])
+      });
+      return;
+    }
+    if (method === "GET" && requestUrl.pathname.includes("/rest/v1/workout_session_muscle_snapshots")) {
+      const snapshot = {
+        id: prescriptionSnapshotId,
+        workout_session_id: trainMockContract.activeSessionId,
+        user_id: trainMockContract.userId
+      };
+      const wantsObject = (requestRoute.request().headers().accept || "").includes("application/vnd.pgrst.object");
+      await requestRoute.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "content-range": "0-0/1", "x-plaivra-qa-fixture": "aw4-prescription-snapshot" },
+        body: JSON.stringify(wantsObject ? snapshot : [snapshot])
+      });
+      return;
+    }
+    if (method === "GET" && requestUrl.pathname.includes("/rest/v1/workout_session_muscle_snapshot_items")) {
+      await requestRoute.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "content-range": `0-${Math.max(0, prescriptionItems.length - 1)}/${prescriptionItems.length}`, "x-plaivra-qa-fixture": "aw4-prescription-items" },
+        body: JSON.stringify(prescriptionItems)
+      });
+      return;
+    }
+    if (method === "GET" && requestUrl.pathname.includes("/rest/v1/workout_session_prescription_sets")) {
+      await requestRoute.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "content-range": `0-${Math.max(0, prescriptionSets.length - 1)}/${prescriptionSets.length}`, "x-plaivra-qa-fixture": "aw4-prescription-sets" },
+        body: JSON.stringify(prescriptionSets)
+      });
+      return;
+    }
+    if (
+      method === "GET"
+      && (
+        requestUrl.pathname.includes("/rest/v1/workout_session_prescription_metric_targets")
+        || requestUrl.pathname.includes("/rest/v1/workout_performance_metric_definitions")
+      )
+    ) {
+      await requestRoute.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "content-range": "*/0", "x-plaivra-qa-fixture": "aw4-empty-prescription-targets" },
+        body: "[]"
       });
       return;
     }

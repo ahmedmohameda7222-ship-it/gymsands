@@ -14,7 +14,7 @@ import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
 import { activeWorkoutCacheFromExecution, clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
 import { getOrStartWorkoutSession } from "@/services/database/direct-workout-sessions";
-import { completeWorkoutSession, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
+import { getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import type { FrozenWorkoutPrescriptionSet, Workout, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionPrescriptionItem, WorkoutSessionSummary } from "@/types";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
@@ -22,15 +22,13 @@ import { useTrainTranslation } from "@/lib/i18n/train";
 import { findPreviousWorkoutSet } from "@/lib/workouts/workout-session-history";
 import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
 import { executionElapsedSeconds, executionRestSecondsLeft, executionStartedAtMs } from "@/lib/workouts/workout-session-execution";
+import { activeSessionPersistenceAdapter } from "@/services/database/active-session-persistence-adapter";
 import {
-  clearWorkoutSessionRestTimer,
-  getWorkoutSessionExecutionCursorItems,
-  importLegacyWorkoutExecutionCache,
-  persistWorkoutSessionCursor,
-  persistWorkoutSessionRestTimer,
-  persistWorkoutSessionTimerReset,
-  requireWorkoutSessionExecutionState
-} from "@/services/database/workout-session-execution";
+  getActiveSessionStore,
+  type ActiveSessionStore
+} from "@/lib/workouts/active-session-store/store";
+import { activeSessionClock } from "@/lib/workouts/active-session-store/clock";
+import { createSessionCommandId } from "@/lib/workouts/session-engine/commands";
 import { frozenLogCompatibility, frozenRepetitionsEntryDefault } from "@/services/database/workout-session-prescriptions";
 
 type SetLog = {
@@ -82,8 +80,9 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
   const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
   const [prescriptionItem, setPrescriptionItem] = useState<WorkoutSessionPrescriptionItem | null>(null);
-  const executionWriteRef = useRef<Promise<unknown>>(Promise.resolve());
+  const activeSessionStoreRef = useRef<ActiveSessionStore | null>(null);
   const executionHydratedRef = useRef(false);
+  const restExpiryCommandRef = useRef<string | null>(null);
   const controllerDeviceIdRef = useRef<string | null>(null);
   const timerKey = useMemo(() => workoutStorageKey(["single-workout-session", user?.id ?? "anonymous", workout.id]), [user?.id, workout.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["single-workout-rest", user?.id ?? "anonymous", workout.id]), [user?.id, workout.id]);
@@ -123,10 +122,24 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     }
   }, [restTimerKey, timerKey, user, workout.id, workout.name]);
 
-  const queueExecutionWrite = useCallback((write: () => Promise<WorkoutSessionExecutionState>, rollback?: () => void) => {
-    const operation = executionWriteRef.current.then(write);
-    executionWriteRef.current = operation.then(
-      (next) => { mirrorExecutionState(next); },
+  const dispatchExecution = useCallback((
+    commandType: Parameters<ActiveSessionStore["dispatch"]>[0]["commandType"],
+    payload: Parameters<ActiveSessionStore["dispatch"]>[0]["payload"],
+    rollback?: () => void
+  ) => {
+    const store = activeSessionStoreRef.current;
+    if (!store || !user?.id || !session?.id) {
+      return Promise.reject(new Error("The workout execution store is unavailable."));
+    }
+    const operation = store.dispatch({
+      userId: user.id,
+      workoutSessionId: session.id,
+      commandId: createSessionCommandId(),
+      commandType,
+      payload
+    } as Parameters<ActiveSessionStore["dispatch"]>[0]);
+    void operation.then(
+      (response) => { mirrorExecutionState(response.state); },
       (error) => {
         rollback?.();
         const message = userSafeError(error, tr("setEntriesPreserved"));
@@ -134,8 +147,8 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         toast({ title: tr("couldNotSaveWorkout"), description: message });
       }
     );
-    return operation;
-  }, [mirrorExecutionState, toast, tr]);
+    return operation.then((response) => response.state);
+  }, [mirrorExecutionState, session, toast, tr, user]);
 
   useEffect(() => {
     setPreviousSet(findPreviousWorkoutSet(history, workout));
@@ -168,45 +181,58 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
         const storedStartedAt = readStoredTimestamp(timerKey);
         const storedRestEndsAt = readStoredTimestamp(restTimerKey);
-        const [persistedState, cursorItems] = await Promise.all([
-          requireWorkoutSessionExecutionState(user.id, nextSession.id),
-          getWorkoutSessionExecutionCursorItems(user.id, nextSession.id)
-        ]);
-        let authoritativeState = persistedState;
-        if (persistedState.bootstrap_source === "legacy_backfill" && persistedState.revision === 0) {
-          try {
-            const imported = await importLegacyWorkoutExecutionCache(
-              user.id,
-              nextSession.id,
-              persistedState,
-              storedStartedAt,
-              controllerDeviceIdRef.current,
-              new Date(),
-              { endsAtMs: storedRestEndsAt, durationSeconds: cursorItems[0]?.prescriptionSets[0]?.restSeconds ?? 60 }
-            );
-            authoritativeState = imported.state;
-          } catch (error) {
-            console.warn("Plaivra could not import the optional legacy direct-workout timer cache.", error);
-          }
-        }
-        if (controllerDeviceIdRef.current && authoritativeState.controller_device_id !== controllerDeviceIdRef.current) {
-          authoritativeState = await persistWorkoutSessionCursor(user.id, nextSession.id, {
-            snapshotItemId: authoritativeState.active_snapshot_item_id,
-            itemOrder: authoritativeState.active_item_order,
-            setNumber: authoritativeState.active_set_number,
+        const store = getActiveSessionStore({
+          userId: user.id,
+          workoutSessionId: nextSession.id,
+          adapter: activeSessionPersistenceAdapter,
+          clearCompatibilityCache: () => clearActiveWorkoutState(user.id)
+        });
+        activeSessionStoreRef.current = store;
+        await store.hydrate({
+          legacyCache: {
+            userId: user.id,
+            sessionId: nextSession.id,
+            startedAtMs: storedStartedAt,
+            restEndsAtMs: storedRestEndsAt,
+            restDurationSeconds: 60,
             controllerDeviceId: controllerDeviceIdRef.current
+          }
+        });
+        let authoritativeState = store.getSnapshot().executionState;
+        const cursorItems = [...store.getSnapshot().prescription];
+        if (!authoritativeState) throw new Error("The active workout has no execution state.");
+        if (controllerDeviceIdRef.current && authoritativeState.controller_device_id !== controllerDeviceIdRef.current) {
+          const response = await store.dispatch({
+            userId: user.id,
+            workoutSessionId: nextSession.id,
+            commandId: createSessionCommandId(),
+            commandType: "move_cursor",
+            payload: {
+              active_snapshot_item_id: authoritativeState.active_snapshot_item_id,
+              active_item_order: authoritativeState.active_item_order,
+              active_set_number: authoritativeState.active_set_number,
+              controller_device_id: controllerDeviceIdRef.current
+            }
           });
+          authoritativeState = response.state;
         }
         if (authoritativeState.view_state === "rest" && executionRestSecondsLeft(authoritativeState) <= 0) {
-          authoritativeState = await clearWorkoutSessionRestTimer(
-            user.id,
-            nextSession.id,
-            "set_entry",
-            controllerDeviceIdRef.current
-          );
+          const response = await store.dispatch({
+            userId: user.id,
+            workoutSessionId: nextSession.id,
+            commandId: createSessionCommandId(),
+            commandType: "clear_rest",
+            payload: {
+              view_state: "set_entry",
+              completion_reason: "natural_expiration",
+              controller_device_id: controllerDeviceIdRef.current
+            }
+          });
+          authoritativeState = response.state;
         }
-        const cursorItem = cursorItems.find((item) => item.id === authoritativeState.active_snapshot_item_id)
-          ?? cursorItems.find((item) => item.itemOrder === authoritativeState.active_item_order)
+        const cursorState = authoritativeState;
+        const cursorItem = cursorItems.find((item) => item.id === cursorState.active_snapshot_item_id)
+          ?? cursorItems.find((item) => item.itemOrder === cursorState.active_item_order)
           ?? cursorItems[0]
           ?? null;
         setPrescriptionItem(cursorItem);
@@ -214,12 +240,19 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         setTimerSeconds(cursorItem?.prescriptionSets[0]?.restSeconds ?? 60);
         if (authoritativeState.controller_device_id !== controllerDeviceIdRef.current
             || authoritativeState.active_snapshot_item_id !== (cursorItem?.id ?? null)) {
-          authoritativeState = await persistWorkoutSessionCursor(user.id, nextSession.id, {
-            snapshotItemId: cursorItem?.id ?? null,
-            itemOrder: cursorItem?.itemOrder ?? 1,
-            setNumber: Math.max(1, authoritativeState.active_set_number),
-            controllerDeviceId: controllerDeviceIdRef.current
+          const response = await store.dispatch({
+            userId: user.id,
+            workoutSessionId: nextSession.id,
+            commandId: createSessionCommandId(),
+            commandType: "move_cursor",
+            payload: {
+              active_snapshot_item_id: cursorItem?.id ?? null,
+              active_item_order: cursorItem?.itemOrder ?? 1,
+              active_set_number: Math.max(1, authoritativeState.active_set_number),
+              controller_device_id: controllerDeviceIdRef.current
+            }
           });
+          authoritativeState = response.state;
         }
         if (!active) return;
         mirrorExecutionState(authoritativeState);
@@ -237,41 +270,36 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
 
   useEffect(() => {
     const tick = () => {
+      const now = activeSessionClock.getSnapshot();
       const seconds = executionState
-        ? executionElapsedSeconds(executionState)
-        : Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000));
+        ? executionElapsedSeconds(executionState, now)
+        : Math.max(0, Math.floor((now - startedAtMs) / 1000));
       setElapsedSeconds(seconds);
       setDuration(Math.max(1, Math.ceil(seconds / 60)));
-    };
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
-  }, [executionState, startedAtMs]);
-
-  useEffect(() => {
-    if (!timerEndsAtMs) return;
-    const tick = () => {
-      const nextLeft = Math.max(0, Math.ceil((timerEndsAtMs - Date.now()) / 1000));
+      const nextLeft = executionState
+        ? executionRestSecondsLeft(executionState, now)
+        : 0;
       setTimerLeft(nextLeft);
-      if (nextLeft <= 0) {
+      setIsTimerRunning(Boolean(executionState?.view_state === "rest" && nextLeft > 0));
+      if (executionState?.view_state === "rest" && nextLeft <= 0) {
+        const expiryKey = `${executionState.revision}:${executionState.rest_ends_at}`;
+        if (restExpiryCommandRef.current === expiryKey) return;
+        restExpiryCommandRef.current = expiryKey;
         setTimerEndsAtMs(null);
         setIsTimerRunning(false);
         clearStoredValue(restTimerKey);
         if (user?.id && session?.id && executionHydratedRef.current) {
-          void queueExecutionWrite(() => clearWorkoutSessionRestTimer(
-            user.id,
-            session.id,
-            "set_entry",
-            controllerDeviceIdRef.current
-          ));
+          void dispatchExecution("clear_rest", {
+            view_state: "set_entry",
+            completion_reason: "natural_expiration",
+            controller_device_id: controllerDeviceIdRef.current
+          });
         }
         toast({ title: tr("restFinished"), description: tr("nextSetReady") });
       }
     };
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
-  }, [queueExecutionWrite, restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
+    return activeSessionClock.subscribe(tick);
+  }, [dispatchExecution, executionState, restTimerKey, session?.id, startedAtMs, toast, tr, user?.id]);
 
   function startRestTimer(seconds: number) {
     const safeSeconds = Math.max(0, seconds);
@@ -284,8 +312,12 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     setIsTimerRunning(true);
     storeTimestamp(restTimerKey, deadline);
     if (user?.id && session?.id && executionHydratedRef.current) {
-      void queueExecutionWrite(
-        () => persistWorkoutSessionRestTimer(user.id, session.id, safeSeconds, controllerDeviceIdRef.current),
+      void dispatchExecution(
+        "start_rest",
+        {
+          duration_seconds: safeSeconds,
+          controller_device_id: controllerDeviceIdRef.current
+        },
         () => {
           setTimerSeconds(previous.timerSeconds);
           setTimerLeft(previous.timerLeft);
@@ -310,11 +342,12 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     }
     try {
       setIsSaving(true);
-      await completeWorkoutSession(
-        session.id,
+      const store = activeSessionStoreRef.current;
+      if (!store) throw new Error("The workout execution store is unavailable.");
+      await store.completeSession({
         notes,
-        duration,
-        sets.map((set, index) => ({
+        durationMinutes: duration,
+        finalLogs: sets.map((set, index) => ({
           exerciseName: prescriptionItem?.activityName ?? workout.name,
           exerciseCategory: workout.category || workout.target_muscle,
           exerciseOrder: prescriptionItem?.itemOrder ?? 1,
@@ -325,8 +358,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
           notes: set.notes || null,
           completedAt: new Date().toISOString()
         }))
-      );
-      clearActiveWorkoutState(user.id);
+      });
       clearStoredValue(timerKey);
       clearStoredValue(restTimerKey);
       toast({ title: tr("workoutCompleted"), description: tr("workoutSavedHistory", { name: workout.name }) });
@@ -363,8 +395,9 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     setDuration(1);
     storeTimestamp(timerKey, nextStartedAt);
     if (user?.id && session?.id && executionHydratedRef.current) {
-      void queueExecutionWrite(
-        () => persistWorkoutSessionTimerReset(user.id, session.id, controllerDeviceIdRef.current),
+      void dispatchExecution(
+        "reset_timer",
+        { controller_device_id: controllerDeviceIdRef.current },
         () => {
           setStartedAtMs(previousStartedAt);
           setElapsedSeconds(previousElapsed);

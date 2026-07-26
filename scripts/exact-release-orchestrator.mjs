@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
+import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
+import { numericRunId, validationRequestId } from "./quality-evidence-contract.mjs";
+import { validateCanonicalQualityArtifact } from "./release-preflight.mjs";
 import { deriveReleaseTarget, STAGE1_VALIDATION_CONTEXT } from "./release-identity-contract.mjs";
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -60,24 +64,70 @@ function writeOutput(name, value) {
   writeFileSync(output, `${name}=${value}\n`, { encoding: "utf8", flag: "a" });
 }
 
-function artifactFor(runId, expectedName) {
-  const response = commandJson("gh", [
-    "api",
-    `repos/${REPOSITORY}/actions/runs/${runId}/artifacts`,
-  ]);
+export function validateCanonicalQualityRun(run, {
+  qualityRunId,
+  reviewedCommit,
+  workflow,
+  repository = REPOSITORY,
+} = {}) {
+  const expectedRunId = numericRunId(qualityRunId, "Quality run ID");
+  const expectedCommit = String(reviewedCommit ?? "").trim().toLowerCase();
+  if (!SHA.test(expectedCommit)) throw new Error("Reviewed commit is missing or invalid.");
+  if (String(run?.id ?? "") !== expectedRunId) throw new Error("Canonical Quality run ID mismatch.");
+  if (run?.repository?.full_name !== repository) throw new Error("Canonical Quality repository mismatch.");
+  if (
+    String(run?.workflow_id ?? "") !== String(workflow?.id ?? "")
+    || workflow?.name !== "Quality"
+    || workflow?.path !== ".github/workflows/quality.yml"
+    || run?.path !== workflow.path
+  ) {
+    throw new Error("Supplied run is not the canonical Quality workflow.");
+  }
+  if (run?.event !== "pull_request") throw new Error("Canonical Quality run must be PR-triggered.");
+  if (Number(run?.run_attempt) !== 1) throw new Error("Canonical Quality run must be the first execution attempt.");
+  if (run?.head_sha !== expectedCommit) throw new Error("Canonical Quality head SHA mismatch.");
+  if (run?.status !== "completed" || run?.conclusion !== "success") {
+    throw new Error("Canonical Quality run is not completed successfully.");
+  }
+  return {
+    id: expectedRunId,
+    status: run.status,
+    conclusion: run.conclusion,
+    event: run.event,
+    runAttempt: String(run.run_attempt),
+    headSha: run.head_sha,
+    url: run.html_url,
+  };
+}
+
+export function selectCanonicalQualityArtifact(response, {
+  qualityRunId,
+  expectedName = `quality-reports-${qualityRunId}`,
+} = {}) {
+  const runId = numericRunId(qualityRunId, "Quality run ID");
   const matches = (response?.artifacts ?? []).filter((artifact) => artifact.name === expectedName);
   if (matches.length !== 1) {
     throw new Error(`Expected exactly one ${expectedName} artifact for run ${runId}; found ${matches.length}.`);
   }
   const artifact = matches[0];
-  if (!String(artifact.digest ?? "").startsWith("sha256:")) {
+  if (artifact.expired === true) throw new Error(`${expectedName} artifact is expired.`);
+  if (!/^sha256:[0-9a-f]{64}$/i.test(String(artifact.digest ?? ""))) {
     throw new Error(`${expectedName} artifact has no canonical SHA-256 digest.`);
   }
+  if (!RUN_ID.test(String(artifact.id ?? ""))) throw new Error(`${expectedName} artifact ID is invalid.`);
   return {
     id: String(artifact.id),
     name: artifact.name,
-    digest: artifact.digest,
+    digest: artifact.digest.toLowerCase(),
   };
+}
+
+function artifactFor(runId, expectedName) {
+  const response = commandJson("gh", [
+    "api",
+    `repos/${REPOSITORY}/actions/runs/${runId}/artifacts`,
+  ]);
+  return selectCanonicalQualityArtifact(response, { qualityRunId: runId, expectedName });
 }
 
 async function findRun({ workflow, branch, expectedTitle, reviewedCommit }) {
@@ -204,7 +254,28 @@ async function waitForRun({ label, runId, maxPolls, failureArtifactName }) {
   throw new Error(`${label} run ${runId} exceeded the orchestration polling limit.`);
 }
 
-function verifyQualityArtifact({ runId, validationRequestId, reviewedCommit, comparisonBase, expectedMigration }) {
+function verifyQualityArtifact({
+  runId,
+  reviewedCommit,
+  comparisonBase,
+  expectedMigration,
+  migrationState,
+}) {
+  const run = commandJson("gh", [
+    "api",
+    `repos/${REPOSITORY}/actions/runs/${runId}`,
+  ]);
+  const workflow = commandJson("gh", [
+    "api",
+    `repos/${REPOSITORY}/actions/workflows/${run.workflow_id}`,
+  ]);
+  const canonicalRun = validateCanonicalQualityRun(run, {
+    qualityRunId: runId,
+    reviewedCommit,
+    workflow,
+  });
+  const artifact = artifactFor(runId, `quality-reports-${runId}`);
+
   rmSync(QUALITY_DIR, { recursive: true, force: true });
   mkdirSync(QUALITY_DIR, { recursive: true });
   command("gh", [
@@ -220,32 +291,21 @@ function verifyQualityArtifact({ runId, validationRequestId, reviewedCommit, com
   ]);
 
   const metadata = JSON.parse(readFileSync(resolve(QUALITY_DIR, "artifact-metadata.json"), "utf8"));
-  const index = JSON.parse(readFileSync(resolve(QUALITY_DIR, "evidence-index.json"), "utf8"));
-  const manifest = JSON.parse(readFileSync(resolve(QUALITY_DIR, "release-manifest.json"), "utf8"));
-  const expected = {
-    repository: REPOSITORY,
-    reviewedCommit,
-    comparisonBase,
-    validationRequestId,
-    workflowRunId: String(runId),
+  const qualityValidationRequestId = validationRequestId(metadata.validationRequestId);
+  const validation = validateCanonicalQualityArtifact({
+    reportsPath: QUALITY_DIR,
+    expectedCommit: reviewedCommit,
+    expectedRepository: REPOSITORY,
+    qualityRunId: runId,
+    migrationState,
+    expectedComparisonBase: comparisonBase,
+    expectedValidationRequestId: qualityValidationRequestId,
     expectedMigration,
-  };
-
-  for (const document of [metadata, index]) {
-    if (document.repository !== expected.repository) throw new Error("Quality artifact repository mismatch.");
-    if (document.reviewedCommit !== expected.reviewedCommit) throw new Error("Quality artifact commit mismatch.");
-    if (document.comparisonBase !== expected.comparisonBase) throw new Error("Quality artifact comparison base mismatch.");
-    if (document.validationRequestId !== expected.validationRequestId) throw new Error("Quality artifact validation request mismatch.");
-    if (String(document.workflowRunId) !== expected.workflowRunId) throw new Error("Quality artifact workflow run mismatch.");
-    if (document.expectedDatabaseMigrationVersion !== expected.expectedMigration) throw new Error("Quality artifact migration mismatch.");
+  });
+  if (!validation.valid) {
+    throw new Error(`Canonical Quality artifact validation failed: ${validation.failures.join(", ")}.`);
   }
-  if (manifest.release.commitSha !== expected.reviewedCommit) throw new Error("Quality manifest commit mismatch.");
-  if (manifest.release.expectedDatabaseMigrationVersion !== expected.expectedMigration) throw new Error("Quality manifest migration mismatch.");
-  if (manifest.qualityArtifact.comparisonBase !== expected.comparisonBase) throw new Error("Quality manifest comparison base mismatch.");
-  if (manifest.qualityArtifact.validationRequestId !== expected.validationRequestId) throw new Error("Quality manifest validation request mismatch.");
-  if (String(manifest.qualityArtifact.workflowRunId) !== expected.workflowRunId) throw new Error("Quality manifest run mismatch.");
-
-  return artifactFor(runId, `quality-reports-${runId}`);
+  return { artifact, canonicalRun, qualityValidationRequestId };
 }
 
 function verifyPreflightArtifact({
@@ -297,9 +357,10 @@ function writeFinalEvidence({
   target,
   reviewedCommit,
   comparisonBase,
-  qualityRequestId,
+  qualityValidationRequestId,
   preflightRequestId,
   qualityRunId,
+  canonicalQualityRun,
   qualityArtifact,
   preflightRunId,
   preflightArtifact,
@@ -320,10 +381,15 @@ function writeFinalEvidence({
       repository: REPOSITORY,
       reviewedCommit,
       comparisonBase,
-      validationRequestId: qualityRequestId,
+      qualityExecutionMode: "reused-canonical-run",
+      qualityRunId: String(qualityRunId),
+      qualityArtifactId: qualityArtifact.id,
+      qualityArtifactName: qualityArtifact.name,
+      qualityArtifactDigest: qualityArtifact.digest,
+      qualityValidationRequestId,
       preflightRequestId,
       expectedDatabaseMigrationVersion: target.expectedMigration,
-      manualQuality: { runId: String(qualityRunId), status: "success" },
+      canonicalQualityRun,
       canonicalArtifact: qualityArtifact,
       releasePreflight: {
         runId: String(preflightRunId),
@@ -352,7 +418,12 @@ function writeFinalEvidence({
       repository: REPOSITORY,
       reviewedCommit,
       comparisonBase,
-      validationRequestId: qualityRequestId,
+      qualityExecutionMode: "reused-canonical-run",
+      qualityRunId: String(qualityRunId),
+      qualityArtifactId: qualityArtifact.id,
+      qualityArtifactName: qualityArtifact.name,
+      qualityArtifactDigest: qualityArtifact.digest,
+      qualityValidationRequestId,
       expectedDatabaseMigrationVersion: target.expectedMigration,
       ledger: {
         pendingCount: target.pendingCount,
@@ -360,7 +431,7 @@ function writeFinalEvidence({
         unresolvedCount: target.unresolvedCount,
         releaseReady: false,
       },
-      manualQuality: { runId: String(qualityRunId), status: "success" },
+      canonicalQualityRun,
       canonicalArtifact: qualityArtifact,
       exactValidation: {
         runId: String(exactRunId),
@@ -391,6 +462,7 @@ async function main() {
   if (repository !== REPOSITORY) throw new Error("Unexpected repository identity.");
   const reviewedCommit = requiredEnv("REVIEWED_COMMIT", SHA).toLowerCase();
   const comparisonBase = requiredEnv("COMPARISON_BASE", SHA).toLowerCase();
+  const qualityRunId = requiredEnv("QUALITY_RUN_ID", RUN_ID);
   const headRef = requiredEnv("HEAD_REF");
   const exactRunId = requiredEnv("GITHUB_RUN_ID", RUN_ID);
   const exactRunAttempt = requiredEnv("GITHUB_RUN_ATTEMPT", RUN_ID);
@@ -398,10 +470,11 @@ async function main() {
     throw new Error("Exact Release checkout identity mismatch.");
   }
 
-  const target = deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")));
-  const qualityRequestId = `stage1-q-${exactRunId}-${exactRunAttempt}-${reviewedCommit}`;
+  const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8"));
+  const target = deriveReleaseTarget(ledger);
+  const migrationState = deriveMigrationLedgerState(ledger);
   const preflightRequestId = `stage1-p-${exactRunId}-${exactRunAttempt}-${reviewedCommit}`;
-  if (!SAFE_ID.test(qualityRequestId) || !SAFE_ID.test(preflightRequestId)) {
+  if (!SAFE_ID.test(preflightRequestId)) {
     throw new Error("Generated orchestration request identity is invalid.");
   }
 
@@ -412,47 +485,35 @@ async function main() {
     headRef,
     exactRunId,
     exactRunAttempt,
-    qualityRequestId,
+    qualityRunId,
     preflightRequestId,
     target,
   });
 
-  command("gh", [
-    "workflow",
-    "run",
-    "quality.yml",
-    "--repo",
-    REPOSITORY,
-    "--ref",
-    headRef,
-    "-f",
-    `reviewed_commit=${reviewedCommit}`,
-    "-f",
-    `comparison_base=${comparisonBase}`,
-    "-f",
-    `validation_request_id=${qualityRequestId}`,
-  ]);
-
-  const qualityRun = await findRun({
-    workflow: "quality.yml",
-    branch: headRef,
-    expectedTitle: `Quality / ${qualityRequestId}`,
-    reviewedCommit,
-  });
-  const qualityRunId = String(qualityRun.databaseId);
   writeOutput("quality_run_id", qualityRunId);
-  await waitForRun({
-    label: "quality",
+  const qualityEvidence = verifyQualityArtifact({
     runId: qualityRunId,
-    maxPolls: 720,
-    failureArtifactName: `quality-failure-evidence-${qualityRunId}`,
-  });
-  const qualityArtifact = verifyQualityArtifact({
-    runId: qualityRunId,
-    validationRequestId: qualityRequestId,
     reviewedCommit,
     comparisonBase,
     expectedMigration: target.expectedMigration,
+    migrationState,
+  });
+  const {
+    artifact: qualityArtifact,
+    canonicalRun: canonicalQualityRun,
+    qualityValidationRequestId,
+  } = qualityEvidence;
+  writeJson(resolve(DIAGNOSTICS_DIR, "orchestration-identity.json"), {
+    repository,
+    reviewedCommit,
+    comparisonBase,
+    headRef,
+    exactRunId,
+    exactRunAttempt,
+    qualityRunId,
+    qualityValidationRequestId,
+    preflightRequestId,
+    target,
   });
 
   let preflightRunId = null;
@@ -473,7 +534,7 @@ async function main() {
       "-f",
       `quality_run_id=${qualityRunId}`,
       "-f",
-      `validation_request_id=${qualityRequestId}`,
+      `validation_request_id=${qualityValidationRequestId}`,
       "-f",
       `preflight_request_id=${preflightRequestId}`,
       "-f",
@@ -503,7 +564,7 @@ async function main() {
       reviewedCommit,
       comparisonBase,
       qualityRunId,
-      validationRequestId: qualityRequestId,
+      validationRequestId: qualityValidationRequestId,
       preflightRequestId,
       expectedMigration: target.expectedMigration,
     });
@@ -513,9 +574,10 @@ async function main() {
     target,
     reviewedCommit,
     comparisonBase,
-    qualityRequestId,
+    qualityValidationRequestId,
     preflightRequestId,
     qualityRunId,
+    canonicalQualityRun,
     qualityArtifact,
     preflightRunId,
     preflightArtifact,
@@ -526,13 +588,15 @@ async function main() {
   rmSync(DIAGNOSTICS_DIR, { recursive: true, force: true });
 }
 
-main().catch((error) => {
-  mkdirSync(DIAGNOSTICS_DIR, { recursive: true });
-  writeJson(resolve(DIAGNOSTICS_DIR, "orchestrator-failure.json"), {
-    message: error instanceof Error ? error.message : String(error),
-    stack: error instanceof Error ? error.stack : null,
-    timestamp: new Date().toISOString(),
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    mkdirSync(DIAGNOSTICS_DIR, { recursive: true });
+    writeJson(resolve(DIAGNOSTICS_DIR, "orchestrator-failure.json"), {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : null,
+      timestamp: new Date().toISOString(),
+    });
+    console.error(error);
+    process.exitCode = 1;
   });
-  console.error(error);
-  process.exitCode = 1;
-});
+}

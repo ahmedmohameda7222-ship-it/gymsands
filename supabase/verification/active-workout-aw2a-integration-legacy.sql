@@ -108,13 +108,23 @@ select pg_temp.assert_true(
 
 -- AW-2B preserves AW-2A database-maintained revision semantics while routing
 -- authenticated mutation through the command authority.
+select active_snapshot_item_id as aw2a_active_snapshot_item_id
+from public.workout_session_execution_states
+where workout_session_id = :'plan_session_id'::uuid
+\gset
 select public.apply_workout_session_execution_command_atomic(
   :'owner_id'::uuid,
   :'plan_session_id'::uuid,
   'a2000000-0000-4000-8000-000000000101'::uuid,
   0,
   'move_cursor',
-  '{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":2,"view_state":"set_entry","controller_device_id":null}'::jsonb
+  jsonb_build_object(
+    'active_snapshot_item_id', :'aw2a_active_snapshot_item_id',
+    'active_item_order', 1,
+    'active_set_number', 2,
+    'view_state', 'set_entry',
+    'controller_device_id', null
+  )
 ) as aw2a_effective_response \gset
 select pg_temp.assert_true(
   (:'aw2a_effective_response'::jsonb->>'outcome') = 'applied'
@@ -128,7 +138,13 @@ select public.apply_workout_session_execution_command_atomic(
   'a2000000-0000-4000-8000-000000000102'::uuid,
   1,
   'move_cursor',
-  '{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":2,"view_state":"set_entry","controller_device_id":null}'::jsonb
+  jsonb_build_object(
+    'active_snapshot_item_id', :'aw2a_active_snapshot_item_id',
+    'active_item_order', 1,
+    'active_set_number', 2,
+    'view_state', 'set_entry',
+    'controller_device_id', null
+  )
 ) as aw2a_noop_response \gset
 select pg_temp.assert_true(
   (:'aw2a_noop_response'::jsonb->>'outcome') = 'no_op'

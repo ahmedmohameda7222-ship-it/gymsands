@@ -45,9 +45,10 @@ Merged pull requests, Git history, and GitHub Actions artifacts preserve impleme
 - Active Workout AW-1 establishes EN/DE/AR language contracts.
 - AW-2 provides persisted execution state, command authority, idempotency receipts, and durable timeline events.
 - AW-3A provides structured performed metrics; AW-3B provides structured set details; AW-3C provides immutable normalized prescription snapshots and deterministic frozen hydration.
-- Plaivra Production contains 74 physical migration records. The ledger classifies 63 exact applications and 11 generated-version aliases, with zero pending, schema-untracked, or unresolved entries.
+- AW-4 provides the shared deterministic session engine, serialized command dispatcher, official Active Workout store, and timestamp-projected timer engine as an unmerged release candidate. Its Production migration was applied exactly once.
+- Plaivra Production contains 75 physical migration records. The ledger classifies 63 exact applications and 12 generated-version aliases, with zero pending, schema-untracked, or unresolved migrations.
 - The released compatibility marker remains `20260724232734`. Physical migration advancement and application-release promotion remain separate operations.
-- PR #86 remains the unmerged AW-3C release candidate. No manual deployment, compatibility-marker promotion, or AW-4 work is authorized by repository state alone.
+- Repository state alone does not authorize merge, manual deployment, or compatibility-marker promotion.
 
 ## Repository areas
 

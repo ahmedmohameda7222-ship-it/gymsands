@@ -39,7 +39,12 @@ declare
     'controller_device_id:text:YES',
     'bootstrap_source:text:NO',
     'created_at:timestamptz:NO',
-    'updated_at:timestamptz:NO'
+    'updated_at:timestamptz:NO',
+    'activity_timer_kind:text:YES',
+    'activity_timer_elapsed_seconds:int4:NO',
+    'activity_timer_running_since:timestamptz:YES',
+    'activity_timer_duration_seconds:int4:YES',
+    'activity_timer_ends_at:timestamptz:YES'
   ];
   v_actual_columns text[];
   v_integrity_definition text;
@@ -211,7 +216,10 @@ begin
   end if;
 
   if v_integrity_definition !~ 'active execution cursor must reference the same user and workout session'
-     or v_integrity_definition !~ 'rest execution state requires one valid timestamp-based rest tuple' then
+     or (
+       v_integrity_definition !~ 'rest execution state requires one valid timestamp-based rest tuple'
+       and v_integrity_definition !~ 'rest execution state requires one valid running or frozen rest tuple'
+     ) then
     raise exception 'Execution-state integrity source contract is missing.';
   end if;
 

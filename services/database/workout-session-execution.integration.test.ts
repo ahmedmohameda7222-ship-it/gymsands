@@ -34,3 +34,21 @@ databaseDescribe("AW-2A PostgreSQL execution-state integration", () => {
     expect(result).toContain("ROLLBACK");
   });
 });
+
+databaseDescribe("AW-4 PostgreSQL session-engine integration", () => {
+  it("proves additive compatibility, timer authority, conflicts, grants, and terminal cleanup", () => {
+    const result = execFileSync(
+      "psql",
+      [
+        disposableDatabaseUrl!,
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-f",
+        resolve(process.cwd(), "supabase/verification/active-workout-aw4-integration.sql")
+      ],
+      { encoding: "utf8", stdio: "pipe" }
+    );
+    expect(result).toContain("ROLLBACK");
+  });
+});

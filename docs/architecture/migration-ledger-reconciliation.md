@@ -1,26 +1,39 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Evidence captured:** 2026-07-25
+**Evidence captured:** 2026-07-26
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Reconciled
+**Status:** Reconciled through AW-4
 
 This document is a human-readable summary only. It does not authorize migration replay, merge, deployment, compatibility-marker promotion, or Production writes.
 
 ## Current state
 
-- Physical Production migration records: **74**
-- Repository classifications: **74**
+- Physical Production migration records: **75**
+- Repository classifications: **75**
 - Exact applications (`state = applied`): **63**
-- Generated-version aliases (`state = applied_version_alias`): **11**
+- Generated-version aliases (`state = applied_version_alias`): **12**
 - `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
 - `unresolvedCount = 0`
 - `historyRepair.state = reconciled`
 - Released compatibility marker: `20260724232734`
-- Latest physical record: `20260725145636_active_workout_aw3c_audit_corrections`
+- Latest physical record: `20260726114212_active_workout_aw4_session_engine`
 
 Physical schema advancement and compatibility-marker promotion are deliberately separate release operations.
+
+## AW-4 applied identity
+
+```text
+Repository 20260726075737_active_workout_aw4_session_engine.sql
+Production 20260726114212_active_workout_aw4_session_engine
+State      applied_version_alias
+Evidence   bc22cb06e1683cf1bcf5dbf2330bb20c711da6a0
+Git blob   e79d74a90adcc62b044ce5eec83018416fdbabab
+SHA-256    b9d5af90a8b7c277bf9892cdae8c412c58284641b7e51f19d220c683eb272d93
+```
+
+The AW-4 migration was applied exactly once to Plaivra Production. The immutable repository filename and SQL bytes must not be edited or replayed. Compatibility-marker promotion remains a separate operation and was not performed. Activity Catalog was not modified.
 
 ## AW-3C applied identities
 

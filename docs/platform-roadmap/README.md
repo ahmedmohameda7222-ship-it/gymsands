@@ -26,20 +26,22 @@
 | Active Workout AW-1 | EN/DE/AR language foundation and message contracts implemented |
 | Active Workout AW-2 | Persisted execution state, command authority, receipts, and timeline events implemented |
 | Active Workout AW-3 | Structured metrics, structured set details, and immutable prescription snapshots implemented |
+| Active Workout AW-4 | Shared session engine, serialized dispatcher, official store, and timestamp timer engine implemented with its Production migration applied; unmerged release candidate |
 | Entitlements/billing | Provider-neutral foundation exists; checkout disabled |
 | iOS/Android | Planning only; no native binary |
 
 ## Next active priorities
 
-1. complete exact-head repository cleanup validation for PR #86;
-2. squash-merge AW-3C only after explicit owner approval and all required checks pass;
-3. complete post-merge identity and release closure without replaying migrations or independently promoting the compatibility marker;
-4. begin AW-4 Session Engine only after AW-3C closure;
-5. continue the approved AW-5 through AW-10 sequence;
-6. finish public MCP/CIMD production configuration and acceptance;
-7. stabilize web accessibility, performance, observability, and failure recovery;
-8. approve offerings before enabling billing;
-9. begin iOS, then Android, from stable shared contracts.
+1. close independent AW-4 QA/QC and obtain explicit owner merge approval;
+2. squash-merge AW-4 only after that approval and all required checks pass;
+3. verify merged `main` and complete required post-merge identity and release closure without replaying migrations, deploying manually, or promoting the compatibility marker;
+4. perform the separately approved CI/Codex workflow simplification before AW-5;
+5. start AW-5 only after that workflow correction is complete and separately approved;
+6. continue the approved AW-6 through AW-10 sequence;
+7. finish public MCP/CIMD production configuration and acceptance;
+8. stabilize web accessibility, performance, observability, and failure recovery;
+9. approve offerings before enabling billing;
+10. begin iOS, then Android, from stable shared contracts.
 
 ## Shared versus platform-specific
 

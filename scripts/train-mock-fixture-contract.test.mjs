@@ -27,3 +27,13 @@ test("AW-3B rendered QA proves hydration before asserting autosave", () => {
   assert.match(qaSource, /const autosaveSmoke = await openScenario/);
   assert.match(qaSource, /hydrationPrecondition\?\.passed/);
 });
+
+test("AW-4 rendered QA hydrates the complete official session-store projection", () => {
+  assert.match(qaSource, /const sessionRoot = directSession/);
+  assert.match(qaSource, /body: JSON\.stringify\(wantsObject \? sessionRoot : \[sessionRoot\]\)/);
+  assert.match(qaSource, /\/rest\/v1\/workout_session_muscle_snapshots/);
+  assert.match(qaSource, /\/rest\/v1\/workout_session_muscle_snapshot_items/);
+  assert.match(qaSource, /\/rest\/v1\/workout_session_prescription_sets/);
+  assert.match(qaSource, /\/rest\/v1\/workout_session_prescription_metric_targets/);
+  assert.match(qaSource, /\/rest\/v1\/workout_performance_metric_definitions/);
+});

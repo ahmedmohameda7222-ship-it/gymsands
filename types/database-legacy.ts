@@ -271,7 +271,7 @@ export type ExerciseMetadata = {
   exercise_url: string;
 };
 
-export type WorkoutSessionStatus = "started" | "completed" | "skipped";
+export type WorkoutSessionStatus = "started" | "completed" | "skipped" | "cancelled";
 
 export type WorkoutSession = {
   id: string;
@@ -320,6 +320,11 @@ export type WorkoutSessionExecutionState = {
   rest_started_at: string | null;
   rest_duration_seconds: number | null;
   rest_ends_at: string | null;
+  activity_timer_kind: "timed_set" | "block" | null;
+  activity_timer_elapsed_seconds: number;
+  activity_timer_running_since: string | null;
+  activity_timer_duration_seconds: number | null;
+  activity_timer_ends_at: string | null;
   controller_device_id: string | null;
   bootstrap_source: WorkoutSessionExecutionBootstrapSource;
   created_at: string;
@@ -338,6 +343,11 @@ export type WorkoutSessionExecutionStatePatch = Partial<Pick<
   | "rest_started_at"
   | "rest_duration_seconds"
   | "rest_ends_at"
+  | "activity_timer_kind"
+  | "activity_timer_elapsed_seconds"
+  | "activity_timer_running_since"
+  | "activity_timer_duration_seconds"
+  | "activity_timer_ends_at"
   | "controller_device_id"
   | "bootstrap_source"
 >>;

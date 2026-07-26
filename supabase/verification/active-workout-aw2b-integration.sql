@@ -63,6 +63,10 @@ set constraints all immediate;
 select pg_temp.assert_true(
   (select count(*)=1 from public.workout_session_execution_states where workout_session_id=:'session_id'::uuid and user_id=:'owner_id'::uuid and revision=0),
   'AW-2A initialization did not create the AW-2B command target.');
+select active_snapshot_item_id as aw2b_active_snapshot_item_id
+from public.workout_session_execution_states
+where workout_session_id = :'session_id'::uuid
+\gset
 
 select pg_temp.assert_rejected(
   format('update public.workout_session_execution_states set active_set_number=2 where workout_session_id=%L::uuid',:'session_id'),
@@ -82,7 +86,13 @@ select set_config('request.jwt.claim.sub',:'owner_id',true);
 
 select public.apply_workout_session_execution_command_atomic(
   :'owner_id'::uuid,:'session_id'::uuid,'a2b00000-0000-4000-8000-000000000101'::uuid,0,
-  'move_cursor','{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":2,"view_state":"set_entry","controller_device_id":null}'::jsonb
+  'move_cursor',jsonb_build_object(
+    'active_snapshot_item_id', :'aw2b_active_snapshot_item_id',
+    'active_item_order', 1,
+    'active_set_number', 2,
+    'view_state', 'set_entry',
+    'controller_device_id', null
+  )
 ) as applied_response \gset
 select pg_temp.assert_true((:'applied_response'::jsonb->>'outcome')='applied','AW-2B command did not apply.');
 select pg_temp.assert_true((:'applied_response'::jsonb->>'revisionAfter')::bigint=1,'Applied command did not increment revision exactly once.');
@@ -101,7 +111,13 @@ select set_config('request.jwt.claim.role','authenticated',true);
 
 select public.apply_workout_session_execution_command_atomic(
   :'owner_id'::uuid,:'session_id'::uuid,'a2b00000-0000-4000-8000-000000000101'::uuid,0,
-  'move_cursor','{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":2,"view_state":"set_entry","controller_device_id":null}'::jsonb
+  'move_cursor',jsonb_build_object(
+    'active_snapshot_item_id', :'aw2b_active_snapshot_item_id',
+    'active_item_order', 1,
+    'active_set_number', 2,
+    'view_state', 'set_entry',
+    'controller_device_id', null
+  )
 ) as replay_response \gset
 reset role;
 select pg_temp.assert_true(
@@ -115,7 +131,13 @@ select set_config('request.jwt.claim.role','authenticated',true);
 
 select public.apply_workout_session_execution_command_atomic(
   :'owner_id'::uuid,:'session_id'::uuid,'a2b00000-0000-4000-8000-000000000101'::uuid,0,
-  'move_cursor','{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":3,"view_state":"set_entry","controller_device_id":null}'::jsonb
+  'move_cursor',jsonb_build_object(
+    'active_snapshot_item_id', :'aw2b_active_snapshot_item_id',
+    'active_item_order', 1,
+    'active_set_number', 3,
+    'view_state', 'set_entry',
+    'controller_device_id', null
+  )
 ) as idempotency_response \gset
 reset role;
 select pg_temp.assert_true(

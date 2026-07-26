@@ -124,6 +124,7 @@ export type WorkoutSessionPrescriptionItem = {
   activityName: string;
   rawCompatibilityPrescription: PlannedActivityPrescription;
   plannedSets: number | null;
+  executionState: "planned" | "completed" | "adjusted" | "skipped";
   normalizationStatus: WorkoutPrescriptionNormalizationStatus;
   prescriptionSets: FrozenWorkoutPrescriptionSet[];
 };

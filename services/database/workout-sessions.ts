@@ -8,6 +8,7 @@ import type { Weekday, Workout, WorkoutSession } from "@/types";
 import {
   getOrStartWorkoutSession as startOrResumeDirectWorkoutSession
 } from "./direct-workout-sessions";
+import { getOpenWorkoutSessionWithStatus } from "./workout-sessions-legacy";
 import { serializeWorkoutSetLogs } from "./workout-set-log-serialization";
 import type { WorkoutSetLogInput } from "./workout-set-log-serialization";
 
@@ -62,6 +63,21 @@ export async function getOrStartWorkoutSession(
   candidateSessionId?: string | null
 ): Promise<WorkoutSession> {
   return startOrResumeDirectWorkoutSession(userId, workout, candidateSessionId);
+}
+
+export async function getWorkoutSessionRoot(userId: string, sessionId: string) {
+  const open = await getOpenWorkoutSessionWithStatus(userId, null, sessionId);
+  if (open.error) throw new Error(open.error);
+  if (open.session) return open.session;
+  if (!supabase || !isUuid(userId) || !isUuid(sessionId)) return null;
+  const { data, error } = await supabase
+    .from("workout_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as WorkoutSession | null;
 }
 
 export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {

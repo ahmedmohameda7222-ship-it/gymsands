@@ -1,35 +1,28 @@
 name: Exact Release Quality Validation
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - .github/workflows/quality.yml
-      - .github/workflows/release-preflight.yml
-      - .github/workflows/exact-release-quality-validation.yml
-      - release/release-manifest.template.json
-      - scripts/create-release-manifest.mjs
-      - scripts/exact-release-orchestrator.mjs
-      - scripts/quality-evidence-contract.mjs
-      - scripts/quality-ledger-target.mjs
-      - scripts/release-identity-contract.mjs
-      - scripts/release-preflight.mjs
-      - scripts/run-quality-gate.mjs
-      - scripts/permanent-quality-replay.test.mjs
-      - scripts/release-closure-stage1.test.mjs
-      - scripts/release-closure-final-qa.test.mjs
-      - scripts/run-quality-gate.test.mjs
-      - scripts/promote-release-schema-compatibility.mjs
-      - scripts/promote-release-schema-compatibility.test.mjs
+  workflow_dispatch:
+    inputs:
+      reviewed_commit:
+        description: Exact 40-character PR head SHA already validated by canonical Quality
+        required: true
+        type: string
+      comparison_base:
+        description: Exact 40-character comparison base recorded by canonical Quality
+        required: true
+        type: string
+      quality_run_id:
+        description: Existing successful canonical PR Quality run ID
+        required: true
+        type: string
 
 permissions:
   actions: write # dispatch and inspect exact workflow runs/artifacts
   contents: read # checkout exact PR head and ledger
 
 concurrency:
-  group: exact-release-quality-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
-  cancel-in-progress: true
+  group: exact-release-quality-${{ inputs.reviewed_commit }}-${{ inputs.quality_run_id }}
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -37,15 +30,34 @@ jobs:
     timeout-minutes: 180
     env:
       GH_TOKEN: ${{ github.token }}
-      REVIEWED_COMMIT: ${{ github.event.pull_request.head.sha }}
-      COMPARISON_BASE: ${{ github.event.pull_request.base.sha }}
-      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      REVIEWED_COMMIT: ${{ inputs.reviewed_commit }}
+      COMPARISON_BASE: ${{ inputs.comparison_base }}
+      QUALITY_RUN_ID: ${{ inputs.quality_run_id }}
+      HEAD_REF: ${{ github.ref_name }}
+      DISPATCH_COMMIT: ${{ github.sha }}
     steps:
+      - name: Validate exact dispatch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]
+          [[ "$COMPARISON_BASE" =~ ^[0-9a-fA-F]{40}$ ]]
+          [[ "$QUALITY_RUN_ID" =~ ^[0-9]+$ ]]
+          test "$GITHUB_REF_TYPE" = "branch"
+          test "${DISPATCH_COMMIT,,}" = "${REVIEWED_COMMIT,,}"
+
       - name: Checkout exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.reviewed_commit }}
           fetch-depth: 0
+
+      - name: Verify checked-out and dispatched ref identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${REVIEWED_COMMIT,,}"
+          test "$(git rev-parse "origin/${HEAD_REF}^{commit}")" = "${REVIEWED_COMMIT,,}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -71,7 +83,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: exact-release-diagnostics-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
+          name: exact-release-diagnostics-${{ inputs.reviewed_commit }}-${{ github.run_attempt }}
           path: exact-release-diagnostics
           if-no-files-found: error
           retention-days: 30

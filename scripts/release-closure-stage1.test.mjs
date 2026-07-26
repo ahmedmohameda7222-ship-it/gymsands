@@ -9,6 +9,10 @@ import {
   EXPECTED_REPOSITORY,
   REQUIRED_QUALITY_GATES,
 } from "./quality-evidence-contract.mjs";
+import {
+  selectCanonicalQualityArtifact,
+  validateCanonicalQualityRun,
+} from "./exact-release-orchestrator.mjs";
 import { validateCanonicalQualityArtifact } from "./release-preflight.mjs";
 
 const root = new URL("../", import.meta.url);
@@ -78,7 +82,7 @@ function createReports({ failedGate = null, staleGate = null } = {}) {
     comparisonBase,
     validationRequestId: validationRequest,
     expectedDatabaseMigrationVersion: EXPECTED_DATABASE_MIGRATION,
-    eventType: "workflow_dispatch",
+    eventType: "pull_request",
     qualityBuildTimestamp: buildTimestamp,
     capturedAt,
     fullReleaseQuality: true,
@@ -112,10 +116,10 @@ function finalizeManifest(reportsPath, manifest = manifestSkeleton()) {
   return manifest;
 }
 
-test("Quality workflow requires exact manual identities and all release gates", () => {
+test("Quality workflow is the single canonical PR producer with all release gates", () => {
   const workflow = source(".github/workflows/quality.yml");
-  assert.match(workflow, /workflow_dispatch:[\s\S]*reviewed_commit:[\s\S]*required: true/);
-  assert.match(workflow, /workflow_dispatch:[\s\S]*comparison_base:[\s\S]*required: true/);
+  assert.doesNotMatch(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /pull_request:[\s\S]*branches:[\s\S]*- main/);
   assert.match(workflow, /\^\[0-9a-fA-F\]\{40\}\$/);
   assert.match(workflow, /ref: \$\{\{ steps\.identity\.outputs\.reviewed_commit \}\}/);
   assert.match(workflow, /--base "\$PLAIVRA_COMPARISON_BASE"/);
@@ -128,6 +132,8 @@ test("Quality workflow requires exact manual identities and all release gates", 
   assert.match(workflow, /quality-reports\/release-manifest\.json/);
   assert.match(workflow, /quality-reports\/unit-failure-parity\.json/);
   assert.match(workflow, /quality-reports\/database-validation\.log/);
+  assert.match(workflow, /SUPABASE_TELEMETRY_DISABLED: "1"/);
+  assert.match(workflow, /DO_NOT_TRACK: "1"/);
 });
 
 test("Release preflight workflow consumes the exact run-keyed artifact read-only", () => {
@@ -168,8 +174,20 @@ test("failed or stale gate cannot generate a release-valid manifest", () => {
   }
 });
 
-test("preflight rejects wrong run, missing evidence, nonzero exit and tampering", () => {
+test("preflight rejects wrong commit, base, run, missing evidence, nonzero exit and tampering", () => {
   const cases = [
+    (reportsPath) => {
+      const metadataPath = join(reportsPath, "artifact-metadata.json");
+      const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+      metadata.reviewedCommit = comparisonBase;
+      writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + "\n");
+    },
+    (reportsPath) => {
+      const metadataPath = join(reportsPath, "artifact-metadata.json");
+      const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+      metadata.comparisonBase = reviewedCommit;
+      writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + "\n");
+    },
     (reportsPath) => {
       const metadataPath = join(reportsPath, "artifact-metadata.json");
       const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
@@ -197,6 +215,78 @@ test("preflight rejects wrong run, missing evidence, nonzero exit and tampering"
     } finally {
       rmSync(reportsPath, { recursive: true, force: true });
     }
+  }
+});
+
+test("Exact Release accepts only the supplied successful canonical PR Quality run", () => {
+  const canonicalRun = {
+    id: Number(runId),
+    name: `Quality / pr-87-${runId}-1-${reviewedCommit}`,
+    workflow_id: 42,
+    path: ".github/workflows/quality.yml",
+    event: "pull_request",
+    run_attempt: 1,
+    head_sha: reviewedCommit,
+    status: "completed",
+    conclusion: "success",
+    html_url: "https://github.example/runs/123456",
+    repository: { full_name: EXPECTED_REPOSITORY },
+  };
+  const canonicalWorkflow = {
+    id: 42,
+    name: "Quality",
+    path: ".github/workflows/quality.yml",
+  };
+  assert.equal(validateCanonicalQualityRun(canonicalRun, {
+    qualityRunId: runId,
+    reviewedCommit,
+    workflow: canonicalWorkflow,
+  }).event, "pull_request");
+
+  for (const mutate of [
+    (run) => { run.id = 999; },
+    (run) => { run.repository.full_name = "other/repository"; },
+    (run) => { run.workflow_id = 99; },
+    (run, workflow) => { workflow.name = "Other"; },
+    (run, workflow) => { workflow.path = ".github/workflows/other.yml"; },
+    (run) => { run.path = ".github/workflows/other.yml"; },
+    (run) => { run.event = "workflow_dispatch"; },
+    (run) => { run.run_attempt = 2; },
+    (run) => { run.head_sha = comparisonBase; },
+    (run) => { run.status = "in_progress"; },
+    (run) => { run.conclusion = "failure"; },
+  ]) {
+    const run = structuredClone(canonicalRun);
+    const workflow = structuredClone(canonicalWorkflow);
+    mutate(run, workflow);
+    assert.throws(() => validateCanonicalQualityRun(run, {
+      qualityRunId: runId,
+      reviewedCommit,
+      workflow,
+    }));
+  }
+});
+
+test("Exact Release accepts exactly one immutable run-keyed Quality artifact", () => {
+  const canonicalArtifact = {
+    id: 789,
+    name: `quality-reports-${runId}`,
+    expired: false,
+    digest: `sha256:${"a".repeat(64)}`,
+  };
+  assert.equal(selectCanonicalQualityArtifact(
+    { artifacts: [canonicalArtifact] },
+    { qualityRunId: runId },
+  ).id, "789");
+
+  for (const artifacts of [
+    [],
+    [canonicalArtifact, { ...canonicalArtifact, id: 790 }],
+    [{ ...canonicalArtifact, expired: true }],
+    [{ ...canonicalArtifact, digest: null }],
+    [{ ...canonicalArtifact, digest: "sha256:not-a-digest" }],
+  ]) {
+    assert.throws(() => selectCanonicalQualityArtifact({ artifacts }, { qualityRunId: runId }));
   }
 });
 
@@ -240,10 +330,17 @@ test("exact release validation binds Quality and preflight to artifact-only evid
   assert.match(workflow, /Upload exact release diagnostics/);
   assert.match(workflow, /actions: write/);
   assert.match(workflow, /contents: read/);
+  assert.match(workflow, /workflow_dispatch:[\s\S]*reviewed_commit:[\s\S]*comparison_base:[\s\S]*quality_run_id:/);
+  assert.doesNotMatch(workflow, /^\s*pull_request:/m);
+  assert.match(workflow, /QUALITY_RUN_ID: \$\{\{ inputs\.quality_run_id \}\}/);
+  assert.match(workflow, /test "\$\{DISPATCH_COMMIT,,\}" = "\$\{REVIEWED_COMMIT,,\}"/);
   assert.doesNotMatch(workflow, /pull_request_target|pull-requests:\s*write|issues:\s*write|contents:\s*write/);
   assert.doesNotMatch(workflow, /supabase db push|apply_migration|deploy_to_vercel/i);
 
-  assert.match(orchestrator, /validation_request_id=\$\{qualityRequestId\}/);
+  assert.match(orchestrator, /requiredEnv\("QUALITY_RUN_ID", RUN_ID\)/);
+  assert.match(orchestrator, /validateCanonicalQualityRun/);
+  assert.match(orchestrator, /validateCanonicalQualityArtifact/);
+  assert.match(orchestrator, /validation_request_id=\$\{qualityValidationRequestId\}/);
   assert.match(orchestrator, /displayTitle === expectedTitle/);
   assert.match(orchestrator, /comparison_base=\$\{comparisonBase\}/);
   assert.match(orchestrator, /expected_migration=\$\{target\.expectedMigration\}/);
@@ -254,8 +351,10 @@ test("exact release validation binds Quality and preflight to artifact-only evid
   assert.match(orchestrator, /schemaVersion: 3/);
   assert.match(orchestrator, /preflightArtifact/);
   assert.match(orchestrator, /exactValidation:/);
-  assert.match(orchestrator, /quality-failure-evidence-\$\{qualityRunId\}/);
+  assert.match(orchestrator, /qualityExecutionMode: "reused-canonical-run"/);
+  assert.match(orchestrator, /qualityValidationRequestId/);
   assert.match(orchestrator, /failedStepSummary/);
+  assert.doesNotMatch(orchestrator, /"workflow",\s*"run",\s*"quality\.yml"/);
   assert.doesNotMatch(orchestrator, /gh run watch|issues\//);
   assert.doesNotMatch(orchestrator, /supabase db push|apply_migration|deploy_to_vercel/i);
 });
