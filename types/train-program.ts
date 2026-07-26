@@ -8,8 +8,8 @@ import type {
   TrainingActivity
 } from "@/lib/activity-catalog/types";
 
-export type PlannedPrescriptionValue = string | number | boolean;
-export type PlannedActivityPrescription = Record<string, PlannedPrescriptionValue>;
+export type { PlannedActivityPrescription, PlannedPrescriptionValue } from "./workout-prescription";
+import type { PlannedActivityPrescription } from "./workout-prescription";
 export type TrainingProgramSource = "manual" | "chatgpt" | "imported" | "legacy_backfill";
 export type PlannedActivityCatalogSource = "external" | "legacy" | "custom" | "manual";
 

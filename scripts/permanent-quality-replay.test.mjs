@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  AW3C_VERSION,
   CORRECTION_AW2A_VERSION,
+  MARKER_AFTER_AW3B_PROMOTION,
   MARKER_AFTER_BRIDGE,
   MARKER_BEFORE_BRIDGE,
   ORIGINAL_AW2A_VERSION,
@@ -78,6 +80,13 @@ test("compatibility bridge is explicit, exact, and local-only", () => {
   assert.match(helper, /127\.0\.0\.1:54322/);
   assert.match(helper, /update public\.release_schema_compatibility/);
   assert.match(helper, /Replay helper changed the repository working tree/);
+});
+
+test("AW-3C replay reproduces the released AW-3B marker before the pending migration", () => {
+  assert.match(helper, new RegExp(AW3C_VERSION));
+  assert.match(helper, new RegExp(MARKER_AFTER_AW3B_PROMOTION));
+  assert.match(helper, /aw3cReleasedContext/);
+  assert.match(helper, /setMarker\(repositoryRoot, logPath, MARKER_AFTER_AW3B_PROMOTION\)/);
 });
 
 test("manual and PR Quality always use exact nonempty comparison identities", () => {

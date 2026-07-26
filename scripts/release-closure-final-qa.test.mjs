@@ -81,7 +81,9 @@ test("Activity Catalog, other projects, generic hosts and localhost are rejected
 test("synthetic pending ledgers remain reviewable but cannot become release-ready", () => {
   const current = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
   const pending = structuredClone(current);
-  const resolvedTarget = deriveReleaseTarget(current).expectedMigration;
+  const currentTarget = deriveReleaseTarget(current);
+  const resolvedTarget = currentTarget.expectedMigration;
+  const expectedPendingCount = currentTarget.pendingCount + 1;
   const futureVersion = (BigInt(resolvedTarget) + 1n).toString().padStart(resolvedTarget.length, "0");
   pending.entries.push({
     productionVersion: null,
@@ -90,20 +92,20 @@ test("synthetic pending ledgers remain reviewable but cannot become release-read
     state: "pending",
     note: "Synthetic forward-only migration pending application.",
   });
-  pending.pendingCount = 1;
-  pending.unresolvedCount = 1;
+  pending.pendingCount = expectedPendingCount;
+  pending.unresolvedCount = expectedPendingCount;
   pending.historyRepair = {
     ...pending.historyRepair,
     state: "pending",
-    pendingCount: 1,
-    unresolvedCount: 1,
+    pendingCount: expectedPendingCount,
+    unresolvedCount: expectedPendingCount,
     note: "Synthetic pending ledger fixture.",
   };
 
   const target = deriveReleaseTarget(pending);
   assert.equal(target.expectedMigration, resolvedTarget);
   assert.equal(target.reconciliationState, "pending");
-  assert.equal(target.pendingCount, 1);
+  assert.equal(target.pendingCount, expectedPendingCount);
   assert.equal(target.releaseReady, false);
   assert.throws(() => deriveReleaseReadyTarget(pending), /not release-ready/);
 });
@@ -158,26 +160,30 @@ test("generic workflow and evidence code contain no pinned AW-2A migration", () 
   assert.match(preflightScript, /PRODUCTION_AUTHORIZATION_CONTEXT[\s\S]*deriveReleaseReadyTarget/);
 });
 
-test("same-head run selection and artifact-only evidence permissions are exact", () => {
+test("same-head orchestration is exact, fail-closed, and diagnostically complete", () => {
   const workflow = source(".github/workflows/exact-release-quality-validation.yml");
-  assert.match(workflow, /displayTitle == env\.EXPECTED_TITLE/);
-  assert.match(workflow, /stage1-q-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}-\$\{REVIEWED_COMMIT\}/);
-  assert.match(workflow, /Download and independently verify canonical Quality evidence/);
-  assert.match(workflow, /Download and independently verify preflight evidence/);
-  assert.match(workflow, /plaivra_aw2b_command_authority_implementation_report\.md/);
-  assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
-  assert.match(workflow, /pre-application-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
-  assert.match(workflow, /if: steps\.identity\.outputs\.release_ready != 'true'/);
-  assert.match(workflow, /if: steps\.identity\.outputs\.release_ready == 'true'/);
-  assert.match(workflow, /releasePreflightDispatched: false/);
-  assert.match(workflow, /schemaVersion: 3/);
-  assert.match(workflow, /canonicalArtifact:/);
-  assert.match(workflow, /preflightArtifact:/);
-  assert.match(workflow, /exactValidation:/);
+  const orchestrator = source("scripts/exact-release-orchestrator.mjs");
+
+  assert.match(workflow, /node scripts\/exact-release-orchestrator\.mjs/);
   assert.match(workflow, /actions: write/);
   assert.match(workflow, /contents: read/);
+  assert.match(workflow, /Upload exact release diagnostics/);
+  assert.doesNotMatch(workflow, /plaivra_aw2a_post_merge_release_closure_implementation_report\.md/);
+  assert.doesNotMatch(workflow, /plaivra_aw2b_command_authority_implementation_report\.md/);
   assert.doesNotMatch(workflow, /issues:\s*write|pull-requests:\s*write|pull_request_target|contents:\s*write/);
-  assert.doesNotMatch(workflow, /issues\/\$PULL_REQUEST_NUMBER\/comments|pr-comment|recorded_comment/i);
+
+  assert.match(orchestrator, /stage1-q-\$\{exactRunId\}-\$\{exactRunAttempt\}-\$\{reviewedCommit\}/);
+  assert.match(orchestrator, /displayTitle === expectedTitle/);
+  assert.match(orchestrator, /quality-failure-evidence-\$\{qualityRunId\}/);
+  assert.match(orchestrator, /failedStepSummary/);
+  assert.match(orchestrator, /consecutiveApiFailures >= 12/);
+  assert.match(orchestrator, /releasePreflightDispatched: false/);
+  assert.match(orchestrator, /schemaVersion: 3/);
+  assert.match(orchestrator, /canonicalArtifact: qualityArtifact/);
+  assert.match(orchestrator, /preflightArtifact/);
+  assert.match(orchestrator, /productionWritePerformed: false/);
+  assert.match(orchestrator, /deploymentPerformed: false/);
+  assert.doesNotMatch(orchestrator, /gh run watch|issues\//);
 });
 
 test("promotion target validation precedes adapter construction", () => {

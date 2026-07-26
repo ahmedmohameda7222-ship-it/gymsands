@@ -6,3 +6,4 @@ export * from "./workout-performance";
 export * from "./workout-set-details";
 export * from "./workout-session-execution-command";
 export * from "./workout-session-timeline";
+export * from "./workout-prescription";

@@ -13,13 +13,14 @@ import {
   type WorkoutSessionExecutionCommandPayloadByType,
   type WorkoutSessionExecutionCommandRequest,
   type WorkoutSessionExecutionCommandResponse,
-  type WorkoutSessionExecutionCommandType,
-  type WorkoutSessionExecutionCursorItem
+  type WorkoutSessionExecutionCommandType
 } from "@/lib/workouts/workout-session-execution";
 import type {
   WorkoutSessionExecutionState,
   WorkoutSessionExecutionViewState
 } from "@/types";
+import { getWorkoutSessionPrescriptionItems } from "@/services/database/workout-session-prescriptions";
+import type { WorkoutSessionPrescriptionItem } from "@/types/workout-prescription";
 
 const executionStateColumns = [
   "workout_session_id",
@@ -394,36 +395,12 @@ export async function requireWorkoutSessionExecutionState(userId: string, sessio
   return state;
 }
 
-export type WorkoutSessionExecutionCursorRow = WorkoutSessionExecutionCursorItem & {
-  sourcePlanActivityId: string | null;
-  plannedSets: number | null;
-};
+export type WorkoutSessionExecutionCursorRow = WorkoutSessionPrescriptionItem;
 
 export async function getWorkoutSessionExecutionCursorItems(userId: string, sessionId: string) {
   requireDatabaseIdentity(userId, sessionId);
   if (isMockAuthUserId(userId)) return [] as WorkoutSessionExecutionCursorRow[];
-  const snapshotResult = await supabase!
-    .from("workout_session_muscle_snapshots")
-    .select("id")
-    .eq("workout_session_id", sessionId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (snapshotResult.error) throw snapshotResult.error;
-  if (!snapshotResult.data?.id) throw new Error("The active workout snapshot could not be loaded.");
-  const itemsResult = await supabase!
-    .from("workout_session_muscle_snapshot_items")
-    .select("id,item_order,source_plan_exercise_id,source_plan_activity_id,planned_sets")
-    .eq("snapshot_id", snapshotResult.data.id)
-    .eq("user_id", userId)
-    .order("item_order", { ascending: true });
-  if (itemsResult.error) throw itemsResult.error;
-  return (itemsResult.data ?? []).map((item: { id: string; item_order: number; source_plan_exercise_id: string | null; source_plan_activity_id: string | null; planned_sets: number | null }) => ({
-    id: item.id,
-    itemOrder: item.item_order,
-    sourcePlanExerciseId: item.source_plan_exercise_id,
-    sourcePlanActivityId: item.source_plan_activity_id,
-    plannedSets: item.planned_sets
-  })) as WorkoutSessionExecutionCursorRow[];
+  return getWorkoutSessionPrescriptionItems(userId, sessionId);
 }
 
 export async function persistWorkoutSessionCursor(

@@ -4,80 +4,61 @@ Plaivra is a user-controlled fitness context, execution, tracking, history, and 
 
 ```text
 User maintains Plaivra context
--> connects Plaivra to ChatGPT
--> grants task-specific read/write permission
--> asks for advice or an action
+-> grants task-specific access
 -> ChatGPT reads the minimum authorized context
--> ChatGPT calls authorized Plaivra tools
--> Plaivra stores, visualizes, tracks, edits, and corrects the result
+-> Plaivra executes authorized tools
+-> the user reviews, tracks, corrects, exports, or deletes the result
 ```
 
-Plaivra does not independently generate workout or meal plans, diagnose medical conditions, or add a copy/import/review queue after successful tool execution. Direct product controls remain available for real-world execution, correction, privacy, export, and deletion.
+Plaivra does not independently invent workout or meal plans, diagnose medical conditions, or create a duplicate AI approval queue after successful authorized tool execution.
 
 ## Authoritative documentation
 
-Read in this order:
+Read current authority in this order:
 
 1. `docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md`
 2. `docs/product/PLAIVRA_LONG_TERM_PRODUCT_AND_PLATFORM_PLAN.md`
 3. `docs/product/ai-first-tracker-model.md`
 4. `docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md`
-5. the relevant file under `docs/design-system/platforms/`
-6. `docs/chatgpt-app/README.md`
-7. `docs/chatgpt-app/cimd-authentication-architecture.md`
-8. `docs/architecture/canonical-domain-model.md`
+5. `docs/chatgpt-app/README.md`
+6. `docs/chatgpt-app/cimd-authentication-architecture.md`
+7. `docs/architecture/canonical-domain-model.md`
+8. `docs/architecture/migration-ledger-reconciliation.md`
 9. `docs/platform-roadmap/README.md`
+10. `docs/release/README.md`
 
-Merged pull requests and Git history preserve implementation evidence. Old prompts, branch handoffs, audit snapshots, generated QA screenshots, and completed status reports are not current authority and should not remain in the active tree.
+Merged pull requests, Git history, and GitHub Actions artifacts preserve implementation evidence. Completed implementation reports, branch handoffs, audit snapshots, generated screenshots, and one-off reconciliation pointers are not active source authority and must not remain in the repository tree.
 
 ## Current stack
 
-- Next.js App Router, React, and TypeScript
-- Tailwind CSS and shared design tokens
-- Supabase Auth, PostgreSQL, RLS, Storage, and migrations
-- MCP server with OAuth/CIMD account connection infrastructure
-- Vitest, Node test runner, Playwright, and repository release gates
-- Node.js 24.x and npm with the committed lockfile
-
-## Repository areas
-
-- `app/` - product routes and API endpoints
-- `components/` - reusable UI and domain components
-- `lib/` - auth, MCP, privacy, security, validation, release, and shared helpers
-- `services/` - domain service and database boundaries
-- `types/` - shared application and database contracts
-- `supabase/migrations/` - immutable migration chain
-- `supabase/verification/` - executable database verification
-- `docs/` - current product, platform, design, release, and architecture authority
-- `.codex/skills/graphify/` - local repository graph skill
-- `.agents/` - optional specialist skills, not a default execution stack
+- Next.js App Router, React, TypeScript, and Tailwind
+- Supabase Auth, PostgreSQL, RLS, Storage, and immutable migrations
+- MCP with OAuth/CIMD, scoped context projections, permissions, idempotency, and audit
+- Vitest, Node test runner, Playwright, and exact-head release gates
+- Node.js 24.x with the committed npm lockfile
 
 ## Current architecture status
 
-- Web is the active product surface.
-- Public MCP, OAuth/CIMD, task-specific context projections, privacy, idempotency, and release foundations exist; publication and full production acceptance remain separate gates.
-- Train Phase 2A provides the additive multi-week hierarchy; the legacy plan writer remains active until later cutover phases.
-- Muscle Intelligence Phase 2 versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures.
-- Muscle Intelligence Phase 3 preserves immutable per-session muscle snapshots and hardened owner-scoped lifecycle authority.
-- Muscle Intelligence Phase 4A provides the approved advanced visible atlas and schema-isolated V2 publication foundation while retaining V1 runtime behavior.
-- Muscle Intelligence Phase 4B publishes 60 reviewed advanced V2 mappings with 453 regional entries and adds plan-building, plan-editing, exercise-preview, and weekly-plan visualization surfaces. It does not cut Active Workout, completion, history, or workout-session snapshots over to V2.
-- Phase 4C.1 runtime cutover is applied in production: existing V1 snapshots remain unchanged, new sessions use V2, and completed V2 workload is frozen independently from mutable set logs.
-- Production migration history contains 70 physical records and is reconciled through generated record `20260722232817_active_workout_aw3b_read_and_payload_corrections`. The ledger contains 63 exact `applied` rows plus seven immutable `applied_version_alias` rows for AW-2A, AW-2B, AW-2C, AW-3A, and all three AW-3B migrations. Repository migrations `20260722210312_active_workout_aw3b_structured_set_details.sql`, `20260722224500_active_workout_aw3b_production_hardening.sql`, and `20260723010500_active_workout_aw3b_read_and_payload_corrections.sql` were applied exactly once as generated Production identities `20260722223426`, `20260722224246`, and `20260722232817`. The deployed compatibility marker intentionally remains at released AW-3A identity `20260722161542` until AW-3B release closure. Do not replay or edit any applied migration.
+- Web is the active product surface; native applications remain future work.
+- Train Phase 2A provides the additive multi-week program hierarchy while compatibility writers remain bounded until later cutover.
+- Muscle Intelligence uses the approved 60-exercise registry, V1/V2 mapping authorities, advanced visible atlas, deterministic analysis, immutable session snapshots, and V2 runtime cutover.
+- Active Workout AW-1 establishes EN/DE/AR language contracts.
+- AW-2 provides persisted execution state, command authority, idempotency receipts, and durable timeline events.
+- AW-3A provides structured performed metrics; AW-3B provides structured set details; AW-3C provides immutable normalized prescription snapshots and deterministic frozen hydration.
+- Plaivra Production contains 74 physical migration records. The ledger classifies 63 exact applications and 11 generated-version aliases, with zero pending, schema-untracked, or unresolved entries.
+- The released compatibility marker remains `20260724232734`. Physical migration advancement and application-release promotion remain separate operations.
+- PR #86 remains the unmerged AW-3C release candidate. No manual deployment, compatibility-marker promotion, or AW-4 work is authorized by repository state alone.
 
-## Applied Phase 4C.1 migrations
+## Repository areas
 
-- `20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql`
-- `20260719223010_muscle_intelligence_phase4c1_snapshot_support.sql`
-- `20260719223020_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql`
-- `20260719223030_muscle_intelligence_phase4c1_direct_session_v2.sql`
-- `20260719223040_muscle_intelligence_phase4c1_replacement_v2.sql`
-- `20260719223050_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql`
-- `20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql`
-- `20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql`
-- `20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql`
+- `app/` — routes and API endpoints
+- `components/` — UI and domain components
+- `lib/` — auth, MCP, privacy, security, validation, release, and shared helpers
+- `services/` — domain and database boundaries
+- `types/` — shared contracts
+- `supabase/migrations/` — immutable migration chain
+- `supabase/verification/` — executable database verification
+- `docs/` — current product, architecture, operations, release, and design authority
+- `.codex/` and `.agents/` — implementation assistance, not runtime product code
 
-These nine files match the production migration identities and were applied exactly once in order. Do not replay or modify them.
-
-AW-2A persisted execution state is applied exactly once to Plaivra Database as production record `20260721000544_active_workout_aw2a_execution_state`, mapped to immutable repository migration `20260720213000_active_workout_aw2a_execution_state.sql`. The migration ledger records this as an `applied_version_alias` because the supported production authority generated a different timestamp while preserving the exact reviewed SQL. The forward-only correction `20260721012814_active_workout_aw2a_execution_state_corrections.sql` is also applied exactly once and adds the partial covering index for `active_snapshot_item_id`; it does not alter the compatibility marker or user workout data. Do not replay or modify either applied migration.
-
-AW-3B post-apply correction `supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql` is committed and pending one authorized Plaivra Database application; do not replay any applied migration.
+Applied migrations must never be renamed, rewritten, reordered, deleted, or replayed. Generated QA evidence belongs in workflow artifacts, not permanent source files.

@@ -4,7 +4,11 @@ import type { Workout } from "@/types";
 const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock("@/lib/supabase/client", () => ({ supabase: { rpc: mocks.rpc } }));
 
-import { getOrStartWorkoutSession, getStableWorkoutIdentity } from "./direct-workout-sessions";
+import {
+  getOrStartWorkoutSession,
+  getStableWorkoutIdentity,
+  plannedPrescriptionForDirectWorkout
+} from "./direct-workout-sessions";
 
 function workout(overrides: Partial<Workout> = {}): Workout {
   return {
@@ -48,6 +52,22 @@ describe("authoritative direct workout sessions", () => {
     });
   });
 
+  it("preserves an explicit zero-rest prescription", () => {
+    expect(plannedPrescriptionForDirectWorkout(workout({ rest_seconds: 0 }))).toEqual({
+      sets: 3,
+      reps: "8",
+      rest_seconds: 0
+    });
+  });
+
+  it("omits only absent optional direct-prescription values", () => {
+    expect(plannedPrescriptionForDirectWorkout(workout({
+      sets: null,
+      reps: null,
+      rest_seconds: null
+    }))).toEqual({});
+  });
+
   it("delegates start and resume to one server-authoritative RPC", async () => {
     const session = {
       id: "22222222-2222-4222-8222-222222222222",
@@ -67,7 +87,7 @@ describe("authoritative direct workout sessions", () => {
       p_identity: "provider-activity-1",
       p_provider: "plaivra_activity_catalog",
       p_candidate_session_id: session.id,
-      p_planned_prescription: { sets: 3, reps: "8", restSeconds: 90 }
+      p_planned_prescription: { sets: 3, reps: "8", rest_seconds: 90 }
     }));
   });
 });

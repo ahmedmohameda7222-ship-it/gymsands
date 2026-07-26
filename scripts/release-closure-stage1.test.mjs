@@ -233,25 +233,31 @@ test("preflight rejects an unexpected migration while accepting exact pending me
 
 test("exact release validation binds Quality and preflight to artifact-only evidence", () => {
   const workflow = source(".github/workflows/exact-release-quality-validation.yml");
-  assert.match(workflow, /validation_request_id="\$VALIDATION_REQUEST_ID"/);
-  assert.match(workflow, /displayTitle == env\.EXPECTED_TITLE/);
-  assert.match(workflow, /Download and independently verify canonical Quality evidence/);
-  assert.match(workflow, /Download and independently verify preflight evidence/);
-  assert.match(workflow, /comparison_base="\$COMPARISON_BASE"/);
-  assert.match(workflow, /expected_migration="\$EXPECTED_MIGRATION"/);
-  assert.match(workflow, /validation_context=stage1-infrastructure-validation/);
-  assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
-  assert.match(workflow, /pre-application-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
-  assert.match(workflow, /releasePreflightDispatched: false/);
-  assert.match(workflow, /if: steps\.identity\.outputs\.release_ready == 'true'/);
-  assert.match(workflow, /schemaVersion: 3/);
-  assert.match(workflow, /preflightArtifact:/);
-  assert.match(workflow, /exactValidation:/);
+  const orchestrator = source("scripts/exact-release-orchestrator.mjs");
+
+  assert.match(workflow, /node scripts\/exact-release-orchestrator\.mjs/);
+  assert.match(workflow, /Upload exact release validation summary/);
+  assert.match(workflow, /Upload exact release diagnostics/);
   assert.match(workflow, /actions: write/);
   assert.match(workflow, /contents: read/);
   assert.doesNotMatch(workflow, /pull_request_target|pull-requests:\s*write|issues:\s*write|contents:\s*write/);
-  assert.doesNotMatch(workflow, /issues\/\$PULL_REQUEST_NUMBER\/comments|pr-comment|recorded_comment/i);
   assert.doesNotMatch(workflow, /supabase db push|apply_migration|deploy_to_vercel/i);
+
+  assert.match(orchestrator, /validation_request_id=\$\{qualityRequestId\}/);
+  assert.match(orchestrator, /displayTitle === expectedTitle/);
+  assert.match(orchestrator, /comparison_base=\$\{comparisonBase\}/);
+  assert.match(orchestrator, /expected_migration=\$\{target\.expectedMigration\}/);
+  assert.match(orchestrator, /validation_context=\$\{STAGE1_VALIDATION_CONTEXT\}/);
+  assert.match(orchestrator, /stage1-exact-release-validation-\$\{reviewedCommit\}/);
+  assert.match(orchestrator, /pre-application-exact-release-validation-\$\{reviewedCommit\}/);
+  assert.match(orchestrator, /releasePreflightDispatched: false/);
+  assert.match(orchestrator, /schemaVersion: 3/);
+  assert.match(orchestrator, /preflightArtifact/);
+  assert.match(orchestrator, /exactValidation:/);
+  assert.match(orchestrator, /quality-failure-evidence-\$\{qualityRunId\}/);
+  assert.match(orchestrator, /failedStepSummary/);
+  assert.doesNotMatch(orchestrator, /gh run watch|issues\//);
+  assert.doesNotMatch(orchestrator, /supabase db push|apply_migration|deploy_to_vercel/i);
 });
 
 test("Stage-1 preflight cannot authorize marker promotion", () => {

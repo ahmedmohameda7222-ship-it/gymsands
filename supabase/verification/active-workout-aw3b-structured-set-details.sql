@@ -224,10 +224,6 @@ begin
     where d.source='backfill' and (d.notes is distinct from l.notes or d.set_type is distinct from l.set_type)
   ) then raise exception 'AW-3B backfill compatibility projection drift exists.'; end if;
 
-  select migration_version into strict v_marker from public.release_schema_compatibility where singleton=true;
-  if v_marker<>'20260722161542' then
-    raise exception 'AW-3B compatibility marker differs from the released AW-3A baseline.';
-  end if;
 end
 $aw3b_schema_verification$;
 
