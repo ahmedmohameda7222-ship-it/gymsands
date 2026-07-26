@@ -1,26 +1,36 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Evidence captured:** 2026-07-25
+**Evidence captured:** 2026-07-26
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Reconciled
+**Status:** Reconciled through AW-3C; one committed AW-4 migration pending
 
 This document is a human-readable summary only. It does not authorize migration replay, merge, deployment, compatibility-marker promotion, or Production writes.
 
 ## Current state
 
 - Physical Production migration records: **74**
-- Repository classifications: **74**
+- Repository classifications: **75**
 - Exact applications (`state = applied`): **63**
 - Generated-version aliases (`state = applied_version_alias`): **11**
-- `pendingCount = 0`
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
 - Released compatibility marker: `20260724232734`
 - Latest physical record: `20260725145636_active_workout_aw3c_audit_corrections`
 
 Physical schema advancement and compatibility-marker promotion are deliberately separate release operations.
+
+## AW-4 pending identity
+
+```text
+Repository 20260726075737_active_workout_aw4_session_engine.sql
+State      pending
+Evidence   bc22cb06e1683cf1bcf5dbf2330bb20c711da6a0
+```
+
+The exact migration bytes are committed but are not recorded in Production migration history. Apply them exactly once only after the required local database proof and exact-head remote checks pass.
 
 ## AW-3C applied identities
 
