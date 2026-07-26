@@ -48,8 +48,7 @@ export function buildDisposableDatabaseUrl(adminDatabaseUrl, databaseName = DEFA
 }
 
 export function resolveIntegrationDatabaseConfig(env = process.env) {
-  const localAdmin = env.PLAIVRA_LOCAL_DATABASE_URL?.trim()
-    || env.PLAIVRA_AW2A_TEST_DATABASE_URL?.trim();
+  const localAdmin = env.PLAIVRA_LOCAL_DATABASE_URL?.trim();
 
   if (localAdmin) {
     const adminUrl = requireLocalPostgresUrl(localAdmin, "PLAIVRA_LOCAL_DATABASE_URL").toString();
