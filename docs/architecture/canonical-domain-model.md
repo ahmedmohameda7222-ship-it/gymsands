@@ -1,6 +1,6 @@
 # Plaivra Canonical Domain Model
 
-**Version:** 2026.7  
+**Version:** 2026.7
 **Status:** Current convergence and cleanup authority
 
 ## Principles
