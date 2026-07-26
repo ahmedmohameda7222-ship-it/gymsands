@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { ActiveWorkoutCoreSession } from "@/components/workouts/active-workout/active-workout-core-session";
@@ -26,6 +26,7 @@ export default function WorkoutDaySessionPage() {
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const legacySurface = searchParams.get("legacy");
+  const coreSource = useMemo(() => day ? ({ kind: "plan-day" as const, day }) : null, [day]);
 
   async function loadDay() {
     setIsLoading(true);
@@ -71,7 +72,7 @@ export default function WorkoutDaySessionPage() {
       />
     );
   }
-  if (!day) {
+  if (!day || !coreSource) {
     return (
       <EmptyState
         title={tr("workoutDayNotFound")}
@@ -93,7 +94,7 @@ export default function WorkoutDaySessionPage() {
         </div>
       ) : (
         <ActiveWorkoutCoreSession
-          source={{ kind: "plan-day", day }}
+          source={coreSource}
           onOpenLegacySurface={(surface) => setLegacySurface(surface)}
         />
       )}
