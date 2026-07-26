@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -29,6 +29,7 @@ test("completed implementation evidence stays out of the active source tree", ()
 
   for (const obsoletePointer of [
     "docs/architecture.md",
+    "docs/privacy/active-workout-command-receipts.md",
     "release/prelaunch-handoff-manifest.json",
     "plaivra_production_migration_reconciliation_plan.md",
     ".github/workflows/aw3c-repository-cleanup.yml",
@@ -48,4 +49,17 @@ test("current authority remains present after evidence cleanup", () => {
   ]) {
     assert.equal(existsSync(join(root, authority)), true, `${authority} is required authority`);
   }
+});
+
+test("tests enforce code and structured contracts instead of Markdown prose", () => {
+  const testSources = ["app", "components", "lib", "services", "scripts"]
+    .flatMap((directory) => filesUnder(join(root, directory)))
+    .filter((path) => /(?:^|\/)[^/]+\.(?:test|spec)\.(?:ts|tsx|js|mjs|cjs)$/i.test(path));
+
+  const proseCoupling = testSources.filter((path) => {
+    const source = readFileSync(path, "utf8");
+    return /readFileSync\(\s*["']docs\/[^"']+\.md["']/i.test(source);
+  });
+
+  assert.deepEqual(proseCoupling, []);
 });
