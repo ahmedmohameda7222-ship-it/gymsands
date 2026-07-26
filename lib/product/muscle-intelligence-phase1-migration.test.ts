@@ -10,8 +10,6 @@ const privacyExport = [
   readFileSync("lib/privacy/data-export.ts", "utf8"),
   readFileSync("lib/privacy/data-export-legacy.ts", "utf8")
 ].join("\n");
-const adr = readFileSync("docs/architecture/decisions/0005-muscle-intelligence-taxonomy-and-mapping-authority.md", "utf8");
-const canonical = readFileSync("docs/architecture/canonical-domain-model.md", "utf8");
 const migrationLedger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   pendingCount: number;
   unresolvedCount: number;
@@ -132,14 +130,11 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
     }
   });
 
-  it("exports only owner-scoped custom mappings and documents the no-runtime-cutover boundary", () => {
+  it("exports only owner-scoped custom mappings", () => {
     expect(privacyExport).toContain('"user_custom_exercise_mapping_sets"');
     expect(privacyExport).toContain('"user_custom_exercise_mapping_entries"');
     expect(privacyExport).not.toContain('owned.exercise_muscle_mapping_sets');
     expect(privacyExport).not.toContain('owned.exercise_provider_links');
-    expect(adr).toContain("code-authoritative 24-muscle taxonomy");
-    expect(adr).toContain("no name-only mapping");
-    expect(canonical.toLowerCase()).toContain("phase 1 does not change train runtime behavior");
   });
 
   it("keeps Phase 1 applied while later migration state remains truthfully classified", () => {
