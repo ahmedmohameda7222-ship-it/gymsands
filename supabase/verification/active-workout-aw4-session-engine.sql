@@ -91,6 +91,7 @@ begin
      or v_definition not like '%start_activity_timer%'
      or v_definition not like '%clear_activity_timer%'
      or v_definition not like '%reset_activity_timer%'
+     or v_definition not like '%natural_expiration%'
      or v_definition not like '%clock_timestamp()%'
      or v_definition not like '%pg_advisory_xact_lock%'
      or v_definition not like '%command_id_reused_with_different_request%' then
@@ -101,7 +102,8 @@ begin
     'public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)'::regprocedure
   ) into strict v_definition;
   if v_definition not like '%completion_reason%'
-     or v_definition not like '%natural_expiration%'
+     or v_definition not like '%p_payload->>''completion_reason''%'
+     or v_definition not like '%v_rest_end_reason%'
      or v_definition not like '%session_paused%'
      or v_definition not like '%session_resumed%' then
     raise exception 'AW-4 public timeline wrapper is incomplete.';
