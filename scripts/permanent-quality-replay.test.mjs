@@ -91,13 +91,14 @@ test("AW-3C replay reproduces the released AW-3B marker before the pending migra
   assert.match(helper, /setMarker\(repositoryRoot, logPath, MARKER_AFTER_AW3B_PROMOTION\)/);
 });
 
-test("canonical full Quality is PR-bound and runs only at explicit phase closure", () => {
+test("canonical full Quality is PR-bound and runs only at ready-for-review phase closure", () => {
   assert.doesNotMatch(quality, /workflow_dispatch:/);
-  assert.match(quality, /pull_request:[\s\S]*branches:[\s\S]*- main/);
-  assert.match(quality, /contains\(github\.event\.pull_request\.labels\.\*\.name, 'phase-close'\)/);
+  assert.match(quality, /pull_request:[\s\S]*branches:[\s\S]*- main[\s\S]*types:[\s\S]*- ready_for_review/);
+  assert.doesNotMatch(quality, /opened|reopened|synchronize|phase-close/);
   assert.match(quality, /PR_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(quality, /PR_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(quality, /--base "\$PLAIVRA_COMPARISON_BASE"/);
+  assert.match(quality, /group: quality-pr-\$\{\{ github\.event\.pull_request\.number \}\}/);
   assert.match(quality, /cancel-in-progress: true/);
   assert.match(quality, /SUPABASE_TELEMETRY_DISABLED: "1"/);
   assert.match(quality, /DO_NOT_TRACK: "1"/);
@@ -109,6 +110,7 @@ test("automatic PR Quality is path-scoped, parallel and fail-safe", () => {
   for (const job of ["integrity", "core", "database", "ui-and-i18n", "ci-contracts", "build", "dependency-audit", "required-summary"]) {
     assert.match(prQuality, new RegExp(`name: ${job.replaceAll("-", "\\-")}`));
   }
+  assert.match(prQuality, /group: pr-quality-\$\{\{ github\.event\.pull_request\.number \}\}/);
   assert.match(prQuality, /cancel-in-progress: true/);
   assert.match(prQuality, /node scripts\/run-ci-check\.mjs/);
   assert.match(prQuality, /if: always\(\)/);
