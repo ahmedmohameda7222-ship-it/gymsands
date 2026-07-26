@@ -3,7 +3,7 @@ import test from "node:test";
 import { changedPathDiffArgs, classifyChangedPaths } from "./ci-change-scope.mjs";
 
 test("ordinary documentation-only changes run only integrity and summary", () => {
-  const scope = classifyChangedPaths(["README.md", "docs/guides/example.md"]);
+  const scope = classifyChangedPaths(["CHANGELOG.md", "docs/guides/example.md"]);
   assert.equal(scope.docsOnly, true);
   assert.equal(scope.core, false);
   assert.equal(scope.database, false);
@@ -18,6 +18,19 @@ test("release prose stays lightweight because executable policy is source-author
     assert.equal(scope.docsOnly, true);
     assert.equal(scope.core, false);
     assert.equal(scope.database, false);
+    assert.equal(scope.ui, false);
+    assert.equal(scope.ci, false);
+    assert.equal(scope.build, false);
+    assert.equal(scope.fallback, false);
+  }
+});
+
+test("migration ledger documentation executes database validation", () => {
+  for (const path of ["README.md", "docs/architecture/migration-ledger-reconciliation.md"]) {
+    const scope = classifyChangedPaths([path]);
+    assert.equal(scope.docsOnly, false);
+    assert.equal(scope.core, true);
+    assert.equal(scope.database, true);
     assert.equal(scope.ui, false);
     assert.equal(scope.ci, false);
     assert.equal(scope.build, false);
