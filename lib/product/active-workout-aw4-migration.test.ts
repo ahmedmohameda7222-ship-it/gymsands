@@ -13,6 +13,10 @@ const integration = readFileSync(
   "supabase/verification/active-workout-aw4-integration.sql",
   "utf8"
 ).replaceAll("\r\n", "\n").toLowerCase();
+const quality = readFileSync(
+  ".github/workflows/quality.yml",
+  "utf8"
+).replaceAll("\r\n", "\n").toLowerCase();
 
 describe("AW-4 session-engine migration contract", () => {
   it("adds the exact safe activity-timer projection without a new table or state version", () => {
@@ -90,5 +94,13 @@ describe("AW-4 session-engine migration contract", () => {
     expect(integration).toContain("replay, idempotency conflict, or revision conflict");
     expect(integration).toContain("terminal cleanup retained execution authority");
     expect(integration).toContain("authenticated direct execution-state update succeeded");
+    const aw3c = quality.indexOf("active-workout-aw3c-integration.sql");
+    const aw4Schema = quality.indexOf("active-workout-aw4-session-engine.sql");
+    const aw4Integration = quality.indexOf("active-workout-aw4-integration.sql");
+    const genericPreflight = quality.indexOf("production-release-migration-preflight.sql");
+    expect(aw3c).toBeGreaterThanOrEqual(0);
+    expect(aw4Schema).toBeGreaterThan(aw3c);
+    expect(aw4Integration).toBeGreaterThan(aw4Schema);
+    expect(genericPreflight).toBeGreaterThan(aw4Integration);
   });
 });

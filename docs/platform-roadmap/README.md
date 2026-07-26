@@ -26,20 +26,20 @@
 | Active Workout AW-1 | EN/DE/AR language foundation and message contracts implemented |
 | Active Workout AW-2 | Persisted execution state, command authority, receipts, and timeline events implemented |
 | Active Workout AW-3 | Structured metrics, structured set details, and immutable prescription snapshots implemented |
+| Active Workout AW-4 | Shared session engine, serialized dispatcher, official store, and timestamp timer engine implemented as an unmerged release candidate |
 | Entitlements/billing | Provider-neutral foundation exists; checkout disabled |
 | iOS/Android | Planning only; no native binary |
 
 ## Next active priorities
 
-1. complete exact-head repository cleanup validation for PR #86;
-2. squash-merge AW-3C only after explicit owner approval and all required checks pass;
+1. complete AW-4 exact-head validation, its single authorized Production migration, and independent QA/QC;
+2. squash-merge AW-4 only after explicit owner approval and all required checks pass;
 3. complete post-merge identity and release closure without replaying migrations or independently promoting the compatibility marker;
-4. begin AW-4 Session Engine only after AW-3C closure;
-5. continue the approved AW-5 through AW-10 sequence;
-6. finish public MCP/CIMD production configuration and acceptance;
-7. stabilize web accessibility, performance, observability, and failure recovery;
-8. approve offerings before enabling billing;
-9. begin iOS, then Android, from stable shared contracts.
+4. continue the approved AW-5 through AW-10 sequence only after separate authorization;
+5. finish public MCP/CIMD production configuration and acceptance;
+6. stabilize web accessibility, performance, observability, and failure recovery;
+7. approve offerings before enabling billing;
+8. begin iOS, then Android, from stable shared contracts.
 
 ## Shared versus platform-specific
 
