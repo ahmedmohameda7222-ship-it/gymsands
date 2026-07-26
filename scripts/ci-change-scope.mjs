@@ -25,6 +25,12 @@ const DATABASE_PATTERNS = [
   /^lib\/privacy\//,
 ];
 
+const INTEGRATION_AUTHORITY_PATTERNS = [
+  /^scripts\/run-integration-tests\.mjs$/,
+  /^vitest\.integration\.config\.(?:js|mjs|cjs|ts)$/i,
+  /^package(?:-lock)?\.json$/,
+];
+
 const UI_PATTERNS = [
   /^app\//,
   /^components\//,
@@ -37,6 +43,16 @@ const UI_PATTERNS = [
 
 const STYLE_BUILD_PATTERNS = [
   /^(?:postcss|tailwind)\.config\.(?:js|mjs|cjs|ts)$/i,
+];
+
+const BUILD_AUTHORITY_PATTERNS = [
+  ...STYLE_BUILD_PATTERNS,
+  /^scripts\/(?:validate-production-env|verify-built-release-metadata)\.mjs$/,
+];
+
+const BROAD_CI_AUTHORITY_PATTERNS = [
+  /^\.github\/workflows\//,
+  /^scripts\/(?:ci-change-scope|run-ci-check)\.mjs$/,
 ];
 
 const CI_PATTERNS = [
@@ -86,18 +102,24 @@ export function classifyChangedPaths(inputPaths) {
 
   const docsOnly = paths.every((path) => matchesAny(path, DOC_PATTERNS));
   const database = paths.some((path) => matchesAny(path, DATABASE_PATTERNS));
+  const integrationAuthority = paths.some((path) => matchesAny(path, INTEGRATION_AUTHORITY_PATTERNS));
   const integrationTest = paths.some((path) => isIntegrationTestPath(path));
   const styleBuild = paths.some((path) => matchesAny(path, STYLE_BUILD_PATTERNS));
-  const ui = styleBuild || paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
+  const buildAuthority = paths.some((path) => matchesAny(path, BUILD_AUTHORITY_PATTERNS));
+  const broadCiAuthority = paths.some((path) => matchesAny(path, BROAD_CI_AUTHORITY_PATTERNS));
+  const ui = styleBuild || broadCiAuthority || paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
   const ci = paths.some((path) => matchesAny(path, CI_PATTERNS));
-  const runtime = styleBuild || paths.some((path) => !isTestPath(path) && matchesAny(path, RUNTIME_PATTERNS));
+  const runtime = buildAuthority || broadCiAuthority || paths.some((path) => !isTestPath(path) && matchesAny(path, RUNTIME_PATTERNS));
   const dependencies = paths.some((path) => matchesAny(path, DEPENDENCY_PATTERNS));
   const recognized = paths.every((path) => (
     isTestPath(path)
     || matchesAny(path, DOC_PATTERNS)
     || matchesAny(path, DATABASE_PATTERNS)
+    || matchesAny(path, INTEGRATION_AUTHORITY_PATTERNS)
     || matchesAny(path, UI_PATTERNS)
     || matchesAny(path, STYLE_BUILD_PATTERNS)
+    || matchesAny(path, BUILD_AUTHORITY_PATTERNS)
+    || matchesAny(path, BROAD_CI_AUTHORITY_PATTERNS)
     || matchesAny(path, CI_PATTERNS)
     || matchesAny(path, RUNTIME_PATTERNS)
     || matchesAny(path, DEPENDENCY_PATTERNS)
@@ -108,7 +130,7 @@ export function classifyChangedPaths(inputPaths) {
     paths,
     docsOnly,
     core: !docsOnly,
-    database: database || integrationTest || fallback,
+    database: database || integrationAuthority || integrationTest || broadCiAuthority || fallback,
     ui: ui || fallback,
     ci: ci || fallback,
     build: runtime || dependencies || fallback,
