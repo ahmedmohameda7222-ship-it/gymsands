@@ -174,13 +174,13 @@ describe("approved Train Phase 1 semantic contracts", () => {
 
   it("passes the route-scoped candidate to the owner-validated direct-session authority", () => {
     const direct = source("services/database/direct-workout-sessions.ts");
-    const form = source("components/workouts/workout-session-form.tsx");
+    const form = source("components/workouts/active-workout/active-workout-core-session.tsx");
     const active = source("components/workouts/active-workout-indicator.tsx");
     expect(direct).toContain("p_candidate_session_id: candidateSessionId && isUuid(candidateSessionId) ? candidateSessionId : null");
     expect(direct).toContain("p_user_id: userId");
     expect(direct).toContain("getStableWorkoutIdentity(workout)");
     expect(form).toContain("storedActiveWorkout.route === sessionRoute");
-    expect(form).toContain("getOrStartWorkoutSession(user.id, workout, candidateSessionId)");
+    expect(form).toContain("getOrStartWorkoutSession(user.id, directWorkout!, candidateSessionId)");
     expect(active).toContain("getOpenWorkoutSessionWithStatus(userId, null, candidateSessionId)");
     expect(active).toContain("stored?.sessionId === open.id && isValidActiveWorkoutRoute(stored.route)");
   });

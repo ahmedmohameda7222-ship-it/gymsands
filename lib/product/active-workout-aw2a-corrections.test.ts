@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const component = readFileSync("components/workouts/workout-day-focus-session.tsx", "utf8").replaceAll("\r\n", "\n");
+const component = readFileSync("components/workouts/active-workout/active-workout-core-session.tsx", "utf8").replaceAll("\r\n", "\n");
 const service = readFileSync("services/database/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
 const store = readFileSync("lib/workouts/active-session-store/store.ts", "utf8").replaceAll("\r\n", "\n");
 

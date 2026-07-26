@@ -6,7 +6,7 @@ const source = (path: string) => readFileSync(path, "utf8");
 describe("AW-3B draft-context effort isolation", () => {
   it("keeps invalid draft effort non-throwing for context while persistence remains strict", () => {
     const details = source("services/database/workout-set-details.ts");
-    const session = source("components/workouts/workout-day-focus-session.tsx");
+    const session = source("components/workouts/active-workout/active-workout-core-session.tsx");
     const renderedQa = source("scripts/run-train-layout-qa.mjs");
 
     expect(details).toContain("export function workoutSetEffortInputForContext(");

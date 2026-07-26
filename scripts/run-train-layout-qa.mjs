@@ -22,7 +22,9 @@ const viewports = [
   { name: "768x1024", width: 768, height: 1024 },
   { name: "1024x768", width: 1024, height: 768 },
   { name: "1280x800", width: 1280, height: 800 },
-  { name: "1440x900", width: 1440, height: 900 }
+  { name: "1440x900", width: 1440, height: 900 },
+  { name: "360x780", width: 360, height: 780 },
+  { name: "393x852", width: 393, height: 852 }
 ];
 await mkdir(outputDir, { recursive: true });
 const browser = await chromium.launch({ headless: true });
@@ -487,6 +489,12 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
   };
   if (openSetDetails) {
     if (!isSessionRoute) throw new Error("Set-details QA requires an Active Workout session route.");
+    const persistedSetStep = page.locator('[data-aw5-set-path-number="1"]').first();
+    await persistedSetStep.waitFor({ state: "visible", timeout: 20_000 });
+    await persistedSetStep.click();
+    await page.waitForFunction(() =>
+      document.querySelector("[data-active-set-state]")?.getAttribute("data-active-set-persisted") === "true"
+    );
     setDetailsTrigger = page.locator("[data-active-set-details-trigger]:visible").first();
     await setDetailsTrigger.waitFor({ state: "visible", timeout: 20_000 });
     await setDetailsTrigger.focus();
@@ -648,6 +656,8 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     const controller = document.querySelector("[data-active-workout-controller]");
     const nav = document.querySelector("[data-mobile-floating-nav]");
     const footer = document.querySelector("[data-train-sticky-footer]");
+    const aw5Shell = document.querySelector("[data-aw5-execution-shell]");
+    const aw5StickyActions = document.querySelector("[data-aw5-sticky-actions]");
     const restAction = document.querySelector("[data-rest-day-weekly-plan] a");
     const actions = main ? [...main.querySelectorAll("a,button")].filter((element) => visible(element) && !element.closest("[data-train-sticky-footer]")) : [];
     let frameworkOverlayDetected = false;
@@ -670,7 +680,17 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
       controller: rect(controller),
       nav: rect(nav),
       footer: rect(footer),
+      aw5StickyActions: rect(aw5StickyActions),
       lastMainAction: rect(actions.at(-1) ?? null),
+      aw5: {
+        present: Boolean(aw5Shell),
+        state: aw5Shell?.getAttribute("data-aw5-session-state") ?? null,
+        primaryActionCount: document.querySelectorAll("[data-aw5-primary-action]").length,
+        detailsTriggerCount: document.querySelectorAll("[data-active-set-details-trigger]").length,
+        miniHeatMapCount: document.querySelectorAll("[data-aw5-mini-heat-map-slot]").length,
+        coreInputCount: ["active-set-reps", "active-set-weight"]
+          .filter((id) => document.getElementById(id)).length
+      },
       shellState: document.querySelector("[data-app-shell]")?.getAttribute("data-active-workout-controller-state") ?? null,
       restActionHref: restAction?.getAttribute("href") ?? null,
       direction: document.querySelector("[data-train-today-card]")?.closest("[dir]")?.getAttribute("dir") ?? document.documentElement.dir,
@@ -702,7 +722,8 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
       controllerFooter: intersects(metrics.controller, metrics.footer),
       controllerNav: intersects(metrics.controller, metrics.nav),
       controllerLastMainAction: intersects(metrics.controller, metrics.lastMainAction),
-      footerNav: intersects(metrics.footer, metrics.nav)
+      footerNav: intersects(metrics.footer, metrics.nav),
+      aw5StickyNav: intersects(metrics.aw5StickyActions, metrics.nav)
     },
     pageErrors,
     consoleErrors,
@@ -913,11 +934,17 @@ for (const drawerScenario of [
   });
 }
 
-const horizontalOverflowViewports = [
-  { name: "360x780", width: 360, height: 780 },
-  { name: "390x844", width: 390, height: 844 },
-  { name: "430x932", width: 430, height: 932 }
-];
+const horizontalOverflowViewports = viewports.filter((viewport) => [
+  "320x568",
+  "360x780",
+  "390x844",
+  "393x852",
+  "430x932",
+  "768x1024",
+  "1024x768",
+  "1280x800",
+  "1440x900"
+].includes(viewport.name));
 const horizontalOverflowMatrix = [];
 for (const language of ["en", "de", "ar"]) {
   for (const viewport of horizontalOverflowViewports) {
@@ -992,6 +1019,14 @@ const failures = observations.filter((item) => {
     || item.intersections.controllerNav
     || item.intersections.controllerLastMainAction
     || item.intersections.footerNav
+    || item.intersections.aw5StickyNav
+    || (sessionRoute && (
+      !item.aw5.present
+      || item.aw5.primaryActionCount !== 2
+      || item.aw5.detailsTriggerCount !== 1
+      || item.aw5.miniHeatMapCount !== 1
+      || item.aw5.coreInputCount !== 2
+    ))
     || (item.scenario === "rest" && item.route === "/my-workout/plans" && item.restActionHref !== `/my-workout/plans/${activePlanId}`)
     || (item.language === "ar" && item.direction !== "rtl")
     || (item.keyboard.checked && (!item.keyboard.focusVisible || item.keyboard.tabSelectionChanged === false || item.keyboard.pickerFocusReturned === false))

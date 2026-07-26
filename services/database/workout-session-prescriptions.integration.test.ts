@@ -7,19 +7,18 @@ describe("AW-3C effective runtime source contract", () => {
   it("uses one frozen projection service and canonical direct snake_case writes", () => {
     const execution = read("services/database/workout-session-execution.ts");
     const direct = read("services/database/direct-workout-sessions.ts");
-    const planUi = read("components/workouts/workout-day-focus-session.tsx");
-    const directUi = read("components/workouts/workout-session-form.tsx");
+    const sharedUi = read("components/workouts/active-workout/active-workout-core-session.tsx");
 
     expect(execution).toContain("getWorkoutSessionPrescriptionItems");
     expect(direct).toContain("rest_seconds");
     expect(direct).not.toContain("restSeconds: workout.rest_seconds");
-    expect(planUi).toContain("makeFrozenExerciseState");
-    expect(planUi).toContain("frozenLogCompatibility");
-    expect(planUi).not.toContain("function firstNumber");
-    expect(planUi).not.toContain("function plannedSetCount");
-    expect(planUi).not.toContain("day.exercises.map(makeExerciseState)");
-    expect(directUi).toContain("hydrateDirectPrescriptionSets");
-    expect(directUi).toContain("frozenLogCompatibility");
+    expect(sharedUi).toContain("makeFrozenExerciseState");
+    expect(sharedUi).toContain("frozenLogCompatibility");
+    expect(sharedUi).toContain("store.hydrate");
+    expect(sharedUi).not.toContain("function firstNumber");
+    expect(sharedUi).not.toContain("function plannedSetCount");
+    expect(sharedUi).not.toContain("day.exercises.map(makeExerciseState)");
+    expect(sharedUi).not.toContain("hydrateDirectPrescriptionSets");
   });
 
   it("exports and deletes both owner-scoped AW-3C tables", () => {

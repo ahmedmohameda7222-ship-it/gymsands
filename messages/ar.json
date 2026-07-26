@@ -44,6 +44,7 @@
       "setProgress": "المجموعة {current} من {total}",
       "sessionTime": "وقت الجلسة",
       "sessionProgress": "تقدم الجلسة",
+      "completedSetsProgress": "اكتملت {completed} من {total} مجموعات",
       "minimizeWorkout": "تصغير التمرين",
       "openSessionMenu": "فتح قائمة الجلسة",
       "loadingSession": "جارٍ تحميل الجلسة والسجلات السابقة…",

@@ -26,16 +26,16 @@ describe("Muscle Intelligence Phase 4C.2", () => {
     expect(advanced).toContain("item.performed_qualifying_sets");
   });
 
-  it("shows active muscle load only in plan-day execution", () => {
-    const day = text("components/workouts/workout-day-focus-session.tsx");
-    const direct = text("components/workouts/workout-session-form.tsx");
+  it("preserves the AW-5 compact heat-map boundary without rendering the large panel", () => {
+    const core = text("components/workouts/active-workout/active-workout-core-session.tsx");
+    const shell = text("components/workouts/active-workout/active-workout-execution-shell.tsx");
     const panel = text("components/workouts/session-muscle-load-panel.tsx");
-    expect(day).toContain("SessionMuscleLoadPanel");
-    expect(day).toContain("muscleLoadRevision");
+    expect(core).not.toContain("SessionMuscleLoadPanel");
+    expect(shell).toContain("data-aw5-mini-heat-map-slot");
+    expect(shell).toContain("miniHeatMapLabel");
     expect(panel).toContain("data-phase4c2-active-muscle-load");
     expect(panel).toContain("mode=active");
     expect(panel).toContain("requestGenerationRef");
-    expect(direct).not.toContain("SessionMuscleLoadPanel");
   });
 
   it("uses the canonical EN DE AR ActiveWorkout heat-map messages and safe failure copy", () => {

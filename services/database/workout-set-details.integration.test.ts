@@ -10,10 +10,10 @@ const legacy = readFileSync(
   "services/database/workout-sessions-legacy-implementation.ts",
   "utf8",
 );
-const ui = readFileSync(
-  "components/workouts/workout-day-focus-session.tsx",
-  "utf8",
-);
+const ui = [
+  "components/workouts/active-workout/active-workout-core-session.tsx",
+  "components/workouts/active-workout/active-workout-execution-shell.tsx",
+].map((path) => readFileSync(path, "utf8")).join("\n");
 const mcp = readFileSync("lib/mcp/tool-executor-implementation.ts", "utf8");
 const migration = readFileSync(
   "supabase/migrations/20260722210312_active_workout_aw3b_structured_set_details.sql",
@@ -128,12 +128,13 @@ describe("AW-3B set-write convergence", () => {
       ui.indexOf("function resetWorkoutTimer"),
     );
     expect(completion).toContain("buildLogRows(exerciseStates)");
-    expect(completion).not.toContain("pendingOnly: true");
+    expect(completion).toContain('sourceKind === "direct"');
+    expect(completion).toContain("buildLogRows(exerciseStates, { pendingOnly: true, validOnly: true })");
   });
 
   it("acknowledges only the saved snapshot and isolates invalid draft effort from strict persistence", () => {
     expect(ui).toContain(
-      "acknowledgeSetWrites(current, nextStates)",
+      "acknowledgeSetWrites(current, states)",
     );
     expect(ui).toContain("setValuesMatch(set, saved, detailWriteKeys)");
     expect(ui).toContain("setValuesMatch(set, saved, logWriteKeys)");
@@ -169,12 +170,11 @@ describe("AW-3B set-write convergence", () => {
       ui.indexOf("if (!exerciseStates.length)"),
     );
     const hydration = ui.slice(
-      ui.indexOf("getOrStartWorkoutDaySession(user.id, day)"),
-      ui.indexOf(".catch((error) =>"),
+      ui.indexOf("const hydration = store.hydrate"),
+      ui.indexOf("setSession(nextSession)"),
     );
-    expect(hydration.indexOf("getWorkoutSessionLogs(nextSession.id)")).toBeLessThan(
-      hydration.indexOf("setSession(nextSession)"),
-    );
+    expect(hydration).toContain("await Promise.all");
+    expect(hydration).toContain("store.getSnapshot()");
     expect(ui).toContain(
       "if (isStarting || !session?.id || !executionHydratedRef.current) return;",
     );

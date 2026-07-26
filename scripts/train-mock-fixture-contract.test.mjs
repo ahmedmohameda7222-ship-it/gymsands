@@ -5,7 +5,12 @@ import test from "node:test";
 const contract = JSON.parse(await readFile(new URL("../lib/fixtures/train-mock-contract.json", import.meta.url), "utf8"));
 const mockSource = await readFile(new URL("../lib/fixtures/train-mock.ts", import.meta.url), "utf8");
 const qaSource = await readFile(new URL("./run-train-layout-qa.mjs", import.meta.url), "utf8");
-const componentSource = await readFile(new URL("../components/workouts/workout-day-focus-session.tsx", import.meta.url), "utf8");
+const componentSource = (
+  await Promise.all([
+    "../components/workouts/active-workout/active-workout-core-session.tsx",
+    "../components/workouts/active-workout/active-workout-execution-shell.tsx"
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")))
+).join("\n");
 
 test("Train mock and rendered QA share one stable persisted-set identity contract", () => {
   assert.match(contract.activeDayId, /^[0-9a-f-]{36}$/);

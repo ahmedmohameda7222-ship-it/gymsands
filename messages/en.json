@@ -44,6 +44,7 @@
       "setProgress": "Set {current} of {total}",
       "sessionTime": "Session time",
       "sessionProgress": "Session progress",
+      "completedSetsProgress": "{completed} of {total} sets completed",
       "minimizeWorkout": "Minimize workout",
       "openSessionMenu": "Open session menu",
       "loadingSession": "Loading your session and previous logs…",

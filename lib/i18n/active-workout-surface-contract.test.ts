@@ -5,7 +5,8 @@ const source = (path: string) => readFileSync(path, "utf8");
 
 describe("AW-1B Active Workout surface contract", () => {
   it("uses the ActiveWorkout namespace for the day-focus session without changing stable identifiers", () => {
-    const session = source("components/workouts/workout-day-focus-session.tsx");
+    const session = source("components/workouts/active-workout/active-workout-core-session.tsx");
+    const shell = source("components/workouts/active-workout/active-workout-execution-shell.tsx");
     const localeMessages = (["en", "de", "ar"] as const).map((locale) =>
       JSON.parse(source(`messages/${locale}.json`)) as {
         ActiveWorkout: {
@@ -31,13 +32,14 @@ describe("AW-1B Active Workout surface contract", () => {
       }
     }
     expect(session).toContain('<option value="machine_taken">{tr("actions.machineOccupied")}</option>');
-    expect(session).toContain('aria-label={tr("accessibility.openSessionMenu")}');
+    expect(shell).toContain("data-active-set-details-trigger");
+    expect(session).toContain('moreLabel={tr("common.more")}');
     expect(session).toContain("legacyReopenSetLabel");
     expect(session).toContain("restartSet(activeExerciseIndex, activeSetIndex)");
   });
 
   it("isolates dynamic names at their local interpolation or element boundary", () => {
-    const session = source("components/workouts/workout-day-focus-session.tsx");
+    const session = source("components/workouts/active-workout/active-workout-core-session.tsx");
     const indicator = source("components/workouts/active-workout-indicator.tsx");
 
     expect(session).toContain('tr("exercise.nextExercise", { name: isolateBidiText(nextExercise.exercise.exercise_name) })');
@@ -52,16 +54,16 @@ describe("AW-1B Active Workout surface contract", () => {
   });
 
   it("routes visible Active Workout measurements and counts through the formatter contract", () => {
-    const session = source("components/workouts/workout-day-focus-session.tsx");
+    const session = source("components/workouts/active-workout/active-workout-core-session.tsx");
 
     expect(session).toContain('formatters.measurement(totalVolume, "kg")');
     expect(session).toContain('formatters.measurement(durationMinutes, "minutes", 0)');
     expect(session).toContain("formatters.ratio(completedSets, totalSets)");
     expect(session).toContain("formatters.integer(previewPrs.length)");
-    expect(session).toContain("formatters.integer(set.setNumber)");
-    expect(session).toContain("formatters.ratio(done, item.sets.length)");
-    expect(session).toContain("formatters.ratio(activeExercise.sets.filter((set) => set.completedAt).length, activeExercise.sets.length)");
-    expect(session).toContain("formatPlannedReps(nextExercise.exercise.reps, formatters");
+    expect(session).toContain("formatSetNumber={formatters.integer}");
+    expect(session).toContain("clampWorkoutProgress(completedSets, totalSets)");
+    expect(session).toContain("buildActiveWorkoutSetPath");
+    expect(session).toContain('tr("set.label", { count: formatters.integer(activeSet.setNumber) })');
     expect(session).not.toContain('value={`${totalVolume} kg`}');
     expect(session).not.toContain('value={`${completedSets}/${totalSets}`}');
     expect(session).not.toContain("value={String(previewPrs.length)}");
