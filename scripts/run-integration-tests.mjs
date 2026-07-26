@@ -6,6 +6,7 @@ import process from "node:process";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 export const DEFAULT_INTEGRATION_DATABASE = "plaivra_ci_test";
+export const DEFAULT_INTEGRATION_POSTGRES_IMAGE = "postgres:15-alpine";
 
 export function requireLocalPostgresUrl(value, label, { requireTestName = false } = {}) {
   if (typeof value !== "string" || !value.trim()) {
@@ -35,83 +36,112 @@ export function requireLocalPostgresUrl(value, label, { requireTestName = false 
   return url;
 }
 
-export function buildDisposableDatabaseUrl(adminDatabaseUrl, databaseName = DEFAULT_INTEGRATION_DATABASE) {
-  if (!/(^|[_-])test($|[_-])/i.test(databaseName)) {
-    throw new Error("Disposable integration database names must contain the token 'test'.");
-  }
-  const url = requireLocalPostgresUrl(adminDatabaseUrl, "Integration database administrator URL");
-  if (url.pathname.replace(/^\//, "") === databaseName) {
-    throw new Error("The administrator database and disposable integration database must be different.");
-  }
-  url.pathname = `/${databaseName}`;
-  return url.toString();
-}
-
 export function resolveIntegrationDatabaseConfig(env = process.env) {
-  const localAdmin = env.PLAIVRA_LOCAL_DATABASE_URL?.trim();
+  const replayedDatabaseUrl = requireLocalPostgresUrl(
+    env.PLAIVRA_AW2A_TEST_DATABASE_URL?.trim() || env.PLAIVRA_LOCAL_DATABASE_URL?.trim(),
+    "PLAIVRA_AW2A_TEST_DATABASE_URL or PLAIVRA_LOCAL_DATABASE_URL",
+  ).toString();
 
-  if (localAdmin) {
-    const adminUrl = requireLocalPostgresUrl(localAdmin, "PLAIVRA_LOCAL_DATABASE_URL").toString();
-    const aw2aUrl = requireLocalPostgresUrl(
-      env.PLAIVRA_AW2A_TEST_DATABASE_URL?.trim() || adminUrl,
-      "PLAIVRA_AW2A_TEST_DATABASE_URL",
-    ).toString();
+  if (env.DATABASE_URL?.trim()) {
     return {
-      provision: true,
-      adminDatabaseUrl: adminUrl,
-      databaseUrl: buildDisposableDatabaseUrl(adminUrl),
-      aw2aDatabaseUrl: aw2aUrl,
-      databaseName: DEFAULT_INTEGRATION_DATABASE,
+      mode: "explicit",
+      databaseUrl: requireLocalPostgresUrl(
+        env.DATABASE_URL,
+        "DATABASE_URL",
+        { requireTestName: true },
+      ).toString(),
+      aw2aDatabaseUrl: replayedDatabaseUrl,
+      databaseName: new URL(env.DATABASE_URL).pathname.replace(/^\//, ""),
+      image: null,
     };
   }
 
-  const explicitDatabaseUrl = requireLocalPostgresUrl(
-    env.DATABASE_URL,
-    "DATABASE_URL",
-    { requireTestName: true },
-  ).toString();
-  const aw2aDatabaseUrl = requireLocalPostgresUrl(
-    env.PLAIVRA_AW2A_TEST_DATABASE_URL,
-    "PLAIVRA_AW2A_TEST_DATABASE_URL",
-  ).toString();
-
   return {
-    provision: false,
-    adminDatabaseUrl: null,
-    databaseUrl: explicitDatabaseUrl,
-    aw2aDatabaseUrl,
-    databaseName: new URL(explicitDatabaseUrl).pathname.replace(/^\//, ""),
+    mode: "docker",
+    databaseUrl: null,
+    aw2aDatabaseUrl: replayedDatabaseUrl,
+    databaseName: DEFAULT_INTEGRATION_DATABASE,
+    image: env.PLAIVRA_INTEGRATION_POSTGRES_IMAGE?.trim() || DEFAULT_INTEGRATION_POSTGRES_IMAGE,
   };
 }
 
-function runPsql(databaseUrl, sql) {
-  execFileSync(
-    "psql",
-    [databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-c", sql],
-    {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      env: { ...process.env, PGPASSWORD: process.env.PGPASSWORD ?? "postgres" },
-      stdio: "pipe",
-    },
-  );
+export function parsePublishedPostgresPort(value) {
+  const match = String(value ?? "").trim().match(/(?:127\.0\.0\.1|0\.0\.0\.0|\[::\]|::):(\d+)$/);
+  if (!match) throw new Error(`Unable to resolve the disposable PostgreSQL port from: ${value}`);
+  const port = Number(match[1]);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid disposable PostgreSQL port: ${match[1]}`);
+  }
+  return port;
 }
 
-export function provisionDisposableDatabase(config) {
-  if (!config.provision || !config.adminDatabaseUrl) return;
-  runPsql(config.adminDatabaseUrl, `drop database if exists ${config.databaseName} with (force);`);
-  runPsql(config.adminDatabaseUrl, `create database ${config.databaseName} template template0 encoding 'UTF8';`);
+function docker(args, options = {}) {
+  return execFileSync("docker", args, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
+    ...options,
+  });
 }
 
-export function removeDisposableDatabase(config) {
-  if (!config.provision || !config.adminDatabaseUrl) return;
-  runPsql(config.adminDatabaseUrl, `drop database if exists ${config.databaseName} with (force);`);
+async function waitForDisposablePostgres(containerName) {
+  for (let attempt = 1; attempt <= 60; attempt += 1) {
+    const readiness = spawnSync(
+      "docker",
+      ["exec", containerName, "pg_isready", "-U", "postgres", "-d", DEFAULT_INTEGRATION_DATABASE],
+      { cwd: process.cwd(), encoding: "utf8", stdio: "pipe" },
+    );
+    if (readiness.status === 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error("Disposable PostgreSQL did not become ready within 60 seconds.");
 }
 
-function main() {
+export async function startDisposablePostgres(config) {
+  if (config.mode !== "docker") {
+    return { containerName: null, databaseUrl: config.databaseUrl };
+  }
+
+  const containerName = `plaivra-integration-postgres-${process.pid}-${Date.now()}`;
+  try {
+    docker([
+      "run",
+      "--detach",
+      "--rm",
+      "--name",
+      containerName,
+      "--env",
+      "POSTGRES_PASSWORD=postgres",
+      "--env",
+      `POSTGRES_DB=${DEFAULT_INTEGRATION_DATABASE}`,
+      "--publish",
+      "127.0.0.1::5432",
+      config.image,
+    ]);
+    await waitForDisposablePostgres(containerName);
+    const port = parsePublishedPostgresPort(docker(["port", containerName, "5432/tcp"]));
+    return {
+      containerName,
+      databaseUrl: `postgresql://postgres:postgres@127.0.0.1:${port}/${DEFAULT_INTEGRATION_DATABASE}`,
+    };
+  } catch (error) {
+    try {
+      docker(["rm", "--force", containerName]);
+    } catch {
+      // Preserve the original startup failure.
+    }
+    throw error;
+  }
+}
+
+export function stopDisposablePostgres(containerName) {
+  if (!containerName) return;
+  docker(["rm", "--force", containerName]);
+}
+
+async function main() {
   const config = resolveIntegrationDatabaseConfig();
-  provisionDisposableDatabase(config);
-
+  const disposable = await startDisposablePostgres(config);
   const executable = process.platform === "win32" ? "npx.cmd" : "npx";
   const args = [
     "vitest",
@@ -128,12 +158,12 @@ function main() {
       stdio: "inherit",
       env: {
         ...process.env,
-        DATABASE_URL: config.databaseUrl,
+        DATABASE_URL: disposable.databaseUrl,
         PLAIVRA_AW2A_TEST_DATABASE_URL: config.aw2aDatabaseUrl,
       },
     });
   } finally {
-    removeDisposableDatabase(config);
+    stopDisposablePostgres(disposable.containerName);
   }
 
   if (result?.error) throw result.error;
@@ -142,7 +172,7 @@ function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    main();
+    await main();
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
     process.exitCode = 1;
