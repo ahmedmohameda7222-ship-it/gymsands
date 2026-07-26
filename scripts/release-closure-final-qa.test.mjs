@@ -167,22 +167,27 @@ test("same-head orchestration is exact, fail-closed, and diagnostically complete
   assert.match(workflow, /node scripts\/exact-release-orchestrator\.mjs/);
   assert.match(workflow, /actions: write/);
   assert.match(workflow, /contents: read/);
+  assert.match(workflow, /workflow_dispatch:[\s\S]*quality_run_id:/);
+  assert.doesNotMatch(workflow, /^\s*pull_request:/m);
   assert.match(workflow, /Upload exact release diagnostics/);
   assert.doesNotMatch(workflow, /plaivra_aw2a_post_merge_release_closure_implementation_report\.md/);
   assert.doesNotMatch(workflow, /plaivra_aw2b_command_authority_implementation_report\.md/);
   assert.doesNotMatch(workflow, /issues:\s*write|pull-requests:\s*write|pull_request_target|contents:\s*write/);
 
-  assert.match(orchestrator, /stage1-q-\$\{exactRunId\}-\$\{exactRunAttempt\}-\$\{reviewedCommit\}/);
+  assert.match(orchestrator, /requiredEnv\("QUALITY_RUN_ID", RUN_ID\)/);
   assert.match(orchestrator, /displayTitle === expectedTitle/);
-  assert.match(orchestrator, /quality-failure-evidence-\$\{qualityRunId\}/);
   assert.match(orchestrator, /failedStepSummary/);
   assert.match(orchestrator, /consecutiveApiFailures >= 12/);
   assert.match(orchestrator, /releasePreflightDispatched: false/);
   assert.match(orchestrator, /schemaVersion: 3/);
+  assert.match(orchestrator, /qualityExecutionMode: "reused-canonical-run"/);
+  assert.match(orchestrator, /qualityArtifactDigest/);
+  assert.match(orchestrator, /qualityValidationRequestId/);
   assert.match(orchestrator, /canonicalArtifact: qualityArtifact/);
   assert.match(orchestrator, /preflightArtifact/);
   assert.match(orchestrator, /productionWritePerformed: false/);
   assert.match(orchestrator, /deploymentPerformed: false/);
+  assert.doesNotMatch(orchestrator, /"workflow",\s*"run",\s*"quality\.yml"/);
   assert.doesNotMatch(orchestrator, /gh run watch|issues\//);
 });
 

@@ -89,14 +89,16 @@ test("AW-3C replay reproduces the released AW-3B marker before the pending migra
   assert.match(helper, /setMarker\(repositoryRoot, logPath, MARKER_AFTER_AW3B_PROMOTION\)/);
 });
 
-test("manual and PR Quality always use exact nonempty comparison identities", () => {
-  assert.match(quality, /workflow_dispatch:[\s\S]*reviewed_commit:[\s\S]*required: true[\s\S]*comparison_base:[\s\S]*required: true/);
+test("canonical PR Quality uses exact nonempty comparison identities and cannot be manually duplicated", () => {
+  assert.doesNotMatch(quality, /workflow_dispatch:/);
   assert.match(quality, /PR_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(quality, /PR_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(quality, /\[\[ "\$reviewed_commit" =~ \^\[0-9a-fA-F\]\{40\}\$ \]\]/);
   assert.match(quality, /\[\[ "\$comparison_base" =~ \^\[0-9a-fA-F\]\{40\}\$ \]\]/);
   assert.match(quality, /--base "\$PLAIVRA_COMPARISON_BASE"/);
   assert.doesNotMatch(quality, /Record workflow-dispatch parity skip|workflow_dispatch has no pull-request base SHA/);
+  assert.match(quality, /SUPABASE_TELEMETRY_DISABLED: "1"/);
+  assert.match(quality, /DO_NOT_TRACK: "1"/);
 });
 
 test("permanent validation names are generic and every release gate is retained", () => {

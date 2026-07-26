@@ -173,6 +173,8 @@ export function validateCanonicalQualityArtifact({
   const metadataRun = String(metadata.workflowRunId ?? "");
   if (metadata.repository !== expectedRepo) failures.push("artifact_repository_mismatch");
   if (metadata.fullReleaseQuality !== true) failures.push("artifact_not_full_release_quality");
+  if (metadata.eventType !== "pull_request") failures.push("artifact_event_type_mismatch");
+  if (String(metadata.workflowRunAttempt ?? "") !== "1") failures.push("artifact_run_attempt_mismatch");
   if (metadataRun !== expectedRun) failures.push("artifact_run_id_mismatch");
   if (metadata.reviewedCommit !== expectedSha) failures.push("artifact_commit_mismatch");
   if (metadata.comparisonBase !== expectedBase) failures.push("artifact_comparison_base_mismatch");
