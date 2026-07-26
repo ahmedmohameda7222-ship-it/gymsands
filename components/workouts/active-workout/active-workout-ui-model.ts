@@ -1,5 +1,6 @@
 import type {
   FrozenWorkoutPrescriptionSet,
+  WorkoutPerformanceMetricSource,
   WorkoutSessionPrescriptionItem,
   WorkoutSetSideMode,
   WorkoutSetTempoAdherence,
@@ -18,6 +19,9 @@ export type ActiveWorkoutCoreSet = {
   plannedTempo: string | null;
   performedTempo: string | null;
   tempoAdherence: WorkoutSetTempoAdherence;
+  detailSource: WorkoutPerformanceMetricSource;
+  detailSourceProvider: string | null;
+  detailSourceVersion: string | null;
   completedAt: string | null;
   prescriptionSet: FrozenWorkoutPrescriptionSet | null;
   hasPersistedDetails: boolean;
