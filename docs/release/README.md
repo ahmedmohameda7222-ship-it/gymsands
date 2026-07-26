@@ -15,7 +15,7 @@ Keep these operations separate:
 7. **Production verification and acceptance** — prove provider identity, `/api/version`, `/api/health`, smoke, browser, console, network, timing, and retained evidence.
 8. **Rollback or forward fix** — use a separately reviewed code/schema-compatible release pair; never substitute an unrelated old deployment.
 
-A passing Draft PR check is not phase closure. A passing phase-close Quality or read-only release preflight is not independent Production authorization. A provider `READY` state alone is not acceptance.
+A passing Draft PR check is not phase closure. A passing review preflight is not production release authorization. Any failed or blocked strict release preflight is a no-go before merge. The migration ledger must be reconciled before the production-triggering merge. A provider `READY` state alone is not acceptance.
 
 ## Two-tier pull-request validation
 
@@ -122,7 +122,11 @@ Unknown modes, mismatched identities, missing files, stale evidence, failed gate
 
 ### Vercel
 
-`vercel.json` declares main-only deployment policy intent. Repository tests prove policy intent only, not provider enforcement. A merge to `main` is production-triggering under the current model, so all fail-closed gates and explicit authorization must precede merge.
+`vercel.json` declares main-only deployment policy intent. Repository configuration and tests verify policy intent only. They do not prove actual Vercel provider enforcement.
+
+Vercel does not use `ignoreCommand`, `PLAIVRA_PREVIEW_RELEASE_SHA`, or `PLAIVRA_PRODUCTION_RELEASE_SHA`. Vercel does not use preview or production exact-SHA approval environment variables.
+
+After candidate pushes, inspect the Vercel deployment list for the exact pushed SHA. A merge to `main` is production-triggering under the current model, so all fail-closed gates and explicit authorization must precede merge.
 
 ### Netlify
 
@@ -130,15 +134,16 @@ Netlify remains separate. Its production ignore gate uses `scripts/netlify-produ
 
 ## Production runbook
 
-1. Complete scoped PR validation and code review.
-2. Mark the stable exact head Ready for review and obtain one passing canonical Quality artifact.
-3. Complete Exact Release and read-only release preflight against that same artifact.
-4. Confirm migration history, compatibility marker, expected migration, and Activity Catalog isolation.
-5. Obtain explicit release-owner approval for the exact head.
-6. Merge the approved exact change to `main`.
-7. Record the resulting 40-character `main` SHA and verify provider build identity.
-8. Verify `/api/version`, `/api/health`, anonymous smoke, populated and empty authenticated synthetic smoke, browser, console, network, screenshots, route timings, and request counts.
-9. Record the final launch verdict.
+1. Complete code review and all required scoped PR checks for the candidate change.
+2. Complete migration-history reconciliation and independent verification.
+3. Confirm the compatibility marker, expected migration identity, and Activity Catalog isolation.
+4. Mark the stable exact head Ready for review, obtain one passing canonical Quality artifact, and complete artifact-reusing Exact Release.
+5. Run `npm run release:preflight -- --mode release ...` against that exact canonical Quality artifact and retain its passing result. The strict command must explicitly include `--mode release`.
+6. Obtain explicit release-owner approval for the exact reviewed change.
+7. Merge the approved exact change to `main`.
+8. Record the resulting 40-character `main` SHA and verify provider build identity.
+9. Verify `/api/version`, `/api/health`, anonymous smoke, populated and empty authenticated synthetic smoke, browser, console, network, screenshots, route timings, and request counts.
+10. Record the final launch verdict.
 
 ## Rollback
 
