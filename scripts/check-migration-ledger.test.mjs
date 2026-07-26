@@ -76,6 +76,22 @@ function reconciledLedger() {
   return ledger;
 }
 
+function ledgerWithEvidence() {
+  const bytes = Buffer.from("select 1;\n");
+  const commit = "54e9768d52011e1d1839c4f50f0a2bc578ca27db";
+  const sha256 = "4a45092ccf992ea92250053a80b931b787924ba61648f420555511b84f10ab6c";
+  const blob = "40f0e35f840b1f7d176bef8849266cfa2dc21831";
+  const ledger = reconciledLedger();
+  ledger.auditedRepositoryCommit = commit;
+  ledger.entries[0] = {
+    ...ledger.entries[0],
+    evidenceCommit: commit,
+    repositorySha256: sha256,
+    repositoryGitBlob: blob
+  };
+  return { ledger, bytes, commit, blob };
+}
+
 test("accepts an internally consistent pending reconciliation ledger", () => {
   const result = validateMigrationLedger({ ledger: validLedger(), files, documentation });
   assert.deepEqual(result.errors, []);
@@ -199,26 +215,15 @@ test("derives all fail-closed counts rather than trusting a declared green state
   });
 });
 
-
-test("accepts reachable immutable migration evidence with matching committed bytes", async () => {
-  const bytes = Buffer.from("select 1;\n");
-  const commit = "54e9768d52011e1d1839c4f50f0a2bc578ca27db";
-  const sha256 = "4a45092ccf992ea92250053a80b931b787924ba61648f420555511b84f10ab6c";
-  const blob = "40f0e35f840b1f7d176bef8849266cfa2dc21831";
-  const ledger = reconciledLedger();
-  ledger.auditedRepositoryCommit = commit;
-  ledger.entries[0] = {
-    ...ledger.entries[0],
-    evidenceCommit: commit,
-    repositorySha256: sha256,
-    repositoryGitBlob: blob
-  };
+test("accepts immutable migration evidence after a squash merge removes ancestry", async () => {
+  const { ledger, bytes, commit, blob } = ledgerWithEvidence();
   const calls = [];
   const errors = await validateMigrationLedgerGitEvidence({
     ledger,
     root: "/repo",
     runGit: async (args) => {
       calls.push(args);
+      if (args[0] === "merge-base") throw new Error("ancestry must not be required");
       if (args[0] === "show") return bytes;
       if (args[0] === "rev-parse") return Buffer.from(`${blob}\n`);
       return Buffer.alloc(0);
@@ -226,29 +231,49 @@ test("accepts reachable immutable migration evidence with matching committed byt
     readCurrentFile: async () => bytes
   });
   assert.deepEqual(errors, []);
-  assert.ok(calls.some((args) => args.join(" ") === `merge-base --is-ancestor ${commit} HEAD`));
+  assert.equal(calls.some((args) => args[0] === "merge-base"), false);
   assert.ok(calls.some((args) => args[0] === "show" && args[1].includes(files[0])));
+  assert.ok(calls.some((args) => args.join(" ") === `rev-parse ${commit}:supabase/migrations/${files[0]}`));
+  assert.ok(calls.some((args) => args.join(" ") === `rev-parse HEAD:supabase/migrations/${files[0]}`));
 });
 
-test("rejects an unrelated or unreachable evidence commit", async () => {
-  const commit = "54e9768d52011e1d1839c4f50f0a2bc578ca27db";
-  const ledger = reconciledLedger();
-  ledger.auditedRepositoryCommit = commit;
-  ledger.entries[0] = {
-    ...ledger.entries[0],
-    evidenceCommit: commit,
-    repositorySha256: "0".repeat(64),
-    repositoryGitBlob: "0".repeat(40)
-  };
+test("rejects a missing audited evidence commit", async () => {
+  const { ledger, bytes } = ledgerWithEvidence();
   const errors = await validateMigrationLedgerGitEvidence({
     ledger,
     runGit: async (args) => {
-      if (args[0] === "merge-base") throw new Error("not ancestor");
+      if (args[0] === "cat-file") throw new Error("missing commit");
+      return Buffer.alloc(0);
+    },
+    readCurrentFile: async () => bytes
+  });
+  assert.ok(errors.some((error) => error.includes("does not exist")));
+});
+
+test("rejects an evidence commit that does not contain the attested migration", async () => {
+  const { ledger, bytes } = ledgerWithEvidence();
+  const errors = await validateMigrationLedgerGitEvidence({
+    ledger,
+    runGit: async (args) => {
       if (args[0] === "show") throw new Error("missing migration");
       return Buffer.alloc(0);
     },
-    readCurrentFile: async () => Buffer.from("select 1;\n")
+    readCurrentFile: async () => bytes
   });
-  assert.ok(errors.some((error) => error.includes("not reachable")));
   assert.ok(errors.some((error) => error.includes("does not contain attested migration")));
+});
+
+test("rejects a current HEAD blob that differs from the attested blob", async () => {
+  const { ledger, bytes, commit, blob } = ledgerWithEvidence();
+  const errors = await validateMigrationLedgerGitEvidence({
+    ledger,
+    runGit: async (args) => {
+      if (args[0] === "show") return bytes;
+      if (args[0] === "rev-parse" && args[1].startsWith(`${commit}:`)) return Buffer.from(`${blob}\n`);
+      if (args[0] === "rev-parse" && args[1].startsWith("HEAD:")) return Buffer.from(`${"1".repeat(40)}\n`);
+      return Buffer.alloc(0);
+    },
+    readCurrentFile: async () => bytes
+  });
+  assert.ok(errors.some((error) => error.includes("current HEAD blob differs")));
 });
