@@ -27,7 +27,9 @@ Read current authority in this order:
 9. `docs/platform-roadmap/README.md`
 10. `docs/release/README.md`
 
-Merged pull requests, Git history, and GitHub Actions artifacts preserve implementation evidence. Completed implementation reports, branch handoffs, audit snapshots, generated screenshots, and one-off reconciliation pointers are not active source authority and must not remain in the repository tree.
+Only current product, architecture, privacy, operations, release, and design authority belongs in `docs/`. Merged pull requests, Git history, and GitHub Actions artifacts preserve implementation evidence. Completed implementation reports, branch handoffs, audit snapshots, generated screenshots, one-off reconciliation pointers, and redundant prose contracts must not remain in the active repository tree.
+
+Tests enforce source code, schema, SQL verification, structured manifests, and other machine-readable contracts. Normal Markdown wording is explanatory authority, not executable test input.
 
 ## Current stack
 
@@ -45,7 +47,7 @@ Merged pull requests, Git history, and GitHub Actions artifacts preserve impleme
 - Active Workout AW-1 establishes EN/DE/AR language contracts.
 - AW-2 provides persisted execution state, command authority, idempotency receipts, and durable timeline events.
 - AW-3A provides structured performed metrics; AW-3B provides structured set details; AW-3C provides immutable normalized prescription snapshots and deterministic frozen hydration.
-- AW-4 provides the shared deterministic session engine, serialized command dispatcher, official Active Workout store, and timestamp-projected timer engine as an unmerged release candidate. Its Production migration was applied exactly once.
+- AW-4 provides the shared deterministic session engine, serialized command dispatcher, official Active Workout store, and timestamp-projected timer engine. AW-4 is merged; its Production migration was applied exactly once.
 - Plaivra Production contains 75 physical migration records. The ledger classifies 63 exact applications and 12 generated-version aliases, with zero pending, schema-untracked, or unresolved migrations.
 - The released compatibility marker remains `20260724232734`. Physical migration advancement and application-release promotion remain separate operations.
 - Repository state alone does not authorize merge, manual deployment, or compatibility-marker promotion.
