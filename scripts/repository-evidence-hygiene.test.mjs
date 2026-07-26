@@ -16,6 +16,63 @@ function filesUnder(directory) {
   return files;
 }
 
+function callArguments(source, callName) {
+  const calls = [];
+  const needle = `${callName}(`;
+  let searchFrom = 0;
+  while (searchFrom < source.length) {
+    const start = source.indexOf(needle, searchFrom);
+    if (start < 0) break;
+    const open = start + needle.length - 1;
+    let depth = 1;
+    let quote = null;
+    let escaped = false;
+    for (let index = open + 1; index < source.length; index += 1) {
+      const character = source[index];
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (character === "\\") {
+          escaped = true;
+          continue;
+        }
+        if (character === quote) quote = null;
+        continue;
+      }
+      if (character === '"' || character === "'" || character === "`") {
+        quote = character;
+        continue;
+      }
+      if (character === "(") depth += 1;
+      if (character === ")") {
+        depth -= 1;
+        if (depth === 0) {
+          calls.push(source.slice(open + 1, index));
+          searchFrom = index + 1;
+          break;
+        }
+      }
+      if (index === source.length - 1) searchFrom = source.length;
+    }
+    if (searchFrom <= start) searchFrom = open + 1;
+  }
+  return calls;
+}
+
+function readsMarkdownProse(source) {
+  const calls = [
+    ...callArguments(source, "readFileSync"),
+    ...callArguments(source, "readFile")
+  ];
+  return calls.some((call) => {
+    const directPath = /docs[\\/][^"'`]*\.md/i.test(call);
+    const segmentedPath = /["'`]docs["'`][\s\S]{0,320}?["'`][^"'`]*\.md["'`]/i.test(call);
+    return directPath || segmentedPath;
+  });
+}
+
 test("completed implementation evidence stays out of the active source tree", () => {
   const topLevelReports = readdirSync(root)
     .filter((entry) => /^plaivra_.*(?:implementation|qaqc|quality|audit|reconciliation).*\.(?:md|json)$/i.test(entry))
@@ -56,10 +113,7 @@ test("tests enforce code and structured contracts instead of Markdown prose", ()
     .flatMap((directory) => filesUnder(join(root, directory)))
     .filter((path) => /(?:^|\/)[^/]+\.(?:test|spec)\.(?:ts|tsx|js|mjs|cjs)$/i.test(path));
 
-  const proseCoupling = testSources.filter((path) => {
-    const source = readFileSync(path, "utf8");
-    return /readFileSync\(\s*["']docs\/[^"']+\.md["']/i.test(source);
-  });
+  const proseCoupling = testSources.filter((path) => readsMarkdownProse(readFileSync(path, "utf8")));
 
   assert.deepEqual(proseCoupling, []);
 });
