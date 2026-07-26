@@ -66,7 +66,7 @@ test("Exact Release reuses canonical Quality and dispatches one read-only prefli
   const verifyQuality = orchestrator.indexOf("const qualityEvidence = verifyQualityArtifact({");
   const dispatchPreflight = orchestrator.indexOf('"release-preflight.yml"');
   const verifyPreflight = orchestrator.indexOf("preflightArtifact = verifyPreflightArtifact({");
-  const finalEvidence = orchestrator.indexOf("writeFinalEvidence({");
+  const finalEvidence = orchestrator.indexOf("writeFinalEvidence({", verifyPreflight);
   assert.ok(verifyQuality >= 0, "canonical Quality verification is missing");
   assert.ok(dispatchPreflight > verifyQuality, "preflight must follow canonical Quality verification");
   assert.ok(verifyPreflight > dispatchPreflight, "preflight evidence must be verified after dispatch");
