@@ -20,6 +20,7 @@ import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
 import { readStoredTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
 import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
 import { activeSessionClock } from "@/lib/workouts/active-session-store/clock";
+import type { CanonicalWorkoutSetWrite } from "@/lib/workouts/active-session-store/persistence-adapter";
 import {
   getActiveSessionStore,
   type ActiveSessionStore
@@ -36,6 +37,7 @@ import {
 } from "@/services/database/workout-session-prescriptions";
 import {
   canUpdateWorkoutSetNote,
+  editableWorkoutSetProvenance,
   parseWorkoutSetEffortInput,
   validateWorkoutSetEffortInput,
   WORKOUT_SET_NOTE_MAX_CODE_POINTS,
@@ -68,6 +70,17 @@ type ActiveWorkoutCoreSessionProps = {
   source: ActiveWorkoutSource;
   onOpenLegacySurface: (surface: "details" | "review") => void;
 };
+
+const detailPatchKeys = new Set<keyof ActiveWorkoutCoreSet>([
+  "notes",
+  "rpe",
+  "rir",
+  "setType",
+  "sideMode",
+  "plannedTempo",
+  "performedTempo",
+  "tempoAdherence"
+]);
 
 function normalizeName(value: string) {
   return value.trim().toLocaleLowerCase();
@@ -127,6 +140,9 @@ function makeCoreExercises(
           plannedTempo: details?.planned_tempo ?? prescriptionSet?.tempoTarget ?? null,
           performedTempo: details?.performed_tempo ?? null,
           tempoAdherence: details?.tempo_adherence ?? "not_recorded",
+          detailSource: details?.source ?? "manual",
+          detailSourceProvider: details?.source_provider ?? "plaivra",
+          detailSourceVersion: details?.source_version ?? "aw5-v1",
           completedAt: log?.completed_at ?? null,
           prescriptionSet,
           hasPersistedDetails: Boolean(details)
@@ -140,14 +156,15 @@ function cursorIndexes(
   state: WorkoutSessionExecutionState,
   exercises: readonly ActiveWorkoutCoreExercise[]
 ) {
-  const exerciseIndex = Math.max(0, exercises.findIndex((exercise) =>
+  const foundExerciseIndex = exercises.findIndex((exercise) =>
     exercise.item.id === state.active_snapshot_item_id
     || exercise.item.itemOrder === state.active_item_order
-  ));
-  const setIndex = Math.max(0, exercises[exerciseIndex]?.sets.findIndex((set) =>
+  );
+  const exerciseIndex = foundExerciseIndex >= 0 ? foundExerciseIndex : 0;
+  const foundSetIndex = exercises[exerciseIndex]?.sets.findIndex((set) =>
     set.setNumber === state.active_set_number
-  ) ?? 0);
-  return { exerciseIndex, setIndex };
+  ) ?? -1;
+  return { exerciseIndex, setIndex: foundSetIndex >= 0 ? foundSetIndex : 0 };
 }
 
 function updateExerciseSet(
@@ -178,6 +195,44 @@ function sourceLabel(source: ActiveWorkoutSource) {
   return source.kind === "plan-day" ? source.day.day_name : source.workout.name;
 }
 
+function canonicalSetWrite(
+  exercise: ActiveWorkoutCoreExercise,
+  set: ActiveWorkoutCoreSet,
+  completedAt: string | null
+): CanonicalWorkoutSetWrite {
+  const provenance = editableWorkoutSetProvenance(
+    set.detailSource,
+    set.detailSourceProvider,
+    set.detailSourceVersion
+  );
+  return {
+    planExerciseId: exercise.item.sourcePlanExerciseId,
+    exerciseOrder: exercise.item.itemOrder,
+    exerciseName: exercise.item.activityName,
+    exerciseCategory: exercise.category,
+    ...frozenLogCompatibility(exercise.item, set.prescriptionSet),
+    setNumber: set.setNumber,
+    reps: activeWorkoutNumber(set.reps),
+    weightKg: activeWorkoutNumber(set.weightKg),
+    notes: set.notes || null,
+    completedAt,
+    setDetails: {
+      schemaVersion: 1,
+      setType: set.setType,
+      rpe: parseWorkoutSetEffortInput(set.rpe, "rpe"),
+      rir: parseWorkoutSetEffortInput(set.rir, "rir"),
+      notes: set.notes || null,
+      sideMode: set.sideMode,
+      plannedTempo: set.plannedTempo,
+      performedTempo: set.performedTempo,
+      tempoAdherence: set.tempoAdherence,
+      source: provenance.source,
+      sourceProvider: provenance.sourceProvider,
+      sourceVersion: provenance.sourceVersion
+    }
+  };
+}
+
 export function ActiveWorkoutCoreSession({
   source,
   onOpenLegacySurface
@@ -199,16 +254,21 @@ export function ActiveWorkoutCoreSession({
   const storeRef = useRef<ActiveSessionStore | null>(null);
   const controllerDeviceIdRef = useRef<string | null>(null);
   const restExpiryRef = useRef<string | null>(null);
+  const detailsSaveRef = useRef<Promise<void> | null>(null);
 
   const route = useMemo(() => sourceRoute(source), [source]);
   const label = useMemo(() => sourceLabel(source), [source]);
   const sourceIdentity = source.kind === "plan-day" ? source.day.id : source.workout.id;
   const timerKey = useMemo(
-    () => workoutStorageKey(["aw5-session", user?.id ?? "anonymous", source.kind, sourceIdentity]),
+    () => source.kind === "plan-day"
+      ? workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", sourceIdentity])
+      : workoutStorageKey(["single-workout-session", user?.id ?? "anonymous", sourceIdentity]),
     [source.kind, sourceIdentity, user?.id]
   );
   const restTimerKey = useMemo(
-    () => workoutStorageKey(["aw5-rest", user?.id ?? "anonymous", source.kind, sourceIdentity]),
+    () => source.kind === "plan-day"
+      ? workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", sourceIdentity])
+      : workoutStorageKey(["single-workout-rest", user?.id ?? "anonymous", sourceIdentity]),
     [source.kind, sourceIdentity, user?.id]
   );
 
@@ -411,7 +471,59 @@ export function ActiveWorkoutCoreSession({
 
   function patchActiveSet(patch: Partial<ActiveWorkoutCoreSet>) {
     if (!activeSet) return;
-    setExercises((current) => updateExerciseSet(current, activeExerciseIndex, activeSetIndex, patch));
+    const touchesDetails = (Object.keys(patch) as Array<keyof ActiveWorkoutCoreSet>)
+      .some((key) => detailPatchKeys.has(key));
+    const provenance = touchesDetails
+      ? editableWorkoutSetProvenance(
+          activeSet.detailSource,
+          activeSet.detailSourceProvider,
+          activeSet.detailSourceVersion
+        )
+      : null;
+    setExercises((current) => updateExerciseSet(current, activeExerciseIndex, activeSetIndex, {
+      ...patch,
+      ...(provenance ? {
+        detailSource: provenance.source,
+        detailSourceProvider: provenance.sourceProvider,
+        detailSourceVersion: provenance.sourceVersion
+      } : {})
+    }));
+  }
+
+  const saveActiveSetDetails = useCallback(async () => {
+    const exercise = exercises[activeExerciseIndex];
+    const set = exercise?.sets[activeSetIndex];
+    const store = storeRef.current;
+    if (!exercise || !set?.completedAt || !store) return;
+    if (validateWorkoutSetEffortInput(set.rpe, "rpe").error || validateWorkoutSetEffortInput(set.rir, "rir").error) return;
+    if (detailsSaveRef.current) return detailsSaveRef.current;
+    const operation = store.saveCanonicalSets([canonicalSetWrite(exercise, set, set.completedAt)])
+      .then(() => {
+        const provenance = editableWorkoutSetProvenance(
+          set.detailSource,
+          set.detailSourceProvider,
+          set.detailSourceVersion
+        );
+        setExercises((current) => updateExerciseSet(current, activeExerciseIndex, activeSetIndex, {
+          hasPersistedDetails: true,
+          detailSource: provenance.source,
+          detailSourceProvider: provenance.sourceProvider,
+          detailSourceVersion: provenance.sourceVersion
+        }));
+      })
+      .catch((error) => {
+        console.warn("Plaivra will retry the active-set details when the user saves again.", error);
+      })
+      .finally(() => {
+        detailsSaveRef.current = null;
+      });
+    detailsSaveRef.current = operation;
+    return operation;
+  }, [activeExerciseIndex, activeSetIndex, exercises]);
+
+  function handleDetailsOpenChange(open: boolean) {
+    setDetailsOpen(open);
+    if (!open) void saveActiveSetDetails();
   }
 
   async function moveToSet(nextSetIndex: number) {
@@ -482,32 +594,7 @@ export function ActiveWorkoutCoreSession({
     setExercises(optimistic);
     try {
       const response = await store.completeCanonicalSet({
-        logs: [{
-          planExerciseId: activeExercise.item.sourcePlanExerciseId,
-          exerciseOrder: activeExercise.item.itemOrder,
-          exerciseName: activeExercise.item.activityName,
-          exerciseCategory: activeExercise.category,
-          ...frozenLogCompatibility(activeExercise.item, activeSet.prescriptionSet),
-          setNumber: activeSet.setNumber,
-          reps: activeWorkoutNumber(activeSet.reps),
-          weightKg: activeWorkoutNumber(activeSet.weightKg),
-          notes: activeSet.notes || null,
-          completedAt,
-          setDetails: {
-            schemaVersion: 1,
-            setType: activeSet.setType,
-            rpe: parseWorkoutSetEffortInput(activeSet.rpe, "rpe"),
-            rir: parseWorkoutSetEffortInput(activeSet.rir, "rir"),
-            notes: activeSet.notes || null,
-            sideMode: activeSet.sideMode,
-            plannedTempo: activeSet.plannedTempo,
-            performedTempo: activeSet.performedTempo,
-            tempoAdherence: activeSet.tempoAdherence,
-            source: "manual",
-            sourceProvider: "plaivra",
-            sourceVersion: "aw5-v1"
-          }
-        }],
+        logs: [canonicalSetWrite(activeExercise, activeSet, completedAt)],
         executionIntent: {
           userId: user.id,
           workoutSessionId: session.id,
@@ -575,6 +662,18 @@ export function ActiveWorkoutCoreSession({
     }
   }
 
+  const setTypeOptions: Array<{ value: WorkoutSetType; label: string }> = [
+    { value: "normal", label: t("set.normal") },
+    { value: "warmup", label: t("set.warmup") },
+    { value: "working", label: t("set.working") },
+    { value: "failure", label: t("set.failure") },
+    { value: "drop", label: t("set.drop") },
+    { value: "backoff", label: t("set.backoff") },
+    { value: "amrap", label: t("set.amrap") },
+    { value: "timed", label: t("set.timed") },
+    { value: "other", label: t("set.other") }
+  ];
+
   const detailsContent = activeSet ? (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
@@ -582,6 +681,7 @@ export function ActiveWorkoutCoreSession({
           <Label htmlFor="active-set-rpe">RPE</Label>
           <Input
             id="active-set-rpe"
+            type="text"
             dir="ltr"
             inputMode="decimal"
             value={activeSet.rpe}
@@ -596,6 +696,7 @@ export function ActiveWorkoutCoreSession({
           <Label htmlFor="active-set-rir">RIR</Label>
           <Input
             id="active-set-rir"
+            type="text"
             dir="ltr"
             inputMode="decimal"
             value={activeSet.rir}
@@ -617,8 +718,8 @@ export function ActiveWorkoutCoreSession({
           className="flex h-12 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           disabled={isBusy}
         >
-          {(["normal", "warmup", "working", "failure", "drop", "backoff", "amrap", "timed", "other"] as const).map((value) => (
-            <option key={value} value={value}>{t(`set.${value}`)}</option>
+          {setTypeOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
       </div>
@@ -644,7 +745,14 @@ export function ActiveWorkoutCoreSession({
         />
       </div>
 
-      <Button type="button" variant="outline" className="min-h-12 w-full" onClick={() => onOpenLegacySurface("details")}>
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-12 w-full"
+        onClick={() => {
+          void saveActiveSetDetails().finally(() => onOpenLegacySurface("details"));
+        }}
+      >
         <ExternalLink className="h-4 w-4" /> {labels.fullDetails}
       </Button>
     </div>
@@ -696,7 +804,7 @@ export function ActiveWorkoutCoreSession({
         isBusy={isBusy || isStarting}
         canCompleteSet={activeWorkoutSetIsCompletable(activeSet)}
         detailsOpen={detailsOpen}
-        onDetailsOpenChange={setDetailsOpen}
+        onDetailsOpenChange={handleDetailsOpenChange}
         onChangeReps={(value) => patchActiveSet({ reps: value })}
         onChangeWeight={(value) => patchActiveSet({ weightKg: value })}
         onSelectSet={(index) => { void moveToSet(index); }}
