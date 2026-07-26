@@ -9,19 +9,20 @@ import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toaster";
 import { activeWorkoutCacheFromExecution, activeWorkoutElapsed, activeWorkoutEvent, clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, resolveActiveWorkoutRoute, writeActiveWorkoutState, type ActiveWorkoutState } from "@/lib/active-workout";
-import { cancelWorkoutSession, completeWorkoutSession, getOpenWorkoutSessionWithStatus, updateWorkoutSessionDuration } from "@/services/database/workout-sessions";
+import { getOpenWorkoutSessionWithStatus } from "@/services/database/workout-sessions";
 import type { WorkoutSession, WorkoutSessionExecutionState } from "@/types";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { userSafeError } from "@/lib/error-formatting";
 import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
 import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
-import { executionElapsedSeconds } from "@/lib/workouts/workout-session-execution";
+import { activeSessionPersistenceAdapter } from "@/services/database/active-session-persistence-adapter";
 import {
-  persistWorkoutSessionCursor,
-  persistWorkoutSessionPause,
-  persistWorkoutSessionResume,
-  requireWorkoutSessionExecutionState
-} from "@/services/database/workout-session-execution";
+  getActiveSessionStore,
+  type ActiveSessionStore
+} from "@/lib/workouts/active-session-store/store";
+import { activeSessionClock } from "@/lib/workouts/active-session-store/clock";
+import { createSessionCommandId } from "@/lib/workouts/session-engine/commands";
+import { sessionTimerSelector } from "@/lib/workouts/session-engine/selectors";
 
 // Frozen Train Phase 1 source contract: owner-scoped resume accepts only
 // stored?.sessionId === open.id && isValidActiveWorkoutRoute(stored.route)
@@ -43,6 +44,7 @@ export function ActiveWorkoutIndicator() {
   const [loadError, setLoadError] = useState("");
   const controllerRef = useRef<HTMLDivElement>(null);
   const controllerDeviceIdRef = useRef<string | null>(null);
+  const activeSessionStoreRef = useRef<ActiveSessionStore | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -63,14 +65,30 @@ export function ActiveWorkoutIndicator() {
     }
     try {
       controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
-      let persisted = await requireWorkoutSessionExecutionState(userId, open.id);
+      const store = getActiveSessionStore({
+        userId,
+        workoutSessionId: open.id,
+        adapter: activeSessionPersistenceAdapter,
+        clearCompatibilityCache: () => clearActiveWorkoutState(userId)
+      });
+      activeSessionStoreRef.current = store;
+      await store.hydrate();
+      let persisted = store.getSnapshot().executionState;
+      if (!persisted) throw new Error("The active workout has no execution state.");
       if (controllerDeviceIdRef.current && persisted.controller_device_id !== controllerDeviceIdRef.current) {
-        persisted = await persistWorkoutSessionCursor(userId, open.id, {
-          snapshotItemId: persisted.active_snapshot_item_id,
-          itemOrder: persisted.active_item_order,
-          setNumber: persisted.active_set_number,
-          controllerDeviceId: controllerDeviceIdRef.current
+        const response = await store.dispatch({
+          userId,
+          workoutSessionId: open.id,
+          commandId: createSessionCommandId(),
+          commandType: "move_cursor",
+          payload: {
+            active_snapshot_item_id: persisted.active_snapshot_item_id,
+            active_item_order: persisted.active_item_order,
+            active_set_number: persisted.active_set_number,
+            controller_device_id: controllerDeviceIdRef.current
+          }
         });
+        persisted = response.state;
       }
       const route = resolveActiveWorkoutRoute(open, stored);
       const next = activeWorkoutCacheFromExecution(persisted, {
@@ -101,12 +119,15 @@ export function ActiveWorkoutIndicator() {
   }, [load, userId]);
 
   useEffect(() => {
-    if (!state) return;
-    const tick = () => setElapsed(activeWorkoutElapsed(state));
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
-  }, [state]);
+    const tick = () => setElapsed(
+      executionState
+        ? sessionTimerSelector(executionState, activeSessionClock.getSnapshot())
+        : state
+          ? activeWorkoutElapsed(state, activeSessionClock.getSnapshot())
+          : 0
+    );
+    return activeSessionClock.subscribe(tick);
+  }, [executionState, state]);
 
   const controllerVisible = Boolean(loadError || (session && state)) && !pathname.startsWith("/workouts/session");
 
@@ -139,40 +160,28 @@ export function ActiveWorkoutIndicator() {
 
   async function togglePause() {
     if (!userId || !state || !session || !executionState || executionState.session_state === "review") return;
-    const previousCache = state;
-    const previousExecution = executionState;
-    const now = new Date();
-    const seconds = executionElapsedSeconds(executionState, now);
-    const optimisticExecution: WorkoutSessionExecutionState = executionState.session_state === "paused"
-      ? { ...executionState, session_state: "active", session_running_since: now.toISOString() }
-      : { ...executionState, session_state: "paused", session_elapsed_seconds: seconds, session_running_since: null };
-    const optimisticCache = activeWorkoutCacheFromExecution(optimisticExecution, {
-      route: state.route,
-      label: state.label,
-      controllerDeviceId: controllerDeviceIdRef.current
-    }, now.getTime());
+    const store = activeSessionStoreRef.current;
+    if (!store) return;
     try {
       setActionPending("pause");
       setActionError("");
-      writeActiveWorkoutState(userId, optimisticCache);
-      setState(optimisticCache);
-      setExecutionState(optimisticExecution);
-      const persisted = previousExecution.session_state === "paused"
-        ? await persistWorkoutSessionResume(userId, session.id, previousExecution, controllerDeviceIdRef.current, now)
-        : await persistWorkoutSessionPause(userId, session.id, previousExecution, controllerDeviceIdRef.current, now);
+      const response = await store.dispatch({
+        userId,
+        workoutSessionId: session.id,
+        commandId: createSessionCommandId(),
+        commandType: executionState.session_state === "paused" ? "resume" : "pause",
+        payload: { controller_device_id: controllerDeviceIdRef.current }
+      });
+      const persisted = response.state;
       const persistedCache = activeWorkoutCacheFromExecution(persisted, {
         route: state.route,
         label: state.label,
         controllerDeviceId: controllerDeviceIdRef.current
-      }, now.getTime());
+      }, activeSessionClock.getSnapshot());
       setExecutionState(persisted);
       setState(persistedCache);
       writeActiveWorkoutState(userId, persistedCache);
-      await updateWorkoutSessionDuration(session.id, Math.max(1, Math.ceil(seconds / 60)));
     } catch (error) {
-      writeActiveWorkoutState(userId, previousCache);
-      setState(previousCache);
-      setExecutionState(previousExecution);
       setActionError(userSafeError(error, t("minimized.pauseRestore")));
     } finally {
       setActionPending(null);
@@ -184,9 +193,12 @@ export function ActiveWorkoutIndicator() {
     try {
       setActionPending("finish");
       setActionError("");
-      const seconds = activeWorkoutElapsed(state);
-      await completeWorkoutSession(session.id, t("minimized.finishedFromIndicator"), Math.max(1, Math.ceil(seconds / 60)));
-      clearActiveWorkoutState(userId);
+      const store = activeSessionStoreRef.current;
+      if (!store) throw new Error("The workout execution store is unavailable.");
+      await store.completeSession({
+        notes: t("minimized.finishedFromIndicator"),
+        durationMinutes: Math.max(1, Math.ceil(elapsed / 60))
+      });
       setSession(null);
       setState(null);
       toast({ title: t("minimized.finishedTitle"), description: t("minimized.finishedDescription") });
@@ -205,8 +217,9 @@ export function ActiveWorkoutIndicator() {
     try {
       setActionPending("cancel");
       setActionError("");
-      await cancelWorkoutSession(session.id);
-      clearActiveWorkoutState(userId);
+      const store = activeSessionStoreRef.current;
+      if (!store) throw new Error("The workout execution store is unavailable.");
+      await store.cancelSession();
       setSession(null);
       setState(null);
       toast({ title: t("minimized.cancelledTitle"), description: t("minimized.cancelledDescription") });

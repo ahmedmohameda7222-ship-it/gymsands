@@ -4,6 +4,27 @@ import type {
   WorkoutSessionExecutionState,
   WorkoutSessionExecutionViewState
 } from "@/types";
+import {
+  ActiveSessionIdempotencyConflictError,
+  ActiveSessionRevisionConflictError,
+  sessionCommandOutcomes,
+  sessionCommandTypes,
+  type ActivityTimerCompletionReason,
+  type ActivityTimerKind,
+  type CompleteSetTransitionPayload,
+  type MoveCursorPayload,
+  type RestCompletionReason,
+  type SessionCommandOutcome,
+  type SessionCommandPayloadByType,
+  type SessionCommandRequest,
+  type SessionCommandResponse,
+  type SessionCommandType
+} from "./session-engine/contracts";
+import { normalizeExecutionState as normalizeCanonicalExecutionState } from "./session-engine/invariants";
+import {
+  restSecondsRemaining,
+  sessionElapsedSeconds
+} from "./session-engine/timers";
 
 export type WorkoutSessionExecutionCursorItem = {
   id: string;
@@ -31,35 +52,14 @@ export type WorkoutSessionAfterSetCompletionPlan = {
   };
 };
 
-export const workoutSessionExecutionCommandTypes = [
-  "move_cursor",
-  "complete_set_transition",
-  "start_rest",
-  "clear_rest",
-  "reset_timer",
-  "pause",
-  "resume",
-  "import_legacy_cache"
-] as const;
+export const workoutSessionExecutionCommandTypes = sessionCommandTypes;
 
-export type WorkoutSessionExecutionCommandType = (typeof workoutSessionExecutionCommandTypes)[number];
+export type WorkoutSessionExecutionCommandType = SessionCommandType;
 
-export type WorkoutSessionExecutionMoveCursorPayload = {
-  active_snapshot_item_id: string | null;
-  active_item_order: number;
-  active_set_number: number;
-  view_state?: "set_entry" | "exercise_complete" | "session_review";
-  controller_device_id?: string | null;
-};
+export type WorkoutSessionExecutionMoveCursorPayload = MoveCursorPayload;
 
-export type WorkoutSessionExecutionCompleteSetTransitionPayload = {
-  active_snapshot_item_id: string | null;
-  active_item_order: number;
-  active_set_number: number;
-  view_state: "rest" | "set_entry" | "exercise_complete";
-  rest_duration_seconds: number | null;
-  controller_device_id: string | null;
-};
+export type WorkoutSessionExecutionCompleteSetTransitionPayload =
+  CompleteSetTransitionPayload;
 
 export type WorkoutSessionExecutionStartRestPayload = {
   duration_seconds: number;
@@ -68,7 +68,19 @@ export type WorkoutSessionExecutionStartRestPayload = {
 
 export type WorkoutSessionExecutionClearRestPayload = {
   view_state: "set_entry" | "exercise_complete" | "session_review";
+  completion_reason?: RestCompletionReason;
   controller_device_id?: string | null;
+};
+
+export type WorkoutSessionExecutionStartActivityTimerPayload = {
+  kind: ActivityTimerKind;
+  duration_seconds: number | null;
+  controller_device_id: string | null;
+};
+
+export type WorkoutSessionExecutionClearActivityTimerPayload = {
+  completion_reason: ActivityTimerCompletionReason;
+  controller_device_id: string | null;
 };
 
 export type WorkoutSessionExecutionDevicePayload = {
@@ -82,93 +94,43 @@ export type WorkoutSessionExecutionImportLegacyCachePayload = {
   controller_device_id: string | null;
 };
 
-export type WorkoutSessionExecutionCommandPayloadByType = {
-  move_cursor: WorkoutSessionExecutionMoveCursorPayload;
-  complete_set_transition: WorkoutSessionExecutionCompleteSetTransitionPayload;
-  start_rest: WorkoutSessionExecutionStartRestPayload;
-  clear_rest: WorkoutSessionExecutionClearRestPayload;
-  reset_timer: WorkoutSessionExecutionDevicePayload;
-  pause: WorkoutSessionExecutionDevicePayload;
-  resume: WorkoutSessionExecutionDevicePayload;
-  import_legacy_cache: WorkoutSessionExecutionImportLegacyCachePayload;
-};
+export type WorkoutSessionExecutionCommandPayloadByType =
+  SessionCommandPayloadByType;
 
-export type WorkoutSessionExecutionCommandRequest<T extends WorkoutSessionExecutionCommandType = WorkoutSessionExecutionCommandType> = {
-  userId: string;
-  workoutSessionId: string;
-  commandId: string;
-  expectedRevision: number;
-  commandType: T;
-  payload: WorkoutSessionExecutionCommandPayloadByType[T];
-};
+export type WorkoutSessionExecutionCommandRequest<
+  T extends WorkoutSessionExecutionCommandType = WorkoutSessionExecutionCommandType
+> = SessionCommandRequest<T>;
 
-export const workoutSessionExecutionCommandOutcomes = [
-  "applied",
-  "no_op",
-  "revision_conflict",
-  "idempotency_conflict"
-] as const;
+export const workoutSessionExecutionCommandOutcomes = sessionCommandOutcomes;
 
-export type WorkoutSessionExecutionCommandOutcome = (typeof workoutSessionExecutionCommandOutcomes)[number];
+export type WorkoutSessionExecutionCommandOutcome = SessionCommandOutcome;
 
-export type WorkoutSessionExecutionCommandResponse = {
-  schemaVersion: 1;
-  workoutSessionId: string;
-  commandId: string;
-  commandType: WorkoutSessionExecutionCommandType;
-  outcome: WorkoutSessionExecutionCommandOutcome;
-  replayed: boolean;
-  expectedRevision: number;
-  revisionBefore: number;
-  revisionAfter: number;
-  reason: string | null;
-  state: WorkoutSessionExecutionState;
-};
+export type WorkoutSessionExecutionCommandResponse = SessionCommandResponse;
 
-export type WorkoutSessionExecutionWriteQueue = {
-  current(): WorkoutSessionExecutionState | null;
-  replace(next: WorkoutSessionExecutionState): void;
-  enqueue(
-    write: (currentServerState: WorkoutSessionExecutionState) => Promise<WorkoutSessionExecutionState>
-  ): Promise<WorkoutSessionExecutionState>;
-};
-
-export class WorkoutSessionExecutionRevisionConflictError extends Error {
+export class WorkoutSessionExecutionRevisionConflictError
+  extends ActiveSessionRevisionConflictError {
   readonly authoritativeState: WorkoutSessionExecutionState;
   readonly response: WorkoutSessionExecutionCommandResponse;
 
   constructor(response: WorkoutSessionExecutionCommandResponse) {
-    super("The workout changed on another request. The latest server state was loaded; retry the intent deliberately.");
+    super(response);
     this.name = "WorkoutSessionExecutionRevisionConflictError";
     this.authoritativeState = response.state;
     this.response = response;
   }
 }
 
-export class WorkoutSessionExecutionIdempotencyConflictError extends Error {
+export class WorkoutSessionExecutionIdempotencyConflictError
+  extends ActiveSessionIdempotencyConflictError {
   readonly response: WorkoutSessionExecutionCommandResponse;
 
   constructor(response: WorkoutSessionExecutionCommandResponse) {
-    super("This workout command ID is already bound to a different request. Create a new command after reconciling state.");
+    super(response);
     this.name = "WorkoutSessionExecutionIdempotencyConflictError";
     this.response = response;
   }
 }
 
-export class WorkoutSessionExecutionSyncError extends Error {
-  readonly canonicalSetSaved = true;
-  readonly cause: unknown;
-
-  constructor(cause: unknown) {
-    super("The set was saved, but the workout execution position could not be synchronized.");
-    this.name = "WorkoutSessionExecutionSyncError";
-    this.cause = cause;
-  }
-}
-
-const sessionStates = new Set<WorkoutSessionExecutionSessionState>(["active", "paused", "review"]);
-const viewStates = new Set<WorkoutSessionExecutionViewState>(["set_entry", "rest", "exercise_complete", "session_review"]);
-const bootstrapSources = new Set<WorkoutSessionExecutionBootstrapSource>(["session_start", "legacy_backfill", "client_cache_import"]);
 const commandTypes = new Set<WorkoutSessionExecutionCommandType>(workoutSessionExecutionCommandTypes);
 const commandOutcomes = new Set<WorkoutSessionExecutionCommandOutcome>(workoutSessionExecutionCommandOutcomes);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -196,26 +158,6 @@ function nowMs(now: number | Date) {
   return Number.isFinite(value) ? value : Date.now();
 }
 
-function sameExecutionState(left: WorkoutSessionExecutionState, right: WorkoutSessionExecutionState) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function acceptMonotonicState(
-  current: WorkoutSessionExecutionState | null,
-  candidate: WorkoutSessionExecutionState
-) {
-  if (!current) return candidate;
-  if (current.workout_session_id !== candidate.workout_session_id || current.user_id !== candidate.user_id) {
-    throw new Error("Workout execution authority changed identity.");
-  }
-  if (candidate.revision > current.revision) return candidate;
-  if (candidate.revision < current.revision) return current;
-  if (!sameExecutionState(current, candidate)) {
-    throw new Error("Workout execution returned incompatible states at the same revision.");
-  }
-  return current;
-}
-
 export function createWorkoutSessionExecutionCommandId(randomUuid?: () => string) {
   const generated = randomUuid?.() ?? globalThis.crypto?.randomUUID?.();
   if (!generated || !uuidPattern.test(generated)) {
@@ -225,37 +167,7 @@ export function createWorkoutSessionExecutionCommandId(randomUuid?: () => string
 }
 
 export function normalizeExecutionState(value: unknown): WorkoutSessionExecutionState | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const row = value as Record<string, unknown>;
-  if (
-    typeof row.workout_session_id !== "string" ||
-    typeof row.user_id !== "string" ||
-    row.state_version !== 1 ||
-    !finiteNonNegativeInteger(row.revision) ||
-    !sessionStates.has(row.session_state as WorkoutSessionExecutionSessionState) ||
-    !viewStates.has(row.view_state as WorkoutSessionExecutionViewState) ||
-    !nullableString(row.active_snapshot_item_id) ||
-    !finitePositiveInteger(row.active_item_order) ||
-    !finitePositiveInteger(row.active_set_number) ||
-    !finiteNonNegativeInteger(row.session_elapsed_seconds) ||
-    !nullableString(row.session_running_since) ||
-    !nullableString(row.rest_started_at) ||
-    !(row.rest_duration_seconds === null || finiteNonNegativeInteger(row.rest_duration_seconds)) ||
-    !nullableString(row.rest_ends_at) ||
-    !nullableString(row.controller_device_id) ||
-    !bootstrapSources.has(row.bootstrap_source as WorkoutSessionExecutionBootstrapSource) ||
-    typeof row.created_at !== "string" ||
-    typeof row.updated_at !== "string"
-  ) return null;
-
-  const sessionState = row.session_state as WorkoutSessionExecutionSessionState;
-  const viewState = row.view_state as WorkoutSessionExecutionViewState;
-  if ((sessionState === "review") !== (viewState === "session_review")) return null;
-  if ((sessionState === "paused") !== (row.session_running_since === null)) return null;
-  const restTupleComplete = row.rest_started_at !== null && row.rest_duration_seconds !== null && row.rest_ends_at !== null;
-  if ((viewState === "rest") !== restTupleComplete) return null;
-
-  return row as WorkoutSessionExecutionState;
+  return normalizeCanonicalExecutionState(value);
 }
 
 export function normalizeWorkoutSessionExecutionCommandResponse(
@@ -305,11 +217,7 @@ export function executionElapsedSeconds(
   state: Pick<WorkoutSessionExecutionState, "session_state" | "session_elapsed_seconds" | "session_running_since">,
   now: number | Date = Date.now()
 ) {
-  const accumulated = Math.max(0, Math.floor(Number(state.session_elapsed_seconds) || 0));
-  if (state.session_state === "paused") return accumulated;
-  const runningSince = timestampMs(state.session_running_since);
-  if (runningSince === null) return accumulated;
-  return accumulated + Math.max(0, Math.floor((nowMs(now) - runningSince) / 1000));
+  return sessionElapsedSeconds(state, nowMs(now));
 }
 
 export function executionDurationMinutes(
@@ -320,13 +228,13 @@ export function executionDurationMinutes(
 }
 
 export function executionRestSecondsLeft(
-  state: Pick<WorkoutSessionExecutionState, "view_state" | "rest_ends_at">,
+  state: Pick<
+    WorkoutSessionExecutionState,
+    "session_state" | "view_state" | "rest_duration_seconds" | "rest_ends_at"
+  >,
   now: number | Date = Date.now()
 ) {
-  if (state.view_state !== "rest") return 0;
-  const restEndsAt = timestampMs(state.rest_ends_at);
-  if (restEndsAt === null) return 0;
-  return Math.max(0, Math.ceil((restEndsAt - nowMs(now)) / 1000));
+  return restSecondsRemaining(state, nowMs(now));
 }
 
 export function executionStartedAtMs(
@@ -404,51 +312,4 @@ export function planWorkoutSessionAfterSetCompletion(input: {
       controller_device_id: input.controllerDeviceId
     }
   };
-}
-
-export function createWorkoutSessionExecutionWriteQueue(
-  initialState: WorkoutSessionExecutionState | null = null
-): WorkoutSessionExecutionWriteQueue {
-  let latestAcceptedState = initialState;
-  let tail: Promise<void> = Promise.resolve();
-
-  return {
-    current() {
-      return latestAcceptedState;
-    },
-    replace(next) {
-      latestAcceptedState = acceptMonotonicState(latestAcceptedState, next);
-    },
-    enqueue(write) {
-      const operation = tail.then(async () => {
-        if (!latestAcceptedState) {
-          throw new Error("Workout execution state is not hydrated.");
-        }
-        try {
-          const next = await write(latestAcceptedState);
-          latestAcceptedState = acceptMonotonicState(latestAcceptedState, next);
-          return latestAcceptedState;
-        } catch (error) {
-          if (error instanceof WorkoutSessionExecutionRevisionConflictError) {
-            latestAcceptedState = acceptMonotonicState(latestAcceptedState, error.authoritativeState);
-          }
-          throw error;
-        }
-      });
-      tail = operation.then(() => undefined, () => undefined);
-      return operation;
-    }
-  };
-}
-
-export async function persistCanonicalSetThenExecution(input: {
-  saveCanonicalSet: () => Promise<void>;
-  persistExecutionState: () => Promise<WorkoutSessionExecutionState>;
-}) {
-  await input.saveCanonicalSet();
-  try {
-    return await input.persistExecutionState();
-  } catch (error) {
-    throw new WorkoutSessionExecutionSyncError(error);
-  }
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const component = readFileSync("components/workouts/workout-day-focus-session.tsx", "utf8").replaceAll("\r\n", "\n");
 const service = readFileSync("services/database/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
+const store = readFileSync("lib/workouts/active-session-store/store.ts", "utf8").replaceAll("\r\n", "\n");
 
 function functionBody(source: string, name: string, nextName: string) {
   const start = source.indexOf(`  async function ${name}`);
@@ -15,8 +16,13 @@ function functionBody(source: string, name: string, nextName: string) {
 describe("AW-2A lifecycle preserved under AW-2B command authority", () => {
   it("retains canonical-log-first set completion sequencing", () => {
     const finishSet = functionBody(component, "finishSet", "restartSet");
-    expect(finishSet).toContain("persistCanonicalSetThenExecution");
-    expect(finishSet.indexOf("saveWorkoutSetLogs")).toBeLessThan(finishSet.indexOf("persistWorkoutSessionAfterSetCompletion"));
+    expect(finishSet).toContain("store.completeCanonicalSet");
+    const completeCanonicalSet = store.slice(
+      store.indexOf("async completeCanonicalSet"),
+      store.indexOf("\n    async completeSession", store.indexOf("async completeCanonicalSet"))
+    );
+    expect(completeCanonicalSet.indexOf("adapter.writeCanonicalSet"))
+      .toBeLessThan(completeCanonicalSet.indexOf("dispatch(setInput.executionIntent)"));
     expect(finishSet).not.toContain("startRestTimer(");
     expect(finishSet).not.toContain("moveToNextSet(");
   });
@@ -43,11 +49,11 @@ describe("AW-2A lifecycle preserved under AW-2B command authority", () => {
     expect(service).toContain('.rpc("apply_workout_session_execution_command_atomic"');
   });
 
-  it("keeps the authoritative elapsed-time heartbeat and queue", () => {
-    const heartbeat = component.match(/useEffect\(\(\) => \{\n    if \(!session\) return;[\s\S]*?\n  \}, \[session\]\);/)?.[0] ?? "";
-    expect(heartbeat).toContain("executionDurationMinutes(authoritativeState)");
-    expect(heartbeat).toContain("executionWriteQueueRef.current.current()");
-    expect(component).toContain("createWorkoutSessionExecutionWriteQueue");
-    expect(component).not.toContain("executionWriteRef");
+  it("replaces the old heartbeat and queue with the official store and shared clock", () => {
+    expect(component).toContain("activeSessionStoreRef.current");
+    expect(component).toContain("activeSessionClock.subscribe");
+    expect(component).toContain("activeSessionClock.getSnapshot");
+    expect(component).not.toContain("createWorkoutSessionExecutionWriteQueue");
+    expect(component).not.toContain("window.setInterval");
   });
 });

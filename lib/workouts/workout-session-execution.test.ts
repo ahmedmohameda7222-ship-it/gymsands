@@ -1,8 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { WorkoutSessionExecutionState } from "@/types";
 import {
   createWorkoutSessionExecutionCommandId,
-  createWorkoutSessionExecutionWriteQueue,
   executionCursorToIndexes,
   executionDurationMinutes,
   executionElapsedSeconds,
@@ -10,10 +9,7 @@ import {
   executionStartedAtMs,
   normalizeExecutionState,
   normalizeWorkoutSessionExecutionCommandResponse,
-  persistCanonicalSetThenExecution,
   planWorkoutSessionAfterSetCompletion,
-  WorkoutSessionExecutionRevisionConflictError,
-  WorkoutSessionExecutionSyncError,
   type WorkoutSessionExecutionCommandResponse
 } from "./workout-session-execution";
 
@@ -38,16 +34,17 @@ function state(overrides: Partial<WorkoutSessionExecutionState> = {}): WorkoutSe
     rest_started_at: null,
     rest_duration_seconds: null,
     rest_ends_at: null,
+    activity_timer_kind: null,
+    activity_timer_elapsed_seconds: 0,
+    activity_timer_running_since: null,
+    activity_timer_duration_seconds: null,
+    activity_timer_ends_at: null,
     controller_device_id: null,
     bootstrap_source: "session_start",
     created_at: "2026-07-20T20:00:00.000Z",
     updated_at: "2026-07-20T20:00:00.000Z",
     ...overrides
   };
-}
-
-function accepted(current: WorkoutSessionExecutionState, patch: Partial<WorkoutSessionExecutionState>) {
-  return state({ ...current, ...patch, revision: current.revision + 1, updated_at: `2026-07-20T20:00:0${current.revision + 1}.000Z` });
 }
 
 function response(overrides: Partial<WorkoutSessionExecutionCommandResponse> = {}): WorkoutSessionExecutionCommandResponse {
@@ -177,73 +174,4 @@ describe("post-set transition planning and truthful ordering", () => {
     expect(complete).toMatchObject({ hasNextSet: false, patch: { view_state: "exercise_complete", rest_duration_seconds: null } });
   });
 
-  it("does not command execution when canonical log persistence fails", async () => {
-    const persistExecutionState = vi.fn(async () => state());
-    await expect(persistCanonicalSetThenExecution({
-      saveCanonicalSet: async () => { throw new Error("log failed"); },
-      persistExecutionState
-    })).rejects.toThrow("log failed");
-    expect(persistExecutionState).not.toHaveBeenCalled();
-  });
-
-  it("saves the canonical log first and preserves partial-success truth on command failure", async () => {
-    const order: string[] = [];
-    const conflict = new WorkoutSessionExecutionRevisionConflictError(response({
-      outcome: "revision_conflict",
-      revisionBefore: 2,
-      revisionAfter: 2,
-      state: state({ revision: 2, updated_at: "2026-07-20T20:00:02.000Z" })
-    }));
-    const caught = await persistCanonicalSetThenExecution({
-      saveCanonicalSet: async () => { order.push("log"); },
-      persistExecutionState: async () => { order.push("execution"); throw conflict; }
-    }).catch((error) => error);
-    expect(order).toEqual(["log", "execution"]);
-    expect(caught).toBeInstanceOf(WorkoutSessionExecutionSyncError);
-    expect(caught.canonicalSetSaved).toBe(true);
-    expect(caught.cause).toBe(conflict);
-  });
-});
-
-describe("monotonic latest-authority write queue", () => {
-  it("uses execution-time latest state for sequential commands", async () => {
-    const seen: number[] = [];
-    const queue = createWorkoutSessionExecutionWriteQueue(state());
-    const first = queue.enqueue(async (current) => {
-      seen.push(current.revision);
-      return accepted(current, { active_set_number: 2 });
-    });
-    const second = queue.enqueue(async (current) => {
-      seen.push(current.revision);
-      return accepted(current, { active_set_number: 3 });
-    });
-    await Promise.all([first, second]);
-    expect(seen).toEqual([0, 1]);
-    expect(queue.current()).toMatchObject({ revision: 2, active_set_number: 3 });
-  });
-
-  it("never regresses on an old replay and accepts a newer conflict authority", async () => {
-    const queue = createWorkoutSessionExecutionWriteQueue(state({ revision: 2, updated_at: "2026-07-20T20:00:02.000Z" }));
-    queue.replace(state({ revision: 1, updated_at: "2026-07-20T20:00:01.000Z" }));
-    expect(queue.current()?.revision).toBe(2);
-
-    const authoritative = state({ revision: 4, active_set_number: 4, updated_at: "2026-07-20T20:00:04.000Z" });
-    const conflict = new WorkoutSessionExecutionRevisionConflictError(response({
-      outcome: "revision_conflict",
-      expectedRevision: 2,
-      revisionBefore: 4,
-      revisionAfter: 4,
-      state: authoritative
-    }));
-    await expect(queue.enqueue(async () => { throw conflict; })).rejects.toBe(conflict);
-    expect(queue.current()).toEqual(authoritative);
-  });
-
-  it("rejects divergent equal-revision state and a failure does not poison the tail", async () => {
-    const queue = createWorkoutSessionExecutionWriteQueue(state({ revision: 1, updated_at: "2026-07-20T20:00:01.000Z" }));
-    expect(() => queue.replace(state({ revision: 1, active_set_number: 2, updated_at: "2026-07-20T20:00:01.000Z" }))).toThrow(/same revision/i);
-    await expect(queue.enqueue(async () => { throw new Error("failed"); })).rejects.toThrow("failed");
-    const next = await queue.enqueue(async (current) => accepted(current, { active_set_number: 2 }));
-    expect(next).toMatchObject({ revision: 2, active_set_number: 2 });
-  });
 });

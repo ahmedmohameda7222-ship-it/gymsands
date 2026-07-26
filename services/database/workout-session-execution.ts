@@ -5,7 +5,6 @@ import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { isUuid } from "@/lib/utils";
 import {
   createWorkoutSessionExecutionCommandId,
-  executionElapsedSeconds,
   normalizeExecutionState,
   normalizeWorkoutSessionExecutionCommandResponse,
   WorkoutSessionExecutionIdempotencyConflictError,
@@ -15,6 +14,14 @@ import {
   type WorkoutSessionExecutionCommandResponse,
   type WorkoutSessionExecutionCommandType
 } from "@/lib/workouts/workout-session-execution";
+import {
+  MAX_ACTIVITY_TIMER_DURATION_SECONDS,
+  type ActivityTimerCompletionReason,
+  type ActivityTimerKind,
+  type RestCompletionReason,
+  type SessionCommandIntent
+} from "@/lib/workouts/session-engine/contracts";
+import { reduceSessionCommand } from "@/lib/workouts/session-engine/reducer";
 import type {
   WorkoutSessionExecutionState,
   WorkoutSessionExecutionViewState
@@ -37,6 +44,11 @@ const executionStateColumns = [
   "rest_started_at",
   "rest_duration_seconds",
   "rest_ends_at",
+  "activity_timer_kind",
+  "activity_timer_elapsed_seconds",
+  "activity_timer_running_since",
+  "activity_timer_duration_seconds",
+  "activity_timer_ends_at",
   "controller_device_id",
   "bootstrap_source",
   "created_at",
@@ -85,6 +97,11 @@ function mockState(userId: string, sessionId: string) {
     rest_started_at: null,
     rest_duration_seconds: null,
     rest_ends_at: null,
+    activity_timer_kind: null,
+    activity_timer_elapsed_seconds: 0,
+    activity_timer_running_since: null,
+    activity_timer_duration_seconds: null,
+    activity_timer_ends_at: null,
     controller_device_id: null,
     bootstrap_source: "session_start",
     created_at: timestamp,
@@ -107,164 +124,79 @@ function requireNormalizedState(value: unknown) {
   return normalized;
 }
 
-function cloneState(state: WorkoutSessionExecutionState): WorkoutSessionExecutionState {
-  return { ...state };
+function mockPrescriptionForTransition<T extends WorkoutSessionExecutionCommandType>(
+  current: WorkoutSessionExecutionState,
+  commandType: T,
+  payload: WorkoutSessionExecutionCommandPayloadByType[T]
+): WorkoutSessionPrescriptionItem[] {
+  const cursor = commandType === "move_cursor" || commandType === "complete_set_transition"
+    ? payload as WorkoutSessionExecutionCommandPayloadByType["move_cursor"]
+    : null;
+  const activeId = cursor?.active_snapshot_item_id ?? current.active_snapshot_item_id;
+  if (!activeId) return [];
+  const activeOrder = cursor?.active_item_order ?? current.active_item_order;
+  const activeSet = cursor?.active_set_number ?? current.active_set_number;
+  return Array.from({ length: activeOrder }, (_, itemIndex) => {
+    const itemOrder = itemIndex + 1;
+    const itemId = itemOrder === activeOrder
+      ? activeId
+      : `mock-snapshot-item-${itemOrder}-${current.workout_session_id}`;
+    const setCount = itemOrder === activeOrder ? Math.max(1, activeSet) : 1;
+    return {
+      snapshotId: `mock-snapshot-${current.workout_session_id}`,
+      id: itemId,
+      workoutSessionId: current.workout_session_id,
+      userId: current.user_id,
+      itemOrder,
+      sourcePlanExerciseId: `mock-plan-exercise-${itemOrder}`,
+      sourcePlanActivityId: null,
+      activityName: `Mock activity ${itemOrder}`,
+      rawCompatibilityPrescription: { sets: setCount },
+      plannedSets: setCount,
+      executionState: "planned",
+      normalizationStatus: "partial",
+      prescriptionSets: Array.from({ length: setCount }, (_, setIndex) => ({
+        id: `mock-prescription-set-${itemOrder}-${setIndex + 1}-${current.workout_session_id}`,
+        snapshotItemId: itemId,
+        snapshotId: `mock-snapshot-${current.workout_session_id}`,
+        workoutSessionId: current.workout_session_id,
+        userId: current.user_id,
+        setOrder: setIndex + 1,
+        performedOrderHint: null,
+        setType: "other",
+        targetMode: "custom",
+        sideMode: "none",
+        restSeconds: null,
+        tempoTarget: null,
+        schemaVersion: 1,
+        createdAt: current.created_at,
+        targets: []
+      }))
+    };
+  });
 }
 
 function applyMockTransition<T extends WorkoutSessionExecutionCommandType>(
   current: WorkoutSessionExecutionState,
-  commandType: T,
-  payload: WorkoutSessionExecutionCommandPayloadByType[T],
+  request: WorkoutSessionExecutionCommandRequest<T>,
   now: Date
 ) {
-  const next = cloneState(current);
-  const elapsed = executionElapsedSeconds(current, now);
-  const devicePayload = payload as { controller_device_id?: string | null };
-  if (Object.prototype.hasOwnProperty.call(devicePayload, "controller_device_id")) {
-    next.controller_device_id = devicePayload.controller_device_id ?? null;
-  }
-
-  switch (commandType) {
-    case "move_cursor": {
-      const typed = payload as WorkoutSessionExecutionCommandPayloadByType["move_cursor"];
-      next.active_snapshot_item_id = typed.active_snapshot_item_id;
-      next.active_item_order = Math.max(1, Math.floor(typed.active_item_order));
-      next.active_set_number = Math.max(1, Math.floor(typed.active_set_number));
-      if (typed.view_state) {
-        next.view_state = typed.view_state;
-        next.rest_started_at = null;
-        next.rest_duration_seconds = null;
-        next.rest_ends_at = null;
-        if (typed.view_state === "session_review") {
-          next.session_state = "review";
-          next.session_elapsed_seconds = elapsed;
-          next.session_running_since = now.toISOString();
-        } else if (current.session_state === "review") {
-          next.session_state = "active";
-          next.session_elapsed_seconds = elapsed;
-          next.session_running_since = now.toISOString();
-        }
-      }
-      break;
-    }
-    case "complete_set_transition": {
-      const typed = payload as WorkoutSessionExecutionCommandPayloadByType["complete_set_transition"];
-      next.active_snapshot_item_id = typed.active_snapshot_item_id;
-      next.active_item_order = Math.max(1, Math.floor(typed.active_item_order));
-      next.active_set_number = Math.max(1, Math.floor(typed.active_set_number));
-      next.view_state = typed.view_state;
-      if (current.session_state === "review") {
-        next.session_state = "active";
-        next.session_elapsed_seconds = elapsed;
-        next.session_running_since = now.toISOString();
-      }
-      if (typed.view_state === "rest") {
-        const seconds = Math.min(86400, Math.max(0, Math.floor(typed.rest_duration_seconds ?? 0)));
-        next.rest_started_at = now.toISOString();
-        next.rest_duration_seconds = seconds;
-        next.rest_ends_at = new Date(now.getTime() + seconds * 1000).toISOString();
-      } else {
-        next.rest_started_at = null;
-        next.rest_duration_seconds = null;
-        next.rest_ends_at = null;
-      }
-      break;
-    }
-    case "start_rest": {
-      const typed = payload as WorkoutSessionExecutionCommandPayloadByType["start_rest"];
-      const seconds = Math.min(86400, Math.max(0, Math.floor(typed.duration_seconds)));
-      if (current.session_state === "review") {
-        next.session_state = "active";
-        next.session_elapsed_seconds = elapsed;
-        next.session_running_since = now.toISOString();
-      }
-      next.view_state = "rest";
-      next.rest_started_at = now.toISOString();
-      next.rest_duration_seconds = seconds;
-      next.rest_ends_at = new Date(now.getTime() + seconds * 1000).toISOString();
-      break;
-    }
-    case "clear_rest": {
-      const typed = payload as WorkoutSessionExecutionCommandPayloadByType["clear_rest"];
-      next.view_state = typed.view_state;
-      next.rest_started_at = null;
-      next.rest_duration_seconds = null;
-      next.rest_ends_at = null;
-      if (typed.view_state === "session_review") {
-        next.session_state = "review";
-        next.session_elapsed_seconds = elapsed;
-        next.session_running_since = now.toISOString();
-      } else if (current.session_state === "review") {
-        next.session_state = "active";
-        next.session_elapsed_seconds = elapsed;
-        next.session_running_since = now.toISOString();
-      }
-      break;
-    }
-    case "reset_timer":
-      next.session_state = "active";
-      if (next.view_state === "session_review") next.view_state = "set_entry";
-      next.session_elapsed_seconds = 0;
-      next.session_running_since = now.toISOString();
-      break;
-    case "pause":
-      if (current.session_state === "review") throw new Error("A workout in session review cannot be paused.");
-      if (current.session_state !== "paused") {
-        next.session_state = "paused";
-        next.session_elapsed_seconds = elapsed;
-        next.session_running_since = null;
-      }
-      break;
-    case "resume":
-      if (current.session_state === "paused") {
-        next.session_state = "active";
-        next.session_running_since = now.toISOString();
-      }
-      break;
-    case "import_legacy_cache": {
-      const typed = payload as WorkoutSessionExecutionCommandPayloadByType["import_legacy_cache"];
-      if (current.bootstrap_source !== "legacy_backfill" || current.revision !== 0) break;
-      const startedAt = typed.cached_started_at ? Date.parse(typed.cached_started_at) : Number.NaN;
-      const restEndsAt = typed.cached_rest_ends_at ? Date.parse(typed.cached_rest_ends_at) : Number.NaN;
-      const nowValue = now.getTime();
-      const validStart = Number.isFinite(startedAt) && startedAt >= nowValue - 24 * 60 * 60_000 && startedAt <= nowValue + 5 * 60_000;
-      const cachedElapsed = validStart ? Math.max(0, Math.floor((nowValue - startedAt) / 1000)) : 0;
-      const restDuration = typed.cached_rest_duration_seconds;
-      const validRest = Number.isFinite(restEndsAt)
-        && restDuration !== null
-        && Number.isSafeInteger(restDuration)
-        && restDuration >= 0
-        && restDuration <= 86400
-        && restEndsAt > nowValue
-        && restEndsAt <= nowValue + 24 * 60 * 60_000;
-      if (cachedElapsed > elapsed || validRest) {
-        next.bootstrap_source = "client_cache_import";
-        if (cachedElapsed > elapsed) {
-          next.session_elapsed_seconds = cachedElapsed;
-          if (next.session_state !== "paused") next.session_running_since = now.toISOString();
-        }
-        if (validRest && restDuration !== null) {
-          if (next.session_state === "review") {
-            next.session_state = "active";
-            next.session_running_since = now.toISOString();
-          }
-          next.view_state = "rest";
-          next.rest_duration_seconds = restDuration;
-          next.rest_ends_at = new Date(restEndsAt).toISOString();
-          next.rest_started_at = new Date(restEndsAt - restDuration * 1000).toISOString();
-        }
-      }
-      break;
-    }
-  }
-  if (
-    (commandType === "pause" && current.session_state === "paused") ||
-    (commandType === "resume" && current.session_state !== "paused") ||
-    (commandType === "import_legacy_cache" && next.bootstrap_source === current.bootstrap_source)
-  ) {
-    next.controller_device_id = current.controller_device_id;
-  }
-  return requireNormalizedState(next);
+  return reduceSessionCommand(
+    current,
+    request as SessionCommandIntent,
+    {
+      userId: request.userId,
+      workoutSessionId: request.workoutSessionId,
+      rootStatus: "started",
+      prescription: mockPrescriptionForTransition(
+        current,
+        request.commandType,
+        request.payload
+      ),
+      performedLogs: []
+    },
+    now.getTime()
+  );
 }
 
 async function executeMockCommand<T extends WorkoutSessionExecutionCommandType>(
@@ -307,10 +239,14 @@ async function executeMockCommand<T extends WorkoutSessionExecutionCommandType>(
     throw new WorkoutSessionExecutionRevisionConflictError(response);
   }
 
-  const candidate = applyMockTransition(current, request.commandType, request.payload, new Date());
-  const changed = JSON.stringify({ ...candidate, revision: current.revision, updated_at: current.updated_at }) !== JSON.stringify(current);
+  const transition = applyMockTransition(current, request, new Date());
+  const changed = transition.outcome === "applied";
   const next = changed
-    ? requireNormalizedState({ ...candidate, revision: current.revision + 1, updated_at: new Date().toISOString() })
+    ? requireNormalizedState({
+        ...transition.state,
+        revision: current.revision + 1,
+        updated_at: new Date().toISOString()
+      })
     : current;
   if (changed) mockStates.set(mockKey(request.userId, request.workoutSessionId), next);
   const response: WorkoutSessionExecutionCommandResponse = {
@@ -323,7 +259,7 @@ async function executeMockCommand<T extends WorkoutSessionExecutionCommandType>(
     expectedRevision: request.expectedRevision,
     revisionBefore: current.revision,
     revisionAfter: next.revision,
-    reason: changed ? null : "no_effective_change",
+    reason: transition.reason,
     state: next
   };
   mockReceipts.set(receiptKey, { fingerprint, response });
@@ -366,14 +302,15 @@ async function executeLatestCommand<T extends WorkoutSessionExecutionCommandType
   commandId = createWorkoutSessionExecutionCommandId()
 ) {
   const latest = await requireWorkoutSessionExecutionState(userId, sessionId);
-  return executeWorkoutSessionExecutionCommand({
+  const request = {
     userId,
     workoutSessionId: sessionId,
     commandId,
     expectedRevision: latest.revision,
     commandType,
     payload
-  });
+  } as WorkoutSessionExecutionCommandRequest<T>;
+  return executeWorkoutSessionExecutionCommand(request);
 }
 
 export async function getWorkoutSessionExecutionState(userId: string, sessionId: string) {
@@ -475,11 +412,60 @@ export async function clearWorkoutSessionRestTimer(
   userId: string,
   sessionId: string,
   viewState: Exclude<WorkoutSessionExecutionViewState, "rest"> = "set_entry",
-  controllerDeviceId?: string | null
+  controllerDeviceId?: string | null,
+  completionReason?: RestCompletionReason
 ) {
   const response = await executeLatestCommand(userId, sessionId, "clear_rest", {
     view_state: viewState,
-    ...(controllerDeviceId !== undefined ? { controller_device_id: controllerDeviceId } : {})
+    ...(controllerDeviceId !== undefined ? { controller_device_id: controllerDeviceId } : {}),
+    ...(completionReason !== undefined ? { completion_reason: completionReason } : {})
+  });
+  return response.state;
+}
+
+export async function persistWorkoutSessionActivityTimer(
+  userId: string,
+  sessionId: string,
+  kind: ActivityTimerKind,
+  durationSeconds: number | null,
+  controllerDeviceId: string | null
+) {
+  if (kind === "block" && durationSeconds === null) {
+    throw new Error("A block activity timer requires a bounded duration.");
+  }
+  const response = await executeLatestCommand(userId, sessionId, "start_activity_timer", {
+    kind,
+    duration_seconds: durationSeconds === null
+      ? null
+      : Math.min(
+          MAX_ACTIVITY_TIMER_DURATION_SECONDS,
+          Math.max(0, Math.floor(durationSeconds))
+        ),
+    controller_device_id: controllerDeviceId
+  });
+  return response.state;
+}
+
+export async function clearWorkoutSessionActivityTimer(
+  userId: string,
+  sessionId: string,
+  completionReason: ActivityTimerCompletionReason,
+  controllerDeviceId: string | null
+) {
+  const response = await executeLatestCommand(userId, sessionId, "clear_activity_timer", {
+    completion_reason: completionReason,
+    controller_device_id: controllerDeviceId
+  });
+  return response.state;
+}
+
+export async function persistWorkoutSessionActivityTimerReset(
+  userId: string,
+  sessionId: string,
+  controllerDeviceId: string | null
+) {
+  const response = await executeLatestCommand(userId, sessionId, "reset_activity_timer", {
+    controller_device_id: controllerDeviceId
   });
   return response.state;
 }

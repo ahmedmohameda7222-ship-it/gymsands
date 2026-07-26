@@ -10,6 +10,10 @@ const verification = readFileSync(
 ).replaceAll("\r\n", "\n").toLowerCase();
 const service = readFileSync("services/database/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
 const contract = readFileSync("lib/workouts/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
+const invariants = readFileSync(
+  "lib/workouts/session-engine/invariants.ts",
+  "utf8"
+).replaceAll("\r\n", "\n");
 const privacy = readFileSync("docs/privacy/active-workout-command-receipts.md", "utf8").replaceAll("\r\n", "\n");
 const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   entries: Array<{ localFile: string; state: string; productionVersion?: string }>;
@@ -93,7 +97,8 @@ describe("AW-2B command authority migration contract", () => {
     ]) expect(service).toContain(`"${command}"`);
     expect(contract).toContain("WorkoutSessionExecutionRevisionConflictError");
     expect(contract).toContain("WorkoutSessionExecutionIdempotencyConflictError");
-    expect(contract).toContain("incompatible states at the same revision");
+    expect(invariants).toContain("acceptMonotonicExecutionState");
+    expect(invariants).toContain("divergent states at the same revision");
   });
 
   it("documents the short-lived privacy export exclusion and reconciles the migration ledger", () => {

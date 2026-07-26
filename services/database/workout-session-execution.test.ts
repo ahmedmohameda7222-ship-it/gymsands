@@ -25,6 +25,11 @@ function row(overrides: Partial<WorkoutSessionExecutionState> = {}): WorkoutSess
     rest_started_at: null,
     rest_duration_seconds: null,
     rest_ends_at: null,
+    activity_timer_kind: null,
+    activity_timer_elapsed_seconds: 0,
+    activity_timer_running_since: null,
+    activity_timer_duration_seconds: null,
+    activity_timer_ends_at: null,
     controller_device_id: null,
     bootstrap_source: "legacy_backfill",
     created_at: "2026-07-22T00:00:00.000Z",
@@ -97,9 +102,12 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/lib/supabase/client", () => ({ supabase: { from: mocks.from, rpc: mocks.rpc } }));
 
 import {
+  clearWorkoutSessionActivityTimer,
   clearWorkoutSessionRestTimer,
   executeWorkoutSessionExecutionCommand,
   importLegacyWorkoutExecutionCache,
+  persistWorkoutSessionActivityTimer,
+  persistWorkoutSessionActivityTimerReset,
   persistWorkoutSessionAfterSetCompletion,
   persistWorkoutSessionCursor,
   persistWorkoutSessionPause,
@@ -130,7 +138,16 @@ describe("AW-2B workout execution database service", () => {
       controllerDeviceId: deviceId
     });
     await persistWorkoutSessionRestTimer(userId, sessionId, 90, deviceId);
-    await clearWorkoutSessionRestTimer(userId, sessionId, "set_entry", deviceId);
+    await clearWorkoutSessionRestTimer(
+      userId,
+      sessionId,
+      "set_entry",
+      deviceId,
+      "natural_expiration"
+    );
+    await persistWorkoutSessionActivityTimer(userId, sessionId, "timed_set", null, deviceId);
+    await clearWorkoutSessionActivityTimer(userId, sessionId, "completed", deviceId);
+    await persistWorkoutSessionActivityTimerReset(userId, sessionId, deviceId);
     await persistWorkoutSessionTimerReset(userId, sessionId, deviceId);
     await persistWorkoutSessionPause(userId, sessionId, row(), deviceId);
     await persistWorkoutSessionResume(userId, sessionId, row({ session_state: "paused", session_running_since: null }), deviceId);
@@ -141,6 +158,9 @@ describe("AW-2B workout execution database service", () => {
       "complete_set_transition",
       "start_rest",
       "clear_rest",
+      "start_activity_timer",
+      "clear_activity_timer",
+      "reset_activity_timer",
       "reset_timer",
       "pause",
       "resume",
@@ -158,6 +178,28 @@ describe("AW-2B workout execution database service", () => {
       rest_duration_seconds: 60,
       controller_device_id: deviceId
     });
+    expect(mocks.rpc.mock.calls[3]?.[1].p_payload).toEqual({
+      view_state: "set_entry",
+      controller_device_id: deviceId,
+      completion_reason: "natural_expiration"
+    });
+    expect(mocks.rpc.mock.calls[4]?.[1].p_payload).toEqual({
+      kind: "timed_set",
+      duration_seconds: null,
+      controller_device_id: deviceId
+    });
+  });
+
+  it("bounds activity timers and rejects an unbounded block before transport", async () => {
+    await persistWorkoutSessionActivityTimer(userId, sessionId, "block", 100_000, deviceId);
+    expect(mocks.rpc.mock.calls[0]?.[1].p_payload).toMatchObject({
+      kind: "block",
+      duration_seconds: 86_400
+    });
+    await expect(
+      persistWorkoutSessionActivityTimer(userId, sessionId, "block", null, deviceId)
+    ).rejects.toThrow(/bounded duration/i);
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
   });
 
   it("uses an explicit command ID unchanged for transport replay", async () => {
