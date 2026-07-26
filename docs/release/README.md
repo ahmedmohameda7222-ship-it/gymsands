@@ -6,63 +6,79 @@ A Plaivra release is one compatible package: reviewed code, reconciled database 
 
 Keep these operations separate:
 
-1. **Pull-request review gate** — prove exact-head repository integrity, full migration-chain rehearsal, database verification, manifest consistency, runtime identity, and all quality evidence. A migration PR may be review-ready while its repository-only migrations remain pending, but only when the state is pending-only and contains zero schema-applied-untracked migrations.
-2. **Production release gate** — reconcile migration history, compatibility markers, and the exact reviewed release candidate, then pass strict release preflight and obtain explicit release-owner approval.
-3. **Merge** — merge only the approved exact head to `main`.
-4. **Automatic Vercel deployment** — the current Git-connected model may deploy the resulting `main` commit.
-5. **Production verification** — prove the provider built the exact resulting 40-character `main` SHA and that `/api/version` and `/api/health` identify it.
-6. **Production acceptance** — complete anonymous and authenticated synthetic smoke, browser/console/network review, timings, request counts, and retained evidence.
-7. **Rollback or forward fix** — use a separately reviewed code/schema-compatible release pair; never substitute an unrelated old deployment.
+1. **Draft pull-request validation** — automatic path-scoped jobs validate only the affected core, database, UI/i18n, CI-contract, build, and dependency surfaces. Unknown paths fail safe to broad validation.
+2. **Phase-close Quality** — marking the exact Draft PR head Ready for review runs the complete canonical Quality pipeline once and produces one immutable run-keyed artifact.
+3. **Exact Release** — request-bound validation consumes that existing successful Quality artifact, verifies its identities and digests, and runs the read-only release preflight. It must not dispatch or rerun Quality.
+4. **Production release gate** — reconcile migration history, compatibility markers, and the exact reviewed release candidate, then obtain explicit release-owner approval.
+5. **Merge** — merge only the approved exact head to `main`.
+6. **Automatic Vercel deployment** — the current Git-connected model may deploy the resulting `main` commit.
+7. **Production verification and acceptance** — prove provider identity, `/api/version`, `/api/health`, smoke, browser, console, network, timing, and retained evidence.
+8. **Rollback or forward fix** — use a separately reviewed code/schema-compatible release pair; never substitute an unrelated old deployment.
 
-A passing review preflight is not production release authorization. Any failed or blocked strict release preflight is a no-go before merge. The migration ledger must be reconciled before the production-triggering merge. A provider `READY` state alone is not acceptance.
+A passing Draft PR check is not phase closure. A passing phase-close Quality or read-only release preflight is not independent Production authorization. A provider `READY` state alone is not acceptance.
 
-## Current production migration state
+## Two-tier pull-request validation
 
-Verified from the reconciled ledger and AW-3C Production evidence captured on 2026-07-25:
+### Automatic scoped PR Quality
 
-- 74 physical Production migration records;
-- 63 exact applications and 11 immutable generated-version aliases;
-- latest physical identity `20260725145636_active_workout_aw3c_audit_corrections`;
+`.github/workflows/pr-quality.yml` runs on each PR head and uses `scripts/ci-change-scope.mjs` to choose independent parallel jobs:
+
+- repository identity and `git diff --check` always run;
+- lint, typecheck, and unit tests run for non-document changes;
+- migration replay, database lint, permanent SQL verification, ledger checks, and integration tests run only for database-impacting changes;
+- rendered UI and message checks run only for runtime UI/i18n changes;
+- CI/script contracts run only for workflow, script, agent-policy, or toolchain changes;
+- production environment and build checks run only for runtime or dependency changes;
+- dependency audit runs only when dependency manifests change;
+- documentation-only changes run the integrity and summary jobs without reinstalling the application.
+
+Test-only source changes do not trigger browser QA or a production build unless another changed path requires them. Unrecognized non-document paths use a conservative broad fallback.
+
+Successful checks print concise status. Failed checks print a bounded useful tail and retain the full focused log as a short-lived workflow artifact. Superseded PR runs are cancelled by PR-number concurrency.
+
+### Canonical phase-close Quality
+
+`.github/workflows/quality.yml` runs only on the standard `ready_for_review` PR event. It retains every complete release gate and produces `quality-reports-<run-id>`.
+
+The operational sequence is:
+
+1. keep the implementation PR Draft while scoped validation and ordinary corrections continue;
+2. when the exact head is stable and scoped checks pass, mark it Ready for review;
+3. wait for the one complete canonical Quality run on that exact head;
+4. if a correction changes the head, convert the PR back to Draft before editing, complete scoped validation, then mark it Ready again;
+5. never reuse a Quality artifact from another head, base, run attempt, repository, migration target, or validation request.
+
+## Current Production migration state
+
+Verified from the reconciled machine ledger and AW-4 Production evidence captured on 2026-07-26:
+
+- 75 physical Production migration records;
+- 63 exact applications and 12 immutable generated-version aliases;
+- latest physical identity `20260726114212_active_workout_aw4_session_engine`;
 - `pendingCount=0`, `schemaVerifiedUntrackedCount=0`, and `unresolvedCount=0`;
-- `historyRepair.state=reconciled`;
-- released compatibility marker `20260724232734`.
+- `historyRepair.state=reconciled` and `release_ready=true`;
+- released compatibility marker remains `20260724232734`.
 
-The AW-3C base and audit-correction migrations were applied exactly once to Plaivra Production and not to Activity Catalog. Applied repository SQL remains immutable. The machine authority is `supabase/migration-ledger.json`; the human summary is `docs/architecture/migration-ledger-reconciliation.md`.
+The AW-4 migration was applied exactly once to Plaivra Production and not to Activity Catalog. Applied repository SQL remains immutable. The machine authority is `supabase/migration-ledger.json`; the human summary is `docs/architecture/migration-ledger-reconciliation.md`.
 
-Physical schema advancement does not independently authorize merge, deployment, or compatibility-marker promotion. A passing review preflight is not production release authorization.
-
-## Provider controls
-
-### Vercel
-
-`vercel.json` declares main-only deployment policy intent. Repository configuration and tests verify policy intent only. They do not prove actual Vercel provider enforcement.
-
-After candidate pushes, inspect the Vercel deployment list for the exact pushed SHA. Any unexpected feature-branch or pull-request deployment is a release-control failure.
-
-Vercel does not use `ignoreCommand`, `PLAIVRA_PREVIEW_RELEASE_SHA`, or `PLAIVRA_PRODUCTION_RELEASE_SHA`. Vercel does not use preview or production exact-SHA approval environment variables. A merge to `main` is production-triggering under the current model, so all fail-closed gates and explicit authorization must precede merge.
-
-### Netlify
-
-Netlify remains separate. Its production ignore gate uses `scripts/netlify-production-release-gate.mjs` and requires the exact approved `PLAIVRA_PRODUCTION_RELEASE_SHA`. Preview and branch behavior do not replace Vercel production evidence.
+Physical schema advancement does not independently authorize merge, deployment, or compatibility-marker promotion.
 
 ## Required exact-head evidence
 
-Quality must retain results for:
+Canonical Quality must retain results for:
 
 - repository integrity;
 - full migration-chain rehearsal;
 - database lint and disposable database verification;
 - migration-ledger validation;
 - dependency audit;
-- lint, typecheck, unit, integration, script, and telemetry tests;
+- lint, typecheck, unit, integration, script, i18n, and telemetry tests;
 - production environment validation;
 - release metadata and production build;
 - rendered QA and Train QA;
-- release manifest and preflight evidence, including separate review and release readiness.
+- release manifest, evidence index, artifact metadata, and unit-failure parity.
 
-After deployment, retain exact-provider identity, anonymous smoke, populated synthetic smoke, empty-state synthetic smoke, browser/console/network review, screenshots, timings, and the final release verdict.
-
-Generated screenshots, logs, and manifests belong in workflow artifacts or external release evidence. They are not committed as permanent source files.
+Exact Release must verify the existing canonical run and artifact, then retain its own validation summary and read-only release-preflight artifact. Generated screenshots, logs, and manifests belong in workflow artifacts, not permanent source files.
 
 ## Build metadata and `/api/version`
 
@@ -78,56 +94,51 @@ Build metadata must include:
 
 `GET /api/version` is a public release assertion. It fails closed when artifact identity, schema compatibility, expected migration identity, or migration reconciliation is invalid. It does not replace physical-schema verification, migration rehearsal, provider evidence, or authenticated browser smoke.
 
-## Preflight modes
+## Preflight
 
-### Pull-request review
+The repository preflight is non-deploying and accepts only an exact canonical Quality artifact whose manifest, metadata, evidence index, gates, commit, base, run ID, request identity, and expected migration all match.
 
-For an explicit local review of a migration PR:
+For an explicit local review:
 
 ```bash
 npm run release:preflight -- \
   --mode review \
   --commit "$REVIEWED_COMMIT" \
+  --comparison-base "$COMPARISON_BASE" \
+  --quality-run-id "$QUALITY_RUN_ID" \
+  --validation-request-id "$VALIDATION_REQUEST_ID" \
+  --preflight-request-id "$PREFLIGHT_REQUEST_ID" \
+  --expected-migration "$EXPECTED_MIGRATION" \
   --repository ahmedmohameda7222-ship-it/gymsands \
+  --validation-context stage1-infrastructure-validation \
+  --production-authorization-token "" \
   --quality-reports quality-reports \
   --output quality-reports/release-preflight.json
 ```
 
-The GitHub Quality workflow explicitly passes `--mode review` for `pull_request` events and `--mode release` for pushes to `main`. The Node preflight never infers a weaker mode from environment context. Review mode still validates the exact commit, manifest, runtime, migration state, and every required quality gate.
+Unknown modes, mismatched identities, missing files, stale evidence, failed gates, or tampered digests fail closed. The command performs no provider or Supabase write.
 
-With reconciled migration history, both review and strict release evaluation may report migration readiness. This still does not authorize merge, compatibility-marker advancement, or deployment.
+## Provider controls
 
-### Strict production release
+### Vercel
 
-Run before any production-triggering merge:
+`vercel.json` declares main-only deployment policy intent. Repository tests prove policy intent only, not provider enforcement. A merge to `main` is production-triggering under the current model, so all fail-closed gates and explicit authorization must precede merge.
 
-```bash
-npm run release:preflight -- \
-  --mode release \
-  --commit "$REVIEWED_COMMIT" \
-  --repository ahmedmohameda7222-ship-it/gymsands \
-  --quality-reports quality-reports \
-  --output quality-reports/release-preflight.json
-```
+### Netlify
 
-`release` is the universal default whenever mode is omitted, including in a pull-request environment. Only an explicit `--mode review` selects review behavior. Release mode remains fail-closed for identity, evidence, runtime, manifest, or migration-history failures, and unknown modes fail closed. The command performs no provider or Supabase write.
+Netlify remains separate. Its production ignore gate uses `scripts/netlify-production-release-gate.mjs` and requires the exact approved `PLAIVRA_PRODUCTION_RELEASE_SHA`. Preview and branch behavior do not replace Vercel Production evidence.
 
 ## Production runbook
 
-1. Complete code review and all required CI checks for the candidate change.
-2. Complete migration-history reconciliation and independent verification.
-3. Confirm the compatibility marker and expected migration identity.
-4. Run strict production environment validation without exposing secret values.
-5. Run `npm run release:preflight -- --mode release ...` and retain its passing result.
-6. Obtain explicit release-owner approval for the exact reviewed change.
-7. Merge the approved exact change to `main` only as part of the coordinated compatibility-marker and deployment operation.
-8. Record the exact resulting 40-character `main` SHA.
-9. Confirm Vercel production was built from that exact SHA.
-10. Verify provider metadata, `/api/version`, and `/api/health`.
-11. Run anonymous smoke.
-12. Run populated and empty authenticated synthetic smoke.
-13. Review browser, console, network, screenshots, route timings, and request counts.
-14. Record the final launch verdict.
+1. Complete scoped PR validation and code review.
+2. Mark the stable exact head Ready for review and obtain one passing canonical Quality artifact.
+3. Complete Exact Release and read-only release preflight against that same artifact.
+4. Confirm migration history, compatibility marker, expected migration, and Activity Catalog isolation.
+5. Obtain explicit release-owner approval for the exact head.
+6. Merge the approved exact change to `main`.
+7. Record the resulting 40-character `main` SHA and verify provider build identity.
+8. Verify `/api/version`, `/api/health`, anonymous smoke, populated and empty authenticated synthetic smoke, browser, console, network, screenshots, route timings, and request counts.
+9. Record the final launch verdict.
 
 ## Rollback
 
@@ -135,6 +146,10 @@ Do not use provider “redeploy previous” as an unverified shortcut. Select a 
 
 ## Related current authority
 
+- `AGENTS.md`
+- `.github/workflows/pr-quality.yml`
+- `.github/workflows/quality.yml`
+- `.github/workflows/exact-release-quality-validation.yml`
 - `docs/operations/launch-runbook.md`
 - `docs/operations/incident-response.md`
 - `docs/operations/submission-checklists.md`
