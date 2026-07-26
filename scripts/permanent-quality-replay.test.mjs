@@ -120,12 +120,13 @@ test("automatic PR Quality is path-scoped, parallel and fail-safe", () => {
   assert.match(prQuality, /value\.result === "failure" \|\| value\.result === "cancelled"/);
 });
 
-test("integration validation provisions and exports both database authorities instead of allowing skipped suites", () => {
+test("integration validation isolates legacy fixtures and exports both database authorities", () => {
   assert.equal(packageJson.scripts["test:integration"], "node scripts/run-integration-tests.mjs");
-  assert.match(integrationRunner, /plaivra_ci_test/);
-  assert.match(integrationRunner, /drop database if exists/);
-  assert.match(integrationRunner, /create database/);
-  assert.match(integrationRunner, /DATABASE_URL: config\.databaseUrl/);
+  assert.match(integrationRunner, /postgres:15-alpine/);
+  assert.match(integrationRunner, /"run"[\s\S]*"--detach"[\s\S]*POSTGRES_DB=/);
+  assert.match(integrationRunner, /docker\(\["port", containerName, "5432\/tcp"\]\)/);
+  assert.match(integrationRunner, /pg_isready/);
+  assert.match(integrationRunner, /DATABASE_URL: disposable\.databaseUrl/);
   assert.match(integrationRunner, /PLAIVRA_AW2A_TEST_DATABASE_URL: config\.aw2aDatabaseUrl/);
   assert.match(quality, /npm run test:integration/);
   assert.match(prQuality, /npm run test:integration/);
