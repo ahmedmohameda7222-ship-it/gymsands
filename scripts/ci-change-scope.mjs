@@ -36,6 +36,7 @@ const UI_PATTERNS = [
 
 const CI_PATTERNS = [
   /^\.github\/workflows\//,
+  /^\.gitignore$/,
   /^scripts\//,
   /^AGENTS\.md$/,
   /^CHATGPT_CODEX_PROMPT_RULES\.md$/,
