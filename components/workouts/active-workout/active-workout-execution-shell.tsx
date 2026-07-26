@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import {
   Check,
   CheckCircle2,
@@ -107,6 +107,7 @@ export function ActiveWorkoutExecutionShell({
 }: ActiveWorkoutExecutionShellProps) {
   const progress = activeWorkoutProgress(completedSets, totalSets);
   const activeSetNumber = setPath[setIndex]?.number ?? setIndex + 1;
+  const detailsTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   return (
     <div
@@ -190,6 +191,7 @@ export function ActiveWorkoutExecutionShell({
                 </button>
               </div>
               <Button
+                ref={detailsTriggerRef}
                 data-active-set-details-trigger
                 type="button"
                 variant="outline"
@@ -205,9 +207,9 @@ export function ActiveWorkoutExecutionShell({
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="aw5-active-set-reps" className="text-xs font-medium text-muted-foreground">{labels.reps}</Label>
+                <Label htmlFor="active-set-reps" className="text-xs font-medium text-muted-foreground">{labels.reps}</Label>
                 <Input
-                  id="aw5-active-set-reps"
+                  id="active-set-reps"
                   dir="ltr"
                   inputMode="numeric"
                   className="h-16 rounded-xl text-center text-2xl font-semibold tabular-nums sm:h-[72px] sm:text-3xl"
@@ -218,9 +220,9 @@ export function ActiveWorkoutExecutionShell({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="aw5-active-set-weight" className="text-xs font-medium text-muted-foreground">{labels.weightKg}</Label>
+                <Label htmlFor="active-set-weight" className="text-xs font-medium text-muted-foreground">{labels.weightKg}</Label>
                 <Input
-                  id="aw5-active-set-weight"
+                  id="active-set-weight"
                   dir="ltr"
                   inputMode="decimal"
                   className="h-16 rounded-xl text-center text-2xl font-semibold tabular-nums sm:h-[72px] sm:text-3xl"
@@ -306,6 +308,10 @@ export function ActiveWorkoutExecutionShell({
           data-active-set-details-dialog
           layout="responsive-drawer"
           closeLabel={labels.close}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            detailsTriggerRef.current?.focus();
+          }}
           className="max-h-[88dvh] overflow-y-auto p-5 lg:inset-y-6 lg:left-auto lg:right-6 lg:h-auto lg:w-[420px] lg:max-w-[420px] lg:translate-x-0 lg:translate-y-0 lg:rounded-2xl lg:border"
         >
           <DialogHeader>
