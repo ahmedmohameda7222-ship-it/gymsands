@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-26T08:39:06Z",
+  "capturedAt": "2026-07-26T11:42:12Z",
   "auditedRepositoryCommit": "bc22cb06e1683cf1bcf5dbf2330bb20c711da6a0",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 1,
-  "unresolvedCount": 1,
+  "pendingCount": 0,
+  "unresolvedCount": 0,
   "historyRepair": {
-    "state": "pending",
+    "state": "reconciled",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 1,
-    "unresolvedCount": 1,
-    "note": "Plaivra Production contains 74 physical migration records and is reconciled through generated AW-3C audit correction 20260725145636. AW-4 migration 20260726075737 is committed and pending pre-application proof. Repository migration identities remain immutable; generated aliases preserve exact application history. Do not replay any applied migration."
+    "pendingCount": 0,
+    "unresolvedCount": 0,
+    "note": "Plaivra Production contains 75 physical migration records and is reconciled through generated AW-4 migration 20260726114212. Repository migration identities remain immutable; generated aliases preserve exact application history. Do not replay any applied migration."
   },
   "entries": [
     {
@@ -484,9 +484,14 @@
     },
     {
       "localFile": "20260726075737_active_workout_aw4_session_engine.sql",
-      "state": "pending",
-      "note": "Committed in pre-application ancestor bc22cb06e1683cf1bcf5dbf2330bb20c711da6a0. Repository Git blob e79d74a90adcc62b044ce5eec83018416fdbabab; repository SHA-256 b9d5af90a8b7c277bf9892cdae8c412c58284641b7e51f19d220c683eb272d93. Apply exactly once only after the required local and exact-head remote gates pass."
+      "state": "applied_version_alias",
+      "note": "Applied exactly once to Plaivra Production on 2026-07-26T11:42:12Z through Supabase apply_migration. The generated production version 20260726114212 differs from immutable repository version 20260726075737; this alias preserves both identities. Durable pre-application evidence commit bc22cb06e1683cf1bcf5dbf2330bb20c711da6a0; exact-head pre-application CI commit 5ff5482ac5789970bfe9231c32e4e9c5d93c7779; repository Git blob e79d74a90adcc62b044ce5eec83018416fdbabab; repository and applied SQL SHA-256 b9d5af90a8b7c277bf9892cdae8c412c58284641b7e51f19d220c683eb272d93. Do not replay.",
+      "productionVersion": "20260726114212",
+      "productionName": "active_workout_aw4_session_engine",
+      "evidenceCommit": "bc22cb06e1683cf1bcf5dbf2330bb20c711da6a0",
+      "repositorySha256": "b9d5af90a8b7c277bf9892cdae8c412c58284641b7e51f19d220c683eb272d93",
+      "repositoryGitBlob": "e79d74a90adcc62b044ce5eec83018416fdbabab"
     }
   ],
-  "productionRecordCount": 74
+  "productionRecordCount": 75
 }
