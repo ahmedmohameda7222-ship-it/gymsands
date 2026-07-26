@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 const SHA = /^[0-9a-f]{40}$/i;
 const matchesAny = (path, patterns) => patterns.some((pattern) => pattern.test(path));
 const isTestPath = (path) => /(^|\/)(?:__tests__\/|[^/]+\.(?:test|spec)\.[^/]+$)/i.test(path);
+const isIntegrationTestPath = (path) => /\.integration\.(?:test|spec)\.[^/]+$/i.test(path);
 
 const DOC_PATTERNS = [
   /(^|\/)README\.md$/i,
@@ -71,6 +72,7 @@ export function classifyChangedPaths(inputPaths) {
       docsOnly: false,
       core: true,
       database: true,
+      integration: false,
       ui: true,
       ci: true,
       build: true,
@@ -81,6 +83,7 @@ export function classifyChangedPaths(inputPaths) {
 
   const docsOnly = paths.every((path) => matchesAny(path, DOC_PATTERNS));
   const database = paths.some((path) => matchesAny(path, DATABASE_PATTERNS));
+  const integrationTest = paths.some((path) => isIntegrationTestPath(path));
   const ui = paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
   const ci = paths.some((path) => matchesAny(path, CI_PATTERNS));
   const runtime = paths.some((path) => !isTestPath(path) && matchesAny(path, RUNTIME_PATTERNS));
@@ -101,12 +104,23 @@ export function classifyChangedPaths(inputPaths) {
     docsOnly,
     core: !docsOnly,
     database: database || fallback,
+    integration: integrationTest && !database && !fallback,
     ui: ui || fallback,
     ci: ci || fallback,
     build: runtime || dependencies || fallback,
     dependencies,
     fallback,
   };
+}
+
+export function changedPathDiffArgs(base, head) {
+  return [
+    "diff",
+    "--name-only",
+    "--no-renames",
+    "--diff-filter=ACMRD",
+    `${base}...${head}`,
+  ];
 }
 
 function exactSha(value, label) {
@@ -120,6 +134,7 @@ function emit(result) {
     docs_only: result.docsOnly,
     core: result.core,
     database: result.database,
+    integration: result.integration,
     ui: result.ui,
     ci: result.ci,
     build: result.build,
@@ -136,7 +151,7 @@ function emit(result) {
 function main() {
   const base = exactSha(process.env.PLAIVRA_PR_BASE_SHA, "PR base");
   const head = exactSha(process.env.PLAIVRA_PR_HEAD_SHA, "PR head");
-  const stdout = execFileSync("git", ["diff", "--name-only", "--diff-filter=ACMR", `${base}...${head}`], {
+  const stdout = execFileSync("git", changedPathDiffArgs(base, head), {
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
   });
