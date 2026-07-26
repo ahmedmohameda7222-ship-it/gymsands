@@ -63,11 +63,11 @@ test("non-database integration-test changes select the job that runs the integra
   assert.equal(scope.fallback, false);
 });
 
-test("database integration-test changes remain on database validation", () => {
+test("database integration-test changes remain on database validation without a build", () => {
   const scope = classifyChangedPaths(["services/database/example.integration.test.ts"]);
   assert.equal(scope.core, true);
   assert.equal(scope.database, true);
-  assert.equal(scope.build, true);
+  assert.equal(scope.build, false);
 });
 
 test("workflow and generic script changes select CI contracts", () => {
