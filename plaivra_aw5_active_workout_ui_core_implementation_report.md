@@ -14,8 +14,8 @@ No schema, migration, RLS, grant, `SECURITY DEFINER`, Production, Activity Catal
 - First coherent implementation commit: `18a716e2c4f991f989c1e700245fb5ca6d98d908`
 - Pull request: [#90](https://github.com/ahmedmohameda7222-ship-it/gymsands/pull/90)
 - PR title: `feat(active-workout): implement AW-5 UI core`
-- PR state at report creation: Draft
-- Final exact head SHA: pending phase-close evidence commit
+- PR state during report finalization: Draft; the binding phase-close changes it to Ready only after this report-finalization head passes exact-head Phase A and scoped PR Quality.
+- Final exact head SHA: the report-finalization commit containing this report. Its exact 40-character identity and all evidence created after it existed are recorded in PR #90's final phase-close evidence comment and the final executor handoff. A Git commit cannot literally contain its own SHA because the file contents determine that SHA.
 
 PR #89 was verified closed and unmerged. Its stale remote branch was deleted; no stale local branch existed. `origin/main` was fetched and the AW-5 branch was created fresh from the base SHA above.
 
@@ -206,14 +206,26 @@ Local integration limitations:
 
 ## CI and phase-close evidence
 
-- Phase A run ID/jobs: pending final exact head.
-- Scoped PR Quality run ID/jobs: pending final exact head.
-- Canonical Quality run ID/jobs/artifacts/IDs/digests/expiry: pending Ready-for-review cycle.
-- Exact Release run ID/jobs/artifact verification: pending canonical Quality artifact.
-- Read-only release preflight: pending Exact Release.
-- Reviews, review threads, and comments: no human review or unresolved review thread at report creation; automated Netlify preview comment only.
+The final report commit necessarily creates a new exact head. Therefore, evidence that does not exist until after this file is committed is recorded in PR #90's final phase-close evidence comment and the final executor handoff, rather than editing this report again and invalidating the evidence with another head.
 
-These fields will not be reported as passed until GitHub confirms them for one exact head.
+Pre-finalization exact-head gate used to authorize this report commit:
+
+- Head: `d6047e7b28a9297c42d64343586261880dea7d18`
+- Phase A: run `30224192499`; `verify-diff` job `89851638923` passed.
+- Scoped PR Quality: run `30224192491`; `scope` job `89851674472`, `integrity` job `89851690190`, `database` job `89851690191`, `ui-and-i18n` job `89851690194`, `ci-contracts` job `89851690197`, `build` job `89851690203`, `dependency-audit` job `89851690206`, `core` job `89851690210`, and `required-summary` job `89852654871` passed.
+- The database job passed chronological migration replay, database lint, verification SQL, migration ledger, and SQL-backed integration tests on Linux.
+- The UI job passed message contracts and the full rendered Train QA matrix on Linux.
+
+Binding final-head evidence location:
+
+- Final exact-head Phase A run ID/job: PR #90 final phase-close evidence comment.
+- Final exact-head scoped PR Quality run ID/jobs: PR #90 final phase-close evidence comment.
+- Canonical Quality run ID/jobs and artifact names, IDs, digests, expiry: PR #90 final phase-close evidence comment.
+- Exact Release run ID/job and immutable artifact verification: PR #90 final phase-close evidence comment.
+- Read-only release preflight: Exact Release summary and PR #90 final phase-close evidence comment.
+- Reviews, review threads, and comments: verified again immediately before Ready transition and recorded in PR #90's final phase-close evidence comment.
+
+No workflow is reported here as final-head passed before GitHub confirms it. Earlier-head evidence is not combined with final-head evidence.
 
 ## Known risks, limitations, and out-of-scope findings
 
@@ -225,6 +237,8 @@ These fields will not be reported as passed until GitHub confirms them for one e
 
 ## Git and release boundary
 
-At report creation the implementation commit was pushed, PR #90 was Draft and mergeable, and the local worktree contained this required report plus its exact-path hygiene-contract correction as the next intended change. The PR was not merged, deployed, or promoted. Production, Activity Catalog, and compatibility-marker state were not mutated.
+The implementation and required report commits are pushed to PR #90. The PR is not merged, deployed, or promoted. Production, Activity Catalog, and compatibility-marker state were not mutated. AW-6 was not started.
 
-Final phase-close state: pending exact-head CI, Ready transition, canonical Quality, Exact Release artifact consumption, and read-only preflight.
+Git status at report finalization: clean after committing and pushing this report-finalization change; the exact final status is reverified in the executor handoff.
+
+Ready for independent Planner QA/QC.
