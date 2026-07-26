@@ -13,8 +13,8 @@ const integration = readFileSync(
   "supabase/verification/active-workout-aw4-integration.sql",
   "utf8"
 ).replaceAll("\r\n", "\n").toLowerCase();
-const quality = readFileSync(
-  ".github/workflows/quality.yml",
+const databaseVerification = readFileSync(
+  "scripts/run-database-verification.mjs",
   "utf8"
 ).replaceAll("\r\n", "\n").toLowerCase();
 
@@ -86,7 +86,7 @@ describe("AW-4 session-engine migration contract", () => {
     expect(migration).toContain("migration_version = '20260724232734'");
   });
 
-  it("keeps permanent schema and integration proofs in the Quality contract", () => {
+  it("keeps permanent schema and integration proofs in the centralized database contract", () => {
     expect(verification).toContain("activity timer columns do not match the exact additive contract");
     expect(verification).toContain("authenticated direct mutation access exists");
     expect(verification).toContain("aw-4 compatibility marker changed");
@@ -94,10 +94,10 @@ describe("AW-4 session-engine migration contract", () => {
     expect(integration).toContain("replay, idempotency conflict, or revision conflict");
     expect(integration).toContain("terminal cleanup retained execution authority");
     expect(integration).toContain("authenticated direct execution-state update succeeded");
-    const aw3c = quality.indexOf("active-workout-aw3c-integration.sql");
-    const aw4Schema = quality.indexOf("active-workout-aw4-session-engine.sql");
-    const aw4Integration = quality.indexOf("active-workout-aw4-integration.sql");
-    const genericPreflight = quality.indexOf("production-release-migration-preflight.sql");
+    const aw3c = databaseVerification.indexOf("active-workout-aw3c-integration.sql");
+    const aw4Schema = databaseVerification.indexOf("active-workout-aw4-session-engine.sql");
+    const aw4Integration = databaseVerification.indexOf("active-workout-aw4-integration.sql");
+    const genericPreflight = databaseVerification.indexOf("production-release-migration-preflight.sql");
     expect(aw3c).toBeGreaterThanOrEqual(0);
     expect(aw4Schema).toBeGreaterThan(aw3c);
     expect(aw4Integration).toBeGreaterThan(aw4Schema);

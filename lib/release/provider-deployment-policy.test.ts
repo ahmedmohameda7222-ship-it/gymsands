@@ -6,6 +6,9 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const netlifyScript = fileURLToPath(new URL("../../scripts/netlify-production-release-gate.mjs", import.meta.url));
 const obsoleteVercelScript = fileURLToPath(new URL("../../scripts/vercel-production-release-gate.mjs", import.meta.url));
+const exactReleaseWorkflow = fileURLToPath(new URL("../../.github/workflows/exact-release-quality-validation.yml", import.meta.url));
+const releasePreflightWorkflow = fileURLToPath(new URL("../../.github/workflows/release-preflight.yml", import.meta.url));
+const exactReleaseOrchestrator = fileURLToPath(new URL("../../scripts/exact-release-orchestrator.mjs", import.meta.url));
 const SHA = "8481ab3ce43b9866f01d8ba0331abf6368f68956";
 const OTHER_SHA = "1111111111111111111111111111111111111111";
 
@@ -21,15 +24,13 @@ function runNetlify(overrides: EnvironmentOverrides = {}) {
 }
 
 describe("provider deployment policy", () => {
-  it("declares repository Vercel policy intent for main only without claiming provider enforcement", () => {
+  it("declares repository Vercel policy intent for main only without a repository-side deployment gate", () => {
     const vercelConfig = JSON.parse(readFileSync(`${repositoryRoot}/vercel.json`, "utf8")) as {
       ignoreCommand?: string;
       git?: { deploymentEnabled?: Record<string, boolean> };
       crons?: Array<{ path: string; schedule: string }>;
     };
     const envExample = readFileSync(`${repositoryRoot}/.env.example`, "utf8");
-    const releaseReadme = readFileSync(`${repositoryRoot}/docs/release/README.md`, "utf8");
-    const launchRunbook = readFileSync(`${repositoryRoot}/docs/operations/launch-runbook.md`, "utf8");
 
     expect(vercelConfig.git?.deploymentEnabled).toEqual({ "**": false, main: true });
     expect(vercelConfig.ignoreCommand).toBeUndefined();
@@ -43,36 +44,40 @@ describe("provider deployment policy", () => {
     expect(envExample).toContain("# Netlify production deployment release hold");
     expect(envExample).toContain("# Vercel does not use this variable.");
     expect(envExample).toMatch(/^PLAIVRA_PRODUCTION_RELEASE_SHA=$/m);
-    expect(releaseReadme).toContain("Repository configuration and tests verify policy intent only.");
-    expect(releaseReadme).toContain("They do not prove actual Vercel provider enforcement.");
-    expect(launchRunbook).toContain("Repository configuration and green repository tests prove policy intent only");
-    expect(launchRunbook).toContain("actual provider behavior requires post-push Vercel verification");
   });
 
-  it("places migration reconciliation, strict preflight, and owner approval before the production-triggering merge", () => {
-    const releaseReadme = readFileSync(`${repositoryRoot}/docs/release/README.md`, "utf8");
-    const launchRunbook = readFileSync(`${repositoryRoot}/docs/operations/launch-runbook.md`, "utf8");
+  it("binds Exact Release to one canonical Quality artifact and a read-only preflight", () => {
+    const exactWorkflow = readFileSync(exactReleaseWorkflow, "utf8");
+    const preflightWorkflow = readFileSync(releasePreflightWorkflow, "utf8");
+    const orchestrator = readFileSync(exactReleaseOrchestrator, "utf8");
 
-    for (const document of [releaseReadme, launchRunbook]) {
-      const reconciliation = document.indexOf("2. Complete migration-history reconciliation");
-      const preflight = document.indexOf("5. Run `npm run release:preflight");
-      const releaseMode = document.indexOf("--mode release", preflight);
-      const approval = document.indexOf("6. Obtain explicit release-owner approval");
-      const merge = document.indexOf("7. Merge the approved exact change to `main`");
+    expect(exactWorkflow).toContain("reviewed_commit:");
+    expect(exactWorkflow).toContain("comparison_base:");
+    expect(exactWorkflow).toContain("quality_run_id:");
+    expect(exactWorkflow).toContain("node scripts/exact-release-orchestrator.mjs");
 
-      expect(reconciliation).toBeGreaterThanOrEqual(0);
-      expect(preflight).toBeGreaterThan(reconciliation);
-      expect(releaseMode).toBeGreaterThan(preflight);
-      expect(approval).toBeGreaterThan(releaseMode);
-      expect(merge).toBeGreaterThan(approval);
-      expect(document).toContain("Any failed or blocked strict release preflight is a no-go before merge");
-      expect(document).toContain("migration ledger must be reconciled before");
-      expect(document).toContain("A provider `READY` state alone is not acceptance");
-      expect(document).toContain("Netlify remains separate");
-    }
+    const verifyQuality = orchestrator.indexOf("const qualityEvidence = verifyQualityArtifact({");
+    const dispatchPreflight = orchestrator.indexOf('"release-preflight.yml"');
+    const waitForPreflight = orchestrator.indexOf('label: "preflight"');
+    const verifyPreflight = orchestrator.indexOf("preflightArtifact = verifyPreflightArtifact({");
+    const finalEvidence = orchestrator.indexOf("writeFinalEvidence({", verifyPreflight);
 
-    expect(releaseReadme).toContain("A passing review preflight is not production release authorization");
-    expect(launchRunbook).toContain("Pull-request review preflight is CI evidence only");
+    expect(verifyQuality).toBeGreaterThanOrEqual(0);
+    expect(dispatchPreflight).toBeGreaterThan(verifyQuality);
+    expect(waitForPreflight).toBeGreaterThan(dispatchPreflight);
+    expect(verifyPreflight).toBeGreaterThan(waitForPreflight);
+    expect(finalEvidence).toBeGreaterThan(verifyPreflight);
+    expect(orchestrator).toContain('qualityExecutionMode: "reused-canonical-run"');
+    expect(orchestrator).toContain("productionWritePerformed: false");
+    expect(orchestrator).toContain("deploymentPerformed: false");
+
+    expect(preflightWorkflow).toContain("actions: read");
+    expect(preflightWorkflow).toContain("contents: read");
+    expect(preflightWorkflow).toContain("Download exact canonical Quality artifact");
+    expect(preflightWorkflow).toContain("Validate migration ledger");
+    expect(preflightWorkflow).toContain("Run strict non-deploying release preflight");
+    expect(preflightWorkflow).toContain("Assert selected mode remains read-only");
+    expect(preflightWorkflow).not.toMatch(/\b(?:vercel|netlify)\s+deploy\b|supabase\s+db\s+push/i);
   });
 
   it("keeps the Netlify ignore command and local build behavior", () => {

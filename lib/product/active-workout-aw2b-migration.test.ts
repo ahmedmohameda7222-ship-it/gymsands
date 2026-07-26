@@ -14,7 +14,10 @@ const invariants = readFileSync(
   "lib/workouts/session-engine/invariants.ts",
   "utf8"
 ).replaceAll("\r\n", "\n");
-const privacy = readFileSync("docs/privacy/active-workout-command-receipts.md", "utf8").replaceAll("\r\n", "\n");
+const privacyExport = [
+  readFileSync("lib/privacy/data-export.ts", "utf8"),
+  readFileSync("lib/privacy/data-export-legacy.ts", "utf8")
+].join("\n");
 const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   entries: Array<{ localFile: string; state: string; productionVersion?: string }>;
 };
@@ -101,9 +104,10 @@ describe("AW-2B command authority migration contract", () => {
     expect(invariants).toContain("divergent states at the same revision");
   });
 
-  it("documents the short-lived privacy export exclusion and reconciles the migration ledger", () => {
-    expect(privacy).toContain("excludes `workout_session_execution_commands` from the user data export");
-    expect(privacy).toContain("cascades when its transient");
+  it("enforces transient receipt lifecycle and export exclusion in executable sources", () => {
+    expect(migration).toContain("references public.workout_session_execution_states(workout_session_id) on delete cascade");
+    expect(migration).toContain("references public.profiles(id) on delete cascade");
+    expect(privacyExport).not.toContain('"workout_session_execution_commands"');
     expect(ledger.entries).toContainEqual(expect.objectContaining({
       localFile: "20260722013000_active_workout_aw2b_command_authority.sql",
       state: "applied_version_alias",

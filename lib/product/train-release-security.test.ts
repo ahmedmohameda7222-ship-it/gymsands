@@ -29,7 +29,7 @@ const aclCorrectionMigration = readFileSync(
   "supabase/migrations/20260715010000_restrict_nutrition_target_override_acl.sql",
   "utf8"
 );
-const qualityWorkflow = readFileSync(".github/workflows/quality.yml", "utf8");
+const databaseVerification = readFileSync("scripts/run-database-verification.mjs", "utf8");
 
 const canonicalRpcs = [
   "activate_workout_plan_atomic",
@@ -102,12 +102,12 @@ describe("Train release security controls", () => {
     expect(productionPreflightFixture).toContain(
       "\\ir production-release-migration-preflight-control.psql"
     );
-    expect(qualityWorkflow).toContain("node scripts/test-database-preflight-control.mjs");
+    expect(databaseVerification).toContain('"scripts/test-database-preflight-control.mjs"');
   });
 
-  it("runs disposable behavioral security verification in the database preflight gate", () => {
-    expect(qualityWorkflow).toContain(
-      "-f supabase/verification/train-atomic-rpc-security.sql"
+  it("runs disposable behavioral security verification through the centralized database gate", () => {
+    expect(databaseVerification).toContain(
+      '"supabase/verification/train-atomic-rpc-security.sql"'
     );
     for (const name of canonicalRpcs) {
       expect(rpcSecurity).toContain(`public.${name}(`);

@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.mjs",
-    "test:integration": "vitest run --config vitest.integration.config.mjs",
+    "test:integration": "node scripts/run-integration-tests.mjs",
     "test:active-workout:aw3a": "vitest run --config vitest.unit.config.mjs services/database/workout-performance.test.ts services/database/workout-performance.integration.test.ts services/database/workout-rpc-convergence.test.ts lib/privacy/data-export.test.ts lib/product/active-workout-aw3a-migration.test.ts lib/mcp/workout-performance-source.test.ts",
     "test:active-workout:aw3b": "vitest run --config vitest.unit.config.mjs services/database/workout-set-details.test.ts services/database/workout-set-autosave.test.ts services/database/workout-performance.test.ts services/database/workout-rpc-convergence.test.ts lib/privacy/data-export.test.ts lib/product/active-workout-aw3b-migration.test.ts lib/mcp/workout-performance-source.test.ts && vitest run --config vitest.integration.config.mjs services/database/workout-set-details.integration.test.ts services/database/workout-performance.integration.test.ts",
     "test:muscle-intelligence:phase2": "vitest run --config vitest.unit.config.mjs lib/train/muscle-intelligence/curated-registry.test.ts lib/product/muscle-intelligence-phase2-migration.test.ts",

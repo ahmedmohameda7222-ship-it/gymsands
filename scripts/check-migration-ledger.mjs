@@ -225,12 +225,9 @@ export async function validateMigrationLedgerGitEvidence({
     return errors;
   }
 
-  try {
-    await runGit(["merge-base", "--is-ancestor", auditedCommit, "HEAD"]);
-  } catch {
-    errors.push(`auditedRepositoryCommit is not reachable from HEAD: ${auditedCommit}`);
-  }
-
+  // Squash merges intentionally do not preserve the implementation branch as
+  // an ancestor. Evidence is therefore bound to immutable commit bytes/blob
+  // plus the identical blob and bytes at the currently reviewed HEAD.
   const evidenceEntries = (ledger.entries ?? []).filter(
     (entry) => entry.evidenceCommit || entry.repositorySha256 || entry.repositoryGitBlob
   );
@@ -272,6 +269,15 @@ export async function validateMigrationLedgerGitEvidence({
     }
     if (committedBlob !== entry.repositoryGitBlob) {
       errors.push(`${entry.localFile} committed blob does not match repositoryGitBlob.`);
+    }
+
+    try {
+      const currentBlob = String(await runGit(["rev-parse", `HEAD:${repositoryPath}`])).trim();
+      if (currentBlob !== entry.repositoryGitBlob) {
+        errors.push(`${entry.localFile} current HEAD blob differs from repositoryGitBlob.`);
+      }
+    } catch {
+      errors.push(`Current HEAD does not contain attested migration ${entry.localFile}.`);
     }
 
     try {

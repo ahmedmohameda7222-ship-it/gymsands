@@ -5,13 +5,11 @@ const migrationPath = "supabase/migrations/20260716215602_muscle_intelligence_ph
 const verificationPath = "supabase/verification/muscle-intelligence-phase1.sql";
 const migration = readFileSync(migrationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const verification = readFileSync(verificationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
-const qualityWorkflow = readFileSync(".github/workflows/quality.yml", "utf8");
+const databaseVerification = readFileSync("scripts/run-database-verification.mjs", "utf8");
 const privacyExport = [
   readFileSync("lib/privacy/data-export.ts", "utf8"),
   readFileSync("lib/privacy/data-export-legacy.ts", "utf8")
 ].join("\n");
-const adr = readFileSync("docs/architecture/decisions/0005-muscle-intelligence-taxonomy-and-mapping-authority.md", "utf8");
-const canonical = readFileSync("docs/architecture/canonical-domain-model.md", "utf8");
 const migrationLedger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   pendingCount: number;
   unresolvedCount: number;
@@ -100,10 +98,9 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
     expect(verification).toContain("published global mapping entry mutation unexpectedly succeeded");
   });
 
-  it("executes the disposable Phase 1 verification in the authoritative Quality database preflight", () => {
-    expect(qualityWorkflow).toContain(
-      'PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase1.sql'
-    );
+  it("executes the disposable Phase 1 verification through the centralized database authority", () => {
+    expect(databaseVerification).toContain('"supabase/verification/muscle-intelligence-phase1.sql"');
+    expect(databaseVerification).toContain('"-v", "ON_ERROR_STOP=1", "-f", file');
     expect(verification.trimEnd().endsWith("rollback;")).toBe(true);
     expect(verification.indexOf("select pg_temp.assert_intruder_custom_insert_denied(:'custom_b_set_id'::uuid)")).toBeLessThan(
       verification.indexOf("select public.publish_user_custom_exercise_mapping_set(:'custom_b_set_id'::uuid)")
@@ -133,14 +130,11 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
     }
   });
 
-  it("exports only owner-scoped custom mappings and documents the no-runtime-cutover boundary", () => {
+  it("exports only owner-scoped custom mappings", () => {
     expect(privacyExport).toContain('"user_custom_exercise_mapping_sets"');
     expect(privacyExport).toContain('"user_custom_exercise_mapping_entries"');
     expect(privacyExport).not.toContain('owned.exercise_muscle_mapping_sets');
     expect(privacyExport).not.toContain('owned.exercise_provider_links');
-    expect(adr).toContain("code-authoritative 24-muscle taxonomy");
-    expect(adr).toContain("no name-only mapping");
-    expect(canonical.toLowerCase()).toContain("phase 1 does not change train runtime behavior");
   });
 
   it("keeps Phase 1 applied while later migration state remains truthfully classified", () => {

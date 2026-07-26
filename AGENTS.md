@@ -64,15 +64,24 @@ Agents and Ruflo are off by default. Use one executor unless genuinely independe
 
 Graphify is a dependency-discovery and context-reduction aid. It never replaces source inspection, tests, SQL verification, runtime evidence, or security review. Regenerate it from clean `main` after major merged architecture phases.
 
-## CI failure boundary
+## CI execution and repair
 
-When a Codex implementation prompt requires CI and any required check fails, is cancelled, times out, or requires action, Codex must output exactly:
+During implementation, run focused checks first and the directly affected broader suite once before pushing. Do not repeatedly run full release validation after every small edit.
 
-```text
-Send me the correction prompt.
-```
+For ordinary in-scope CI failures, the executor must continue autonomously:
 
-Then stop. Do not investigate, rerun, modify files, download artifacts, or update the report. Independent quality control performs the diagnosis.
+1. inspect the failed workflow, job, step, concise relevant log tail, and focused artifact;
+2. identify and reproduce the narrowest verified root cause;
+3. apply the smallest correct in-scope correction;
+4. run focused validation, then the directly affected suite;
+5. commit and push to the same branch and pull request;
+6. repeat until the required checks pass.
+
+Do not restart the phase, perform speculative repository-wide audits, reread long prompts unnecessarily, or request a new correction prompt for routine lint, typecheck, test, fixture, build, rendered-QA, migration-replay, database-lint, or workflow-contract failures.
+
+Stop and report an exact blocker only for missing permissions or credentials, a persistent required-service outage, unexpected Production divergence, Activity Catalog mutation, destructive or data-loss action, modification of an already-applied migration, a new unauthorized Production migration, base drift causing an architectural conflict, or a product decision outside the approved phase.
+
+Canonical full release Quality runs once at phase closure. Exact Release consumes that run-keyed immutable artifact and must not rerun Quality.
 
 ## Completion
 
