@@ -31,6 +31,20 @@ test("central database verification changes select the database gate", () => {
   assert.equal(scope.build, false);
 });
 
+test("both migration replay helpers execute live database validation", () => {
+  for (const path of [
+    "scripts/replay-local-migration-chain.mjs",
+    "scripts/replay-local-migration-chain-legacy.mjs",
+  ]) {
+    const scope = classifyChangedPaths([path]);
+    assert.equal(scope.core, true);
+    assert.equal(scope.database, true);
+    assert.equal(scope.ci, true);
+    assert.equal(scope.build, false);
+    assert.equal(scope.fallback, false);
+  }
+});
+
 test("UI changes select UI, core and build without database replay", () => {
   const scope = classifyChangedPaths([
     "components/workouts/example.tsx",
