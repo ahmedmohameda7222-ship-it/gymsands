@@ -41,10 +41,8 @@ import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { activeWorkoutCacheFromExecution, clearActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
 import { userSafeError } from "@/lib/error-formatting";
 import {
-  completeWorkoutSession,
   getOrStartWorkoutDaySession,
   getWorkoutHistoryDetailed,
-  replaceWorkoutSessionExercise,
 } from "@/services/database/workout-sessions";
 import { createExerciseAlternative, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
 import type { ExerciseLog, FrozenWorkoutPrescriptionSet, UserWorkoutPlanExercise, Workout, WorkoutPerformanceMetricSource, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionPrescriptionItem, WorkoutSessionSummary, WorkoutSetSideMode, WorkoutSetTempoAdherence, WorkoutSetType } from "@/types";
@@ -1442,10 +1440,15 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   async function applyStableReplacement(replacement: Workout) {
     if (!user?.id || !session || !activeExercise) return;
+    const store = activeSessionStoreRef.current;
+    if (!store) return;
     const originalName = activeExercise.exercise.exercise_name;
     setIsSavingAlternative(true);
     try {
-      await replaceWorkoutSessionExercise(user.id, session.id, activeExercise.exercise.id, replacement);
+      await store.replaceExercise({
+        sourcePlanExerciseId: activeExercise.exercise.id,
+        replacement
+      });
       setMuscleLoadRevision((current) => current + 1);
       setExerciseStates((current) => current.map((item, index) => index === activeExerciseIndex
         ? { ...item, exercise: { ...item.exercise, exercise_name: replacement.name } }

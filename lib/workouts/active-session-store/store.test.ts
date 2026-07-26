@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { WorkoutSession, WorkoutSessionExecutionState } from "@/types";
+import type { Workout, WorkoutSession, WorkoutSessionExecutionState } from "@/types";
 import type { ActiveSessionPersistenceAdapter } from "./persistence-adapter";
 import {
   ActiveSessionTransportUncertainError,
@@ -319,5 +319,43 @@ describe("AW-4 official Active Workout store", () => {
     expect(clearCompatibilityCache).toHaveBeenCalledTimes(1);
     await expect(store.dispatch(pauseIntent())).rejects
       .toMatchObject({ code: "terminal_mutation_attempt" });
+  });
+
+  it("routes replacement and skip through the identity-bound adapter and rehydrates", async () => {
+    const replaceExercise = vi.fn(async () => ({}));
+    const skipExercise = vi.fn(async () => ({}));
+    const loadSessionRoot = vi.fn(async () => root());
+    const mock = adapter({ replaceExercise, skipExercise, loadSessionRoot });
+    const store = createActiveSessionStore({
+      userId: fixtureIds.userId,
+      workoutSessionId: fixtureIds.sessionId,
+      adapter: mock
+    });
+    await store.hydrate();
+    const replacement = {
+      id: fixtureIds.itemId,
+      name: "Identity-bound replacement",
+      catalog_source: null
+    } as Workout;
+
+    await store.replaceExercise({
+      sourcePlanExerciseId: fixtureIds.itemId,
+      replacement
+    });
+    expect(replaceExercise).toHaveBeenCalledWith({
+      userId: fixtureIds.userId,
+      workoutSessionId: fixtureIds.sessionId,
+      sourcePlanExerciseId: fixtureIds.itemId,
+      replacement
+    });
+
+    await store.skipExercise(fixtureIds.itemId, "user_skipped");
+    expect(skipExercise).toHaveBeenCalledWith(
+      fixtureIds.userId,
+      fixtureIds.sessionId,
+      fixtureIds.itemId,
+      "user_skipped"
+    );
+    expect(loadSessionRoot).toHaveBeenCalledTimes(3);
   });
 });

@@ -3,6 +3,7 @@ import type {
   WorkoutSession,
   WorkoutSessionExecutionState
 } from "@/types";
+import type { WorkoutSessionExerciseSkipReason } from "@/types/workout-session-timeline";
 import type { WorkoutSessionPrescriptionItem } from "@/types/workout-prescription";
 import {
   createSessionCommandDispatcher,
@@ -24,7 +25,8 @@ import {
 import type {
   ActiveSessionPersistenceAdapter,
   CanonicalWorkoutSetWrite,
-  CompleteActiveSessionInput
+  CompleteActiveSessionInput,
+  ReplaceActiveSessionExerciseInput
 } from "./persistence-adapter";
 
 export type ActiveSessionPresentationSurface =
@@ -108,6 +110,13 @@ export type ActiveSessionStore = {
   retryPendingTransport(): Promise<SessionCommandResponse>;
   saveCanonicalSets(logs: CanonicalWorkoutSetWrite[]): Promise<void>;
   completeCanonicalSet(input: CompleteCanonicalSetInput): Promise<SessionCommandResponse>;
+  replaceExercise(
+    input: Omit<ReplaceActiveSessionExerciseInput, "userId" | "workoutSessionId">
+  ): Promise<void>;
+  skipExercise(
+    snapshotItemId: string,
+    reason?: WorkoutSessionExerciseSkipReason
+  ): Promise<void>;
   completeSession(input: Omit<CompleteActiveSessionInput, "userId" | "workoutSessionId">): Promise<void>;
   cancelSession(): Promise<void>;
   setPresentationSurface(surface: ActiveSessionPresentationSurface): void;
@@ -402,6 +411,109 @@ export function createActiveSessionStore(input: {
     }
   }
 
+  function hydrate(options: HydrateActiveSessionOptions = {}) {
+    requireUsable();
+    if (hydrationPromise && !options.force) return hydrationPromise;
+    const generation = snapshot.hydrationGeneration + 1;
+    publish({
+      hydrationGeneration: generation,
+      hydrationStatus: "loading",
+      recoverableError: null,
+      hardError: null
+    });
+    const promise = (async () => {
+      try {
+        const [root, executionState, prescription, performedLogs] = await Promise.all([
+          input.adapter.loadSessionRoot(snapshot.userId, snapshot.workoutSessionId),
+          input.adapter.loadExecutionState(snapshot.userId, snapshot.workoutSessionId),
+          input.adapter.loadPrescription(snapshot.userId, snapshot.workoutSessionId),
+          input.adapter.loadPerformedLogs(snapshot.userId, snapshot.workoutSessionId)
+        ]);
+        if (disposed || generation !== snapshot.hydrationGeneration) return;
+        validateHydrationIdentity(
+          snapshot,
+          root,
+          executionState,
+          prescription,
+          performedLogs
+        );
+        publish({
+          root,
+          executionState,
+          prescription,
+          performedLogs,
+          hydrationStatus: root!.status === "started" ? "ready" : "terminal",
+          finalProjection: null
+        });
+        if (executionState) dispatcher.replace(executionState);
+        if (
+          executionState
+          && eligibleLegacyCache(snapshot, executionState, options.legacyCache)
+        ) {
+          const cache = options.legacyCache!;
+          try {
+            await dispatch({
+              userId: snapshot.userId,
+              workoutSessionId: snapshot.workoutSessionId,
+              commandId: createSessionCommandId(input.commandId),
+              commandType: "import_legacy_cache",
+              payload: {
+                cached_started_at: cache.startedAtMs === null
+                  ? null
+                  : new Date(cache.startedAtMs).toISOString(),
+                cached_rest_ends_at: cache.restEndsAtMs == null
+                  ? null
+                  : new Date(cache.restEndsAtMs).toISOString(),
+                cached_rest_duration_seconds: cache.restDurationSeconds ?? null,
+                controller_device_id: cache.controllerDeviceId ?? null
+              }
+            });
+          } catch {
+            // Canonical hydration remains usable; dispatch records the bounded typed error.
+          }
+        }
+      } catch (error) {
+        if (disposed || generation !== snapshot.hydrationGeneration) return;
+        const typed = error instanceof ActiveSessionError
+          ? error
+          : new ActiveSessionError(
+              "hydration_failed",
+              "The active workout could not be hydrated.",
+              error
+            );
+        publish({ hydrationStatus: "failed", hardError: typed });
+        throw typed;
+      } finally {
+        if (generation === snapshot.hydrationGeneration) hydrationPromise = null;
+      }
+    })();
+    hydrationPromise = promise;
+    return promise;
+  }
+
+  async function mutateSessionProjection(operation: () => Promise<unknown>) {
+    requireUsable();
+    if (!snapshot.root || snapshot.root.status !== "started" || !snapshot.executionState) {
+      throw new ActiveSessionError(
+        "terminal_mutation_attempt",
+        "This workout cannot accept another projection mutation."
+      );
+    }
+    try {
+      await operation();
+      await hydrate({ force: true });
+    } catch (error) {
+      if (error instanceof ActiveSessionError) throw error;
+      const typed = new ActiveSessionError(
+        "adapter_failure",
+        "The workout projection could not be updated.",
+        error
+      );
+      publish({ recoverableError: typed });
+      throw typed;
+    }
+  }
+
   return {
     getSnapshot() {
       return snapshot;
@@ -425,85 +537,7 @@ export function createActiveSessionStore(input: {
     select(selector) {
       return selector(snapshot);
     },
-    hydrate(options = {}) {
-      requireUsable();
-      if (hydrationPromise && !options.force) return hydrationPromise;
-      const generation = snapshot.hydrationGeneration + 1;
-      publish({
-        hydrationGeneration: generation,
-        hydrationStatus: "loading",
-        recoverableError: null,
-        hardError: null
-      });
-      const promise = (async () => {
-        try {
-          const [root, executionState, prescription, performedLogs] = await Promise.all([
-            input.adapter.loadSessionRoot(snapshot.userId, snapshot.workoutSessionId),
-            input.adapter.loadExecutionState(snapshot.userId, snapshot.workoutSessionId),
-            input.adapter.loadPrescription(snapshot.userId, snapshot.workoutSessionId),
-            input.adapter.loadPerformedLogs(snapshot.userId, snapshot.workoutSessionId)
-          ]);
-          if (disposed || generation !== snapshot.hydrationGeneration) return;
-          validateHydrationIdentity(
-            snapshot,
-            root,
-            executionState,
-            prescription,
-            performedLogs
-          );
-          publish({
-            root,
-            executionState,
-            prescription,
-            performedLogs,
-            hydrationStatus: root!.status === "started" ? "ready" : "terminal",
-            finalProjection: null
-          });
-          if (executionState) dispatcher.replace(executionState);
-          if (
-            executionState
-            && eligibleLegacyCache(snapshot, executionState, options.legacyCache)
-          ) {
-            const cache = options.legacyCache!;
-            try {
-              await dispatch({
-                userId: snapshot.userId,
-                workoutSessionId: snapshot.workoutSessionId,
-                commandId: createSessionCommandId(input.commandId),
-                commandType: "import_legacy_cache",
-                payload: {
-                  cached_started_at: cache.startedAtMs === null
-                    ? null
-                    : new Date(cache.startedAtMs).toISOString(),
-                  cached_rest_ends_at: cache.restEndsAtMs == null
-                    ? null
-                    : new Date(cache.restEndsAtMs).toISOString(),
-                  cached_rest_duration_seconds: cache.restDurationSeconds ?? null,
-                  controller_device_id: cache.controllerDeviceId ?? null
-                }
-              });
-            } catch {
-              // Canonical hydration remains usable; dispatch records the bounded typed error.
-            }
-          }
-        } catch (error) {
-          if (disposed || generation !== snapshot.hydrationGeneration) return;
-          const typed = error instanceof ActiveSessionError
-            ? error
-            : new ActiveSessionError(
-                "hydration_failed",
-                "The active workout could not be hydrated.",
-                error
-              );
-          publish({ hydrationStatus: "failed", hardError: typed });
-          throw typed;
-        } finally {
-          if (generation === snapshot.hydrationGeneration) hydrationPromise = null;
-        }
-      })();
-      hydrationPromise = promise;
-      return promise;
-    },
+    hydrate,
     reconcile: acceptState,
     dispatch,
     async retryPendingTransport() {
@@ -585,6 +619,25 @@ export function createActiveSessionStore(input: {
         snapshot.workoutSessionId
       );
       publish({ performedLogs });
+    },
+    replaceExercise(replacementInput) {
+      return mutateSessionProjection(() =>
+        input.adapter.replaceExercise({
+          ...replacementInput,
+          userId: snapshot.userId,
+          workoutSessionId: snapshot.workoutSessionId
+        })
+      );
+    },
+    skipExercise(snapshotItemId, reason) {
+      return mutateSessionProjection(() =>
+        input.adapter.skipExercise(
+          snapshot.userId,
+          snapshot.workoutSessionId,
+          snapshotItemId,
+          reason
+        )
+      );
     },
     completeSession(completeInput) {
       return terminalize(() => input.adapter.completeSession({

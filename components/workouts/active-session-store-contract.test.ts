@@ -25,7 +25,9 @@ describe("AW-4 Active Workout surface ownership", () => {
   it("keeps the day-session monolith free of a second command reducer or write queue", () => {
     const source = readFileSync(surfaces[0], "utf8");
     expect(source).not.toMatch(/executionWriteQueue|switch\s*\(\s*commandType/);
+    expect(source).not.toContain("replaceWorkoutSessionExercise");
     expect(source).toContain("completeCanonicalSet");
     expect(source).toContain("completeSession");
+    expect(source).toContain("store.replaceExercise");
   });
 });
