@@ -19,6 +19,12 @@ const disposableDatabaseUrl = isDisposableLocalSupabase(databaseUrl) ? databaseU
 const databaseDescribe = disposableDatabaseUrl ? describe.sequential : describe.skip;
 const ownerId = "c2b00000-0000-4000-8000-000000000001";
 let sessionId = "";
+let activeSnapshotItemId = "";
+let activeItemOrder = 0;
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
 
 function sql(query: string) {
   if (!disposableDatabaseUrl) throw new Error("A disposable local Supabase database is required.");
@@ -78,19 +84,31 @@ beforeAll(() => {
       'c2b00000-0000-4000-8000-000000000014'::uuid
     )->'session'->>'id';
     commit;`);
-  sessionId = result.split(/\r?\n/).find((line) => /^[0-9a-f-]{36}$/i.test(line.trim()))?.trim() ?? "";
-  if (!sessionId) throw new Error(`Concurrency fixture session was not created: ${result}`);
+  sessionId = result.split(/\r?\n/).find((line) => isUuid(line.trim()))?.trim() ?? "";
+  if (!isUuid(sessionId)) throw new Error(`Concurrency fixture session was not created: ${result}`);
+
+  const initializedState = sql(`select active_snapshot_item_id::text, active_item_order::text
+    from public.workout_session_execution_states
+    where workout_session_id='${sessionId}'::uuid`);
+  const [snapshotItemId = "", itemOrder = ""] =
+    initializedState.split(/\r?\n/).find((line) => line.trim())?.trim().split("|") ?? [];
+  const parsedItemOrder = Number(itemOrder);
+  if (!isUuid(snapshotItemId) || !Number.isInteger(parsedItemOrder) || parsedItemOrder < 1) {
+    throw new Error(`Concurrency fixture execution cursor was not initialized: ${initializedState}`);
+  }
+  activeSnapshotItemId = snapshotItemId;
+  activeItemOrder = parsedItemOrder;
 });
 
 databaseDescribe("AW-2B PostgreSQL command concurrency", () => {
   it("serializes different command IDs at the same expected revision without lost updates", async () => {
     const commandA = `select public.apply_workout_session_execution_command_atomic(
       '${ownerId}'::uuid,'${sessionId}'::uuid,'c2b00000-0000-4000-8000-000000000101'::uuid,0,
-      'move_cursor','{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":2,"view_state":"set_entry","controller_device_id":null}'::jsonb
+      'move_cursor','{"active_snapshot_item_id":"${activeSnapshotItemId}","active_item_order":${activeItemOrder},"active_set_number":2,"view_state":"set_entry","controller_device_id":null}'::jsonb
     )::text`;
     const commandB = `select public.apply_workout_session_execution_command_atomic(
       '${ownerId}'::uuid,'${sessionId}'::uuid,'c2b00000-0000-4000-8000-000000000102'::uuid,0,
-      'move_cursor','{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":3,"view_state":"set_entry","controller_device_id":null}'::jsonb
+      'move_cursor','{"active_snapshot_item_id":"${activeSnapshotItemId}","active_item_order":${activeItemOrder},"active_set_number":3,"view_state":"set_entry","controller_device_id":null}'::jsonb
     )::text`;
     const [left, right] = await Promise.all([authCommand(commandA), authCommand(commandB)]);
     const responses = [parseEnvelope(left.stdout), parseEnvelope(right.stdout)];
