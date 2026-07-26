@@ -31,6 +31,28 @@
 | Entitlements | Provider-neutral offering, subscription, event, and entitlement contracts | Foundation exists; checkout disabled |
 | Native | Shared contracts only | No iOS or Android binary |
 
+## Workout plans
+
+The approved target program architecture is:
+
+```text
+user_workout_plans
+- user_workout_plan_week_templates
+  - user_workout_plan_sessions
+    - user_workout_plan_phases
+      - user_workout_plan_activities
+- user_workout_plan_weeks
+  - references one reusable week template
+```
+
+Until the remaining projection, writer, schedule, privacy, and regression gates complete cutover, the active runtime plan write path remains:
+
+- `user_workout_plans`;
+- `user_workout_plan_days`;
+- `user_workout_plan_exercises`.
+
+Phase 2A is additive architecture, not permission to introduce another plan authority or a third performed-session root.
+
 ## Workout and Active Workout authority
 
 `workout_sessions` is the performed-session root. `exercise_logs` records performed sets. AW-2 execution-state, command, receipt, and timeline relations remain owner-bound children of that root.
@@ -46,6 +68,8 @@ After session start, the frozen prescription graph is the prescription authority
 ## Exercise catalog and Muscle Intelligence
 
 `exercises` is the canonical global exercise-definition table. The generated 600-row legacy catalog is retired. The reviewed cohort contains 60 exercises with EN/DE/AR localization, controlled aliases, provenance, exact provider links where approved, and immutable V1/V2 mappings.
+
+Muscle Intelligence Phase 1 established the code-authoritative taxonomy, immutable mapping authority, publication security, and deterministic resistance-set calculation. Phase 1 does not change Train runtime behavior, visible UI, plan or session writers, or trusted mapping seeds.
 
 Muscle Intelligence preserves historical mapping identity in session snapshots. Phase 4A supplies the advanced visible atlas, Phase 4B publishes reviewed V2 regional mappings, and Phase 4C cuts new session snapshots and completed workload analysis to V2 without rewriting historical V1 sessions.
 
