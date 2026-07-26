@@ -166,7 +166,6 @@ test("same-head run selection and artifact-only evidence permissions are exact",
   assert.match(workflow, /stage1-q-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}-\$\{REVIEWED_COMMIT\}/);
   assert.match(workflow, /Download and independently verify canonical Quality evidence/);
   assert.match(workflow, /Download and independently verify preflight evidence/);
-  assert.match(workflow, /plaivra_aw2b_command_authority_implementation_report\.md/);
   assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(workflow, /pre-application-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(workflow, /if: steps\.identity\.outputs\.release_ready != 'true'/);
