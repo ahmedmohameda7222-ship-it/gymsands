@@ -1,59 +1,48 @@
 # Plaivra Platform Roadmap
 
-**Version:** 2026.5
-**Authority:** subordinate to the Product Constitution and Long-Term Plan
+**Version:** 2026.7  
+**Authority:** Subordinate to the Product Constitution and Long-Term Plan
 
 ## Strategic sequence
 
-1. stable premium responsive web product;
-2. public ChatGPT app using curated MCP and CIMD/OAuth;
-3. Product Constitution Lock;
-4. provider-neutral entitlements and web subscription;
-5. iOS;
-6. Android.
-
-The existing Next.js repository remains the main product repository. Native work must wait for stable product, data, permission, API, analytics, and design contracts.
+1. stabilize the responsive web product;
+2. complete the public ChatGPT app, OAuth/CIMD, and scoped MCP acceptance;
+3. lock product and domain contracts;
+4. activate approved provider-neutral entitlements and web billing;
+5. build iOS;
+6. build Android.
 
 ## Current implementation status
 
 | Capability | Status |
 |---|---|
-| Product and cross-platform constitutions | Implemented as current authority |
-| Repository/documentation reset | Current baseline refreshed; generated and historical evidence is excluded from the active source tree |
-| Obsolete AI request/safety workflow | Removed from active runtime and database |
-| Canonical domain ADRs | ADRs 0001–0005 accepted |
-| Premium web routes | Active; continued stabilization and accessibility/performance work required |
-| Context Projection Service | Implemented for task-specific contexts; public launch acceptance remains incomplete |
-| Public MCP catalog and execution | Implemented foundation with typed contracts, permissions, idempotency, and tests; platform publication remains incomplete |
-| CIMD/OAuth | Infrastructure implemented; final production configuration and platform review remain |
-| Train Phase 2A | Additive multi-week hierarchy applied; writer/runtime cutover remains future work |
-| Exercise catalog reset | Generated 600-row legacy catalog retired; approved 60-exercise replacement is applied and tracked in production |
-| Muscle Intelligence | Phase 2 curated registry, mappings, provenance, and migration reconciliation complete; runtime snapshot integration and visible features remain future phases |
-| Entitlements/billing | Provider-neutral database/service foundation exists; checkout and offerings remain disabled |
+| Product/design constitutions | Current authority |
+| Repository evidence hygiene | Completed reports and generated evidence excluded from active source |
+| Public MCP and task projections | Implemented foundation; platform acceptance remains |
+| OAuth/CIMD | Implemented foundation; final production/platform acceptance remains |
+| Train Phase 2A | Additive multi-week hierarchy active; later writer cutover remains |
+| Exercise catalog | Reviewed 60-exercise cohort active |
+| Muscle Intelligence | Advanced atlas, reviewed V2 mappings, immutable snapshots, V2 runtime cutover, and active-session load surfaces implemented |
+| Active Workout AW-1 | EN/DE/AR language foundation and message contracts implemented |
+| Active Workout AW-2 | Persisted execution state, command authority, receipts, and timeline events implemented |
+| Active Workout AW-3 | Structured metrics, structured set details, and immutable prescription snapshots implemented |
+| Entitlements/billing | Provider-neutral foundation exists; checkout disabled |
 | iOS/Android | Planning only; no native binary |
-
-## Shared versus platform-specific
-
-Share product/domain rules, validation, permission contracts, entitlement semantics, API/MCP contracts, analytics meaning, design tokens, and accessibility outcomes.
-
-Do not blindly share DOM components, desktop assumptions, browser navigation, hover behavior, web dialogs, native system controls, billing UX, or platform permission flows.
 
 ## Next active priorities
 
-1. complete fresh exact-head review and merge/release coordination for PR #67;
-2. coordinate the compatibility marker with the exact merged and deployed application release;
-3. begin the next approved Muscle Intelligence runtime phase only after PR #67 is merged and production identity is verified;
-4. complete remaining Train Phase 2 projection/writer/cutover work in controlled phases;
-5. finish public MCP/CIMD production configuration, acceptance, and submission evidence;
-6. stabilize web performance, accessibility, error states, and release observability;
-7. declare Product Constitution Lock only after core P0/P1 gates close;
-8. approve offerings and activate provider-neutral entitlements/web billing;
+1. complete exact-head repository cleanup validation for PR #86;
+2. squash-merge AW-3C only after explicit owner approval and all required checks pass;
+3. complete post-merge identity and release closure without replaying migrations or independently promoting the compatibility marker;
+4. begin AW-4 Session Engine only after AW-3C closure;
+5. continue the approved AW-5 through AW-10 sequence;
+6. finish public MCP/CIMD production configuration and acceptance;
+7. stabilize web accessibility, performance, observability, and failure recovery;
+8. approve offerings before enabling billing;
 9. begin iOS, then Android, from stable shared contracts.
 
-## Native direction
+## Shared versus platform-specific
 
-When native development begins, prefer a deliberate monorepo shape with web, mobile, core contracts, API client, validation, design tokens, and analytics contracts. Expo/React Native remains the default shared mobile direction unless evidence justifies separate native implementations.
+Share domain rules, permissions, API/MCP contracts, validation, analytics meaning, migration strategy, design tokens, and accessibility outcomes. Do not blindly share DOM components, browser navigation assumptions, hover behavior, dialogs, or platform-specific permission and billing UX.
 
-## Global quality rule
-
-A feature is cross-platform-ready only when it has one domain contract, permission model, analytics meaning, migration strategy, semantic design rule set, platform adaptations, and appropriate tests. Do not ship three inconsistent Plaivra products.
+A capability is cross-platform-ready only when its canonical domain contract, permission model, migration strategy, semantic design rules, platform adaptations, and tests are explicit.
