@@ -18,10 +18,12 @@ import {
 import { REQUIRED_QUALITY_GATES } from "./quality-evidence-contract.mjs";
 
 const quality = readFileSync(".github/workflows/quality.yml", "utf8").replaceAll("\r\n", "\n");
+const prQuality = readFileSync(".github/workflows/pr-quality.yml", "utf8").replaceAll("\r\n", "\n");
 const helper = [
   readFileSync("scripts/replay-local-migration-chain.mjs", "utf8"),
   readFileSync("scripts/replay-local-migration-chain-legacy.mjs", "utf8")
 ].join("\n").replaceAll("\r\n", "\n");
+const databaseVerification = readFileSync("scripts/run-database-verification.mjs", "utf8").replaceAll("\r\n", "\n");
 const parity = readFileSync("scripts/check-unit-failure-parity.mjs", "utf8").replaceAll("\r\n", "\n");
 const aw2bSqlIntegration = readFileSync(
   "services/database/workout-session-execution-sql.integration.test.ts",
@@ -32,7 +34,7 @@ function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-test("Quality delegates chronological replay to the permanent helper through retained evidence", () => {
+test("phase-close Quality delegates chronological replay to the permanent helper", () => {
   assert.match(quality, /--name full-migration-chain[\s\S]*-- node scripts\/replay-local-migration-chain\.mjs[\s\S]*--log quality-reports\/database-validation\.log[\s\S]*--prove-future-order/);
   assert.match(helper, /\["db", "reset", "--local", "--no-seed", "--version", ORIGINAL_AW2A_VERSION\]/);
   assert.match(helper, /\["migration", "up", "--local", "--include-all"\]/);
@@ -89,16 +91,28 @@ test("AW-3C replay reproduces the released AW-3B marker before the pending migra
   assert.match(helper, /setMarker\(repositoryRoot, logPath, MARKER_AFTER_AW3B_PROMOTION\)/);
 });
 
-test("canonical PR Quality uses exact nonempty comparison identities and cannot be manually duplicated", () => {
+test("canonical full Quality is PR-bound and runs only at explicit phase closure", () => {
   assert.doesNotMatch(quality, /workflow_dispatch:/);
+  assert.match(quality, /pull_request:[\s\S]*branches:[\s\S]*- main/);
+  assert.match(quality, /contains\(github\.event\.pull_request\.labels\.\*\.name, 'phase-close'\)/);
   assert.match(quality, /PR_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(quality, /PR_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
-  assert.match(quality, /\[\[ "\$reviewed_commit" =~ \^\[0-9a-fA-F\]\{40\}\$ \]\]/);
-  assert.match(quality, /\[\[ "\$comparison_base" =~ \^\[0-9a-fA-F\]\{40\}\$ \]\]/);
   assert.match(quality, /--base "\$PLAIVRA_COMPARISON_BASE"/);
-  assert.doesNotMatch(quality, /Record workflow-dispatch parity skip|workflow_dispatch has no pull-request base SHA/);
+  assert.match(quality, /cancel-in-progress: true/);
   assert.match(quality, /SUPABASE_TELEMETRY_DISABLED: "1"/);
   assert.match(quality, /DO_NOT_TRACK: "1"/);
+});
+
+test("automatic PR Quality is path-scoped, parallel and fail-safe", () => {
+  assert.match(prQuality, /name: PR Quality/);
+  assert.match(prQuality, /node scripts\/ci-change-scope\.mjs/);
+  for (const job of ["integrity", "core", "database", "ui-and-i18n", "ci-contracts", "build", "dependency-audit", "required-summary"]) {
+    assert.match(prQuality, new RegExp(`name: ${job.replaceAll("-", "\\-")}`));
+  }
+  assert.match(prQuality, /cancel-in-progress: true/);
+  assert.match(prQuality, /node scripts\/run-ci-check\.mjs/);
+  assert.match(prQuality, /if: always\(\)/);
+  assert.match(prQuality, /value\.result === "failure" \|\| value\.result === "cancelled"/);
 });
 
 test("permanent validation names are generic and every release gate is retained", () => {
@@ -111,7 +125,9 @@ test("permanent validation names are generic and every release gate is retained"
   assert.match(quality, /quality-reports\/unit-failure-parity\.json/);
   assert.doesNotMatch(quality, /aw2a-database-validation|aw2a-unit-failure-parity|aw2a-validation-/);
   assert.doesNotMatch(parity, /aw2a-/i);
-  assert.match(quality, /supabase\/verification\/active-workout-aw2a-execution-state\.sql/);
+  assert.match(quality, /node scripts\/run-database-verification\.mjs/);
+  assert.match(databaseVerification, /active-workout-aw2a-execution-state\.sql/);
+  assert.match(databaseVerification, /active-workout-aw4-session-engine\.sql/);
   assert.match(quality, /npm run test:integration/);
 });
 
