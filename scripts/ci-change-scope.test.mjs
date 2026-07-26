@@ -7,7 +7,6 @@ test("documentation-only changes run only integrity and summary", () => {
   assert.equal(scope.docsOnly, true);
   assert.equal(scope.core, false);
   assert.equal(scope.database, false);
-  assert.equal(scope.integration, false);
   assert.equal(scope.ui, false);
   assert.equal(scope.ci, false);
   assert.equal(scope.build, false);
@@ -21,7 +20,6 @@ test("database changes select database, core and build conservatively", () => {
   assert.equal(scope.docsOnly, false);
   assert.equal(scope.core, true);
   assert.equal(scope.database, true);
-  assert.equal(scope.integration, false);
   assert.equal(scope.build, true);
 });
 
@@ -29,7 +27,6 @@ test("central database verification changes select the database gate", () => {
   const scope = classifyChangedPaths(["scripts/run-database-verification.mjs"]);
   assert.equal(scope.core, true);
   assert.equal(scope.database, true);
-  assert.equal(scope.integration, false);
   assert.equal(scope.ci, true);
   assert.equal(scope.build, false);
 });
@@ -42,7 +39,6 @@ test("UI changes select UI, core and build without database replay", () => {
   assert.equal(scope.core, true);
   assert.equal(scope.ui, true);
   assert.equal(scope.database, false);
-  assert.equal(scope.integration, false);
   assert.equal(scope.build, true);
 });
 
@@ -52,27 +48,25 @@ test("test-only source changes avoid build and rendered browser QA", () => {
     "lib/i18n/example.spec.ts",
   ]);
   assert.equal(scope.core, true);
-  assert.equal(scope.integration, false);
+  assert.equal(scope.database, false);
   assert.equal(scope.ui, false);
   assert.equal(scope.build, false);
   assert.equal(scope.fallback, false);
 });
 
-test("non-database integration-test changes select the integration suite", () => {
+test("non-database integration-test changes select the job that runs the integration suite", () => {
   const scope = classifyChangedPaths(["lib/release/version-route.integration.test.ts"]);
   assert.equal(scope.core, true);
-  assert.equal(scope.database, false);
-  assert.equal(scope.integration, true);
+  assert.equal(scope.database, true);
   assert.equal(scope.ui, false);
   assert.equal(scope.build, false);
   assert.equal(scope.fallback, false);
 });
 
-test("database integration-test changes stay on the database job", () => {
+test("database integration-test changes remain on database validation", () => {
   const scope = classifyChangedPaths(["services/database/example.integration.test.ts"]);
   assert.equal(scope.core, true);
   assert.equal(scope.database, true);
-  assert.equal(scope.integration, false);
   assert.equal(scope.build, true);
 });
 
@@ -84,7 +78,6 @@ test("workflow and generic script changes select CI contracts", () => {
   assert.equal(scope.core, true);
   assert.equal(scope.ci, true);
   assert.equal(scope.database, false);
-  assert.equal(scope.integration, false);
   assert.equal(scope.ui, false);
 });
 
@@ -119,7 +112,6 @@ test("unknown non-document paths fail safe to the broad affected scopes", () => 
   assert.equal(scope.fallback, true);
   assert.equal(scope.core, true);
   assert.equal(scope.database, true);
-  assert.equal(scope.integration, false);
   assert.equal(scope.ui, true);
   assert.equal(scope.ci, true);
   assert.equal(scope.build, true);
@@ -130,7 +122,6 @@ test("empty diffs fail safe instead of silently skipping validation", () => {
   assert.equal(scope.fallback, true);
   assert.equal(scope.core, true);
   assert.equal(scope.database, true);
-  assert.equal(scope.integration, false);
   assert.equal(scope.ui, true);
   assert.equal(scope.ci, true);
   assert.equal(scope.build, true);
