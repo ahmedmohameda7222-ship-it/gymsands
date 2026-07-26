@@ -7,7 +7,7 @@ const migration = readFileSync(migrationPath, "utf8").replaceAll("\r\n", "\n").t
 const verification = readFileSync(verificationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const adr = readFileSync("docs/architecture/decisions/0004-train-multi-week-multi-sport-program-model.md", "utf8");
 const canonical = readFileSync("docs/architecture/canonical-domain-model.md", "utf8");
-const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
+const databaseVerification = readFileSync("scripts/run-database-verification.mjs", "utf8");
 const migrationLedger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   historyRepair: { state: string };
   pendingCount: number;
@@ -75,7 +75,7 @@ describe("Train Phase 2A architecture contract", () => {
     expect(migration).toContain("grant execute on function public.detach_workout_plan_week_atomic(uuid, uuid)\nto authenticated, service_role");
   });
 
-  it("enforces privacy, ownership, JSON shape, and verification in the authoritative quality gate", () => {
+  it("enforces privacy, ownership, JSON shape, and centralized verification", () => {
     expect(migration).toContain("assert_train_phase2a_session_structure_integrity");
     expect(migration).toContain("assert_train_phase2a_activity_structure_integrity");
     expect(migration).not.toContain("assert_train_phase2a_structure_integrity");
@@ -93,7 +93,7 @@ describe("Train Phase 2A architecture contract", () => {
     expect(verification).toContain("detach rpc is not idempotent");
     expect(verification).toContain("failed detach left a partial cloned template");
     expect(verification).toContain("account deletion did not remove train phase 2a user data");
-    expect(workflow).toContain("-f supabase/verification/train-phase2a-program-architecture.sql");
+    expect(databaseVerification).toContain('"supabase/verification/train-phase2a-program-architecture.sql"');
   });
 
   it("records the verified Phase 2A production identity independently of later forward migrations", () => {
