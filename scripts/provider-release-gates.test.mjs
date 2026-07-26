@@ -7,7 +7,7 @@ import test from "node:test";
 const root = process.cwd();
 const netlifyGate = resolve(root, "scripts/netlify-production-release-gate.mjs");
 const obsoleteVercelGate = resolve(root, "scripts/vercel-production-release-gate.mjs");
-const exactReleaseWorkflow = resolve(root, ".github/workflows/exact-release-quality.yml");
+const exactReleaseWorkflow = resolve(root, ".github/workflows/exact-release-quality-validation.yml");
 const releasePreflightWorkflow = resolve(root, ".github/workflows/release-preflight.yml");
 const exactReleaseOrchestrator = resolve(root, "scripts/exact-release-orchestrator.mjs");
 const sha = "60a204d5fc20fc396be1b1b47e748c42ebba6abf";
