@@ -97,7 +97,6 @@ test("active configuration has no Vercel preview or production SHA approval depe
 test("tracked references contain no active obsolete Vercel gate dependency", () => {
   assert.deepEqual(trackedFilesContaining("scripts/vercel-production-release-gate.mjs"), [
     "lib/release/provider-deployment-policy.test.ts",
-    "release/prelaunch-handoff-manifest.json",
     "scripts/provider-release-gates.test.mjs"
   ]);
 
@@ -117,9 +116,6 @@ test("tracked references contain no active obsolete Vercel gate dependency", () 
     "scripts/provider-release-gates.test.mjs",
     "scripts/release-metadata-bundle.test.mjs"
   ]);
-
-  const historicalManifest = readFileSync(resolve(root, "release/prelaunch-handoff-manifest.json"), "utf8");
-  assert.match(historicalManifest, /scripts\/vercel-production-release-gate\.mjs/);
 });
 
 test("git diff checks pass for the working tree and branch range", () => {
