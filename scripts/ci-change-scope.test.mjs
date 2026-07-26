@@ -54,6 +54,16 @@ test("styling build configuration selects rendered UI QA and production build", 
   }
 });
 
+test("build authority scripts execute the production build gate", () => {
+  for (const path of ["scripts/validate-production-env.mjs", "scripts/verify-built-release-metadata.mjs"]) {
+    const scope = classifyChangedPaths([path]);
+    assert.equal(scope.core, true);
+    assert.equal(scope.ci, true);
+    assert.equal(scope.build, true);
+    assert.equal(scope.database, false);
+  }
+});
+
 test("test-only source changes avoid build and rendered browser QA", () => {
   const scope = classifyChangedPaths([
     "components/workouts/example.test.tsx",
@@ -82,20 +92,34 @@ test("database integration-test changes remain on database validation without a 
   assert.equal(scope.build, false);
 });
 
-test("workflow and generic script changes select CI contracts", () => {
-  const scope = classifyChangedPaths([
-    ".github/workflows/pr-quality.yml",
-    "scripts/run-ci-check.mjs",
-  ]);
-  assert.equal(scope.core, true);
-  assert.equal(scope.ci, true);
-  assert.equal(scope.database, false);
-  assert.equal(scope.ui, false);
+test("integration runner and configuration changes execute live database integration", () => {
+  for (const path of ["scripts/run-integration-tests.mjs", "vitest.integration.config.mjs"]) {
+    const scope = classifyChangedPaths([path]);
+    assert.equal(scope.core, true);
+    assert.equal(scope.database, true);
+    assert.equal(scope.ci, true);
+    assert.equal(scope.ui, false);
+    assert.equal(scope.build, false);
+    assert.equal(scope.fallback, false);
+  }
 });
 
-test("dependency changes select audit and build", () => {
+test("central workflow and CI wrapper changes exercise every live affected gate", () => {
+  for (const path of [".github/workflows/pr-quality.yml", "scripts/ci-change-scope.mjs", "scripts/run-ci-check.mjs"]) {
+    const scope = classifyChangedPaths([path]);
+    assert.equal(scope.core, true);
+    assert.equal(scope.database, true);
+    assert.equal(scope.ui, true);
+    assert.equal(scope.ci, true);
+    assert.equal(scope.build, true);
+    assert.equal(scope.fallback, false);
+  }
+});
+
+test("dependency changes select audit, integration and build", () => {
   const scope = classifyChangedPaths(["package.json", "package-lock.json"]);
   assert.equal(scope.dependencies, true);
+  assert.equal(scope.database, true);
   assert.equal(scope.build, true);
   assert.equal(scope.ci, true);
 });
