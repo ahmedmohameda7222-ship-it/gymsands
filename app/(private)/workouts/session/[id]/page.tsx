@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { PageHeading } from "@/components/layout/page-heading";
@@ -30,6 +30,7 @@ export default function WorkoutSessionPage() {
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const legacySurface = searchParams.get("legacy");
+  const coreSource = useMemo(() => workout ? ({ kind: "direct" as const, workout }) : null, [workout]);
 
   async function loadWorkout() {
     setIsLoading(true);
@@ -72,7 +73,7 @@ export default function WorkoutSessionPage() {
       {isLoading ? <CardSkeleton rows={6} /> : null}
       {!isLoading && loadError ? <ErrorState title={tr("workoutSessionLoadFailed")} description={loadError} onRetry={loadWorkout} fallbackLabel={tr("backToTrain")} fallbackHref="/my-workout/plans" details={loadErrorDetails} /> : null}
       {!isLoading && !loadError && !workout ? <ErrorState title={tr("workoutNotFound")} description={tr("workoutSessionLoadFailed")} fallbackLabel={tr("backToTrain")} fallbackHref="/my-workout/plans" /> : null}
-      {!isLoading && !loadError && workout ? (
+      {!isLoading && !loadError && workout && coreSource ? (
         legacySurface ? (
           <div className="mx-auto w-full max-w-[1240px] space-y-4" data-aw5-legacy-bridge={legacySurface}>
             <Button type="button" variant="outline" className="min-h-11" onClick={() => setLegacySurface(null)}>
@@ -83,7 +84,7 @@ export default function WorkoutSessionPage() {
           </div>
         ) : (
           <ActiveWorkoutCoreSession
-            source={{ kind: "direct", workout }}
+            source={coreSource}
             onOpenLegacySurface={(surface) => setLegacySurface(surface)}
           />
         )
