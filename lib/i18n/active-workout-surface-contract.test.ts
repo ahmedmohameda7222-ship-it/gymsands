@@ -96,7 +96,7 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(prQuality).toContain("npm run qa:train");
     expect(qualityWorkflow).toContain("Record i18n evidence metadata");
     expect(qualityWorkflow).toContain("Upload successful i18n rendered evidence");
-    expect(qualityWorkflow).toContain("contains(github.event.pull_request.labels.*.name, 'phase-close')");
+    expect(qualityWorkflow).toContain("- ready_for_review");
     expect(qualityWorkflow).toContain("i18n-rendered-evidence-${{ github.event.pull_request.head.sha }}");
     for (const filename of [
       "active-workout-en-390x844.png",
