@@ -130,6 +130,26 @@ test("central workflow and CI wrapper changes exercise every live affected gate"
   }
 });
 
+test("unclassified execution scripts fail safe to all live validation gates", () => {
+  const scope = classifyChangedPaths(["scripts/new-release-authority.mjs"]);
+  assert.equal(scope.core, true);
+  assert.equal(scope.database, true);
+  assert.equal(scope.ui, true);
+  assert.equal(scope.ci, true);
+  assert.equal(scope.build, true);
+  assert.equal(scope.fallback, true);
+});
+
+test("script test files remain lightweight and do not trigger broad fallback", () => {
+  const scope = classifyChangedPaths(["scripts/new-release-authority.test.mjs"]);
+  assert.equal(scope.core, true);
+  assert.equal(scope.database, false);
+  assert.equal(scope.ui, false);
+  assert.equal(scope.ci, true);
+  assert.equal(scope.build, false);
+  assert.equal(scope.fallback, false);
+});
+
 test("dependency changes select audit, integration and build", () => {
   const scope = classifyChangedPaths(["package.json", "package-lock.json"]);
   assert.equal(scope.dependencies, true);
