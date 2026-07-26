@@ -35,6 +35,10 @@ const UI_PATTERNS = [
   /(?:playwright|rendered-qa|train-layout-qa)/i,
 ];
 
+const STYLE_BUILD_PATTERNS = [
+  /^(?:postcss|tailwind)\.config\.(?:js|mjs|cjs|ts)$/i,
+];
+
 const CI_PATTERNS = [
   /^\.github\/workflows\//,
   /^\.gitignore$/,
@@ -83,15 +87,17 @@ export function classifyChangedPaths(inputPaths) {
   const docsOnly = paths.every((path) => matchesAny(path, DOC_PATTERNS));
   const database = paths.some((path) => matchesAny(path, DATABASE_PATTERNS));
   const integrationTest = paths.some((path) => isIntegrationTestPath(path));
-  const ui = paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
+  const styleBuild = paths.some((path) => matchesAny(path, STYLE_BUILD_PATTERNS));
+  const ui = styleBuild || paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
   const ci = paths.some((path) => matchesAny(path, CI_PATTERNS));
-  const runtime = paths.some((path) => !isTestPath(path) && matchesAny(path, RUNTIME_PATTERNS));
+  const runtime = styleBuild || paths.some((path) => !isTestPath(path) && matchesAny(path, RUNTIME_PATTERNS));
   const dependencies = paths.some((path) => matchesAny(path, DEPENDENCY_PATTERNS));
   const recognized = paths.every((path) => (
     isTestPath(path)
     || matchesAny(path, DOC_PATTERNS)
     || matchesAny(path, DATABASE_PATTERNS)
     || matchesAny(path, UI_PATTERNS)
+    || matchesAny(path, STYLE_BUILD_PATTERNS)
     || matchesAny(path, CI_PATTERNS)
     || matchesAny(path, RUNTIME_PATTERNS)
     || matchesAny(path, DEPENDENCY_PATTERNS)
