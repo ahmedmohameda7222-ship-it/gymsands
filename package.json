@@ -38,7 +38,8 @@
     "qa:train": "node scripts/run-train-layout-qa.mjs",
     "test:i18n": "vitest run --config vitest.unit.config.mjs lib/i18n/message-shape.test.ts lib/i18n/active-workout-message-contract.test.ts lib/i18n/active-workout-formatters.test.ts lib/i18n/active-workout-surface-contract.test.ts",
     "test:active-workout:aw3c": "vitest run --config vitest.unit.config.mjs services/database/workout-session-prescriptions.test.ts lib/privacy/data-export.test.ts lib/product/active-workout-aw3c-migration.test.ts && vitest run --config vitest.integration.config.mjs services/database/workout-session-prescriptions.integration.test.ts",
-    "test:active-workout:aw4": "vitest run --config vitest.unit.config.mjs lib/workouts/session-engine/contracts.test.ts lib/workouts/session-engine/reducer.test.ts lib/workouts/session-engine/timers.test.ts lib/workouts/session-engine/commands.test.ts lib/workouts/active-session-store/store.test.ts lib/workouts/active-session-store/clock.test.ts services/database/active-session-persistence-adapter.test.ts services/database/workout-session-execution.test.ts components/workouts/active-session-store-contract.test.ts lib/product/active-workout-aw4-migration.test.ts && vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts"
+    "test:active-workout:aw4": "vitest run --config vitest.unit.config.mjs lib/workouts/session-engine/contracts.test.ts lib/workouts/session-engine/reducer.test.ts lib/workouts/session-engine/timers.test.ts lib/workouts/session-engine/commands.test.ts lib/workouts/active-session-store/store.test.ts lib/workouts/active-session-store/clock.test.ts services/database/active-session-persistence-adapter.test.ts services/database/workout-session-execution.test.ts components/workouts/active-session-store-contract.test.ts lib/product/active-workout-aw4-migration.test.ts && vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts",
+    "test:active-workout:aw5": "vitest run --config vitest.unit.config.mjs components/workouts/active-workout/active-workout-ui-core.test.tsx components/workouts/active-session-store-contract.test.ts lib/i18n/active-workout-surface-contract.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -51,10 +52,6 @@
     "@supabase/supabase-js": "^2.84.0",
     "@zxing/browser": "0.1.5",
     "@zxing/library": "0.21.3",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "framer-motion": "^12.23.24",
-    "jose": "^6.2.3",
     "jszip": "3.10.1",
     "lucide-react": "^0.555.0",
     "next": "16.2.11",
@@ -65,7 +62,7 @@
     "recharts": "^3.4.1",
     "server-only": "^0.0.1",
     "stripe": "22.3.1",
-    "tailwind-merge": "^3.4.0",
+    "tailwind-merge": "^3.4.1",
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
@@ -74,7 +71,6 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vitest/ui": "^4.1.9",
     "autoprefixer": "^10.4.22",
     "eslint": "^9.39.1",
     "eslint-config-next": "16.2.11",
