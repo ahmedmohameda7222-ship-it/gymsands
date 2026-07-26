@@ -16,6 +16,12 @@ const DOC_PATTERNS = [
   /^\.github\/(ISSUE_TEMPLATE|PULL_REQUEST_TEMPLATE)\//,
 ];
 
+// Documentation is normally lightweight, but machine-readable documentation
+// contracts are executable repository inputs and must run the core suite.
+const MACHINE_DOCUMENT_CONTRACT_PATTERNS = [
+  /^docs\/.*\.(?:json|ya?ml)$/i,
+];
+
 const DATABASE_PATTERNS = [
   /^supabase\//,
   /^services\/database\//,
@@ -111,7 +117,8 @@ export function classifyChangedPaths(inputPaths) {
     };
   }
 
-  const docsOnly = paths.every((path) => matchesAny(path, DOC_PATTERNS));
+  const machineDocumentContract = paths.some((path) => matchesAny(path, MACHINE_DOCUMENT_CONTRACT_PATTERNS));
+  const docsOnly = !machineDocumentContract && paths.every((path) => matchesAny(path, DOC_PATTERNS));
   const database = paths.some((path) => matchesAny(path, DATABASE_PATTERNS));
   const integrationAuthority = paths.some((path) => matchesAny(path, INTEGRATION_AUTHORITY_PATTERNS));
   const integrationTest = paths.some((path) => isIntegrationTestPath(path));
@@ -125,6 +132,7 @@ export function classifyChangedPaths(inputPaths) {
   const recognized = paths.every((path) => (
     isTestPath(path)
     || matchesAny(path, DOC_PATTERNS)
+    || matchesAny(path, MACHINE_DOCUMENT_CONTRACT_PATTERNS)
     || matchesAny(path, DATABASE_PATTERNS)
     || matchesAny(path, INTEGRATION_AUTHORITY_PATTERNS)
     || matchesAny(path, UI_PATTERNS)
