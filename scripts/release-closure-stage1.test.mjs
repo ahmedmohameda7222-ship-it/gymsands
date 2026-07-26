@@ -221,7 +221,8 @@ test("preflight rejects wrong commit, base, run, missing evidence, nonzero exit 
 test("Exact Release accepts only the supplied successful canonical PR Quality run", () => {
   const canonicalRun = {
     id: Number(runId),
-    name: "Quality",
+    name: `Quality / pr-87-${runId}-1-${reviewedCommit}`,
+    workflow_id: 42,
     path: ".github/workflows/quality.yml",
     event: "pull_request",
     run_attempt: 1,
@@ -231,14 +232,23 @@ test("Exact Release accepts only the supplied successful canonical PR Quality ru
     html_url: "https://github.example/runs/123456",
     repository: { full_name: EXPECTED_REPOSITORY },
   };
+  const canonicalWorkflow = {
+    id: 42,
+    name: "Quality",
+    path: ".github/workflows/quality.yml",
+  };
   assert.equal(validateCanonicalQualityRun(canonicalRun, {
     qualityRunId: runId,
     reviewedCommit,
+    workflow: canonicalWorkflow,
   }).event, "pull_request");
 
   for (const mutate of [
     (run) => { run.id = 999; },
     (run) => { run.repository.full_name = "other/repository"; },
+    (run) => { run.workflow_id = 99; },
+    (run, workflow) => { workflow.name = "Other"; },
+    (run, workflow) => { workflow.path = ".github/workflows/other.yml"; },
     (run) => { run.path = ".github/workflows/other.yml"; },
     (run) => { run.event = "workflow_dispatch"; },
     (run) => { run.run_attempt = 2; },
@@ -247,10 +257,12 @@ test("Exact Release accepts only the supplied successful canonical PR Quality ru
     (run) => { run.conclusion = "failure"; },
   ]) {
     const run = structuredClone(canonicalRun);
-    mutate(run);
+    const workflow = structuredClone(canonicalWorkflow);
+    mutate(run, workflow);
     assert.throws(() => validateCanonicalQualityRun(run, {
       qualityRunId: runId,
       reviewedCommit,
+      workflow,
     }));
   }
 });

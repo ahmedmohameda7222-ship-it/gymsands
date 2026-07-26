@@ -67,6 +67,7 @@ function writeOutput(name, value) {
 export function validateCanonicalQualityRun(run, {
   qualityRunId,
   reviewedCommit,
+  workflow,
   repository = REPOSITORY,
 } = {}) {
   const expectedRunId = numericRunId(qualityRunId, "Quality run ID");
@@ -74,7 +75,12 @@ export function validateCanonicalQualityRun(run, {
   if (!SHA.test(expectedCommit)) throw new Error("Reviewed commit is missing or invalid.");
   if (String(run?.id ?? "") !== expectedRunId) throw new Error("Canonical Quality run ID mismatch.");
   if (run?.repository?.full_name !== repository) throw new Error("Canonical Quality repository mismatch.");
-  if (run?.name !== "Quality" || run?.path !== ".github/workflows/quality.yml") {
+  if (
+    String(run?.workflow_id ?? "") !== String(workflow?.id ?? "")
+    || workflow?.name !== "Quality"
+    || workflow?.path !== ".github/workflows/quality.yml"
+    || run?.path !== workflow.path
+  ) {
     throw new Error("Supplied run is not the canonical Quality workflow.");
   }
   if (run?.event !== "pull_request") throw new Error("Canonical Quality run must be PR-triggered.");
@@ -259,9 +265,14 @@ function verifyQualityArtifact({
     "api",
     `repos/${REPOSITORY}/actions/runs/${runId}`,
   ]);
+  const workflow = commandJson("gh", [
+    "api",
+    `repos/${REPOSITORY}/actions/workflows/${run.workflow_id}`,
+  ]);
   const canonicalRun = validateCanonicalQualityRun(run, {
     qualityRunId: runId,
     reviewedCommit,
+    workflow,
   });
   const artifact = artifactFor(runId, `quality-reports-${runId}`);
 
