@@ -60,7 +60,7 @@ describe("provider deployment policy", () => {
     const dispatchPreflight = orchestrator.indexOf('"release-preflight.yml"');
     const waitForPreflight = orchestrator.indexOf('label: "preflight"');
     const verifyPreflight = orchestrator.indexOf("preflightArtifact = verifyPreflightArtifact({");
-    const finalEvidence = orchestrator.indexOf("writeFinalEvidence({");
+    const finalEvidence = orchestrator.indexOf("writeFinalEvidence({", verifyPreflight);
 
     expect(verifyQuality).toBeGreaterThanOrEqual(0);
     expect(dispatchPreflight).toBeGreaterThan(verifyQuality);
