@@ -22,6 +22,14 @@ const MACHINE_DOCUMENT_CONTRACT_PATTERNS = [
   /^docs\/.*\.(?:json|ya?ml)$/i,
 ];
 
+// These two prose authorities are intentionally inspected by the migration
+// ledger validator while unresolved migrations exist, so edits must execute
+// the database gate rather than being treated as validation-free docs.
+const DATABASE_DOCUMENT_CONTRACT_PATTERNS = [
+  /^README\.md$/i,
+  /^docs\/architecture\/migration-ledger-reconciliation\.md$/i,
+];
+
 const DATABASE_PATTERNS = [
   /^supabase\//,
   /^services\/database\//,
@@ -118,8 +126,11 @@ export function classifyChangedPaths(inputPaths) {
   }
 
   const machineDocumentContract = paths.some((path) => matchesAny(path, MACHINE_DOCUMENT_CONTRACT_PATTERNS));
-  const docsOnly = !machineDocumentContract && paths.every((path) => matchesAny(path, DOC_PATTERNS));
-  const database = paths.some((path) => matchesAny(path, DATABASE_PATTERNS));
+  const databaseDocumentContract = paths.some((path) => matchesAny(path, DATABASE_DOCUMENT_CONTRACT_PATTERNS));
+  const docsOnly = !machineDocumentContract
+    && !databaseDocumentContract
+    && paths.every((path) => matchesAny(path, DOC_PATTERNS));
+  const database = databaseDocumentContract || paths.some((path) => matchesAny(path, DATABASE_PATTERNS));
   const integrationAuthority = paths.some((path) => matchesAny(path, INTEGRATION_AUTHORITY_PATTERNS));
   const integrationTest = paths.some((path) => isIntegrationTestPath(path));
   const styleBuild = paths.some((path) => matchesAny(path, STYLE_BUILD_PATTERNS));
@@ -133,6 +144,7 @@ export function classifyChangedPaths(inputPaths) {
     isTestPath(path)
     || matchesAny(path, DOC_PATTERNS)
     || matchesAny(path, MACHINE_DOCUMENT_CONTRACT_PATTERNS)
+    || matchesAny(path, DATABASE_DOCUMENT_CONTRACT_PATTERNS)
     || matchesAny(path, DATABASE_PATTERNS)
     || matchesAny(path, INTEGRATION_AUTHORITY_PATTERNS)
     || matchesAny(path, UI_PATTERNS)
