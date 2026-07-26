@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import test from "node:test";
+import ts from "typescript";
 
 const root = process.cwd();
+const readCallees = new Set(["readFileSync", "readFile", "createReadStream"]);
 
 function filesUnder(directory) {
   if (!existsSync(directory)) return [];
@@ -16,62 +18,105 @@ function filesUnder(directory) {
   return files;
 }
 
-function callArguments(source, callName) {
-  const calls = [];
-  const needle = `${callName}(`;
-  let searchFrom = 0;
-  while (searchFrom < source.length) {
-    const start = source.indexOf(needle, searchFrom);
-    if (start < 0) break;
-    const open = start + needle.length - 1;
-    let depth = 1;
-    let quote = null;
-    let escaped = false;
-    for (let index = open + 1; index < source.length; index += 1) {
-      const character = source[index];
-      if (quote) {
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (character === "\\") {
-          escaped = true;
-          continue;
-        }
-        if (character === quote) quote = null;
-        continue;
-      }
-      if (character === '"' || character === "'" || character === "`") {
-        quote = character;
-        continue;
-      }
-      if (character === "(") depth += 1;
-      if (character === ")") {
-        depth -= 1;
-        if (depth === 0) {
-          calls.push(source.slice(open + 1, index));
-          searchFrom = index + 1;
-          break;
-        }
-      }
-      if (index === source.length - 1) searchFrom = source.length;
-    }
-    if (searchFrom <= start) searchFrom = open + 1;
-  }
-  return calls;
+function scriptKind(path) {
+  const extension = extname(path).toLowerCase();
+  if (extension === ".tsx") return ts.ScriptKind.TSX;
+  if (extension === ".ts") return ts.ScriptKind.TS;
+  return ts.ScriptKind.JS;
 }
 
-function readsMarkdownProse(source) {
-  const calls = [
-    ...callArguments(source, "readFileSync"),
-    ...callArguments(source, "readFile")
-  ];
-  return calls.some((call) => {
-    const directPath = /docs[\\/][^"'`]*\.md/i.test(call);
-    const segmentedPath = /["'`]docs["'`][\s\S]{0,320}?["'`][^"'`]*\.md["'`]/i.test(call);
-    return directPath || segmentedPath;
-  });
+function collectConstInitializers(sourceFile) {
+  const bindings = new Map();
+  function visit(node) {
+    if (ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.Const) !== 0) {
+      for (const declaration of node.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name) && declaration.initializer) {
+          bindings.set(declaration.name.text, declaration.initializer);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return bindings;
 }
+
+function staticPathFragments(node, bindings, seen = new Set()) {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return [node.text];
+  }
+  if (ts.isTemplateExpression(node)) {
+    const fragments = [node.head.text];
+    for (const span of node.templateSpans) {
+      fragments.push(...staticPathFragments(span.expression, bindings, seen));
+      fragments.push(span.literal.text);
+    }
+    return fragments;
+  }
+  if (ts.isIdentifier(node) && bindings.has(node.text) && !seen.has(node.text)) {
+    const nextSeen = new Set(seen);
+    nextSeen.add(node.text);
+    return staticPathFragments(bindings.get(node.text), bindings, nextSeen);
+  }
+
+  const fragments = [];
+  ts.forEachChild(node, (child) => {
+    fragments.push(...staticPathFragments(child, bindings, seen));
+  });
+  return fragments;
+}
+
+function isMarkdownDocumentationPath(fragments) {
+  const normalized = fragments
+    .map((fragment) => String(fragment).replaceAll("\\", "/").trim())
+    .filter(Boolean);
+  const direct = normalized.some((fragment) => /(?:^|\/)docs\/[^?#]*\.md(?:$|[?#])/i.test(fragment));
+  const segmented = /(?:^|\/)docs(?:\/[^/]+)*\/[^/]+\.md(?:$|[?#])/i.test(normalized.join("/"));
+  return direct || segmented;
+}
+
+function readsMarkdownProse(source, path = "fixture.mjs") {
+  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, scriptKind(path));
+  const bindings = collectConstInitializers(sourceFile);
+  let coupled = false;
+
+  function visit(node) {
+    if (coupled) return;
+    if (ts.isCallExpression(node)) {
+      const expression = node.expression;
+      const callee = ts.isIdentifier(expression)
+        ? expression.text
+        : ts.isPropertyAccessExpression(expression)
+          ? expression.name.text
+          : null;
+      if (callee && readCallees.has(callee) && node.arguments[0]) {
+        const fragments = staticPathFragments(node.arguments[0], bindings);
+        if (isMarkdownDocumentationPath(fragments)) {
+          coupled = true;
+          return;
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return coupled;
+}
+
+test("Markdown prose detector covers direct, template, resolve, and const-bound reads", () => {
+  const coupledSources = [
+    'readFileSync("docs/release/README.md", "utf8");',
+    'readFileSync(`${root}/docs/release/README.md`, "utf8");',
+    'readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8");',
+    'const authority = join(root, "docs", "release", "README.md"); readFileSync(authority, "utf8");',
+    'fs.readFile(resolve(root, "docs", "release", "README.md"));'
+  ];
+  for (const source of coupledSources) {
+    assert.equal(readsMarkdownProse(source), true, source);
+  }
+  assert.equal(readsMarkdownProse('readFileSync(resolve(root, file), "utf8");'), false);
+});
 
 test("completed implementation evidence stays out of the active source tree", () => {
   const topLevelReports = readdirSync(root)
@@ -113,7 +158,7 @@ test("tests enforce code and structured contracts instead of Markdown prose", ()
     .flatMap((directory) => filesUnder(join(root, directory)))
     .filter((path) => /(?:^|\/)[^/]+\.(?:test|spec)\.(?:ts|tsx|js|mjs|cjs)$/i.test(path));
 
-  const proseCoupling = testSources.filter((path) => readsMarkdownProse(readFileSync(path, "utf8")));
+  const proseCoupling = testSources.filter((path) => readsMarkdownProse(readFileSync(path, "utf8"), path));
 
   assert.deepEqual(proseCoupling, []);
 });
