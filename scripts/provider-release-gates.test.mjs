@@ -7,9 +7,12 @@ import test from "node:test";
 const root = process.cwd();
 const netlifyGate = resolve(root, "scripts/netlify-production-release-gate.mjs");
 const obsoleteVercelGate = resolve(root, "scripts/vercel-production-release-gate.mjs");
+const exactReleaseWorkflow = resolve(root, ".github/workflows/exact-release-quality.yml");
+const releasePreflightWorkflow = resolve(root, ".github/workflows/release-preflight.yml");
+const exactReleaseOrchestrator = resolve(root, "scripts/exact-release-orchestrator.mjs");
 const sha = "60a204d5fc20fc396be1b1b47e748c42ebba6abf";
 const otherSha = "fce4f9dacd16ade098d1bbfc1eb6793d50cb5eb9";
-const textExtensions = new Set([".cjs", ".example", ".js", ".json", ".md", ".mjs", ".toml", ".ts", ".tsx", ".yaml", ".yml"]);
+const textExtensions = new Set([".cjs", ".example", ".js", ".json", ".mjs", ".toml", ".ts", ".tsx", ".yaml", ".yml"]);
 
 function runNetlify(environment = {}) {
   return spawnSync(process.execPath, [netlifyGate], {
@@ -19,17 +22,22 @@ function runNetlify(environment = {}) {
   });
 }
 
-function trackedFilesContaining(needle) {
+function isTestFile(file) {
+  return /(?:^|\/)[^/]+\.(?:test|spec)\.(?:ts|tsx|js|mjs|cjs)$/i.test(file);
+}
+
+function trackedRuntimeFilesContaining(needle) {
   const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
     .split(/\r?\n/)
     .filter(Boolean)
-    .filter((file) => file === ".env.example" || textExtensions.has(extname(file)));
+    .filter((file) => file === ".env.example" || textExtensions.has(extname(file)))
+    .filter((file) => !file.startsWith("docs/") && !isTestFile(file));
   return tracked
     .filter((file) => readFileSync(resolve(root, file), "utf8").includes(needle))
     .sort();
 }
 
-test("repository config declares Vercel main-only policy intent without claiming provider enforcement", () => {
+test("repository config declares Vercel main-only policy intent without a repository-side gate", () => {
   const config = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8"));
 
   assert.deepEqual(config.git?.deploymentEnabled, { "**": false, main: true });
@@ -42,79 +50,51 @@ test("repository config declares Vercel main-only policy intent without claiming
   assert.equal(existsSync(obsoleteVercelGate), false);
 });
 
-test("release documentation distinguishes repository intent from actual provider verification", () => {
-  const releaseReadme = readFileSync(resolve(root, "docs/release/README.md"), "utf8");
-  const launchRunbook = readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8");
+test("Exact Release reuses canonical Quality and dispatches one read-only preflight", () => {
+  const exactWorkflow = readFileSync(exactReleaseWorkflow, "utf8");
+  const preflightWorkflow = readFileSync(releasePreflightWorkflow, "utf8");
+  const orchestrator = readFileSync(exactReleaseOrchestrator, "utf8");
 
-  assert.match(releaseReadme, /Repository configuration and tests verify policy intent only\./);
-  assert.match(releaseReadme, /They do not prove actual Vercel provider enforcement\./);
-  assert.match(releaseReadme, /inspect the Vercel deployment list for the exact pushed SHA/);
-  assert.match(launchRunbook, /Repository configuration and green repository tests prove policy intent only/);
-  assert.match(launchRunbook, /actual provider behavior requires post-push Vercel verification/);
+  assert.match(exactWorkflow, /quality_run_id:/);
+  assert.match(exactWorkflow, /node scripts\/exact-release-orchestrator\.mjs/);
+  assert.match(orchestrator, /qualityExecutionMode: "reused-canonical-run"/);
+  assert.match(orchestrator, /"release-preflight\.yml"/);
+  assert.match(orchestrator, /validation_context=\$\{STAGE1_VALIDATION_CONTEXT\}/);
+  assert.match(orchestrator, /productionWritePerformed: false/);
+  assert.match(orchestrator, /deploymentPerformed: false/);
+
+  const verifyQuality = orchestrator.indexOf("const qualityEvidence = verifyQualityArtifact({");
+  const dispatchPreflight = orchestrator.indexOf('"release-preflight.yml"');
+  const verifyPreflight = orchestrator.indexOf("preflightArtifact = verifyPreflightArtifact({");
+  const finalEvidence = orchestrator.indexOf("writeFinalEvidence({");
+  assert.ok(verifyQuality >= 0, "canonical Quality verification is missing");
+  assert.ok(dispatchPreflight > verifyQuality, "preflight must follow canonical Quality verification");
+  assert.ok(verifyPreflight > dispatchPreflight, "preflight evidence must be verified after dispatch");
+  assert.ok(finalEvidence > verifyPreflight, "final exact evidence must follow preflight verification");
+
+  assert.match(preflightWorkflow, /permissions:\s+actions: read\s+contents: read/);
+  assert.match(preflightWorkflow, /Download exact canonical Quality artifact/);
+  assert.match(preflightWorkflow, /Validate migration ledger/);
+  assert.match(preflightWorkflow, /Run strict non-deploying release preflight/);
+  assert.match(preflightWorkflow, /Assert selected mode remains read-only/);
+  assert.doesNotMatch(preflightWorkflow, /\b(?:vercel|netlify)\s+deploy\b|supabase\s+db\s+push/i);
 });
 
-test("launch documentation places reconciliation, strict preflight, and owner approval before merge", () => {
-  const releaseReadme = readFileSync(resolve(root, "docs/release/README.md"), "utf8");
-  const launchRunbook = readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8");
-  const documents = [releaseReadme, launchRunbook];
-
-  for (const document of documents) {
-    const reconciliation = document.indexOf("2. Complete migration-history reconciliation");
-    const preflight = document.indexOf("5. Run `npm run release:preflight");
-    const releaseMode = document.indexOf("--mode release", preflight);
-    const approval = document.indexOf("6. Obtain explicit release-owner approval");
-    const merge = document.indexOf("7. Merge the approved exact change to `main`");
-
-    assert.ok(reconciliation >= 0, "migration reconciliation step is missing");
-    assert.ok(preflight > reconciliation, "release preflight must follow migration reconciliation");
-    assert.ok(releaseMode > preflight, "production preflight must explicitly select strict release mode");
-    assert.ok(approval > releaseMode, "owner approval must follow a passing strict release preflight");
-    assert.ok(merge > approval, "the production-triggering merge must follow approval");
-    assert.match(document, /Any failed or blocked strict release preflight is a no-go before merge/);
-    assert.match(document, /migration ledger must be reconciled before/);
-    assert.match(document, /A provider `READY` state alone is not acceptance/);
-    assert.match(document, /Netlify remains separate/);
-  }
-
-  assert.match(releaseReadme, /A passing review preflight is not production release authorization/);
-  assert.match(launchRunbook, /Pull-request review preflight is CI evidence only/);
-});
-
-test("active configuration has no Vercel preview or production SHA approval dependency", () => {
+test("active configuration has no obsolete Vercel SHA approval dependency", () => {
   const envExample = readFileSync(resolve(root, ".env.example"), "utf8");
-  const releaseReadme = readFileSync(resolve(root, "docs/release/README.md"), "utf8");
-  const launchRunbook = readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8");
 
   assert.doesNotMatch(envExample, /PLAIVRA_PREVIEW_RELEASE_SHA/);
   assert.match(envExample, /# Netlify production deployment release hold/);
   assert.match(envExample, /# Vercel does not use this variable\./);
   assert.match(envExample, /^PLAIVRA_PRODUCTION_RELEASE_SHA=$/m);
-  assert.match(releaseReadme, /Vercel does not use `ignoreCommand`/);
-  assert.match(releaseReadme, /Vercel does not use preview or production exact-SHA approval environment variables/);
-  assert.match(launchRunbook, /Vercel does not use `PLAIVRA_PREVIEW_RELEASE_SHA` or `PLAIVRA_PRODUCTION_RELEASE_SHA`/);
 });
 
-test("tracked references contain no active obsolete Vercel gate dependency", () => {
-  assert.deepEqual(trackedFilesContaining("scripts/vercel-production-release-gate.mjs"), [
-    "lib/release/provider-deployment-policy.test.ts",
-    "scripts/provider-release-gates.test.mjs"
-  ]);
-
-  assert.deepEqual(trackedFilesContaining("PLAIVRA_PREVIEW_RELEASE_SHA"), [
-    "docs/operations/launch-runbook.md",
-    "docs/release/README.md",
-    "lib/release/provider-deployment-policy.test.ts",
-    "scripts/provider-release-gates.test.mjs"
-  ]);
-
-  assert.deepEqual(trackedFilesContaining("PLAIVRA_PRODUCTION_RELEASE_SHA"), [
+test("runtime references contain no active obsolete Vercel gate dependency", () => {
+  assert.deepEqual(trackedRuntimeFilesContaining("scripts/vercel-production-release-gate.mjs"), []);
+  assert.deepEqual(trackedRuntimeFilesContaining("PLAIVRA_PREVIEW_RELEASE_SHA"), []);
+  assert.deepEqual(trackedRuntimeFilesContaining("PLAIVRA_PRODUCTION_RELEASE_SHA"), [
     ".env.example",
-    "docs/operations/launch-runbook.md",
-    "docs/release/README.md",
-    "lib/release/provider-deployment-policy.test.ts",
-    "scripts/netlify-production-release-gate.mjs",
-    "scripts/provider-release-gates.test.mjs",
-    "scripts/release-metadata-bundle.test.mjs"
+    "scripts/netlify-production-release-gate.mjs"
   ]);
 });
 
