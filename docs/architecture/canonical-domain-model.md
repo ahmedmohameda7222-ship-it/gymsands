@@ -21,7 +21,7 @@
 | Profile/context | Profiles, structured preferences, constraints, permissions, settings, and task projections | Active |
 | Workout plans | Phase 2A multi-week hierarchy under `user_workout_plans` | Additive model active; bounded compatibility writer remains |
 | Performed sessions | `workout_sessions` with `exercise_logs` and normalized children | Canonical root active |
-| Active execution | Execution state, commands, receipts, timeline events, deterministic engine, serialized dispatcher, and one official client store under `workout_sessions` | AW-4 implementation candidate; Production migration pending |
+| Active execution | Execution state, commands, receipts, timeline events, deterministic engine, serialized dispatcher, and one official client store under `workout_sessions` | AW-4 implementation and Production schema applied; unmerged release candidate |
 | Performed metrics | `exercise_log_metric_values` plus structured set-detail hierarchy | AW-3A/AW-3B complete |
 | Frozen prescriptions | Snapshot items with normalized immutable sets and metric targets | AW-3C implemented and applied |
 | Exercise catalog | `exercises` with reviewed provider links and mapping registries | Approved 60-exercise cohort active |
