@@ -12,6 +12,19 @@ test("ordinary documentation-only changes run only integrity and summary", () =>
   assert.equal(scope.build, false);
 });
 
+test("release prose stays lightweight because executable policy is source-authoritative", () => {
+  for (const path of ["docs/release/README.md", "docs/operations/launch-runbook.md"]) {
+    const scope = classifyChangedPaths([path]);
+    assert.equal(scope.docsOnly, true);
+    assert.equal(scope.core, false);
+    assert.equal(scope.database, false);
+    assert.equal(scope.ui, false);
+    assert.equal(scope.ci, false);
+    assert.equal(scope.build, false);
+    assert.equal(scope.fallback, false);
+  }
+});
+
 test("machine-readable documentation contracts execute core validation", () => {
   for (const path of [
     "docs/chatgpt-app/public-tool-catalog.json",
