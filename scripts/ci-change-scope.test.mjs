@@ -2,14 +2,29 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { changedPathDiffArgs, classifyChangedPaths } from "./ci-change-scope.mjs";
 
-test("documentation-only changes run only integrity and summary", () => {
-  const scope = classifyChangedPaths(["README.md", "docs/architecture/example.md"]);
+test("ordinary documentation-only changes run only integrity and summary", () => {
+  const scope = classifyChangedPaths(["README.md", "docs/guides/example.md"]);
   assert.equal(scope.docsOnly, true);
   assert.equal(scope.core, false);
   assert.equal(scope.database, false);
   assert.equal(scope.ui, false);
   assert.equal(scope.ci, false);
   assert.equal(scope.build, false);
+});
+
+test("machine-readable documentation contracts execute core validation", () => {
+  for (const path of [
+    "docs/chatgpt-app/public-tool-catalog.json",
+    "docs/contracts/example.yaml",
+  ]) {
+    const scope = classifyChangedPaths([path]);
+    assert.equal(scope.docsOnly, false);
+    assert.equal(scope.core, true);
+    assert.equal(scope.database, false);
+    assert.equal(scope.ui, false);
+    assert.equal(scope.build, false);
+    assert.equal(scope.fallback, false);
+  }
 });
 
 test("database changes select database, core and build conservatively", () => {
