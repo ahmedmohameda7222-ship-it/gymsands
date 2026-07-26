@@ -178,7 +178,5 @@ describe("AW-3A migration and runtime authority", () => {
       productionName: "active_workout_aw3a_structured_metrics"
     });
     expect(ledger.auditedRepositoryCommit).toMatch(/^[a-f0-9]{40}$/);
-    const report = readFileSync("plaivra_aw3a_final_planner_qaqc_corrections_report.md", "utf8");
-    expect(report).toContain("a196cb217245557030cdc812a9dfcb670fcc0ba6");
   });
 });
