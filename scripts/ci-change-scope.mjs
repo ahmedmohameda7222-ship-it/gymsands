@@ -21,7 +21,7 @@ const DATABASE_PATTERNS = [
   /^services\/database\//,
   /^services\/database[^/]*\.(?:ts|tsx|js|mjs)$/,
   /^types\/database[^/]*\.(?:ts|tsx)$/,
-  /^scripts\/(?:check-migration-ledger|quality-ledger-target|replay-local-migration-chain|run-database-verification|test-database-preflight-control|release-preflight|release-identity-contract)\.mjs$/,
+  /^scripts\/(?:check-migration-ledger|quality-ledger-target|replay-local-migration-chain(?:-legacy)?|run-database-verification|test-database-preflight-control|release-preflight|release-identity-contract)\.mjs$/,
   /^lib\/privacy\//,
 ];
 
