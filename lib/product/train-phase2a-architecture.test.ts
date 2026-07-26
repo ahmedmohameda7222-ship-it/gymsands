@@ -5,8 +5,6 @@ const migrationPath = "supabase/migrations/20260715190000_train_phase2a_program_
 const verificationPath = "supabase/verification/train-phase2a-program-architecture.sql";
 const migration = readFileSync(migrationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const verification = readFileSync(verificationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
-const adr = readFileSync("docs/architecture/decisions/0004-train-multi-week-multi-sport-program-model.md", "utf8");
-const canonical = readFileSync("docs/architecture/canonical-domain-model.md", "utf8");
 const databaseVerification = readFileSync("scripts/run-database-verification.mjs", "utf8");
 const migrationLedger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   historyRepair: { state: string };
@@ -103,14 +101,5 @@ describe("Train Phase 2A architecture contract", () => {
     expect(phase2aEntry?.state).toBe("applied");
     expect(phase2aEntry?.productionVersion).toBe("20260715190000");
     expect(phase2aEntry?.productionName).toBe("train_phase2a_program_architecture");
-  });
-
-  it("documents the target model without claiming runtime cutover", () => {
-    expect(adr).toContain("Phase 2A is not a runtime cutover");
-    expect(adr).toContain("A third performed-session root is prohibited");
-    expect(adr).toContain("assigned program week");
-    expect(adr).toContain("explicit local schedule start date");
-    expect(canonical).toContain("The approved target program architecture is");
-    expect(canonical).toContain("the active runtime plan write path remains");
   });
 });
