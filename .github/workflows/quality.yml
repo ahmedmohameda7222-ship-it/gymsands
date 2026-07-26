@@ -1,16 +1,23 @@
 name: Quality
-run-name: Quality / ${{ format('pr-{0}-{1}-{2}-{3}', github.event.pull_request.number, github.run_id, github.run_attempt, github.event.pull_request.head.sha) }}
+run-name: Quality / release-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.reviewed_commit }}
 
 on:
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      reviewed_commit:
+        description: Exact 40-character branch head SHA to validate
+        required: true
+        type: string
+      comparison_base:
+        description: Exact 40-character base SHA for failure-parity comparison
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: quality-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  group: quality-release-${{ inputs.reviewed_commit }}
   cancel-in-progress: false
 
 jobs:
@@ -34,28 +41,24 @@ jobs:
       DO_NOT_TRACK: "1"
 
     steps:
-      - name: Declare full release scope
-        id: scope
-        shell: bash
-        run: echo "i18n=true" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve exact run identity
+      - name: Resolve exact release Quality identity
         id: identity
         shell: bash
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REVIEWED_COMMIT_INPUT: ${{ inputs.reviewed_commit }}
+          COMPARISON_BASE_INPUT: ${{ inputs.comparison_base }}
+          DISPATCH_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
-          reviewed_commit="$PR_HEAD_SHA"
-          comparison_base="$PR_BASE_SHA"
-          validation_request_id="pr-${PR_NUMBER}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${reviewed_commit}"
-          [[ "$reviewed_commit" =~ ^[0-9a-fA-F]{40}$ ]]
-          [[ "$comparison_base" =~ ^[0-9a-fA-F]{40}$ ]]
+          reviewed_commit="${REVIEWED_COMMIT_INPUT,,}"
+          comparison_base="${COMPARISON_BASE_INPUT,,}"
+          dispatch_commit="${DISPATCH_COMMIT,,}"
+          validation_request_id="release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${reviewed_commit}"
+          [[ "$reviewed_commit" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$comparison_base" =~ ^[0-9a-f]{40}$ ]]
           [[ "$validation_request_id" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{7,127}$ ]]
-          reviewed_commit="${reviewed_commit,,}"
-          comparison_base="${comparison_base,,}"
+          test "$GITHUB_REF_TYPE" = "branch"
+          test "$dispatch_commit" = "$reviewed_commit"
           quality_build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')"
           {
             echo "reviewed_commit=$reviewed_commit"
@@ -76,6 +79,14 @@ jobs:
         with:
           ref: ${{ steps.identity.outputs.reviewed_commit }}
           fetch-depth: 0
+
+      - name: Verify checked-out branch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$PLAIVRA_COMMIT_SHA"
+          test "$(git rev-parse "origin/${GITHUB_REF_NAME}^{commit}")" = "$PLAIVRA_COMMIT_SHA"
+          test "$(git rev-parse "$PLAIVRA_COMPARISON_BASE^{commit}")" = "$PLAIVRA_COMPARISON_BASE"
 
       - name: Derive validation target from exact migration ledger
         id: release_target
@@ -113,7 +124,6 @@ jobs:
           -- bash -lc 'set -euo pipefail;
           test "$GITHUB_REPOSITORY" = "ahmedmohameda7222-ship-it/gymsands";
           test "$(git rev-parse HEAD)" = "$PLAIVRA_COMMIT_SHA";
-          test "$(git rev-parse "$PLAIVRA_COMPARISON_BASE^{commit}")" = "$PLAIVRA_COMPARISON_BASE";
           git diff --check;
           test -z "$(git status --porcelain --untracked-files=no)"'
 
@@ -144,23 +154,7 @@ jobs:
           --reports-dir quality-reports
           --commit "$PLAIVRA_COMMIT_SHA"
           --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
-          -- bash -lc 'set -euo pipefail;
-          PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase1.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-phase2a-program-architecture.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-integration.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-structured-metrics.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-integration.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-final-completion.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-structured-set-details.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-integration.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3c-immutable-prescription-snapshots.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3c-integration.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw4-session-engine.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw4-integration.sql;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql;
-          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$PLAIVRA_LOCAL_DATABASE_URL" node scripts/test-database-preflight-control.mjs;
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql'
+          -- node scripts/run-database-verification.mjs
 
       - name: Gate — migration ledger
         run: >-
@@ -299,34 +293,25 @@ jobs:
           QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train'
 
       - name: Record i18n evidence metadata
-        if: github.event_name == 'pull_request' && steps.scope.outputs.i18n == 'true'
         shell: bash
-        env:
-          PLAIVRA_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          metadata = {
-              "headSha": os.environ["PLAIVRA_COMMIT_SHA"],
-              "workflowRunId": os.environ["GITHUB_RUN_ID"],
-              "workflowRunAttempt": os.environ["GITHUB_RUN_ATTEMPT"],
-              "repository": os.environ["GITHUB_REPOSITORY"],
-              "pullRequestNumber": int(os.environ["PLAIVRA_PULL_REQUEST_NUMBER"]),
-          }
-          output = Path("quality-reports/i18n-rendered-evidence-metadata.json")
-          output.parent.mkdir(parents=True, exist_ok=True)
-          output.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-          PY
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const metadata = {
+            headSha: process.env.PLAIVRA_COMMIT_SHA,
+            workflowRunId: process.env.GITHUB_RUN_ID,
+            workflowRunAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            repository: process.env.GITHUB_REPOSITORY,
+            branch: process.env.GITHUB_REF_NAME,
+          };
+          fs.writeFileSync('quality-reports/i18n-rendered-evidence-metadata.json', JSON.stringify(metadata, null, 2) + '\n');
+          NODE
 
       - name: Upload successful i18n rendered evidence
-        if: github.event_name == 'pull_request' && steps.scope.outputs.i18n == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: i18n-rendered-evidence-${{ github.event.pull_request.head.sha }}
+          name: i18n-rendered-evidence-${{ steps.identity.outputs.reviewed_commit }}
           path: |
             quality-reports/train-qa-evidence/active-workout-en-390x844.png
             quality-reports/train-qa-evidence/active-workout-de-390x844.png
@@ -364,7 +349,6 @@ jobs:
           set -euo pipefail
           node - <<'NODE'
           const fs = require('node:fs');
-          fs.mkdirSync('quality-reports', { recursive: true });
           const metadata = {
             schemaVersion: 1,
             repository: process.env.GITHUB_REPOSITORY,
