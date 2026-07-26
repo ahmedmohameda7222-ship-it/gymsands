@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const netlifyScript = fileURLToPath(new URL("../../scripts/netlify-production-release-gate.mjs", import.meta.url));
 const obsoleteVercelScript = fileURLToPath(new URL("../../scripts/vercel-production-release-gate.mjs", import.meta.url));
-const exactReleaseWorkflow = fileURLToPath(new URL("../../.github/workflows/exact-release-quality.yml", import.meta.url));
+const exactReleaseWorkflow = fileURLToPath(new URL("../../.github/workflows/exact-release-quality-validation.yml", import.meta.url));
 const releasePreflightWorkflow = fileURLToPath(new URL("../../.github/workflows/release-preflight.yml", import.meta.url));
 const exactReleaseOrchestrator = fileURLToPath(new URL("../../scripts/exact-release-orchestrator.mjs", import.meta.url));
 const SHA = "8481ab3ce43b9866f01d8ba0331abf6368f68956";
