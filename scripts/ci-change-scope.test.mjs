@@ -12,7 +12,7 @@ test("documentation-only changes run only integrity and summary", () => {
   assert.equal(scope.build, false);
 });
 
-test("database changes select database, core, CI contracts and build conservatively", () => {
+test("database changes select database, core and build conservatively", () => {
   const scope = classifyChangedPaths([
     "supabase/migrations/20260727000000_example.sql",
     "services/database/example.ts",
@@ -23,10 +23,18 @@ test("database changes select database, core, CI contracts and build conservativ
   assert.equal(scope.build, true);
 });
 
+test("central database verification changes select the database gate", () => {
+  const scope = classifyChangedPaths(["scripts/run-database-verification.mjs"]);
+  assert.equal(scope.core, true);
+  assert.equal(scope.database, true);
+  assert.equal(scope.ci, true);
+  assert.equal(scope.build, false);
+});
+
 test("UI changes select UI, core and build without database replay", () => {
   const scope = classifyChangedPaths([
     "components/workouts/example.tsx",
-    "lib/i18n/en.ts",
+    "messages/en.json",
   ]);
   assert.equal(scope.core, true);
   assert.equal(scope.ui, true);
@@ -34,7 +42,18 @@ test("UI changes select UI, core and build without database replay", () => {
   assert.equal(scope.build, true);
 });
 
-test("workflow and script changes select CI contracts", () => {
+test("test-only source changes avoid build and rendered browser QA", () => {
+  const scope = classifyChangedPaths([
+    "components/workouts/example.test.tsx",
+    "lib/i18n/example.spec.ts",
+  ]);
+  assert.equal(scope.core, true);
+  assert.equal(scope.ui, false);
+  assert.equal(scope.build, false);
+  assert.equal(scope.fallback, false);
+});
+
+test("workflow and generic script changes select CI contracts", () => {
   const scope = classifyChangedPaths([
     ".github/workflows/pr-quality.yml",
     "scripts/run-ci-check.mjs",
