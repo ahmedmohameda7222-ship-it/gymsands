@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 
 const SHA = /^[0-9a-f]{40}$/i;
 const matchesAny = (path, patterns) => patterns.some((pattern) => pattern.test(path));
+const isTestPath = (path) => /(^|\/)(?:__tests__\/|[^/]+\.(?:test|spec)\.[^/]+$)/i.test(path);
 
 const DOC_PATTERNS = [
   /(^|\/)README\.md$/i,
@@ -19,13 +20,14 @@ const DATABASE_PATTERNS = [
   /^services\/database\//,
   /^services\/database[^/]*\.(?:ts|tsx|js|mjs)$/,
   /^types\/database[^/]*\.(?:ts|tsx)$/,
-  /^scripts\/(?:check-migration-ledger|quality-ledger-target|replay-local-migration-chain|test-database-preflight-control|release-preflight|release-identity-contract)\.mjs$/,
+  /^scripts\/(?:check-migration-ledger|quality-ledger-target|replay-local-migration-chain|run-database-verification|test-database-preflight-control|release-preflight|release-identity-contract)\.mjs$/,
   /^lib\/privacy\//,
 ];
 
 const UI_PATTERNS = [
   /^app\//,
   /^components\//,
+  /^messages\//,
   /^public\//,
   /^lib\/(?:i18n|train|active-workout|workouts)\//,
   /(?:^|\/)(?:globals|theme)\.css$/,
@@ -47,6 +49,7 @@ const RUNTIME_PATTERNS = [
   /^app\//,
   /^components\//,
   /^lib\//,
+  /^messages\//,
   /^services\//,
   /^types\//,
   /^public\//,
@@ -77,12 +80,13 @@ export function classifyChangedPaths(inputPaths) {
 
   const docsOnly = paths.every((path) => matchesAny(path, DOC_PATTERNS));
   const database = paths.some((path) => matchesAny(path, DATABASE_PATTERNS));
-  const ui = paths.some((path) => matchesAny(path, UI_PATTERNS));
+  const ui = paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
   const ci = paths.some((path) => matchesAny(path, CI_PATTERNS));
-  const runtime = paths.some((path) => matchesAny(path, RUNTIME_PATTERNS));
+  const runtime = paths.some((path) => !isTestPath(path) && matchesAny(path, RUNTIME_PATTERNS));
   const dependencies = paths.some((path) => matchesAny(path, DEPENDENCY_PATTERNS));
   const recognized = paths.every((path) => (
-    matchesAny(path, DOC_PATTERNS)
+    isTestPath(path)
+    || matchesAny(path, DOC_PATTERNS)
     || matchesAny(path, DATABASE_PATTERNS)
     || matchesAny(path, UI_PATTERNS)
     || matchesAny(path, CI_PATTERNS)
