@@ -26,22 +26,19 @@
 | Active Workout AW-1 | EN/DE/AR language foundation and message contracts implemented |
 | Active Workout AW-2 | Persisted execution state, command authority, receipts, and timeline events implemented |
 | Active Workout AW-3 | Structured metrics, structured set details, and immutable prescription snapshots implemented |
-| Active Workout AW-4 | Shared session engine, serialized dispatcher, official store, and timestamp timer engine implemented with its Production migration applied; unmerged release candidate |
+| Active Workout AW-4 | Shared session engine, serialized dispatcher, official store, and timestamp timer engine merged; Production migration applied and ledger reconciled |
+| CI/Codex workflow | Path-scoped parallel PR validation, concise failure evidence, ready-for-review full Quality, artifact-reusing Exact Release, and bounded autonomous repair implemented |
 | Entitlements/billing | Provider-neutral foundation exists; checkout disabled |
 | iOS/Android | Planning only; no native binary |
 
 ## Next active priorities
 
-1. close independent AW-4 QA/QC and obtain explicit owner merge approval;
-2. squash-merge AW-4 only after that approval and all required checks pass;
-3. verify merged `main` and complete required post-merge identity and release closure without replaying migrations, deploying manually, or promoting the compatibility marker;
-4. perform the separately approved CI/Codex workflow simplification before AW-5;
-5. start AW-5 only after that workflow correction is complete and separately approved;
-6. continue the approved AW-6 through AW-10 sequence;
-7. finish public MCP/CIMD production configuration and acceptance;
-8. stabilize web accessibility, performance, observability, and failure recovery;
-9. approve offerings before enabling billing;
-10. begin iOS, then Android, from stable shared contracts.
+1. start AW-5 only after independent approval of the merged CI/Codex workflow simplification;
+2. continue the approved AW-6 through AW-10 sequence after their preceding phases are complete and approved;
+3. finish public MCP/CIMD production configuration and acceptance;
+4. stabilize web accessibility, performance, observability, and failure recovery;
+5. approve offerings before enabling billing;
+6. begin iOS, then Android, from stable shared contracts.
 
 ## Shared versus platform-specific
 
