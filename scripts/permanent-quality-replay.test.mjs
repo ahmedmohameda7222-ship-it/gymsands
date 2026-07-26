@@ -94,7 +94,8 @@ test("AW-3C replay reproduces the released AW-3B marker before the pending migra
 test("canonical full Quality is PR-bound and runs only at ready-for-review phase closure", () => {
   assert.doesNotMatch(quality, /workflow_dispatch:/);
   assert.match(quality, /pull_request:[\s\S]*branches:[\s\S]*- main[\s\S]*types:[\s\S]*- ready_for_review/);
-  assert.doesNotMatch(quality, /opened|reopened|synchronize|phase-close/);
+  assert.doesNotMatch(quality, /^\s*- (?:opened|reopened|synchronize|labeled)\s*$/m);
+  assert.doesNotMatch(quality, /contains\(github\.event\.pull_request\.labels/);
   assert.match(quality, /PR_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(quality, /PR_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(quality, /--base "\$PLAIVRA_COMPARISON_BASE"/);
