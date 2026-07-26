@@ -55,10 +55,21 @@ const BROAD_CI_AUTHORITY_PATTERNS = [
   /^scripts\/(?:ci-change-scope|run-ci-check)\.mjs$/,
 ];
 
-const CI_PATTERNS = [
+const CI_SELECTION_PATTERNS = [
   /^\.github\/workflows\//,
   /^\.gitignore$/,
   /^scripts\//,
+  /^AGENTS\.md$/,
+  /^CHATGPT_CODEX_PROMPT_RULES\.md$/,
+  /^\.agents\//,
+  /^(?:package|tsconfig|vitest|eslint|next|postcss|tailwind)[^/]*\.(?:json|js|mjs|cjs|ts)$/,
+  /^\.nvmrc$/,
+  /^\.node-version$/,
+];
+
+const RECOGNIZED_CI_PATTERNS = [
+  /^\.github\/workflows\//,
+  /^\.gitignore$/,
   /^AGENTS\.md$/,
   /^CHATGPT_CODEX_PROMPT_RULES\.md$/,
   /^\.agents\//,
@@ -108,7 +119,7 @@ export function classifyChangedPaths(inputPaths) {
   const buildAuthority = paths.some((path) => matchesAny(path, BUILD_AUTHORITY_PATTERNS));
   const broadCiAuthority = paths.some((path) => matchesAny(path, BROAD_CI_AUTHORITY_PATTERNS));
   const ui = styleBuild || broadCiAuthority || paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
-  const ci = paths.some((path) => matchesAny(path, CI_PATTERNS));
+  const ci = paths.some((path) => matchesAny(path, CI_SELECTION_PATTERNS));
   const runtime = buildAuthority || broadCiAuthority || paths.some((path) => !isTestPath(path) && matchesAny(path, RUNTIME_PATTERNS));
   const dependencies = paths.some((path) => matchesAny(path, DEPENDENCY_PATTERNS));
   const recognized = paths.every((path) => (
@@ -120,7 +131,7 @@ export function classifyChangedPaths(inputPaths) {
     || matchesAny(path, STYLE_BUILD_PATTERNS)
     || matchesAny(path, BUILD_AUTHORITY_PATTERNS)
     || matchesAny(path, BROAD_CI_AUTHORITY_PATTERNS)
-    || matchesAny(path, CI_PATTERNS)
+    || matchesAny(path, RECOGNIZED_CI_PATTERNS)
     || matchesAny(path, RUNTIME_PATTERNS)
     || matchesAny(path, DEPENDENCY_PATTERNS)
   ));
