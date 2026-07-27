@@ -74,57 +74,59 @@ function WorkoutSummaryCard({
   formatters: ActiveWorkoutFormatters;
 }) {
   return (
-    <MotionCard>
-      <Card className="rounded-[28px] border-success/20 bg-success/[0.04]">
-        <CardContent className="space-y-5 p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
-              <Dumbbell className="h-5 w-5 text-success" aria-hidden="true" />
+    <div data-aw5-completed-summary>
+      <MotionCard>
+        <Card className="rounded-[28px] border-success/20 bg-success/[0.04]">
+          <CardContent className="space-y-5 p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
+                <Dumbbell className="h-5 w-5 text-success" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-base font-semibold">
+                  {tr("completion.dayComplete", { day: isolateBidiText(dayName) })}
+                </p>
+                <p className="text-sm text-muted-foreground">{tr("completion.savedHistory")}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-base font-semibold">
-                {tr("completion.dayComplete", { day: isolateBidiText(dayName) })}
-              </p>
-              <p className="text-sm text-muted-foreground">{tr("completion.savedHistory")}</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <InfoStat
+                label={tr("review.minutes")}
+                value={formatters.measurement(summary.durationMinutes, "minutes", 0)}
+              />
+              <InfoStat
+                label={tr("review.volume")}
+                value={formatters.measurement(summary.totalVolume, "kg")}
+              />
+              <InfoStat
+                label={tr("set.labelPlural")}
+                value={formatters.integer(summary.completedSets)}
+              />
+              <InfoStat
+                label={tr("navigation.exercises")}
+                value={formatters.integer(summary.completedExercises)}
+              />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <InfoStat
-              label={tr("review.minutes")}
-              value={formatters.measurement(summary.durationMinutes, "minutes", 0)}
-            />
-            <InfoStat
-              label={tr("review.volume")}
-              value={formatters.measurement(summary.totalVolume, "kg")}
-            />
-            <InfoStat
-              label={tr("set.labelPlural")}
-              value={formatters.integer(summary.completedSets)}
-            />
-            <InfoStat
-              label={tr("navigation.exercises")}
-              value={formatters.integer(summary.completedExercises)}
-            />
-          </div>
-          {summary.prs.length ? (
-            <div className="rounded-[16px] border border-primary/20 bg-primary/[0.04] p-4">
-              <p className="flex items-center gap-2 text-sm font-semibold text-primary">
-                <Trophy className="h-4 w-4" aria-hidden="true" />
-                {tr("completion.newPrs", { count: summary.prs.length })}
-              </p>
-              <ul className="mt-2 space-y-1">
-                {summary.prs.slice(0, 4).map((pr) => (
-                  <li key={pr} className="text-sm text-muted-foreground">- {pr}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          <Button asChild className="min-h-12 w-full rounded-[18px]">
-            <Link href="/my-workout/plans">{tr("completion.backToWorkouts")}</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    </MotionCard>
+            {summary.prs.length ? (
+              <div className="rounded-[16px] border border-primary/20 bg-primary/[0.04] p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Trophy className="h-4 w-4" aria-hidden="true" />
+                  {tr("completion.newPrs", { count: summary.prs.length })}
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {summary.prs.slice(0, 4).map((pr) => (
+                    <li key={pr} className="text-sm text-muted-foreground">- {pr}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <Button asChild className="min-h-12 w-full rounded-[18px]">
+              <Link href="/my-workout/plans">{tr("completion.backToWorkouts")}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </MotionCard>
+    </div>
   );
 }
 
