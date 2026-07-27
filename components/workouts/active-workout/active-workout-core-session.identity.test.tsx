@@ -6,10 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkoutPlanDaySession } from "@/types";
 
-const startDaySession = vi.fn();
-const hydrate = vi.fn();
-const getSnapshot = vi.fn();
-const dispatch = vi.fn();
+const { startDaySession, hydrate, getSnapshot, dispatch } = vi.hoisted(() => ({
+  startDaySession: vi.fn(),
+  hydrate: vi.fn(),
+  getSnapshot: vi.fn(),
+  dispatch: vi.fn()
+}));
 
 vi.mock("next/link", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>
@@ -100,7 +102,7 @@ function day(id: string): WorkoutPlanDaySession {
     plan_id: "plan-1",
     day_number: 1,
     day_name: "Strength A",
-    weekday: "monday",
+    weekday: "Monday",
     notes: null,
     plan: null,
     exercises: [{
