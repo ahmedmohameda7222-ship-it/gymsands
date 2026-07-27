@@ -1,0 +1,321 @@
+import {
+  activityId,
+  baseUrl,
+  contract,
+  createDeferred,
+  directExerciseName,
+  itemId,
+  requestRecord,
+  setIds,
+  snapshotId
+} from "./aw5-correction-qa-shared.mjs";
+
+function catalogPayload(url) {
+  const activity = {
+    id: activityId,
+    slug: "barbell_squat",
+    name: directExerciseName,
+    shortDescription: "Deterministic AW-5 rendered verification activity.",
+    instructions: [{ order: 1, text: "Brace and move with control." }],
+    difficulty: "intermediate",
+    movementPattern: "squat",
+    version: 1,
+    activityType: {
+      id: "22222222-2222-4222-8222-222222222222",
+      slug: "strength",
+      name: "Strength"
+    },
+    metricSchema: null,
+    sports: [],
+    sessionTypes: [],
+    sessionPhases: [],
+    equipment: [{
+      id: "33333333-3333-4333-8333-333333333333",
+      slug: "barbell",
+      name: "Barbell",
+      isRequired: true
+    }],
+    muscles: [{
+      id: "44444444-4444-4444-8444-444444444444",
+      slug: "quadriceps",
+      name: "Quadriceps",
+      role: "primary"
+    }],
+    trainingGoals: [],
+    translations: {},
+    guideUrl: "https://example.com/catalog-guide",
+    videoUrl: "https://example.com/catalog-video",
+    updatedAt: "2026-07-27T00:00:00.000Z"
+  };
+  const meta = { source: "external", degraded: false, catalogVersion: "v1", locale: "en" };
+  if (url.pathname.endsWith("/filters")) {
+    return {
+      data: {
+        sports: [],
+        activityTypes: [activity.activityType],
+        sessionTypes: [],
+        sessionPhases: [],
+        equipment: activity.equipment,
+        trainingGoals: [],
+        difficulties: ["intermediate"]
+      },
+      meta
+    };
+  }
+  if (url.pathname.endsWith("/alternatives")) return { data: [], meta };
+  if (/\/activities\/[^/]+$/.test(url.pathname)) return { data: activity, meta };
+  if (url.pathname.endsWith("/activities")) {
+    return {
+      data: [activity],
+      pagination: { limit: 30, offset: 0, returned: 1, nextOffset: null },
+      meta
+    };
+  }
+  if (url.pathname.endsWith("/sports")) return { data: [], meta };
+  return { data: { sport: activity.activityType, sessionTypes: [], sessionPhases: [] }, meta };
+}
+
+export async function installAw5CorrectionFixture(context, { direct, language, theme, delayCanonical }, requestHistory) {
+  const sessionId = contract.activeSessionId;
+  const exerciseName = direct ? directExerciseName : contract.activeFirstExerciseName;
+  const sourceExerciseId = direct ? null : contract.activeFirstExerciseId;
+  const delayedCanonical = createDeferred();
+  const canonicalFinished = createDeferred();
+  const root = {
+    id: sessionId,
+    user_id: contract.userId,
+    workout_id: direct ? activityId : null,
+    plan_id: direct ? null : contract.planIds.active,
+    plan_day_id: direct ? null : contract.activeDayId,
+    workout_name: direct ? directExerciseName : contract.activeDayName,
+    workout_day_name: direct ? null : contract.activeDayName,
+    workout_category: "strength",
+    started_at: "2026-07-27T08:00:00.000Z",
+    completed_at: null,
+    skipped_at: null,
+    duration_minutes: null,
+    notes: null,
+    status: "started",
+    source: direct ? "manual" : "schedule"
+  };
+  const snapshot = {
+    id: snapshotId,
+    workout_session_id: sessionId,
+    user_id: contract.userId
+  };
+  const item = {
+    id: itemId,
+    snapshot_id: snapshotId,
+    user_id: contract.userId,
+    item_order: 1,
+    source_plan_exercise_id: sourceExerciseId,
+    source_plan_activity_id: direct ? activityId : null,
+    activity_name_snapshot: exerciseName,
+    planned_prescription: { sets: 2, reps: "8-10", rest_seconds: 90 },
+    planned_sets: 2,
+    state: "planned"
+  };
+  const sets = [1, 2].map((setOrder) => ({
+    id: setIds[setOrder - 1],
+    snapshot_item_id: itemId,
+    snapshot_id: snapshotId,
+    workout_session_id: sessionId,
+    user_id: contract.userId,
+    set_order: setOrder,
+    performed_order_hint: null,
+    set_type: "working",
+    target_mode: "custom",
+    side_mode: "none",
+    rest_seconds: 90,
+    tempo_target: null,
+    schema_version: 1,
+    created_at: "2026-07-27T08:00:00.000Z"
+  }));
+  const settings = {
+    id: "22222222-2222-4222-8222-222222222222",
+    user_id: contract.userId,
+    theme_id: theme === "dark" ? "elite-noir" : "olive",
+    theme,
+    accent_color: theme === "dark" ? "elite-noir" : "olive",
+    language,
+    weight_unit: "kg",
+    height_unit: "cm",
+    distance_unit: "km",
+    liquid_unit: "ml",
+    energy_unit: "kcal",
+    body_measurement_unit: "cm",
+    week_starts_on: "monday",
+    default_start_page: "today",
+    compact_mode: false,
+    reduce_animations: true,
+    large_text_mode: false,
+    quick_log_sections: ["workout"],
+    created_at: "2026-07-27T00:00:00.000Z",
+    updated_at: "2026-07-27T00:00:00.000Z"
+  };
+
+  await context.addCookies([{
+    name: "plaivra.language.v1",
+    value: language,
+    url: baseUrl,
+    sameSite: "Lax"
+  }]);
+  await context.addInitScript(({ languageValue, themeId }) => {
+    localStorage.setItem("plaivra.qa.train-scenario", "active");
+    localStorage.setItem("plaivra.qa.train-variant", "active-default-success");
+    localStorage.setItem("plaivra.language.v1", languageValue);
+    localStorage.setItem("plaivra-theme-id", themeId);
+  }, {
+    languageValue: language,
+    themeId: theme === "dark" ? "elite-noir" : "olive"
+  });
+
+  await context.route("**/api/activity-catalog/**", async (route) => {
+    requestHistory.push(requestRecord(route.request(), "fulfilled:activity-catalog"));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: {
+        "cache-control": "private, no-store",
+        "x-plaivra-qa-fixture": "aw5-correction-catalog"
+      },
+      body: JSON.stringify(catalogPayload(new URL(route.request().url())))
+    });
+  });
+
+  await context.route(/\/api\/workouts\/sessions\/[^/]+\/muscle-analysis(?:\?.*)?$/, async (route) => {
+    requestHistory.push(requestRecord(route.request(), "fulfilled:heat-map"));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: {
+        "cache-control": "private, no-store",
+        "x-plaivra-qa-fixture": "aw5-correction-heat-map"
+      },
+      body: JSON.stringify({
+        sessionId,
+        snapshotId,
+        snapshotSchemaVersion: "workout_session_muscle_snapshot_v1",
+        frozenAt: "2026-07-27T08:00:00.000Z",
+        source: "session_start",
+        snapshotCompleteness: "complete",
+        reasonCodes: [],
+        effectiveCompleteness: "complete",
+        effectiveWarnings: [],
+        analysis: {
+          schemaVersion: "muscle_analysis_result_v1",
+          taxonomyVersion: "muscle_taxonomy_v1",
+          engineVersion: "muscle_load_resistance_sets_v1",
+          thresholdVersion: "muscle_load_thresholds_v1",
+          mode: "planned",
+          period: { kind: "session" },
+          completeness: "complete",
+          muscles: [],
+          contributionBreakdown: [],
+          mappingVersionsUsed: [],
+          coverage: {
+            totalItemCount: 1,
+            includedItemCount: 1,
+            unmappedItemCount: 0,
+            unsupportedItemCount: 0
+          },
+          warnings: []
+        }
+      })
+    });
+  });
+
+  await context.route(/^https:\/\/[^/]+\.supabase\.co\//, async (route) => {
+    const request = route.request();
+    const method = request.method();
+    const pathname = new URL(request.url()).pathname;
+    const wantsObject = (request.headers().accept || "").includes("application/vnd.pgrst.object");
+    const respond = (body, status = 200, headers = {}) => route.fulfill({
+      status,
+      contentType: "application/json",
+      headers,
+      body: JSON.stringify(body)
+    });
+    requestHistory.push(requestRecord(request, `intercepted:${pathname}`));
+
+    if (method === "POST" && pathname.includes("/rest/v1/rpc/start_or_resume_workout_session_atomic")) {
+      return respond({ session: root, resumed: true });
+    }
+    if (method === "POST" && pathname.includes("/rest/v1/rpc/start_or_resume_direct_workout_session_atomic")) {
+      return respond({ session: root, resumed: true });
+    }
+    if (method === "GET" && pathname.includes("/rest/v1/workout_sessions")) {
+      return respond(wantsObject ? root : [root], 200, { "content-range": "0-0/1" });
+    }
+    if (method === "GET" && pathname.includes("/rest/v1/workout_session_muscle_snapshots")) {
+      return respond(wantsObject ? snapshot : [snapshot], 200, { "content-range": "0-0/1" });
+    }
+    if (method === "GET" && pathname.includes("/rest/v1/workout_session_muscle_snapshot_items")) {
+      return respond([item], 200, { "content-range": "0-0/1" });
+    }
+    if (method === "GET" && pathname.includes("/rest/v1/workout_session_prescription_sets")) {
+      return respond(sets, 200, { "content-range": "0-1/2" });
+    }
+    if (method === "GET" && (
+      pathname.includes("/rest/v1/workout_session_prescription_metric_targets")
+      || pathname.includes("/rest/v1/workout_performance_metric_definitions")
+      || pathname.includes("/rest/v1/exercise_logs")
+      || pathname.includes("/rest/v1/user_exercise_alternatives")
+      || pathname.includes("/rest/v1/user_progression_targets")
+    )) {
+      return respond([], 200, { "content-range": "*/0" });
+    }
+    if (method === "POST" && pathname.includes("/rest/v1/rpc/upsert_workout_set_logs_atomic")) {
+      if (delayCanonical) await delayedCanonical.promise;
+      const payload = request.postDataJSON();
+      await respond({ saved: payload?.p_logs?.length ?? 1, deleted: 0 });
+      canonicalFinished.resolve();
+      return;
+    }
+    if (method === "POST" && pathname.includes("/rest/v1/rpc/complete_workout_session_atomic")) {
+      return respond({ ...root, status: "completed", completed_at: "2026-07-27T09:00:00.000Z" });
+    }
+    if (pathname.includes("/rest/v1/user_app_settings") && (method === "GET" || method === "HEAD")) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: {
+          "content-range": "0-0/1",
+          "x-plaivra-qa-fixture": "localized-settings"
+        },
+        body: method === "HEAD" ? "" : JSON.stringify(wantsObject ? settings : [settings])
+      });
+    }
+
+    let body = {};
+    if (method !== "GET" && method !== "HEAD") {
+      try {
+        body = request.postDataJSON();
+      } catch {
+        body = {};
+      }
+    }
+    return route.fulfill({
+      status: method === "POST" ? 201 : 200,
+      contentType: "application/json",
+      headers: {
+        "content-range": "0-0/0",
+        "x-plaivra-qa-fixture": "aw5-correction-empty"
+      },
+      body: method === "HEAD" ? "" : JSON.stringify(method === "GET" ? [] : body)
+    });
+  });
+
+  return {
+    sessionId,
+    releaseCanonical: delayedCanonical.resolve,
+    canonicalSettled: () => delayedCanonical.settled,
+    waitForCanonical: async () => {
+      if (!delayCanonical) return;
+      await Promise.race([
+        canonicalFinished.promise,
+        new Promise((resolve) => setTimeout(resolve, 2_000))
+      ]);
+    }
+  };
+}
