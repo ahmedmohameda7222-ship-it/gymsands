@@ -71,7 +71,7 @@ describe("AW-5 Active Workout UI core source contract", () => {
   it("removes the loaded direct-route hero and uses one localized generic session label", () => {
     expect(directPage).not.toContain("PageHeading");
     expect(directPage).toContain("WorkoutSessionForm");
-    expect(controller).toContain("activeWorkoutSessionLabel");
+    expect(controller).toContain('tr("header.workoutSession")');
     expect(activeWorkoutI18n).toContain('en: "Workout session"');
     expect(activeWorkoutI18n).toContain('de: "Trainingseinheit"');
     expect(activeWorkoutI18n).toContain('ar: "جلسة التمرين"');
@@ -114,6 +114,7 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(controller).not.toContain("[mirrorExecutionState, session, toast, tr, user]");
     expect(controller).not.toContain("user.id");
     expect(controller).not.toContain("react-hooks/exhaustive-deps");
+    expect(directPage).not.toContain("react-hooks/exhaustive-deps");
   });
 
   it("exposes explicit logical close and session-sticky geometry contracts", () => {
