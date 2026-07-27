@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Dumbbell, Save, Trophy } from "lucide-react";
 
@@ -83,9 +84,9 @@ function WorkoutSummaryCard({
                 <Dumbbell className="h-5 w-5 text-success" aria-hidden="true" />
               </div>
               <div>
-                <p className="text-base font-semibold">
+                <h1 id="aw5-completed-summary-title" className="text-base font-semibold">
                   {tr("completion.dayComplete", { day: isolateBidiText(dayName) })}
-                </p>
+                </h1>
                 <p className="text-sm text-muted-foreground">{tr("completion.savedHistory")}</p>
               </div>
             </div>
@@ -148,11 +149,61 @@ export function ActiveWorkoutReviewBridge({
   tr,
   formatters
 }: ActiveWorkoutReviewBridgeProps) {
+  const completionSurfaceRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!completedSummary) return;
+
+    const surface = completionSurfaceRef.current;
+    const executionShell = surface?.closest<HTMLElement>("[data-aw5-execution-shell]");
+    if (!surface || !executionShell) {
+      surface?.focus();
+      return;
+    }
+
+    const restored: Array<{
+      element: HTMLElement;
+      inert: boolean;
+      ariaHidden: string | null;
+    }> = [];
+    let branch: HTMLElement = surface;
+
+    while (branch !== executionShell) {
+      const parent = branch.parentElement;
+      if (!parent) break;
+      for (const sibling of Array.from(parent.children)) {
+        if (sibling === branch || !(sibling instanceof HTMLElement)) continue;
+        restored.push({
+          element: sibling,
+          inert: sibling.inert,
+          ariaHidden: sibling.getAttribute("aria-hidden")
+        });
+        sibling.inert = true;
+        sibling.setAttribute("aria-hidden", "true");
+      }
+      branch = parent;
+    }
+
+    surface.focus();
+
+    return () => {
+      for (const item of restored) {
+        item.element.inert = item.inert;
+        if (item.ariaHidden === null) item.element.removeAttribute("aria-hidden");
+        else item.element.setAttribute("aria-hidden", item.ariaHidden);
+      }
+    };
+  }, [completedSummary]);
+
   if (completedSummary) {
     return (
       <div
+        ref={completionSurfaceRef}
         data-aw5-completion-surface
-        className="fixed inset-0 z-[60] overflow-y-auto bg-background"
+        role="main"
+        aria-labelledby="aw5-completed-summary-title"
+        tabIndex={-1}
+        className="fixed inset-0 z-[60] overflow-y-auto bg-background outline-none"
       >
         <div className="mx-auto flex min-h-dvh w-full max-w-6xl items-start px-4 py-6 sm:px-6 lg:items-center lg:py-10">
           <div className="w-full">

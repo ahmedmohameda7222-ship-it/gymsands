@@ -2,121 +2,131 @@
 
 ## Executive summary
 
-AW-5 converges the plan-day and direct workout-session routes on one shared controller and one compact, responsive execution shell. The user interface prioritizes the active exercise, active set, reps, weight, progress, pause/rest state, contextual primary action, details access, and a bounded Mini Heat Map placeholder while preserving the AW-4 store, clock, reducer, command, canonical-set, autosave, and terminal-completion authorities.
+AW-5 converges the plan-day and direct workout-session routes on one shared controller and one compact, responsive execution shell while preserving the AW-4 store, clock, reducer, commands, canonical-set persistence, autosave, and terminal-completion authority.
 
-The rendered-QA blocker was recovered without changing application architecture, database contracts, Supabase state, or AW-4 execution ownership. The failure was traced to a drifted Playwright correction fixture and later to mock-auth terminal readback ownership. The permanent harness now uses the canonical Train mock identities, records structured diagnostics on every failure, executes all required interaction states, and has one clear owner.
+The rendered-QA blocker was recovered without modifying database contracts, Supabase Production, Activity Catalog, migrations, or compatibility state. The permanent correction harness now uses the canonical Train mock identity, has one owner, records structured evidence on every failure, and executes all required real interaction states.
 
-No schema, migration, RLS, grant, `SECURITY DEFINER`, Production, Activity Catalog, compatibility-marker, deployment, AW-6, or AW-7 change was made.
+A later exact-head canonical Quality passed mechanically but was rejected after manual PNG inspection because the completed summary was stacked above the still-interactive workout editor. PR #90 was returned to Draft. The owning completion bridge was corrected so the completed summary becomes a dedicated full-viewport terminal surface; the underlying editor is inert and hidden from assistive technology, focus moves to the completion surface, and a permanent source contract prevents regression.
 
-## Repository identity and release boundary
+No merge, deployment, Production write, Activity Catalog write, schema/migration change, compatibility-marker promotion, dependency addition, or AW-6 work occurred.
 
-- Repository: `ahmedmohameda7222-ship-it/gymsands`
-- Branch: `feat/active-workout-aw5-ui-core`
-- Pull request: `#90`
-- Base branch: `main`
-- Comparison base: `2169527efc3c2cd4210fc358a58c6bce37f1788b`
-- First coherent AW-5 implementation commit: `18a716e2c4f991f989c1e700245fb5ca6d98d908`
-- Planner-audited recovery start head: `de649109a7111c43fd58bcb6f418767f713077f3`
-- Last code-only recovery head before this report commit: `e81267f88f121eb6c8e1b0530be6321717aa4430`
-- PR state during implementation and report finalization: Draft, open, unmerged
+## Repository and release boundary
 
-This report commit necessarily creates a new exact head. Git cannot embed a commit's own SHA inside the file whose bytes determine that SHA. The final report-head SHA and all post-report Quality, Exact Release, preflight, and review identities are therefore recorded in the immutable final PR evidence comment and executor handoff.
+```text
+Repository: ahmedmohameda7222-ship-it/gymsands
+Branch: feat/active-workout-aw5-ui-core
+Pull request: #90
+Base: main
+Comparison base: 2169527efc3c2cd4210fc358a58c6bce37f1788b
+Planner-audited recovery start head: de649109a7111c43fd58bcb6f418767f713077f3
+Pre-report terminal-surface correction head: d83e0a9b257c70f3d8c7b3d32af2657a398112f2
+PR state while this report is committed: Draft, open, unmerged
+```
 
-## Delivered architecture
+This report commit necessarily creates a new exact head. Git cannot embed a commit's own SHA in the file whose bytes determine that SHA. Final report-head evidence is therefore recorded in the immutable PR phase-close comment after all exact-head gates exist.
 
-### Shared session ownership
+## Delivered product architecture
 
-Both reachable session routes use the same AW-5 controller and shell:
+### One shared controller and shell
+
+Both reachable session routes use `ActiveWorkoutCoreSession` and `ActiveWorkoutExecutionShell`:
 
 - `/workouts/session/day/[dayId]`
 - `/workouts/session/[id]`
 
-The route adapters preserve source-specific start/resume behavior and pass a typed source into `ActiveWorkoutCoreSession`, which renders `ActiveWorkoutExecutionShell`.
+The route adapters preserve source-specific start/resume behavior but converge on one execution experience.
 
-### Preserved AW-4 authority
+### AW-4 authority preserved
 
 The implementation retains:
 
-- `getActiveSessionStore` as the session-store owner;
-- `activeSessionClock` as the clock owner;
+- `getActiveSessionStore`;
+- `activeSessionClock`;
 - the AW-4 reducer and command dispatcher;
-- canonical set persistence through `completeCanonicalSet`;
-- terminal session completion through `store.completeSession`;
+- `completeCanonicalSet`;
+- `store.completeSession`;
 - frozen prescription and performed-log hydration;
-- revision and controller identity handling;
-- recoverable and hard-error classification.
+- revision and controller-device semantics;
+- authoritative rest, pause, resume, cursor, review, and completion transitions.
 
-There is no second reducer, session clock, write queue, execution-state emulator, or direct Active Workout table write in application runtime code.
+There is no second reducer, clock, execution-state store, write queue, or direct Active Workout table write in application runtime code.
 
 ### Task-first execution UI
 
-The execution shell provides:
+The shared shell provides:
 
-- compact close, session identity, timer, progress, Pause/Resume, and Mini Heat Map header controls;
+- compact close, session identity, timer, progress, Pause/Resume, and Mini Heat Map header;
 - one dominant exercise heading;
 - reps and weight editing;
-- a visible canonical set path;
-- validation feedback without advancing the cursor;
+- canonical set path;
+- localized validation feedback;
 - one dominant mobile sticky action;
-- compact desktop side actions;
-- authoritative rest, paused, review, and completion states;
-- structured set-details access;
-- EN, DE, and AR localization with RTL-safe logical placement;
+- desktop side actions;
+- real rest, paused, details, review, and completion states;
+- EN, DE, and AR parity;
+- RTL-safe logical placement;
 - light and dark presentation;
-- keyboard-safe mobile editing.
+- mobile keyboard-safe editing.
 
-### Canonical set and completion behavior
+### Terminal completion
 
-- Reps must be a positive whole number.
-- Weight must be non-negative; zero remains valid.
-- Invalid effort/detail values block persistence.
-- A successful set write uses one canonical persistence path and one AW-4 transition.
-- A failed canonical write does not advance the cursor.
-- Confirmed persistence followed by execution synchronization failure is acknowledged and reconciled without duplicating the write.
-- Rest, pause, resume, reset, presets, Add 30, Skip Rest, and natural expiry remain command/store driven.
-- Completion enters the real review surface and finalizes through `store.completeSession`.
+Completion still finalizes exclusively through `store.completeSession`.
+
+After authoritative completion:
+
+- the review closes;
+- a full-viewport `data-aw5-completion-surface` replaces the execution experience visually;
+- the underlying editor branches become `inert` and `aria-hidden`;
+- focus moves to the terminal surface;
+- the surface is labelled by the completed-workout heading;
+- only the completed summary and its exit action remain interactive.
+
+This is a presentation/accessibility correction only. It does not alter completion data or AW-4 authority.
 
 ## Rendered-QA blocker recovery
 
-### Initial blocker evidence
+### Initial audited failure
 
-The earlier blocker report stopped at:
+The earlier blocker report recorded:
 
-- head `e50b06bd442f6e103c440513010e9bb6c2e06344`;
-- Phase A run `30251171882` — success;
-- PR Quality run `30251170875` — later superseded/cancelled by a newer push.
+```text
+Head: e50b06bd442f6e103c440513010e9bb6c2e06344
+Phase A: 30251171882 — success
+PR Quality: 30251170875 — later superseded/cancelled
+```
 
 The cancelled superseded run was not treated as a source failure.
 
-The Planner re-audited head:
+Planner re-audit:
 
-- `de649109a7111c43fd58bcb6f418767f713077f3`;
-- Phase A run `30253360396` — success;
-- PR Quality run `30253360401` — failure;
-- failed job `ui-and-i18n`, job `89936272614`;
-- failure artifact `pr-quality-ui-failure-30253360401`, artifact ID `8648155593`;
-- artifact digest `sha256:b381cc5e727169e6ebd33c9080e6c777324b189b5e2bde6f9d7acf390dc2af1a`.
+```text
+Head: de649109a7111c43fd58bcb6f418767f713077f3
+Phase A: 30253360396 — success
+PR Quality: 30253360401 — failure
+UI job: 89936272614
+Failure artifact ID: 8648155593
+Digest: sha256:b381cc5e727169e6ebd33c9080e6c777324b189b5e2bde6f9d7acf390dc2af1a
+```
 
-The exact failure evidence proved:
+The artifact proved:
 
 - global rendered QA: 126 observations, 0 failures;
 - established Train base matrix: 224 observations, 0 failures;
-- first correction scenario: `plan-day-set-entry-en-320x568`;
-- failure: 30-second timeout waiting for `[data-aw5-execution-shell]`;
-- no correction observation or correction screenshot survived because the old harness threw directly from `openSession()`.
+- first correction scenario timed out waiting for `[data-aw5-execution-shell]`;
+- the old harness threw before recording any correction observation or screenshot.
 
-This was a correction-harness bootstrap and diagnostics defect, not a database, build, migration, application architecture, or global rendered-QA failure.
+This was a correction-harness bootstrap/diagnostics defect, not a database, build, migration, global UI, or application-architecture failure.
 
-### Dead-code ownership correction
+### Dead `v2` removal and final ownership
 
-The permanent command remains:
+The single command remains:
 
 ```text
 npm run qa:train
 -> scripts/run-train-layout-qa.mjs
 ```
 
-The final ownership structure is:
+Permanent ownership:
 
 ```text
 scripts/run-train-layout-qa.mjs
@@ -127,19 +137,18 @@ scripts/train-layout-qa-fixture.mjs
 scripts/aw5-correction-qa-diagnostics.mjs
 ```
 
-Actions completed:
+Completed actions:
 
-- consolidated the valid correction logic under `run-aw5-correction-layout-qa.mjs`;
+- consolidated valid correction logic into `run-aw5-correction-layout-qa.mjs`;
 - deleted `run-aw5-correction-layout-qa-v2.mjs`;
-- retained the broad established matrix in `run-train-layout-qa-base.mjs`;
-- retained `run-train-layout-qa.mjs` as the single entrypoint;
-- strengthened `train-mock-fixture-contract.test.mjs` to prove one correction owner, canonical identities, failure diagnostics, required states, cleanup, and nonzero failure exit after evidence is written.
-
-No `v3`, `fixed`, `final`, `new`, or parallel replacement harness remains.
+- preserved the broad base matrix;
+- retained one `qa:train` entrypoint;
+- strengthened `train-mock-fixture-contract.test.mjs`;
+- created no `v3`, `fixed`, `new`, or parallel harness.
 
 ### Canonical fixture identity
 
-The permanent correction harness reads `lib/fixtures/train-mock-contract.json` and uses:
+The permanent harness reads `lib/fixtures/train-mock-contract.json` and uses:
 
 - `userId`;
 - `planIds.active`;
@@ -149,13 +158,11 @@ The permanent correction harness reads `lib/fixtures/train-mock-contract.json` a
 - `activeSessionId`;
 - `activeExerciseLogId`.
 
-Stable snapshot, item, and set IDs are used. The harness no longer generates a new canonical session ID per browser context. Route, session root, snapshot, item, prescription sets, performed logs, and the mock execution service converge on `activeSessionId` and `userId`.
+Stable deterministic snapshot, item, and set IDs are used. The route, session root, snapshot, item, sets, logs, cursor, and mock execution service all converge on `activeSessionId` and `userId`. The harness does not implement a second execution reducer.
 
-The harness does not implement a second execution reducer and does not fake a mock-auth execution RPC that application code does not call. Mock execution continues through the real reducer owned by `services/database/workout-session-execution.ts`.
+### Failure-safe evidence
 
-### Failure-safe diagnostics
-
-Every scenario now logs:
+Each scenario logs:
 
 ```text
 [AW5-QA] START <scenario>
@@ -163,75 +170,116 @@ Every scenario now logs:
 [AW5-QA] FAIL <scenario> <classification> <reason>
 ```
 
-A failure records, before context closure:
+Failure evidence includes:
 
-- current URL and HTTP status;
+- URL and response status;
 - document title;
-- safely truncated body text;
-- visible `h1`/`h2` text;
-- loading, error, toast, execution-shell, and active-set presence;
+- truncated body;
+- visible headings;
+- loading/error/toast/shell/set-state presence;
 - page errors;
 - console errors and warnings;
 - failed requests;
-- the last 50 intercepted API/Supabase requests;
-- a failure screenshot;
-- a structured observation and partial JSON report.
+- last 50 intercepted API/Supabase requests;
+- screenshot;
+- structured observation;
+- partial JSON report.
 
-Every context closes in `finally`; Chromium closes in a top-level `finally`; delayed canonical persistence is released or awaited before closure; independent scenarios continue safely; the process fails only after evidence is written.
+Each context and Chromium close in `finally`. Delayed persistence is resolved before closure. Independent scenarios continue safely. The process exits nonzero only after evidence is written.
 
-### Follow-up completion readback failure
+### Completion readback correction
 
-After bootstrap recovery, exact head `70513da83e6c85c69881c412c18a848b2c581a70` produced:
+At head `70513da83e6c85c69881c412c18a848b2c581a70`, 16 correction scenarios passed and only `plan-day-completed-summary-en-1440x900` failed.
 
-- Phase A success;
-- all non-UI PR Quality lanes successful;
-- 16 successful AW-5 correction scenarios;
-- one failed scenario: `plan-day-completed-summary-en-1440x900`.
-
-PR Quality run `30262567900`, UI job `89965702399`, produced artifact:
-
-- name `pr-quality-ui-failure-30262567900`;
-- artifact ID `8651735202`;
-- digest `sha256:26fac6dcf82d7dc94f5f5e6069c097ef492a4d2f8bf66531ea650423ede89b34`.
-
-The structured evidence showed:
-
-- the completion RPC returned HTTP 200;
-- no page error, unexpected console error, or failed request occurred;
-- the review remained open because terminal root confirmation still read the canonical mock session as `started`;
-- a page-level Supabase root override could not own the first read because mock auth resolves `getOpenWorkoutSessionWithStatus()` from `getMockTrainActivity()` before falling through to Supabase.
-
-The correction stayed in the harness. Before clicking the real Save & finish action, the scenario switches the Train mock scenario from active to rest, so the open-session mock no longer returns a started root and the existing completed-root interceptor becomes the authoritative terminal readback. No selector, AW-4 store, execution service, persistence adapter, application component, or database contract was changed.
-
-### Successful recovery gate
-
-Code-only recovery head:
+Evidence:
 
 ```text
-e81267f88f121eb6c8e1b0530be6321717aa4430
+PR Quality: 30262567900
+UI job: 89965702399
+Artifact ID: 8651735202
+Digest: sha256:26fac6dcf82d7dc94f5f5e6069c097ef492a4d2f8bf66531ea650423ede89b34
 ```
 
-Exact-head results:
+The completion RPC succeeded, but mock-auth root confirmation still returned the canonical session as `started`. The harness correction switched the Train mock scenario before Save & finish so the existing completed-root interceptor became authoritative. No selector, AW-4 store, application component, or database contract was changed for that issue.
 
-- Phase A run `30266149098` — success;
-- scoped PR Quality run `30266148975` — success;
-- `scope` job `89977187396` — success;
-- `integrity` job `89977215282` — success;
-- `core` job `89977215301` — success;
-- `database` job `89977215509` — success;
-- `ui-and-i18n` job `89977215257` — success;
-- `ci-contracts` job `89977215357` — success;
-- `build` job `89977215342` — success;
-- `dependency-audit` job `89977215431` — success;
-- `required-summary` job `89979559686` — success.
+Recovery head `e81267f88f121eb6c8e1b0530be6321717aa4430` passed:
 
-The UI lane passed:
+```text
+Phase A: 30266149098
+Scoped PR Quality: 30266148975
+scope: 89977187396
+integrity: 89977215282
+core: 89977215301
+database: 89977215509
+ui-and-i18n: 89977215257
+ci-contracts: 89977215357
+build: 89977215342
+dependency-audit: 89977215431
+required-summary: 89979559686
+```
 
-- global rendered QA: 126/126;
-- established Train base matrix: 224/224;
-- all required AW-5 correction states, including completed summary.
+### Rejected canonical Quality and visual correction
 
-## Required correction scenarios
+Report head `5fca710a3b846f5517db89272ffba4691190f70d` passed exact Draft gates and canonical Quality:
+
+```text
+Phase A: 30267189078 — success
+Scoped PR Quality: 30267188888 — success
+Canonical Quality: 30267970504
+Canonical verify job: 89983155160 — success
+```
+
+Canonical artifacts:
+
+```text
+quality-reports-30267970504
+ID: 8654019485
+Digest: sha256:e540d044f711d3fbe9d3f2394ef7d4baef522137d33c97610bab3a63d0df3c7d
+Expires: 2026-08-26
+
+database-validation-5fca710a3b846f5517db89272ffba4691190f70d
+ID: 8654020130
+Digest: sha256:f10f69ca743a1531f56848b79fcb39445fae584c31394ff1cc3637ab6de33347
+Expires: 2026-08-26
+
+i18n-rendered-evidence-5fca710a3b846f5517db89272ffba4691190f70d
+ID: 8654017509
+Digest: sha256:e3c1c327737d199ac49ce5ec004edee720d1d93ee13f8d8e053c07987e263491
+Expires: 2026-08-10
+```
+
+The Quality run was technically green, but manual inspection of the actual `plan-day-completed-summary-en-1440x900.png` found a material product defect: the completed summary was stacked above the still-interactive workout shell, including Pause, inputs, and Finish.
+
+Actions:
+
+- rejected run `30267970504` as final visual sign-off evidence;
+- did not dispatch Exact Release;
+- converted PR #90 back to Draft;
+- traced ownership to `ActiveWorkoutReviewBridge`;
+- made completion a full-viewport terminal surface;
+- added focus, inert, and assistive-technology isolation;
+- added a permanent source contract.
+
+Pre-report correction head:
+
+```text
+d83e0a9b257c70f3d8c7b3d32af2657a398112f2
+Phase A: 30269831363 — success
+Scoped PR Quality: 30269831835 — success
+scope: 89989337664
+ui-and-i18n: 89989369860
+core: 89989369890
+ci-contracts: 89989369901
+database: 89989369908
+dependency-audit: 89989369911
+integrity: 89989369922
+build: 89989369936
+required-summary: 89991880074
+```
+
+The scoped UI lane, including global 126/126, base Train 224/224, and all correction scenarios, completed in roughly ten minutes and remained comfortably below the 35-minute target.
+
+## Required rendered scenarios
 
 The permanent correction harness executes:
 
@@ -255,129 +303,128 @@ plan-day-keyboard-reps-en-390x844
 plan-day-keyboard-weight-en-390x844
 ```
 
-The broad Train viewport and regression matrix remains in addition to this correction subset.
+The broad Train base viewport/regression matrix remains in addition to this subset.
 
-## Geometry and product assertions
+## Geometry and interaction assertions
 
 The rendered contracts verify:
 
-- no close-control overlap with Mini Heat Map, title, metadata, or Pause/Resume;
-- correct logical-start close placement in LTR and RTL;
-- no sticky-action overlap with reps, weight, details, set path, rest presets, or validation feedback;
-- usable set path and primary action at 320×568;
+- no close overlap with Mini Heat Map, title, metadata, or Pause/Resume;
+- logical-start close placement in LTR and RTL;
+- no sticky overlap with reps, weight, details, set path, rest presets, or validation feedback;
+- usable set path and CTA at 320×568;
 - no unnecessary mobile-navigation gap;
-- one localized generic direct-session label and one dominant exercise heading;
-- no route-level loaded PageHeading duplication;
-- focused reps and weight can be scrolled above the sticky action;
+- one generic direct-session label and one dominant exercise heading;
+- no loaded route-level PageHeading duplication;
+- focused reps and weight above the sticky action;
 - no horizontal overflow;
 - no clipped translated control;
-- no framework error overlay or unexpected browser diagnostic.
+- no framework error overlay or unexpected browser warning;
+- invalid reps do not advance the cursor;
+- busy uses delayed canonical persistence;
+- rest and paused states come from real commands;
+- review and completion use real interactions;
+- completed summary is a dedicated terminal surface.
 
 ## Manual PNG inspection
 
-Actual PNGs from the exact predecessor application tree were manually inspected after the structured 16-scenario run. The only subsequent source change was the terminal mock-readback line in the harness; no application-rendered component or style changed.
+Actual rendered PNGs were manually inspected for:
 
-Inspected states included:
+- mobile and desktop set entry;
+- direct route mobile and desktop;
+- German and Arabic;
+- RTL;
+- dark mode;
+- validation;
+- busy;
+- rest;
+- pause;
+- details;
+- review;
+- keyboard reps and weight;
+- completion.
 
-- 320×568 and 390×844 plan-day set entry;
-- 390×844 and 1440×900 direct set entry;
-- German and Arabic presentation;
-- dark desktop presentation;
-- validation error;
-- canonical busy state;
-- authoritative rest and paused states;
-- Arabic and dark details drawers;
-- session review;
-- reps and weight keyboard viewports;
-- the failed completion readback screenshot used for root-cause diagnosis.
+Findings before the terminal correction:
 
-Findings:
+- headers, sticky actions, 320×568 usability, direct hierarchy, RTL, dark contrast, validation, busy, rest, pause, details, review, and keyboard states were professionally composed;
+- no framework error overlay or development issue badge appeared;
+- the completion screenshot exposed the stacked-editor defect described above.
 
-- header controls were separated and readable;
-- the sticky action remained visible without intersecting editor content;
-- the 320×568 layout remained task-usable;
-- direct session hierarchy contained one dominant exercise title;
-- Arabic logical placement and RTL set order were correct;
-- dark surfaces retained usable contrast and hierarchy;
-- validation, busy, rest, pause, details, review, and keyboard states were professionally composed;
-- no material professional UI defect requiring application-code correction was found;
-- no framework error overlay or development issue badge appeared in the inspected correction PNGs.
-
-Canonical Quality for the final report head uploads the complete successful quality-reports artifact. Those exact final-head PNGs are downloaded and inspected before Exact Release; their artifact identities and any final finding are recorded in the final PR evidence comment.
+The prior canonical artifact is intentionally superseded. A new canonical Quality for the final report head is required, and its actual PNGs must be manually inspected again before Exact Release.
 
 ## Validation summary
 
-Passed during implementation and recovery:
+Passed on the recovery/correction tree:
 
-- `git diff --check`;
-- `node --test scripts/train-mock-fixture-contract.test.mjs`;
-- `npm run test:scripts`;
-- `npm run test:active-workout:aw5`;
-- `npm run test:i18n`;
+- repository integrity and `git diff --check`;
+- script contracts;
+- AW-5 unit/source contracts;
+- AW-4 and prior Active Workout regressions;
+- i18n contracts;
 - lint;
 - typecheck;
-- unit tests;
-- production environment validation;
-- production build;
+- full unit parity;
+- integration tests;
 - chronological migration replay;
-- database lint;
-- database verification SQL;
-- migration ledger validation;
-- SQL-backed integration tests;
+- database lint and verification SQL;
+- migration ledger;
+- production environment contract;
+- production build;
 - dependency audit;
 - global rendered QA 126/126;
 - established Train rendered QA 224/224;
-- permanent AW-5 correction scenario suite.
+- permanent AW-5 correction scenarios.
 
-The exact final report head receives a new Phase A and scoped PR Quality run. No earlier-head result is combined with a later head.
+The final report commit receives new exact-head Phase A and scoped PR Quality. Earlier-head evidence is never combined with final-head evidence.
 
 ## Database, security, privacy, and deployment impact
 
 - No schema change.
-- No migration was created, edited, applied, or replayed against Production.
-- No RLS or database privilege change.
+- No migration created, edited, or applied.
+- No RLS or privilege change.
 - No Supabase Production write.
-- No Activity Catalog read/write operation for implementation.
+- No Activity Catalog write.
 - No compatibility-marker change.
-- No deployment initiated by the implementation chat.
+- No implementation-initiated deployment.
 - No merge.
-- No AW-6 work.
+- No AW-6.
 - No dependency addition.
 - No global CSP rewrite.
 - No expansion of the targeted lint exception.
 
-The automated Netlify pull-request preview remains platform-generated preview infrastructure, not an implementation-initiated Production deployment.
+The automated Netlify PR preview is platform-generated preview infrastructure, not an implementation-initiated Production deployment.
 
-## Review and phase-close procedure
+## Final phase-close procedure
 
 After this report commit:
 
 1. verify PR #90 remains Draft and mergeable;
-2. obtain exact-report-head Phase A success;
-3. obtain exact-report-head scoped PR Quality success;
+2. obtain exact-head Phase A success;
+3. obtain exact-head scoped PR Quality success;
 4. audit comments, reviews, and unresolved threads;
-5. mark PR #90 Ready for review only after those Draft gates pass;
-6. obtain one new canonical Quality for the exact report head;
-7. download and manually inspect its successful rendered evidence and full quality-reports artifact;
-8. run Exact Release using that immutable Quality artifact;
-9. run strict read-only release preflight;
-10. record exact runs, jobs, artifact IDs, digests, expiry, review state, and boundaries in the final PR evidence comment;
-11. stop without merge or deployment for independent Planner QA/QC.
+5. mark PR #90 Ready only after Draft gates pass;
+6. obtain one new canonical Quality for the exact final head;
+7. download and manually inspect the full successful rendered artifact;
+8. reject and correct any remaining material defect;
+9. run Exact Release using that immutable Quality artifact;
+10. run strict read-only release preflight;
+11. record exact identities and boundaries in the immutable PR evidence comment;
+12. stop unmerged and undeployed for independent Planner QA/QC.
 
-## Final evidence location and self-reference rule
+## Final evidence location
 
-The exact report commit SHA cannot be embedded in this report without producing another commit and invalidating the evidence. The following are recorded in PR #90's final immutable phase-close evidence comment and executor handoff after they exist:
+Because the final report commit SHA cannot be self-embedded, the final PR evidence comment records:
 
 - exact final head and comparison base;
 - final Phase A run/job;
 - final scoped PR Quality run/jobs;
 - canonical Quality run/job;
-- canonical Quality artifact names, IDs, digests, and expiry;
-- exact final rendered PNG inspection result;
+- canonical artifact names, IDs, digests, and expiry;
+- exact PNG inspection result;
 - Exact Release run/job and consumed Quality artifact;
 - read-only preflight run/job and artifact;
-- comment, review, thread, and mergeability audit;
-- confirmation of no merge, deployment, Production write, Activity Catalog write, migration, compatibility-marker promotion, or AW-6 action;
+- comments/reviews/threads/mergeability audit;
+- confirmation of no merge, deployment, Production write, Activity Catalog write, migration, compatibility promotion, or AW-6;
 - final statement: `Ready for independent Planner QA/QC.`
 
-Until those post-commit gates are terminal on this report head, this document does not claim they passed.
+This report does not claim those post-commit gates passed before they exist.

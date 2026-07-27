@@ -68,12 +68,18 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(shell).not.toMatch(/>\s*\{progressPercent\}%\s*</);
   });
 
-  it("renders completion as a dedicated terminal surface instead of stacking it above the editor", () => {
+  it("renders completion as an accessible terminal surface instead of stacking it above the editor", () => {
     expect(reviewBridge).toContain("if (completedSummary)");
     expect(reviewBridge).toContain("data-aw5-completion-surface");
     expect(reviewBridge).toContain("fixed inset-0");
     expect(reviewBridge).toContain("overflow-y-auto bg-background");
     expect(reviewBridge).toContain("min-h-dvh");
+    expect(reviewBridge).toContain('role="main"');
+    expect(reviewBridge).toContain('aria-labelledby="aw5-completed-summary-title"');
+    expect(reviewBridge).toContain("completionSurfaceRef");
+    expect(reviewBridge).toContain("sibling.inert = true");
+    expect(reviewBridge).toContain('sibling.setAttribute("aria-hidden", "true")');
+    expect(reviewBridge).toContain("surface.focus()");
     expect(reviewBridge).toContain("<WorkoutSummaryCard");
     expect(reviewBridge).not.toContain("{completedSummary ? (");
   });
@@ -109,11 +115,11 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(runtimeModel).not.toContain("getActiveSessionStore");
     expect(runtimeModel).not.toContain("activeSessionClock");
     expect(runtimeModel).not.toContain("window.");
-    for (const bridge of [detailsBridge, reviewBridge]) {
-      expect(bridge).not.toContain("getActiveSessionStore");
-      expect(bridge).not.toContain("activeSessionClock");
-      expect(bridge).not.toContain("store.hydrate");
-      expect(bridge).not.toContain("supabase");
+    for (const bridgeSource of [detailsBridge, reviewBridge]) {
+      expect(bridgeSource).not.toContain("getActiveSessionStore");
+      expect(bridgeSource).not.toContain("activeSessionClock");
+      expect(bridgeSource).not.toContain("store.hydrate");
+      expect(bridgeSource).not.toContain("supabase");
     }
   });
 
