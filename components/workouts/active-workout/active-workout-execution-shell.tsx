@@ -146,6 +146,9 @@ export function ActiveWorkoutExecutionShell({
   onStartRest
 }: ActiveWorkoutExecutionShellProps) {
   const progressPercent = Math.round(progress * 100);
+  const resolvedPrimaryActionDisabled = primaryActionKind === "complete-set"
+    ? busy || completed
+    : primaryActionDisabled;
 
   return (
     <div
@@ -389,7 +392,7 @@ export function ActiveWorkoutExecutionShell({
             type="button"
             className="hidden min-h-[52px] w-full text-[15px] lg:inline-flex"
             onClick={onPrimaryAction}
-            disabled={primaryActionDisabled}
+            disabled={resolvedPrimaryActionDisabled}
             aria-busy={busy}
           >
             <PrimaryActionIcon kind={primaryActionKind} />
@@ -450,7 +453,7 @@ export function ActiveWorkoutExecutionShell({
             type="button"
             className="min-h-[52px] flex-1 text-[15px]"
             onClick={onPrimaryAction}
-            disabled={primaryActionDisabled}
+            disabled={resolvedPrimaryActionDisabled}
             aria-busy={busy}
           >
             <PrimaryActionIcon kind={primaryActionKind} />
