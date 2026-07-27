@@ -148,77 +148,86 @@ export function ActiveWorkoutReviewBridge({
   tr,
   formatters
 }: ActiveWorkoutReviewBridgeProps) {
-  return (
-    <>
-      {completedSummary ? (
-        <WorkoutSummaryCard
-          summary={completedSummary}
-          dayName={dayName}
-          tr={tr}
-          formatters={formatters}
-        />
-      ) : null}
+  if (completedSummary) {
+    return (
+      <div
+        data-aw5-completion-surface
+        className="fixed inset-0 z-[60] overflow-y-auto bg-background"
+      >
+        <div className="mx-auto flex min-h-dvh w-full max-w-6xl items-start px-4 py-6 sm:px-6 lg:items-center lg:py-10">
+          <div className="w-full">
+            <WorkoutSummaryCard
+              summary={completedSummary}
+              dayName={dayName}
+              tr={tr}
+              formatters={formatters}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          data-aw5-session-review
-          layout="responsive-drawer"
-          closeLabel={tr("common.close")}
-          className="p-5 lg:max-w-lg lg:rounded-[28px]"
-        >
-          <DialogHeader>
-            <DialogTitle>{tr("review.finishQuestion")}</DialogTitle>
-            <DialogDescription>{tr("review.finishDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <InfoStat
-              label={tr("review.minutes")}
-              value={formatters.measurement(durationMinutes, "minutes", 0)}
-            />
-            <InfoStat
-              label={tr("set.labelPlural")}
-              value={formatters.ratio(completedSets, totalSets)}
-              valueDirection="ltr"
-            />
-            <InfoStat
-              label={tr("review.volume")}
-              value={formatters.measurement(totalVolume, "kg")}
-            />
-            <InfoStat
-              label={tr("review.personalRecords")}
-              value={formatters.integer(previewPrs.length)}
-            />
-          </div>
-          <div className="mt-4 space-y-2">
-            <Label htmlFor="finish-notes">{tr("details.workoutNotes")}</Label>
-            <textarea
-              id="finish-notes"
-              dir="auto"
-              className="min-h-24 w-full resize-y rounded-[16px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              value={sessionNotes}
-              onChange={(event) => onSessionNotesChange(event.target.value)}
-              placeholder={tr("review.optionalNote")}
-              disabled={busy}
-            />
-          </div>
-          <Button
-            className="mt-4 min-h-[52px] w-full"
-            onClick={onComplete}
-            disabled={busy || !sessionAvailable}
-          >
-            <Save className="h-4 w-4" aria-hidden="true" />
-            {tr("review.saveAndFinish")}
-          </Button>
-          <Button
-            className="mt-2 min-h-[52px] w-full"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        data-aw5-session-review
+        layout="responsive-drawer"
+        closeLabel={tr("common.close")}
+        className="p-5 lg:max-w-lg lg:rounded-[28px]"
+      >
+        <DialogHeader>
+          <DialogTitle>{tr("review.finishQuestion")}</DialogTitle>
+          <DialogDescription>{tr("review.finishDescription")}</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <InfoStat
+            label={tr("review.minutes")}
+            value={formatters.measurement(durationMinutes, "minutes", 0)}
+          />
+          <InfoStat
+            label={tr("set.labelPlural")}
+            value={formatters.ratio(completedSets, totalSets)}
+            valueDirection="ltr"
+          />
+          <InfoStat
+            label={tr("review.volume")}
+            value={formatters.measurement(totalVolume, "kg")}
+          />
+          <InfoStat
+            label={tr("review.personalRecords")}
+            value={formatters.integer(previewPrs.length)}
+          />
+        </div>
+        <div className="mt-4 space-y-2">
+          <Label htmlFor="finish-notes">{tr("details.workoutNotes")}</Label>
+          <textarea
+            id="finish-notes"
+            dir="auto"
+            className="min-h-24 w-full resize-y rounded-[16px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={sessionNotes}
+            onChange={(event) => onSessionNotesChange(event.target.value)}
+            placeholder={tr("review.optionalNote")}
             disabled={busy}
-          >
-            {tr("review.continueWorkout")}
-          </Button>
-        </DialogContent>
-      </Dialog>
-    </>
+          />
+        </div>
+        <Button
+          className="mt-4 min-h-[52px] w-full"
+          onClick={onComplete}
+          disabled={busy || !sessionAvailable}
+        >
+          <Save className="h-4 w-4" aria-hidden="true" />
+          {tr("review.saveAndFinish")}
+        </Button>
+        <Button
+          className="mt-2 min-h-[52px] w-full"
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+          disabled={busy}
+        >
+          {tr("review.continueWorkout")}
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }
