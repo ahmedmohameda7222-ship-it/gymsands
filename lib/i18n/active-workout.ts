@@ -21,6 +21,16 @@ export type ActiveWorkoutFormatters = Omit<ActiveWorkoutBaseFormatters, "measure
   measurement: (value: number, unit: ActiveWorkoutMeasurementUnit, maximumFractionDigits?: number) => string;
 };
 
+const activeWorkoutSessionLabels: Record<SupportedLanguage, string> = {
+  en: "Workout session",
+  de: "Trainingseinheit",
+  ar: "جلسة التمرين"
+};
+
+export function activeWorkoutSessionLabel(locale: SupportedLanguage) {
+  return activeWorkoutSessionLabels[locale];
+}
+
 export function isolateBidiText(value: string): string {
   return `\u2068${value}\u2069`;
 }
