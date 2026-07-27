@@ -2,10 +2,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = (path: string) => readFileSync(path, "utf8");
+const controller = source("components/workouts/active-workout/active-workout-core-session.tsx");
+const details = source("components/workouts/active-workout/active-workout-details-bridge.tsx");
+const review = source("components/workouts/active-workout/active-workout-review-bridge.tsx");
+const runtimeModel = source("components/workouts/active-workout/active-workout-runtime-model.ts");
+const activeWorkoutSurface = [controller, details, review, runtimeModel].join("\n");
 
 describe("AW-1B Active Workout surface contract", () => {
-  it("uses the ActiveWorkout namespace for the day-focus session without changing stable identifiers", () => {
-    const session = source("components/workouts/active-workout/active-workout-core-session.tsx");
+  it("uses the ActiveWorkout namespace without changing stable identifiers", () => {
     const shell = source("components/workouts/active-workout/active-workout-execution-shell.tsx");
     const localeMessages = (["en", "de", "ar"] as const).map((locale) =>
       JSON.parse(source(`messages/${locale}.json`)) as {
@@ -18,11 +22,11 @@ describe("AW-1B Active Workout surface contract", () => {
       }
     );
 
-    expect(session).toContain("useActiveWorkoutTranslation");
-    expect(session).not.toContain("useTrainTranslation");
+    expect(controller).toContain("useActiveWorkoutTranslation");
+    expect(controller).not.toContain("useTrainTranslation");
     for (const key of ["normal", "warmup", "working", "failure", "drop", "backoff", "amrap", "timed", "other", "newBest"] as const) {
       for (const messages of localeMessages) expect(messages.ActiveWorkout.set[key]?.trim()).not.toBe("");
-      expect(session).toContain(`tr("set.${key}"`);
+      expect(activeWorkoutSurface).toContain(`tr("set.${key}"`);
     }
     for (const messages of localeMessages) {
       expect(messages.ActiveWorkout.actions.machineOccupied.trim()).not.toBe("");
@@ -31,43 +35,45 @@ describe("AW-1B Active Workout surface contract", () => {
         expect(messages.ActiveWorkout.units[unit]?.trim()).not.toBe("");
       }
     }
-    expect(session).toContain('<option value="machine_taken">{tr("actions.machineOccupied")}</option>');
+    expect(details).toContain('<option value="machine_taken">{tr("actions.machineOccupied")}</option>');
     expect(shell).toContain("data-active-set-details-trigger");
-    expect(session).toContain('moreLabel={tr("common.more")}');
-    expect(session).toContain("legacyReopenSetLabel");
-    expect(session).toContain("restartSet(activeExerciseIndex, activeSetIndex)");
+    expect(controller).toContain('moreLabel={tr("common.more")}');
+    expect(controller).toContain("legacyReopenSetLabel");
+    expect(controller).toContain("restartSet(activeExerciseIndex, activeSetIndex)");
   });
 
   it("isolates dynamic names at their local interpolation or element boundary", () => {
-    const session = source("components/workouts/active-workout/active-workout-core-session.tsx");
     const indicator = source("components/workouts/active-workout-indicator.tsx");
 
-    expect(session).toContain('tr("exercise.nextExercise", { name: isolateBidiText(nextExercise.exercise.exercise_name) })');
-    expect(session).not.toContain('tr("exercise.nextExercise", { name: nextExercise.exercise.exercise_name })');
-    expect(session).toContain('tr("completion.savedNamedWorkout", { name: isolateBidiText(day.day_name) })');
-    expect(session).toContain('tr("exercise.replacementReadyDescription", { name: isolateBidiText(replacement.name) })');
-    expect(session).toContain('map((alternative) => isolateBidiText(alternative.alternative_exercise_name))');
-    expect(session).toContain('<bdi dir="auto">{currentInstructions}</bdi>');
-    expect(session).toContain('textarea id="finish-notes" dir="auto"');
+    expect(controller).toContain('tr("exercise.nextExercise", {');
+    expect(controller).toContain("name: isolateBidiText(nextExercise.exercise.exercise_name)");
+    expect(controller).not.toContain("name: nextExercise.exercise.exercise_name");
+    expect(controller).toContain('tr("completion.savedNamedWorkout", {');
+    expect(controller).toContain("name: isolateBidiText(day.day_name)");
+    expect(controller).toContain('tr("exercise.replacementReadyDescription", {');
+    expect(controller).toContain("name: isolateBidiText(replacement.name)");
+    expect(details).toContain("isolateBidiText(alternative.alternative_exercise_name)");
+    expect(details).toContain('<bdi dir="auto">{currentInstructions}</bdi>');
+    expect(review).toContain('id="finish-notes"');
+    expect(review).toContain('dir="auto"');
     expect(indicator).toContain("<bdi>{state?.label");
     expect(indicator).toContain('<span dir="ltr" className="tabular-nums">{formatters.timer(elapsed)}</span>');
   });
 
   it("routes visible Active Workout measurements and counts through the formatter contract", () => {
-    const session = source("components/workouts/active-workout/active-workout-core-session.tsx");
-
-    expect(session).toContain('formatters.measurement(totalVolume, "kg")');
-    expect(session).toContain('formatters.measurement(durationMinutes, "minutes", 0)');
-    expect(session).toContain("formatters.ratio(completedSets, totalSets)");
-    expect(session).toContain("formatters.integer(previewPrs.length)");
-    expect(session).toContain("formatSetNumber={formatters.integer}");
-    expect(session).toContain("clampWorkoutProgress(completedSets, totalSets)");
-    expect(session).toContain("buildActiveWorkoutSetPath");
-    expect(session).toContain('tr("set.label", { count: formatters.integer(activeSet.setNumber) })');
-    expect(session).not.toContain('value={`${totalVolume} kg`}');
-    expect(session).not.toContain('value={`${completedSets}/${totalSets}`}');
-    expect(session).not.toContain("value={String(previewPrs.length)}");
-    expect(session).not.toContain("value={String(durationMinutes)}");
+    expect(review).toContain('formatters.measurement(totalVolume, "kg")');
+    expect(review).toContain('formatters.measurement(durationMinutes, "minutes", 0)');
+    expect(review).toContain("formatters.ratio(completedSets, totalSets)");
+    expect(review).toContain("formatters.integer(previewPrs.length)");
+    expect(controller).toContain("formatSetNumber={formatters.integer}");
+    expect(controller).toContain("clampWorkoutProgress(completedSets, totalSets)");
+    expect(controller).toContain("buildActiveWorkoutSetPath");
+    expect(controller).toContain('tr("set.label", {');
+    expect(controller).toContain("count: formatters.integer(activeSet.setNumber)");
+    expect(review).not.toContain('value={`${totalVolume} kg`}');
+    expect(review).not.toContain('value={`${completedSets}/${totalSets}`}');
+    expect(review).not.toContain("value={String(previewPrs.length)}");
+    expect(review).not.toContain("value={String(durationMinutes)}");
   });
 
   it("localizes the persistent controller and keeps mixed-direction values isolated", () => {
@@ -81,7 +87,7 @@ describe("AW-1B Active Workout surface contract", () => {
   });
 
   it("keeps rendered locale QA aligned with scoped PR checks and phase-close evidence", () => {
-    const qa = source("scripts/run-train-layout-qa.mjs");
+    const qa = source("scripts/run-train-layout-qa-base.mjs");
     const prQuality = source(".github/workflows/pr-quality.yml");
     const qualityWorkflow = source(".github/workflows/quality.yml");
     const trainUi = source("components/workouts/train-ui.tsx");
@@ -109,7 +115,7 @@ describe("AW-1B Active Workout surface contract", () => {
       "active-workout-ar-1440x900.png",
       "active-workout-indicator-ar-390x844.png",
       "train-layout-qa-results.json",
-      "i18n-rendered-evidence-metadata.json",
+      "i18n-rendered-evidence-metadata.json"
     ]) {
       expect(qualityWorkflow).toContain(filename);
     }
