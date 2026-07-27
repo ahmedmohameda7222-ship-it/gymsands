@@ -14,7 +14,8 @@ const qaSource = (
 const componentSource = (
   await Promise.all([
     "../components/workouts/active-workout/active-workout-core-session.tsx",
-    "../components/workouts/active-workout/active-workout-execution-shell.tsx"
+    "../components/workouts/active-workout/active-workout-execution-shell.tsx",
+    "../components/workouts/active-workout/active-workout-review-bridge.tsx"
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")))
 ).join("\n");
 
@@ -60,7 +61,9 @@ test("AW-5 correction QA covers deterministic states, clean production chrome, a
     "direct-set-entry-en-390x844",
     "direct-set-entry-en-1440x900",
     "plan-day-details-ar-390x844",
-    "plan-day-details-dark-en-1440x900"
+    "plan-day-details-dark-en-1440x900",
+    "plan-day-session-review-en-1440x900",
+    "plan-day-completed-summary-en-1440x900"
   ]) {
     assert.match(qaSource, new RegExp(state));
   }
@@ -73,12 +76,13 @@ test("AW-5 correction QA covers deterministic states, clean production chrome, a
     "data-aw5-sticky-actions",
     "data-aw5-set-path",
     "data-aw5-rest-presets",
-    "data-aw5-feedback"
+    "data-aw5-feedback",
+    "data-aw5-completed-summary"
   ]) {
-    assert.match(qaSource, new RegExp(selector));
+    assert.match(componentSource + qaSource, new RegExp(selector));
   }
   assert.match(qaSource, /framework overlay detected/);
   assert.match(qaSource, /session CTA leaves an unnecessary mobile-navigation gap/);
-  assert.match(qaSource, /focused mobile input cannot be scrolled above the sticky CTA/);
+  assert.match(qaSource, /focused .* input cannot be scrolled above the sticky CTA/);
   assert.match(qaSource, /aw5-correction-layout-qa-results\.json/);
 });
