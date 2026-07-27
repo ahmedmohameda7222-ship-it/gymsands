@@ -4,7 +4,13 @@ import test from "node:test";
 
 const contract = JSON.parse(await readFile(new URL("../lib/fixtures/train-mock-contract.json", import.meta.url), "utf8"));
 const mockSource = await readFile(new URL("../lib/fixtures/train-mock.ts", import.meta.url), "utf8");
-const qaSource = await readFile(new URL("./run-train-layout-qa.mjs", import.meta.url), "utf8");
+const qaSource = (
+  await Promise.all([
+    "./run-train-layout-qa.mjs",
+    "./run-train-layout-qa-base.mjs",
+    "./run-aw5-correction-layout-qa.mjs"
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")))
+).join("\n");
 const componentSource = (
   await Promise.all([
     "../components/workouts/active-workout/active-workout-core-session.tsx",
@@ -41,4 +47,38 @@ test("AW-4 rendered QA hydrates the complete official session-store projection",
   assert.match(qaSource, /\/rest\/v1\/workout_session_prescription_sets/);
   assert.match(qaSource, /\/rest\/v1\/workout_session_prescription_metric_targets/);
   assert.match(qaSource, /\/rest\/v1\/workout_performance_metric_definitions/);
+});
+
+test("AW-5 correction QA covers deterministic states, clean production chrome, and geometry", () => {
+  for (const state of [
+    "plan-day-set-entry-en-320x568",
+    "plan-day-set-entry-en-390x844",
+    "plan-day-rest-en-390x844",
+    "plan-day-paused-en-390x844",
+    "plan-day-busy-en-390x844",
+    "plan-day-validation-error-en-390x844",
+    "direct-set-entry-en-390x844",
+    "direct-set-entry-en-1440x900",
+    "plan-day-details-ar-390x844",
+    "plan-day-details-dark-en-1440x900"
+  ]) {
+    assert.match(qaSource, new RegExp(state));
+  }
+  for (const selector of [
+    "data-workout-session-close",
+    "data-aw5-mini-heat-map-slot",
+    "data-aw5-session-title",
+    "data-aw5-metadata",
+    "data-aw5-pause-resume",
+    "data-aw5-sticky-actions",
+    "data-aw5-set-path",
+    "data-aw5-rest-presets",
+    "data-aw5-feedback"
+  ]) {
+    assert.match(qaSource, new RegExp(selector));
+  }
+  assert.match(qaSource, /framework overlay detected/);
+  assert.match(qaSource, /session CTA leaves an unnecessary mobile-navigation gap/);
+  assert.match(qaSource, /focused mobile input cannot be scrolled above the sticky CTA/);
+  assert.match(qaSource, /aw5-correction-layout-qa-results\.json/);
 });
