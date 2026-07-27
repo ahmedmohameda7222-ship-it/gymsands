@@ -58,16 +58,18 @@ describe("approved Train Phase 1 UI contracts", () => {
   });
 
   it("localizes the day-focus session while preserving stable set and replacement identifiers", () => {
-    const session = source("components/workouts/active-workout/active-workout-core-session.tsx");
+    const controller = source("components/workouts/active-workout/active-workout-core-session.tsx");
+    const details = source("components/workouts/active-workout/active-workout-details-bridge.tsx");
     const shell = source("components/workouts/active-workout/active-workout-execution-shell.tsx");
+    const activeWorkout = `${controller}\n${details}`;
     for (const key of ["normal", "warmup", "working", "failure", "drop", "backoff", "amrap", "timed", "other"]) {
-      expect(session).toContain(`tr("set.${key}"`);
+      expect(activeWorkout).toContain(`tr("set.${key}"`);
     }
-    expect(session).toContain("useActiveWorkoutTranslation");
-    expect(session).toContain('<option value="machine_taken">{tr("actions.machineOccupied")}</option>');
-    expect(session).toContain('moreLabel={tr("common.more")}');
+    expect(controller).toContain("useActiveWorkoutTranslation");
+    expect(details).toContain('<option value="machine_taken">{tr("actions.machineOccupied")}</option>');
+    expect(controller).toContain('moreLabel={tr("common.more")}');
     expect(shell).toContain("aria-label={moreLabel}");
-    expect(session).not.toContain('<option value="normal">Normal</option>');
+    expect(activeWorkout).not.toContain('<option value="normal">Normal</option>');
   });
 
   it("localizes detail, history filters, direct-session failures, and the active workout controller", () => {
@@ -89,7 +91,9 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(history.match(/aria-label=\{tr\("filterWorkoutHistoryWeek"\)\}/g)?.length).toBe(2);
     expect(history.match(/aria-label=\{tr\("filterWorkoutHistoryMonth"\)\}/g)?.length).toBe(2);
     expect(directSession).toContain('userSafeError(error, tr("workoutSessionOpenFailed"))');
-    expect(directSession).toContain("[locale, params.id, user?.id]");
+    expect(directSession).toContain("const userId = user?.id ?? null");
+    expect(directSession).toContain("const workoutId = params.id");
+    expect(directSession).toContain("[locale, toast, tr, userId, workoutId]");
     expect(activeWorkout).toContain('t("minimized.finishQuestion")');
     expect(activeWorkout).toContain('t("minimized.cancelQuestion")');
     expect(activeWorkout).not.toContain("Return to workout</Link>");
@@ -100,6 +104,7 @@ describe("approved Train Phase 1 UI contracts", () => {
     const history = source("app/(private)/workout-history/page.tsx");
     const session = source("app/(private)/workouts/session/[id]/page.tsx");
     const sessionForm = source("components/workouts/active-workout/active-workout-execution-shell.tsx");
+    const sticky = source("components/layout/mobile-sticky-actions.tsx");
     const shell = source("components/layout/app-shell.tsx");
     const translations = source("lib/i18n/train.ts");
     for (const route of [library, history]) {
@@ -109,8 +114,9 @@ describe("approved Train Phase 1 UI contracts", () => {
     }
     expect(session).toContain("<WorkoutSessionScreen confirmExit>");
     expect(sessionForm).toContain("<MobileStickyActions");
-    expect(sessionForm).toContain("allowOnSession");
-    expect(sessionForm).toContain("<MobileStickyActionsSpacer allowOnSession");
+    expect(sessionForm).toContain('placement="session"');
+    expect(sessionForm).toContain('<MobileStickyActionsSpacer placement="session"');
+    expect(sticky).toContain('export type MobileStickyActionsPlacement = "app" | "session"');
     expect(shell.match(/Logout/g)?.length ?? 0).toBeLessThanOrEqual(1);
     expect(translations.match(/browseExercisesDescription:/g)?.length).toBe(3);
     expect(translations.match(/closeWorkoutSession:/g)?.length).toBe(3);
