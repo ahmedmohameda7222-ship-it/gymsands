@@ -6,22 +6,25 @@ const source = (path: string) => readFileSync(path, "utf8");
 describe("AW-3B draft-context effort isolation", () => {
   it("keeps invalid draft effort non-throwing for context while persistence remains strict", () => {
     const details = source("services/database/workout-set-details.ts");
-    const session = source("components/workouts/active-workout/active-workout-core-session.tsx");
-    const renderedQa = source("scripts/run-train-layout-qa.mjs");
+    const runtimeModel = source("components/workouts/active-workout/active-workout-runtime-model.ts");
+    const renderedQa = [
+      source("scripts/run-train-layout-qa-base.mjs"),
+      source("scripts/run-aw5-correction-layout-qa.mjs")
+    ].join("\n");
 
     expect(details).toContain("export function workoutSetEffortInputForContext(");
     expect(details).toContain("return result.error ? null : result.value");
     expect(details).toContain("export function parseWorkoutSetEffortInput(");
     expect(details).toContain("throw new Error(");
 
-    expect(session).toContain('effortMode?: "strict" | "draft-context"');
-    expect(session).toContain('buildLogRows(states, { effortMode: "draft-context" })');
-    expect(session).toContain('rpe: workoutSetEffortInputForContext(set.rpe, "rpe")');
-    expect(session).toContain('rir: workoutSetEffortInputForContext(set.rir, "rir")');
-    expect(session).toContain('const parseEffort = options.effortMode === "draft-context"');
-    expect(session).toContain(": parseWorkoutSetEffortInput");
-    expect(session).not.toContain('parseWorkoutSetEffortInput(set.rpe');
-    expect(session).not.toContain('parseWorkoutSetEffortInput(set.rir');
+    expect(runtimeModel).toContain('effortMode?: "strict" | "draft-context"');
+    expect(runtimeModel).toContain('buildCanonicalLogRows(states, { effortMode: "draft-context" })');
+    expect(runtimeModel).toContain('rpe: workoutSetEffortInputForContext(set.rpe, "rpe")');
+    expect(runtimeModel).toContain('rir: workoutSetEffortInputForContext(set.rir, "rir")');
+    expect(runtimeModel).toContain('const parseEffort = options.effortMode === "draft-context"');
+    expect(runtimeModel).toContain(": parseWorkoutSetEffortInput");
+    expect(runtimeModel).not.toContain('parseWorkoutSetEffortInput(set.rpe');
+    expect(runtimeModel).not.toContain('parseWorkoutSetEffortInput(set.rir');
 
     expect(renderedQa).toContain('await rpe.fill("8.25")');
     expect(renderedQa).toContain('await rir.fill("20.1")');
