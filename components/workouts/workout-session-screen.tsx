@@ -63,7 +63,7 @@ export function WorkoutSessionScreen({
         variant="outline"
         size="icon"
         onClick={handleClose}
-        className="absolute start-3 top-3 z-[40] h-12 w-12 rounded-full bg-card/95 shadow-lg backdrop-blur sm:start-5 sm:top-5"
+        className="absolute start-3 top-3 z-[40] h-12 w-12 rounded-full bg-card/95 shadow-lg backdrop-blur sm:start-5 sm:top-5 lg:start-1"
         aria-label={tr("closeWorkoutSession")}
       >
         <ChevronDown className="h-5 w-5" aria-hidden="true" />
