@@ -40,12 +40,32 @@ async function clearKnownNextDevelopmentPortal(page) {
   });
 }
 
-async function openSession({ name, route = dayRoute, viewport, language = "en", theme = "light", delayCanonical = false }) {
+async function openSession({
+  name,
+  route = dayRoute,
+  viewport,
+  language = "en",
+  theme = "light",
+  delayCanonical = false
+}) {
   const direct = route === directRoute;
-  const context = await browser.newContext({ viewport, reducedMotion: "reduce", colorScheme: theme });
+  const context = await browser.newContext({
+    viewport,
+    reducedMotion: "reduce",
+    colorScheme: theme
+  });
   const session = {
-    name, direct, context, page: null, response: null, fixture: null,
-    pageErrors: [], consoleErrors: [], consoleWarnings: [], requestFailures: [], requestHistory: []
+    name,
+    direct,
+    context,
+    page: null,
+    response: null,
+    fixture: null,
+    pageErrors: [],
+    consoleErrors: [],
+    consoleWarnings: [],
+    requestFailures: [],
+    requestHistory: []
   };
   try {
     const page = await context.newPage();
@@ -69,7 +89,9 @@ async function openSession({ name, route = dayRoute, viewport, language = "en", 
       });
     });
     page.on("request", (request) => {
-      if (/supabase\.co|\/api\//.test(request.url())) session.requestHistory.push(requestRecord(request));
+      if (/supabase\.co|\/api\//.test(request.url())) {
+        session.requestHistory.push(requestRecord(request));
+      }
     });
     page.on("response", (response) => {
       const request = response.request();
@@ -80,8 +102,14 @@ async function openSession({ name, route = dayRoute, viewport, language = "en", 
         });
       }
     });
-    session.response = await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded", timeout: 45_000 });
-    await page.waitForSelector("[data-aw5-execution-shell]", { state: "visible", timeout: 20_000 });
+    session.response = await page.goto(`${baseUrl}${route}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000
+    });
+    await page.waitForSelector("[data-aw5-execution-shell]", {
+      state: "visible",
+      timeout: 20_000
+    });
     await page.waitForFunction(
       (expected) => document.documentElement.lang === expected,
       language,
@@ -117,9 +145,16 @@ async function runScenario(config, exercise, recordOptions = {}) {
     session = await openSession(config);
     const outcome = await exercise(session);
     await clearKnownNextDevelopmentPortal(session.page);
-    const failures = await record(session, outcome?.recordOptions ?? recordOptions, outcome?.failures ?? []);
-    if (failures.length) console.error(`[AW5-QA] FAIL ${config.name} rendered assertion failure ${failures.join(" | ")}`);
-    else console.log(`[AW5-QA] PASS ${config.name} ${Date.now() - startedAt}`);
+    const failures = await record(
+      session,
+      outcome?.recordOptions ?? recordOptions,
+      outcome?.failures ?? []
+    );
+    if (failures.length) {
+      console.error(`[AW5-QA] FAIL ${config.name} rendered assertion failure ${failures.join(" | ")}`);
+    } else {
+      console.log(`[AW5-QA] PASS ${config.name} ${Date.now() - startedAt}`);
+    }
   } catch (error) {
     session = session ?? error.aw5Session;
     let classification = "unhandled application error";
@@ -129,7 +164,8 @@ async function runScenario(config, exercise, recordOptions = {}) {
       classification = captured.classification;
       reason = captured.failure;
     } else if (error.aw5Recorded) {
-      classification = observations.at(-1)?.classification ?? classification;
+      const last = observations.at(-1);
+      classification = last?.classification ?? classification;
     }
     console.error(`[AW5-QA] FAIL ${config.name} ${classification} ${reason}`);
   } finally {
@@ -182,7 +218,11 @@ try {
   );
 
   await runScenario(
-    { name: "plan-day-busy-en-390x844", viewport: { width: 390, height: 844 }, delayCanonical: true },
+    {
+      name: "plan-day-busy-en-390x844",
+      viewport: { width: 390, height: 844 },
+      delayCanonical: true
+    },
     async (session) => {
       await enterSet(session.page);
       await visiblePrimary(session.page).click({ timeout: 10_000 });
@@ -208,7 +248,10 @@ try {
     async (session) => {
       await enterSet(session.page);
       await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-aw5-session-state="rest"]', { state: "visible", timeout: 15_000 });
+      await session.page.waitForSelector('[data-aw5-session-state="rest"]', {
+        state: "visible",
+        timeout: 15_000
+      });
       const failures = [];
       const restText = (await visiblePrimary(session.page).innerText({ timeout: 10_000 })).trim();
       if (!/skip/i.test(restText)) failures.push(`rest CTA is ${JSON.stringify(restText)}`);
@@ -220,8 +263,12 @@ try {
         await addThirty.click({ timeout: 10_000 });
         const state = await session.page.locator("[data-aw5-execution-shell]").getAttribute("data-aw5-session-state");
         if (state !== "rest") failures.push("Add 30 left the authoritative rest state");
-      } else failures.push("Add 30 control is missing");
-      await session.page.locator("[data-aw5-rest-presets]").evaluate((element) => element.scrollIntoView({ block: "center" }));
+      } else {
+        failures.push("Add 30 control is missing");
+      }
+      await session.page.locator("[data-aw5-rest-presets]").evaluate((element) => {
+        element.scrollIntoView({ block: "center" });
+      });
       return { failures, recordOptions: { restPresets: true } };
     }
   );
@@ -230,7 +277,10 @@ try {
     { name: "plan-day-paused-en-390x844", viewport: { width: 390, height: 844 } },
     async (session) => {
       await session.page.locator("[data-aw5-pause-resume]").click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-aw5-session-state="paused"]', { state: "visible", timeout: 10_000 });
+      await session.page.waitForSelector('[data-aw5-session-state="paused"]', {
+        state: "visible",
+        timeout: 10_000
+      });
       const label = (await visiblePrimary(session.page).innerText({ timeout: 10_000 })).trim();
       return { failures: /resume/i.test(label) ? [] : [`paused primary action is ${JSON.stringify(label)}`] };
     }
@@ -242,7 +292,10 @@ try {
   ]) {
     await runScenario(scenario, async (session) => {
       await session.page.locator("[data-active-set-details-trigger]").click({ timeout: 10_000 });
-      await session.page.waitForSelector("[data-active-set-details-dialog]", { state: "visible", timeout: 10_000 });
+      await session.page.waitForSelector("[data-active-set-details-dialog]", {
+        state: "visible",
+        timeout: 10_000
+      });
     });
   }
 
@@ -250,7 +303,10 @@ try {
     { name: "plan-day-session-review-en-1440x900", viewport: { width: 1440, height: 900 } },
     async (session) => {
       await session.page.getByRole("button", { name: /^Finish$/i }).click({ timeout: 10_000 });
-      await session.page.waitForSelector("[data-aw5-session-review]", { state: "visible", timeout: 10_000 });
+      await session.page.waitForSelector("[data-aw5-session-review]", {
+        state: "visible",
+        timeout: 10_000
+      });
     }
   );
 
@@ -259,12 +315,21 @@ try {
     async (session) => {
       await enterSet(session.page, "8", "80");
       await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-aw5-session-state="rest"]', { state: "visible", timeout: 15_000 });
+      await session.page.waitForSelector('[data-aw5-session-state="rest"]', {
+        state: "visible",
+        timeout: 15_000
+      });
       await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-active-set-number="2"]', { state: "visible", timeout: 15_000 });
+      await session.page.waitForSelector('[data-active-set-number="2"]', {
+        state: "visible",
+        timeout: 15_000
+      });
       await enterSet(session.page, "9", "82.5");
       await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-aw5-session-state="completed"]', { state: "visible", timeout: 15_000 });
+      await session.page.waitForSelector('[data-aw5-session-state="completed"]', {
+        state: "visible",
+        timeout: 15_000
+      });
       await visiblePrimary(session.page).click({ timeout: 10_000 });
       const review = session.page.locator("[data-aw5-session-review]");
       await review.waitFor({ state: "visible", timeout: 10_000 });
@@ -285,14 +350,23 @@ try {
           })
         });
       });
+      await session.page.evaluate(() => {
+        localStorage.setItem("plaivra.qa.train-scenario", "rest");
+      });
       await review.getByRole("button", { name: /save.*finish/i }).click({ timeout: 10_000 });
-      await session.page.waitForSelector("[data-aw5-completed-summary]", { state: "visible", timeout: 15_000 });
+      await session.page.waitForSelector("[data-aw5-completed-summary]", {
+        state: "visible",
+        timeout: 15_000
+      });
     }
   );
 
   for (const keyboard of ["reps", "weight"]) {
     await runScenario(
-      { name: `plan-day-keyboard-${keyboard}-en-390x844`, viewport: { width: 390, height: 844 } },
+      {
+        name: `plan-day-keyboard-${keyboard}-en-390x844`,
+        viewport: { width: 390, height: 844 }
+      },
       async (session) => {
         await session.page.setViewportSize({ width: 390, height: 464 });
         const input = session.page.locator(`#active-set-${keyboard}`);
