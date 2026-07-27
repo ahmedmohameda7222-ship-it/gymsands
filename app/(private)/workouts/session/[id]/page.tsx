@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -16,6 +16,7 @@ import type { Workout } from "@/types";
 
 export default function WorkoutSessionPage() {
   const params = useParams<{ id: string }>();
+  const workoutId = params.id;
   const { toast } = useToast();
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -25,13 +26,13 @@ export default function WorkoutSessionPage() {
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
 
-  async function loadWorkout() {
+  const loadWorkout = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
     setLoadErrorDetails(undefined);
     try {
-      const customExercise = await getCustomExercise(userId ?? undefined, params.id);
-      const nextWorkout = customExercise ?? await getWorkout(params.id, locale);
+      const customExercise = await getCustomExercise(userId ?? undefined, workoutId);
+      const nextWorkout = customExercise ?? await getWorkout(workoutId, locale);
       const customVideo = userId && !customExercise
         ? await getUserExerciseVideo(userId, nextWorkout.id)
         : null;
@@ -52,13 +53,11 @@ export default function WorkoutSessionPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [locale, toast, tr, userId, workoutId]);
 
   useEffect(() => {
     void loadWorkout();
-    // The primitive route, locale, and user identities are the only load boundary.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale, params.id, userId]);
+  }, [loadWorkout]);
 
   return (
     <WorkoutSessionScreen confirmExit>
