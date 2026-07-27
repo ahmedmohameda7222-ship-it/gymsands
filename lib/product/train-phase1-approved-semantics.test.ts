@@ -180,7 +180,8 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(direct).toContain("p_user_id: userId");
     expect(direct).toContain("getStableWorkoutIdentity(workout)");
     expect(form).toContain("storedActiveWorkout.route === sessionRoute");
-    expect(form).toContain("getOrStartWorkoutSession(user.id, directWorkout!, candidateSessionId)");
+    expect(form).toContain("getOrStartWorkoutSession(userId, currentDirectWorkout!, candidateSessionId)");
+    expect(form).toContain("const userId = user?.id ?? null");
     expect(active).toContain("getOpenWorkoutSessionWithStatus(userId, null, candidateSessionId)");
     expect(active).toContain("stored?.sessionId === open.id && isValidActiveWorkoutRoute(stored.route)");
   });
