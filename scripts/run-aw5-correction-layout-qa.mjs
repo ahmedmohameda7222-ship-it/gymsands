@@ -2,6 +2,7 @@ import { chromium } from "@playwright/test";
 
 import {
   baseUrl,
+  contract,
   dayRoute,
   directRoute,
   errorMessage,
@@ -14,6 +15,30 @@ import { installAw5CorrectionFixture } from "./train-layout-qa-fixture.mjs";
 import { captureFailure, record } from "./aw5-correction-qa-diagnostics.mjs";
 
 let browser;
+
+function expectedDevelopmentConsoleError(message) {
+  return /eval\(\) is not supported in this environment[\s\S]*React will never use eval\(\) in production mode/i.test(message);
+}
+
+async function clearKnownNextDevelopmentPortal(page) {
+  await page.evaluate(() => {
+    const visible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    for (const portal of document.querySelectorAll("nextjs-portal")) {
+      const root = portal.shadowRoot;
+      const hasVisibleErrorDialog = root
+        ? [...root.querySelectorAll(
+            "nextjs-errors-dialog, nextjs-error-dialog, [data-nextjs-error-dialog], [data-nextjs-dialog-overlay], [data-nextjs-error-overlay]"
+          )].some(visible)
+        : false;
+      if (!hasVisibleErrorDialog) portal.remove();
+    }
+  });
+}
 
 async function openSession({ name, route = dayRoute, viewport, language = "en", theme = "light", delayCanonical = false }) {
   const direct = route === directRoute;
@@ -32,7 +57,9 @@ async function openSession({ name, route = dayRoute, viewport, language = "en", 
     );
     page.on("pageerror", (error) => session.pageErrors.push(error.message));
     page.on("console", (message) => {
-      if (message.type() === "error") session.consoleErrors.push(message.text());
+      if (message.type() === "error" && !expectedDevelopmentConsoleError(message.text())) {
+        session.consoleErrors.push(message.text());
+      }
       if (message.type() === "warning") session.consoleWarnings.push(message.text());
     });
     page.on("requestfailed", (request) => {
@@ -60,6 +87,7 @@ async function openSession({ name, route = dayRoute, viewport, language = "en", 
       language,
       { timeout: 10_000 }
     );
+    await clearKnownNextDevelopmentPortal(page);
     await page.waitForTimeout(150);
     return session;
   } catch (error) {
@@ -88,6 +116,7 @@ async function runScenario(config, exercise, recordOptions = {}) {
   try {
     session = await openSession(config);
     const outcome = await exercise(session);
+    await clearKnownNextDevelopmentPortal(session.page);
     const failures = await record(session, outcome?.recordOptions ?? recordOptions, outcome?.failures ?? []);
     if (failures.length) console.error(`[AW5-QA] FAIL ${config.name} rendered assertion failure ${failures.join(" | ")}`);
     else console.log(`[AW5-QA] PASS ${config.name} ${Date.now() - startedAt}`);
@@ -187,6 +216,7 @@ try {
       if (await presets.count() < 1) failures.push("rest presets are missing");
       const addThirty = session.page.getByRole("button", { name: /30/ }).last();
       if (await addThirty.count()) {
+        await clearKnownNextDevelopmentPortal(session.page);
         await addThirty.click({ timeout: 10_000 });
         const state = await session.page.locator("[data-aw5-execution-shell]").getAttribute("data-aw5-session-state");
         if (state !== "rest") failures.push("Add 30 left the authoritative rest state");
@@ -238,6 +268,23 @@ try {
       await visiblePrimary(session.page).click({ timeout: 10_000 });
       const review = session.page.locator("[data-aw5-session-review]");
       await review.waitFor({ state: "visible", timeout: 10_000 });
+      await session.page.route(/^https:\/\/[^/]+\.supabase\.co\/rest\/v1\/workout_sessions\?/, async (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get("id") !== `eq.${contract.activeSessionId}`) {
+          await route.fallback();
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: contract.activeSessionId,
+            user_id: contract.userId,
+            plan_day_id: contract.activeDayId,
+            status: "completed"
+          })
+        });
+      });
       await review.getByRole("button", { name: /save.*finish/i }).click({ timeout: 10_000 });
       await session.page.waitForSelector("[data-aw5-completed-summary]", { state: "visible", timeout: 15_000 });
     }
