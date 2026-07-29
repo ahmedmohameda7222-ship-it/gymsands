@@ -2,9 +2,9 @@
 
 > Generated: `2026-07-29T15:37:00+02:00`  
 > Repository: `ahmedmohameda7222-ship-it/gymsands`  
-> Canonical base: `main@2169527efc3c2cd4210fc358a58c6bce37f1788b`  
+> Audited application base: `main@2169527efc3c2cd4210fc358a58c6bce37f1788b`  
 > Active-work overlay: `PR #90@e4cfca2f909912fa3041cebaf5689944dc655339`  
-> Freshness: verify the manifest and Git diff before relying on this snapshot. Exact source, migrations, tests, and workflows remain executable truth.
+> Freshness: compare repository trees from the audited application base, excluding context-only paths. Exact source, migrations, tests, and workflows remain executable truth.
 
 ## Every-task startup
 
@@ -26,14 +26,30 @@ Record:
 ```text
 current HEAD
 current branch
-main SHA
-base SHA
+current main SHA
+task base SHA
 changed files
 latest repository migration
 active PR/head when relevant
 ```
 
-Compare with the manifest.
+Read `auditedApplicationBase.sha` and `contextOnlyPaths` from the JSON manifest.
+
+Compare repository trees, not commit ancestry:
+
+```bash
+git diff --name-only <auditedApplicationBase.sha> HEAD -- . \
+  ':(exclude)AGENTS.md' \
+  ':(exclude)docs/codex-context/**'
+```
+
+Also compare the audited base with current `main` using the same exclusions when the task branch does not contain the latest main.
+
+- No non-context paths changed: application context is fresh.
+- Non-context paths changed: map them to domains and inspect only affected context and dependencies.
+- Relevant overlay head changed: refresh that overlay even when canonical application paths are unchanged.
+
+The audited SHA intentionally points to an application/source-state commit before the final context-only refresh commit. This prevents the manifest from needing to contain its own commit SHA.
 
 ### 3. Choose one path
 
@@ -47,7 +63,7 @@ Read the exact current files/symbols to edit, their direct imports/callers, test
 
 **Stale context**
 
-Inspect the diff from the recorded SHA to current state, then update only affected context sections.
+Inspect only non-context changed paths since the audited application base, then update affected context sections.
 
 **Contradiction**
 
@@ -86,15 +102,19 @@ Do not update it for ordinary internal refactors or visual tweaks that do not ch
 
 ## Incremental refresh procedure
 
-1. Set previous manifest SHA as the comparison base.
-2. List changed paths and commits.
-3. Map changed paths to context sections.
-4. Read only those files plus proven dependencies.
-5. Update affected Markdown and JSON fields.
-6. Move accepted overlay facts into canonical context only after merge.
-7. Remove a closed overlay after its accepted state is represented canonically.
-8. Set the new canonical SHA and generated timestamp.
-9. Run path/link and consistency checks.
+1. Finish and validate the implementation/source changes.
+2. Record the exact implementation/source-state commit SHA.
+3. Add one final context-only commit after it.
+4. Set `auditedApplicationBase.sha` to the recorded implementation/source-state commit.
+5. List non-context paths changed from the previous audited application base.
+6. Map those paths to context sections.
+7. Read only those files plus proven dependencies.
+8. Update affected Markdown, overlay and JSON fields.
+9. Move accepted overlay facts into canonical context only after merge.
+10. Remove a closed overlay after its accepted state is represented canonically.
+11. Run path/link, JSON and cross-file consistency checks.
+
+If an implementation PR is later squash-merged, tree comparison between the recorded implementation commit and the new `main` still proves whether application content differs. Commit ancestry is not required.
 
 ## Overlay lifecycle
 
@@ -120,6 +140,7 @@ Every implementation report must include:
 - tests actually run;
 - CI/artifact identity;
 - context files updated or a reason no update was required;
+- audited application-base SHA used by the manifest;
 - remaining risk;
 - no merge/deploy statement when not authorized.
 
