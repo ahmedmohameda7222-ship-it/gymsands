@@ -2,9 +2,9 @@
 
 > Generated: `2026-07-29T15:37:00+02:00`  
 > Repository: `ahmedmohameda7222-ship-it/gymsands`  
-> Canonical base: `main@2169527efc3c2cd4210fc358a58c6bce37f1788b`  
+> Audited application base: `main@2169527efc3c2cd4210fc358a58c6bce37f1788b`  
 > Active-work overlay: `PR #90@e4cfca2f909912fa3041cebaf5689944dc655339`  
-> Freshness: verify the manifest and Git diff before relying on this snapshot. Exact source, migrations, tests, and workflows remain executable truth.
+> Freshness: compare repository trees from the audited application base, excluding context-only paths. Exact source, migrations, tests, and workflows remain executable truth.
 
 ## Purpose
 
@@ -19,10 +19,26 @@ Before any Plaivra code task:
 1. Read this file.
 2. Read `09_CODEX_STARTUP_AND_REFRESH_PROTOCOL.md`.
 3. Read only the domain context files relevant to the task.
-4. Compare the current `HEAD`, `main`, migrations, and changed paths with `context_manifest.json`.
-5. Read the exact current files and symbols to be changed.
-6. Inspect only dependencies exposed by imports, references, tests, migrations, security boundaries, or the task prompt.
-7. After a meaningful architecture, schema, workflow, authority, or phase-state change, update the affected context files and manifest in the same PR.
+4. Compare the current repository tree with `context_manifest.json` using its audited application base and context-only exclusions.
+5. Check the active PR/head identity when an overlay is relevant.
+6. Read the exact current files and symbols to be changed.
+7. Inspect only dependencies exposed by imports, references, tests, migrations, security boundaries, or the task prompt.
+8. After a meaningful architecture, schema, workflow, authority, or phase-state change, update the affected context files and manifest in the same PR.
+
+## Freshness model
+
+The recorded SHA is an **audited application-source snapshot**, not a self-referential claim that it equals the commit containing this manifest.
+
+When checking freshness, compare that SHA with the current target tree and ignore changes limited to:
+
+```text
+AGENTS.md
+docs/codex-context/**
+```
+
+If all non-context paths are unchanged, the application context remains fresh even after this Knowledge Base PR is merged.
+
+For future implementation work, refresh context in a final context-only commit and point `auditedApplicationBase.sha` to the immediately preceding implementation/source-state commit. Tree comparison remains valid even if GitHub later squash-merges the PR.
 
 ## Authority order
 
@@ -61,7 +77,7 @@ This context base summarizes and indexes those authorities; it does not outrank 
 ## Snapshot status
 
 - Canonical branch: `main`
-- Canonical SHA: `2169527efc3c2cd4210fc358a58c6bce37f1788b`
+- Audited application-base SHA: `2169527efc3c2cd4210fc358a58c6bce37f1788b`
 - Active unmerged work: PR #90, branch `feat/active-workout-aw5-ui-core`
 - Active-work SHA: `e4cfca2f909912fa3041cebaf5689944dc655339`
 - Current merged Active Workout phase: AW-4
