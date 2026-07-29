@@ -1,10 +1,18 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "repository": "ahmedmohameda7222-ship-it/gymsands",
   "generatedAt": "2026-07-29T15:37:00+02:00",
-  "canonical": {
+  "auditedApplicationBase": {
     "branch": "main",
     "sha": "2169527efc3c2cd4210fc358a58c6bce37f1788b",
+    "comparisonMode": "tree",
+    "meaning": "Application/source state audited before the final context-only commit"
+  },
+  "contextOnlyPaths": [
+    "AGENTS.md",
+    "docs/codex-context/**"
+  ],
+  "canonicalState": {
     "latestMergedActiveWorkoutPhase": "AW-4",
     "latestProductionMigration": "20260726114212",
     "productionMigrationRecordCount": 75,
@@ -98,5 +106,6 @@
     "Active Workout phase completion",
     "active PR head or disposition changes"
   ],
+  "refreshCommitRule": "Use a final context-only commit whose manifest points to the preceding implementation/source-state commit",
   "readExactSourceBeforeEdit": true
 }
