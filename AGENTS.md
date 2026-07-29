@@ -8,6 +8,21 @@ For broad product or architecture work, use the authority order in `README.md`. 
 
 Historical reports, old prompts, branch handoffs, generated QA evidence, and Git history are evidence, not current authority.
 
+## Persistent Codex context
+
+Before any repository task, read:
+
+1. `docs/codex-context/00_CONTEXT_MANIFEST.md`;
+2. `docs/codex-context/09_CODEX_STARTUP_AND_REFRESH_PROTOCOL.md`;
+3. `docs/codex-context/context_manifest.json`;
+4. only the domain context files relevant to the task.
+
+Compare the recorded canonical SHA, current `main`, current `HEAD`, migrations, and changed paths. When context is fresh, use it to avoid repository-wide rediscovery. When it is stale, inspect the diff since the recorded SHA and refresh only affected sections.
+
+The context base is navigation and decision memory, not executable truth. Before editing, always read the exact current source, direct contracts, tests, and persistence/security boundaries involved. Active-work overlays are non-canonical until merged.
+
+Update the affected context and manifest in the same pull request after a meaningful domain-authority, architecture, schema, RPC/RLS/grant, privacy, MCP, CI/release, or phase-state change. Ordinary internal refactors or visual tweaks do not require a context update unless entry points or contracts change.
+
 ## Execution model
 
 Plaivra planning and implementation are separate responsibilities:
