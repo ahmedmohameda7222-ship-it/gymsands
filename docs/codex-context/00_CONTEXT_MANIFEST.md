@@ -1,9 +1,9 @@
 # Plaivra Codex Context Manifest
 
-> Generated: `2026-07-29T15:37:00+02:00`  
-> Repository: `ahmedmohameda7222-ship-it/gymsands`  
-> Audited application base: `main@2169527efc3c2cd4210fc358a58c6bce37f1788b`  
-> Active-work overlay: `PR #90@e4cfca2f909912fa3041cebaf5689944dc655339`  
+> Generated: `2026-07-29T15:37:00+02:00`
+> Repository: `ahmedmohameda7222-ship-it/gymsands`
+> Audited application base: `main@2169527efc3c2cd4210fc358a58c6bce37f1788b`
+> Active-work overlay: `PR #90@e4cfca2f909912fa3041cebaf5689944dc655339`
 > Freshness: compare repository trees from the audited application base, excluding context-only paths. Exact source, migrations, tests, and workflows remain executable truth.
 
 ## Purpose
