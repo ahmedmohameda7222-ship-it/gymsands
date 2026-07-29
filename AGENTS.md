@@ -17,11 +17,11 @@ Before any repository task, read:
 3. `docs/codex-context/context_manifest.json`;
 4. only the domain context files relevant to the task.
 
-Compare the recorded canonical SHA, current `main`, current `HEAD`, migrations, and changed paths. When context is fresh, use it to avoid repository-wide rediscovery. When it is stale, inspect the diff since the recorded SHA and refresh only affected sections.
+Use the manifest's `auditedApplicationBase.sha` and `contextOnlyPaths` to compare repository **trees**, not commit ancestry. Ignore differences limited to `AGENTS.md` and `docs/codex-context/**` when deciding whether application context is stale. Check active-work overlay heads separately.
 
-The context base is navigation and decision memory, not executable truth. Before editing, always read the exact current source, direct contracts, tests, and persistence/security boundaries involved. Active-work overlays are non-canonical until merged.
+When context is fresh, use it to avoid repository-wide rediscovery. When non-context paths changed, inspect only the affected diff and dependencies. The context base is navigation and decision memory, not executable truth: before editing, always read the exact current source, direct contracts, tests, and persistence/security boundaries involved. Active-work overlays are non-canonical until merged.
 
-Update the affected context and manifest in the same pull request after a meaningful domain-authority, architecture, schema, RPC/RLS/grant, privacy, MCP, CI/release, or phase-state change. Ordinary internal refactors or visual tweaks do not require a context update unless entry points or contracts change.
+After a meaningful domain-authority, architecture, schema, RPC/RLS/grant, privacy, MCP, CI/release, or phase-state change, finish implementation first, then add a final context-only commit. Point the manifest to the immediately preceding implementation/source-state commit. Ordinary internal refactors or visual tweaks do not require a context update unless entry points or contracts change.
 
 ## Execution model
 
