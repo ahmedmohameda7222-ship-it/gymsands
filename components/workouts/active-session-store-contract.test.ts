@@ -1,15 +1,23 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const surfaces = [
+const routeSurfaces = [
   "components/workouts/workout-day-focus-session.tsx",
   "components/workouts/workout-session-form.tsx",
+] as const;
+
+const authoritySurfaces = [
+  "components/workouts/active-workout/active-workout-core-session.tsx",
   "components/workouts/active-workout-indicator.tsx"
 ] as const;
 
 describe("AW-4 Active Workout surface ownership", () => {
   it("routes every reachable session surface through the official store and shared clock", () => {
-    for (const file of surfaces) {
+    for (const file of routeSurfaces) {
+      const source = readFileSync(file, "utf8");
+      expect(source).toContain("ActiveWorkoutCoreSession");
+    }
+    for (const file of authoritySurfaces) {
       const source = readFileSync(file, "utf8");
       expect(source).toContain("getActiveSessionStore");
       expect(source).toContain("activeSessionClock");
@@ -23,7 +31,7 @@ describe("AW-4 Active Workout surface ownership", () => {
   });
 
   it("keeps the day-session monolith free of a second command reducer or write queue", () => {
-    const source = readFileSync(surfaces[0], "utf8");
+    const source = readFileSync(authoritySurfaces[0], "utf8");
     const compatibilitySource = readFileSync(
       "lib/workouts/workout-session-execution.ts",
       "utf8"

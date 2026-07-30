@@ -4,11 +4,24 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import { useTrainTranslation } from "@/lib/i18n/train";
 
-export function WorkoutSessionScreen({ children, confirmExit = false }: { children: React.ReactNode; confirmExit?: boolean }) {
+export function WorkoutSessionScreen({
+  children,
+  confirmExit = false
+}: {
+  children: React.ReactNode;
+  confirmExit?: boolean;
+}) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const { dir, tr } = useTrainTranslation();
@@ -35,23 +48,30 @@ export function WorkoutSessionScreen({ children, confirmExit = false }: { childr
       style={{ willChange: "transform" }}
       initial={reduceMotion ? false : { y: "100%" }}
       animate={isClosing ? { y: "100%" } : { y: 0 }}
-      transition={{ duration: reduceMotion ? 0.001 : 0.38, ease: [0.22, 1, 0.36, 1] }}
+      transition={{
+        duration: reduceMotion ? 0.001 : 0.38,
+        ease: [0.22, 1, 0.36, 1]
+      }}
       onAnimationComplete={() => {
         if (isClosing) router.back();
       }}
       dir={dir}
     >
       <Button
+        data-workout-session-close
         type="button"
         variant="outline"
         size="icon"
         onClick={handleClose}
-        className="absolute end-3 top-3 z-[40] h-12 w-12 rounded-full bg-card/95 shadow-lg backdrop-blur"
+        className="absolute start-3 top-3 z-[40] h-12 w-12 rounded-full bg-card/95 shadow-lg backdrop-blur sm:start-5 sm:top-5 lg:start-1"
         aria-label={tr("closeWorkoutSession")}
       >
-        <ChevronDown className="h-5 w-5" />
+        <ChevronDown className="h-5 w-5" aria-hidden="true" />
       </Button>
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-3 sm:px-6 sm:pt-5 lg:px-8">
+      <div
+        data-workout-session-scroll
+        className="flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-0 [scroll-padding-bottom:calc(7rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8"
+      >
         {children}
       </div>
       <Dialog open={exitDialogOpen} onOpenChange={setExitDialogOpen}>
@@ -61,7 +81,12 @@ export function WorkoutSessionScreen({ children, confirmExit = false }: { childr
             <DialogDescription>{tr("exitWorkoutDescription")}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" className="min-h-12" onClick={() => setExitDialogOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-12"
+              onClick={() => setExitDialogOpen(false)}
+            >
               {tr("keepTraining")}
             </Button>
             <Button type="button" className="min-h-12" onClick={closeSession}>

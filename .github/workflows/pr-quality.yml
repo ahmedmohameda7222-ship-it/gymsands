@@ -181,7 +181,8 @@ jobs:
         run: >-
           node scripts/run-ci-check.mjs --name rendered-qa -- bash -lc
           'set -euo pipefail;
-          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > ci-reports/qa-server.log 2>&1 &
+          NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build;
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start > ci-reports/qa-server.log 2>&1 &
           server_pid=$!;
           trap '\''kill "$server_pid" 2>/dev/null || true'\'' EXIT;
           for attempt in $(seq 1 60); do
@@ -189,8 +190,17 @@ jobs:
             sleep 1;
           done;
           curl --fail --silent http://localhost:3000/ > /dev/null;
-          QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=ci-reports/rendered-qa-evidence npm run qa:rendered;
-          QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=ci-reports/train-qa-evidence npm run qa:train'
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=ci-reports/rendered-qa-evidence npm run qa:rendered;
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=ci-reports/train-qa-evidence npm run qa:train'
+      - name: Upload successful rendered evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-quality-rendered-evidence-${{ github.event.pull_request.head.sha }}
+          path: |
+            ci-reports/rendered-qa-evidence/
+            ci-reports/train-qa-evidence/
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload focused failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

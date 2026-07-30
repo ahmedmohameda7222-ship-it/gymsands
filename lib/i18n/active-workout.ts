@@ -21,6 +21,21 @@ export type ActiveWorkoutFormatters = Omit<ActiveWorkoutBaseFormatters, "measure
   measurement: (value: number, unit: ActiveWorkoutMeasurementUnit, maximumFractionDigits?: number) => string;
 };
 
+const activeWorkoutSessionLabels: Record<SupportedLanguage, string> = {
+  en: "Workout session",
+  de: "Trainingseinheit",
+  ar: "جلسة التمرين"
+};
+
+export function activeWorkoutSessionLabel(locale: SupportedLanguage) {
+  return activeWorkoutSessionLabels[locale];
+}
+
+export type ActiveWorkoutTranslator = (
+  key: string,
+  values?: Record<string, string | number | Date>
+) => string;
+
 export function isolateBidiText(value: string): string {
   return `\u2068${value}\u2069`;
 }
@@ -29,7 +44,13 @@ export function useActiveWorkoutTranslation() {
   const requestedLocale = useLocale();
   const locale: SupportedLanguage = isSupportedLanguage(requestedLocale) ? requestedLocale : defaultLocale;
   const metadata = getLocaleMetadata(locale);
-  const t = useTranslations("ActiveWorkout");
+  const message = useTranslations("ActiveWorkout");
+  const t = useMemo<ActiveWorkoutTranslator>(() => (
+    key,
+    values
+  ) => key === "header.workoutSession"
+    ? activeWorkoutSessionLabel(locale)
+    : message(key as never, values as never), [locale, message]);
   const baseFormatters = useMemo(
     () => createActiveWorkoutFormatters(metadata.intlLocale),
     [metadata.intlLocale]
@@ -65,4 +86,3 @@ export function useActiveWorkoutTranslation() {
 }
 
 export type ActiveWorkoutTranslation = ReturnType<typeof useActiveWorkoutTranslation>;
-export type ActiveWorkoutTranslator = ActiveWorkoutTranslation["t"];

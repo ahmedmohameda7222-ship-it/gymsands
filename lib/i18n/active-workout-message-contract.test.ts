@@ -14,7 +14,7 @@ const requiredKeys = [
   "units.kg", "units.reps", "units.seconds", "units.minutes",
   "common.confirm", "common.remove", "common.add", "common.view", "common.hide",
   "header.workoutDay", "header.exerciseProgress", "header.setProgress", "header.sessionTime",
-  "header.sessionProgress", "header.minimizeWorkout", "header.openSessionMenu",
+  "header.sessionProgress", "header.completedSetsProgress", "header.minimizeWorkout", "header.openSessionMenu",
   "exercise.setsCount", "exercise.repsCount", "exercise.restSeconds", "exercise.previousPerformance",
   "exercise.previousSet", "exercise.useValues", "exercise.noPreviousPerformance", "exercise.complete",
   "exercise.setsSaved", "exercise.nextExercise", "exercise.startNextExercise", "exercise.reviewAndFinish",

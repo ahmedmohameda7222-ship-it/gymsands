@@ -2,26 +2,55 @@
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
+
 import { cn } from "@/lib/utils";
 
-function useDisableStickyActions(allowOnSession = false) {
+export type MobileStickyActionsPlacement = "app" | "session";
+
+type StickyVisibilityOptions = {
+  placement: MobileStickyActionsPlacement;
+  allowOnSession: boolean;
+};
+
+function useDisableStickyActions({
+  placement,
+  allowOnSession
+}: StickyVisibilityOptions) {
   const pathname = usePathname();
-  return !allowOnSession && pathname.startsWith("/workouts/session");
+  const sessionPlacement = placement === "session" || allowOnSession;
+  return !sessionPlacement && pathname.startsWith("/workouts/session");
 }
 
 type MobileStickyActionsProps = React.HTMLAttributes<HTMLDivElement> & {
+  placement?: MobileStickyActionsPlacement;
+  /** @deprecated Use placement="session" for full-screen workout execution. */
   allowOnSession?: boolean;
 };
 
-export function MobileStickyActions({ className, children, allowOnSession = false, ...props }: MobileStickyActionsProps) {
-  const disabled = useDisableStickyActions(allowOnSession);
+export function MobileStickyActions({
+  className,
+  children,
+  placement = "app",
+  allowOnSession = false,
+  ...props
+}: MobileStickyActionsProps) {
+  const disabled = useDisableStickyActions({ placement, allowOnSession });
 
   if (disabled) return null;
 
+  const resolvedPlacement = placement === "session" || allowOnSession
+    ? "session"
+    : "app";
+
   return (
     <div
+      data-mobile-sticky-placement={resolvedPlacement}
+      data-mobile-sticky-safe-area={resolvedPlacement === "session" ? "true" : undefined}
       className={cn(
-        "fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-30 border-t bg-card/95 px-4 py-3 shadow-luxe backdrop-blur lg:hidden",
+        "fixed inset-x-0 z-30 border-t bg-card/95 px-4 pt-3 shadow-luxe backdrop-blur lg:hidden",
+        resolvedPlacement === "session"
+          ? "bottom-0 min-h-[calc(4.75rem+env(safe-area-inset-bottom))] pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+          : "bottom-[calc(4.25rem+env(safe-area-inset-bottom))] pb-3",
         className
       )}
       {...props}
@@ -31,10 +60,36 @@ export function MobileStickyActions({ className, children, allowOnSession = fals
   );
 }
 
-export function MobileStickyActionsSpacer({ className, allowOnSession = false }: { className?: string; allowOnSession?: boolean }) {
-  const disabled = useDisableStickyActions(allowOnSession);
+type MobileStickyActionsSpacerProps = {
+  className?: string;
+  placement?: MobileStickyActionsPlacement;
+  /** @deprecated Use placement="session" for full-screen workout execution. */
+  allowOnSession?: boolean;
+};
+
+export function MobileStickyActionsSpacer({
+  className,
+  placement = "app",
+  allowOnSession = false
+}: MobileStickyActionsSpacerProps) {
+  const disabled = useDisableStickyActions({ placement, allowOnSession });
 
   if (disabled) return null;
 
-  return <div aria-hidden="true" className={cn("h-24 lg:hidden", className)} />;
+  const resolvedPlacement = placement === "session" || allowOnSession
+    ? "session"
+    : "app";
+
+  return (
+    <div
+      aria-hidden="true"
+      data-mobile-sticky-spacer={resolvedPlacement}
+      className={cn(
+        resolvedPlacement === "session"
+          ? "h-[calc(6rem+env(safe-area-inset-bottom))] lg:hidden"
+          : "h-24 lg:hidden",
+        className
+      )}
+    />
+  );
 }

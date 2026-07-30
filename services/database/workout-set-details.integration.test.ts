@@ -10,10 +10,23 @@ const legacy = readFileSync(
   "services/database/workout-sessions-legacy-implementation.ts",
   "utf8",
 );
-const ui = readFileSync(
-  "components/workouts/workout-day-focus-session.tsx",
+const controller = readFileSync(
+  "components/workouts/active-workout/active-workout-core-session.tsx",
   "utf8",
 );
+const runtimeModel = readFileSync(
+  "components/workouts/active-workout/active-workout-runtime-model.ts",
+  "utf8",
+);
+const detailsBridge = readFileSync(
+  "components/workouts/active-workout/active-workout-details-bridge.tsx",
+  "utf8",
+);
+const shell = readFileSync(
+  "components/workouts/active-workout/active-workout-execution-shell.tsx",
+  "utf8",
+);
+const ui = [controller, runtimeModel, detailsBridge, shell].join("\n");
 const mcp = readFileSync("lib/mcp/tool-executor-implementation.ts", "utf8");
 const migration = readFileSync(
   "supabase/migrations/20260722210312_active_workout_aw3b_structured_set_details.sql",
@@ -30,7 +43,7 @@ describe("AW-3B set-write convergence", () => {
     }
     expect(sessions).toContain('.rpc("upsert_workout_set_logs_atomic"');
     expect(legacy).toContain('.rpc("upsert_workout_set_logs_atomic"');
-    expect(legacy).toContain('.rpc("complete_workout_session_atomic"');
+    expect(legacy).toMatch(/\.rpc\(\s*"complete_workout_session_atomic"/);
     expect(mcp).toContain('.rpc("upsert_workout_set_logs_atomic"');
   });
 
@@ -51,8 +64,8 @@ describe("AW-3B set-write convergence", () => {
     expect(ui).not.toContain("`RPE:${");
     expect(ui).not.toContain("`RIR:${");
     expect(ui).not.toContain("`type:${");
-    expect(ui).toContain("setDetails:");
-    expect(ui).toContain("notes: set.notes || null");
+    expect(runtimeModel).toContain("setDetails:");
+    expect(runtimeModel).toContain("notes: set.notes || null");
     expect(migration).toContain(
       "private.workout_set_type(null,v_log->>'set_type')",
     );
@@ -75,84 +88,117 @@ describe("AW-3B set-write convergence", () => {
     expect(logReader).toContain('.order("segment_order"');
     expect(logReader).toContain('referencedTable: "exercise_log_set_segments"');
     expect(logReader).toContain("relationContext");
-    expect(ui).toContain("const details = log.set_details");
-    expect(ui).toContain("details?.rpe");
-    expect(ui).toContain("details?.rir");
-    expect(ui).toContain("details?.set_type");
-    expect(ui).toContain('notes: log.notes ?? ""');
-    expect(ui).not.toContain("log.notes ?? details?.notes");
+    expect(runtimeModel).toContain("const details = log.set_details");
+    expect(runtimeModel).toContain("details?.rpe");
+    expect(runtimeModel).toContain("details?.rir");
+    expect(runtimeModel).toContain("details?.set_type");
+    expect(runtimeModel).toContain('notes: log.notes ?? ""');
+    expect(runtimeModel).not.toContain("log.notes ?? details?.notes");
     for (const type of ["backoff", "amrap", "timed", "other"]) {
-      expect(ui).toContain(`<option value="${type}">{tr("set.${type}")}</option>`);
+      expect(detailsBridge).toContain(
+        `<option value="${type}">{tr("set.${type}")}</option>`,
+      );
     }
   });
 
   it("preserves absent and hidden details while persisting only explicit UI intent", () => {
-    expect(ui).toContain("hasSetDetails: Boolean(details)");
-    expect(ui).toContain("setDetailsWriteRequired: false");
-    expect(ui).toContain("buildWorkoutContextLogRows(exerciseStates)");
-    expect(ui).toContain("if (!set?.hasSetDetails || row.setDetails) return row");
-    expect(ui).toContain("sideMode: set.sideMode");
-    expect(ui).toContain("plannedTempo: set.plannedTempo");
-    expect(ui).toContain("performedTempo: set.performedTempo");
-    expect(ui).toContain("tempoAdherence: set.tempoAdherence");
-    expect(ui).toContain("source: detailProvenance.source");
-    expect(ui).toContain("sourceProvider: detailProvenance.sourceProvider");
-    expect(ui).toContain("sourceVersion: detailProvenance.sourceVersion");
-    expect(ui).toContain("editableWorkoutSetProvenance(");
-    expect(ui).not.toContain('set.detailSource === "backfill"');
-    expect(ui).toContain("detailSource: provenance.source");
-    expect(ui).toContain("source: set.detailSource");
-    expect(types).toContain('Exclude<\n  WorkoutPerformanceMetricSource,\n  "backfill"');
-    expect(ui).toContain("details\n          ? details.source_provider");
-    expect(ui).toContain("details\n          ? details.source_version");
-    expect(ui).toContain("buildLogRows(states, { pendingOnly: true })");
-    expect(ui).toContain("mountWorkoutSetAutosaveCoordinator");
-    expect(ui).toContain("scheduleFlush(650)");
-    expect(ui).toContain("handleSetDetailsOpenChange");
-    expect(ui).toContain("validOnly: true");
-    expect(ui).toContain("? isPendingSetWrite(set)");
-    expect(ui).toContain(": Boolean(set.completedAt)");
-    expect(ui).toContain(
+    expect(runtimeModel).toContain("hasSetDetails: Boolean(details)");
+    expect(runtimeModel).toContain("setDetailsWriteRequired: false");
+    expect(controller).toContain("buildWorkoutContextLogRows(exerciseStates)");
+    expect(runtimeModel).toContain(
+      "if (!set?.hasSetDetails || row.setDetails) return row",
+    );
+    expect(runtimeModel).toContain("sideMode: set.sideMode");
+    expect(runtimeModel).toContain("plannedTempo: set.plannedTempo");
+    expect(runtimeModel).toContain("performedTempo: set.performedTempo");
+    expect(runtimeModel).toContain("tempoAdherence: set.tempoAdherence");
+    expect(runtimeModel).toContain("source: detailProvenance.source");
+    expect(runtimeModel).toContain(
+      "sourceProvider: detailProvenance.sourceProvider",
+    );
+    expect(runtimeModel).toContain(
+      "sourceVersion: detailProvenance.sourceVersion",
+    );
+    expect(runtimeModel).toContain("editableWorkoutSetProvenance(");
+    expect(runtimeModel).not.toContain('set.detailSource === "backfill"');
+    expect(runtimeModel).toContain("detailSource: provenance.source");
+    expect(runtimeModel).toContain("source: set.detailSource");
+    expect(types).toContain(
+      'Exclude<\n  WorkoutPerformanceMetricSource,\n  "backfill"',
+    );
+    expect(runtimeModel).toContain(
+      "details ? details.source_provider : set.detailSourceProvider",
+    );
+    expect(runtimeModel).toContain(
+      "details ? details.source_version : set.detailSourceVersion",
+    );
+    expect(controller).toContain(
+      "buildCanonicalLogRows(states, { pendingOnly: true })",
+    );
+    expect(controller).toContain("mountWorkoutSetAutosaveCoordinator");
+    expect(controller).toContain("scheduleFlush(650)");
+    expect(controller).toContain("handleSetDetailsOpenChange");
+    expect(controller).toContain("validOnly: true");
+    expect(runtimeModel).toContain("? isPendingSetWrite(set)");
+    expect(runtimeModel).toContain(": Boolean(set.completedAt)");
+    expect(runtimeModel).toContain(
       "set.logWriteRequired && Boolean(set.completedAt || set.hasPersistedLog)",
     );
-    expect(ui).toContain("hasPersistedLog: false");
-    expect(ui).toContain("hasPersistedLog: true");
-    expect(ui).toContain("completedAt: log.completed_at ?? null");
-    expect(ui).toContain('htmlFor="active-set-reps"');
-    expect(ui).toContain('id="active-set-reps"');
-    expect(ui).toContain('htmlFor="active-set-weight"');
-    expect(ui).toContain('id="active-set-weight"');
+    expect(runtimeModel).toContain("hasPersistedLog: false");
+    expect(runtimeModel).toContain("hasPersistedLog: true");
+    expect(runtimeModel).toContain("completedAt: log.completed_at ?? null");
+    expect(shell).toContain('htmlFor="active-set-reps"');
+    expect(shell).toContain('id="active-set-reps"');
+    expect(shell).toContain('htmlFor="active-set-weight"');
+    expect(shell).toContain('id="active-set-weight"');
 
-    const completion = ui.slice(
-      ui.indexOf("async function completeSession"),
-      ui.indexOf("function resetWorkoutTimer"),
+    const completion = controller.slice(
+      controller.indexOf("async function completeSession"),
+      controller.indexOf("function resetWorkoutTimer"),
     );
-    expect(completion).toContain("buildLogRows(exerciseStates)");
-    expect(completion).not.toContain("pendingOnly: true");
+    expect(completion).toContain("buildCanonicalLogRows(exerciseStates)");
+    expect(completion).toContain('sourceKind === "direct"');
+    expect(completion).toContain("buildCanonicalLogRows(exerciseStates, {");
+    expect(completion).toContain("pendingOnly: true");
+    expect(completion).toContain("validOnly: true");
   });
 
   it("acknowledges only the saved snapshot and isolates invalid draft effort from strict persistence", () => {
-    expect(ui).toContain(
-      "acknowledgeSetWrites(current, nextStates)",
+    expect(controller).toContain("acknowledgeSetWrites(current, states)");
+    expect(runtimeModel).toContain(
+      "setValuesMatch(set, saved, detailWriteKeys)",
     );
-    expect(ui).toContain("setValuesMatch(set, saved, detailWriteKeys)");
-    expect(ui).toContain("setValuesMatch(set, saved, logWriteKeys)");
-    expect(ui).toContain(
+    expect(runtimeModel).toContain("setValuesMatch(set, saved, logWriteKeys)");
+    expect(runtimeModel).toContain(
       "hasSetDetails: set.hasSetDetails || saved.setDetailsWriteRequired",
     );
-    expect(ui).not.toContain("setExerciseStates(acknowledgeSetWrites(nextStates))");
-    expect(ui).toContain('effortMode?: "strict" | "draft-context"');
-    expect(ui).toContain('const parseEffort = options.effortMode === "draft-context"');
-    expect(ui).toContain(": parseWorkoutSetEffortInput");
-    expect(ui).toContain('rpe: parseEffort(set.rpe, "rpe")');
-    expect(ui).toContain('rir: parseEffort(set.rir, "rir")');
-    expect(ui).toContain('buildLogRows(states, { effortMode: "draft-context" })');
-    expect(ui).toContain('rpe: workoutSetEffortInputForContext(set.rpe, "rpe")');
-    expect(ui).toContain('rir: workoutSetEffortInputForContext(set.rir, "rir")');
-    expect(ui).not.toContain('parseWorkoutSetEffortInput(set.rpe');
-    expect(ui).not.toContain('parseWorkoutSetEffortInput(set.rir');
-    expect(ui).toContain("aria-invalid={Boolean(activeRpeValidation.error)}");
-    expect(ui).toContain("aria-invalid={Boolean(activeRirValidation.error)}");
+    expect(controller).not.toContain(
+      "setExerciseStates(acknowledgeSetWrites(nextStates))",
+    );
+    expect(runtimeModel).toContain('effortMode?: "strict" | "draft-context"');
+    expect(runtimeModel).toContain(
+      'const parseEffort = options.effortMode === "draft-context"',
+    );
+    expect(runtimeModel).toContain(": parseWorkoutSetEffortInput");
+    expect(runtimeModel).toContain('rpe: parseEffort(set.rpe, "rpe")');
+    expect(runtimeModel).toContain('rir: parseEffort(set.rir, "rir")');
+    expect(runtimeModel).toContain(
+      'buildCanonicalLogRows(states, { effortMode: "draft-context" })',
+    );
+    expect(runtimeModel).toContain(
+      'rpe: workoutSetEffortInputForContext(set.rpe, "rpe")',
+    );
+    expect(runtimeModel).toContain(
+      'rir: workoutSetEffortInputForContext(set.rir, "rir")',
+    );
+    expect(runtimeModel).not.toContain("parseWorkoutSetEffortInput(set.rpe");
+    expect(runtimeModel).not.toContain("parseWorkoutSetEffortInput(set.rir");
+    expect(detailsBridge).toContain(
+      "aria-invalid={Boolean(activeRpeValidation.error)}",
+    );
+    expect(detailsBridge).toContain(
+      "aria-invalid={Boolean(activeRirValidation.error)}",
+    );
   });
 
   it("fails closed when the nested structured-log read is unavailable", () => {
@@ -163,27 +209,26 @@ describe("AW-3B set-write convergence", () => {
     expect(reader).toContain("if (error)");
     expect(reader).toContain("throw error");
     expect(reader).not.toContain("return []");
-    expect(ui).toContain("setLoadFailed(true)");
-    expect(ui).toContain("if (loadFailed)");
-    expect(ui.indexOf("if (loadFailed)")).toBeLessThan(
-      ui.indexOf("if (!exerciseStates.length)"),
+    expect(controller).toContain("setLoadFailed(true)");
+    expect(controller).toContain("if (loadFailed)");
+    expect(controller.indexOf("if (loadFailed)")).toBeLessThan(
+      controller.indexOf("if (!exerciseStates.length)"),
     );
-    const hydration = ui.slice(
-      ui.indexOf("getOrStartWorkoutDaySession(user.id, day)"),
-      ui.indexOf(".catch((error) =>"),
+    const hydration = controller.slice(
+      controller.indexOf("const hydration = store.hydrate"),
+      controller.indexOf("setSession(nextSession)"),
     );
-    expect(hydration.indexOf("getWorkoutSessionLogs(nextSession.id)")).toBeLessThan(
-      hydration.indexOf("setSession(nextSession)"),
+    expect(hydration).toContain("await Promise.all");
+    expect(hydration).toContain("store.getSnapshot()");
+    expect(controller).toContain(
+      "if (isStarting || !sessionId || !executionHydratedRef.current) return;",
     );
-    expect(ui).toContain(
-      "if (isStarting || !session?.id || !executionHydratedRef.current) return;",
+    expect(controller).toContain(
+      "if (!sessionId || isSaving || isStarting || !executionHydratedRef.current) return;",
     );
-    expect(ui).toContain(
-      "if (!session || isSaving || isStarting || !executionHydratedRef.current) return;",
-    );
-    expect(ui).toContain("setIsStarting(true)");
-    expect(ui).toContain("setSession(null)");
-    expect(ui).toContain("|| !executionHydratedRef.current");
+    expect(controller).toContain("setIsStarting(true)");
+    expect(controller).toContain("setSession(null)");
+    expect(controller).toContain("|| !executionHydratedRef.current");
   });
 
   it("keeps completion converged on the public AW-3B wrapper", () => {
