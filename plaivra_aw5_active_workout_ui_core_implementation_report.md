@@ -461,6 +461,11 @@ framework overlay, or unexpected console warning/error.
   render-time ref mutation.
 - Preserved primitive bootstrap identity and added direct-route completion,
   pending, success, failure, timer, toast, and redirect identity coverage.
+- Preserved direct-workout instructions, guide/custom-video URLs, category,
+  target muscle, equipment, and notes when projecting a frozen prescription
+  item without a plan-exercise ID. The fallback is limited to the unambiguous
+  single live exercise produced by the direct-workout adapter, and a focused
+  runtime-model regression test covers the full metadata projection.
 - Normalized exercise identity with Unicode NFKC handling, Unicode-aware prefix
   stripping, punctuation handling, Arabic coverage, and accent coverage.
 - Corrected completion semantics so an exercise is complete only when every set

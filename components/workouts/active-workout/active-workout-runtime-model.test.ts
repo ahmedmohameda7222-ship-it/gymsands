@@ -6,6 +6,7 @@ import type {
 } from "@/lib/i18n/active-workout";
 import type {
   UserWorkoutPlanExercise,
+  Workout,
   WorkoutSessionPrescriptionItem,
   WorkoutSessionSummary
 } from "@/types";
@@ -14,6 +15,8 @@ import {
   buildCanonicalLogRows,
   buildPrs,
   buildSummary,
+  directWorkoutDay,
+  frozenExercise,
   hydrateStates,
   mergeSetPatch,
   normalizeExerciseName,
@@ -124,6 +127,49 @@ function exerciseState(
 }
 
 describe("active workout runtime model", () => {
+  it("preserves direct-workout metadata when the frozen item has no plan-exercise identity", () => {
+    const workout = {
+      id: "direct-workout-1",
+      plan_exercise_id: null,
+      name: "Direct Bench Press",
+      category: "strength",
+      target_muscle: "chest",
+      equipment: "barbell",
+      difficulty: "intermediate",
+      sets: 3,
+      reps: "6-8",
+      rest_seconds: 120,
+      instructions: "Keep the shoulder blades stable.",
+      notes: "Use the competition grip.",
+      exercise_url: "https://example.com/direct-bench-guide",
+      video_url: "https://example.com/direct-bench-video",
+      custom_video_url: "https://example.com/direct-bench-custom-video",
+      is_global: false
+    } satisfies Workout;
+    const live = directWorkoutDay(workout).exercises[0]!;
+    const item = {
+      ...prescriptionItem,
+      id: "direct-item-1",
+      sourcePlanExerciseId: null,
+      activityName: workout.name
+    };
+
+    expect(frozenExercise(item, [live])).toMatchObject({
+      id: workout.id,
+      workout_id: workout.id,
+      source_workout_id: workout.id,
+      exercise_name: workout.name,
+      category: workout.category,
+      target_muscle: workout.target_muscle,
+      equipment: workout.equipment,
+      instructions: workout.instructions,
+      notes: workout.notes,
+      exercise_url: workout.exercise_url,
+      video_url: workout.video_url,
+      custom_video_url: workout.custom_video_url
+    });
+  });
+
   it("normalizes numeric drafts and exercise identity deterministically", () => {
     expect(toNumberOrNull(" 12,5 ")).toBe(12.5);
     expect(toNumberOrNull(" ")).toBeNull();

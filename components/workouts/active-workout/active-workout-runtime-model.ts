@@ -153,7 +153,11 @@ export function frozenExercise(
   item: WorkoutSessionPrescriptionItem,
   liveExercises: UserWorkoutPlanExercise[]
 ): UserWorkoutPlanExercise {
-  const live = liveExercises.find((exercise) => exercise.id === item.sourcePlanExerciseId);
+  const live = item.sourcePlanExerciseId
+    ? liveExercises.find((exercise) => exercise.id === item.sourcePlanExerciseId)
+    : liveExercises.length === 1
+      ? liveExercises[0]
+      : undefined;
   const firstSet = item.prescriptionSets[0] ?? null;
   return live ? {
     ...live,
