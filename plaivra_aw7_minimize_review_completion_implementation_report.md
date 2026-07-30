@@ -20,7 +20,7 @@ None. The fetched remote `main` matched the prompt's expected base exactly.
 
 Planner-corrected implementation and exact remote evidence head: `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`.
 
-The required report commit is a documentation-only descendant and cannot self-reference its own Git object ID. The final PR head after this report commit is therefore recorded in the PR and completion handoff; no runtime, test, QA-harness, or visual behavior changes follow the validated head above.
+The required report commit is a documentation-only descendant and cannot self-reference its own Git object ID. The final PR head after this report commit is `1fb16db421e613e577979d90a93ab214dc456077`; no runtime, test, QA-harness, or visual behavior changes follow the validated implementation head above.
 
 ## 6. PR number/URL/Draft state
 
@@ -174,9 +174,15 @@ Planner-corrected exact-head validation on `1a523d6ab1c11ef3655c78ad3c4320e9a89b
 - Rendered UI QA — passed.
 - database integration job — passed.
 
+Final docs-only exact-head validation on `1fb16db421e613e577979d90a93ab214dc456077`:
+
+- Phase A Diff Validation run `30581769829` — passed.
+- PR Quality run `30581769801` — passed.
+- every required job, including required summary and Rendered UI QA — passed.
+
 ## 32. Production build result
 
-The required `NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build` passed during original implementation validation. The Planner-corrected exact-head PR Quality production build also passed. Explicit QA-only production builds use `NEXT_PUBLIC_USE_MOCK_AUTH=true` and `NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true`; these do not enable mock auth in an ordinary Production build.
+The required `NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build` passed during original implementation validation. Both the Planner-corrected implementation head and final docs-only head PR Quality production builds passed. Explicit QA-only production builds use `NEXT_PUBLIC_USE_MOCK_AUTH=true` and `NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true`; these do not enable mock auth in an ordinary Production build.
 
 ## 33. Rendered-QA matrix
 
@@ -193,7 +199,7 @@ The original ten production-server AW-7 scenarios passed:
 9. Mobile EN 390x844 — terminal partial completion with one saved set and final Muscle Load.
 10. Desktop EN 1440x900 — terminal isolation with one saved set and final Muscle Load.
 
-After the Planner correction, exact-head PR Quality Rendered UI QA passed again on `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`.
+After the Planner correction, exact-head Rendered UI QA passed on both `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd` and final docs-only head `1fb16db421e613e577979d90a93ab214dc456077`.
 
 ## 34. Artifact and screenshot paths
 
@@ -203,13 +209,22 @@ Original local AW-7 artifact:
 
 The original ten PNGs are in the same directory and are named `01-mobile-en-minimized-active-390x844.png` through `10-desktop-en-terminal-isolation-1440x900.png`.
 
-Planner-corrected exact-head remote rendered artifact:
+Planner-corrected implementation-head remote rendered artifact:
 
 ```text
 artifact ID: 8774802526
 name: pr-quality-rendered-evidence-1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd
 digest: sha256:7787e190bcf688d58f3a93cc974c365e1534e5bd4d49c57175b387451a96e194
 workflow run: 30581021493
+```
+
+Final docs-only exact-head remote rendered artifact:
+
+```text
+artifact ID: 8775060904
+name: pr-quality-rendered-evidence-1fb16db421e613e577979d90a93ab214dc456077
+digest: sha256:28e8427a81da85693a1c0a69ae13d7a87b81555bf2e5aeddf313c206aeb3fb98
+workflow run: 30581769801
 ```
 
 ## 35. Manual visual findings/corrections
@@ -230,11 +245,11 @@ Planner correction:
 - minimized progress excludes skipped prescription items and matching skipped-item logs;
 - the correction did not change bar dimensions, positioning, Pause/Resume behavior, review layout, completion layout, or session-engine transitions.
 
-The corrected exact-head rendered artifact was inspected for the affected Active Workout surfaces. No horizontal overflow, clipped controls, overlay collisions, duplicate controller, stale minimized bar, duplicate review/completion surface, or mutable editor behind terminal completion was found.
+The corrected exact-head rendered artifacts were inspected for the affected Active Workout surfaces. No horizontal overflow, clipped controls, overlay collisions, duplicate controller, stale minimized bar, duplicate review/completion surface, or mutable editor behind terminal completion was found.
 
 ## 36. Console/page/network results
 
-The original final artifact recorded zero console errors, zero page errors, zero unexpected failed requests/responses, and zero scenario failures. Seventeen cancelled Next.js `_rsc` prefetch/navigation requests were classified separately as expected `net::ERR_ABORTED` cancellations, not network failures. The Planner-corrected exact-head Rendered UI QA also completed successfully.
+The original final artifact recorded zero console errors, zero page errors, zero unexpected failed requests/responses, and zero scenario failures. Seventeen cancelled Next.js `_rsc` prefetch/navigation requests were classified separately as expected `net::ERR_ABORTED` cancellations, not network failures. Both corrected exact-head Rendered UI QA runs completed successfully.
 
 ## 37. Database/migration confirmation
 
@@ -268,7 +283,7 @@ No architectural or product issue requiring AW-8 or a separate phase was opened.
 
 ## 44. Working-tree status
 
-All correction writes were committed directly to the existing AW-7 branch. The PR diff is clean and exact-head integrity passed.
+All correction writes were committed directly to the existing AW-7 branch. Exact-head integrity passed on the implementation and final report heads.
 
 ## 45. PR unmerged confirmation
 
@@ -288,6 +303,10 @@ Corrected implementation/evidence head:
 
 `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`
 
+Final report head:
+
+`1fb16db421e613e577979d90a93ab214dc456077`
+
 Root cause:
 
 The session engine correctly advanced the authoritative cursor to the next set/item before entering rest, but the minimized controller searched for another item after that cursor and could present a later exercise as next.
@@ -298,8 +317,10 @@ The minimized rest context now uses the authoritative active item, set number, a
 
 Evidence:
 
-- Phase A `30581021594` — passed.
-- PR Quality `30581021493` — passed.
-- exact-head artifact `8774802526` — uploaded successfully.
+- implementation-head Phase A `30581021594` — passed.
+- implementation-head PR Quality `30581021493` — passed.
+- final-head Phase A `30581769829` — passed.
+- final-head PR Quality `30581769801` — passed.
+- final-head artifact `8775060904` — uploaded successfully.
 - PR remains Draft and unmerged.
 - no migration, Production, Activity Catalog, compatibility-marker, deployment, merge, or AW-8 work occurred.
