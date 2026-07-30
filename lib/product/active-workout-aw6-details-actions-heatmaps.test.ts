@@ -19,6 +19,7 @@ const fullMap = source(
 );
 const sessionPanel = source("components/workouts/session-muscle-load-panel.tsx");
 const aw5CorrectionQa = source("scripts/run-aw5-correction-layout-qa.mjs");
+const trainLayoutQa = source("scripts/run-train-layout-qa-base.mjs");
 
 describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
   it("uses one active-session request owner for mini and full consumers", () => {
@@ -92,6 +93,10 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(aw5CorrectionQa).toContain(
       'locator("[data-aw5-rest-presets]:visible")'
     );
+    expect(trainLayoutQa).toContain(
+      '...document.querySelectorAll("[data-active-set-details-trigger]")'
+    );
+    expect(trainLayoutQa).toContain("].filter(visible).length");
     expect(shell.match(/data-aw5-rest-presets/g)).toHaveLength(2);
     expect(shell).toContain(
       'data-aw5-rest-presets className="mt-3 grid grid-cols-4 gap-2 lg:hidden"'

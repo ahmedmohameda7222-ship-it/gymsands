@@ -1319,9 +1319,9 @@ async function openScenario({
         primaryActionCount: document.querySelectorAll(
           "[data-aw5-primary-action]",
         ).length,
-        detailsTriggerCount: document.querySelectorAll(
-          "[data-active-set-details-trigger]",
-        ).length,
+        detailsTriggerCount: [
+          ...document.querySelectorAll("[data-active-set-details-trigger]"),
+        ].filter(visible).length,
         miniHeatMapCount: document.querySelectorAll(
           "[data-aw5-mini-heat-map-slot]",
         ).length,
