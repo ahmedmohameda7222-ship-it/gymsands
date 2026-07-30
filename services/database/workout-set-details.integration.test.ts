@@ -220,8 +220,12 @@ describe("AW-3B set-write convergence", () => {
     );
     expect(hydration).toContain("await Promise.all");
     expect(hydration).toContain("store.getSnapshot()");
-    expect(controller).toContain(
-      "if (isStarting || !sessionId || !executionHydratedRef.current) return;",
+    const finishSet = controller.slice(
+      controller.indexOf("async function finishSet"),
+      controller.indexOf("async function restartSet"),
+    );
+    expect(finishSet).toMatch(
+      /\|\| isStarting[\s\S]*\|\| !sessionId[\s\S]*\|\| !userId[\s\S]*\|\| !executionHydratedRef\.current/,
     );
     expect(controller).toContain(
       "if (!sessionId || isSaving || isStarting || !executionHydratedRef.current) return;",
