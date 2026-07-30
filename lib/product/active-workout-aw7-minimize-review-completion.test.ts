@@ -28,6 +28,20 @@ describe("AW-7 minimize, review, and completion source contract", () => {
     expect(minimizedBar).not.toContain("Cancel workout");
   });
 
+  it("uses the authoritative rest cursor target and excludes skipped items from progress", () => {
+    const restProjection = indicator.slice(
+      indicator.indexOf('execution?.view_state === "rest"'),
+      indicator.indexOf("return (", indicator.indexOf('execution?.view_state === "rest"'))
+    );
+
+    expect(indicator).not.toContain("const nextItem");
+    expect(restProjection).toContain("name: activeItem.activityName");
+    expect(restProjection).toContain("current: execution.active_set_number");
+    expect(restProjection).toContain("total: activeSetCount");
+    expect(minimizedBar).toContain('item.executionState !== "skipped"');
+    expect(indicator).toContain("projectActiveWorkoutMinimizedProgress(prescription, logs)");
+  });
+
   it("minimizes only after the core flushes and returns to a validated prior route", () => {
     expect(core).toContain("useRegisterActiveWorkoutMinimize(minimizeWorkout)");
     const minimize = core.slice(
