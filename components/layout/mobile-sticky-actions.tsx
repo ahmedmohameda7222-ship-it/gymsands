@@ -45,10 +45,11 @@ export function MobileStickyActions({
   return (
     <div
       data-mobile-sticky-placement={resolvedPlacement}
+      data-mobile-sticky-safe-area={resolvedPlacement === "session" ? "true" : undefined}
       className={cn(
         "fixed inset-x-0 z-30 border-t bg-card/95 px-4 pt-3 shadow-luxe backdrop-blur lg:hidden",
         resolvedPlacement === "session"
-          ? "bottom-0 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+          ? "bottom-0 min-h-[calc(4.75rem+env(safe-area-inset-bottom))] pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
           : "bottom-[calc(4.25rem+env(safe-area-inset-bottom))] pb-3",
         className
       )}
@@ -85,7 +86,7 @@ export function MobileStickyActionsSpacer({
       data-mobile-sticky-spacer={resolvedPlacement}
       className={cn(
         resolvedPlacement === "session"
-          ? "h-[calc(5.25rem+env(safe-area-inset-bottom))] lg:hidden"
+          ? "h-[calc(6rem+env(safe-area-inset-bottom))] lg:hidden"
           : "h-24 lg:hidden",
         className
       )}

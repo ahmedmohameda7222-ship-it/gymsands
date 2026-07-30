@@ -81,7 +81,7 @@ export async function installAw5CorrectionFixture(context, { direct, language, t
   const sourceExerciseId = direct ? null : contract.activeFirstExerciseId;
   const delayedCanonical = createDeferred();
   const canonicalFinished = createDeferred();
-  const root = {
+  let root = {
     id: sessionId,
     user_id: contract.userId,
     workout_id: direct ? activityId : null,
@@ -273,7 +273,15 @@ export async function installAw5CorrectionFixture(context, { direct, language, t
       return;
     }
     if (method === "POST" && pathname.includes("/rest/v1/rpc/complete_workout_session_atomic")) {
-      return respond({ ...root, status: "completed", completed_at: "2026-07-27T09:00:00.000Z" });
+      const payload = request.postDataJSON();
+      root = {
+        ...root,
+        status: "completed",
+        completed_at: "2026-07-27T09:00:00.000Z",
+        duration_minutes: payload?.p_duration_minutes ?? root.duration_minutes,
+        notes: payload?.p_notes ?? root.notes
+      };
+      return respond(root);
     }
     if (pathname.includes("/rest/v1/user_app_settings") && (method === "GET" || method === "HEAD")) {
       return route.fulfill({

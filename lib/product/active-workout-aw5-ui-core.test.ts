@@ -4,33 +4,37 @@ import { describe, expect, it } from "vitest";
 const source = (path: string) => readFileSync(path, "utf8");
 
 const controller = source(
-  "components/workouts/active-workout/active-workout-core-session.tsx"
+  "components/workouts/active-workout/active-workout-core-session.tsx",
 );
 const shell = source(
-  "components/workouts/active-workout/active-workout-execution-shell.tsx"
+  "components/workouts/active-workout/active-workout-execution-shell.tsx",
 );
 const runtimeModel = source(
-  "components/workouts/active-workout/active-workout-runtime-model.ts"
+  "components/workouts/active-workout/active-workout-runtime-model.ts",
 );
 const sourceCompatibility = source(
-  "components/workouts/active-workout/active-workout-source-compatibility.ts"
+  "components/workouts/active-workout/active-workout-source-compatibility.ts",
 );
 const detailsBridge = source(
-  "components/workouts/active-workout/active-workout-details-bridge.tsx"
+  "components/workouts/active-workout/active-workout-details-bridge.tsx",
 );
 const reviewBridge = source(
-  "components/workouts/active-workout/active-workout-review-bridge.tsx"
+  "components/workouts/active-workout/active-workout-review-bridge.tsx",
 );
 const workoutSessionScreen = source(
-  "components/workouts/workout-session-screen.tsx"
+  "components/workouts/workout-session-screen.tsx",
 );
-const stickyActions = source(
-  "components/layout/mobile-sticky-actions.tsx"
-);
+const stickyActions = source("components/layout/mobile-sticky-actions.tsx");
 const dayRoute = source("components/workouts/workout-day-focus-session.tsx");
 const directRoute = source("components/workouts/workout-session-form.tsx");
 const directPage = source("app/(private)/workouts/session/[id]/page.tsx");
 const activeWorkoutI18n = source("lib/i18n/active-workout.ts");
+const authProvider = source("components/auth/auth-provider.tsx");
+const environment = source("lib/env.ts");
+const workoutPlans = source("services/database/workout-plans.ts");
+const workoutSessionsLegacy = source(
+  "services/database/workout-sessions-legacy-implementation.ts",
+);
 
 describe("AW-5 Active Workout UI core source contract", () => {
   it("converges both routes on one shared controller and shell", () => {
@@ -51,7 +55,9 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(controller).not.toMatch(/switch\s*\(\s*commandType/);
     expect(controller).not.toContain("createWorkoutSessionExecutionWriteQueue");
     expect(controller).not.toContain("supabase.from");
-    expect(controller).not.toMatch(/from\(\s*["'](?:exercise_logs|workout_session_execution_state|workout_set_details)/);
+    expect(controller).not.toMatch(
+      /from\(\s*["'](?:exercise_logs|workout_session_execution_state|workout_set_details)/,
+    );
   });
 
   it("keeps the compact primary shell free of rejected legacy presentation", () => {
@@ -75,10 +81,14 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(reviewBridge).toContain("overflow-y-auto bg-background");
     expect(reviewBridge).toContain("min-h-dvh");
     expect(reviewBridge).toContain('role="main"');
-    expect(reviewBridge).toContain('aria-labelledby="aw5-completed-summary-title"');
+    expect(reviewBridge).toContain(
+      'aria-labelledby="aw5-completed-summary-title"',
+    );
     expect(reviewBridge).toContain("completionSurfaceRef");
     expect(reviewBridge).toContain("sibling.inert = true");
-    expect(reviewBridge).toContain('sibling.setAttribute("aria-hidden", "true")');
+    expect(reviewBridge).toContain(
+      'sibling.setAttribute("aria-hidden", "true")',
+    );
     expect(reviewBridge).toContain("surface.focus()");
     expect(reviewBridge).toContain("<WorkoutSummaryCard");
     expect(reviewBridge).not.toContain("{completedSummary ? (");
@@ -105,7 +115,9 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(controller).toContain("ActiveWorkoutDetailsBridge");
     expect(controller).toContain("ActiveWorkoutReviewBridge");
     expect(controller).toContain("active-workout-runtime-model");
-    expect(controller).not.toMatch(/function\s+(?:buildPrs|buildSummary|historicalSets|previousPerformance|previousSetForExercise)\b/);
+    expect(controller).not.toMatch(
+      /function\s+(?:buildPrs|buildSummary|historicalSets|previousPerformance|previousSetForExercise)\b/,
+    );
     expect(controller).not.toMatch(/from\s+["']@\/components\/ui\/dialog["']/);
     expect(controller).not.toContain("AiActionRequestDialog");
     expect(controller).not.toContain("WorkoutAiActionPanel");
@@ -127,7 +139,9 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(controller).toContain("const userId = user?.id ?? null");
     expect(controller).toContain("const sourceKind = source.kind");
     expect(controller).toContain("const sourceId =");
-    expect(controller).not.toContain("[mirrorExecutionState, session, toast, tr, user]");
+    expect(controller).not.toContain(
+      "[mirrorExecutionState, session, toast, tr, user]",
+    );
     expect(controller).not.toContain("user.id");
     expect(controller).not.toContain("react-hooks/exhaustive-deps");
     expect(directPage).not.toContain("react-hooks/exhaustive-deps");
@@ -137,7 +151,7 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(workoutSessionScreen).toContain("data-workout-session-close");
     expect(workoutSessionScreen).toContain("start-3");
     expect(workoutSessionScreen).not.toContain("end-3 top-3");
-    expect(stickyActions).toContain('placement?: MobileStickyActionsPlacement');
+    expect(stickyActions).toContain("placement?: MobileStickyActionsPlacement");
     expect(stickyActions).toContain('"app" | "session"');
     expect(shell).toContain('placement="session"');
     for (const selector of [
@@ -148,9 +162,25 @@ describe("AW-5 Active Workout UI core source contract", () => {
       "data-aw5-rest-presets",
       "data-aw5-primary-editor",
       "data-aw5-feedback",
-      "data-aw5-sticky-actions"
+      "data-aw5-sticky-actions",
     ]) {
       expect(shell).toContain(selector);
     }
+  });
+
+  it("permits mock auth in production only for the explicit rendered-QA build", () => {
+    expect(environment).toContain("NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA");
+    expect(authProvider).toContain(
+      "env.useMockAuth && (!isProduction || env.productionQaBuild)",
+    );
+    expect(authProvider).toContain(
+      "env.useMockAuth && isProduction && !env.productionQaBuild",
+    );
+    expect(workoutPlans).toContain(
+      'process.env.NODE_ENV !== "production" || env.productionQaBuild',
+    );
+    expect(workoutSessionsLegacy).toContain(
+      "env.useMockAuth && isMockAuthUserId(userId) && !env.productionQaBuild",
+    );
   });
 });

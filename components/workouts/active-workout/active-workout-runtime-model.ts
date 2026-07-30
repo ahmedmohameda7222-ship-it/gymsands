@@ -90,6 +90,7 @@ export type ActiveWorkoutSummary = {
   totalVolume: number;
   completedSets: number;
   completedExercises: number;
+  partialExercises: string[];
   skippedExercises: string[];
   prs: string[];
   suggestions: string[];
@@ -368,11 +369,14 @@ export function formatPlannedReps(
 }
 
 export function normalizeExerciseName(value: string) {
-  return value
+  const normalized = value
+    .normalize("NFKC")
     .toLowerCase()
-    .replace(/^[a-z]\d\s*[:.)-]\s*/i, "")
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/^[a-z]\p{N}+\s*[:.)-]\s*/u, "");
+  const identity = normalized
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+  return identity || normalized.trim();
 }
 
 export function roundWorkoutMetric(value: number) {
@@ -626,8 +630,14 @@ export function buildSummary(
 ): ActiveWorkoutSummary {
   const sessionSets = buildSessionSets(states);
   const completedExercises = states.filter((item) =>
-    item.sets.some((set) => set.completedAt)
+    item.sets.length > 0 && item.sets.every((set) => set.completedAt)
   ).length;
+  const partialExercises = states
+    .filter((item) => {
+      const completedCount = item.sets.filter((set) => set.completedAt).length;
+      return completedCount > 0 && completedCount < item.sets.length;
+    })
+    .map((item) => item.exercise.exercise_name);
   const skippedExercises = states
     .filter((item) => !item.sets.some((set) => set.completedAt))
     .map((item) => item.exercise.exercise_name);
@@ -638,6 +648,7 @@ export function buildSummary(
     ),
     completedSets: sessionSets.length,
     completedExercises,
+    partialExercises,
     skippedExercises,
     prs: buildPrs(states, history, tr, formatters),
     suggestions: states.map((item) => buildProgressiveSuggestion(item, tr, formatters)),

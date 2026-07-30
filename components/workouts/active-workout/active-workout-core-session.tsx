@@ -11,6 +11,11 @@ import { InlineFeedback } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
 import { ActiveWorkoutDetailsBridge } from "@/components/workouts/active-workout/active-workout-details-bridge";
+import {
+  dispatchActiveWorkoutExecutionAwaited,
+  dispatchActiveWorkoutExecutionBackground,
+  type ActiveWorkoutExecutionDispatchOptions
+} from "@/components/workouts/active-workout/active-workout-command-dispatch";
 import { ActiveWorkoutExecutionShell } from "@/components/workouts/active-workout/active-workout-execution-shell";
 import { ActiveWorkoutReviewBridge } from "@/components/workouts/active-workout/active-workout-review-bridge";
 import {
@@ -115,25 +120,29 @@ function restDeadline(seconds: number) {
   return Date.now() + seconds * 1000;
 }
 
+function useLatest<T>(value: T) {
+  const ref = useRef(value);
+  useEffect(() => {
+    ref.current = value;
+  }, [value]);
+  return ref;
+}
+
 export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSource }) {
   const sourceKind = source.kind;
   const sourceId = source.kind === "plan-day" ? source.day.id : source.workout.id;
   const day = source.kind === "plan-day" ? source.day : directWorkoutDay(source.workout);
   const directWorkout = source.kind === "direct" ? source.workout : null;
-  const dayRef = useRef(day);
-  const directWorkoutRef = useRef(directWorkout);
-  dayRef.current = day;
-  directWorkoutRef.current = directWorkout;
+  const dayRef = useLatest(day);
+  const directWorkoutRef = useLatest(directWorkout);
 
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const { toast } = useToast();
-  const toastRef = useRef(toast);
-  toastRef.current = toast;
+  const toastRef = useLatest(toast);
   const router = useRouter();
   const { t: tr, locale: language, direction: dir, formatters } = useActiveWorkoutTranslation();
-  const trRef = useRef(tr);
-  trRef.current = tr;
+  const trRef = useLatest(tr);
   const legacyReopenSetLabel = translateTrain(language, "reopenSet");
   const legacySetReopened = translateTrain(language, "setReopened");
   const legacySetReopenFailed = translateTrain(language, "setReopenFailed");
@@ -216,44 +225,46 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         controllerDeviceId: controllerDeviceIdRef.current
       }, now));
     }
-  }, [restTimerKey, sessionRoute, userId, workoutTimerKey]);
+  }, [dayRef, restTimerKey, sessionRoute, userId, workoutTimerKey]);
 
-  const dispatchExecution = useCallback((
+  const executionDispatchContext = useCallback(() => ({
+    store: activeSessionStoreRef.current,
+    userId,
+    sessionId,
+    createCommandId: createSessionCommandId,
+    mirrorState: mirrorExecutionState,
+    reportFailure: (error: unknown) => {
+      const currentTr = trRef.current;
+      setSetFeedbackVariant("error");
+      setSetFeedback(currentTr("offline.setSaveCombined"));
+      toastRef.current({
+        title: currentTr("completion.saveFailedTitle"),
+        description: userSafeError(error, currentTr("offline.keepOpenRetry"))
+      });
+    }
+  }), [mirrorExecutionState, sessionId, toastRef, trRef, userId]);
+
+  const dispatchExecutionAwaited = useCallback((
     commandType: Parameters<ActiveSessionStore["dispatch"]>[0]["commandType"],
     payload: Parameters<ActiveSessionStore["dispatch"]>[0]["payload"],
-    options: {
-      rollback?: (currentServerState: WorkoutSessionExecutionState | null) => void;
-      reportFailure?: boolean;
-    } = {}
-  ) => {
-    const store = activeSessionStoreRef.current;
-    const attemptedState = store?.getSnapshot().executionState ?? null;
-    if (!store || !userId || !sessionId) {
-      return Promise.reject(new Error("The workout execution store is unavailable."));
-    }
-    const operation = store.dispatch({
-      userId,
-      workoutSessionId: sessionId,
-      commandId: createSessionCommandId(),
-      commandType,
-      payload
-    } as Parameters<ActiveSessionStore["dispatch"]>[0]);
-    void operation.then(
-      (response) => { mirrorExecutionState(response.state); },
-      (error) => {
-        options.rollback?.(attemptedState);
-        if (options.reportFailure === false) return;
-        const currentTr = trRef.current;
-        setSetFeedbackVariant("error");
-        setSetFeedback(currentTr("offline.setSaveCombined"));
-        toastRef.current({
-          title: currentTr("completion.saveFailedTitle"),
-          description: userSafeError(error, currentTr("offline.keepOpenRetry"))
-        });
-      }
-    );
-    return operation.then((response) => response.state);
-  }, [mirrorExecutionState, sessionId, userId]);
+    options: ActiveWorkoutExecutionDispatchOptions = {}
+  ) => dispatchActiveWorkoutExecutionAwaited(
+    executionDispatchContext(),
+    commandType,
+    payload,
+    options
+  ), [executionDispatchContext]);
+
+  const dispatchExecutionBackground = useCallback((
+    commandType: Parameters<ActiveSessionStore["dispatch"]>[0]["commandType"],
+    payload: Parameters<ActiveSessionStore["dispatch"]>[0]["payload"],
+    options: ActiveWorkoutExecutionDispatchOptions = {}
+  ) => dispatchActiveWorkoutExecutionBackground(
+    executionDispatchContext(),
+    commandType,
+    payload,
+    options
+  ), [executionDispatchContext]);
 
   useEffect(() => {
     let active = true;
@@ -432,10 +443,14 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     return () => { active = false; };
   }, [
     mirrorExecutionState,
+    dayRef,
+    directWorkoutRef,
     restTimerKey,
     sessionRoute,
     sourceId,
     sourceKind,
+    toastRef,
+    trRef,
     userId,
     workoutTimerKey
   ]);
@@ -461,7 +476,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         setIsTimerRunning(false);
         clearStoredValue(restTimerKey);
         if (userId && sessionId && executionHydratedRef.current) {
-          void dispatchExecution("clear_rest", {
+          void dispatchExecutionBackground("clear_rest", {
             view_state: "set_entry",
             completion_reason: "natural_expiration",
             controller_device_id: controllerDeviceIdRef.current
@@ -484,7 +499,16 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       }
     };
     return activeSessionClock.subscribe(tick);
-  }, [dispatchExecution, executionState, restTimerKey, sessionId, startedAtMs, userId]);
+  }, [
+    dispatchExecutionBackground,
+    executionState,
+    restTimerKey,
+    sessionId,
+    startedAtMs,
+    toastRef,
+    trRef,
+    userId
+  ]);
 
   useEffect(() => {
     if (!executionHydratedRef.current || !userId || !sessionId || !executionState) return;
@@ -500,7 +524,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       && executionState.controller_device_id === controllerDeviceIdRef.current
     ) return;
 
-    void dispatchExecution(
+    void dispatchExecutionBackground(
       "move_cursor",
       {
         active_snapshot_item_id: cursorItem?.id ?? null,
@@ -523,7 +547,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }, [
     activeExerciseIndex,
     activeSetIndex,
-    dispatchExecution,
+    dispatchExecutionBackground,
     executionCursorItems,
     executionState,
     sessionId,
@@ -728,7 +752,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setIsTimerRunning(true);
     storeTimestamp(restTimerKey, deadline);
     if (userId && sessionId && executionHydratedRef.current) {
-      void dispatchExecution(
+      void dispatchExecutionBackground(
         "start_rest",
         {
           duration_seconds: safeSeconds,
@@ -746,7 +770,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setIsTimerRunning(false);
     clearStoredValue(restTimerKey);
     if (userId && sessionId && executionHydratedRef.current) {
-      void dispatchExecution(
+      void dispatchExecutionBackground(
         "clear_rest",
         {
           view_state: "set_entry",
@@ -1018,7 +1042,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setFinishOpen(true);
     if (!userId) return;
     const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
-    void dispatchExecution("move_cursor", {
+    void dispatchExecutionBackground("move_cursor", {
       active_snapshot_item_id: cursor.snapshotItemId,
       active_item_order: cursor.itemOrder,
       active_set_number: cursor.setNumber,
@@ -1035,7 +1059,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setFinishOpen(false);
     if (!userId || !sessionId || !executionHydratedRef.current) return;
     const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
-    void dispatchExecution("move_cursor", {
+    void dispatchExecutionBackground("move_cursor", {
       active_snapshot_item_id: cursor.snapshotItemId,
       active_item_order: cursor.itemOrder,
       active_set_number: cursor.setNumber,
@@ -1105,12 +1129,12 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     if (!executionState || isSaving || isStarting) return;
     setIsSaving(true);
     try {
-      await dispatchExecution(
+      await dispatchExecutionAwaited(
         executionState.session_state === "paused" ? "resume" : "pause",
         { controller_device_id: controllerDeviceIdRef.current }
       );
     } catch {
-      // dispatchExecution presents the localized recoverable failure.
+      // dispatchExecutionAwaited presents the localized recoverable failure.
     } finally {
       setIsSaving(false);
     }
@@ -1124,7 +1148,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setElapsedSeconds(0);
     storeTimestamp(workoutTimerKey, nextStartedAt);
     if (userId && sessionId && executionHydratedRef.current) {
-      void dispatchExecution(
+      void dispatchExecutionBackground(
         "reset_timer",
         { controller_device_id: controllerDeviceIdRef.current },
         {
@@ -1449,6 +1473,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         resumeLabel={tr("common.resume")}
         finishLabel={tr("common.finish")}
         addThirtySecondsLabel={tr("rest.addThirtySeconds")}
+        restPresetSectionLabel={tr("actions.timerControls")}
         restPresetLabels={[30, 60, 90, 180].map((seconds) => ({
           seconds,
           label: restPresetLabel(seconds, tr)

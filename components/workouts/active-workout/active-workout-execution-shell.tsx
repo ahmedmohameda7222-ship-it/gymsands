@@ -70,6 +70,7 @@ export type ActiveWorkoutExecutionShellProps = {
   resumeLabel: string;
   finishLabel: string;
   addThirtySecondsLabel: string;
+  restPresetSectionLabel: string;
   restPresetLabels: ReadonlyArray<{ seconds: number; label: string }>;
   feedback: ReactNode;
   detailsContent: ReactNode;
@@ -131,6 +132,7 @@ export function ActiveWorkoutExecutionShell({
   resumeLabel,
   finishLabel,
   addThirtySecondsLabel,
+  restPresetSectionLabel,
   restPresetLabels,
   feedback,
   detailsContent,
@@ -368,9 +370,11 @@ export function ActiveWorkoutExecutionShell({
                   <p className="mt-0.5 text-xs text-muted-foreground">{nextContextLabel}</p>
                 </div>
                 <Button
+                  data-aw5-add-thirty
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="hidden lg:inline-flex"
                   onClick={onAddThirtySeconds}
                   disabled={busy}
                 >
@@ -386,7 +390,10 @@ export function ActiveWorkoutExecutionShell({
           </div>
         </section>
 
-        <aside className="border-t border-border/70 pt-4 lg:sticky lg:top-4 lg:rounded-[var(--radius-lg)] lg:border lg:bg-card/75 lg:p-4">
+        <aside className={cn(
+          "border-t border-border/70 pt-4 lg:sticky lg:top-4 lg:block lg:rounded-[var(--radius-lg)] lg:border lg:bg-card/75 lg:p-4",
+          !restActive && "hidden"
+        )}>
           <Button
             data-aw5-primary-action
             type="button"
@@ -399,20 +406,25 @@ export function ActiveWorkoutExecutionShell({
             {primaryActionLabel}
           </Button>
 
-          <div data-aw5-rest-presets className="grid grid-cols-4 gap-2 lg:mt-4">
-            {restPresetLabels.map((preset) => (
-              <Button
-                key={preset.seconds}
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-11 px-1.5 text-xs"
-                onClick={() => onStartRest(preset.seconds)}
-                disabled={busy}
-              >
-                {preset.label}
-              </Button>
-            ))}
+          <div data-aw5-rest-presets className="lg:mt-4">
+            <h3 className="text-xs font-semibold text-muted-foreground">
+              {restPresetSectionLabel}
+            </h3>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {restPresetLabels.map((preset) => (
+                <Button
+                  key={preset.seconds}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 px-1.5 text-xs"
+                  onClick={() => onStartRest(preset.seconds)}
+                  disabled={busy}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
           </div>
 
           <Button
@@ -438,6 +450,7 @@ export function ActiveWorkoutExecutionShell({
         <div className="mx-auto flex w-full max-w-xl items-center gap-2.5">
           {restActive ? (
             <Button
+              data-aw5-add-thirty
               type="button"
               variant="outline"
               className="min-h-[52px] shrink-0 px-3 text-xs"
@@ -446,6 +459,17 @@ export function ActiveWorkoutExecutionShell({
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               {addThirtySecondsLabel}
+            </Button>
+          ) : primaryActionKind === "complete-set" ? (
+            <Button
+              data-aw5-finish-action
+              type="button"
+              variant="outline"
+              className="min-h-[52px] shrink-0 px-3 text-xs"
+              onClick={onFinish}
+              disabled={busy}
+            >
+              {finishLabel}
             </Button>
           ) : null}
           <Button

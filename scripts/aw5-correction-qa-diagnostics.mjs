@@ -6,7 +6,7 @@ import {
   errorMessage,
   observations,
   outputDir,
-  overlaps,
+  overlapDepth,
   writeReport
 } from "./aw5-correction-qa-shared.mjs";
 
@@ -50,6 +50,34 @@ export async function geometry(page) {
         const value = element.getBoundingClientRect();
         return { left: value.left, right: value.right, top: value.top, bottom: value.bottom, width: value.width, height: value.height };
       });
+    const interactiveControls = [...document.querySelectorAll(
+      "[data-aw5-execution-shell] button, [data-aw5-execution-shell] input, [data-aw5-execution-shell] select, [data-aw5-execution-shell] textarea, [data-aw5-execution-shell] a[href]"
+    )]
+      .filter(visible)
+      .filter((element) =>
+        !element.closest("[data-aw5-sticky-actions]")
+        && !element.closest("[data-aw5-rest-presets]")
+        && !element.closest("[data-active-set-details-dialog]")
+        && !element.closest("[data-aw5-session-review]")
+        && !element.closest("[data-aw5-completion-surface]")
+      )
+      .map((element) => {
+        const value = element.getBoundingClientRect();
+        return {
+          label: element.getAttribute("data-aw5-finish-action") !== null
+            ? "Finish review"
+            : element.getAttribute("aria-label")
+              || element.textContent?.replace(/\s+/g, " ").trim()
+              || element.id
+              || element.tagName.toLowerCase(),
+          left: value.left,
+          right: value.right,
+          top: value.top,
+          bottom: value.bottom,
+          width: value.width,
+          height: value.height
+        };
+      });
     return {
       viewport: { width: innerWidth, height: innerHeight },
       direction: document.documentElement.dir || getComputedStyle(document.body).direction || "ltr",
@@ -64,6 +92,7 @@ export async function geometry(page) {
       details: rect("[data-active-set-details-trigger]"),
       setPath: rect("[data-aw5-set-path]"),
       restPresets: rects("[data-aw5-rest-presets] button"),
+      interactiveControls,
       feedback: rect("[data-aw5-feedback]"),
       clippedControls: [...document.querySelectorAll("[data-aw5-execution-shell] button")]
         .filter(visible)
@@ -82,13 +111,17 @@ export async function geometry(page) {
 
 export function geometryFailures(metrics, options = {}) {
   const failures = [];
+  const intersectionFailure = (label, first, second) => {
+    const depth = overlapDepth(first, second);
+    if (depth > 1) failures.push(`${label} (${depth.toFixed(2)}px)`);
+  };
   for (const [name, target] of [
     ["Mini Heat Map", metrics.heatMap],
     ["session title", metrics.sessionTitle],
     ["metadata", metrics.metadata],
     ["Pause/Resume", metrics.pause]
   ]) {
-    if (overlaps(metrics.close, target)) failures.push(`close intersects ${name}`);
+    intersectionFailure(`close intersects ${name}`, metrics.close, target);
   }
   if (metrics.close && metrics.heatMap) {
     const closeCenter = (metrics.close.left + metrics.close.right) / 2;
@@ -103,13 +136,18 @@ export function geometryFailures(metrics, options = {}) {
     ["set path", metrics.setPath],
     ["validation feedback", metrics.feedback]
   ]) {
-    if (overlaps(metrics.sticky, target)) failures.push(`sticky intersects ${name}`);
+    intersectionFailure(`sticky intersects ${name}`, metrics.sticky, target);
   }
-  if (options.restPresets) {
-    metrics.restPresets.forEach((target, index) => {
-      if (overlaps(metrics.sticky, target)) failures.push(`sticky intersects rest preset ${index + 1}`);
-    });
-  }
+  metrics.restPresets.forEach((target, index) => {
+    intersectionFailure(`sticky intersects rest preset ${index + 1}`, metrics.sticky, target);
+  });
+  metrics.interactiveControls.forEach((target, index) => {
+    intersectionFailure(
+      `sticky intersects interactive control ${index + 1} (${target.label})`,
+      metrics.sticky,
+      target
+    );
+  });
   if (options.initial320) {
     if (!metrics.setPath || metrics.setPath.top < 0 || metrics.setPath.bottom > metrics.viewport.height) failures.push("set path is not fully visible in the initial 320x568 viewport");
     if (!metrics.sticky || metrics.sticky.top < 0 || metrics.sticky.bottom > metrics.viewport.height + 1) failures.push("primary CTA is not fully visible in the initial 320x568 viewport");
@@ -127,11 +165,8 @@ export function geometryFailures(metrics, options = {}) {
   return failures;
 }
 
-export function expectedDevelopmentWarning(message) {
-  return /Reduced Motion enabled on your device/i.test(message)
-    || /Content Security Policy.*(?:unsafe-eval|eval)/i.test(message)
-    || /Refused to evaluate a string as JavaScript.*unsafe-eval/i.test(message)
-    || /Download the React DevTools/i.test(message);
+export function expectedProductionWarning(message) {
+  return /Reduced Motion enabled on your device/i.test(message);
 }
 
 export async function domDiagnostics(page) {
@@ -218,7 +253,7 @@ export async function captureFailure(session, error, { bootstrapFailed = false }
 export async function record(session, options = {}, additionalFailures = []) {
   const metrics = await geometry(session.page);
   const chrome = await frameworkChrome(session.page);
-  const warnings = session.consoleWarnings.filter((message) => !expectedDevelopmentWarning(message));
+  const warnings = session.consoleWarnings.filter((message) => !expectedProductionWarning(message));
   const failures = [
     ...geometryFailures(metrics, { ...options, direct: session.direct }),
     ...additionalFailures,

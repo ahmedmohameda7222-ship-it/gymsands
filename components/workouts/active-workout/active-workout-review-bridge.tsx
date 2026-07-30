@@ -11,13 +11,13 @@ import {
   DialogContent,
   DialogDescription,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { MotionCard } from "@/components/motion";
 import type {
   ActiveWorkoutFormatters,
-  ActiveWorkoutTranslator
+  ActiveWorkoutTranslator,
 } from "@/lib/i18n/active-workout";
 import { isolateBidiText } from "@/lib/i18n/active-workout";
 
@@ -45,7 +45,7 @@ export type ActiveWorkoutReviewBridgeProps = {
 function InfoStat({
   label,
   value,
-  valueDirection = "auto"
+  valueDirection = "auto",
 }: {
   label: string;
   value: string;
@@ -53,7 +53,10 @@ function InfoStat({
 }) {
   return (
     <div className="rounded-[16px] border border-border/60 bg-muted/30 p-3 text-center">
-      <p dir={valueDirection} className="text-lg font-bold tracking-[-0.03em] tabular-nums">
+      <p
+        dir={valueDirection}
+        className="text-lg font-bold tracking-[-0.03em] tabular-nums"
+      >
         {value}
       </p>
       <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -67,7 +70,7 @@ function WorkoutSummaryCard({
   summary,
   dayName,
   tr,
-  formatters
+  formatters,
 }: {
   summary: ActiveWorkoutSummary;
   dayName: string;
@@ -84,16 +87,27 @@ function WorkoutSummaryCard({
                 <Dumbbell className="h-5 w-5 text-success" aria-hidden="true" />
               </div>
               <div>
-                <h1 id="aw5-completed-summary-title" className="text-base font-semibold">
-                  {tr("completion.dayComplete", { day: isolateBidiText(dayName) })}
+                <h1
+                  id="aw5-completed-summary-title"
+                  className="text-base font-semibold"
+                >
+                  {tr("completion.dayComplete", {
+                    day: isolateBidiText(dayName),
+                  })}
                 </h1>
-                <p className="text-sm text-muted-foreground">{tr("completion.savedHistory")}</p>
+                <p className="text-sm text-muted-foreground">
+                  {tr("completion.savedHistory")}
+                </p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               <InfoStat
                 label={tr("review.minutes")}
-                value={formatters.measurement(summary.durationMinutes, "minutes", 0)}
+                value={formatters.measurement(
+                  summary.durationMinutes,
+                  "minutes",
+                  0,
+                )}
               />
               <InfoStat
                 label={tr("review.volume")}
@@ -107,6 +121,10 @@ function WorkoutSummaryCard({
                 label={tr("navigation.exercises")}
                 value={formatters.integer(summary.completedExercises)}
               />
+              <InfoStat
+                label={tr("navigation.partial")}
+                value={formatters.integer(summary.partialExercises.length)}
+              />
             </div>
             {summary.prs.length ? (
               <div className="rounded-[16px] border border-primary/20 bg-primary/[0.04] p-4">
@@ -116,13 +134,17 @@ function WorkoutSummaryCard({
                 </p>
                 <ul className="mt-2 space-y-1">
                   {summary.prs.slice(0, 4).map((pr) => (
-                    <li key={pr} className="text-sm text-muted-foreground">- {pr}</li>
+                    <li key={pr} className="text-sm text-muted-foreground">
+                      - {pr}
+                    </li>
                   ))}
                 </ul>
               </div>
             ) : null}
             <Button asChild className="min-h-12 w-full rounded-[18px]">
-              <Link href="/my-workout/plans">{tr("completion.backToWorkouts")}</Link>
+              <Link href="/my-workout/plans" prefetch={false}>
+                {tr("completion.backToWorkouts")}
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -147,7 +169,7 @@ export function ActiveWorkoutReviewBridge({
   completedSummary,
   dayName,
   tr,
-  formatters
+  formatters,
 }: ActiveWorkoutReviewBridgeProps) {
   const completionSurfaceRef = useRef<HTMLDivElement>(null);
 
@@ -155,42 +177,91 @@ export function ActiveWorkoutReviewBridge({
     if (!completedSummary) return;
 
     const surface = completionSurfaceRef.current;
-    const executionShell = surface?.closest<HTMLElement>("[data-aw5-execution-shell]");
-    if (!surface || !executionShell) {
-      surface?.focus();
-      return;
-    }
+    if (!surface) return;
 
     const restored: Array<{
       element: HTMLElement;
       inert: boolean;
       ariaHidden: string | null;
+      visibility: string;
+    }> = [];
+    const restoredLandmarks: Array<{
+      element: HTMLElement;
+      role: string | null;
     }> = [];
     let branch: HTMLElement = surface;
 
-    while (branch !== executionShell) {
+    while (branch !== document.body) {
       const parent = branch.parentElement;
       if (!parent) break;
+      if (
+        parent !== surface &&
+        (parent.tagName === "MAIN" || parent.getAttribute("role") === "main")
+      ) {
+        restoredLandmarks.push({
+          element: parent,
+          role: parent.getAttribute("role"),
+        });
+        parent.setAttribute("role", "presentation");
+      }
       for (const sibling of Array.from(parent.children)) {
         if (sibling === branch || !(sibling instanceof HTMLElement)) continue;
         restored.push({
           element: sibling,
           inert: sibling.inert,
-          ariaHidden: sibling.getAttribute("aria-hidden")
+          ariaHidden: sibling.getAttribute("aria-hidden"),
+          visibility: sibling.style.visibility,
         });
         sibling.inert = true;
         sibling.setAttribute("aria-hidden", "true");
+        sibling.style.visibility = "hidden";
       }
       branch = parent;
     }
 
+    const keepFocusInside = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        surface.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter(
+        (element) => !element.inert && element.getClientRects().length > 0,
+      );
+      if (!focusable.length) {
+        event.preventDefault();
+        surface.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (
+        event.shiftKey &&
+        (document.activeElement === first || document.activeElement === surface)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    surface.addEventListener("keydown", keepFocusInside);
     surface.focus();
 
     return () => {
+      surface.removeEventListener("keydown", keepFocusInside);
       for (const item of restored) {
         item.element.inert = item.inert;
-        if (item.ariaHidden === null) item.element.removeAttribute("aria-hidden");
+        if (item.ariaHidden === null)
+          item.element.removeAttribute("aria-hidden");
         else item.element.setAttribute("aria-hidden", item.ariaHidden);
+        item.element.style.visibility = item.visibility;
+      }
+      for (const item of restoredLandmarks) {
+        if (item.role === null) item.element.removeAttribute("role");
+        else item.element.setAttribute("role", item.role);
       }
     };
   }, [completedSummary]);
@@ -205,7 +276,7 @@ export function ActiveWorkoutReviewBridge({
         tabIndex={-1}
         className="fixed inset-0 z-[60] overflow-y-auto bg-background outline-none"
       >
-        <div className="mx-auto flex min-h-dvh w-full max-w-6xl items-start px-4 py-6 sm:px-6 lg:items-center lg:py-10">
+        <div className="mx-auto flex min-h-dvh w-full max-w-6xl items-start px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 lg:items-center lg:pb-[calc(2.5rem+env(safe-area-inset-bottom))] lg:pt-10">
           <div className="w-full">
             <WorkoutSummaryCard
               summary={completedSummary}
@@ -229,7 +300,9 @@ export function ActiveWorkoutReviewBridge({
       >
         <DialogHeader>
           <DialogTitle>{tr("review.finishQuestion")}</DialogTitle>
-          <DialogDescription>{tr("review.finishDescription")}</DialogDescription>
+          <DialogDescription>
+            {tr("review.finishDescription")}
+          </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <InfoStat

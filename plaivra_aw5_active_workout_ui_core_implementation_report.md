@@ -428,3 +428,152 @@ Because the final report commit SHA cannot be self-embedded, the final PR eviden
 - final statement: `Ready for independent Planner QA/QC.`
 
 This report does not claim those post-commit gates passed before they exist.
+
+## Independent full-branch Planner audit and final correction
+
+The independent full-branch audit rejected head
+`e4cfca2f909912fa3041cebaf5689944dc655339`. Its canonical Quality run
+`30272234811` and artifact `8655784721` are retained only as historical
+before-correction evidence.
+
+### Rejected false-green evidence
+
+The rejected rendered artifact recorded the mobile rest-preset block under the
+sticky action layer but did not fail the gate. The measured intersection was
+`17.546875px`. Therefore the prior statement that the rejected head was fully
+visually approved is superseded.
+
+The correction makes sticky geometry enforcement unconditional. It no longer
+depends on a file-specific development exception or last-match masking. The
+rendered diagnostics now fail for any material sticky intersection, inconsistent
+stored geometry, duplicate contextual Add 30 control, horizontal overflow,
+framework overlay, or unexpected console warning/error.
+
+### Runtime and UI corrections
+
+- Preserved AW-4's canonical session store, reducer, timer, persistence adapter,
+  and command authority; no second store, reducer, timer, or write queue was
+  introduced.
+- Added explicit awaited and background command-dispatch paths. Awaited
+  rejections mirror rollback once, report once, and rethrow; background
+  dispatches settle without an unhandled rejection.
+- Removed the file-level `react-hooks/refs` suppression and eliminated
+  render-time ref mutation.
+- Preserved primitive bootstrap identity and added direct-route completion,
+  pending, success, failure, timer, toast, and redirect identity coverage.
+- Normalized exercise identity with Unicode NFKC handling, Unicode-aware prefix
+  stripping, punctuation handling, Arabic coverage, and accent coverage.
+- Corrected completion semantics so an exercise is complete only when every set
+  is complete, partial when some but not all sets are complete, and untouched
+  otherwise.
+- Added the partial-exercise count to review and terminal summaries.
+- Isolated the completion surface from the underlying workout using focus
+  containment, inert/assistive-technology isolation, safe-area padding, and
+  restoration on close.
+- Added mobile completion review, desktop completion review, partial review, and
+  completed-summary coverage at `320x568`, `390x844`, and `1440x900`.
+- Kept mobile Add 30 contextual to rest, kept the desktop control in its
+  established location, and proved that no duplicate is visible.
+- Preserved mobile sticky actions and desktop aside behavior while adding
+  sufficient session scroll clearance.
+
+### Production rendered-QA and fixture corrections
+
+- Rendered sign-off now uses an explicit mock-auth production build followed by
+  `next start`; it does not use `next dev`.
+- The production-QA capability is explicit and fail-closed. Ordinary production
+  builds still reject mock authentication.
+- Quality removes the QA build, performs a final non-mock production rebuild,
+  and verifies built release metadata afterward.
+- The completion fixture owns one mutable authoritative session root and returns
+  the post-completion readback. The page-level route override and localStorage
+  completion shortcut were removed.
+- The base Train fixture now exposes an open workout session only in the
+  `active` scenario while preserving the complete AW-4 session projection.
+- Production browser diagnostics record server mode, build/start commands,
+  mock-auth build value, head SHA, workflow run ID, and self-consistent geometry.
+- Progress charts provide a deterministic initial responsive dimension, removing
+  the false first-measurement warning without allowing a warning exception.
+
+### Final local rendered matrix and manual audit
+
+The final production-mode local pass produced:
+
+```text
+Global rendered QA: 126 observations, 0 failures
+Train base QA: 224 observations, 0 failures
+AW-5 correction QA: 23 observations, 0 failures
+```
+
+All 23 final AW-5 PNGs were manually inspected at original resolution:
+
+```text
+plan-day-set-entry-en-320x568
+plan-day-set-entry-en-390x844
+direct-set-entry-en-390x844
+direct-set-entry-en-1440x900
+plan-day-set-entry-de-390x844
+plan-day-set-entry-ar-390x844
+plan-day-set-entry-dark-en-1440x900
+plan-day-validation-error-en-390x844
+plan-day-busy-en-390x844
+plan-day-rest-en-390x844
+plan-day-rest-en-320x568
+plan-day-rest-en-1440x900
+plan-day-paused-en-390x844
+plan-day-details-ar-390x844
+plan-day-details-dark-en-1440x900
+plan-day-session-review-en-390x844
+plan-day-session-review-en-1440x900
+plan-day-partial-review-en-390x844
+plan-day-completed-summary-en-320x568
+plan-day-completed-summary-en-390x844
+plan-day-completed-summary-en-1440x900
+plan-day-keyboard-reps-en-390x844
+plan-day-keyboard-weight-en-390x844
+```
+
+The manual audit passed mobile/desktop composition, EN/DE/AR, RTL, light/dark,
+validation, busy, rest, paused, details, focus, terminal isolation, partial
+truthfulness, no sticky intersection, no duplicate Add 30, no clipped
+translation, and no horizontal overflow. The temporary fidelity ledger and PNGs
+remain outside the active tree.
+
+### Final local validation truth
+
+Passed:
+
+- `git diff --check`;
+- clean `npm ci` installation;
+- AW-5: 24 tests;
+- AW-4: 48 unit tests, with 2 database-backed tests skipped when no configured
+  local replay database was present;
+- AW-3B: 46 unit tests and 14 integration-contract tests;
+- i18n: 29 tests;
+- scripts: 171 tests;
+- lint and typecheck;
+- full unit: 210 files and 1,371 tests;
+- mock-auth production build and production rendered QA;
+- final non-mock production build;
+- built release metadata verification for reconciled migration
+  `20260726114212`.
+
+The standalone `npm run test:integration` command failed closed locally before
+execution because neither `PLAIVRA_AW2A_TEST_DATABASE_URL` nor
+`PLAIVRA_LOCAL_DATABASE_URL` was configured and Docker Desktop was unavailable.
+No remote database was substituted. Exact-head Phase A and Quality provide the
+authoritative isolated PostgreSQL integration execution.
+
+### Scope and final evidence boundary
+
+No schema, migration, RLS, grant, database function, Supabase Production data,
+Activity Catalog data, compatibility marker, dependency, Production deployment,
+merge, AW-6, or AW-7 was changed or started.
+
+The exact final head, Phase A, scoped PR Quality, canonical Quality, immutable
+artifact IDs/digests/expiry, Exact Release, strict read-only preflight, and
+review/thread/mergeability audit are recorded in the new immutable PR #90
+phase-close comment after those post-commit gates exist. This avoids changing
+the exact reviewed head merely to self-embed its evidence.
+
+Ready for independent Planner QA/QC.

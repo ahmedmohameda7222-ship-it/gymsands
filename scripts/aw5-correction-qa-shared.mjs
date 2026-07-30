@@ -20,9 +20,21 @@ export const setIds = [
   "23000000-0000-4000-8000-000000000002"
 ];
 export const observations = [];
+export const serverMode = process.env.QA_SERVER_MODE || "production";
+export const buildCommand = process.env.QA_BUILD_COMMAND
+  || "NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build";
+export const startCommand = process.env.QA_START_COMMAND || "npm run start";
+export const mockAuthBuildValue = process.env.QA_MOCK_AUTH_BUILD_VALUE || "true";
+export const headSha = process.env.QA_HEAD_SHA || process.env.GITHUB_SHA || null;
+export const workflowRunId = process.env.QA_WORKFLOW_RUN_ID || process.env.GITHUB_RUN_ID || null;
 
 export function overlaps(a, b) {
   return Boolean(a && b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top);
+}
+
+export function overlapDepth(a, b) {
+  if (!overlaps(a, b)) return 0;
+  return Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
 }
 
 export function errorMessage(error) {
@@ -35,12 +47,48 @@ export function truncate(value, limit = 2000) {
 }
 
 export function reportPayload() {
-  const failures = observations.flatMap((item) =>
+  const observedFailures = observations.flatMap((item) =>
     item.failures.map((failure) => `${item.name}: ${failure}`)
   );
+  const consistencyFailures = observations.flatMap((item) => {
+    if (!item.metrics) return [];
+    const pairs = [
+      ["close intersects Mini Heat Map", item.metrics.close, item.metrics.heatMap],
+      ["close intersects session title", item.metrics.close, item.metrics.sessionTitle],
+      ["close intersects metadata", item.metrics.close, item.metrics.metadata],
+      ["close intersects Pause/Resume", item.metrics.close, item.metrics.pause],
+      ["sticky intersects reps input", item.metrics.sticky, item.metrics.reps],
+      ["sticky intersects weight input", item.metrics.sticky, item.metrics.weight],
+      ["sticky intersects details trigger", item.metrics.sticky, item.metrics.details],
+      ["sticky intersects set path", item.metrics.sticky, item.metrics.setPath],
+      ["sticky intersects validation feedback", item.metrics.sticky, item.metrics.feedback],
+      ...item.metrics.restPresets.map((target, index) => [
+        `sticky intersects rest preset ${index + 1}`,
+        item.metrics.sticky,
+        target
+      ]),
+      ...item.metrics.interactiveControls.map((target, index) => [
+        `sticky intersects interactive control ${index + 1} (${target.label})`,
+        item.metrics.sticky,
+        target
+      ])
+    ];
+    return pairs.flatMap(([label, first, second]) => {
+      const depth = overlapDepth(first, second);
+      if (depth <= 1 || item.failures.some((failure) => failure.startsWith(label))) return [];
+      return [`${item.name}: unreported intersection ${label} (${depth.toFixed(2)}px)`];
+    });
+  });
+  const failures = [...observedFailures, ...consistencyFailures];
   return {
     generatedAt: new Date().toISOString(),
     baseUrl,
+    serverMode,
+    buildCommand,
+    startCommand,
+    mockAuthBuildValue,
+    headSha,
+    workflowRunId,
     canonicalIdentity: {
       userId: contract.userId,
       activePlanId: contract.planIds.active,
@@ -66,6 +114,7 @@ export function reportPayload() {
       keyboardWeight: observations.some((item) => item.name.includes("keyboard-weight") && !item.bootstrapFailed)
     },
     observations,
+    consistencyFailures,
     failures
   };
 }

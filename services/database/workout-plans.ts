@@ -6,9 +6,22 @@ import { env } from "@/lib/env";
 import { getMockTrainPlans } from "@/lib/fixtures/train-mock";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
-import type { UserWorkoutPlan, Weekday, Workout, WorkoutPlanDaySession } from "@/types";
+import type {
+  UserWorkoutPlan,
+  Weekday,
+  Workout,
+  WorkoutPlanDaySession,
+} from "@/types";
 
-export const weekDays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export const weekDays: Weekday[] = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
 
 export function getCurrentWeekday(date = new Date()): Weekday {
   return weekDays[date.getDay()];
@@ -18,10 +31,10 @@ function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
 }
 function getMockUserWorkoutPlanDay(
-  dayId: string
+  dayId: string,
 ): WorkoutPlanDaySession | null {
   const plan = getMockTrainPlans().find((candidate) =>
-    candidate.days.some((day) => day.id === dayId)
+    candidate.days.some((day) => day.id === dayId),
   );
 
   const day = plan?.days.find((candidate) => candidate.id === dayId);
@@ -37,15 +50,17 @@ function getMockUserWorkoutPlanDay(
       user_id: plan.user_id,
       name: plan.name,
       is_active: plan.is_active,
-      is_default: plan.is_default ?? plan.is_active
-    }
+      is_default: plan.is_default ?? plan.is_active,
+    },
   };
 }
 function looksLikeUrl(value: string | null | undefined) {
   return Boolean(value && /^https?:\/\//i.test(value));
 }
 
-function isMissingTemplateSchemaError(error: { message?: string; code?: string } | null | undefined) {
+function isMissingTemplateSchemaError(
+  error: { message?: string; code?: string } | null | undefined,
+) {
   const message = error?.message?.toLowerCase() ?? "";
   return (
     error?.code === "PGRST204" ||
@@ -68,8 +83,10 @@ function hydrateWorkoutMetadata(workout: Workout): Workout {
     muscle_category: workout.muscle_category ?? workout.target_muscle,
     equipment_required: workout.equipment_required ?? workout.equipment,
     experience_level: workout.experience_level ?? workout.difficulty,
-    exercise_url: workout.exercise_url ?? (looksLikeUrl(workout.notes) ? workout.notes : null),
-    secondary_muscles: workout.secondary_muscles ?? []
+    exercise_url:
+      workout.exercise_url ??
+      (looksLikeUrl(workout.notes) ? workout.notes : null),
+    secondary_muscles: workout.secondary_muscles ?? [],
   };
 }
 
@@ -133,12 +150,19 @@ function workoutExercisePayload(workout: Workout, exerciseIndex: number) {
     weight?: string | null;
     tempo?: string | null;
   };
-  const exerciseGuideUrl = workout.exercise_url || (looksLikeUrl(workout.notes) ? workout.notes : null);
+  const exerciseGuideUrl =
+    workout.exercise_url ||
+    (looksLikeUrl(workout.notes) ? workout.notes : null);
   const customVideoUrl = workout.custom_video_url || null;
   return {
-    id: workout.plan_exercise_id && isUuid(workout.plan_exercise_id) ? workout.plan_exercise_id : undefined,
+    id:
+      workout.plan_exercise_id && isUuid(workout.plan_exercise_id)
+        ? workout.plan_exercise_id
+        : undefined,
     source_workout_id:
-      isUuid(workout.id) && workout.id !== workout.plan_exercise_id ? workout.id : null,
+      isUuid(workout.id) && workout.id !== workout.plan_exercise_id
+        ? workout.id
+        : null,
     exercise_name: workout.name,
     category: workout.category,
     target_muscle: workout.target_muscle || workout.muscle_category,
@@ -155,7 +179,7 @@ function workoutExercisePayload(workout: Workout, exerciseIndex: number) {
     tempo: extended.tempo ?? null,
     sort_order: exerciseIndex + 1,
     order_index: exerciseIndex + 1,
-    notes: looksLikeUrl(workout.notes) ? null : workout.notes
+    notes: looksLikeUrl(workout.notes) ? null : workout.notes,
   };
 }
 
@@ -164,7 +188,7 @@ function workoutDayPayload(day: WorkoutPlanDayInput) {
     day_name: day.dayName.trim(),
     weekday: day.weekday,
     notes: day.notes?.trim() || null,
-    exercises: day.exercises.filter(Boolean).map(workoutExercisePayload)
+    exercises: day.exercises.filter(Boolean).map(workoutExercisePayload),
   };
 }
 
@@ -172,7 +196,8 @@ async function authenticatedUserId() {
   if (!supabase) throw new Error("Database not connected");
   const { data, error } = await supabase.auth.getUser();
   if (error) throw error;
-  if (!data.user || !isUuid(data.user.id)) throw new Error("User session invalid");
+  if (!data.user || !isUuid(data.user.id))
+    throw new Error("User session invalid");
   return data.user.id;
 }
 
@@ -193,7 +218,7 @@ function mapPlanExerciseToWorkout(exercise: RawPlanExercise): Workout {
     video_url: exercise.custom_video_url ?? exercise.video_url ?? null,
     custom_video_url: exercise.custom_video_url ?? exercise.video_url ?? null,
     notes: exercise.notes,
-    is_global: true
+    is_global: true,
   });
 }
 
@@ -221,9 +246,9 @@ function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
         notes: day.notes,
         exercises: (day.user_workout_plan_exercises ?? [])
           .filter((exercise) => !exercise.archived_at)
-          .sort((a, b) => a.sort_order - b.sort_order)
+          .sort((a, b) => a.sort_order - b.sort_order),
       }))
-      .sort((a, b) => a.day_number - b.day_number)
+      .sort((a, b) => a.day_number - b.day_number),
   };
 }
 
@@ -260,7 +285,10 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   }
 
   if (error) {
-    console.warn("Plaivra could not load the saved workout plan.", error.message);
+    console.warn(
+      "Plaivra could not load the saved workout plan.",
+      error.message,
+    );
     return null;
   }
 
@@ -293,7 +321,9 @@ export async function getUserWorkoutPlans(userId: string) {
       .from("user_workout_plans")
       .select(selectLegacy)
       .eq("user_id", userId)
-      .or("source.is.null,source.eq.manual,source.eq.chatgpt,source.eq.imported")
+      .or(
+        "source.is.null,source.eq.manual,source.eq.chatgpt,source.eq.imported",
+      )
       .order("created_at", { ascending: false });
     data = legacy.data as unknown;
     error = legacy.error;
@@ -304,7 +334,9 @@ export async function getUserWorkoutPlans(userId: string) {
     return [];
   }
 
-  return ((data ?? []) as unknown as RawWorkoutPlan[]).map(normalizeWorkoutPlan);
+  return ((data ?? []) as unknown as RawWorkoutPlan[]).map(
+    normalizeWorkoutPlan,
+  );
 }
 
 export async function getUserWorkoutPlan(userId: string, planId: string) {
@@ -338,27 +370,39 @@ export async function getUserWorkoutPlan(userId: string, planId: string) {
   return data ? normalizeWorkoutPlan(data as unknown as RawWorkoutPlan) : null;
 }
 
-export async function setDefaultUserWorkoutPlan(userId: string, planId: string, scheduleStartDate = todayIso()) {
-  if (!canUseUserData(userId) || !isUuid(planId)) throw new Error("User session invalid");
-  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
+export async function setDefaultUserWorkoutPlan(
+  userId: string,
+  planId: string,
+  scheduleStartDate = todayIso(),
+) {
+  if (!canUseUserData(userId) || !isUuid(planId))
+    throw new Error("User session invalid");
+  if (!isIsoDate(scheduleStartDate))
+    throw new Error("Schedule start date must use YYYY-MM-DD.");
   const { error } = await supabase!.rpc("activate_workout_plan_atomic", {
     p_user_id: userId,
     p_plan_id: planId,
     p_schedule_start_date: scheduleStartDate,
-    p_expected_updated_at: null
+    p_expected_updated_at: null,
   });
   if (error) throw error;
   return true;
 }
 
-export async function deleteUserWorkoutPlan(userId: string, planId: string, scheduleStartDate = todayIso()) {
-  if (!canUseUserData(userId) || !isUuid(planId)) throw new Error("User session invalid");
-  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
+export async function deleteUserWorkoutPlan(
+  userId: string,
+  planId: string,
+  scheduleStartDate = todayIso(),
+) {
+  if (!canUseUserData(userId) || !isUuid(planId))
+    throw new Error("User session invalid");
+  if (!isIsoDate(scheduleStartDate))
+    throw new Error("Schedule start date must use YYYY-MM-DD.");
   const { error } = await supabase!.rpc("delete_workout_plan_atomic", {
     p_user_id: userId,
     p_plan_id: planId,
     p_confirmed: true,
-    p_schedule_start_date: scheduleStartDate
+    p_schedule_start_date: scheduleStartDate,
   });
   if (error) throw error;
   return true;
@@ -377,7 +421,10 @@ export async function getUserWorkoutPlanDay(dayId: string) {
     return null;
   }
 
-  if (env.useMockAuth && process.env.NODE_ENV !== "production") {
+  if (
+    env.useMockAuth &&
+    (process.env.NODE_ENV !== "production" || env.productionQaBuild)
+  ) {
     return getMockUserWorkoutPlanDay(dayId);
   }
 
@@ -388,7 +435,7 @@ export async function getUserWorkoutPlanDay(dayId: string) {
   const result = await supabase
     .from("user_workout_plan_days")
     .select(
-      "id,plan_id,day_number,day_name,weekday,notes,archived_at,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes,archived_at),user_workout_plans(id,user_id,name,is_active,archived_at)"
+      "id,plan_id,day_number,day_name,weekday,notes,archived_at,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes,archived_at),user_workout_plans(id,user_id,name,is_active,archived_at)",
     )
     .eq("id", dayId)
     .maybeSingle();
@@ -399,7 +446,7 @@ export async function getUserWorkoutPlanDay(dayId: string) {
     const compatible = await supabase!
       .from("user_workout_plan_days")
       .select(
-        "id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes),user_workout_plans(id,user_id,name,is_active)"
+        "id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes),user_workout_plans(id,user_id,name,is_active)",
       )
       .eq("id", dayId)
       .maybeSingle();
@@ -413,9 +460,30 @@ export async function getUserWorkoutPlanDay(dayId: string) {
   }
 
   if (!data) return null;
-  const row = data as unknown as RawPlanDay & { user_workout_plans?: { id: string; user_id: string; name: string; is_active: boolean; is_default?: boolean | null; archived_at?: string | null } | { id: string; user_id: string; name: string; is_active: boolean; is_default?: boolean | null; archived_at?: string | null }[] | null };
+  const row = data as unknown as RawPlanDay & {
+    user_workout_plans?:
+      | {
+          id: string;
+          user_id: string;
+          name: string;
+          is_active: boolean;
+          is_default?: boolean | null;
+          archived_at?: string | null;
+        }
+      | {
+          id: string;
+          user_id: string;
+          name: string;
+          is_active: boolean;
+          is_default?: boolean | null;
+          archived_at?: string | null;
+        }[]
+      | null;
+  };
   if (row.archived_at) return null;
-  const planRelation = Array.isArray(row.user_workout_plans) ? row.user_workout_plans[0] : row.user_workout_plans;
+  const planRelation = Array.isArray(row.user_workout_plans)
+    ? row.user_workout_plans[0]
+    : row.user_workout_plans;
   if (planRelation?.archived_at) return null;
   return {
     id: row.id,
@@ -428,34 +496,55 @@ export async function getUserWorkoutPlanDay(dayId: string) {
       .filter((exercise) => !exercise.archived_at)
       .sort((a, b) => a.sort_order - b.sort_order),
     plan: planRelation
-      ? { id: planRelation.id, user_id: planRelation.user_id, name: planRelation.name, is_active: planRelation.is_active, is_default: planRelation.is_default ?? planRelation.is_active }
-      : null
+      ? {
+          id: planRelation.id,
+          user_id: planRelation.user_id,
+          name: planRelation.name,
+          is_active: planRelation.is_active,
+          is_default: planRelation.is_default ?? planRelation.is_active,
+        }
+      : null,
   };
 }
 
-export async function updateUserWorkoutPlanDay(dayId: string, day: WorkoutPlanDayInput, scheduleStartDate = todayIso()) {
+export async function updateUserWorkoutPlanDay(
+  dayId: string,
+  day: WorkoutPlanDayInput,
+  scheduleStartDate = todayIso(),
+) {
   const cleanExercises = day.exercises.filter(Boolean);
   const cleanName = day.dayName.trim();
 
   if (!cleanName) throw new Error("Workout day name is required.");
-  if (!cleanExercises.length) throw new Error("Add at least one exercise before saving this workout day.");
+  if (!cleanExercises.length)
+    throw new Error(
+      "Add at least one exercise before saving this workout day.",
+    );
 
   if (!supabase || !isUuid(dayId)) throw new Error("Database not connected");
-  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
+  if (!isIsoDate(scheduleStartDate))
+    throw new Error("Schedule start date must use YYYY-MM-DD.");
   const userId = await authenticatedUserId();
   const { error } = await supabase.rpc("save_workout_plan_day_atomic", {
     p_user_id: userId,
     p_day_id: dayId,
-    p_day: workoutDayPayload({ ...day, dayName: cleanName, exercises: cleanExercises }),
+    p_day: workoutDayPayload({
+      ...day,
+      dayName: cleanName,
+      exercises: cleanExercises,
+    }),
     p_schedule_start_date: scheduleStartDate,
     p_expected_updated_at: null,
-    p_rebuild_schedule: true
+    p_rebuild_schedule: true,
   });
   if (error) throw error;
   return true;
 }
 
-export async function createUserWorkoutPlanDay(planId: string, day: WorkoutPlanDayInput) {
+export async function createUserWorkoutPlanDay(
+  planId: string,
+  day: WorkoutPlanDayInput,
+) {
   const cleanName = day.dayName.trim();
   const cleanExercises = day.exercises.filter(Boolean);
   if (!cleanName) throw new Error("Workout day name is required.");
@@ -467,7 +556,7 @@ export async function createUserWorkoutPlanDay(planId: string, day: WorkoutPlanD
       day_name: cleanName,
       weekday: day.weekday,
       notes: day.notes || null,
-      exercises: []
+      exercises: [],
     } as UserWorkoutPlan["days"][number];
   }
 
@@ -487,7 +576,7 @@ export async function createUserWorkoutPlanDay(planId: string, day: WorkoutPlanD
       day_number: nextDayNumber,
       day_name: cleanName,
       weekday: day.weekday,
-      notes: day.notes || null
+      notes: day.notes || null,
     })
     .select("id,plan_id,day_number,day_name,weekday,notes")
     .single();
@@ -495,7 +584,9 @@ export async function createUserWorkoutPlanDay(planId: string, day: WorkoutPlanD
 
   if (cleanExercises.length) {
     const rows = cleanExercises.map((workout, exerciseIndex) => {
-      const exerciseGuideUrl = workout.exercise_url || (looksLikeUrl(workout.notes) ? workout.notes : null);
+      const exerciseGuideUrl =
+        workout.exercise_url ||
+        (looksLikeUrl(workout.notes) ? workout.notes : null);
       const customVideoUrl = workout.custom_video_url || null;
       return {
         plan_day_id: savedDay.id,
@@ -513,13 +604,26 @@ export async function createUserWorkoutPlanDay(planId: string, day: WorkoutPlanD
         video_url: customVideoUrl,
         custom_video_url: customVideoUrl,
         sort_order: exerciseIndex + 1,
-        notes: looksLikeUrl(workout.notes) ? null : workout.notes
+        notes: looksLikeUrl(workout.notes) ? null : workout.notes,
       };
     });
-    let { error: exerciseError } = await supabase!.from("user_workout_plan_exercises").insert(rows);
+    let { error: exerciseError } = await supabase!
+      .from("user_workout_plan_exercises")
+      .insert(rows);
     if (exerciseError && isMissingTemplateSchemaError(exerciseError)) {
-      const compatibleRows = rows.map(({ source_workout_id: _source, instructions: _instructions, exercise_url: _exerciseUrl, video_url: _video, custom_video_url: _customVideo, ...row }) => row);
-      const compatible = await supabase!.from("user_workout_plan_exercises").insert(compatibleRows);
+      const compatibleRows = rows.map(
+        ({
+          source_workout_id: _source,
+          instructions: _instructions,
+          exercise_url: _exerciseUrl,
+          video_url: _video,
+          custom_video_url: _customVideo,
+          ...row
+        }) => row,
+      );
+      const compatible = await supabase!
+        .from("user_workout_plan_exercises")
+        .insert(compatibleRows);
       exerciseError = compatible.error;
     }
     if (exerciseError) throw exerciseError;
@@ -527,7 +631,7 @@ export async function createUserWorkoutPlanDay(planId: string, day: WorkoutPlanD
 
   return {
     ...(savedDay as Omit<UserWorkoutPlan["days"][number], "exercises">),
-    exercises: []
+    exercises: [],
   };
 }
 
@@ -539,7 +643,7 @@ export async function createUserWorkoutPlan({
   programDurationWeeks,
   sessionDurationMinutes,
   startDate,
-  days
+  days,
 }: {
   userId: string;
   planName: string;
@@ -554,44 +658,57 @@ export async function createUserWorkoutPlan({
     .map((day) => ({
       ...day,
       dayName: day.dayName.trim(),
-      exercises: day.exercises.filter(Boolean)
+      exercises: day.exercises.filter(Boolean),
     }))
     .filter((day) => day.dayName && day.weekday && day.exercises.length);
 
   if (!planName.trim()) throw new Error("Plan name is required.");
-  if (!cleanDays.length) throw new Error("Add at least one weekday with one workout.");
+  if (!cleanDays.length)
+    throw new Error("Add at least one weekday with one workout.");
 
   if (!canUseUserData(userId)) throw new Error("User session invalid");
   const scheduleStartDate = startDate ?? todayIso();
-  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
+  if (!isIsoDate(scheduleStartDate))
+    throw new Error("Schedule start date must use YYYY-MM-DD.");
 
-  const { data: plan, error: planError } = await supabase!.rpc("create_workout_plan_atomic", {
-    p_user_id: userId,
-    p_plan: {
-      name: planName.trim(),
-      source: "manual",
-      goal: goal?.trim() || null,
-      description: description?.trim() || null,
-      program_duration_weeks: programDurationWeeks ?? null,
-      session_duration_minutes: sessionDurationMinutes ?? null,
-      days_per_week: cleanDays.length,
-      days: cleanDays.map(workoutDayPayload)
+  const { data: plan, error: planError } = await supabase!.rpc(
+    "create_workout_plan_atomic",
+    {
+      p_user_id: userId,
+      p_plan: {
+        name: planName.trim(),
+        source: "manual",
+        goal: goal?.trim() || null,
+        description: description?.trim() || null,
+        program_duration_weeks: programDurationWeeks ?? null,
+        session_duration_minutes: sessionDurationMinutes ?? null,
+        days_per_week: cleanDays.length,
+        days: cleanDays.map(workoutDayPayload),
+      },
+      p_activate: true,
+      p_schedule_start_date: scheduleStartDate,
     },
-    p_activate: true,
-    p_schedule_start_date: scheduleStartDate
-  });
+  );
   if (planError) throw planError;
   if (!plan) throw new Error("Workout plan could not be created.");
   return plan as { id: string };
 }
 
-export function workoutsFromPlanDay(day: UserWorkoutPlan["days"][number] | null | undefined): Workout[] {
-  return (day?.exercises ?? []).map((exercise) => mapPlanExerciseToWorkout(exercise as RawPlanExercise));
+export function workoutsFromPlanDay(
+  day: UserWorkoutPlan["days"][number] | null | undefined,
+): Workout[] {
+  return (day?.exercises ?? []).map((exercise) =>
+    mapPlanExerciseToWorkout(exercise as RawPlanExercise),
+  );
 }
 
-export async function getUserWorkoutPlanExerciseDetail(userId: string, exerciseId: string) {
+export async function getUserWorkoutPlanExerciseDetail(
+  userId: string,
+  exerciseId: string,
+) {
   if (!supabase || !isUuid(userId) || !isUuid(exerciseId)) return null;
-  const fullSelect = "id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes,archived_at";
+  const fullSelect =
+    "id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes,archived_at";
   const fullResult = await supabase
     .from("user_workout_plan_exercises")
     .select(fullSelect)
@@ -602,7 +719,9 @@ export async function getUserWorkoutPlanExerciseDetail(userId: string, exerciseI
   if (error && isMissingTemplateSchemaError(error)) {
     const compatible = await supabase
       .from("user_workout_plan_exercises")
-      .select("id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes")
+      .select(
+        "id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes",
+      )
       .eq("id", exerciseId)
       .maybeSingle();
     exercise = compatible.data as unknown as RawPlanExercise | null;
@@ -631,6 +750,6 @@ export async function getUserWorkoutPlanExerciseDetail(userId: string, exerciseI
   return {
     exercise: mapPlanExerciseToWorkout(rawExercise),
     dayName: day.day_name,
-    planName: plan.name
+    planName: plan.name,
   };
 }

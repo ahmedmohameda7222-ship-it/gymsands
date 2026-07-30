@@ -2,7 +2,6 @@ import { chromium } from "@playwright/test";
 
 import {
   baseUrl,
-  contract,
   dayRoute,
   directRoute,
   errorMessage,
@@ -15,30 +14,6 @@ import { installAw5CorrectionFixture } from "./train-layout-qa-fixture.mjs";
 import { captureFailure, record } from "./aw5-correction-qa-diagnostics.mjs";
 
 let browser;
-
-function expectedDevelopmentConsoleError(message) {
-  return /eval\(\) is not supported in this environment[\s\S]*React will never use eval\(\) in production mode/i.test(message);
-}
-
-async function clearKnownNextDevelopmentPortal(page) {
-  await page.evaluate(() => {
-    const visible = (element) => {
-      if (!(element instanceof HTMLElement)) return false;
-      const style = getComputedStyle(element);
-      const rect = element.getBoundingClientRect();
-      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
-    };
-    for (const portal of document.querySelectorAll("nextjs-portal")) {
-      const root = portal.shadowRoot;
-      const hasVisibleErrorDialog = root
-        ? [...root.querySelectorAll(
-            "nextjs-errors-dialog, nextjs-error-dialog, [data-nextjs-error-dialog], [data-nextjs-dialog-overlay], [data-nextjs-error-overlay]"
-          )].some(visible)
-        : false;
-      if (!hasVisibleErrorDialog) portal.remove();
-    }
-  });
-}
 
 async function openSession({
   name,
@@ -77,7 +52,7 @@ async function openSession({
     );
     page.on("pageerror", (error) => session.pageErrors.push(error.message));
     page.on("console", (message) => {
-      if (message.type() === "error" && !expectedDevelopmentConsoleError(message.text())) {
+      if (message.type() === "error") {
         session.consoleErrors.push(message.text());
       }
       if (message.type() === "warning") session.consoleWarnings.push(message.text());
@@ -115,7 +90,6 @@ async function openSession({
       language,
       { timeout: 10_000 }
     );
-    await clearKnownNextDevelopmentPortal(page);
     await page.waitForTimeout(150);
     return session;
   } catch (error) {
@@ -137,6 +111,131 @@ async function enterSet(page, reps = "8", weight = "80") {
   await page.locator("#active-set-weight").fill(weight, { timeout: 10_000 });
 }
 
+async function openSessionReview(page) {
+  const mobileFinish = page.locator("[data-aw5-finish-action]:visible");
+  if (await mobileFinish.count()) {
+    await mobileFinish.click({ timeout: 10_000 });
+  } else {
+    await page.getByRole("button", { name: /^Finish$/i }).click({ timeout: 10_000 });
+  }
+  await page.locator("[data-aw5-session-review]").waitFor({
+    state: "visible",
+    timeout: 10_000
+  });
+}
+
+async function completeTwoSetSession(page) {
+  await enterSet(page, "8", "80");
+  await visiblePrimary(page).click({ timeout: 10_000 });
+  await page.waitForSelector('[data-aw5-session-state="rest"]', {
+    state: "visible",
+    timeout: 15_000
+  });
+  await visiblePrimary(page).click({ timeout: 10_000 });
+  await page.waitForSelector('[data-active-set-number="2"]', {
+    state: "visible",
+    timeout: 15_000
+  });
+  await enterSet(page, "9", "82.5");
+  await visiblePrimary(page).click({ timeout: 10_000 });
+  await page.waitForSelector('[data-aw5-session-state="completed"]', {
+    state: "visible",
+    timeout: 15_000
+  });
+  await visiblePrimary(page).click({ timeout: 10_000 });
+  await page.locator("[data-aw5-session-review]").waitFor({
+    state: "visible",
+    timeout: 10_000
+  });
+}
+
+async function terminalBehaviorFailures(page) {
+  const surface = page.locator("[data-aw5-completion-surface]");
+  await surface.waitFor({ state: "visible", timeout: 15_000 });
+  const back = surface.getByRole("link", { name: /back to workouts/i });
+  await back.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(50);
+
+  const state = await page.evaluate(() => {
+    const surface = document.querySelector("[data-aw5-completion-surface]");
+    const visible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && rect.width > 0
+        && rect.height > 0;
+    };
+    const isolated = (element) => {
+      let current = element;
+      while (current && current !== surface) {
+        if (current.inert || current.getAttribute("aria-hidden") === "true") return true;
+        current = current.parentElement;
+      }
+      return false;
+    };
+    const backgroundControls = [
+      ...document.querySelectorAll(
+        "[data-aw5-pause-resume], [data-aw5-primary-editor] input, [data-aw5-set-path] button, [data-aw5-sticky-actions] button, [data-workout-session-close]"
+      )
+    ].filter((element) => !surface?.contains(element));
+    const visibleMainLandmarks = [...document.querySelectorAll("main, [role='main']")]
+      .filter((element) =>
+        element.getAttribute("role") !== "presentation"
+        && !isolated(element)
+        && visible(element)
+      );
+    const backLink = surface?.querySelector("a");
+    const backRect = backLink?.getBoundingClientRect() ?? null;
+    return {
+      focused: document.activeElement === surface,
+      activeInside: Boolean(surface?.contains(document.activeElement)),
+      visibleMainLandmarks: visibleMainLandmarks.length,
+      editorVisible: visible(document.querySelector("[data-aw5-primary-editor]")),
+      pauseVisible: visible(document.querySelector("[data-aw5-pause-resume]")),
+      setPathVisible: visible(document.querySelector("[data-aw5-set-path]")),
+      stickyVisible: visible(document.querySelector("[data-aw5-sticky-actions]")),
+      allBackgroundIsolated: backgroundControls.every(isolated),
+      backgroundTabbable: backgroundControls.filter((element) =>
+        !isolated(element)
+        && !element.hasAttribute("disabled")
+        && element.getAttribute("tabindex") !== "-1"
+      ).length,
+      horizontalOverflowPx: surface instanceof HTMLElement
+        ? Math.max(0, surface.scrollWidth - surface.clientWidth)
+        : 0,
+      backWithinViewport: Boolean(
+        backRect
+        && backRect.top >= -1
+        && backRect.bottom <= innerHeight + 1
+      )
+    };
+  });
+  const failures = [];
+  if (!state.focused) failures.push("completion surface did not receive initial focus");
+  if (state.visibleMainLandmarks !== 1) failures.push(`visible main landmark count is ${state.visibleMainLandmarks}`);
+  if (state.editorVisible) failures.push("underlying editor remains visible");
+  if (state.pauseVisible) failures.push("underlying Pause/Resume remains visible");
+  if (state.setPathVisible) failures.push("underlying set path remains visible");
+  if (state.stickyVisible) failures.push("underlying sticky footer remains visible");
+  if (!state.allBackgroundIsolated) failures.push("background interactive branches are not inert and aria-hidden");
+  if (state.backgroundTabbable) failures.push(`${state.backgroundTabbable} background controls remain tabbable`);
+  if (state.horizontalOverflowPx > 1) failures.push(`completion surface horizontal overflow is ${state.horizontalOverflowPx}px`);
+  if (!state.backWithinViewport) failures.push("Back to workouts is not reachable without a safe-area collision");
+
+  await page.keyboard.press("Tab");
+  const tabInside = await page.evaluate(() =>
+    Boolean(document.querySelector("[data-aw5-completion-surface]")?.contains(document.activeElement))
+  );
+  await page.keyboard.press("Shift+Tab");
+  const reverseTabInside = await page.evaluate(() =>
+    Boolean(document.querySelector("[data-aw5-completion-surface]")?.contains(document.activeElement))
+  );
+  if (!tabInside || !reverseTabInside) failures.push("focus escaped the terminal completion surface");
+  return failures;
+}
+
 async function runScenario(config, exercise, recordOptions = {}) {
   const startedAt = Date.now();
   console.log(`[AW5-QA] START ${config.name}`);
@@ -144,7 +243,6 @@ async function runScenario(config, exercise, recordOptions = {}) {
   try {
     session = await openSession(config);
     const outcome = await exercise(session);
-    await clearKnownNextDevelopmentPortal(session.page);
     const failures = await record(
       session,
       outcome?.recordOptions ?? recordOptions,
@@ -243,9 +341,12 @@ try {
     }
   );
 
-  await runScenario(
+  for (const scenario of [
     { name: "plan-day-rest-en-390x844", viewport: { width: 390, height: 844 } },
-    async (session) => {
+    { name: "plan-day-rest-en-320x568", viewport: { width: 320, height: 568 } },
+    { name: "plan-day-rest-en-1440x900", viewport: { width: 1440, height: 900 } }
+  ]) {
+    await runScenario(scenario, async (session) => {
       await enterSet(session.page);
       await visiblePrimary(session.page).click({ timeout: 10_000 });
       await session.page.waitForSelector('[data-aw5-session-state="rest"]', {
@@ -257,21 +358,21 @@ try {
       if (!/skip/i.test(restText)) failures.push(`rest CTA is ${JSON.stringify(restText)}`);
       const presets = session.page.locator("[data-aw5-rest-presets] button");
       if (await presets.count() < 1) failures.push("rest presets are missing");
-      const addThirty = session.page.getByRole("button", { name: /30/ }).last();
-      if (await addThirty.count()) {
-        await clearKnownNextDevelopmentPortal(session.page);
+      const addThirty = session.page.locator("[data-aw5-add-thirty]:visible");
+      const addThirtyCount = await addThirty.count();
+      if (addThirtyCount !== 1) {
+        failures.push(`visible Add 30 control count is ${addThirtyCount}, expected 1`);
+      } else {
         await addThirty.click({ timeout: 10_000 });
         const state = await session.page.locator("[data-aw5-execution-shell]").getAttribute("data-aw5-session-state");
         if (state !== "rest") failures.push("Add 30 left the authoritative rest state");
-      } else {
-        failures.push("Add 30 control is missing");
       }
       await session.page.locator("[data-aw5-rest-presets]").evaluate((element) => {
         element.scrollIntoView({ block: "center" });
       });
-      return { failures, recordOptions: { restPresets: true } };
-    }
-  );
+      return { failures };
+    });
+  }
 
   await runScenario(
     { name: "plan-day-paused-en-390x844", viewport: { width: 390, height: 844 } },
@@ -299,19 +400,17 @@ try {
     });
   }
 
-  await runScenario(
-    { name: "plan-day-session-review-en-1440x900", viewport: { width: 1440, height: 900 } },
-    async (session) => {
-      await session.page.getByRole("button", { name: /^Finish$/i }).click({ timeout: 10_000 });
-      await session.page.waitForSelector("[data-aw5-session-review]", {
-        state: "visible",
-        timeout: 10_000
-      });
-    }
-  );
+  for (const scenario of [
+    { name: "plan-day-session-review-en-390x844", viewport: { width: 390, height: 844 } },
+    { name: "plan-day-session-review-en-1440x900", viewport: { width: 1440, height: 900 } }
+  ]) {
+    await runScenario(scenario, async (session) => {
+      await openSessionReview(session.page);
+    });
+  }
 
   await runScenario(
-    { name: "plan-day-completed-summary-en-1440x900", viewport: { width: 1440, height: 900 } },
+    { name: "plan-day-partial-review-en-390x844", viewport: { width: 390, height: 844 } },
     async (session) => {
       await enterSet(session.page, "8", "80");
       await visiblePrimary(session.page).click({ timeout: 10_000 });
@@ -320,46 +419,29 @@ try {
         timeout: 15_000
       });
       await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-active-set-number="2"]', {
-        state: "visible",
-        timeout: 15_000
-      });
-      await enterSet(session.page, "9", "82.5");
-      await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-aw5-session-state="completed"]', {
-        state: "visible",
-        timeout: 15_000
-      });
-      await visiblePrimary(session.page).click({ timeout: 10_000 });
-      const review = session.page.locator("[data-aw5-session-review]");
-      await review.waitFor({ state: "visible", timeout: 10_000 });
-      await session.page.route(/^https:\/\/[^/]+\.supabase\.co\/rest\/v1\/workout_sessions\?/, async (route) => {
-        const url = new URL(route.request().url());
-        if (url.searchParams.get("id") !== `eq.${contract.activeSessionId}`) {
-          await route.fallback();
-          return;
-        }
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            id: contract.activeSessionId,
-            user_id: contract.userId,
-            plan_day_id: contract.activeDayId,
-            status: "completed"
-          })
-        });
-      });
-      await session.page.evaluate(() => {
-        localStorage.setItem("plaivra.qa.train-scenario", "rest");
-      });
-      await review.getByRole("button", { name: /save.*finish/i }).click({ timeout: 10_000 });
-      await session.page.waitForSelector("[data-aw5-completed-summary]", {
-        state: "visible",
-        timeout: 15_000
-      });
+      await openSessionReview(session.page);
+      const reviewText = await session.page.locator("[data-aw5-session-review]").innerText();
+      return { failures: /1\s*\/\s*2/.test(reviewText) ? [] : ["partial review does not display 1 of 2 completed sets"] };
     }
   );
+
+  for (const scenario of [
+    { name: "plan-day-completed-summary-en-320x568", viewport: { width: 320, height: 568 } },
+    { name: "plan-day-completed-summary-en-390x844", viewport: { width: 390, height: 844 } },
+    { name: "plan-day-completed-summary-en-1440x900", viewport: { width: 1440, height: 900 } }
+  ]) {
+    await runScenario(scenario, async (session) => {
+      await completeTwoSetSession(session.page);
+      const review = session.page.locator("[data-aw5-session-review]");
+      await review.getByRole("button", { name: /save.*finish/i }).click({ timeout: 10_000 });
+      const failures = await terminalBehaviorFailures(session.page);
+      const completedText = await session.page.locator("[data-aw5-completed-summary]").innerText();
+      if (!/\b1\b/.test(completedText) || !/\b0\b/.test(completedText)) {
+        failures.push("completed summary does not expose completed and partial exercise counts");
+      }
+      return { failures };
+    });
+  }
 
   for (const keyboard of ["reps", "weight"]) {
     await runScenario(

@@ -70,7 +70,7 @@ export function WorkoutSessionScreen({
       </Button>
       <div
         data-workout-session-scroll
-        className="flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-0 [scroll-padding-bottom:calc(6rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8"
+        className="flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-0 [scroll-padding-bottom:calc(7rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8"
       >
         {children}
       </div>

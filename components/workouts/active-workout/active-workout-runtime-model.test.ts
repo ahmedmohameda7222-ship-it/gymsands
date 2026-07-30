@@ -12,6 +12,7 @@ import type {
 
 import {
   buildCanonicalLogRows,
+  buildPrs,
   buildSummary,
   hydrateStates,
   mergeSetPatch,
@@ -97,11 +98,41 @@ function states(): ActiveWorkoutExerciseState[] {
   return [{ exercise, prescriptionItem, sets: [setState()] }];
 }
 
+function exerciseState(
+  name: string,
+  completed: number,
+  total = 3
+): ActiveWorkoutExerciseState {
+  return {
+    exercise: {
+      ...exercise,
+      id: `exercise-${name}`,
+      exercise_name: name,
+      sets: total
+    },
+    prescriptionItem: {
+      ...prescriptionItem,
+      id: `item-${name}`,
+      activityName: name,
+      plannedSets: total
+    },
+    sets: Array.from({ length: total }, (_, index) => setState({
+      setNumber: index + 1,
+      completedAt: index < completed ? `2026-07-27T08:0${index}:00.000Z` : null
+    }))
+  };
+}
+
 describe("active workout runtime model", () => {
   it("normalizes numeric drafts and exercise identity deterministically", () => {
     expect(toNumberOrNull(" 12,5 ")).toBe(12.5);
     expect(toNumberOrNull(" ")).toBeNull();
     expect(normalizeExerciseName("A1: Bench Press")).toBe("bench press");
+    expect(normalizeExerciseName("ضغط الصدر")).toBe("ضغط الصدر");
+    expect(normalizeExerciseName("سحب أمامي")).toBe("سحب أمامي");
+    expect(normalizeExerciseName("BÄNKDRÜCKEN")).toBe("bänkdrücken");
+    expect(normalizeExerciseName("  Bench—Press...   Close Grip ")).toBe("bench press close grip");
+    expect(normalizeExerciseName("تمرين ٢")).not.toBe("");
   });
 
   it("marks detail and canonical-log writes when a set draft changes", () => {
@@ -168,9 +199,82 @@ describe("active workout runtime model", () => {
       totalVolume: 800,
       completedSets: 1,
       completedExercises: 1,
+      partialExercises: [],
       skippedExercises: [],
       notes: "Good session"
     });
     expect(summary.suggestions).toHaveLength(1);
+  });
+
+  it("separates not-started, partial, and fully completed exercise semantics", () => {
+    const none = buildSummary([exerciseState("None", 0)], [], 1, "", tr, formatters);
+    const partial = buildSummary([exerciseState("Partial", 1)], [], 1, "", tr, formatters);
+    const full = buildSummary([exerciseState("Full", 3)], [], 1, "", tr, formatters);
+    const mixed = buildSummary([
+      exerciseState("None", 0),
+      exerciseState("Partial", 1),
+      exerciseState("Full", 3)
+    ], [], 1, "", tr, formatters);
+
+    expect(none).toMatchObject({
+      completedExercises: 0,
+      partialExercises: [],
+      skippedExercises: ["None"]
+    });
+    expect(partial).toMatchObject({
+      completedExercises: 0,
+      partialExercises: ["Partial"],
+      skippedExercises: []
+    });
+    expect(full).toMatchObject({
+      completedExercises: 1,
+      partialExercises: [],
+      skippedExercises: []
+    });
+    expect(mixed).toMatchObject({
+      completedExercises: 1,
+      partialExercises: ["Partial"],
+      skippedExercises: ["None"]
+    });
+  });
+
+  it("keeps unrelated Arabic histories and PR groups distinct", () => {
+    const history = [{
+      id: "history-ar",
+      started_at: "2026-07-26T08:00:00.000Z",
+      completed_at: "2026-07-26T09:00:00.000Z",
+      exercise_logs: [{
+        exercise_name: "ضغط الصدر",
+        set_number: 1,
+        reps: 8,
+        weight_kg: 50
+      }, {
+        exercise_name: "سحب أمامي",
+        set_number: 1,
+        reps: 10,
+        weight_kg: 40
+      }]
+    }] as unknown as WorkoutSessionSummary[];
+
+    expect(previousSetForExercise(history, "ضغط الصدر", 1)).toMatchObject({
+      reps: 8,
+      weightKg: 50
+    });
+    expect(previousSetForExercise(history, "تمرين مختلف", 1)).toBeNull();
+
+    const prs = buildPrs([
+      exerciseState("ضغط الصدر", 1, 1),
+      exerciseState("سحب أمامي", 1, 1)
+    ].map((item, index) => ({
+      ...item,
+      sets: item.sets.map((set) => ({
+        ...set,
+        reps: index === 0 ? "9" : "11",
+        weightKg: index === 0 ? "55" : "45"
+      }))
+    })), history, tr, formatters);
+
+    expect(prs.some((item) => item.includes("ضغط الصدر"))).toBe(true);
+    expect(prs.some((item) => item.includes("سحب أمامي"))).toBe(true);
   });
 });
