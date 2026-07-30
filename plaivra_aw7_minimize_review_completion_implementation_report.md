@@ -18,7 +18,7 @@ None. The fetched remote `main` matched the prompt's expected base exactly.
 
 ## 5. Final head SHA
 
-Validated implementation and exact rendered-evidence head: `304c005fc43b1264f847c8e1dac645fecee39718`.
+Validated implementation, QA-correction, and exact rendered-evidence head: `03a25b11a702b4ea8a7653f862137084c146c399`.
 
 The required report commit is a documentation-only descendant and cannot self-reference its own Git object ID. The final PR head after that commit is therefore recorded in the PR and completion handoff; no runtime, test, QA-harness, or visual behavior changes follow the validated head above.
 
@@ -130,6 +130,7 @@ Changed:
 - both session route pages, AppShell, global indicator, WorkoutSessionScreen
 - Active Workout core, runtime model, review bridge, Muscle Load controller
 - core/runtime identity tests, compatibility cache tests, Train source-contract tests
+- the AW-3B integration source contract and Train rendered-overlap probe
 - active-workout i18n contracts and EN/DE/AR messages
 - `package.json` and the shared rendered-QA fixture
 
@@ -150,7 +151,10 @@ Added minimized-bar rendering tests and an AW-7 lifecycle/source contract. Exten
 - `npm run test:active-workout:aw6` — 9 files, 57 tests passed.
 - `npm run test:unit` — 215 files, 1,398 tests passed after the narrow CI contract correction.
 - `npm run test:scripts` — 171 tests passed.
+- `npm run test:active-workout:aw3b` — 60 tests passed across its unit and source-integration phases.
 - Focused corrected Train contracts — 2 files, 19 tests passed.
+- `npm run qa:train` — 224 base observations and 23 AW-5 compatibility scenarios passed after excluding controller-owned and closed-disclosure controls from the legacy page-content overlap probe.
+- Exact-head PR Quality run `30578301323` — scope, integrity, core, database, UI/i18n, CI contracts, build, and dependency audit passed; its database job passed all 72 integration tests.
 
 ## 32. Production build result
 
@@ -175,7 +179,7 @@ All ten exact-head production-server scenarios passed:
 
 Machine-readable artifact:
 
-`C:\Users\Ahmee\.codex\visualizations\2026\07\30\019fb46b-f313-71d3-9ff7-d4baefae1097\aw7-qa-exact-304c005fc43\aw7-layout-qa-results.json`
+`C:\Users\Ahmee\.codex\visualizations\2026\07\30\019fb46b-f313-71d3-9ff7-d4baefae1097\aw7-qa-final-03a25b11\aw7-layout-qa-results.json`
 
 The ten PNGs are in the same directory and are named `01-mobile-en-minimized-active-390x844.png` through `10-desktop-en-terminal-isolation-1440x900.png`.
 
@@ -186,9 +190,10 @@ Every final PNG was manually inspected. Material corrections made during rendere
 - partial confirmation focus changed from Continue to Finish anyway;
 - two mojibake separators were replaced by correct middle dots;
 - terminal fixture journeys now save one set before partial completion;
-- completed-mode fixture metadata now matches the final request.
+- completed-mode fixture metadata now matches the final request;
+- the legacy Train overlap probe now ignores the minimized controller's own actions and hidden controls inside closed disclosures, while retaining its visible page-action collision check.
 
-Final inspection found no horizontal overflow, clipped controls, overlay collisions, duplicate controller, stale minimized bar, duplicate review/completion surface, or mutable editor behind terminal completion.
+Final inspection found no horizontal overflow, clipped controls, overlay collisions, duplicate controller, stale minimized bar, duplicate review/completion surface, or mutable editor behind terminal completion. The ten final-head PNGs were also SHA-256-identical to the manually inspected corrected set.
 
 ## 36. Console/page/network results
 
@@ -218,7 +223,6 @@ No deployment or production promotion was performed. GitHub/Netlify PR previews 
 
 - The committed report is necessarily a docs-only descendant of the exact implementation/evidence head stated in section 5.
 - Rendered QA uses deterministic mock-auth/fixture data and is not evidence of live Production database state.
-- Optional PR Quality jobs were still rerunning when this report was authored; final live check state is reported in the completion handoff.
 
 ## 43. Out-of-scope findings
 
