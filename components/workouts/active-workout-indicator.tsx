@@ -34,7 +34,57 @@ import {
 } from "@/lib/workouts/session-engine/selectors";
 import { activeSessionPersistenceAdapter } from "@/services/database/active-session-persistence-adapter";
 import { getOpenWorkoutSessionWithStatus } from "@/services/database/workout-sessions";
-import type { WorkoutSession } from "@/types";
+import type { ExerciseLog, WorkoutSession, WorkoutSessionPrescriptionItem } from "@/types";
+
+function prescriptionSetCount(item: WorkoutSessionPrescriptionItem | null) {
+  return item?.prescriptionSets.length || item?.plannedSets || 1;
+}
+
+function completedLogMatchesItem(
+  log: ExerciseLog,
+  item: WorkoutSessionPrescriptionItem
+) {
+  if (log.plan_exercise_id && item.sourcePlanExerciseId) {
+    return log.plan_exercise_id === item.sourcePlanExerciseId;
+  }
+  if (log.plan_activity_id && item.sourcePlanActivityId) {
+    return log.plan_activity_id === item.sourcePlanActivityId;
+  }
+  if (Number.isSafeInteger(log.exercise_order)) {
+    return log.exercise_order === item.itemOrder;
+  }
+  return false;
+}
+
+export function projectActiveWorkoutMinimizedProgress(
+  prescription: readonly WorkoutSessionPrescriptionItem[],
+  logs: readonly ExerciseLog[]
+) {
+  const activeItems = prescription.filter((item) => item.executionState !== "skipped");
+  const totalSetCount = activeItems.reduce(
+    (sum, item) => sum + prescriptionSetCount(item),
+    0
+  );
+  const hasSkippedItems = activeItems.length !== prescription.length;
+  const completedSetCount = Math.min(
+    totalSetCount,
+    logs.filter((log) => {
+      if (!log.completed_at) return false;
+      const hasStableIdentity = Boolean(
+        log.plan_exercise_id
+        || log.plan_activity_id
+        || Number.isSafeInteger(log.exercise_order)
+      );
+      if (!hasSkippedItems || !hasStableIdentity) return !hasSkippedItems;
+      return activeItems.some((item) => completedLogMatchesItem(log, item));
+    }).length
+  );
+  return {
+    totalSetCount,
+    completedSetCount,
+    progress: totalSetCount > 0 ? completedSetCount / totalSetCount : 0
+  };
+}
 
 export function ActiveWorkoutIndicator() {
   const { user } = useAuth();
@@ -257,19 +307,9 @@ export function ActiveWorkoutIndicator() {
     item.id === execution?.active_snapshot_item_id
     || item.itemOrder === execution?.active_item_order
   ) ?? null;
-  const nextItem = prescription.find((item) =>
-    item.itemOrder > (activeItem?.itemOrder ?? execution?.active_item_order ?? 0)
-    && item.executionState !== "skipped"
-  ) ?? null;
-  const activeSetCount = activeItem?.prescriptionSets.length
-    || activeItem?.plannedSets
-    || 1;
-  const totalSetCount = prescription.reduce(
-    (sum, item) => sum + (item.prescriptionSets.length || item.plannedSets || 1),
-    0
-  );
-  const completedSetCount = logs.filter((log) => Boolean(log.completed_at)).length;
-  const progress = totalSetCount > 0 ? completedSetCount / totalSetCount : 0;
+  const activeSetCount = prescriptionSetCount(activeItem);
+  const { totalSetCount, completedSetCount, progress } =
+    projectActiveWorkoutMinimizedProgress(prescription, logs);
   const href = state?.route ?? (
     session ? resolveActiveWorkoutRoute(session, null) : "/my-workout/plans"
   );
@@ -312,8 +352,11 @@ export function ActiveWorkoutIndicator() {
   } else if (execution?.view_state === "rest" && restLeft > 0) {
     barState = "rest";
     title = t("rest.resting");
-    meta = nextItem
-      ? t("exercise.nextExercise", { name: nextItem.activityName })
+    meta = activeItem
+      ? `${t("exercise.nextExercise", { name: activeItem.activityName })} · ${t("minimized.setPosition", {
+          current: execution.active_set_number,
+          total: activeSetCount
+        })}`
       : t("minimized.nextSetReady");
     timer = formatters.timer(restLeft);
     actionLabel = t("minimized.openWorkout");
