@@ -5,6 +5,7 @@ import { CirclePause, CirclePlay, RefreshCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ExerciseLog, WorkoutSessionPrescriptionItem } from "@/types";
 
 export type ActiveWorkoutMinimizedBarState =
   | "active"
@@ -25,6 +26,58 @@ export type ActiveWorkoutMinimizedBarProps = {
   actionPending: boolean;
   onAction?: () => void;
 };
+
+export function activeWorkoutPrescriptionSetCount(
+  item: WorkoutSessionPrescriptionItem | null
+) {
+  return item?.prescriptionSets.length || item?.plannedSets || 1;
+}
+
+function completedLogMatchesItem(
+  log: ExerciseLog,
+  item: WorkoutSessionPrescriptionItem
+) {
+  if (log.plan_exercise_id && item.sourcePlanExerciseId) {
+    return log.plan_exercise_id === item.sourcePlanExerciseId;
+  }
+  if (log.plan_activity_id && item.sourcePlanActivityId) {
+    return log.plan_activity_id === item.sourcePlanActivityId;
+  }
+  if (Number.isSafeInteger(log.exercise_order)) {
+    return log.exercise_order === item.itemOrder;
+  }
+  return false;
+}
+
+export function projectActiveWorkoutMinimizedProgress(
+  prescription: readonly WorkoutSessionPrescriptionItem[],
+  logs: readonly ExerciseLog[]
+) {
+  const activeItems = prescription.filter((item) => item.executionState !== "skipped");
+  const totalSetCount = activeItems.reduce(
+    (sum, item) => sum + activeWorkoutPrescriptionSetCount(item),
+    0
+  );
+  const hasSkippedItems = activeItems.length !== prescription.length;
+  const completedSetCount = Math.min(
+    totalSetCount,
+    logs.filter((log) => {
+      if (!log.completed_at) return false;
+      const hasStableIdentity = Boolean(
+        log.plan_exercise_id
+        || log.plan_activity_id
+        || Number.isSafeInteger(log.exercise_order)
+      );
+      if (!hasSkippedItems || !hasStableIdentity) return !hasSkippedItems;
+      return activeItems.some((item) => completedLogMatchesItem(log, item));
+    }).length
+  );
+  return {
+    totalSetCount,
+    completedSetCount,
+    progress: totalSetCount > 0 ? completedSetCount / totalSetCount : 0
+  };
+}
 
 export function ActiveWorkoutMinimizedBar({
   state,
