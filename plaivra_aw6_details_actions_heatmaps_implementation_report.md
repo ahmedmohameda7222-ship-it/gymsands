@@ -22,16 +22,17 @@ There was no discrepancy. The prompt's expected base and the verified remote `ma
 
 ## 5. Final head SHA
 
-The final implementation and rendered-evidence head is `717b7478165111f10e4992487581414c4b933238`.
+The corrected implementation and successful rendered-evidence head is `a9dc153c7bfb4714c28bf582c8cc8ab4f70cf0c5`.
 
-This report is committed afterward as the report-only closure commit. A Git commit cannot truthfully embed its own resulting SHA; the exact final PR head is therefore recorded by live PR metadata and the completion handoff.
+This report is committed afterward as the report-only closure commit. A Git commit cannot truthfully embed its own resulting SHA; the exact final PR head and its report-only exact-head checks are therefore recorded by live PR metadata and the completion handoff.
 
 ## 6. PR number, URL, Draft/Ready state
 
 - PR: #92
 - URL: <https://github.com/ahmedmohameda7222-ship-it/gymsands/pull/92>
-- State at report creation: open, Draft, unmerged
-- Initial remote workflow state on implementation head: Phase A Diff Validation passed; PR Quality was queued.
+- State at correction-report creation: open, Draft, unmerged
+- Corrected implementation-head Phase A Diff Validation: run `30570570485`, passed.
+- Corrected implementation-head PR Quality: run `30570570280`, passed, including `ui-and-i18n` and `required-summary`.
 
 ## 7. One-pass confirmation for AW-6A/AW-6B/AW-6C
 
@@ -51,6 +52,10 @@ The bounded conditional inspection record was:
 - `lib/i18n/active-workout-formatters.ts` to preserve existing locale formatting.
 - Existing focused Heat Map and Active Workout identity tests to follow current deterministic test conventions.
 - Existing AI action components to reuse their approved surface without dialog stacking.
+- `scripts/run-aw5-correction-layout-qa.mjs` because exact-head CI showed its responsive trigger and rest-preset selectors needed to target the visible instance.
+- `scripts/aw5-correction-qa-diagnostics.mjs` because the exact 320-pixel overlap assertion identified the obscured feedback geometry.
+- `components/layout/mobile-sticky-actions.tsx` to verify the established session spacer and sticky safe-area contract before preserving it unchanged.
+- `scripts/run-train-layout-qa-base.mjs` because the successful rendered scenarios were still classified as failures by a DOM-wide Details-trigger count instead of the approved visible-trigger count.
 
 No Graphify, agents, historical implementation reports, unrelated modules, or later-phase material were used.
 
@@ -191,6 +196,8 @@ All new member-facing copy is present in English, German, and Arabic with matchi
 - `messages/en.json`
 - `package.json`
 - `scripts/repository-evidence-hygiene.test.mjs`
+- `scripts/run-aw5-correction-layout-qa.mjs`
+- `scripts/run-train-layout-qa-base.mjs`
 - `scripts/train-layout-qa-fixture.mjs`
 
 ## 29. Files deleted
@@ -202,6 +209,7 @@ None.
 - Added controller tests for null identity, one request per revision, stale response rejection, cache retention, refresh failure, initial error, V1 projection, retry, and state resolution.
 - Added quick-action tests for plan-day/direct, guide absence, busy state, mobile priority, and desktop projection.
 - Added AW-6 product contract tests for shared ownership, section order, opening destinations, revision events, direct boundaries, translations, and focused rendered-QA metadata.
+- Added exact correction contracts for both responsive Details declarations, one visible trigger per breakpoint, current-set destination/focus ownership, visible rest-preset targeting, scoped busy feedback, and the base Train runner's visible-trigger count.
 - Updated core identity, Heat Map, Phase 4C2, i18n, and existing AW-5 contracts to preserve shared-core and regression boundaries.
 - Advanced the repository evidence-hygiene contract to require the AW-6 report while preserving the direct AW-5 predecessor handoff.
 
@@ -225,6 +233,9 @@ None.
 - `npm run start -H 127.0.0.1 -p 3000`: production server became ready.
 - `npm run qa:active-workout:aw6`: all 8/8 final scenarios passed.
 - Final `node --test scripts/repository-evidence-hygiene.test.mjs scripts/train-mock-fixture-contract.test.mjs`: 15/15 passed after advancing the required current-phase report from AW-5 to AW-6.
+- Exact-head correction focused loop, run after each correction: `git diff --check`, `npm run lint`, `npm run typecheck`, and `npm run test:active-workout:aw6`; final local result was 9 files and 57/57 tests passed.
+- Corrected implementation head `a9dc153c7bfb4714c28bf582c8cc8ab4f70cf0c5`: Phase A Diff Validation run `30570570485` passed.
+- Corrected implementation head `a9dc153c7bfb4714c28bf582c8cc8ab4f70cf0c5`: PR Quality run `30570570280` passed all jobs, including `core`, `build`, `database`, `ui-and-i18n`, and `required-summary`.
 
 No gate was weakened, bypassed, converted to a warning, or claimed without a successful result.
 
@@ -268,6 +279,20 @@ Screenshots:
 
 The artifact records implementation head `717b7478165111f10e4992487581414c4b933238`. Screenshots and machine evidence are local ignored QA evidence and are intentionally not committed.
 
+The successful exact-head GitHub artifact is:
+
+`pr-quality-rendered-evidence-a9dc153c7bfb4714c28bf582c8cc8ab4f70cf0c5`
+
+The required desktop correction screenshot inside that artifact is:
+
+`train-qa-evidence/active-workout-set-details-dark-en-1440x900.png`
+
+Its source observation is:
+
+`active-default-success-dark-en-1440x900-workouts-session-day-10000000-0000-4000-8000-000000000011-set-details.png`
+
+The successful Train manifest records 224 observations, 0 failures, and `passed: true`.
+
 ## 35. Manual visual findings and corrections
 
 All eight PNGs were manually inspected after the coherent implementation:
@@ -285,6 +310,25 @@ The focused correction loop hardened screenshot retry after a transient Chromium
 The first report-hygiene check correctly rejected a new root report while its allowlist still named AW-5 as the current phase. The policy was narrowly advanced to require this exact AW-6 report and preserve only the direct AW-5 predecessor; its focused rerun passed.
 
 The in-app Browser pre-check could not inject the deterministic route fixture and therefore reached the app's safe load-error state. The contract-required standalone Playwright production runner supplied the authoritative fixture-controlled rendered evidence.
+
+### Exact-head desktop Details trigger correction
+
+The original PR Quality failure was reproduced at head `4acb8606ca933d1a4fe284b65810218770bb2bc7`, run `30565749815`, job `90949842360`. The production runner timed out because `[data-active-set-details-trigger]` existed only in the mobile `lg:hidden` row and therefore had no visible desktop instance.
+
+The correction added the canonical selector only to the desktop `set-details` quick action and preserved the existing `onQuickAction(action, event.currentTarget)` path, current-set destination, return-focus ref, single responsive Details surface, and desktop rail.
+
+Exact-head CI then exposed previously masked runner contracts, corrected in the same bounded pass:
+
+- `e6268ff4527877eabdc342bb490875b109fcacd7` added the desktop selector and destination coverage. PR Quality run `30566894136` showed the old AW-5 helper needed a visible selector.
+- `9484e2894e7a51199d7ea0ddab1ae4b94fabd55b` targeted the visible Details trigger. PR Quality run `30567612645` then exposed a busy-feedback false positive and the missing mobile rest-preset scroll target.
+- `25d2e7749388db3f77c12e6917a1a6346f35c1f9` scoped the busy assertion to `[data-aw5-feedback]`.
+- `545e52e47ce56a7a8bcd2b967ebdd73f7ece80a1` restored mobile rest presets while preserving the established sticky spacer. PR Quality run `30569155038` proved the responsive preset selector also needed visible targeting.
+- `86934557a1b0fcaec809146ddc7541dade33b68f` targeted the visible preset group. PR Quality run `30569843629` passed general rendered QA and all 23 AW-5 correction scenarios, but its base manifest still counted both responsive Details declarations.
+- `a9dc153c7bfb4714c28bf582c8cc8ab4f70cf0c5` changed that diagnostic to count visible Details triggers. Phase A run `30570570485` and PR Quality run `30570570280` both passed.
+
+The required desktop screenshot was manually inspected from the successful artifact. It shows the dark 1440×900 Active Workout execution view with the right-side Workout details surface open at Current set, populated RPE/RIR/type/note controls, a visible close control, and the underlying execution/rail layout preserved under the expected modal dimming. The panel remains within the viewport with no horizontal overflow.
+
+The machine observation independently records `dialogFocused: true`, `drawerWithinViewport: true`, `drawerHorizontalOverflowPx: 0`, `focusReturned: true`, successful hydration, successful autosave flush, and no framework overlay. The final AW-5 correction manifest records all 23 scenarios clean, including `plan-day-rest-en-320x568` and `plan-day-details-dark-en-1440x900`.
 
 ## 36. Console/page/network error results
 
@@ -316,7 +360,7 @@ No deployment, promotion, release preflight, Exact Release, auto-merge, merge, o
 
 - Muscle Load is based on saved completed sets, matching the active-session API contract; unsaved drafts are intentionally not analyzed.
 - V1 broad compatibility may identify a broad muscle without detailed regional mapping. The UI states this instead of inventing precision.
-- The final PNG and JSON evidence is intentionally ignored rather than committed, so it remains a local handoff artifact at the paths above.
+- PNG and JSON evidence is intentionally not committed. The final exact-head evidence is retained in the successful GitHub Actions artifact named above.
 
 ## 43. Out-of-scope findings
 
@@ -324,7 +368,7 @@ No out-of-scope product defect requiring a separate change was found during the 
 
 ## 44. Working-tree status
 
-The working tree was clean at implementation commit `717b7478165111f10e4992487581414c4b933238`. This report is the only intended report-closure change after that commit. Generated screenshots, logs, and machine evidence remain ignored and uncommitted.
+The working tree was clean at corrected implementation/evidence commit `a9dc153c7bfb4714c28bf582c8cc8ab4f70cf0c5`. This report is the only intended report-closure change after that commit. Generated screenshots, logs, and machine evidence remain outside the repository and uncommitted.
 
 ## 45. Explicit confirmation that the PR is unmerged
 
