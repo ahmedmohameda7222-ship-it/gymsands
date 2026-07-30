@@ -2,7 +2,7 @@
 
 ## 1. Executive summary
 
-AW-7A, AW-7B, and AW-7C were completed as one uninterrupted implementation pass. The global Active Workout controller is now a compact minimized bar, Finish enters a persisted full review, completion is terminal-proofed and recoverable, and plan-day/direct sessions share one terminal summary with final saved-set Muscle Load.
+AW-7A, AW-7B, and AW-7C were completed as one uninterrupted implementation pass. The global Active Workout controller is now a compact minimized bar, Finish enters a persisted full review, completion is terminal-proofed and recoverable, and plan-day/direct sessions share one terminal summary with final saved-set Muscle Load. A later independent Planner audit identified and corrected one minimized-rest context defect before merge readiness.
 
 ## 2. Actual base SHA
 
@@ -18,9 +18,9 @@ None. The fetched remote `main` matched the prompt's expected base exactly.
 
 ## 5. Final head SHA
 
-Validated implementation, QA-correction, and exact rendered-evidence head: `03a25b11a702b4ea8a7653f862137084c146c399`.
+Planner-corrected implementation and exact remote evidence head: `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`.
 
-The required report commit is a documentation-only descendant and cannot self-reference its own Git object ID. The final PR head after that commit is therefore recorded in the PR and completion handoff; no runtime, test, QA-harness, or visual behavior changes follow the validated head above.
+The required report commit is a documentation-only descendant and cannot self-reference its own Git object ID. The final PR head after this report commit is therefore recorded in the PR and completion handoff; no runtime, test, QA-harness, or visual behavior changes follow the validated head above.
 
 ## 6. PR number/URL/Draft state
 
@@ -28,7 +28,7 @@ Draft PR [#93](https://github.com/ahmedmohameda7222-ship-it/gymsands/pull/93), o
 
 ## 7. One-pass AW-7A/B/C confirmation
 
-AW-7A minimized controller/navigation, AW-7B authoritative review/correction, and AW-7C completion/recovery/terminal summary were implemented continuously on this one branch and PR. No intermediate phase handoff or later phase was started.
+AW-7A minimized controller/navigation, AW-7B authoritative review/correction, and AW-7C completion/recovery/terminal summary were implemented continuously on this one branch and PR. No later product phase was started. The Planner correction remained on the same branch and PR.
 
 ## 8. Authorities preserved
 
@@ -36,11 +36,13 @@ The AW-4 Active Session store, serialized command dispatcher, session engine red
 
 ## 9. Minimized controller architecture
 
-`ActiveWorkoutIndicator` remains the global owner. It hydrates the owner-scoped open session into the existing Active Session store, subscribes to authoritative snapshots, reads the existing session clock, and renders the presentational `ActiveWorkoutMinimizedBar`. The compatibility cache remains a mirror, not authority.
+`ActiveWorkoutIndicator` remains the global owner. It hydrates the owner-scoped open session into the existing Active Session store, subscribes to authoritative snapshots, reads the existing session clock, and renders the presentational `ActiveWorkoutMinimizedBar`. The compatibility cache remains a mirror, not authority. The minimized progress projection is a pure tested helper owned by the minimized-bar module.
 
 ## 10. Minimized bar states
 
 The compact bar projects active set progress, rest countdown/next context, paused state, persisted review readiness, and a recoverable load error. Whole-surface navigation resumes the exact session route. Pause/Resume is the only normal mutation. Finish and Cancel are absent.
+
+During rest, the displayed next exercise and set now come directly from the authoritative execution cursor, which the session engine has already advanced to the true next target. It no longer searches for a prescription item after that cursor. Progress and review ratios exclude explicitly skipped prescription items and matching skipped-item logs.
 
 ## 11. Mobile/desktop overlay integration
 
@@ -129,6 +131,7 @@ Changed:
 
 - both session route pages, AppShell, global indicator, WorkoutSessionScreen
 - Active Workout core, runtime model, review bridge, Muscle Load controller
+- minimized-bar projection and focused regression tests
 - core/runtime identity tests, compatibility cache tests, Train source-contract tests
 - the AW-3B integration source contract and Train rendered-overlap probe
 - active-workout i18n contracts and EN/DE/AR messages
@@ -142,27 +145,42 @@ Deleted:
 
 Added minimized-bar rendering tests and an AW-7 lifecycle/source contract. Extended runtime semantics for incomplete/skip/replacement facts, compatibility route storage, core terminal behavior, Muscle Load completed mode, i18n surfaces, and legacy Train contracts. Added `test:active-workout:aw7` and `qa:active-workout:aw7`.
 
+The Planner correction added focused coverage proving that skipped prescription items and their logs are excluded from minimized progress, while canonical logs remain compatible when no item is skipped. A source contract prevents the rest projection from reintroducing a later `nextItem` search and requires the authoritative active item/set cursor.
+
 ## 31. Validation commands and factual results
+
+Original implementation validation:
 
 - `git diff --check` — passed.
 - `npm run lint -- --quiet` — passed.
 - `npm run typecheck` — passed.
-- `npm run test:active-workout:aw7` — 11 files, 70 tests passed.
+- `npm run test:active-workout:aw7` — 11 files, 70 tests passed before the Planner correction.
 - `npm run test:active-workout:aw6` — 9 files, 57 tests passed.
-- `npm run test:unit` — 215 files, 1,398 tests passed after the narrow CI contract correction.
+- `npm run test:unit` — 215 files, 1,398 tests passed before the Planner correction.
 - `npm run test:scripts` — 171 tests passed.
 - `npm run test:active-workout:aw3b` — 60 tests passed across its unit and source-integration phases.
 - Focused corrected Train contracts — 2 files, 19 tests passed.
-- `npm run qa:train` — 224 base observations and 23 AW-5 compatibility scenarios passed after excluding controller-owned and closed-disclosure controls from the legacy page-content overlap probe.
-- Exact-head PR Quality run `30578301323` — scope, integrity, core, database, UI/i18n, CI contracts, build, and dependency audit passed; its database job passed all 72 integration tests.
+- `npm run qa:train` — 224 base observations and 23 AW-5 compatibility scenarios passed.
+
+Planner-corrected exact-head validation on `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`:
+
+- Phase A Diff Validation run `30581021594` — passed.
+- PR Quality run `30581021493` — passed.
+- scope, integrity, core, database, UI/i18n, CI contracts, build, dependency audit, and required summary — passed.
+- lint — passed.
+- typecheck — passed.
+- full unit job, including the new minimized progress and rest-context contracts — passed.
+- production build — passed.
+- Rendered UI QA — passed.
+- database integration job — passed.
 
 ## 32. Production build result
 
-The required `NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build` passed: compilation, TypeScript, page-data collection, and 92 static page generations completed successfully. Separate explicit QA-only production builds used `NEXT_PUBLIC_USE_MOCK_AUTH=true` and `NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true`; those also passed and do not enable mock auth in an ordinary Production build.
+The required `NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build` passed during original implementation validation. The Planner-corrected exact-head PR Quality production build also passed. Explicit QA-only production builds use `NEXT_PUBLIC_USE_MOCK_AUTH=true` and `NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true`; these do not enable mock auth in an ordinary Production build.
 
 ## 33. Rendered-QA matrix
 
-All ten exact-head production-server scenarios passed:
+The original ten production-server AW-7 scenarios passed:
 
 1. Mobile EN 390x844 — minimized active bar above mobile nav.
 2. Mobile EN 390x844 — minimized rest countdown.
@@ -175,33 +193,52 @@ All ten exact-head production-server scenarios passed:
 9. Mobile EN 390x844 — terminal partial completion with one saved set and final Muscle Load.
 10. Desktop EN 1440x900 — terminal isolation with one saved set and final Muscle Load.
 
+After the Planner correction, exact-head PR Quality Rendered UI QA passed again on `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`.
+
 ## 34. Artifact and screenshot paths
 
-Machine-readable artifact:
+Original local AW-7 artifact:
 
 `C:\Users\Ahmee\.codex\visualizations\2026\07\30\019fb46b-f313-71d3-9ff7-d4baefae1097\aw7-qa-final-03a25b11\aw7-layout-qa-results.json`
 
-The ten PNGs are in the same directory and are named `01-mobile-en-minimized-active-390x844.png` through `10-desktop-en-terminal-isolation-1440x900.png`.
+The original ten PNGs are in the same directory and are named `01-mobile-en-minimized-active-390x844.png` through `10-desktop-en-terminal-isolation-1440x900.png`.
+
+Planner-corrected exact-head remote rendered artifact:
+
+```text
+artifact ID: 8774802526
+name: pr-quality-rendered-evidence-1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd
+digest: sha256:7787e190bcf688d58f3a93cc974c365e1534e5bd4d49c57175b387451a96e194
+workflow run: 30581021493
+```
 
 ## 35. Manual visual findings/corrections
 
-Every final PNG was manually inspected. Material corrections made during rendered QA:
+Original rendered-QA corrections:
 
 - partial confirmation focus changed from Continue to Finish anyway;
 - two mojibake separators were replaced by correct middle dots;
 - terminal fixture journeys now save one set before partial completion;
 - completed-mode fixture metadata now matches the final request;
-- the legacy Train overlap probe now ignores the minimized controller's own actions and hidden controls inside closed disclosures, while retaining its visible page-action collision check.
+- the legacy Train overlap probe ignores the minimized controller's own actions and hidden controls inside closed disclosures while retaining its visible page-action collision check.
 
-Final inspection found no horizontal overflow, clipped controls, overlay collisions, duplicate controller, stale minimized bar, duplicate review/completion surface, or mutable editor behind terminal completion. The ten final-head PNGs were also SHA-256-identical to the manually inspected corrected set.
+Planner correction:
+
+- the previous minimized rest projection could skip the authoritative next set and display a later exercise;
+- rest copy now uses the cursor's active prescription item and `active_set_number` directly;
+- the rest fallback no longer guesses a later exercise;
+- minimized progress excludes skipped prescription items and matching skipped-item logs;
+- the correction did not change bar dimensions, positioning, Pause/Resume behavior, review layout, completion layout, or session-engine transitions.
+
+The corrected exact-head rendered artifact was inspected for the affected Active Workout surfaces. No horizontal overflow, clipped controls, overlay collisions, duplicate controller, stale minimized bar, duplicate review/completion surface, or mutable editor behind terminal completion was found.
 
 ## 36. Console/page/network results
 
-The final artifact records zero console errors, zero page errors, zero unexpected failed requests/responses, and zero scenario failures. Seventeen cancelled Next.js `_rsc` prefetch/navigation requests were classified separately as expected `net::ERR_ABORTED` cancellations, not network failures.
+The original final artifact recorded zero console errors, zero page errors, zero unexpected failed requests/responses, and zero scenario failures. Seventeen cancelled Next.js `_rsc` prefetch/navigation requests were classified separately as expected `net::ERR_ABORTED` cancellations, not network failures. The Planner-corrected exact-head Rendered UI QA also completed successfully.
 
 ## 37. Database/migration confirmation
 
-No migration, DDL, database schema, RLS, grant, ledger, or compatibility-version file changed.
+No migration, DDL, database schema, RLS, grant, ledger, or compatibility-version file changed. The Planner correction modified only UI projection logic, focused tests, and this report.
 
 ## 38. Supabase Production confirmation
 
@@ -221,8 +258,9 @@ No deployment or production promotion was performed. GitHub/Netlify PR previews 
 
 ## 42. Known genuine limitations
 
-- The committed report is necessarily a docs-only descendant of the exact implementation/evidence head stated in section 5.
+- The committed report is necessarily a docs-only descendant of the exact corrected implementation/evidence head stated in section 5.
 - Rendered QA uses deterministic mock-auth/fixture data and is not evidence of live Production database state.
+- The Planner correction reused the existing exact-head remote Train/rendered matrix rather than performing a Production database journey.
 
 ## 43. Out-of-scope findings
 
@@ -230,7 +268,7 @@ No architectural or product issue requiring AW-8 or a separate phase was opened.
 
 ## 44. Working-tree status
 
-The tree was clean before report creation. It will be clean again after this report is committed.
+All correction writes were committed directly to the existing AW-7 branch. The PR diff is clean and exact-head integrity passed.
 
 ## 45. PR unmerged confirmation
 
@@ -239,3 +277,29 @@ PR #93 is open, Draft, and unmerged. No merge was attempted.
 ## 46. AW-8 not started confirmation
 
 AW-8 was not started. No fatigue, recovery, hypertrophy, trend, or other AW-8 derived metric was added.
+
+## 47. Planner correction closure
+
+Old audited head:
+
+`1b1d3b614d5e30d0e1009e8a9203c7bf9781cccc`
+
+Corrected implementation/evidence head:
+
+`1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`
+
+Root cause:
+
+The session engine correctly advanced the authoritative cursor to the next set/item before entering rest, but the minimized controller searched for another item after that cursor and could present a later exercise as next.
+
+Resolution:
+
+The minimized rest context now uses the authoritative active item, set number, and set count. Minimized progress now uses non-skipped prescription items and excludes matching skipped-item logs. The existing session engine remained unchanged.
+
+Evidence:
+
+- Phase A `30581021594` — passed.
+- PR Quality `30581021493` — passed.
+- exact-head artifact `8774802526` — uploaded successfully.
+- PR remains Draft and unmerged.
+- no migration, Production, Activity Catalog, compatibility-marker, deployment, merge, or AW-8 work occurred.
