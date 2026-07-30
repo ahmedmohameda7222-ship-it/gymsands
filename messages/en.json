@@ -154,6 +154,16 @@
       "allDone": "All done"
     },
     "details": {
+      "activeWorkoutDetails": "Workout details",
+      "activeWorkoutDetailsDescription": "Review the current exercise, set, saved Muscle Load, adjustments, and assistance.",
+      "exerciseOverview": "Exercise overview",
+      "currentSet": "Current set",
+      "muscleLoad": "Muscle Load",
+      "adjustToday": "Adjust today",
+      "assistance": "Assistance",
+      "currentSetContext": "Set {set} · planned {planned}",
+      "previousBest": "Previous best: {value}",
+      "previousDate": "Last performed: {date}",
       "instructions": "Instructions",
       "videoAnimation": "Video or animation",
       "equipment": "Equipment",
@@ -176,6 +186,12 @@
       "workoutNotes": "Workout notes"
     },
     "actions": {
+      "guideVideo": "Guide / video",
+      "skipToday": "Skip today",
+      "askPlaivra": "Ask Plaivra",
+      "chooseReplacement": "Choose replacement",
+      "askPlaivraReplacement": "Ask Plaivra for a replacement",
+      "resetWorkoutTimer": "Reset workout timer",
       "exerciseActions": "Exercise actions",
       "setDetails": "Set details",
       "addSetNote": "Add set note",
@@ -226,6 +242,7 @@
       "coachDescription": "Review this workout, make today lighter, or plan the next step."
     },
     "heatMap": {
+      "currentSessionMuscleLoad": "Current-session Muscle Load",
       "currentSessionHeat": "Current Session Heat",
       "currentSessionDescription": "Based only on saved completed sets.",
       "exerciseTargetTitle": "Exercise Target Map",

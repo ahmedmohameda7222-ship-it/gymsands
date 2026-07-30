@@ -32,6 +32,8 @@ export type MuscleHeatMapProps = {
   selectedTargetId?: MuscleHeatMapTargetId | null;
   onSelectedTargetChange?: (targetId: MuscleHeatMapTargetId | null) => void;
   showLegend?: boolean;
+  showViewLabels?: boolean;
+  showStateMessage?: boolean;
   disclosure?: ReactNode;
   statusDetails?: ReactNode;
   alignmentDebug?: boolean;
@@ -173,6 +175,8 @@ export function MuscleHeatMap({
   selectedTargetId,
   onSelectedTargetChange,
   showLegend,
+  showViewLabels = true,
+  showStateMessage = true,
   disclosure,
   statusDetails,
   alignmentDebug = false,
@@ -258,23 +262,43 @@ export function MuscleHeatMap({
   };
 
   return (
-    <div ref={rootRef} className={cn("space-y-4", className)} data-muscle-heat-map-mode={mode} data-state={state}>
-      <div className={cn("grid gap-4", view === "both" && "sm:grid-cols-2")} aria-busy={state === "loading"}>
+    <div
+      ref={rootRef}
+      className={cn(mode === "compact" ? "space-y-0" : "space-y-4", className)}
+      data-muscle-heat-map-mode={mode}
+      data-state={state}
+    >
+      <div
+        className={cn(
+          "grid",
+          mode === "compact" ? "gap-1" : "gap-4",
+          view === "both" && (mode === "compact" ? "grid-cols-2" : "sm:grid-cols-2")
+        )}
+        aria-busy={state === "loading"}
+      >
         {view === "front" || view === "both" ? (
           <div>
-            <p className="mb-2 text-center text-sm font-medium text-muted-foreground">{labels.frontView}</p>
+            {showViewLabels ? (
+              <p className="mb-2 text-center text-sm font-medium text-muted-foreground">
+                {labels.frontView}
+              </p>
+            ) : null}
             <FrontMuscleBody {...bodyProps} viewLabel={labels.frontView} />
           </div>
         ) : null}
         {view === "back" || view === "both" ? (
           <div>
-            <p className="mb-2 text-center text-sm font-medium text-muted-foreground">{labels.backView}</p>
+            {showViewLabels ? (
+              <p className="mb-2 text-center text-sm font-medium text-muted-foreground">
+                {labels.backView}
+              </p>
+            ) : null}
             <BackMuscleBody {...bodyProps} viewLabel={labels.backView} />
           </div>
         ) : null}
       </div>
 
-      {stateMessage ? (
+      {stateMessage && showStateMessage ? (
         <div className={cn(
           "rounded-2xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground",
           state === "error" && "border-destructive/40 text-destructive"

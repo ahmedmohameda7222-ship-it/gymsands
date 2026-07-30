@@ -154,6 +154,16 @@
       "allDone": "اكتمل الكل"
     },
     "details": {
+      "activeWorkoutDetails": "تفاصيل التمرين",
+      "activeWorkoutDetailsDescription": "راجع التمرين الحالي والمجموعة والحمل العضلي المحفوظ وتعديلات اليوم والمساعدة.",
+      "exerciseOverview": "نظرة عامة على التمرين",
+      "currentSet": "المجموعة الحالية",
+      "muscleLoad": "الحمل العضلي",
+      "adjustToday": "تعديل اليوم",
+      "assistance": "المساعدة",
+      "currentSetContext": "المجموعة {set} · المخطط {planned}",
+      "previousBest": "أفضل مجموعة سابقة: {value}",
+      "previousDate": "آخر تنفيذ: {date}",
       "instructions": "التعليمات",
       "videoAnimation": "فيديو أو حركة توضيحية",
       "equipment": "المعدات",
@@ -176,6 +186,12 @@
       "workoutNotes": "ملاحظات التمرين"
     },
     "actions": {
+      "guideVideo": "الدليل / الفيديو",
+      "skipToday": "تخطي اليوم",
+      "askPlaivra": "اسأل Plaivra",
+      "chooseReplacement": "اختيار بديل",
+      "askPlaivraReplacement": "اطلب من Plaivra بديلاً",
+      "resetWorkoutTimer": "إعادة ضبط مؤقت التمرين",
       "exerciseActions": "إجراءات التمرين",
       "setDetails": "تفاصيل المجموعة",
       "addSetNote": "إضافة ملاحظة للمجموعة",
@@ -226,6 +242,7 @@
       "coachDescription": "راجع التمرين أو اجعله أخف اليوم أو خطط للخطوة التالية."
     },
     "heatMap": {
+      "currentSessionMuscleLoad": "الحمل العضلي للجلسة الحالية",
       "currentSessionHeat": "حمل الجلسة الحالي",
       "currentSessionDescription": "يعتمد فقط على المجموعات المكتملة والمحفوظة.",
       "exerciseTargetTitle": "خريطة العضلات المستهدفة",

@@ -9,7 +9,6 @@ import {
   Clock3,
   Ellipsis,
   FastForward,
-  PersonStanding,
   Plus
 } from "lucide-react";
 
@@ -22,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+import type { ActiveWorkoutQuickAction } from "./active-workout-actions";
 import type { ActiveWorkoutSetPathItem } from "./active-workout-ui-model";
 
 export type ActiveWorkoutPrimaryActionKind =
@@ -39,8 +39,11 @@ export type ActiveWorkoutExecutionShellProps = {
   completedSetsLabel: string;
   elapsedLabel: string;
   progress: number;
-  miniHeatMapLabel: string;
-  miniHeatMapDescription: string;
+  miniHeatMap: ReactNode;
+  desktopMiniHeatMap: ReactNode;
+  muscleLoadStatusLabel: string;
+  mobileQuickActions: readonly ActiveWorkoutQuickAction[];
+  desktopQuickActions: readonly ActiveWorkoutQuickAction[];
   paused: boolean;
   busy: boolean;
   restActive: boolean;
@@ -82,6 +85,7 @@ export type ActiveWorkoutExecutionShellProps = {
   onPauseResume: () => void;
   onFinish: () => void;
   onOpenDetails: (trigger: HTMLButtonElement) => void;
+  onQuickAction: (action: ActiveWorkoutQuickAction, trigger: HTMLButtonElement) => void;
   onAddThirtySeconds: () => void;
   onStartRest: (seconds: number) => void;
 };
@@ -101,8 +105,11 @@ export function ActiveWorkoutExecutionShell({
   completedSetsLabel,
   elapsedLabel,
   progress,
-  miniHeatMapLabel,
-  miniHeatMapDescription,
+  miniHeatMap,
+  desktopMiniHeatMap,
+  muscleLoadStatusLabel,
+  mobileQuickActions,
+  desktopQuickActions,
   paused,
   busy,
   restActive,
@@ -144,6 +151,7 @@ export function ActiveWorkoutExecutionShell({
   onPauseResume,
   onFinish,
   onOpenDetails,
+  onQuickAction,
   onAddThirtySeconds,
   onStartRest
 }: ActiveWorkoutExecutionShellProps) {
@@ -196,15 +204,7 @@ export function ActiveWorkoutExecutionShell({
             </div>
           </div>
 
-          <div
-            data-aw5-mini-heat-map-slot
-            role="img"
-            aria-label={miniHeatMapLabel}
-            title={miniHeatMapDescription}
-            className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-border/70 bg-muted/35 text-muted-foreground sm:h-[64px] sm:w-[64px] lg:h-[68px] lg:w-[68px]"
-          >
-            <PersonStanding className="h-8 w-8" strokeWidth={1.6} aria-hidden="true" />
-          </div>
+          <div data-aw5-mini-heat-map-slot className="lg:hidden">{miniHeatMap}</div>
         </div>
 
         <div className="mt-2.5 flex items-center gap-3">
@@ -246,8 +246,8 @@ export function ActiveWorkoutExecutionShell({
 
       <main className="mt-3 grid items-start gap-4 sm:mt-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-6">
         <section aria-labelledby="aw5-current-exercise" className="min-w-0">
-          <div className="flex items-start gap-3 border-b border-border/70 pb-3 sm:pb-4">
-            <div className="min-w-0 flex-1">
+          <div className="border-b border-border/70 pb-3 sm:pb-4">
+            <div className="min-w-0">
               <p className="text-xs font-semibold text-primary">{currentSetLabel}</p>
               <h2
                 id="aw5-current-exercise"
@@ -257,18 +257,36 @@ export function ActiveWorkoutExecutionShell({
                 <bdi>{exerciseName}</bdi>
               </h2>
             </div>
-            <Button
-              data-active-set-details-trigger
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-11 w-11 shrink-0 sm:h-12 sm:w-12"
-              aria-label={moreLabel}
-              onClick={(event) => onOpenDetails(event.currentTarget)}
-              disabled={busy}
+            <div
+              data-aw6-mobile-quick-actions
+              className="mt-3 grid grid-cols-3 gap-2 lg:hidden"
             >
-              <Ellipsis className="h-5 w-5" aria-hidden="true" />
-            </Button>
+              {mobileQuickActions.map((action) => (
+                <Button
+                  key={action.id}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10 min-w-0 px-2 text-[11px]"
+                  onClick={(event) => onQuickAction(action, event.currentTarget)}
+                  disabled={action.disabled}
+                >
+                  <span className="truncate">{action.label}</span>
+                </Button>
+              ))}
+              <Button
+                data-active-set-details-trigger
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10 min-w-0 px-2 text-[11px]"
+                aria-label={moreLabel}
+                onClick={(event) => onOpenDetails(event.currentTarget)}
+              >
+                <Ellipsis className="h-4 w-4" aria-hidden="true" />
+                <span className="truncate">{moreLabel}</span>
+              </Button>
+            </div>
           </div>
 
           <div data-aw5-primary-editor className="mt-4 sm:mt-5">
@@ -390,14 +408,19 @@ export function ActiveWorkoutExecutionShell({
           </div>
         </section>
 
-        <aside className={cn(
-          "border-t border-border/70 pt-4 lg:sticky lg:top-4 lg:block lg:rounded-[var(--radius-lg)] lg:border lg:bg-card/75 lg:p-4",
-          !restActive && "hidden"
-        )}>
+        <aside className="hidden lg:sticky lg:top-4 lg:block lg:rounded-[var(--radius-lg)] lg:border lg:border-border/70 lg:bg-card/75 lg:p-4">
+          <div className="flex items-center gap-3 border-b border-border/70 pb-4">
+            {desktopMiniHeatMap}
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">{muscleLoadStatusLabel}</p>
+              <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{completedSetsLabel}</p>
+            </div>
+          </div>
+
           <Button
             data-aw5-primary-action
             type="button"
-            className="hidden min-h-[52px] w-full text-[15px] lg:inline-flex"
+            className="mt-4 min-h-[52px] w-full text-[15px]"
             onClick={onPrimaryAction}
             disabled={resolvedPrimaryActionDisabled}
             aria-busy={busy}
@@ -406,31 +429,57 @@ export function ActiveWorkoutExecutionShell({
             {primaryActionLabel}
           </Button>
 
-          <div data-aw5-rest-presets className="lg:mt-4">
+          <div data-aw6-desktop-quick-actions className="mt-4 border-t border-border/70 pt-4">
             <h3 className="text-xs font-semibold text-muted-foreground">
-              {restPresetSectionLabel}
+              {moreLabel}
             </h3>
-            <div className="mt-2 grid grid-cols-4 gap-2">
-              {restPresetLabels.map((preset) => (
+            <div className="mt-2 grid gap-2">
+              {desktopQuickActions.map((action) => (
                 <Button
-                  key={preset.seconds}
+                  key={action.id}
                   type="button"
-                  variant="outline"
+                  variant={action.id === "skip-today" ? "outline" : "ghost"}
                   size="sm"
-                  className="min-h-11 px-1.5 text-xs"
-                  onClick={() => onStartRest(preset.seconds)}
-                  disabled={busy}
+                  className={cn(
+                    "min-h-10 w-full justify-start",
+                    action.id === "skip-today" && "border-amber-500/40 hover:bg-amber-500/10"
+                  )}
+                  onClick={(event) => onQuickAction(action, event.currentTarget)}
+                  disabled={action.disabled}
                 >
-                  {preset.label}
+                  {action.label}
                 </Button>
               ))}
             </div>
           </div>
 
+          {restActive ? (
+            <div data-aw5-rest-presets className="mt-4 border-t border-border/70 pt-4">
+              <h3 className="text-xs font-semibold text-muted-foreground">
+                {restPresetSectionLabel}
+              </h3>
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {restPresetLabels.map((preset) => (
+                  <Button
+                    key={preset.seconds}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11 px-1.5 text-xs"
+                    onClick={() => onStartRest(preset.seconds)}
+                    disabled={busy}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <Button
             type="button"
             variant="ghost"
-            className="mt-2 hidden w-full lg:inline-flex"
+            className="mt-2 w-full"
             onClick={onFinish}
             disabled={busy}
           >

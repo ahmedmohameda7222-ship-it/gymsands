@@ -10,6 +10,12 @@ import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { InlineFeedback } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
+import {
+  buildActiveWorkoutQuickActions,
+  projectActiveWorkoutQuickActions,
+  type ActiveWorkoutDetailsSection,
+  type ActiveWorkoutQuickAction
+} from "@/components/workouts/active-workout/active-workout-actions";
 import { ActiveWorkoutDetailsBridge } from "@/components/workouts/active-workout/active-workout-details-bridge";
 import {
   dispatchActiveWorkoutExecutionAwaited,
@@ -17,6 +23,8 @@ import {
   type ActiveWorkoutExecutionDispatchOptions
 } from "@/components/workouts/active-workout/active-workout-command-dispatch";
 import { ActiveWorkoutExecutionShell } from "@/components/workouts/active-workout/active-workout-execution-shell";
+import { ActiveWorkoutMiniHeatMap } from "@/components/workouts/active-workout/active-workout-mini-heat-map";
+import { useActiveWorkoutMuscleLoad } from "@/components/workouts/active-workout/active-workout-muscle-load-controller";
 import { ActiveWorkoutReviewBridge } from "@/components/workouts/active-workout/active-workout-review-bridge";
 import {
   acknowledgeSetWrites,
@@ -185,6 +193,11 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const [prFeedback, setPrFeedback] = useState("");
   const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
   const [executionCursorItems, setExecutionCursorItems] = useState<WorkoutSessionExecutionCursorRow[]>([]);
+  const [muscleLoadRefreshRevision, setMuscleLoadRefreshRevision] = useState(0);
+  const [detailsRequest, setDetailsRequest] = useState<{
+    section: ActiveWorkoutDetailsSection;
+    focusTarget: "guide-video" | null;
+  }>({ section: "overview", focusTarget: null });
 
   const executionHydratedRef = useRef(false);
   const activeSessionStoreRef = useRef<ActiveSessionStore | null>(null);
@@ -194,6 +207,13 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const exerciseStatesRef = useRef(exerciseStates);
   const autosaveAdapterRef = useRef<WorkoutSetAutosaveAdapter<ActiveWorkoutExerciseState[]> | null>(null);
   const autosaveCoordinatorRef = useRef<WorkoutSetAutosaveCoordinator | null>(null);
+  const muscleLoadController = useActiveWorkoutMuscleLoad({
+    sessionId,
+    refreshRevision: muscleLoadRefreshRevision
+  });
+  const bumpMuscleLoadRefreshRevision = useCallback(() => {
+    setMuscleLoadRefreshRevision((current) => current + 1);
+  }, []);
 
   const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
     setExecutionState(next);
@@ -424,6 +444,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         setProgressionTargets(targets);
         setAlternatives(savedAlternatives.filter((item) => exerciseIds.includes(item.plan_exercise_id)));
         executionHydratedRef.current = true;
+        bumpMuscleLoadRefreshRevision();
       })
       .catch((error) => {
         if (active) {
@@ -442,6 +463,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
     return () => { active = false; };
   }, [
+    bumpMuscleLoadRefreshRevision,
     mirrorExecutionState,
     dayRef,
     directWorkoutRef,
@@ -912,6 +934,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       const acknowledgedStates = acknowledgeSetWrites(nextStates, nextStates);
       setExerciseStates(acknowledgedStates);
       exerciseStatesRef.current = acknowledgedStates;
+      bumpMuscleLoadRefreshRevision();
       setActiveExerciseIndex(transition.nextExerciseIndex);
       setActiveSetIndex(transition.nextSetIndex);
       if (!transition.hasNextSet || transition.patch.view_state !== "rest") {
@@ -969,6 +992,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         const acknowledgedStates = acknowledgeSetWrites(nextStates, nextStates);
         setExerciseStates(acknowledgedStates);
         exerciseStatesRef.current = acknowledgedStates;
+        bumpMuscleLoadRefreshRevision();
         setSetFeedbackVariant("error");
         setSetFeedback(`${tr("set.saved")} ${tr("offline.keepOpenRetry")}`);
         toastRef.current({
@@ -1010,6 +1034,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     exerciseStatesRef.current = nextStates;
     try {
       await persistProgress(nextStates);
+      bumpMuscleLoadRefreshRevision();
       setSetFeedbackVariant("info");
       setSetFeedback(legacySetReopened);
     } catch (error) {
@@ -1207,6 +1232,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       ));
       if (state) mirrorExecutionState(state);
       setActionsOpen(false);
+      bumpMuscleLoadRefreshRevision();
     } catch (error) {
       toastRef.current({
         title: tr("completion.saveFailedTitle"),
@@ -1239,6 +1265,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         return next;
       });
       setReplacementPickerOpen(false);
+      bumpMuscleLoadRefreshRevision();
       toastRef.current({
         title: tr("exercise.replacementReady"),
         description: tr("exercise.replacementReadyDescription", {
@@ -1407,6 +1434,67 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     }
   };
   const busy = isSaving || isStarting;
+  const allQuickActions = buildActiveWorkoutQuickActions({
+    sourceKind,
+    hasGuideOrVideo: Boolean(currentGuideUrl || currentCustomVideoUrl),
+    busy,
+    paused: Boolean(isPaused),
+    activeSetCompleted: Boolean(activeSet.completedAt),
+    terminal: Boolean(completedSummary),
+    aiPermitted: true,
+    labels: {
+      "previous-set": tr("exercise.previousSet"),
+      "set-details": tr("actions.setDetails"),
+      "guide-video": tr("actions.guideVideo"),
+      "replace-today": tr("actions.replaceToday"),
+      "skip-today": tr("actions.skipToday"),
+      "ask-plaivra": tr("actions.askPlaivra")
+    }
+  });
+  const mobileQuickActions = projectActiveWorkoutQuickActions(
+    allQuickActions,
+    "mobile"
+  );
+  const desktopQuickActions = projectActiveWorkoutQuickActions(
+    allQuickActions,
+    "desktop"
+  );
+  const openDetails = (
+    section: ActiveWorkoutDetailsSection,
+    trigger: HTMLButtonElement,
+    focusTarget: "guide-video" | null = null
+  ) => {
+    setDetailsTriggerRef.current = trigger;
+    setDetailsRequest({ section, focusTarget });
+    setActionsOpen(true);
+  };
+  const handleQuickAction = (
+    action: ActiveWorkoutQuickAction,
+    trigger: HTMLButtonElement
+  ) => {
+    if (action.disabled) return;
+    if (action.intent === "apply-previous-set") {
+      applyPreviousSet(activeExerciseIndex, activeSetIndex);
+      return;
+    }
+    openDetails(
+      action.destination ?? "overview",
+      trigger,
+      action.id === "guide-video" ? "guide-video" : null
+    );
+  };
+  const miniHeatMap = (
+    <ActiveWorkoutMiniHeatMap
+      controller={muscleLoadController}
+      onOpen={(trigger) => openDetails("muscle-load", trigger)}
+    />
+  );
+  const desktopMiniHeatMap = (
+    <ActiveWorkoutMiniHeatMap
+      controller={muscleLoadController}
+      onOpen={(trigger) => openDetails("muscle-load", trigger)}
+    />
+  );
 
   return (
     <div data-active-workout-controller className="contents">
@@ -1428,8 +1516,11 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         })}
         elapsedLabel={formatters.timer(elapsedSeconds)}
         progress={clampWorkoutProgress(completedSets, totalSets)}
-        miniHeatMapLabel={tr("heatMap.currentSessionHeat")}
-        miniHeatMapDescription={tr("heatMap.currentSessionDescription")}
+        miniHeatMap={miniHeatMap}
+        desktopMiniHeatMap={desktopMiniHeatMap}
+        muscleLoadStatusLabel={tr("heatMap.currentSessionMuscleLoad")}
+        mobileQuickActions={mobileQuickActions}
+        desktopQuickActions={desktopQuickActions}
         paused={Boolean(isPaused)}
         busy={busy}
         restActive={restActive}
@@ -1533,9 +1624,9 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         onPauseResume={() => { void togglePause(); }}
         onFinish={openSessionReview}
         onOpenDetails={(trigger) => {
-          setDetailsTriggerRef.current = trigger;
-          setActionsOpen(true);
+          openDetails("overview", trigger);
         }}
+        onQuickAction={handleQuickAction}
         onAddThirtySeconds={() => startRestTimer(timerLeft + 30)}
         onStartRest={startRestTimer}
         detailsContent={(
@@ -1543,9 +1634,12 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             open={actionsOpen}
             onOpenChange={handleSetDetailsOpenChange}
             returnFocusRef={setDetailsTriggerRef}
+            requestedSection={detailsRequest.section}
+            requestedFocusTarget={detailsRequest.focusTarget}
             sourceKind={sourceKind}
             activeExercise={activeExercise}
             activeSet={activeSet}
+            previousPerformance={activePreviousPerformance}
             currentInstructions={currentInstructions}
             currentGuideUrl={currentGuideUrl}
             currentCustomVideoUrl={currentCustomVideoUrl}
@@ -1563,12 +1657,13 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
               activeSetIndex,
               patch
             )}
+            muscleLoadController={muscleLoadController}
             activeAlternatives={activeAlternatives}
             replacementReason={replacementReason}
             onReplacementReasonChange={setReplacementReason}
             onUseReplacement={() => {
               setActionsOpen(false);
-              setReplacementPickerOpen(true);
+              window.setTimeout(() => setReplacementPickerOpen(true), 0);
             }}
             onSkipExercise={() => { void skipCurrentExercise(); }}
             isSavingAlternative={isSavingAlternative}

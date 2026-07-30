@@ -41,6 +41,7 @@ export function AiActionRequestDialog({
   children,
   buttonVariant = "outline",
   permissionSection,
+  onBeforeOpen,
   className
 }: {
   actions: AiActionOption[];
@@ -51,6 +52,7 @@ export function AiActionRequestDialog({
   children?: ReactNode;
   buttonVariant?: "default" | "outline" | "ghost";
   permissionSection?: AiPermissionSection;
+  onBeforeOpen?: () => void;
   className?: string;
 }) {
   const { openCustomPrompt } = useQuickChatGpt();
@@ -66,6 +68,7 @@ export function AiActionRequestDialog({
           size="sm"
           className={cn("min-h-11", className && "w-full")}
           onClick={() => {
+            onBeforeOpen?.();
             const summary = buildAiActionSummary(action.type, context);
             const write = isWriteAction(action.type);
             openCustomPrompt({

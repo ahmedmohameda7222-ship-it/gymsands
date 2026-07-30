@@ -1,23 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { RefreshCcw } from "lucide-react";
 
-import { MuscleHeatMap, type MuscleHeatMapState } from "@/components/train/muscle-heat-map/muscle-heat-map";
+import { MuscleHeatMap } from "@/components/train/muscle-heat-map/muscle-heat-map";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useActiveWorkoutMuscleLoad } from "@/components/workouts/active-workout/active-workout-muscle-load-controller";
 import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
-import type { AdvancedExposureResult } from "@/lib/train/muscle-intelligence/advanced-exposure";
-import type { MuscleLoadAnalysisResult } from "@/lib/train/muscle-intelligence/calculate-muscle-load";
-import {
-  projectBroadMuscleCompatibility,
-  type BroadCompatibilityResult
-} from "@/lib/train/muscle-intelligence/compatibility-projection";
 import { getMuscleHeatMapLabels } from "@/lib/train/muscle-intelligence/muscle-intelligence-ui-copy";
-import type { Phase3SessionAnalysisContract } from "@/lib/train/muscle-intelligence/session-analysis-contract";
 import { cn } from "@/lib/utils";
-
-type HeatMapAnalysis = AdvancedExposureResult | BroadCompatibilityResult | null;
 
 type SessionMuscleLoadPanelProps = {
   sessionId: string;
@@ -25,61 +17,14 @@ type SessionMuscleLoadPanelProps = {
   className?: string;
 };
 
-function resolveAnalysis(result: Phase3SessionAnalysisContract | null): HeatMapAnalysis {
-  if (!result) return null;
-  if (result.snapshotSchemaVersion === "workout_session_muscle_snapshot_v1") {
-    return projectBroadMuscleCompatibility(result.analysis as MuscleLoadAnalysisResult);
-  }
-  return result.analysis as HeatMapAnalysis;
-}
-
-function hasExposure(analysis: HeatMapAnalysis): boolean {
-  if (!analysis) return false;
-  return analysis.kind === "advanced"
-    ? analysis.targets.some((target) => target.rawExposure > 0)
-    : analysis.targets.some((target) => target.heatLevel !== "none");
-}
-
-function resolveState(
-  result: Phase3SessionAnalysisContract | null,
-  analysis: HeatMapAnalysis,
-  loading: boolean,
-  failed: boolean
-): MuscleHeatMapState {
-  if (loading && !result) return "loading";
-  if (failed && !result) return "error";
-  if (!result || !analysis) return "unavailable";
-  if (result.effectiveCompleteness === "unavailable") return "unavailable";
-  if (!hasExposure(analysis)) return "empty";
-  if (result.effectiveCompleteness === "partial" || result.effectiveCompleteness === "limited") return "partial";
-  return "ready";
-}
-
-function isAnalysisPayload(value: unknown): value is Phase3SessionAnalysisContract {
-  return Boolean(value && typeof value === "object" && "snapshotId" in value);
-}
-
-function responseError(value: unknown): string {
-  if (value && typeof value === "object" && "error" in value && typeof value.error === "string" && value.error) {
-    return value.error;
-  }
-  return "Active muscle load request failed.";
-}
-
 export function SessionMuscleLoadPanel({
   sessionId,
   refreshRevision,
   className
 }: SessionMuscleLoadPanelProps) {
   const { t, locale } = useActiveWorkoutTranslation();
-  const [result, setResult] = useState<Phase3SessionAnalysisContract | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [failed, setFailed] = useState(false);
   const [mobileView, setMobileView] = useState<"front" | "back">("front");
-  const requestGenerationRef = useRef(0);
-  const abortRef = useRef<AbortController | null>(null);
-  const resultRef = useRef<Phase3SessionAnalysisContract | null>(null);
+  const muscleLoad = useActiveWorkoutMuscleLoad({ sessionId, refreshRevision });
   const baseLabels = useMemo(() => getMuscleHeatMapLabels(locale), [locale]);
   const labels = useMemo(() => ({
     ...baseLabels,
@@ -107,48 +52,7 @@ export function SessionMuscleLoadPanel({
     back: t("heatMap.back")
   };
 
-  const load = useCallback(async () => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const generation = ++requestGenerationRef.current;
-    const hasPrevious = resultRef.current !== null;
-    setLoading(!hasPrevious);
-    setRefreshing(hasPrevious);
-    setFailed(false);
-
-    try {
-      const response = await fetch(
-        `/api/workouts/sessions/${encodeURIComponent(sessionId)}/muscle-analysis?mode=active`,
-        { cache: "no-store", signal: controller.signal }
-      );
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok || !isAnalysisPayload(payload)) throw new Error(responseError(payload));
-      if (controller.signal.aborted || generation !== requestGenerationRef.current) return;
-      resultRef.current = payload;
-      setResult(payload);
-    } catch (error) {
-      if (controller.signal.aborted || generation !== requestGenerationRef.current) return;
-      console.warn("Plaivra could not refresh active muscle load.", error);
-      setFailed(true);
-    } finally {
-      if (!controller.signal.aborted && generation === requestGenerationRef.current) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }, [sessionId]);
-
-  useEffect(() => {
-    void load();
-    return () => {
-      abortRef.current?.abort();
-      requestGenerationRef.current += 1;
-    };
-  }, [load, refreshRevision]);
-
-  const analysis = useMemo(() => resolveAnalysis(result), [result]);
-  const state = resolveState(result, analysis, loading, failed);
+  const { analysis, state, refreshing, failed, hasCachedResult, reload } = muscleLoad;
   const disclosure = state === "empty"
     ? copy.noSavedSets
     : state === "partial"
@@ -184,10 +88,10 @@ export function SessionMuscleLoadPanel({
           ) : null}
         </div>
 
-        {failed && result ? (
+        {failed && hasCachedResult ? (
           <div className="flex flex-col gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <p className="text-muted-foreground">{copy.loadFailed}</p>
-            <Button type="button" size="sm" variant="outline" className="min-h-10" onClick={() => void load()}>
+            <Button type="button" size="sm" variant="outline" className="min-h-10" onClick={reload}>
               {copy.retry}
             </Button>
           </div>
@@ -244,8 +148,8 @@ export function SessionMuscleLoadPanel({
           />
         </div>
 
-        {failed && !result ? (
-          <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => void load()}>
+        {failed && !hasCachedResult ? (
+          <Button type="button" variant="outline" className="min-h-11 w-full" onClick={reload}>
             <RefreshCcw className="me-2 h-4 w-4" />
             {copy.retry}
           </Button>

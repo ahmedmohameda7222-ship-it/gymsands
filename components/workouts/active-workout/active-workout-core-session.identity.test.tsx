@@ -82,6 +82,18 @@ vi.mock("@/components/workouts/active-workout/active-workout-execution-shell", (
 vi.mock("@/components/workouts/active-workout/active-workout-details-bridge", () => ({
   ActiveWorkoutDetailsBridge: () => null
 }));
+vi.mock("@/components/workouts/active-workout/active-workout-muscle-load-controller", () => ({
+  useActiveWorkoutMuscleLoad: () => ({
+    result: null,
+    analysis: null,
+    state: "empty",
+    loading: false,
+    refreshing: false,
+    failed: false,
+    hasCachedResult: false,
+    reload: vi.fn()
+  })
+}));
 vi.mock("@/components/workouts/active-workout/active-workout-review-bridge", () => ({
   ActiveWorkoutReviewBridge: (props: {
     open: boolean;
