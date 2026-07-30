@@ -6,7 +6,10 @@ const source = (path: string) => readFileSync(path, "utf8");
 describe("AW-3B draft-context effort isolation", () => {
   it("keeps invalid draft effort non-throwing for context while persistence remains strict", () => {
     const details = source("services/database/workout-set-details.ts");
-    const runtimeModel = source("components/workouts/active-workout/active-workout-runtime-model.ts");
+    const runtimeModel = [
+      source("components/workouts/active-workout/active-workout-runtime-model.ts"),
+      source("components/workouts/active-workout/active-workout-runtime-model-core.ts")
+    ].join("\n");
     const renderedQa = [
       source("scripts/run-train-layout-qa-base.mjs"),
       source("scripts/run-aw5-correction-layout-qa.mjs")

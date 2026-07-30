@@ -53,25 +53,41 @@ export function projectActiveWorkoutMinimizedProgress(
   prescription: readonly WorkoutSessionPrescriptionItem[],
   logs: readonly ExerciseLog[]
 ) {
+  const completedLogs = logs.filter((log) => Boolean(log.completed_at));
   const activeItems = prescription.filter((item) => item.executionState !== "skipped");
-  const totalSetCount = activeItems.reduce(
+  const skippedItems = prescription.filter((item) => item.executionState === "skipped");
+  const activeTotal = activeItems.reduce(
     (sum, item) => sum + activeWorkoutPrescriptionSetCount(item),
     0
   );
-  const hasSkippedItems = activeItems.length !== prescription.length;
+
+  if (!skippedItems.length) {
+    const completedSetCount = Math.min(activeTotal, completedLogs.length);
+    return {
+      totalSetCount: activeTotal,
+      completedSetCount,
+      progress: activeTotal > 0 ? completedSetCount / activeTotal : 0
+    };
+  }
+
+  const completedForItem = (item: WorkoutSessionPrescriptionItem) => Math.min(
+    activeWorkoutPrescriptionSetCount(item),
+    completedLogs.filter((log) => completedLogMatchesItem(log, item)).length
+  );
+  const activeCompleted = activeItems.reduce(
+    (sum, item) => sum + completedForItem(item),
+    0
+  );
+  const skippedCompleted = skippedItems.reduce(
+    (sum, item) => sum + completedForItem(item),
+    0
+  );
+  const totalSetCount = activeTotal + skippedCompleted;
   const completedSetCount = Math.min(
     totalSetCount,
-    logs.filter((log) => {
-      if (!log.completed_at) return false;
-      const hasStableIdentity = Boolean(
-        log.plan_exercise_id
-        || log.plan_activity_id
-        || Number.isSafeInteger(log.exercise_order)
-      );
-      if (!hasSkippedItems || !hasStableIdentity) return !hasSkippedItems;
-      return activeItems.some((item) => completedLogMatchesItem(log, item));
-    }).length
+    activeCompleted + skippedCompleted
   );
+
   return {
     totalSetCount,
     completedSetCount,

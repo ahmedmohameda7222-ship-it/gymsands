@@ -21,6 +21,15 @@ export type WorkoutSetAutosaveCoordinator = {
   isSaving: () => boolean;
 };
 
+function isRetryableAutosaveError(error: unknown) {
+  return !(
+    error
+    && typeof error === "object"
+    && "retryable" in error
+    && error.retryable === false
+  );
+}
+
 export function createWorkoutSetAutosaveCoordinator<TSnapshot>(
   getAdapter: () => WorkoutSetAutosaveAdapter<TSnapshot>,
   options: WorkoutSetAutosaveOptions = {},
@@ -43,7 +52,10 @@ export function createWorkoutSetAutosaveCoordinator<TSnapshot>(
     cancelTimer();
     timer = setTimer(() => {
       timer = null;
-      void requestFlush();
+      void requestFlush().catch(() => {
+        // Background autosave remains recoverable. Explicit callers receive
+        // the rejection and can block navigation or review transitions.
+      });
     }, Math.max(0, delayMs));
   };
 
@@ -59,23 +71,28 @@ export function createWorkoutSetAutosaveCoordinator<TSnapshot>(
     const snapshot = adapter.getSnapshot();
     if (!adapter.hasPendingWrites(snapshot)) return;
 
+    let succeeded = false;
     inFlight = (async () => {
       try {
         await adapter.persistSnapshot(snapshot);
         if (cancelled) return;
         getAdapter().acknowledgeSnapshot(snapshot);
+        succeeded = true;
       } catch (error) {
         if (cancelled) return;
-        getAdapter().onFailure?.(error);
-        if (getAdapter().hasPendingWrites(getAdapter().getSnapshot())) {
-          scheduleFlush(retryDelayMs);
+        if (isRetryableAutosaveError(error)) {
+          getAdapter().onFailure?.(error);
+          if (getAdapter().hasPendingWrites(getAdapter().getSnapshot())) {
+            scheduleFlush(retryDelayMs);
+          }
         }
+        throw error;
       } finally {
         inFlight = null;
         if (cancelled) return;
         if (flushRequestedWhileSaving) {
           flushRequestedWhileSaving = false;
-          await requestFlush();
+          if (succeeded) await requestFlush();
         }
       }
     })();
