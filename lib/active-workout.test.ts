@@ -1,8 +1,13 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from "vitest";
 import {
   activeWorkoutCacheFromExecution,
   activeWorkoutElapsed,
+  isValidPreviousActiveWorkoutRoute,
   parseActiveWorkoutState,
+  readPreviousActiveWorkoutRoute,
+  rememberPreviousActiveWorkoutRoute,
   resolveActiveWorkoutRoute,
   type ActiveWorkoutState
 } from "./active-workout";
@@ -84,5 +89,18 @@ describe("active workout compatibility cache", () => {
       viewState: "set_entry",
       controllerDeviceId: "33333333-3333-4333-8333-333333333333"
     });
+  });
+
+  it("stores only safe non-session minimize destinations for the current browser tab", () => {
+    expect(isValidPreviousActiveWorkoutRoute("/today")).toBe(true);
+    expect(isValidPreviousActiveWorkoutRoute("/workouts?tab=strength")).toBe(true);
+    expect(isValidPreviousActiveWorkoutRoute("/workouts/session/day/day-1")).toBe(false);
+    expect(isValidPreviousActiveWorkoutRoute("//example.invalid")).toBe(false);
+    expect(isValidPreviousActiveWorkoutRoute("https://example.invalid")).toBe(false);
+
+    rememberPreviousActiveWorkoutRoute("user-1", "/today");
+    expect(readPreviousActiveWorkoutRoute("user-1")).toBe("/today");
+    rememberPreviousActiveWorkoutRoute("user-1", "/workouts/session/session-1");
+    expect(readPreviousActiveWorkoutRoute("user-1")).toBe("/today");
   });
 });

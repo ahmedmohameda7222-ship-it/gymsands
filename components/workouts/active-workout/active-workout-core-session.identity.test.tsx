@@ -13,6 +13,7 @@ const {
   getSnapshot,
   dispatch,
   completeSession,
+  getOpenSession,
   routerPush,
   clearStoredValue,
   runtimePresentation
@@ -23,6 +24,7 @@ const {
   getSnapshot: vi.fn(),
   dispatch: vi.fn(),
   completeSession: vi.fn(),
+  getOpenSession: vi.fn(),
   routerPush: vi.fn(),
   clearStoredValue: vi.fn(),
   runtimePresentation: {
@@ -183,6 +185,7 @@ vi.mock("@/services/database/workout-set-autosave", () => ({
 }));
 vi.mock("@/services/database/workout-sessions", () => ({
   getOrStartWorkoutDaySession: (...args: unknown[]) => startDaySession(...args),
+  getOpenWorkoutSessionWithStatus: (...args: unknown[]) => getOpenSession(...args),
   getWorkoutHistoryDetailed: () => Promise.resolve([])
 }));
 
@@ -237,6 +240,7 @@ describe("ActiveWorkoutCoreSession primitive bootstrap identity", () => {
     getSnapshot.mockReset();
     dispatch.mockReset();
     completeSession.mockReset();
+    getOpenSession.mockReset();
     routerPush.mockReset();
     clearStoredValue.mockReset();
     startDirectSession.mockReset();
@@ -265,6 +269,7 @@ describe("ActiveWorkoutCoreSession primitive bootstrap identity", () => {
       commandId: intent.commandId
     }));
     completeSession.mockResolvedValue(undefined);
+    getOpenSession.mockResolvedValue({ session: null });
     getSnapshot.mockImplementation(() => ({
       root: { status: "started" },
       executionState: {
@@ -382,7 +387,7 @@ describe("ActiveWorkoutCoreSession primitive bootstrap identity", () => {
     await act(async () => root.unmount());
   });
 
-  it("completes a direct session once with pending valid logs and redirects after success", async () => {
+  it("completes a direct session once with pending valid logs and keeps the shared terminal surface", async () => {
     let resolveCompletion: (() => void) | undefined;
     completeSession.mockImplementation(() => new Promise<void>((resolve) => {
       resolveCompletion = resolve;
@@ -448,13 +453,21 @@ describe("ActiveWorkoutCoreSession primitive bootstrap identity", () => {
     expect((container.querySelector("[data-test-save-finish]") as HTMLButtonElement).disabled).toBe(true);
 
     await act(async () => {
+      getSnapshot.mockReturnValue({
+        ...directSnapshot,
+        root: {
+          ...directSnapshot.root,
+          status: "completed",
+          completed_at: "2026-07-27T09:00:00.000Z"
+        },
+        executionState: null
+      });
       resolveCompletion?.();
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(routerPush).toHaveBeenCalledTimes(1);
-    expect(routerPush).toHaveBeenCalledWith("/workout-history");
+    expect(routerPush).not.toHaveBeenCalled();
     expect(clearStoredValue).toHaveBeenCalledWith("single-workout-session:user-1:workout-1");
     expect(clearStoredValue).toHaveBeenCalledWith("single-workout-rest:user-1:workout-1");
     expect(container.querySelector("[data-test-completed-summary]")).not.toBeNull();
