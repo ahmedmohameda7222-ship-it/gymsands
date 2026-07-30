@@ -75,7 +75,7 @@ function catalogPayload(url, includeGuide) {
   return { data: { sport: activity.activityType, sessionTypes: [], sessionPhases: [] }, meta };
 }
 
-function activeMuscleAnalysisPayload(sessionId, scenario) {
+function activeMuscleAnalysisPayload(sessionId, scenario, mode = "active") {
   const inactive = scenario === "empty";
   const partial = scenario === "partial";
   return {
@@ -93,7 +93,7 @@ function activeMuscleAnalysisPayload(sessionId, scenario) {
       taxonomyVersion: "muscle_taxonomy_v1",
       engineVersion: "muscle_load_resistance_sets_v1",
       thresholdVersion: "muscle_load_thresholds_v1",
-      mode: "active",
+      mode,
       period: { kind: "session" },
       completeness: partial ? "partial" : "complete",
       muscles: [{
@@ -232,6 +232,9 @@ export async function installAw5CorrectionFixture(context, {
   });
 
   await context.route(/\/api\/workouts\/sessions\/[^/]+\/muscle-analysis(?:\?.*)?$/, async (route) => {
+    const analysisMode = new URL(route.request().url()).searchParams.get("mode") === "completed"
+      ? "completed"
+      : "active";
     muscleRequestCount += 1;
     const refreshFailure = muscleScenario === "cached-refresh-error" && muscleRequestCount > 1;
     requestHistory.push(requestRecord(
@@ -248,7 +251,7 @@ export async function installAw5CorrectionFixture(context, {
       body: JSON.stringify(
         refreshFailure
           ? { error: "Active muscle load request failed.", code: "qa_refresh_failed" }
-          : activeMuscleAnalysisPayload(sessionId, muscleScenario)
+          : activeMuscleAnalysisPayload(sessionId, muscleScenario, analysisMode)
       )
     });
   });

@@ -184,6 +184,19 @@ async function completePartialWorkout(page) {
   });
 }
 
+async function completeFirstSet(page) {
+  await page.locator("#active-set-reps").fill("8");
+  await page.locator("#active-set-weight").fill("80");
+  await visible(page, "[data-aw5-primary-action]").click({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Skip rest", exact: true })
+    .filter({ visible: true })
+    .waitFor({ state: "visible", timeout: 10_000 });
+  await page.getByRole("button", { name: "Skip rest", exact: true })
+    .filter({ visible: true })
+    .click({ timeout: 10_000 });
+  await page.locator("#active-set-reps").waitFor({ state: "visible", timeout: 10_000 });
+}
+
 async function prepareScenario(page, scenario) {
   const response = await openSession(page);
   const checks = {
@@ -237,6 +250,7 @@ async function prepareScenario(page, scenario) {
     scenario.action === "terminal-mobile-heat"
     || scenario.action === "terminal-desktop-isolation"
   ) {
+    await completeFirstSet(page);
     await enterReview(page);
     await completePartialWorkout(page);
     if (scenario.action === "terminal-mobile-heat") {
