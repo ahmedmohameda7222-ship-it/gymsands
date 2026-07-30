@@ -437,6 +437,9 @@ export function ActiveWorkoutExecutionShell({
               {desktopQuickActions.map((action) => (
                 <Button
                   key={action.id}
+                  data-active-set-details-trigger={
+                    action.id === "set-details" ? true : undefined
+                  }
                   type="button"
                   variant={action.id === "skip-today" ? "outline" : "ghost"}
                   size="sm"

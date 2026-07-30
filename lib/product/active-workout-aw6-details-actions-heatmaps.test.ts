@@ -70,6 +70,20 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(details).toContain("onBeforeOpen={closeBeforeAi}");
   });
 
+  it("preserves one visible canonical Details trigger per responsive layout", () => {
+    expect(shell.match(/data-active-set-details-trigger/g)).toHaveLength(2);
+    expect(shell).toContain('className="mt-3 grid grid-cols-3 gap-2 lg:hidden"');
+    expect(shell).toContain(
+      'data-active-set-details-trigger={\n                    action.id === "set-details" ? true : undefined'
+    );
+    expect(shell).toContain("data-aw6-desktop-quick-actions");
+    expect(shell).toContain(
+      "onClick={(event) => onQuickAction(action, event.currentTarget)}"
+    );
+    expect(core).toContain("setDetailsTriggerRef.current = trigger");
+    expect(core).toContain('action.destination ?? "overview"');
+  });
+
   it("refreshes only after acknowledged persisted mutations, not local drafts", () => {
     const updateSet = core.slice(
       core.indexOf("function updateSet("),

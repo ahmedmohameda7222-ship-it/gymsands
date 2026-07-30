@@ -44,6 +44,8 @@ describe("AW-6 contextual quick actions", () => {
     ]);
     expect(visible.find((action) => action.id === "replace-today")?.destination)
       .toBe("adjust-today");
+    expect(visible.find((action) => action.id === "set-details")?.destination)
+      .toBe("current-set");
   });
 
   it("keeps replacement and skip out of direct sessions", () => {
