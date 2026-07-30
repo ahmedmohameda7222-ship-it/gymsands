@@ -154,6 +154,16 @@
       "allDone": "Alles erledigt"
     },
     "details": {
+      "activeWorkoutDetails": "Trainingsdetails",
+      "activeWorkoutDetailsDescription": "Prüfe die aktuelle Übung, den Satz, die gespeicherte Muskelbelastung, Anpassungen und Unterstützung.",
+      "exerciseOverview": "Übungsübersicht",
+      "currentSet": "Aktueller Satz",
+      "muscleLoad": "Muskelbelastung",
+      "adjustToday": "Heute anpassen",
+      "assistance": "Unterstützung",
+      "currentSetContext": "Satz {set} · geplant {planned}",
+      "previousBest": "Bisher bester Satz: {value}",
+      "previousDate": "Zuletzt ausgeführt: {date}",
       "instructions": "Anleitung",
       "videoAnimation": "Video oder Animation",
       "equipment": "Ausrüstung",
@@ -176,6 +186,12 @@
       "workoutNotes": "Trainingsnotizen"
     },
     "actions": {
+      "guideVideo": "Anleitung / Video",
+      "skipToday": "Heute überspringen",
+      "askPlaivra": "Plaivra fragen",
+      "chooseReplacement": "Alternative auswählen",
+      "askPlaivraReplacement": "Plaivra nach einer Alternative fragen",
+      "resetWorkoutTimer": "Trainingstimer zurücksetzen",
       "exerciseActions": "Übungsaktionen",
       "setDetails": "Satzdetails",
       "addSetNote": "Satznotiz hinzufügen",
@@ -226,6 +242,7 @@
       "coachDescription": "Lass das Training prüfen, mache es heute leichter oder plane den nächsten Schritt."
     },
     "heatMap": {
+      "currentSessionMuscleLoad": "Muskelbelastung der aktuellen Einheit",
       "currentSessionHeat": "Aktuelle Trainingsbelastung",
       "currentSessionDescription": "Basiert nur auf gespeicherten, abgeschlossenen Sätzen.",
       "exerciseTargetTitle": "Zielmuskelkarte der Übung",

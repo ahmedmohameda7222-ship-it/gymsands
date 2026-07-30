@@ -332,11 +332,11 @@ try {
       const busy = await session.page.evaluate(() => ({
         repsDisabled: document.querySelector("#active-set-reps")?.disabled,
         weightDisabled: document.querySelector("#active-set-weight")?.disabled,
-        text: document.querySelector("[data-aw5-execution-shell]")?.textContent ?? ""
+        feedbackText: document.querySelector("[data-aw5-feedback]")?.textContent ?? ""
       }));
       const failures = [];
       if (!busy.repsDisabled || !busy.weightDisabled) failures.push("busy completion did not disable the primary editor");
-      if (/Saving\.\.\.|Saved/i.test(busy.text)) failures.push("busy completion exposed rejected save-state chrome");
+      if (/Saving\.\.\.|Saved/i.test(busy.feedbackText)) failures.push("busy completion exposed rejected save-state chrome");
       return { failures };
     }
   );
@@ -356,7 +356,7 @@ try {
       const failures = [];
       const restText = (await visiblePrimary(session.page).innerText({ timeout: 10_000 })).trim();
       if (!/skip/i.test(restText)) failures.push(`rest CTA is ${JSON.stringify(restText)}`);
-      const presets = session.page.locator("[data-aw5-rest-presets] button");
+      const presets = session.page.locator("[data-aw5-rest-presets]:visible button");
       if (await presets.count() < 1) failures.push("rest presets are missing");
       const addThirty = session.page.locator("[data-aw5-add-thirty]:visible");
       const addThirtyCount = await addThirty.count();
@@ -367,7 +367,7 @@ try {
         const state = await session.page.locator("[data-aw5-execution-shell]").getAttribute("data-aw5-session-state");
         if (state !== "rest") failures.push("Add 30 left the authoritative rest state");
       }
-      await session.page.locator("[data-aw5-rest-presets]").evaluate((element) => {
+      await session.page.locator("[data-aw5-rest-presets]:visible").evaluate((element) => {
         element.scrollIntoView({ block: "center" });
       });
       return { failures };
@@ -392,7 +392,9 @@ try {
     { name: "plan-day-details-dark-en-1440x900", viewport: { width: 1440, height: 900 }, theme: "dark" }
   ]) {
     await runScenario(scenario, async (session) => {
-      await session.page.locator("[data-active-set-details-trigger]").click({ timeout: 10_000 });
+      await session.page.locator("[data-active-set-details-trigger]:visible").click({
+        timeout: 10_000
+      });
       await session.page.waitForSelector("[data-active-set-details-dialog]", {
         state: "visible",
         timeout: 10_000

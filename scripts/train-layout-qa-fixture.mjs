@@ -10,13 +10,13 @@ import {
   snapshotId
 } from "./aw5-correction-qa-shared.mjs";
 
-function catalogPayload(url) {
+function catalogPayload(url, includeGuide) {
   const activity = {
     id: activityId,
     slug: "barbell_squat",
     name: directExerciseName,
     shortDescription: "Deterministic AW-5 rendered verification activity.",
-    instructions: [{ order: 1, text: "Brace and move with control." }],
+    instructions: includeGuide ? [{ order: 1, text: "Brace and move with control." }] : [],
     difficulty: "intermediate",
     movementPattern: "squat",
     version: 1,
@@ -43,8 +43,8 @@ function catalogPayload(url) {
     }],
     trainingGoals: [],
     translations: {},
-    guideUrl: "https://example.com/catalog-guide",
-    videoUrl: "https://example.com/catalog-video",
+    guideUrl: includeGuide ? "https://example.com/catalog-guide" : null,
+    videoUrl: includeGuide ? "https://example.com/catalog-video" : null,
     updatedAt: "2026-07-27T00:00:00.000Z"
   };
   const meta = { source: "external", degraded: false, catalogVersion: "v1", locale: "en" };
@@ -75,7 +75,54 @@ function catalogPayload(url) {
   return { data: { sport: activity.activityType, sessionTypes: [], sessionPhases: [] }, meta };
 }
 
-export async function installAw5CorrectionFixture(context, { direct, language, theme, delayCanonical }, requestHistory) {
+function activeMuscleAnalysisPayload(sessionId, scenario) {
+  const inactive = scenario === "empty";
+  const partial = scenario === "partial";
+  return {
+    sessionId,
+    snapshotId: "24000000-0000-4000-8000-000000000001",
+    snapshotSchemaVersion: "workout_session_muscle_snapshot_v1",
+    frozenAt: "2026-07-27T08:00:00.000Z",
+    source: "session_start",
+    snapshotCompleteness: partial ? "partial" : "complete",
+    reasonCodes: partial ? ["unmapped_items"] : [],
+    effectiveCompleteness: partial ? "partial" : "complete",
+    effectiveWarnings: partial ? ["unmapped_items"] : [],
+    analysis: {
+      schemaVersion: "muscle_analysis_result_v1",
+      taxonomyVersion: "muscle_taxonomy_v1",
+      engineVersion: "muscle_load_resistance_sets_v1",
+      thresholdVersion: "muscle_load_thresholds_v1",
+      mode: "active",
+      period: { kind: "session" },
+      completeness: partial ? "partial" : "complete",
+      muscles: [{
+        muscleId: "quadriceps",
+        rawScore: inactive ? 0 : 4,
+        levelInputScore: inactive ? 0 : 4,
+        level: inactive ? "inactive" : "medium"
+      }],
+      contributionBreakdown: [],
+      mappingVersionsUsed: [],
+      coverage: {
+        totalItemCount: 1,
+        includedItemCount: 1,
+        unmappedItemCount: partial ? 1 : 0,
+        unsupportedItemCount: 0
+      },
+      warnings: partial ? ["unmapped_items"] : []
+    }
+  };
+}
+
+export async function installAw5CorrectionFixture(context, {
+  direct,
+  language,
+  theme,
+  delayCanonical,
+  muscleScenario = "ready",
+  includeGuide = true
+}, requestHistory) {
   const sessionId = contract.activeSessionId;
   const exerciseName = direct ? directExerciseName : contract.activeFirstExerciseName;
   const sourceExerciseId = direct ? null : contract.activeFirstExerciseId;
@@ -98,6 +145,7 @@ export async function installAw5CorrectionFixture(context, { direct, language, t
     status: "started",
     source: direct ? "manual" : "schedule"
   };
+  let muscleRequestCount = 0;
   const snapshot = {
     id: snapshotId,
     workout_session_id: sessionId,
@@ -179,49 +227,29 @@ export async function installAw5CorrectionFixture(context, { direct, language, t
         "cache-control": "private, no-store",
         "x-plaivra-qa-fixture": "aw5-correction-catalog"
       },
-      body: JSON.stringify(catalogPayload(new URL(route.request().url())))
+      body: JSON.stringify(catalogPayload(new URL(route.request().url()), includeGuide))
     });
   });
 
   await context.route(/\/api\/workouts\/sessions\/[^/]+\/muscle-analysis(?:\?.*)?$/, async (route) => {
-    requestHistory.push(requestRecord(route.request(), "fulfilled:heat-map"));
+    muscleRequestCount += 1;
+    const refreshFailure = muscleScenario === "cached-refresh-error" && muscleRequestCount > 1;
+    requestHistory.push(requestRecord(
+      route.request(),
+      refreshFailure ? "response:503:heat-map" : "fulfilled:heat-map"
+    ));
     await route.fulfill({
-      status: 200,
+      status: refreshFailure ? 503 : 200,
       contentType: "application/json",
       headers: {
         "cache-control": "private, no-store",
         "x-plaivra-qa-fixture": "aw5-correction-heat-map"
       },
-      body: JSON.stringify({
-        sessionId,
-        snapshotId,
-        snapshotSchemaVersion: "workout_session_muscle_snapshot_v1",
-        frozenAt: "2026-07-27T08:00:00.000Z",
-        source: "session_start",
-        snapshotCompleteness: "complete",
-        reasonCodes: [],
-        effectiveCompleteness: "complete",
-        effectiveWarnings: [],
-        analysis: {
-          schemaVersion: "muscle_analysis_result_v1",
-          taxonomyVersion: "muscle_taxonomy_v1",
-          engineVersion: "muscle_load_resistance_sets_v1",
-          thresholdVersion: "muscle_load_thresholds_v1",
-          mode: "planned",
-          period: { kind: "session" },
-          completeness: "complete",
-          muscles: [],
-          contributionBreakdown: [],
-          mappingVersionsUsed: [],
-          coverage: {
-            totalItemCount: 1,
-            includedItemCount: 1,
-            unmappedItemCount: 0,
-            unsupportedItemCount: 0
-          },
-          warnings: []
-        }
-      })
+      body: JSON.stringify(
+        refreshFailure
+          ? { error: "Active muscle load request failed.", code: "qa_refresh_failed" }
+          : activeMuscleAnalysisPayload(sessionId, muscleScenario)
+      )
     });
   });
 
@@ -316,6 +344,7 @@ export async function installAw5CorrectionFixture(context, { direct, language, t
 
   return {
     sessionId,
+    muscleRequestCount: () => muscleRequestCount,
     releaseCanonical: delayedCanonical.resolve,
     canonicalSettled: () => delayedCanonical.settled,
     waitForCanonical: async () => {

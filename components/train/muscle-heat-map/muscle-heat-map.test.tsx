@@ -255,6 +255,22 @@ describe("MuscleHeatMap", () => {
     await act(async () => unavailable.root.unmount());
   });
 
+  it("keeps a tiny dual-view compact map stable without labels or a state-message card", async () => {
+    const compact = await render({
+      mode: "compact",
+      view: "both",
+      state: "partial",
+      showViewLabels: false,
+      showStateMessage: false
+    });
+    expect(compact.container.querySelectorAll('svg[viewBox="0 0 1024 1536"]')).toHaveLength(2);
+    expect(compact.container.querySelector('[role="status"]')).toBeNull();
+    expect(compact.container.textContent).not.toContain("Front");
+    expect(compact.container.textContent).not.toContain("Back");
+    expect(compact.container.textContent).not.toContain("Some detail is unavailable");
+    await act(async () => compact.root.unmount());
+  });
+
   it("exposes parent-owned disclosure and status detail slots plus development-only alignment metadata", async () => {
     const runtime = await render({
       state: "partial",

@@ -10,13 +10,15 @@ export function WorkoutAiActionPanel({
   sourceId,
   context,
   actions,
-  compact = false
+  compact = false,
+  onBeforeOpen
 }: {
   sourceType: string;
   sourceId?: string | null;
   context: Record<string, unknown>;
   actions?: AiActionOption[];
   compact?: boolean;
+  onBeforeOpen?: () => void;
 }) {
   const { tr } = useTrainTranslation();
   const resolvedActions: AiActionOption[] = actions ?? [
@@ -27,7 +29,7 @@ export function WorkoutAiActionPanel({
     { type: "adjust_for_low_readiness", label: tr("makeTodayLighter"), description: tr("makeTodayLighterDescription") }
   ];
   if (compact) {
-    return <AiActionRequestDialog actions={resolvedActions} sourceType={sourceType} sourceId={sourceId} context={context} title={tr("workoutRequest")} />;
+    return <AiActionRequestDialog actions={resolvedActions} sourceType={sourceType} sourceId={sourceId} context={context} title={tr("workoutRequest")} onBeforeOpen={onBeforeOpen} />;
   }
 
   return (
@@ -37,7 +39,7 @@ export function WorkoutAiActionPanel({
         <p className="text-sm text-muted-foreground">{tr("chatGptWorkoutDescription")}</p>
       </CardHeader>
       <CardContent className="p-4 sm:p-5">
-        <AiActionRequestDialog actions={resolvedActions} sourceType={sourceType} sourceId={sourceId} context={context} title={tr("workoutRequest")} />
+        <AiActionRequestDialog actions={resolvedActions} sourceType={sourceType} sourceId={sourceId} context={context} title={tr("workoutRequest")} onBeforeOpen={onBeforeOpen} />
       </CardContent>
     </Card>
   );
