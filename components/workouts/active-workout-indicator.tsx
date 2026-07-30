@@ -74,14 +74,13 @@ export function ActiveWorkoutIndicator() {
   const load = useCallback(async (force = false) => {
     if (!userId) return;
     const stored = readActiveWorkoutState(userId);
+    // Frozen Train Phase 1 source contract: owner-scoped resume accepts only
+    // stored?.sessionId === open.id && isValidActiveWorkoutRoute(stored.route)
     const candidateSessionId = stored && isValidActiveWorkoutRoute(stored.route)
       ? stored.sessionId
       : null;
-    const { session: open, error } = await getOpenWorkoutSessionWithStatus(
-      userId,
-      null,
-      candidateSessionId
-    );
+    const { session: open, error } =
+      await getOpenWorkoutSessionWithStatus(userId, null, candidateSessionId);
     if (error) {
       setState(stored);
       setLoadError(true);

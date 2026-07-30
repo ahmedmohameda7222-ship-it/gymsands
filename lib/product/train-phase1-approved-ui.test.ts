@@ -94,8 +94,11 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(directSession).toContain("const userId = user?.id ?? null");
     expect(directSession).toContain("const workoutId = params.id");
     expect(directSession).toContain("[locale, toast, tr, userId, workoutId]");
-    expect(activeWorkout).toContain('t("minimized.finishQuestion")');
-    expect(activeWorkout).toContain('t("minimized.cancelQuestion")');
+    expect(activeWorkout).toContain("<ActiveWorkoutMinimizedBar");
+    expect(activeWorkout).toContain('t("common.pause")');
+    expect(activeWorkout).toContain('t("common.resume")');
+    expect(activeWorkout).not.toContain('t("minimized.finishQuestion")');
+    expect(activeWorkout).not.toContain('t("minimized.cancelQuestion")');
     expect(activeWorkout).not.toContain("Return to workout</Link>");
   });
 
@@ -112,7 +115,8 @@ describe("approved Train Phase 1 UI contracts", () => {
       expect(route).toContain("<TrainPageContainer");
       expect(route).toContain("dir={dir}");
     }
-    expect(session).toContain("<WorkoutSessionScreen confirmExit>");
+    expect(session).toContain('<WorkoutSessionScreen fallbackHref="/workouts">');
+    expect(session).not.toContain("confirmExit");
     expect(sessionForm).toContain("<MobileStickyActions");
     expect(sessionForm).toContain('placement="session"');
     expect(sessionForm).toContain('<MobileStickyActionsSpacer placement="session"');
