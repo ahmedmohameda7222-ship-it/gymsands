@@ -400,6 +400,21 @@ export function ActiveWorkoutExecutionShell({
                   {addThirtySecondsLabel}
                 </Button>
               </div>
+              <div data-aw5-rest-presets className="mt-3 grid grid-cols-4 gap-2 lg:hidden">
+                {restPresetLabels.map((preset) => (
+                  <Button
+                    key={preset.seconds}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11 px-1.5 text-xs"
+                    onClick={() => onStartRest(preset.seconds)}
+                    disabled={busy}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
             </div>
           ) : null}
 
@@ -537,10 +552,7 @@ export function ActiveWorkoutExecutionShell({
           </Button>
         </div>
       </MobileStickyActions>
-      <MobileStickyActionsSpacer
-        placement="session"
-        className="h-[calc(7rem+env(safe-area-inset-bottom))]"
-      />
+      <MobileStickyActionsSpacer placement="session" />
     </div>
   );
 }

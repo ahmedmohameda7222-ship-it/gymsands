@@ -89,9 +89,11 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(aw5CorrectionQa).toContain(
       'feedbackText: document.querySelector("[data-aw5-feedback]")'
     );
+    expect(shell.match(/data-aw5-rest-presets/g)).toHaveLength(2);
     expect(shell).toContain(
-      'className="h-[calc(7rem+env(safe-area-inset-bottom))]"'
+      'data-aw5-rest-presets className="mt-3 grid grid-cols-4 gap-2 lg:hidden"'
     );
+    expect(shell).toContain('<MobileStickyActionsSpacer placement="session" />');
   });
 
   it("refreshes only after acknowledged persisted mutations, not local drafts", () => {
