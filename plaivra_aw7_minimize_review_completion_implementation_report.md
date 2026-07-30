@@ -18,9 +18,9 @@ None. The fetched remote `main` matched the prompt's expected base exactly.
 
 ## 5. Final head SHA
 
-Planner-corrected implementation and exact remote evidence head: `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`.
+Planner-corrected runtime, test, and exact remote evidence head: `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`.
 
-The required report commits are documentation-only descendants and cannot self-reference their own Git object IDs. The final PR head after evidence closure is recorded in the immutable PR evidence comment; no runtime, test, QA-harness, or visual behavior changes follow the validated implementation head above.
+All descendants after that commit are documentation-only updates to this report. Final PR identity and workflow evidence are recorded in the immutable PR conversation to avoid further self-referential report commits.
 
 ## 6. PR number/URL/Draft state
 
@@ -174,11 +174,11 @@ Planner-corrected exact-head validation on `1a523d6ab1c11ef3655c78ad3c4320e9a89b
 - Rendered UI QA — passed.
 - database integration job — passed.
 
-Final immutable PR evidence contains the final report-head Phase A, PR Quality, and rendered-artifact identities.
+Final report-head identities and exact validation results are recorded in the immutable PR evidence comment.
 
 ## 32. Production build result
 
-The required `NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build` passed during original implementation validation. The Planner-corrected implementation head and final report head PR Quality production builds passed. Explicit QA-only production builds use `NEXT_PUBLIC_USE_MOCK_AUTH=true` and `NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true`; these do not enable mock auth in an ordinary Production build.
+The required `NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build` passed during original implementation validation. The Planner-corrected implementation and report heads passed PR Quality production builds. Explicit QA-only production builds use `NEXT_PUBLIC_USE_MOCK_AUTH=true` and `NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true`; these do not enable mock auth in an ordinary Production build.
 
 ## 33. Rendered-QA matrix
 
@@ -195,7 +195,7 @@ The original ten production-server AW-7 scenarios passed:
 9. Mobile EN 390x844 — terminal partial completion with one saved set and final Muscle Load.
 10. Desktop EN 1440x900 — terminal isolation with one saved set and final Muscle Load.
 
-After the Planner correction, exact-head Rendered UI QA passed on the corrected implementation and final report heads.
+After the Planner correction, exact-head Rendered UI QA passed on the corrected implementation and report heads.
 
 ## 34. Artifact and screenshot paths
 
@@ -214,7 +214,7 @@ digest: sha256:7787e190bcf688d58f3a93cc974c365e1534e5bd4d49c57175b387451a96e194
 workflow run: 30581021493
 ```
 
-The final report-head artifact identity is recorded in the immutable PR evidence comment.
+Final report-head artifact identity is recorded in the immutable PR evidence comment.
 
 ## 35. Manual visual findings/corrections
 
@@ -272,7 +272,7 @@ No architectural or product issue requiring AW-8 or a separate phase was opened.
 
 ## 44. Working-tree status
 
-All correction writes were committed directly to the existing AW-7 branch. Exact-head integrity passed on the implementation and final report heads.
+All correction writes were committed directly to the existing AW-7 branch. Exact-head integrity passed on the implementation and report heads.
 
 ## 45. PR unmerged confirmation
 
@@ -288,11 +288,11 @@ Old audited head:
 
 `1b1d3b614d5e30d0e1009e8a9203c7bf9781cccc`
 
-Corrected implementation/evidence head:
+Corrected runtime/test/evidence head:
 
 `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`
 
-Final PR head and exact final evidence are recorded immutably in the PR conversation.
+All later commits modify this report only. Final PR head, Phase A, PR Quality, and rendered artifact are recorded immutably in the PR conversation.
 
 Root cause:
 
