@@ -278,6 +278,10 @@ test("AW-5 rendered sign-off uses production build and start metadata", () => {
     /NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build/,
   );
   assert.match(workflowSource, /npm run start/);
+  assert.match(
+    workflowSource,
+    /pr-quality-rendered-evidence-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/,
+  );
   for (const token of [
     "serverMode",
     "buildCommand",
