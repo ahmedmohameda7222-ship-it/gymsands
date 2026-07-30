@@ -1282,9 +1282,13 @@ async function openScenario({
     const actions = main
       ? [...main.querySelectorAll("a,button")].filter(
           (element) =>
-            visible(element) && !element.closest("[data-train-sticky-footer]"),
+            visible(element)
+            && !element.closest("[data-train-sticky-footer]")
+            && !element.closest("[data-active-workout-controller]")
+            && !element.closest("details:not([open])"),
         )
       : [];
+    const lastMainAction = actions.at(-1) ?? null;
     let frameworkOverlayDetected = false;
     const frameworkOverlayDetails = [];
     for (const portal of document.querySelectorAll("nextjs-portal")) {
@@ -1312,7 +1316,15 @@ async function openScenario({
       nav: rect(nav),
       footer: rect(footer),
       aw5StickyActions: rect(aw5StickyActions),
-      lastMainAction: rect(actions.at(-1) ?? null),
+      lastMainAction: rect(lastMainAction),
+      lastMainActionIdentity: lastMainAction
+        ? {
+            tagName: lastMainAction.tagName.toLowerCase(),
+            text: lastMainAction.textContent?.replace(/\s+/g, " ").trim() ?? "",
+            href: lastMainAction.getAttribute("href"),
+            ariaLabel: lastMainAction.getAttribute("aria-label"),
+          }
+        : null,
       aw5: {
         present: Boolean(aw5Shell),
         state: aw5Shell?.getAttribute("data-aw5-session-state") ?? null,
