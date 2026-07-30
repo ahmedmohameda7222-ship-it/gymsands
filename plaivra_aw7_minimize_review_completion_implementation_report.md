@@ -20,7 +20,7 @@ None. The fetched remote `main` matched the prompt's expected base exactly.
 
 Planner-corrected implementation and exact remote evidence head: `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`.
 
-The required report commit is a documentation-only descendant and cannot self-reference its own Git object ID. The final PR head after this report commit is `1fb16db421e613e577979d90a93ab214dc456077`; no runtime, test, QA-harness, or visual behavior changes follow the validated implementation head above.
+The required report commits are documentation-only descendants and cannot self-reference their own Git object IDs. The current PR head after the final evidence closure is `5cd6cb705f382514db471409da15511d3b3710c2`; no runtime, test, QA-harness, or visual behavior changes follow the validated implementation head above.
 
 ## 6. PR number/URL/Draft state
 
@@ -180,6 +180,11 @@ Final docs-only exact-head validation on `1fb16db421e613e577979d90a93ab214dc4560
 - PR Quality run `30581769801` — passed.
 - every required job, including required summary and Rendered UI QA — passed.
 
+Current final report head `5cd6cb705f382514db471409da15511d3b3710c2`:
+
+- Phase A Diff Validation run `30582397175` — passed.
+- PR Quality run `30582397154` — running at the time this self-contained report closure was committed; final immutable result belongs in the PR evidence comment because this file cannot self-reference a future workflow result without creating another head.
+
 ## 32. Production build result
 
 The required `NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build` passed during original implementation validation. Both the Planner-corrected implementation head and final docs-only head PR Quality production builds passed. Explicit QA-only production builds use `NEXT_PUBLIC_USE_MOCK_AUTH=true` and `NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true`; these do not enable mock auth in an ordinary Production build.
@@ -199,7 +204,7 @@ The original ten production-server AW-7 scenarios passed:
 9. Mobile EN 390x844 — terminal partial completion with one saved set and final Muscle Load.
 10. Desktop EN 1440x900 — terminal isolation with one saved set and final Muscle Load.
 
-After the Planner correction, exact-head Rendered UI QA passed on both `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd` and final docs-only head `1fb16db421e613e577979d90a93ab214dc456077`.
+After the Planner correction, exact-head Rendered UI QA passed on both `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd` and docs-only head `1fb16db421e613e577979d90a93ab214dc456077`.
 
 ## 34. Artifact and screenshot paths
 
@@ -303,9 +308,9 @@ Corrected implementation/evidence head:
 
 `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`
 
-Final report head:
+Current final report head:
 
-`1fb16db421e613e577979d90a93ab214dc456077`
+`5cd6cb705f382514db471409da15511d3b3710c2`
 
 Root cause:
 
@@ -315,12 +320,14 @@ Resolution:
 
 The minimized rest context now uses the authoritative active item, set number, and set count. Minimized progress now uses non-skipped prescription items and excludes matching skipped-item logs. The existing session engine remained unchanged.
 
-Evidence:
+Evidence finalized before this immutable report closure:
 
 - implementation-head Phase A `30581021594` — passed.
 - implementation-head PR Quality `30581021493` — passed.
-- final-head Phase A `30581769829` — passed.
-- final-head PR Quality `30581769801` — passed.
-- final-head artifact `8775060904` — uploaded successfully.
+- docs-head Phase A `30581769829` — passed.
+- docs-head PR Quality `30581769801` — passed.
+- docs-head artifact `8775060904` — uploaded successfully.
+- current final head Phase A `30582397175` — passed.
+- current final head PR Quality `30582397154` — final status is recorded immutably in the PR comment after the workflow completes.
 - PR remains Draft and unmerged.
 - no migration, Production, Activity Catalog, compatibility-marker, deployment, merge, or AW-8 work occurred.
