@@ -89,6 +89,9 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(aw5CorrectionQa).toContain(
       'feedbackText: document.querySelector("[data-aw5-feedback]")'
     );
+    expect(aw5CorrectionQa).toContain(
+      'locator("[data-aw5-rest-presets]:visible")'
+    );
     expect(shell.match(/data-aw5-rest-presets/g)).toHaveLength(2);
     expect(shell).toContain(
       'data-aw5-rest-presets className="mt-3 grid grid-cols-4 gap-2 lg:hidden"'

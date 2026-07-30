@@ -356,7 +356,7 @@ try {
       const failures = [];
       const restText = (await visiblePrimary(session.page).innerText({ timeout: 10_000 })).trim();
       if (!/skip/i.test(restText)) failures.push(`rest CTA is ${JSON.stringify(restText)}`);
-      const presets = session.page.locator("[data-aw5-rest-presets] button");
+      const presets = session.page.locator("[data-aw5-rest-presets]:visible button");
       if (await presets.count() < 1) failures.push("rest presets are missing");
       const addThirty = session.page.locator("[data-aw5-add-thirty]:visible");
       const addThirtyCount = await addThirty.count();
@@ -367,7 +367,7 @@ try {
         const state = await session.page.locator("[data-aw5-execution-shell]").getAttribute("data-aw5-session-state");
         if (state !== "rest") failures.push("Add 30 left the authoritative rest state");
       }
-      await session.page.locator("[data-aw5-rest-presets]").evaluate((element) => {
+      await session.page.locator("[data-aw5-rest-presets]:visible").evaluate((element) => {
         element.scrollIntoView({ block: "center" });
       });
       return { failures };
