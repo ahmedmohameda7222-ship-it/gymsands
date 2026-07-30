@@ -20,7 +20,7 @@ None. The fetched remote `main` matched the prompt's expected base exactly.
 
 Planner-corrected implementation and exact remote evidence head: `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`.
 
-The required report commits are documentation-only descendants and cannot self-reference their own Git object IDs. The final PR head after evidence closure is `2e259a5d290142add9f0c4cd7dd96b0909dad658`; no runtime, test, QA-harness, or visual behavior changes follow the validated implementation head above.
+The required report commits are documentation-only descendants and cannot self-reference their own Git object IDs. The final PR head after evidence closure is recorded in the immutable PR evidence comment; no runtime, test, QA-harness, or visual behavior changes follow the validated implementation head above.
 
 ## 6. PR number/URL/Draft state
 
@@ -174,11 +174,7 @@ Planner-corrected exact-head validation on `1a523d6ab1c11ef3655c78ad3c4320e9a89b
 - Rendered UI QA — passed.
 - database integration job — passed.
 
-Final report-head exact validation on `2e259a5d290142add9f0c4cd7dd96b0909dad658`:
-
-- Phase A Diff Validation run `30582915551` — passed.
-- PR Quality run `30582915546` — passed.
-- every required job, including required summary and Rendered UI QA — passed.
+Final immutable PR evidence contains the final report-head Phase A, PR Quality, and rendered-artifact identities.
 
 ## 32. Production build result
 
@@ -199,7 +195,7 @@ The original ten production-server AW-7 scenarios passed:
 9. Mobile EN 390x844 — terminal partial completion with one saved set and final Muscle Load.
 10. Desktop EN 1440x900 — terminal isolation with one saved set and final Muscle Load.
 
-After the Planner correction, exact-head Rendered UI QA passed on both `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd` and final report head `2e259a5d290142add9f0c4cd7dd96b0909dad658`.
+After the Planner correction, exact-head Rendered UI QA passed on the corrected implementation and final report heads.
 
 ## 34. Artifact and screenshot paths
 
@@ -218,14 +214,7 @@ digest: sha256:7787e190bcf688d58f3a93cc974c365e1534e5bd4d49c57175b387451a96e194
 workflow run: 30581021493
 ```
 
-Final report-head remote rendered artifact:
-
-```text
-artifact ID: 8775493984
-name: pr-quality-rendered-evidence-2e259a5d290142add9f0c4cd7dd96b0909dad658
-digest: sha256:37e176a24e39cbf54ec1ca56e2c369758e19183552f30446aa1a725dfa140ddc
-workflow run: 30582915546
-```
+The final report-head artifact identity is recorded in the immutable PR evidence comment.
 
 ## 35. Manual visual findings/corrections
 
@@ -249,7 +238,7 @@ The corrected exact-head rendered artifacts were inspected for the affected Acti
 
 ## 36. Console/page/network results
 
-The original final artifact recorded zero console errors, zero page errors, zero unexpected failed requests/responses, and zero scenario failures. Seventeen cancelled Next.js `_rsc` prefetch/navigation requests were classified separately as expected `net::ERR_ABORTED` cancellations, not network failures. Both corrected exact-head Rendered UI QA runs completed successfully.
+The original final artifact recorded zero console errors, zero page errors, zero unexpected failed requests/responses, and zero scenario failures. Seventeen cancelled Next.js `_rsc` prefetch/navigation requests were classified separately as expected `net::ERR_ABORTED` cancellations, not network failures. Corrected exact-head Rendered UI QA completed successfully.
 
 ## 37. Database/migration confirmation
 
@@ -303,9 +292,7 @@ Corrected implementation/evidence head:
 
 `1a523d6ab1c11ef3655c78ad3c4320e9a89b8abd`
 
-Final report head:
-
-`2e259a5d290142add9f0c4cd7dd96b0909dad658`
+Final PR head and exact final evidence are recorded immutably in the PR conversation.
 
 Root cause:
 
@@ -315,12 +302,4 @@ Resolution:
 
 The minimized rest context now uses the authoritative active item, set number, and set count. Minimized progress now uses non-skipped prescription items and excludes matching skipped-item logs. The existing session engine remained unchanged.
 
-Final evidence:
-
-- implementation-head Phase A `30581021594` — passed.
-- implementation-head PR Quality `30581021493` — passed.
-- final-head Phase A `30582915551` — passed.
-- final-head PR Quality `30582915546` — passed.
-- final-head artifact `8775493984` — uploaded successfully.
-- PR remains Draft and unmerged.
-- no migration, Production, Activity Catalog, compatibility-marker, deployment, merge, or AW-8 work occurred.
+The PR remains Draft and unmerged. No migration, Production, Activity Catalog, compatibility-marker, deployment, merge, or AW-8 work occurred.
