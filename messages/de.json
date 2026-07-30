@@ -151,7 +151,9 @@
       "moveLater": "Später",
       "moveLast": "An das Ende",
       "todayOrderOnly": "Nur die Reihenfolge für heute",
-      "allDone": "Alles erledigt"
+      "allDone": "Alles erledigt",
+      "minimizeFailedTitle": "Training bleibt geöffnet",
+      "minimizeFailedDescription": "Die letzten Satzänderungen konnten nicht sicher gespeichert werden. Versuche es vor dem Minimieren erneut."
     },
     "details": {
       "activeWorkoutDetails": "Trainingsdetails",
@@ -299,7 +301,13 @@
       "cancelledTitle": "Training abgebrochen",
       "cancelledDescription": "Die aktive Einheit wurde entfernt.",
       "cancelFailedTitle": "Training wurde nicht abgebrochen",
-      "cancelFailedDescription": "Das Training konnte nicht abgebrochen werden. Die aktive Einheit bleibt verfügbar."
+      "cancelFailedDescription": "Das Training konnte nicht abgebrochen werden. Die aktive Einheit bleibt verfügbar.",
+      "setPosition": "Satz {current} von {total}",
+      "pausedSetPosition": "Pausiert · Satz {current} von {total}",
+      "available": "Aktives Training verfügbar",
+      "tapToReconnect": "Tippen zum erneuten Verbinden",
+      "readyToReview": "Training kann geprüft werden",
+      "reviewProgress": "{completed} von {total} Sätzen abgeschlossen"
     },
     "review": {
       "title": "Training prüfen",
@@ -318,7 +326,46 @@
       "minutes": "Minuten",
       "finishQuestion": "Training beenden?",
       "finishDescription": "Das Training wird im Trainingsverlauf gespeichert.",
-      "partialFinish": "Teiltraining beenden"
+      "partialFinish": "Teiltraining beenden",
+      "progress": "{completed} von {total} Sätzen abgeschlossen",
+      "partial": "Teilweise",
+      "replaced": "Ersetzt",
+      "noWorkoutNote": "Keine Trainingsnotiz",
+      "incompleteTitle": "Ein Teil des geplanten Trainings ist unvollständig",
+      "incompleteSummary": "{exercises, plural, one {# Übung unvollständig} other {# Übungen unvollständig}} · {sets, plural, one {# Satz unvollständig} other {# Sätze unvollständig}} · {skipped, plural, one {# Übung übersprungen} other {# Übungen übersprungen}}",
+      "exerciseBreakdown": "Übungs- und Satzübersicht",
+      "exerciseSetProgress": "{completed} von {total} Sätzen",
+      "status": {
+        "completed": "Abgeschlossen",
+        "partial": "Teilweise",
+        "incomplete": "Unvollständig",
+        "skipped": "Übersprungen"
+      },
+      "replacedFrom": "Ersetzt statt {name}",
+      "incomplete": "Unvollständig",
+      "setType": "Typ",
+      "setTypes": {
+        "warmup": "Aufwärmen",
+        "working": "Arbeitssatz",
+        "normal": "Standard",
+        "failure": "Bis zum Versagen",
+        "drop": "Dropsatz",
+        "backoff": "Reduktionssatz",
+        "amrap": "AMRAP",
+        "timed": "Zeitbasiert",
+        "other": "Andere"
+      },
+      "noteSaved": "Notiz",
+      "pending": "Speichern ausstehend",
+      "persisted": "Gespeichert",
+      "notSaved": "Nicht gespeichert",
+      "reopenSet": "Satz erneut öffnen",
+      "jumpToSet": "Zum Satz",
+      "finalSummary": "Abschlussübersicht",
+      "finishWithIncomplete": "Dieses Training mit {count, plural, one {# unvollständigen Satz} other {# unvollständigen Sätzen}} beenden?",
+      "finishAnyway": "Trotzdem beenden",
+      "openFailedTitle": "Prüfung konnte nicht geöffnet werden",
+      "openFailedDescription": "Die letzten Satzänderungen oder die Prüfposition konnten nicht gespeichert werden. Versuche es im Training erneut."
     },
     "completion": {
       "title": "Training abgeschlossen",
@@ -336,7 +383,28 @@
       "progressionNoCompleted": "{name}: keine abgeschlossenen Sätze. Behandle diese Übung als übersprungen oder unvollständig.",
       "progressionLogged": "{name}: {completed} von {total} Sätzen protokolliert. Wiederhole die Übung und vergleiche beim nächsten Mal.",
       "progressionIncrease": "{name}: Alle Arbeitssätze haben das obere Wiederholungsziel erreicht. Erwäge beim nächsten Mal mehr Gewicht.",
-      "progressionRepeat": "{name}: Einige Arbeitssätze haben das obere Wiederholungsziel verfehlt. Verwende beim nächsten Mal dasselbe Gewicht."
+      "progressionRepeat": "{name}: Einige Arbeitssätze haben das obere Wiederholungsziel verfehlt. Verwende beim nächsten Mal dasselbe Gewicht.",
+      "backToToday": "Zurück zu Heute",
+      "workSummary": "Trainingsänderungen",
+      "partialExercise": "{name}: teilweise abgeschlossen",
+      "skippedExercise": "{name}: übersprungen",
+      "replacedExercise": "{original} ersetzt durch {current}",
+      "finalMuscleLoad": "Finale Muskelbelastung",
+      "recoveryTitle": "Trainingsabschluss wird bestätigt",
+      "retryDescription": "Das Training ist weiterhin in der Prüfung aktiv. Versuche den Abschluss erneut.",
+      "reconnectDescription": "Plaivra konnte den finalen Trainingsstatus nicht bestätigen. Stelle die Verbindung wieder her und versuche es auf diesem Bildschirm erneut."
+    },
+    "conflict": {
+      "title": "Du hast bereits ein aktives Training",
+      "description": "Setze es fort oder brich es bestätigt ab, bevor du dieses Training startest.",
+      "resume": "Aktuelles Training fortsetzen",
+      "cancelAndStart": "Aktuelles abbrechen und dieses starten",
+      "goBack": "Zurück",
+      "confirmTitle": "Aktives Training abbrechen?",
+      "confirmDescription": "Das aktuelle Training muss erfolgreich abgebrochen sein, bevor das gewünschte Training starten kann.",
+      "confirmCancel": "Abbrechen und starten",
+      "cancelFailedTitle": "Aktuelles Training wurde nicht abgebrochen",
+      "cancelFailedDescription": "Das gewünschte Training wurde nicht gestartet. Versuche es erneut oder setze das aktuelle Training fort."
     },
     "offline": {
       "setSaveFailed": "Dieser Satz konnte nicht sicher gespeichert werden.",

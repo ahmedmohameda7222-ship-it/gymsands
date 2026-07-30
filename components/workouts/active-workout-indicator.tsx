@@ -1,68 +1,104 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CirclePause, CirclePlay, Dumbbell, Flag, X } from "lucide-react";
 import { usePathname } from "next/navigation";
+
 import { useAuth } from "@/components/auth/auth-provider";
-import { Button } from "@/components/ui/button";
-import { useConfirm } from "@/components/ui/confirm-dialog";
-import { useToast } from "@/components/ui/toaster";
-import { activeWorkoutCacheFromExecution, activeWorkoutElapsed, activeWorkoutEvent, clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, resolveActiveWorkoutRoute, writeActiveWorkoutState, type ActiveWorkoutState } from "@/lib/active-workout";
-import { getOpenWorkoutSessionWithStatus } from "@/services/database/workout-sessions";
-import type { WorkoutSession, WorkoutSessionExecutionState } from "@/types";
-import { useSuccessFeedback } from "@/components/feedback/success-feedback";
-import { userSafeError } from "@/lib/error-formatting";
+import {
+  ActiveWorkoutMinimizedBar,
+  type ActiveWorkoutMinimizedBarState
+} from "@/components/workouts/active-workout-minimized-bar";
+import {
+  activeWorkoutCacheFromExecution,
+  activeWorkoutElapsed,
+  activeWorkoutEvent,
+  clearActiveWorkoutState,
+  isValidActiveWorkoutRoute,
+  readActiveWorkoutState,
+  resolveActiveWorkoutRoute,
+  writeActiveWorkoutState,
+  type ActiveWorkoutState
+} from "@/lib/active-workout";
 import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
 import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
-import { activeSessionPersistenceAdapter } from "@/services/database/active-session-persistence-adapter";
+import { activeSessionClock } from "@/lib/workouts/active-session-store/clock";
 import {
   getActiveSessionStore,
+  type ActiveSessionSnapshot,
   type ActiveSessionStore
 } from "@/lib/workouts/active-session-store/store";
-import { activeSessionClock } from "@/lib/workouts/active-session-store/clock";
 import { createSessionCommandId } from "@/lib/workouts/session-engine/commands";
-import { sessionTimerSelector } from "@/lib/workouts/session-engine/selectors";
-
-// Frozen Train Phase 1 source contract: owner-scoped resume accepts only
-// stored?.sessionId === open.id && isValidActiveWorkoutRoute(stored.route)
+import {
+  restTimerSelector,
+  sessionTimerSelector
+} from "@/lib/workouts/session-engine/selectors";
+import { activeSessionPersistenceAdapter } from "@/services/database/active-session-persistence-adapter";
+import { getOpenWorkoutSessionWithStatus } from "@/services/database/workout-sessions";
+import type { WorkoutSession } from "@/types";
 
 export function ActiveWorkoutIndicator() {
   const { user } = useAuth();
   const userId = user?.id;
   const pathname = usePathname();
-  const { toast } = useToast();
-  const { celebrate } = useSuccessFeedback();
-  const { dialog, ask } = useConfirm();
   const { t, formatters } = useActiveWorkoutTranslation();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [state, setState] = useState<ActiveWorkoutState | null>(null);
-  const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
+  const [snapshot, setSnapshot] = useState<ActiveSessionSnapshot | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [actionPending, setActionPending] = useState<"pause" | "finish" | "cancel" | null>(null);
-  const [actionError, setActionError] = useState("");
-  const [loadError, setLoadError] = useState("");
+  const [restLeft, setRestLeft] = useState(0);
+  const [actionPending, setActionPending] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const controllerRef = useRef<HTMLDivElement>(null);
   const controllerDeviceIdRef = useRef<string | null>(null);
   const activeSessionStoreRef = useRef<ActiveSessionStore | null>(null);
+  const unsubscribeStoreRef = useRef<(() => void) | null>(null);
 
-  const load = useCallback(async () => {
+  const acceptStoreSnapshot = useCallback((
+    store: ActiveSessionStore,
+    open: WorkoutSession,
+    route: string
+  ) => {
+    const nextSnapshot = store.getSnapshot();
+    const persisted = nextSnapshot.executionState;
+    setSnapshot(nextSnapshot);
+    if (!persisted || nextSnapshot.root?.status !== "started") return;
+    const next = activeWorkoutCacheFromExecution(persisted, {
+      route,
+      label: open.workout_name,
+      controllerDeviceId: controllerDeviceIdRef.current
+    });
+    setState(next);
+    if (userId) writeActiveWorkoutState(userId, next);
+  }, [userId]);
+
+  const load = useCallback(async (force = false) => {
     if (!userId) return;
     const stored = readActiveWorkoutState(userId);
-    const candidateSessionId = stored && isValidActiveWorkoutRoute(stored.route) ? stored.sessionId : null;
-    const { session: open, error } = await getOpenWorkoutSessionWithStatus(userId, null, candidateSessionId);
+    const candidateSessionId = stored && isValidActiveWorkoutRoute(stored.route)
+      ? stored.sessionId
+      : null;
+    const { session: open, error } = await getOpenWorkoutSessionWithStatus(
+      userId,
+      null,
+      candidateSessionId
+    );
     if (error) {
-      setLoadError(t("minimized.loadFailed"));
+      setState(stored);
+      setLoadError(true);
       return;
     }
-    setSession(open);
     if (!open) {
+      unsubscribeStoreRef.current?.();
+      unsubscribeStoreRef.current = null;
+      activeSessionStoreRef.current = null;
       clearActiveWorkoutState(userId);
+      setSession(null);
       setState(null);
-      setExecutionState(null);
-      setLoadError("");
+      setSnapshot(null);
+      setLoadError(false);
       return;
     }
+
     try {
       controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
       const store = getActiveSessionStore({
@@ -72,10 +108,13 @@ export function ActiveWorkoutIndicator() {
         clearCompatibilityCache: () => clearActiveWorkoutState(userId)
       });
       activeSessionStoreRef.current = store;
-      await store.hydrate();
+      await store.hydrate({ force });
       let persisted = store.getSnapshot().executionState;
-      if (!persisted) throw new Error("The active workout has no execution state.");
-      if (controllerDeviceIdRef.current && persisted.controller_device_id !== controllerDeviceIdRef.current) {
+      if (!persisted) throw new Error("Active execution state is unavailable.");
+      if (
+        controllerDeviceIdRef.current
+        && persisted.controller_device_id !== controllerDeviceIdRef.current
+      ) {
         const response = await store.dispatch({
           userId,
           workoutSessionId: open.id,
@@ -97,44 +136,71 @@ export function ActiveWorkoutIndicator() {
         controllerDeviceId: controllerDeviceIdRef.current
       });
       writeActiveWorkoutState(userId, next);
-      setExecutionState(persisted);
+      setSession(open);
       setState(next);
-      setLoadError("");
-    } catch (executionError) {
-      setExecutionState(null);
-      setState(null);
-      setLoadError(userSafeError(executionError, t("minimized.loadFailed")));
+      setSnapshot(store.getSnapshot());
+      setLoadError(false);
+      unsubscribeStoreRef.current?.();
+      unsubscribeStoreRef.current = store.subscribe(() => {
+        acceptStoreSnapshot(store, open, route);
+      });
+    } catch {
+      setSession(open);
+      setState(stored);
+      setSnapshot(null);
+      setLoadError(true);
     }
-  }, [t, userId]);
+  }, [acceptStoreSnapshot, userId]);
 
-  useEffect(() => { void load(); }, [load, pathname]);
+  useEffect(() => {
+    void load();
+    return () => {
+      unsubscribeStoreRef.current?.();
+      unsubscribeStoreRef.current = null;
+    };
+  }, [load]);
 
   useEffect(() => {
     if (!userId) return;
     const syncCache = () => setState(readActiveWorkoutState(userId));
-    const reload = () => { void load(); };
+    const reload = () => { void load(true); };
     window.addEventListener(activeWorkoutEvent, syncCache);
     window.addEventListener("focus", reload);
-    return () => { window.removeEventListener(activeWorkoutEvent, syncCache); window.removeEventListener("focus", reload); };
+    return () => {
+      window.removeEventListener(activeWorkoutEvent, syncCache);
+      window.removeEventListener("focus", reload);
+    };
   }, [load, userId]);
 
   useEffect(() => {
-    const tick = () => setElapsed(
-      executionState
-        ? sessionTimerSelector(executionState, activeSessionClock.getSnapshot())
-        : state
-          ? activeWorkoutElapsed(state, activeSessionClock.getSnapshot())
-          : 0
-    );
+    const tick = () => {
+      const now = activeSessionClock.getSnapshot();
+      setElapsed(
+        snapshot?.executionState
+          ? sessionTimerSelector(snapshot.executionState, now)
+          : state
+            ? activeWorkoutElapsed(state, now)
+            : 0
+      );
+      setRestLeft(
+        snapshot?.executionState
+          ? restTimerSelector(snapshot.executionState, now)
+          : state?.restEndsAtMs
+            ? Math.max(0, Math.ceil((state.restEndsAtMs - now) / 1000))
+            : 0
+      );
+    };
+    tick();
     return activeSessionClock.subscribe(tick);
-  }, [executionState, state]);
+  }, [snapshot?.executionState, state]);
 
-  const controllerVisible = Boolean(loadError || (session && state)) && !pathname.startsWith("/workouts/session");
+  const controllerVisible = Boolean(
+    loadError ? state || session : session && state && snapshot?.executionState
+  ) && !pathname.startsWith("/workouts/session");
 
   useLayoutEffect(() => {
     const shell = document.querySelector<HTMLElement>("[data-app-shell]");
     if (!shell) return;
-
     const updateHeight = () => {
       const height = controllerVisible && controllerRef.current
         ? Math.ceil(controllerRef.current.getBoundingClientRect().height)
@@ -142,126 +208,137 @@ export function ActiveWorkoutIndicator() {
       shell.style.setProperty("--active-workout-controller-height", `${height}px`);
       shell.dataset.activeWorkoutControllerState = height > 0 ? "present" : "absent";
     };
-
     updateHeight();
     const observer = typeof ResizeObserver === "undefined" || !controllerRef.current
       ? null
       : new ResizeObserver(updateHeight);
     if (observer && controllerRef.current) observer.observe(controllerRef.current);
     window.addEventListener("resize", updateHeight);
-
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", updateHeight);
       shell.style.removeProperty("--active-workout-controller-height");
       shell.dataset.activeWorkoutControllerState = "absent";
     };
-  }, [actionError, controllerVisible, loadError, pathname, state?.label, state?.paused]);
+  }, [controllerVisible, loadError, snapshot?.executionState?.session_state]);
 
   async function togglePause() {
-    if (!userId || !state || !session || !executionState || executionState.session_state === "review") return;
+    const executionState = snapshot?.executionState;
     const store = activeSessionStoreRef.current;
-    if (!store) return;
+    if (
+      !userId
+      || !session
+      || !store
+      || !executionState
+      || executionState.session_state === "review"
+    ) return;
+    setActionPending(true);
     try {
-      setActionPending("pause");
-      setActionError("");
-      const response = await store.dispatch({
+      await store.dispatch({
         userId,
         workoutSessionId: session.id,
         commandId: createSessionCommandId(),
         commandType: executionState.session_state === "paused" ? "resume" : "pause",
         payload: { controller_device_id: controllerDeviceIdRef.current }
       });
-      const persisted = response.state;
-      const persistedCache = activeWorkoutCacheFromExecution(persisted, {
-        route: state.route,
-        label: state.label,
-        controllerDeviceId: controllerDeviceIdRef.current
-      }, activeSessionClock.getSnapshot());
-      setExecutionState(persisted);
-      setState(persistedCache);
-      writeActiveWorkoutState(userId, persistedCache);
-    } catch (error) {
-      setActionError(userSafeError(error, t("minimized.pauseRestore")));
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
     } finally {
-      setActionPending(null);
+      setActionPending(false);
     }
   }
 
-  async function finish() {
-    if (!userId || !session || !state) return;
-    try {
-      setActionPending("finish");
-      setActionError("");
-      const store = activeSessionStoreRef.current;
-      if (!store) throw new Error("The workout execution store is unavailable.");
-      await store.completeSession({
-        notes: t("minimized.finishedFromIndicator"),
-        durationMinutes: Math.max(1, Math.ceil(elapsed / 60))
-      });
-      setSession(null);
-      setState(null);
-      toast({ title: t("minimized.finishedTitle"), description: t("minimized.finishedDescription") });
-      celebrate(t("completion.title"));
-    } catch (error) {
-      const message = userSafeError(error, t("minimized.finishFailedDescription"));
-      setActionError(message);
-      toast({ title: t("minimized.finishFailedTitle"), description: message });
-    } finally {
-      setActionPending(null);
-    }
-  }
+  if (!controllerVisible) return null;
 
-  async function cancel() {
-    if (!userId || !session) return;
-    try {
-      setActionPending("cancel");
-      setActionError("");
-      const store = activeSessionStoreRef.current;
-      if (!store) throw new Error("The workout execution store is unavailable.");
-      await store.cancelSession();
-      setSession(null);
-      setState(null);
-      toast({ title: t("minimized.cancelledTitle"), description: t("minimized.cancelledDescription") });
-    } catch (error) {
-      const message = userSafeError(error, t("minimized.cancelFailedDescription"));
-      setActionError(message);
-      toast({ title: t("minimized.cancelFailedTitle"), description: message });
-    } finally {
-      setActionPending(null);
-    }
-  }
+  const execution = snapshot?.executionState;
+  const prescription = snapshot?.prescription ?? [];
+  const logs = snapshot?.performedLogs ?? [];
+  const activeItem = prescription.find((item) =>
+    item.id === execution?.active_snapshot_item_id
+    || item.itemOrder === execution?.active_item_order
+  ) ?? null;
+  const nextItem = prescription.find((item) =>
+    item.itemOrder > (activeItem?.itemOrder ?? execution?.active_item_order ?? 0)
+    && item.executionState !== "skipped"
+  ) ?? null;
+  const activeSetCount = activeItem?.prescriptionSets.length
+    || activeItem?.plannedSets
+    || 1;
+  const totalSetCount = prescription.reduce(
+    (sum, item) => sum + (item.prescriptionSets.length || item.plannedSets || 1),
+    0
+  );
+  const completedSetCount = logs.filter((log) => Boolean(log.completed_at)).length;
+  const progress = totalSetCount > 0 ? completedSetCount / totalSetCount : 0;
+  const href = state?.route ?? (
+    session ? resolveActiveWorkoutRoute(session, null) : "/my-workout/plans"
+  );
 
-  if (!controllerVisible) return dialog;
+  let barState: ActiveWorkoutMinimizedBarState = "active";
+  let title = activeItem?.activityName ?? state?.label ?? t("minimized.activeWorkout");
+  let meta = t("minimized.setPosition", {
+    current: execution?.active_set_number ?? state?.activeSetNumber ?? 1,
+    total: activeSetCount
+  });
+  let timer: string | null = formatters.timer(elapsed);
+  let actionLabel = t("common.pause");
+  let onAction: (() => void) | undefined = () => { void togglePause(); };
+
+  if (loadError) {
+    barState = "error";
+    title = t("minimized.available");
+    meta = t("minimized.tapToReconnect");
+    timer = null;
+    actionLabel = t("common.retry");
+    onAction = () => { void load(true); };
+  } else if (execution?.session_state === "review") {
+    barState = "review";
+    title = t("minimized.readyToReview");
+    meta = t("minimized.reviewProgress", {
+      completed: completedSetCount,
+      total: totalSetCount
+    });
+    timer = null;
+    actionLabel = t("review.title");
+    onAction = undefined;
+  } else if (execution?.session_state === "paused") {
+    barState = "paused";
+    meta = t("minimized.pausedSetPosition", {
+      current: execution.active_set_number,
+      total: activeSetCount
+    });
+    timer = null;
+    actionLabel = t("common.resume");
+  } else if (execution?.view_state === "rest" && restLeft > 0) {
+    barState = "rest";
+    title = t("rest.resting");
+    meta = nextItem
+      ? t("exercise.nextExercise", { name: nextItem.activityName })
+      : t("minimized.nextSetReady");
+    timer = formatters.timer(restLeft);
+    actionLabel = t("minimized.openWorkout");
+    onAction = undefined;
+  }
 
   return (
-    <>
-      {dialog}
-      <div ref={controllerRef} data-active-workout-controller className="fixed inset-x-3 bottom-[var(--active-workout-controller-bottom)] z-[70] mx-auto max-w-2xl rounded-[18px] border border-primary/25 bg-card/95 p-3 shadow-xl backdrop-blur lg:inset-x-auto lg:bottom-[var(--desktop-active-workout-controller-bottom)] lg:right-5 lg:w-[34rem]">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><Dumbbell className="h-5 w-5" /></span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold"><bdi>{state?.label ?? t("minimized.activeWorkout")}</bdi></p>
-              <p className="text-xs text-muted-foreground">
-                {loadError || (
-                  <>
-                    {state?.paused ? t("common.paused") : t("common.active")} ·{" "}
-                    <span dir="ltr" className="tabular-nums">{formatters.timer(elapsed)}</span>
-                  </>
-                )}
-              </p>
-              {actionError ? <p className="mt-1 text-xs leading-5 text-destructive">{actionError}</p> : null}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {state ? <Button asChild className="min-h-12"><Link href={state.route} aria-label={t("accessibility.openWorkout")}>{state.paused ? <CirclePlay className="h-4 w-4" /> : null}{t("minimized.openWorkout")}</Link></Button> : null}
-            {state ? <Button type="button" variant="outline" className="min-h-12" aria-label={state.paused ? t("accessibility.resumeWorkout") : t("accessibility.pauseWorkout")} onClick={() => { void togglePause(); }} disabled={Boolean(actionPending) || executionState?.session_state === "review"}>{state.paused ? <CirclePlay className="h-4 w-4" /> : <CirclePause className="h-4 w-4" />}{actionPending === "pause" ? t("common.saving") : state.paused ? t("common.resume") : t("common.pause")}</Button> : null}
-            {state ? <Button type="button" variant="outline" className="min-h-12" aria-label={t("accessibility.finishWorkout")} disabled={Boolean(actionPending)} onClick={() => ask({ title: t("minimized.finishQuestion"), description: t("minimized.finishDescription"), confirmLabel: t("minimized.finishWorkout"), onConfirm: () => { void finish(); } })}><Flag className="h-4 w-4" />{actionPending === "finish" ? t("minimized.finishing") : t("common.finish")}</Button> : null}
-            {state ? <Button type="button" variant="ghost" className="min-h-12 text-destructive hover:text-destructive" aria-label={t("accessibility.cancelWorkout")} disabled={Boolean(actionPending)} onClick={() => ask({ title: t("minimized.cancelQuestion"), description: t("minimized.cancelDescription"), confirmLabel: t("minimized.cancelWorkout"), variant: "destructive", onConfirm: () => { void cancel(); } })}><X className="h-4 w-4" />{actionPending === "cancel" ? t("minimized.cancelling") : t("common.cancel")}</Button> : null}
-          </div>
-        </div>
-      </div>
-    </>
+    <div
+      ref={controllerRef}
+      data-active-workout-controller
+      className="fixed inset-x-3 bottom-[var(--active-workout-controller-bottom)] z-[70] mx-auto max-w-xl lg:inset-x-auto lg:bottom-[var(--desktop-active-workout-controller-bottom)] lg:right-5 lg:w-[26rem] lg:max-w-[calc(100vw-2.5rem)] rtl:lg:left-5 rtl:lg:right-auto"
+    >
+      <ActiveWorkoutMinimizedBar
+        state={barState}
+        href={href}
+        title={title}
+        meta={meta}
+        timer={timer}
+        progress={progress}
+        openLabel={t("accessibility.openWorkout")}
+        actionLabel={actionLabel}
+        actionPending={actionPending}
+        onAction={onAction}
+      />
+    </div>
   );
 }

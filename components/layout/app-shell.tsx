@@ -33,6 +33,7 @@ import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { ActiveWorkoutIndicator } from "@/components/workouts/active-workout-indicator";
 import { MobileFloatingNav } from "@/components/layout/mobile-floating-nav";
 import { getTrainNavigationTarget } from "@/lib/navigation/mobile-nav";
+import { rememberPreviousActiveWorkoutRoute } from "@/lib/active-workout";
 
 type NavItem = {
   href: string;
@@ -111,7 +112,7 @@ function isActivePath(pathname: string, item: NavItem) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { profile, isAdmin, signOut } = useAuth();
+  const { user, profile, isAdmin, signOut } = useAuth();
   const { settings } = useUserSettings();
   const { t } = useTranslation();
   const hideProfileDetails = settings.hideProfileDetails || settings.privateProfileMode;
@@ -127,6 +128,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.removeEventListener("offline", update);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id || pathname.startsWith("/workouts/session")) return;
+    rememberPreviousActiveWorkoutRoute(user.id, pathname);
+  }, [pathname, user?.id]);
 
   if (pathname === "/onboarding") {
     return (

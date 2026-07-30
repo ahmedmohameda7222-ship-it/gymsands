@@ -1,6 +1,7 @@
 import type { WorkoutSessionExecutionSessionState, WorkoutSessionExecutionState, WorkoutSessionExecutionViewState } from "@/types";
 
 export const activeWorkoutEvent = "plaivra:active-workout-changed";
+const previousRoutePrefix = "plaivra.active-workout.previous-route";
 
 export type ActiveWorkoutState = {
   sessionId: string;
@@ -28,6 +29,10 @@ export function isValidActiveWorkoutRoute(route: string) {
 
 function key(userId: string) {
   return `plaivra.active-workout.${userId}`;
+}
+
+function previousRouteKey(userId: string) {
+  return `${previousRoutePrefix}.${userId}`;
 }
 
 function optionalNonNegativeInteger(value: unknown) {
@@ -91,6 +96,27 @@ export function clearActiveWorkoutState(userId: string) {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(key(userId));
   window.dispatchEvent(new CustomEvent(activeWorkoutEvent));
+}
+
+export function isValidPreviousActiveWorkoutRoute(route: string) {
+  return (
+    route.startsWith("/")
+    && !route.startsWith("//")
+    && !route.startsWith("/workouts/session")
+    && !route.includes("\n")
+    && !route.includes("\r")
+  );
+}
+
+export function rememberPreviousActiveWorkoutRoute(userId: string, route: string) {
+  if (typeof window === "undefined" || !isValidPreviousActiveWorkoutRoute(route)) return;
+  window.sessionStorage.setItem(previousRouteKey(userId), route);
+}
+
+export function readPreviousActiveWorkoutRoute(userId: string) {
+  if (typeof window === "undefined") return null;
+  const route = window.sessionStorage.getItem(previousRouteKey(userId));
+  return route && isValidPreviousActiveWorkoutRoute(route) ? route : null;
 }
 
 export function activeWorkoutElapsed(state: ActiveWorkoutState, now = Date.now()) {

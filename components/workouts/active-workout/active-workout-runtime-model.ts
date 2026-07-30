@@ -89,12 +89,51 @@ export type ActiveWorkoutSummary = {
   durationMinutes: number;
   totalVolume: number;
   completedSets: number;
+  totalPlannedSets: number;
   completedExercises: number;
+  totalExercises: number;
+  incompleteExercises: string[];
   partialExercises: string[];
   skippedExercises: string[];
+  replacedExercises: Array<{ currentName: string; originalName: string }>;
   prs: string[];
   suggestions: string[];
   notes: string;
+};
+
+export type ActiveWorkoutReviewSet = {
+  setNumber: number;
+  completed: boolean;
+  reps: string;
+  weightKg: string;
+  rpe: string;
+  rir: string;
+  setType: WorkoutSetType;
+  notes: string;
+  persisted: boolean;
+  pending: boolean;
+};
+
+export type ActiveWorkoutReviewExercise = {
+  exerciseIndex: number;
+  currentName: string;
+  originalName: string | null;
+  status: "completed" | "partial" | "incomplete" | "skipped";
+  completedSets: number;
+  totalSets: number;
+  sets: ActiveWorkoutReviewSet[];
+};
+
+export type ActiveWorkoutReviewProjection = {
+  exercises: ActiveWorkoutReviewExercise[];
+  completedSets: number;
+  totalSets: number;
+  incompleteSets: number;
+  completedExercises: number;
+  incompleteExercises: number;
+  partialExercises: number;
+  skippedExercises: number;
+  replacedExercises: number;
 };
 
 const detailWriteKeys: Array<keyof ActiveWorkoutSetState> = [
@@ -633,6 +672,7 @@ export function buildSummary(
   formatters: ActiveWorkoutFormatters
 ): ActiveWorkoutSummary {
   const sessionSets = buildSessionSets(states);
+  const review = buildActiveWorkoutReview(states);
   const completedExercises = states.filter((item) =>
     item.sets.length > 0 && item.sets.every((set) => set.completedAt)
   ).length;
@@ -643,20 +683,97 @@ export function buildSummary(
     })
     .map((item) => item.exercise.exercise_name);
   const skippedExercises = states
-    .filter((item) => !item.sets.some((set) => set.completedAt))
+    .filter((item) => item.prescriptionItem.executionState === "skipped")
     .map((item) => item.exercise.exercise_name);
+  const incompleteExercises = review.exercises
+    .filter((item) => item.status === "incomplete")
+    .map((item) => item.currentName);
+  const replacedExercises = review.exercises
+    .filter((item) => item.originalName)
+    .map((item) => ({
+      currentName: item.currentName,
+      originalName: item.originalName!
+    }));
   return {
     durationMinutes,
     totalVolume: roundWorkoutMetric(
       sessionSets.reduce((sum, set) => sum + set.weightKg * set.reps, 0)
     ),
     completedSets: sessionSets.length,
+    totalPlannedSets: review.totalSets,
     completedExercises,
+    totalExercises: states.length,
+    incompleteExercises,
     partialExercises,
     skippedExercises,
+    replacedExercises,
     prs: buildPrs(states, history, tr, formatters),
     suggestions: states.map((item) => buildProgressiveSuggestion(item, tr, formatters)),
     notes
+  };
+}
+
+export function buildActiveWorkoutReview(
+  states: ActiveWorkoutExerciseState[],
+  originalExercises: UserWorkoutPlanExercise[] = []
+): ActiveWorkoutReviewProjection {
+  const exercises = states.map<ActiveWorkoutReviewExercise>((item, exerciseIndex) => {
+    const completedSets = item.sets.filter((set) => Boolean(set.completedAt)).length;
+    const skipped = item.prescriptionItem.executionState === "skipped";
+    const status = skipped
+      ? "skipped"
+      : completedSets === item.sets.length && item.sets.length > 0
+        ? "completed"
+        : completedSets > 0
+          ? "partial"
+          : "incomplete";
+    const original = originalExercises.find((exercise) =>
+      exercise.id === item.prescriptionItem.sourcePlanExerciseId
+      || exercise.id === item.exercise.id
+    );
+    const originalName = original
+      && normalizeExerciseName(original.exercise_name)
+        !== normalizeExerciseName(item.exercise.exercise_name)
+      ? original.exercise_name
+      : null;
+
+    return {
+      exerciseIndex,
+      currentName: item.exercise.exercise_name,
+      originalName,
+      status,
+      completedSets,
+      totalSets: item.sets.length,
+      sets: item.sets.map((set) => ({
+        setNumber: set.setNumber,
+        completed: Boolean(set.completedAt),
+        reps: set.reps,
+        weightKg: set.weightKg,
+        rpe: set.rpe,
+        rir: set.rir,
+        setType: set.setType,
+        notes: set.notes,
+        persisted: set.hasPersistedLog,
+        pending: set.logWriteRequired
+      }))
+    };
+  });
+  const activeExercises = exercises.filter((item) => item.status !== "skipped");
+  const totalSets = activeExercises.reduce((sum, item) => sum + item.totalSets, 0);
+  const completedSets = activeExercises.reduce((sum, item) => sum + item.completedSets, 0);
+
+  return {
+    exercises,
+    completedSets,
+    totalSets,
+    incompleteSets: Math.max(0, totalSets - completedSets),
+    completedExercises: exercises.filter((item) => item.status === "completed").length,
+    incompleteExercises: exercises.filter((item) =>
+      item.status === "incomplete" || item.status === "partial"
+    ).length,
+    partialExercises: exercises.filter((item) => item.status === "partial").length,
+    skippedExercises: exercises.filter((item) => item.status === "skipped").length,
+    replacedExercises: exercises.filter((item) => item.originalName).length
   };
 }
 

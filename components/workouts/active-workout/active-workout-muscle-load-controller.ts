@@ -98,10 +98,12 @@ function responseError(value: unknown): string {
 
 export function useActiveWorkoutMuscleLoad({
   sessionId,
-  refreshRevision
+  refreshRevision,
+  mode = "active"
 }: {
   sessionId: string | null;
   refreshRevision: number;
+  mode?: "active" | "completed";
 }): ActiveWorkoutMuscleLoadController {
   const [result, setResult] = useState<Phase3SessionAnalysisContract | null>(null);
   const [loading, setLoading] = useState(false);
@@ -125,8 +127,9 @@ export function useActiveWorkoutMuscleLoad({
     setFailed(false);
 
     try {
+      const analysisModeQuery = mode === "active" ? "mode=active" : "mode=completed";
       const response = await fetch(
-        `/api/workouts/sessions/${encodeURIComponent(sessionId)}/muscle-analysis?mode=active`,
+        `/api/workouts/sessions/${encodeURIComponent(sessionId)}/muscle-analysis?${analysisModeQuery}`,
         { cache: "no-store", signal: abortController.signal }
       );
       const payload: unknown = await response.json().catch(() => null);
@@ -155,13 +158,14 @@ export function useActiveWorkoutMuscleLoad({
         setRefreshing(false);
       }
     }
-  }, [sessionId]);
+  }, [mode, sessionId]);
 
   useEffect(() => {
-    if (sessionIdRef.current !== sessionId) {
+    const analysisIdentity = sessionId ? `${sessionId}:${mode}` : null;
+    if (sessionIdRef.current !== analysisIdentity) {
       abortRef.current?.abort();
       requestGenerationRef.current += 1;
-      sessionIdRef.current = sessionId;
+      sessionIdRef.current = analysisIdentity;
       resultRef.current = null;
       setResult(null);
       setLoading(false);
@@ -174,7 +178,7 @@ export function useActiveWorkoutMuscleLoad({
       abortRef.current?.abort();
       requestGenerationRef.current += 1;
     };
-  }, [load, refreshRevision, reloadRevision, sessionId]);
+  }, [load, mode, refreshRevision, reloadRevision, sessionId]);
 
   const analysis = useMemo(
     () => resolveActiveWorkoutMuscleLoadAnalysis(result),
