@@ -119,8 +119,8 @@ test("Markdown prose detector covers direct, template, resolve, and const-bound 
 });
 
 test("completed implementation evidence stays out of the active source tree", () => {
-  const requiredCurrentPhaseReport = "plaivra_aw6_details_actions_heatmaps_implementation_report.md";
-  const preservedDirectPredecessorReport = "plaivra_aw5_active_workout_ui_core_implementation_report.md";
+  const requiredCurrentPhaseReport = "plaivra_aw7_minimize_review_completion_implementation_report.md";
+  const preservedDirectPredecessorReport = "plaivra_aw6_details_actions_heatmaps_implementation_report.md";
   const topLevelReports = readdirSync(root)
     .filter((entry) => /^plaivra_.*(?:implementation|qaqc|quality|audit|reconciliation).*\.(?:md|json)$/i.test(entry))
     .filter((entry) => ![requiredCurrentPhaseReport, preservedDirectPredecessorReport].includes(entry))

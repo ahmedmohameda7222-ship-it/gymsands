@@ -151,7 +151,9 @@
       "moveLater": "Move later",
       "moveLast": "Move last",
       "todayOrderOnly": "Today’s order only",
-      "allDone": "All done"
+      "allDone": "All done",
+      "minimizeFailedTitle": "Workout stayed open",
+      "minimizeFailedDescription": "Your latest set changes could not be saved safely. Retry before minimizing."
     },
     "details": {
       "activeWorkoutDetails": "Workout details",
@@ -299,7 +301,13 @@
       "cancelledTitle": "Workout cancelled",
       "cancelledDescription": "The active session was removed.",
       "cancelFailedTitle": "Workout was not cancelled",
-      "cancelFailedDescription": "Workout could not be cancelled. The active session is still available."
+      "cancelFailedDescription": "Workout could not be cancelled. The active session is still available.",
+      "setPosition": "Set {current} of {total}",
+      "pausedSetPosition": "Paused · Set {current} of {total}",
+      "available": "Active workout available",
+      "tapToReconnect": "Tap to reconnect",
+      "readyToReview": "Workout ready to review",
+      "reviewProgress": "{completed} of {total} sets completed"
     },
     "review": {
       "title": "Review workout",
@@ -318,7 +326,46 @@
       "minutes": "Minutes",
       "finishQuestion": "Finish workout?",
       "finishDescription": "This will save your workout to history.",
-      "partialFinish": "Finish partial workout"
+      "partialFinish": "Finish partial workout",
+      "progress": "{completed} of {total} sets completed",
+      "partial": "Partial",
+      "replaced": "Replaced",
+      "noWorkoutNote": "No workout note",
+      "incompleteTitle": "Some planned work is incomplete",
+      "incompleteSummary": "{exercises, plural, one {# exercise incomplete} other {# exercises incomplete}} · {sets, plural, one {# set incomplete} other {# sets incomplete}} · {skipped, plural, one {# exercise skipped} other {# exercises skipped}}",
+      "exerciseBreakdown": "Exercise and set breakdown",
+      "exerciseSetProgress": "{completed} of {total} sets",
+      "status": {
+        "completed": "Completed",
+        "partial": "Partial",
+        "incomplete": "Incomplete",
+        "skipped": "Skipped"
+      },
+      "replacedFrom": "Replaced from {name}",
+      "incomplete": "Incomplete",
+      "setType": "Type",
+      "setTypes": {
+        "warmup": "Warm-up",
+        "working": "Working",
+        "normal": "Normal",
+        "failure": "Failure",
+        "drop": "Drop set",
+        "backoff": "Back-off",
+        "amrap": "AMRAP",
+        "timed": "Timed",
+        "other": "Other"
+      },
+      "noteSaved": "Note",
+      "pending": "Pending save",
+      "persisted": "Saved",
+      "notSaved": "Not saved",
+      "reopenSet": "Reopen set",
+      "jumpToSet": "Jump to set",
+      "finalSummary": "Final summary",
+      "finishWithIncomplete": "Finish this workout with {count, plural, one {# incomplete set} other {# incomplete sets}}?",
+      "finishAnyway": "Finish anyway",
+      "openFailedTitle": "Review could not open",
+      "openFailedDescription": "Your latest set changes or review position could not be saved. Retry from the workout."
     },
     "completion": {
       "title": "Workout complete",
@@ -336,7 +383,28 @@
       "progressionNoCompleted": "{name}: no completed sets. Treat this exercise as skipped or incomplete.",
       "progressionLogged": "{name}: logged {completed} of {total} sets. Repeat and compare next time.",
       "progressionIncrease": "{name}: all working sets reached the top of the rep target. Consider increasing the weight next time.",
-      "progressionRepeat": "{name}: some working sets missed the top reps. Repeat the same weight next time."
+      "progressionRepeat": "{name}: some working sets missed the top reps. Repeat the same weight next time.",
+      "backToToday": "Back to Today",
+      "workSummary": "Workout changes",
+      "partialExercise": "{name}: partially completed",
+      "skippedExercise": "{name}: skipped",
+      "replacedExercise": "{original} replaced by {current}",
+      "finalMuscleLoad": "Final Muscle Load",
+      "recoveryTitle": "Confirming workout completion",
+      "retryDescription": "The workout is still active in review. Retry completion when you are ready.",
+      "reconnectDescription": "Plaivra could not confirm the final workout state. Reconnect and retry without leaving this screen."
+    },
+    "conflict": {
+      "title": "You already have an active workout",
+      "description": "Resume it, or cancel it authoritatively before starting this workout.",
+      "resume": "Resume current workout",
+      "cancelAndStart": "Cancel current and start this workout",
+      "goBack": "Go back",
+      "confirmTitle": "Cancel the active workout?",
+      "confirmDescription": "The current workout must be cancelled successfully before the requested workout can start.",
+      "confirmCancel": "Cancel and start",
+      "cancelFailedTitle": "Current workout was not cancelled",
+      "cancelFailedDescription": "The requested workout was not started. Retry or resume the current workout."
     },
     "offline": {
       "setSaveFailed": "This set could not be saved safely.",

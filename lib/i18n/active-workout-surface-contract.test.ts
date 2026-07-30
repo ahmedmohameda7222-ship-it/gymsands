@@ -77,6 +77,9 @@ describe("AW-1B Active Workout surface contract", () => {
     const indicator = source(
       "components/workouts/active-workout-indicator.tsx",
     );
+    const minimizedBar = source(
+      "components/workouts/active-workout-minimized-bar.tsx",
+    );
 
     expect(controller).toContain('tr("exercise.nextExercise", {');
     expect(controller).toContain(
@@ -97,10 +100,8 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(details).toContain('<bdi dir="auto">{currentInstructions}</bdi>');
     expect(review).toContain('id="finish-notes"');
     expect(review).toContain('dir="auto"');
-    expect(indicator).toContain("<bdi>{state?.label");
-    expect(indicator).toContain(
-      '<span dir="ltr" className="tabular-nums">{formatters.timer(elapsed)}</span>',
-    );
+    expect(minimizedBar).toContain("<bdi>{title}</bdi>");
+    expect(minimizedBar).toContain('dir="ltr"');
   });
 
   it("routes visible Active Workout measurements and counts through the formatter contract", () => {
@@ -108,7 +109,7 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(review).toContain(
       'formatters.measurement(durationMinutes, "minutes", 0)',
     );
-    expect(review).toContain("formatters.ratio(completedSets, totalSets)");
+    expect(review).toContain("formatters.ratio(review.completedSets, review.totalSets)");
     expect(review).toContain("formatters.integer(previewPrs.length)");
     expect(controller).toContain("formatSetNumber={formatters.integer}");
     expect(controller).toContain(
@@ -129,14 +130,15 @@ describe("AW-1B Active Workout surface contract", () => {
     const indicator = source(
       "components/workouts/active-workout-indicator.tsx",
     );
+    const minimizedBar = source(
+      "components/workouts/active-workout-minimized-bar.tsx",
+    );
     expect(indicator).toContain("useActiveWorkoutTranslation");
     expect(indicator).not.toContain("useTrainTranslation");
-    expect(indicator).toContain('t("minimized.finishQuestion")');
-    expect(indicator).toContain('t("minimized.cancelQuestion")');
-    expect(indicator).toContain("<bdi>{state?.label");
-    expect(indicator).toContain(
-      '<span dir="ltr" className="tabular-nums">{formatters.timer(elapsed)}</span>',
-    );
+    expect(indicator).not.toContain('t("minimized.finishQuestion")');
+    expect(indicator).not.toContain('t("minimized.cancelQuestion")');
+    expect(minimizedBar).toContain("<bdi>{title}</bdi>");
+    expect(minimizedBar).toContain('dir="ltr"');
   });
 
   it("keeps rendered locale QA aligned with scoped PR checks and phase-close evidence", () => {

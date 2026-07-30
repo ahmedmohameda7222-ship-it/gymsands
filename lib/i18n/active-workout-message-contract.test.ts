@@ -53,10 +53,14 @@ const requiredKeys = [
   "minimized.activeWorkout", "minimized.workoutPaused", "minimized.restTime",
   "minimized.nextSetReady", "minimized.openWorkout", "minimized.pause", "minimized.resume",
   "minimized.finishWorkout", "minimized.cancelWorkout", "minimized.hideBar",
+  "minimized.setPosition", "minimized.pausedSetPosition", "minimized.available",
+  "minimized.tapToReconnect", "minimized.readyToReview", "minimized.reviewProgress",
   "review.title", "review.duration", "review.completedSets", "review.completedExercises",
   "review.skipped", "review.volume", "review.personalRecords", "review.incompleteExercises",
   "review.workoutNote", "review.optionalNote", "review.saveAndFinish", "review.continueWorkout",
+  "review.progress", "review.jumpToSet", "review.reopenSet", "review.finishAnyway",
   "completion.title", "completion.savedHistory", "completion.backToWorkouts", "completion.viewDetails",
+  "completion.backToToday", "completion.finalMuscleLoad", "completion.recoveryTitle",
   "offline.setSaveFailed", "offline.keepOpenRetry", "offline.retry",
   "multiDevice.activeElsewhere", "multiDevice.viewOnly", "multiDevice.takeOver",
   "multiDevice.otherReadOnly", "multiDevice.changedElsewhere", "multiDevice.unsavedPreserved",
@@ -185,7 +189,7 @@ describe("ActiveWorkout message contract", () => {
   });
 
   it("does not add rejected future-state semantics to the canonical namespace", () => {
-    const rejectedKeyPattern = /(undo|reopen|stayHere|difficultyRating|recoveryMap|readinessMap|injuryRisk|silentMerge|autoReplace)/i;
+    const rejectedKeyPattern = /(undo|stayHere|difficultyRating|recoveryMap|readinessMap|injuryRisk|silentMerge|autoReplace)/i;
     for (const [locale, messages] of Object.entries(locales)) {
       for (const key of Object.keys(flattenMessages(messages))) {
         expect(rejectedKeyPattern.test(key), `${locale}: ${key}`).toBe(false);

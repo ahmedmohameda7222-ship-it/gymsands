@@ -12,6 +12,7 @@ import type {
 } from "@/types";
 
 import {
+  buildActiveWorkoutReview,
   buildCanonicalLogRows,
   buildPrs,
   buildSummary,
@@ -265,7 +266,8 @@ describe("active workout runtime model", () => {
     expect(none).toMatchObject({
       completedExercises: 0,
       partialExercises: [],
-      skippedExercises: ["None"]
+      skippedExercises: [],
+      incompleteExercises: ["None"]
     });
     expect(partial).toMatchObject({
       completedExercises: 0,
@@ -280,8 +282,39 @@ describe("active workout runtime model", () => {
     expect(mixed).toMatchObject({
       completedExercises: 1,
       partialExercises: ["Partial"],
-      skippedExercises: ["None"]
+      skippedExercises: [],
+      incompleteExercises: ["None"]
     });
+  });
+
+  it("projects authoritative review counts and keeps explicit skips distinct from incomplete work", () => {
+    const skipped = exerciseState("Skipped", 0);
+    skipped.prescriptionItem = {
+      ...skipped.prescriptionItem,
+      executionState: "skipped"
+    };
+    const projection = buildActiveWorkoutReview([
+      exerciseState("None", 0),
+      exerciseState("Partial", 1),
+      exerciseState("Full", 3),
+      skipped
+    ]);
+
+    expect(projection).toMatchObject({
+      completedSets: 4,
+      totalSets: 9,
+      incompleteSets: 5,
+      completedExercises: 1,
+      incompleteExercises: 2,
+      partialExercises: 1,
+      skippedExercises: 1
+    });
+    expect(projection.exercises.map((item) => item.status)).toEqual([
+      "incomplete",
+      "partial",
+      "completed",
+      "skipped"
+    ]);
   });
 
   it("keeps unrelated Arabic histories and PR groups distinct", () => {

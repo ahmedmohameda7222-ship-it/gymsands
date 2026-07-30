@@ -34,7 +34,7 @@ describe("AW-3B completed-set autosave coordinator", () => {
     expect(current).toEqual({ revision: 2, dirty: false });
   });
 
-  it("retains dirty state after failure and schedules an automatic retry", async () => {
+  it("rejects an explicit failed flush, retains dirty state, and schedules retry", async () => {
     let current: Snapshot = { revision: 1, dirty: true };
     let attempts = 0;
     const scheduled: Array<() => void> = [];
@@ -59,7 +59,7 @@ describe("AW-3B completed-set autosave coordinator", () => {
       },
     );
 
-    await coordinator.requestFlush();
+    await expect(coordinator.requestFlush()).rejects.toThrow("transient");
     expect(current.dirty).toBe(true);
     expect(failures).toHaveLength(1);
     expect(scheduled).toHaveLength(1);
@@ -69,6 +69,34 @@ describe("AW-3B completed-set autosave coordinator", () => {
     await Promise.resolve();
     expect(attempts).toBe(2);
     expect(current.dirty).toBe(false);
+  });
+
+  it("does not retry expected non-retryable draft validation failures", async () => {
+    const scheduled: Array<() => void> = [];
+    const onFailure = vi.fn();
+    const validationError = Object.assign(new Error("invalid draft"), {
+      retryable: false
+    });
+    const coordinator = createWorkoutSetAutosaveCoordinator(
+      () => ({
+        getSnapshot: () => ({ revision: 1, dirty: true }),
+        hasPendingWrites: (snapshot: Snapshot) => snapshot.dirty,
+        persistSnapshot: async () => { throw validationError; },
+        acknowledgeSnapshot: vi.fn(),
+        onFailure,
+      }),
+      {
+        setTimer: (callback) => {
+          scheduled.push(callback);
+          return 1 as unknown as ReturnType<typeof setTimeout>;
+        },
+        clearTimer: vi.fn(),
+      },
+    );
+
+    await expect(coordinator.requestFlush()).rejects.toBe(validationError);
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(scheduled).toHaveLength(0);
   });
 
   it("does not write when no snapshot is pending", async () => {
@@ -110,5 +138,4 @@ describe("AW-3B completed-set autosave coordinator", () => {
     cleanupSecondMount();
     expect(coordinatorRef.current).toBeNull();
   });
-
 });

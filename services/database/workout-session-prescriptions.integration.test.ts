@@ -8,7 +8,10 @@ describe("AW-3C effective runtime source contract", () => {
     const execution = read("services/database/workout-session-execution.ts");
     const direct = read("services/database/direct-workout-sessions.ts");
     const controller = read("components/workouts/active-workout/active-workout-core-session.tsx");
-    const runtimeModel = read("components/workouts/active-workout/active-workout-runtime-model.ts");
+    const runtimeModel = [
+      read("components/workouts/active-workout/active-workout-runtime-model.ts"),
+      read("components/workouts/active-workout/active-workout-runtime-model-core.ts")
+    ].join("\n");
     const sharedRuntime = `${controller}\n${runtimeModel}`;
 
     expect(execution).toContain("getWorkoutSessionPrescriptionItems");

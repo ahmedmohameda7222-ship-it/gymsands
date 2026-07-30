@@ -151,7 +151,9 @@
       "moveLater": "نقله إلى وقت لاحق",
       "moveLast": "نقله إلى النهاية",
       "todayOrderOnly": "ترتيب اليوم فقط",
-      "allDone": "اكتمل الكل"
+      "allDone": "اكتمل الكل",
+      "minimizeFailedTitle": "بقي التمرين مفتوحًا",
+      "minimizeFailedDescription": "تعذر حفظ آخر تغييرات المجموعة بأمان. أعد المحاولة قبل تصغير التمرين."
     },
     "details": {
       "activeWorkoutDetails": "تفاصيل التمرين",
@@ -299,7 +301,13 @@
       "cancelledTitle": "تم إلغاء التمرين",
       "cancelledDescription": "تمت إزالة الجلسة النشطة.",
       "cancelFailedTitle": "لم يتم إلغاء التمرين",
-      "cancelFailedDescription": "تعذر إلغاء التمرين. ما زالت الجلسة النشطة متاحة."
+      "cancelFailedDescription": "تعذر إلغاء التمرين. ما زالت الجلسة النشطة متاحة.",
+      "setPosition": "المجموعة {current} من {total}",
+      "pausedSetPosition": "متوقف مؤقتًا · المجموعة {current} من {total}",
+      "available": "يوجد تمرين نشط",
+      "tapToReconnect": "اضغط لإعادة الاتصال",
+      "readyToReview": "التمرين جاهز للمراجعة",
+      "reviewProgress": "اكتملت {completed} من {total} مجموعات"
     },
     "review": {
       "title": "مراجعة التمرين",
@@ -318,7 +326,46 @@
       "minutes": "الدقائق",
       "finishQuestion": "هل تريد إنهاء التمرين؟",
       "finishDescription": "سيتم حفظ التمرين في السجل.",
-      "partialFinish": "إنهاء التمرين الجزئي"
+      "partialFinish": "إنهاء التمرين الجزئي",
+      "progress": "اكتملت {completed} من {total} مجموعات",
+      "partial": "جزئي",
+      "replaced": "مستبدل",
+      "noWorkoutNote": "لا توجد ملاحظة للتمرين",
+      "incompleteTitle": "بعض العمل المخطط غير مكتمل",
+      "incompleteSummary": "{exercises, plural, zero {لا تمارين غير مكتملة} one {تمرين واحد غير مكتمل} two {تمرينان غير مكتملين} few {# تمارين غير مكتملة} many {# تمرينًا غير مكتمل} other {# تمرين غير مكتمل}} · {sets, plural, zero {لا مجموعات غير مكتملة} one {مجموعة واحدة غير مكتملة} two {مجموعتان غير مكتملتين} few {# مجموعات غير مكتملة} many {# مجموعة غير مكتملة} other {# مجموعة غير مكتملة}} · {skipped, plural, zero {لا تمارين متخطاة} one {تمرين واحد متخطى} two {تمرينان متخطيان} few {# تمارين متخطاة} many {# تمرينًا متخطى} other {# تمرين متخطى}}",
+      "exerciseBreakdown": "تفاصيل التمارين والمجموعات",
+      "exerciseSetProgress": "{completed} من {total} مجموعات",
+      "status": {
+        "completed": "مكتمل",
+        "partial": "جزئي",
+        "incomplete": "غير مكتمل",
+        "skipped": "متخطى"
+      },
+      "replacedFrom": "بديل عن {name}",
+      "incomplete": "غير مكتمل",
+      "setType": "النوع",
+      "setTypes": {
+        "warmup": "إحماء",
+        "working": "عمل",
+        "normal": "عادي",
+        "failure": "حتى الفشل",
+        "drop": "إسقاط",
+        "backoff": "تخفيف",
+        "amrap": "أقصى تكرارات",
+        "timed": "مؤقت",
+        "other": "آخر"
+      },
+      "noteSaved": "ملاحظة",
+      "pending": "بانتظار الحفظ",
+      "persisted": "محفوظ",
+      "notSaved": "غير محفوظ",
+      "reopenSet": "إعادة فتح المجموعة",
+      "jumpToSet": "الانتقال إلى المجموعة",
+      "finalSummary": "الملخص النهائي",
+      "finishWithIncomplete": "إنهاء هذا التمرين مع {count, plural, zero {عدم وجود مجموعات غير مكتملة} one {مجموعة واحدة غير مكتملة} two {مجموعتين غير مكتملتين} few {# مجموعات غير مكتملة} many {# مجموعة غير مكتملة} other {# مجموعة غير مكتملة}}؟",
+      "finishAnyway": "الإنهاء على أي حال",
+      "openFailedTitle": "تعذر فتح المراجعة",
+      "openFailedDescription": "تعذر حفظ آخر تغييرات المجموعة أو موضع المراجعة. أعد المحاولة من التمرين."
     },
     "completion": {
       "title": "اكتمل التمرين",
@@ -336,7 +383,28 @@
       "progressionNoCompleted": "{name}: لا توجد مجموعات مكتملة. اعتبر هذا التمرين متخطيًا أو غير مكتمل.",
       "progressionLogged": "{name}: تم تسجيل {completed} من {total} مجموعات. كرر التمرين وقارن في المرة القادمة.",
       "progressionIncrease": "{name}: وصلت جميع مجموعات العمل إلى الحد الأعلى لهدف التكرارات. فكّر في زيادة الوزن في المرة القادمة.",
-      "progressionRepeat": "{name}: لم تصل بعض مجموعات العمل إلى الحد الأعلى للتكرارات. استخدم الوزن نفسه في المرة القادمة."
+      "progressionRepeat": "{name}: لم تصل بعض مجموعات العمل إلى الحد الأعلى للتكرارات. استخدم الوزن نفسه في المرة القادمة.",
+      "backToToday": "العودة إلى اليوم",
+      "workSummary": "تغييرات التمرين",
+      "partialExercise": "{name}: مكتمل جزئيًا",
+      "skippedExercise": "{name}: متخطى",
+      "replacedExercise": "تم استبدال {original} بـ {current}",
+      "finalMuscleLoad": "الحمل العضلي النهائي",
+      "recoveryTitle": "جارٍ تأكيد اكتمال التمرين",
+      "retryDescription": "ما زال التمرين نشطًا في المراجعة. أعد محاولة الإنهاء عندما تكون جاهزًا.",
+      "reconnectDescription": "تعذر على Plaivra تأكيد الحالة النهائية للتمرين. أعد الاتصال والمحاولة دون مغادرة هذه الشاشة."
+    },
+    "conflict": {
+      "title": "لديك تمرين نشط بالفعل",
+      "description": "استأنفه أو ألغِه بشكل مؤكد قبل بدء هذا التمرين.",
+      "resume": "استئناف التمرين الحالي",
+      "cancelAndStart": "إلغاء الحالي وبدء هذا التمرين",
+      "goBack": "الرجوع",
+      "confirmTitle": "إلغاء التمرين النشط؟",
+      "confirmDescription": "يجب تأكيد إلغاء التمرين الحالي قبل أن يبدأ التمرين المطلوب.",
+      "confirmCancel": "الإلغاء والبدء",
+      "cancelFailedTitle": "لم يتم إلغاء التمرين الحالي",
+      "cancelFailedDescription": "لم يبدأ التمرين المطلوب. أعد المحاولة أو استأنف التمرين الحالي."
     },
     "offline": {
       "setSaveFailed": "تعذر حفظ هذه المجموعة بأمان.",

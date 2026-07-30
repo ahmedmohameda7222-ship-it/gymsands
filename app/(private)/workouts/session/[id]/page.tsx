@@ -60,7 +60,7 @@ export default function WorkoutSessionPage() {
   }, [loadWorkout]);
 
   return (
-    <WorkoutSessionScreen confirmExit>
+    <WorkoutSessionScreen fallbackHref="/workouts">
       {isLoading ? (
         <div className="mx-auto w-full max-w-3xl pt-20">
           <h1 className="mb-4 text-lg font-semibold">{tr("startWorkout")}</h1>

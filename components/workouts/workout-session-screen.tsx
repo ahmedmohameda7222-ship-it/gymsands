@@ -1,46 +1,97 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 
+import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog";
-import { useTrainTranslation } from "@/lib/i18n/train";
+  ActiveWorkoutSessionNavigationProvider,
+  useActiveWorkoutSessionNavigation
+} from "@/components/workouts/active-workout/active-workout-session-navigation";
+import { readPreviousActiveWorkoutRoute } from "@/lib/active-workout";
+import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
+
+type WorkoutSessionFallback = "/my-workout/plans" | "/workouts";
 
 export function WorkoutSessionScreen({
   children,
-  confirmExit = false
+  fallbackHref
 }: {
   children: React.ReactNode;
-  confirmExit?: boolean;
+  fallbackHref: WorkoutSessionFallback;
+}) {
+  return (
+    <ActiveWorkoutSessionNavigationProvider>
+      <WorkoutSessionScreenSurface fallbackHref={fallbackHref}>
+        {children}
+      </WorkoutSessionScreenSurface>
+    </ActiveWorkoutSessionNavigationProvider>
+  );
+}
+
+function WorkoutSessionScreenSurface({
+  children,
+  fallbackHref
+}: {
+  children: React.ReactNode;
+  fallbackHref: WorkoutSessionFallback;
 }) {
   const router = useRouter();
+  const { user } = useAuth();
   const reduceMotion = useReducedMotion();
-  const { dir, tr } = useTrainTranslation();
+  const { direction: dir, t } = useActiveWorkoutTranslation();
+  const navigation = useActiveWorkoutSessionNavigation();
   const [isClosing, setIsClosing] = useState(false);
-  const [exitDialogOpen, setExitDialogOpen] = useState(false);
+  const [isMinimizing, setIsMinimizing] = useState(false);
+  const destinationRef = useRef<WorkoutSessionFallback | string>(fallbackHref);
+  const minimizeStartedRef = useRef(false);
 
-  function handleClose() {
-    if (isClosing) return;
-    if (confirmExit) {
-      setExitDialogOpen(true);
-      return;
+  const handleMinimize = useCallback(async () => {
+    if (minimizeStartedRef.current || isClosing || isMinimizing) return;
+    minimizeStartedRef.current = true;
+    setIsMinimizing(true);
+    let safeToNavigate = false;
+    try {
+      safeToNavigate = await (
+        navigation?.requestMinimize() ?? Promise.resolve(true)
+      );
+      if (!safeToNavigate) return;
+      destinationRef.current = user?.id
+        ? readPreviousActiveWorkoutRoute(user.id) ?? fallbackHref
+        : fallbackHref;
+      setIsClosing(true);
+    } finally {
+      if (!safeToNavigate) {
+        minimizeStartedRef.current = false;
+        setIsMinimizing(false);
+      }
     }
-    setIsClosing(true);
-  }
+  }, [fallbackHref, isClosing, isMinimizing, navigation, user?.id]);
 
-  function closeSession() {
-    setExitDialogOpen(false);
-    setIsClosing(true);
-  }
+  useEffect(() => {
+    const guardKey = "plaivraAw7SessionGuard";
+    if (!window.history.state?.[guardKey]) {
+      window.history.pushState(
+        { ...(window.history.state ?? {}), [guardKey]: true },
+        "",
+        window.location.href
+      );
+    }
+    const handlePopState = () => {
+      if (minimizeStartedRef.current) return;
+      window.history.pushState(
+        { ...(window.history.state ?? {}), [guardKey]: true },
+        "",
+        window.location.href
+      );
+      void handleMinimize();
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [handleMinimize]);
 
   return (
     <motion.div
@@ -53,7 +104,7 @@ export function WorkoutSessionScreen({
         ease: [0.22, 1, 0.36, 1]
       }}
       onAnimationComplete={() => {
-        if (isClosing) router.back();
+        if (isClosing) router.push(destinationRef.current);
       }}
       dir={dir}
     >
@@ -62,9 +113,11 @@ export function WorkoutSessionScreen({
         type="button"
         variant="outline"
         size="icon"
-        onClick={handleClose}
+        onClick={() => { void handleMinimize(); }}
+        disabled={isMinimizing}
         className="absolute start-3 top-3 z-[40] h-12 w-12 rounded-full bg-card/95 shadow-lg backdrop-blur sm:start-5 sm:top-5 lg:start-1"
-        aria-label={tr("closeWorkoutSession")}
+        aria-label={t("accessibility.minimizeWorkout")}
+        title={t("accessibility.minimizeWorkout")}
       >
         <ChevronDown className="h-5 w-5" aria-hidden="true" />
       </Button>
@@ -74,27 +127,6 @@ export function WorkoutSessionScreen({
       >
         {children}
       </div>
-      <Dialog open={exitDialogOpen} onOpenChange={setExitDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{tr("exitWorkoutSession")}</DialogTitle>
-            <DialogDescription>{tr("exitWorkoutDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-12"
-              onClick={() => setExitDialogOpen(false)}
-            >
-              {tr("keepTraining")}
-            </Button>
-            <Button type="button" className="min-h-12" onClick={closeSession}>
-              {tr("exitSession")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </motion.div>
   );
 }
