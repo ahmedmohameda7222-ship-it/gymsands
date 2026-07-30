@@ -332,11 +332,11 @@ try {
       const busy = await session.page.evaluate(() => ({
         repsDisabled: document.querySelector("#active-set-reps")?.disabled,
         weightDisabled: document.querySelector("#active-set-weight")?.disabled,
-        text: document.querySelector("[data-aw5-execution-shell]")?.textContent ?? ""
+        feedbackText: document.querySelector("[data-aw5-feedback]")?.textContent ?? ""
       }));
       const failures = [];
       if (!busy.repsDisabled || !busy.weightDisabled) failures.push("busy completion did not disable the primary editor");
-      if (/Saving\.\.\.|Saved/i.test(busy.text)) failures.push("busy completion exposed rejected save-state chrome");
+      if (/Saving\.\.\.|Saved/i.test(busy.feedbackText)) failures.push("busy completion exposed rejected save-state chrome");
       return { failures };
     }
   );

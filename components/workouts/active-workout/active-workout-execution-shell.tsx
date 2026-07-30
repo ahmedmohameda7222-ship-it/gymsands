@@ -537,7 +537,10 @@ export function ActiveWorkoutExecutionShell({
           </Button>
         </div>
       </MobileStickyActions>
-      <MobileStickyActionsSpacer placement="session" />
+      <MobileStickyActionsSpacer
+        placement="session"
+        className="h-[calc(7rem+env(safe-area-inset-bottom))]"
+      />
     </div>
   );
 }
