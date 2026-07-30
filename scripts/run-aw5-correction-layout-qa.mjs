@@ -392,7 +392,9 @@ try {
     { name: "plan-day-details-dark-en-1440x900", viewport: { width: 1440, height: 900 }, theme: "dark" }
   ]) {
     await runScenario(scenario, async (session) => {
-      await session.page.locator("[data-active-set-details-trigger]").click({ timeout: 10_000 });
+      await session.page.locator("[data-active-set-details-trigger]:visible").click({
+        timeout: 10_000
+      });
       await session.page.waitForSelector("[data-active-set-details-dialog]", {
         state: "visible",
         timeout: 10_000

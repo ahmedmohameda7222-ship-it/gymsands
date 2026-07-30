@@ -18,6 +18,7 @@ const fullMap = source(
   "components/workouts/active-workout/active-workout-muscle-load-section.tsx"
 );
 const sessionPanel = source("components/workouts/session-muscle-load-panel.tsx");
+const aw5CorrectionQa = source("scripts/run-aw5-correction-layout-qa.mjs");
 
 describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
   it("uses one active-session request owner for mini and full consumers", () => {
@@ -82,6 +83,9 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     );
     expect(core).toContain("setDetailsTriggerRef.current = trigger");
     expect(core).toContain('action.destination ?? "overview"');
+    expect(aw5CorrectionQa).toContain(
+      'locator("[data-active-set-details-trigger]:visible")'
+    );
   });
 
   it("refreshes only after acknowledged persisted mutations, not local drafts", () => {
