@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 const migrationPath =
   "supabase/migrations/20260731090000_active_workout_aw9_offline_multi_device.sql";
 const migration = readFileSync(migrationPath, "utf8");
+const aw2bVerification = readFileSync(
+  "supabase/verification/active-workout-aw2b-integration.sql",
+  "utf8",
+);
 
 describe("AW-9 additive database authority", () => {
   it("adds claim_control without modifying an applied migration", () => {
@@ -41,6 +45,21 @@ describe("AW-9 additive database authority", () => {
     );
     expect(migration).toContain(
       "return public.aw9_pre_apply_workout_session_execution_command_atomic",
+    );
+  });
+
+  it("preserves legacy unclaimed calls while rejecting implicit device claims", () => {
+    expect(aw2bVerification).toContain(
+      "as controller_conflict_response \\gset",
+    );
+    expect(aw2bVerification).toContain(
+      "(:'controller_conflict_response'::jsonb->>'outcome')='controller_conflict'",
+    );
+    expect(aw2bVerification).toContain(
+      "(:'controller_conflict_response'::jsonb->>'reason')='controller_not_claimed'",
+    );
+    expect(aw2bVerification).toContain(
+      "Identity-bearing ordinary command bypassed claim_control",
     );
   });
 });
