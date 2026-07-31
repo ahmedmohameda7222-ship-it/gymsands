@@ -245,7 +245,7 @@ describe("approved Train Phase 1 semantic contracts", () => {
   it("passes the route-scoped candidate to the owner-validated direct-session authority", () => {
     const direct = source("services/database/direct-workout-sessions.ts");
     const form = source(
-      "components/workouts/active-workout/active-workout-core-session.tsx",
+      "components/workouts/active-workout/active-workout-core-session-implementation.tsx",
     );
     const active = source("components/workouts/active-workout-indicator.tsx");
     expect(direct).toContain(
