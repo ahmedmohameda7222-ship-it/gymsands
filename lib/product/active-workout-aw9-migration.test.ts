@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migrationPath =
   "supabase/migrations/20260731090000_active_workout_aw9_offline_multi_device.sql";
-const migration = readFileSync(migrationPath, "utf8");
+const migrationBytes = readFileSync(migrationPath);
+const migration = migrationBytes.toString("utf8");
 
 describe("AW-9 additive database authority", () => {
   it("adds claim_control without modifying an applied migration", () => {
@@ -42,5 +44,11 @@ describe("AW-9 additive database authority", () => {
     expect(migration).toContain(
       "return public.aw9_pre_apply_workout_session_execution_command_atomic",
     );
+  });
+
+  it("reports the immutable repository digest used by the pending ledger", () => {
+    const digest = createHash("sha256").update(migrationBytes).digest("hex");
+    console.info(`AW9_MIGRATION_SHA256=${digest}`);
+    expect(digest).toMatch(/^[a-f0-9]{64}$/);
   });
 });
