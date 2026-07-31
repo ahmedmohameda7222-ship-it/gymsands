@@ -111,14 +111,16 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(sourceCompatibility).toContain('"single-workout-rest"');
   });
 
-  it("extracts pure runtime calculations and bounded AW-6/AW-7 compatibility bridges", () => {
+  it("extracts pure runtime calculations and bounds the authority-critical takeover dialog", () => {
     expect(controller).toContain("ActiveWorkoutDetailsBridge");
     expect(controller).toContain("ActiveWorkoutReviewBridge");
     expect(controller).toContain("active-workout-runtime-model");
     expect(controller).not.toMatch(
       /function\s+(?:buildPrs|buildSummary|historicalSets|previousPerformance|previousSetForExercise)\b/,
     );
-    expect(controller).not.toMatch(/from\s+["']@\/components\/ui\/dialog["']/);
+    expect(controller.match(/from\s+["']@\/components\/ui\/dialog["']/g)).toHaveLength(1);
+    expect(controller).toContain("data-aw9-takeover-confirmation");
+    expect(controller.match(/<Dialog\b/g)).toHaveLength(1);
     expect(controller).not.toContain("AiActionRequestDialog");
     expect(controller).not.toContain("WorkoutAiActionPanel");
     expect(controller).not.toContain("ExercisePickerDialog");
