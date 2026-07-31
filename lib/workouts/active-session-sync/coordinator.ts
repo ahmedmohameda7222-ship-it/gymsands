@@ -2,6 +2,9 @@ import type { ActiveSessionPersistenceAdapter } from "@/lib/workouts/active-sess
 import {
   ActiveSessionControllerConflictError,
   ActiveSessionDataConflictError,
+  ActiveSessionError,
+  ActiveSessionIdempotencyConflictError,
+  ActiveSessionRevisionConflictError,
   ActiveSessionTransportUncertainError,
 } from "@/lib/workouts/session-engine/contracts";
 import {
@@ -33,7 +36,10 @@ export type ActiveWorkoutSyncCoordinator = {
   ): Promise<ActiveWorkoutOperation>;
   reconcile(options?: { force?: boolean }): Promise<ActiveWorkoutSyncState>;
   pendingCount(): Promise<number>;
-  resolveDataConflict(strategy: "server" | "local"): Promise<ActiveWorkoutSyncState>;
+  resolveDataConflict(
+    operationId: string,
+    strategy: "server" | "local",
+  ): Promise<ActiveWorkoutSyncState>;
   dispose(): void;
 };
 
@@ -43,10 +49,25 @@ function operationId() {
   return value;
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error)
+    return String((error as { message?: unknown }).message ?? "");
+  return String(error ?? "");
+}
+
+function isRetryableTransport(error: unknown) {
+  if (error instanceof ActiveSessionTransportUncertainError) return true;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  return /failed to fetch|network|timeout|timed out|connection|socket|econn|temporarily unavailable|could not be confirmed/i
+    .test(errorMessage(error));
+}
+
 export function createActiveWorkoutSyncCoordinator(input: {
   userId: string;
   workoutSessionId: string;
   controllerDeviceId: string;
+  tabId?: string;
   adapter: ActiveSessionPersistenceAdapter;
   onState?: (state: ActiveWorkoutSyncState, pendingCount: number) => void;
   onDataConflict?: (conflict: ActiveWorkoutSetConflict | null) => void;
@@ -54,8 +75,8 @@ export function createActiveWorkoutSyncCoordinator(input: {
 }): ActiveWorkoutSyncCoordinator {
   let disposed = false;
   let reconciliation: Promise<ActiveWorkoutSyncState> | null = null;
-  const tabId =
-    globalThis.crypto?.randomUUID?.()
+  const tabId = input.tabId
+    ?? globalThis.crypto?.randomUUID?.()
     ?? `${Date.now()}-${Math.random()}`;
   const channel =
     typeof BroadcastChannel === "undefined"
@@ -63,7 +84,8 @@ export function createActiveWorkoutSyncCoordinator(input: {
       : new BroadcastChannel(
           `plaivra-active-workout:${input.userId}:${input.workoutSessionId}`,
         );
-  channel?.addEventListener("message", () => input.onInvalidate?.());
+  const invalidate = () => input.onInvalidate?.();
+  channel?.addEventListener("message", invalidate);
   const laneKey =
     `plaivra.active-workout.flush.${input.userId}.${input.workoutSessionId}`;
 
@@ -80,6 +102,21 @@ export function createActiveWorkoutSyncCoordinator(input: {
   }
 
   async function execute(operation: ActiveWorkoutOperation) {
+    const root = await input.adapter.loadSessionRoot(
+      operation.userId,
+      operation.workoutSessionId,
+    );
+    if (!root || root.status !== "started") {
+      if (
+        operation.payload.kind === "complete_session"
+        && root?.status === "completed"
+      ) return;
+      throw new ActiveSessionError(
+        "terminal_mutation_attempt",
+        "The server workout is already terminal.",
+      );
+    }
+
     if (operation.payload.kind === "command") {
       await input.adapter.dispatchExecutionCommand(operation.payload.request);
       return;
@@ -87,8 +124,15 @@ export function createActiveWorkoutSyncCoordinator(input: {
     if (operation.payload.kind === "set_write") {
       const targetIdentity = operation.targetIdentity;
       const desired = operation.payload.logs[0];
-      if (!targetIdentity || !desired) {
-        throw new Error("A durable set operation requires one target.");
+      if (
+        !targetIdentity
+        || !desired
+        || operation.payload.logs.length !== 1
+      ) {
+        throw new ActiveSessionError(
+          "invalid_transition",
+          "A durable set operation requires exactly one target.",
+        );
       }
       const serverLogs = await input.adapter.loadPerformedLogs(
         operation.userId,
@@ -121,16 +165,41 @@ export function createActiveWorkoutSyncCoordinator(input: {
         !confirmedTarget
         || fingerprintCanonicalExerciseLog(confirmedTarget) !== desiredFingerprint
       ) {
-        throw new Error("The canonical set write could not be confirmed.");
+        throw new ActiveSessionTransportUncertainError(
+          {
+            userId: operation.userId,
+            workoutSessionId: operation.workoutSessionId,
+            commandId: operation.id,
+            commandType: "move_cursor",
+            expectedRevision: operation.baseRevision ?? 0,
+            payload: {
+              active_snapshot_item_id: null,
+              active_item_order: 1,
+              active_set_number: 1,
+            },
+          },
+          new Error("The canonical set write could not be confirmed."),
+        );
       }
       return;
     }
-    const root = await input.adapter.loadSessionRoot(
-      operation.userId,
-      operation.workoutSessionId,
-    );
-    if (root?.status === "completed" || root?.status === "cancelled") return;
     await input.adapter.completeSession(operation.payload.input);
+  }
+
+  async function discardTerminalOperations() {
+    const operations = await listActiveWorkoutOperations(
+      input.userId,
+      input.workoutSessionId,
+    );
+    for (const operation of operations) {
+      await updateActiveWorkoutOperation(operation, {
+        state: "discarded",
+        nextRetryAt: null,
+        lastErrorCode: "terminal_server_wins",
+      });
+    }
+    input.onDataConflict?.(null);
+    input.onInvalidate?.();
   }
 
   async function run(force = false) {
@@ -143,6 +212,13 @@ export function createActiveWorkoutSyncCoordinator(input: {
       input.workoutSessionId,
     );
     for (const operation of operations) {
+      if (operation.state === "conflict") {
+        return notify(
+          operation.lastErrorCode === "controller_conflict"
+            ? "device_conflict"
+            : "data_conflict",
+        );
+      }
       if (operation.attemptCount >= MAX_ATTEMPTS) {
         await updateActiveWorkoutOperation(operation, {
           state: "transport_uncertain",
@@ -170,6 +246,7 @@ export function createActiveWorkoutSyncCoordinator(input: {
         if (error instanceof ActiveSessionControllerConflictError) {
           await updateActiveWorkoutOperation(operation, {
             state: "conflict",
+            nextRetryAt: null,
             lastErrorCode: "controller_conflict",
           });
           return notify("device_conflict");
@@ -198,9 +275,52 @@ export function createActiveWorkoutSyncCoordinator(input: {
           }
           await updateActiveWorkoutOperation(operation, {
             state: "conflict",
+            nextRetryAt: null,
             lastErrorCode: "target_conflict",
           });
           return notify("data_conflict");
+        }
+        if (error instanceof ActiveSessionRevisionConflictError) {
+          await updateActiveWorkoutOperation(operation, {
+            state: "discarded",
+            nextRetryAt: null,
+            lastErrorCode: "revision_conflict_rehydrate",
+          });
+          input.onInvalidate?.();
+          return notify("retry_needed");
+        }
+        if (error instanceof ActiveSessionIdempotencyConflictError) {
+          await updateActiveWorkoutOperation(operation, {
+            state: "conflict",
+            nextRetryAt: null,
+            lastErrorCode: "idempotency_conflict",
+          });
+          return notify("retry_needed");
+        }
+        if (
+          error instanceof ActiveSessionError
+          && error.code === "terminal_mutation_attempt"
+        ) {
+          await discardTerminalOperations();
+          return notify("online_synced");
+        }
+        if (error instanceof ActiveSessionError && !isRetryableTransport(error)) {
+          await updateActiveWorkoutOperation(operation, {
+            state: "discarded",
+            nextRetryAt: null,
+            lastErrorCode: error.code,
+          });
+          input.onInvalidate?.();
+          return notify("retry_needed");
+        }
+        if (!isRetryableTransport(error)) {
+          await updateActiveWorkoutOperation(operation, {
+            state: "discarded",
+            nextRetryAt: null,
+            lastErrorCode: "non_retryable_adapter_error",
+          });
+          input.onInvalidate?.();
+          return notify("retry_needed");
         }
         const delay = Math.min(
           MAX_RETRY_MS,
@@ -233,6 +353,12 @@ export function createActiveWorkoutSyncCoordinator(input: {
       );
     }
     if (typeof localStorage === "undefined") return run(force);
+    const acquireOrRenewLease = () => {
+      localStorage.setItem(
+        laneKey,
+        JSON.stringify({ tabId, expiresAt: Date.now() + FLUSH_LEASE_MS }),
+      );
+    };
     const now = Date.now();
     try {
       const lease = JSON.parse(localStorage.getItem(laneKey) ?? "null") as {
@@ -248,13 +374,12 @@ export function createActiveWorkoutSyncCoordinator(input: {
     } catch {
       // Invalid fallback lease data is replaced below.
     }
-    localStorage.setItem(
-      laneKey,
-      JSON.stringify({ tabId, expiresAt: now + FLUSH_LEASE_MS }),
-    );
+    acquireOrRenewLease();
+    const renewal = setInterval(acquireOrRenewLease, FLUSH_LEASE_MS / 3);
     try {
       return await run(force);
     } finally {
+      clearInterval(renewal);
       try {
         const lease = JSON.parse(localStorage.getItem(laneKey) ?? "null") as {
           tabId?: unknown;
@@ -266,8 +391,41 @@ export function createActiveWorkoutSyncCoordinator(input: {
     }
   }
 
+  async function nextConflict() {
+    const operations = await listActiveWorkoutOperations(
+      input.userId,
+      input.workoutSessionId,
+    );
+    const conflict = operations.find((item) => item.state === "conflict");
+    if (!conflict || conflict.payload.kind !== "set_write") {
+      input.onDataConflict?.(null);
+      return null;
+    }
+    const local = conflict.payload.logs[0];
+    if (!local || !conflict.targetIdentity) return null;
+    const serverLogs = await input.adapter.loadPerformedLogs(
+      conflict.userId,
+      conflict.workoutSessionId,
+    );
+    input.onDataConflict?.({
+      operationId: conflict.id,
+      targetIdentity: conflict.targetIdentity,
+      local,
+      server: serverLogs.find(
+        (log) => exerciseLogTargetIdentity(log) === conflict.targetIdentity,
+      ) ?? null,
+    });
+    return conflict;
+  }
+
   return {
     async enqueue(payload, baseRevision, baseTargetFingerprint = null) {
+      if (payload.kind === "set_write" && payload.logs.length !== 1) {
+        throw new ActiveSessionError(
+          "invalid_transition",
+          "Each durable set operation must contain exactly one canonical set.",
+        );
+      }
       const targetIdentity =
         payload.kind === "set_write" && payload.logs[0]
           ? canonicalSetTargetIdentity(payload.logs[0])
@@ -316,56 +474,65 @@ export function createActiveWorkoutSyncCoordinator(input: {
       return reconciliation;
     },
     pendingCount,
-    async resolveDataConflict(strategy) {
+    async resolveDataConflict(operationIdValue, strategy) {
       const operations = await listActiveWorkoutOperations(
         input.userId,
         input.workoutSessionId,
       );
-      for (const operation of operations.filter(
-        (item) => item.state === "conflict",
-      )) {
-        if (strategy === "local" && operation.payload.kind === "set_write") {
-          const serverLogs = await input.adapter.loadPerformedLogs(
-            operation.userId,
-            operation.workoutSessionId,
-          );
-          const serverTarget = serverLogs.find(
-            (log) =>
-              operation.targetIdentity !== null
-              && exerciseLogTargetIdentity(log) === operation.targetIdentity,
-          );
-          await updateActiveWorkoutOperation(operation, {
-            state: "discarded",
-            lastErrorCode: null,
-            nextRetryAt: null,
-          });
-          await addActiveWorkoutOperation({
-            id: operationId(),
-            userId: operation.userId,
-            workoutSessionId: operation.workoutSessionId,
-            deviceId: input.controllerDeviceId,
-            tabId,
-            targetIdentity: operation.targetIdentity,
-            baseTargetFingerprint: serverTarget
-              ? fingerprintCanonicalExerciseLog(serverTarget)
-              : null,
-            stableCommandId: null,
-            payload: operation.payload,
-            baseRevision: operation.baseRevision,
-          });
-          continue;
-        }
+      const operation = operations.find(
+        (item) => item.id === operationIdValue && item.state === "conflict",
+      );
+      if (!operation || operation.payload.kind !== "set_write") {
+        throw new ActiveSessionError(
+          "invalid_transition",
+          "The selected set conflict is no longer pending.",
+        );
+      }
+      if (strategy === "local") {
+        const serverLogs = await input.adapter.loadPerformedLogs(
+          operation.userId,
+          operation.workoutSessionId,
+        );
+        const serverTarget = serverLogs.find(
+          (log) =>
+            operation.targetIdentity !== null
+            && exerciseLogTargetIdentity(log) === operation.targetIdentity,
+        );
+        await updateActiveWorkoutOperation(operation, {
+          state: "discarded",
+          lastErrorCode: null,
+          nextRetryAt: null,
+        });
+        await addActiveWorkoutOperation({
+          id: operationId(),
+          userId: operation.userId,
+          workoutSessionId: operation.workoutSessionId,
+          deviceId: input.controllerDeviceId,
+          tabId,
+          targetIdentity: operation.targetIdentity,
+          baseTargetFingerprint: serverTarget
+            ? fingerprintCanonicalExerciseLog(serverTarget)
+            : null,
+          stableCommandId: null,
+          payload: operation.payload,
+          baseRevision: operation.baseRevision,
+        });
+      } else {
         await updateActiveWorkoutOperation(operation, {
           state: "discarded",
           lastErrorCode: null,
           nextRetryAt: null,
         });
       }
-      input.onDataConflict?.(null);
-      return strategy === "local" ? run() : notify("online_synced");
+      const remaining = await nextConflict();
+      if (remaining) return notify("data_conflict");
+      return strategy === "local"
+        ? runAsLaneLeader(true)
+        : notify("online_synced");
     },
     dispose() {
       disposed = true;
+      channel?.removeEventListener("message", invalidate);
       channel?.close();
     },
   };
