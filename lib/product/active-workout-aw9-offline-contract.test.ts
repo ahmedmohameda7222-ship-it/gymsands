@@ -13,6 +13,10 @@ const coordinator = readFileSync(
   "lib/workouts/active-session-sync/coordinator.ts",
   "utf8",
 );
+const fallbackLease = readFileSync(
+  "lib/workouts/active-session-sync/fallback-lease.ts",
+  "utf8",
+);
 const store = readFileSync(
   "lib/workouts/active-session-store/store-core.ts",
   "utf8",
@@ -47,6 +51,17 @@ describe("AW-9 durable synchronization contract", () => {
     expect(coordinator).toContain("controller_conflict");
     expect(coordinator).toContain("revision_conflict_rehydrate");
     expect(coordinator).toContain("target_conflict");
+  });
+
+  it("fences the localStorage fallback flush lane across competing tabs", () => {
+    expect(coordinator).toContain("acquireActiveWorkoutFallbackLease");
+    expect(coordinator).toContain("!leaseLost && lease.owns()");
+    expect(coordinator).toContain("if (!lease.renew()) leaseLost = true");
+    expect(coordinator).not.toContain("acquireOrRenewLease");
+    expect(fallbackLease).toContain("fenceToken");
+    expect(fallbackLease).toContain("await clock.sleep");
+    expect(fallbackLease).toContain("if (!isOwned()) return null");
+    expect(fallbackLease).toContain("if (isOwned()) input.storage.removeItem");
   });
 
   it("restores the exact candidate session from cache only after offline failure", () => {
