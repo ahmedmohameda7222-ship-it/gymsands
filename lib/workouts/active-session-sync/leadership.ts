@@ -1,31 +1,19 @@
-const LEASE_MS = 15_000;
+import {
+  acquireActiveWorkoutFallbackLease,
+  type ActiveWorkoutFallbackLease,
+} from "./fallback-lease";
 
-type Lease = {
-  tabId: string;
-  expiresAt: number;
-};
+const LEASE_MS = 15_000;
 
 export type ActiveWorkoutTabLeadership = {
   tabId: string;
   isLeader(): boolean;
-  acquire(force?: boolean): boolean;
+  acquire(force?: boolean): Promise<boolean>;
   renew(): boolean;
   release(): void;
+  dispose(): void;
   subscribe(listener: (leader: boolean) => void): () => void;
 };
-
-function parseLease(value: string | null): Lease | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value) as Partial<Lease>;
-    return typeof parsed.tabId === "string"
-      && Number.isFinite(parsed.expiresAt)
-      ? { tabId: parsed.tabId, expiresAt: Number(parsed.expiresAt) }
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 export function createActiveWorkoutTabLeadership(input: {
   userId: string;
@@ -34,41 +22,19 @@ export function createActiveWorkoutTabLeadership(input: {
   const tabId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
   const key = `plaivra.active-workout.leader.${input.userId}.${input.workoutSessionId}`;
   const listeners = new Set<(leader: boolean) => void>();
-  let releaseNavigatorLock: (() => void) | null = null;
-  let navigatorLockPending = false;
+  let activeLease: ActiveWorkoutFallbackLease | null = null;
+  let disposed = false;
 
-  function acquireNavigatorLock() {
-    if (
-      navigatorLockPending
-      || typeof navigator === "undefined"
-      || !navigator.locks
-    ) return;
-    navigatorLockPending = true;
-    void navigator.locks.request(key, { mode: "exclusive" }, async () => {
-      if (!isLeader()) {
-        navigatorLockPending = false;
-        return;
-      }
-      await new Promise<void>((resolve) => {
-        releaseNavigatorLock = resolve;
-      });
-      releaseNavigatorLock = null;
-      navigatorLockPending = false;
-    });
-  }
-
-  function current() {
-    if (typeof localStorage === "undefined") return null;
-    const lease = parseLease(localStorage.getItem(key));
-    if (lease && lease.expiresAt <= Date.now()) {
-      localStorage.removeItem(key);
+  function storage(): Storage | null {
+    try {
+      return typeof localStorage === "undefined" ? null : localStorage;
+    } catch {
       return null;
     }
-    return lease;
   }
 
   function isLeader() {
-    return current()?.tabId === tabId;
+    return !disposed && Boolean(activeLease?.owns());
   }
 
   function notify() {
@@ -76,34 +42,60 @@ export function createActiveWorkoutTabLeadership(input: {
     for (const listener of listeners) listener(value);
   }
 
-  function acquire(force = false) {
-    if (typeof localStorage === "undefined") return true;
-    const lease = current();
-    if (lease && lease.tabId !== tabId && !force) {
+  async function acquire(force = false) {
+    if (disposed) return false;
+    const leaseStorage = storage();
+    if (!leaseStorage) {
+      activeLease = null;
       notify();
       return false;
     }
-    localStorage.setItem(
+
+    if (force) {
+      activeLease?.release();
+      activeLease = null;
+      try {
+        leaseStorage.removeItem(key);
+      } catch {
+        notify();
+        return false;
+      }
+    }
+
+    const nextLease = await acquireActiveWorkoutFallbackLease({
+      storage: leaseStorage,
       key,
-      JSON.stringify({ tabId, expiresAt: Date.now() + LEASE_MS }),
-    );
-    acquireNavigatorLock();
+      ownerId: tabId,
+      leaseMs: LEASE_MS,
+    });
+    if (disposed) {
+      nextLease?.release();
+      return false;
+    }
+    if (nextLease) {
+      activeLease?.release();
+      activeLease = nextLease;
+    }
     notify();
     return isLeader();
   }
 
-  function release() {
-    if (typeof localStorage !== "undefined" && isLeader())
-      localStorage.removeItem(key);
-    releaseNavigatorLock?.();
+  function renew() {
+    const renewed = activeLease?.renew() ?? false;
+    if (!renewed) activeLease = null;
     notify();
-    if (typeof window !== "undefined")
-      window.removeEventListener("storage", onStorage);
+    return renewed;
+  }
+
+  function release() {
+    activeLease?.release();
+    activeLease = null;
+    notify();
   }
 
   const onStorage = (event: StorageEvent) => {
     if (event.key !== key) return;
-    if (!isLeader()) releaseNavigatorLock?.();
+    if (activeLease && !activeLease.owns()) activeLease = null;
     notify();
   };
   if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
@@ -112,10 +104,16 @@ export function createActiveWorkoutTabLeadership(input: {
     tabId,
     isLeader,
     acquire,
-    renew() {
-      return isLeader() ? acquire(true) : false;
-    },
+    renew,
     release,
+    dispose() {
+      if (disposed) return;
+      release();
+      disposed = true;
+      if (typeof window !== "undefined")
+        window.removeEventListener("storage", onStorage);
+      listeners.clear();
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
