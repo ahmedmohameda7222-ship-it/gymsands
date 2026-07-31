@@ -84,7 +84,18 @@ const requiredKeys = [
   "accessibility.openCurrentSessionHeat", "accessibility.switchFront", "accessibility.switchBack"
 ] as const;
 
-const allowedIdenticalTokens = new Set(["Plaivra", "ChatGPT", "RPE", "RIR", "AMRAP", "PR", "kg", "lb", "Optional"]);
+const allowedIdenticalTokens = new Set([
+  "Plaivra",
+  "ChatGPT",
+  "RPE",
+  "RIR",
+  "AMRAP",
+  "PR",
+  "Server",
+  "kg",
+  "lb",
+  "Optional"
+]);
 const unsafeMessagePattern = /<script|javascript:|onerror\s*=|onclick\s*=/i;
 const placeholderOnlyPattern = /^\s*\{[A-Za-z][^}]*\}\s*$/;
 
