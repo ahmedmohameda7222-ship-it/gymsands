@@ -77,8 +77,28 @@ replaceExactly(
     database.close();
     return operations.filter((operation) =>
       operation.state !== "applied" && operation.state !== "discarded"
-    ).length;`,
-  2
+    ).length;`
+);
+replaceExactly(
+  runnerPath,
+  `      const transaction = database.transaction("operations", "readonly");
+      const countRequest = transaction.objectStore("operations").count();
+      const count = await new Promise((resolve, reject) => {
+        countRequest.onsuccess = () => resolve(countRequest.result);
+        countRequest.onerror = () => reject(countRequest.error);
+      });
+      database.close();
+      return count === 0;`,
+  `      const transaction = database.transaction("operations", "readonly");
+      const allRequest = transaction.objectStore("operations").getAll();
+      const operations = await new Promise((resolve, reject) => {
+        allRequest.onsuccess = () => resolve(allRequest.result);
+        allRequest.onerror = () => reject(allRequest.error);
+      });
+      database.close();
+      return operations.every((operation) =>
+        operation.state === "applied" || operation.state === "discarded"
+      );`
 );
 replaceExactly(
   runnerPath,
@@ -119,6 +139,7 @@ replaceExactly(
     );
     expect(runner).toContain('{ name: "Finish anyway", exact: true }');
     expect(runner).toContain('operation.state !== "applied" && operation.state !== "discarded"');
+    expect(runner).toContain('operation.state === "applied" || operation.state === "discarded"');
     expect(runner).toContain('setOffline(page, false, false)');
     expect(store).toContain('if (state !== "online_synced") return;');`
 );
