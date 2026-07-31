@@ -1,5 +1,5 @@
-name: AW-10 final sync materializer
-run-name: AW-10 final sync materializer / pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+name: PR Quality
+run-name: PR Quality / pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
 
 on:
   pull_request:
@@ -7,48 +7,334 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: aw10-final-sync-${{ github.event.pull_request.number }}
+  group: pr-quality-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+  SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+  PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+  PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+  PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+  PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+  PLAIVRA_RELEASE_ENVIRONMENT: ci
+  PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+  PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  SUPABASE_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+
 jobs:
-  materialize-final-sync:
-    if: github.event.pull_request.head.ref == 'feat/active-workout-aw8-aw9-aw10-closure'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+  classify:
+    name: scope
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+      core: ${{ steps.scope.outputs.core }}
+      database: ${{ steps.scope.outputs.database }}
+      ui: ${{ steps.scope.outputs.ui }}
+      ci: ${{ steps.scope.outputs.ci }}
+      build: ${{ steps.scope.outputs.build }}
+      dependencies: ${{ steps.scope.outputs.dependencies }}
+      fallback: ${{ steps.scope.outputs.fallback }}
+      changed_count: ${{ steps.scope.outputs.changed_count }}
+      scope_summary: ${{ steps.scope.outputs.scope_summary }}
     steps:
-      - name: Checkout writable branch
+      - name: Checkout exact PR head
         uses: actions/checkout@v4
         with:
-          ref: feat/active-workout-aw8-aw9-aw10-closure
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: Set up Node
-        uses: actions/setup-node@v4
+
+      - name: Classify changed paths conservatively
+        id: scope
+        env:
+          PLAIVRA_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PLAIVRA_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci-change-scope.mjs
+
+  integrity:
+    name: integrity
+    needs: classify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact identity and clean diff
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git rev-parse "$EXPECTED_BASE^{commit}")" = "$EXPECTED_BASE"
+          git diff --check "$EXPECTED_BASE...$EXPECTED_HEAD"
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+  core:
+    name: core
+    needs: classify
+    if: needs.classify.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Apply and validate final AW-10 sync corrections
+      - run: npm ci
+      - name: Lint
+        run: node scripts/run-ci-check.mjs --name lint -- npm run lint
+      - name: Typecheck
+        run: node scripts/run-ci-check.mjs --name typecheck -- npm run typecheck
+      - name: Unit tests
+        run: node scripts/run-ci-check.mjs --name unit -- npm run test:unit
+      - name: Upload focused failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-quality-core-failure-${{ github.run_id }}
+          path: ci-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  database:
+    name: database
+    needs: classify
+    if: needs.classify.outputs.database == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Chronological migration replay
+        run: >-
+          node scripts/run-ci-check.mjs --name migration-replay --
+          node scripts/replay-local-migration-chain.mjs
+          --log ci-reports/database-validation.log --prove-future-order
+      - name: Database lint
+        run: >-
+          node scripts/run-ci-check.mjs --name database-lint --
+          supabase db lint --local --schema public --level error --fail-on error
+      - name: Database verification SQL
+        run: node scripts/run-ci-check.mjs --name database-verification -- node scripts/run-database-verification.mjs
+      - name: Migration ledger
+        run: node scripts/run-ci-check.mjs --name migration-ledger -- npm run migration:ledger:check
+      - name: Database integration tests
+        env:
+          PLAIVRA_AW2A_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
+        run: node scripts/run-ci-check.mjs --name integration -- npm run test:integration
+      - name: Upload focused failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-quality-database-failure-${{ github.run_id }}
+          path: ci-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ui:
+    name: ui-and-i18n
+    needs: classify
+    if: needs.classify.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Message contracts
+        run: node scripts/run-ci-check.mjs --name i18n -- npm run test:i18n
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Rendered UI QA
+        run: >-
+          node scripts/run-ci-check.mjs --name rendered-qa -- bash -lc
+          'set -euo pipefail;
+          NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build;
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start > ci-reports/qa-server.log 2>&1 &
+          server_pid=$!;
+          trap '\''kill "$server_pid" 2>/dev/null || true'\'' EXIT;
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi;
+            sleep 1;
+          done;
+          curl --fail --silent http://localhost:3000/ > /dev/null;
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=ci-reports/rendered-qa-evidence npm run qa:rendered;
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=ci-reports/train-qa-evidence npm run qa:train;
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_AW10_EVIDENCE_DIR=ci-reports/active-workout-aw10-evidence npm run qa:active-workout:aw10'
+      - name: Upload successful rendered evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-quality-rendered-evidence-${{ github.event.pull_request.head.sha }}
+          path: |
+            ci-reports/rendered-qa-evidence/
+            ci-reports/train-qa-evidence/
+            ci-reports/active-workout-aw10-evidence/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload focused failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-quality-ui-failure-${{ github.run_id }}
+          path: ci-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ci-contracts:
+    name: ci-contracts
+    needs: classify
+    if: needs.classify.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Repository script contracts
+        run: node scripts/run-ci-check.mjs --name script-contracts -- npm run test:scripts
+      - name: Telemetry contracts
+        run: node scripts/run-ci-check.mjs --name telemetry -- npm run test:telemetry
+      - name: Upload focused failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-quality-ci-failure-${{ github.run_id }}
+          path: ci-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build:
+    name: build
+    needs: classify
+    if: needs.classify.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Production environment contract
+        run: >-
+          node scripts/run-ci-check.mjs --name environment -- bash -lc
+          'set -euo pipefail;
+          export PLAIVRA_VALIDATE_PRODUCTION_ENV=true;
+          export PLAIVRA_RELEASE_ENVIRONMENT=production;
+          export NEXT_PUBLIC_APP_URL=https://app.plaivra.com;
+          export NEXT_PUBLIC_USE_MOCK_AUTH=false;
+          export PLAIVRA_MCP_BASE_URL=https://app.plaivra.com/api/mcp;
+          export PLAIVRA_OAUTH_ISSUER=https://app.plaivra.com;
+          export PLAIVRA_CIMD_ALLOWED_ORIGINS=https://chatgpt.com;
+          export CRON_SECRET=ci-placeholder-cron-secret-that-is-long-enough;
+          npm run validate:env'
+      - name: Production build
+        run: node scripts/run-ci-check.mjs --name build -- bash -lc 'NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build'
+      - name: Upload focused failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-quality-build-failure-${{ github.run_id }}
+          path: ci-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  dependencies:
+    name: dependency-audit
+    needs: classify
+    if: needs.classify.outputs.dependencies == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Runtime dependency audit
+        run: node scripts/run-ci-check.mjs --name dependency-audit -- npm audit --omit=dev --audit-level=moderate
+      - name: Upload focused failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-quality-dependency-failure-${{ github.run_id }}
+          path: ci-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  summary:
+    name: required-summary
+    if: always()
+    needs:
+      - classify
+      - integrity
+      - core
+      - database
+      - ui
+      - ci-contracts
+      - build
+      - dependencies
+    runs-on: ubuntu-latest
+    env:
+      NEEDS_JSON: ${{ toJson(needs) }}
+      SCOPE_JSON: ${{ needs.classify.outputs.scope_summary }}
+    steps:
+      - name: Publish concise scope and result summary
         run: |
-          set -euo pipefail
-          node .github/aw10-final-sync-fix.cjs
-          git rm -f .github/aw10-final-sync-fix.cjs
-          git diff --check
-          node --check scripts/run-aw10-active-workout-closure-qa.mjs
-          npm ci
-          npm run typecheck
-          npx vitest run --config vitest.unit.config.mjs \
-            lib/workouts/active-session-store/store.test.ts \
-            lib/workouts/active-session-sync/fallback-lease.test.ts \
-            lib/workouts/active-session-sync/leadership.test.ts \
-            lib/product/active-workout-aw9-offline-contract.test.ts \
-            components/workouts/active-workout/active-workout-runtime-model.test.ts
-      - name: Commit validated final AW-10 sync corrections
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add --all
-          git commit -m "fix(active-workout): complete durable reconnect lane"
-          git push origin HEAD:feat/active-workout-aw8-aw9-aw10-closure
+          node - <<'NODE'
+          const needs = JSON.parse(process.env.NEEDS_JSON);
+          const scope = JSON.parse(process.env.SCOPE_JSON || "{}");
+          const lines = ["## PR Quality", "", `Scope: \`${JSON.stringify(scope)}\``, "", "| Job | Result |", "|---|---|"];
+          let failed = false;
+          for (const [name, value] of Object.entries(needs)) {
+            lines.push(`| ${name} | ${value.result} |`);
+            if (value.result === "failure" || value.result === "cancelled") failed = true;
+          }
+          require("node:fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
+          if (failed) process.exitCode = 1;
+          NODE
