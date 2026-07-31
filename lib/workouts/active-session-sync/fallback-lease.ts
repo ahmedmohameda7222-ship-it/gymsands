@@ -62,7 +62,12 @@ export async function acquireActiveWorkoutFallbackLease(input: {
 }): Promise<ActiveWorkoutFallbackLease | null> {
   const clock = input.clock ?? defaultClock();
   const now = clock.now();
-  const current = parseLease(input.storage.getItem(input.key));
+  let current: ActiveWorkoutFallbackLeaseRecord | null;
+  try {
+    current = parseLease(input.storage.getItem(input.key));
+  } catch {
+    return null;
+  }
   if (
     current
     && current.expiresAt > now
@@ -75,7 +80,11 @@ export async function acquireActiveWorkoutFallbackLease(input: {
     fenceToken,
     expiresAt: now + input.leaseMs,
   };
-  input.storage.setItem(input.key, JSON.stringify(candidate));
+  try {
+    input.storage.setItem(input.key, JSON.stringify(candidate));
+  } catch {
+    return null;
+  }
 
   // localStorage has no compare-and-swap. A short stabilization turn lets
   // simultaneous contenders settle; only the last persisted fenced token
@@ -83,13 +92,17 @@ export async function acquireActiveWorkoutFallbackLease(input: {
   await clock.sleep(input.stabilizationMs ?? DEFAULT_STABILIZATION_MS);
 
   const isOwned = () => {
-    const persisted = parseLease(input.storage.getItem(input.key));
-    return Boolean(
-      persisted
-      && persisted.ownerId === input.ownerId
-      && persisted.fenceToken === fenceToken
-      && persisted.expiresAt > clock.now(),
-    );
+    try {
+      const persisted = parseLease(input.storage.getItem(input.key));
+      return Boolean(
+        persisted
+        && persisted.ownerId === input.ownerId
+        && persisted.fenceToken === fenceToken
+        && persisted.expiresAt > clock.now(),
+      );
+    } catch {
+      return false;
+    }
   };
 
   if (!isOwned()) return null;
@@ -98,18 +111,28 @@ export async function acquireActiveWorkoutFallbackLease(input: {
     owns: isOwned,
     renew() {
       if (!isOwned()) return false;
-      input.storage.setItem(
-        input.key,
-        JSON.stringify({
-          ownerId: input.ownerId,
-          fenceToken,
-          expiresAt: clock.now() + input.leaseMs,
-        } satisfies ActiveWorkoutFallbackLeaseRecord),
-      );
+      try {
+        input.storage.setItem(
+          input.key,
+          JSON.stringify({
+            ownerId: input.ownerId,
+            fenceToken,
+            expiresAt: clock.now() + input.leaseMs,
+          } satisfies ActiveWorkoutFallbackLeaseRecord),
+        );
+      } catch {
+        return false;
+      }
       return isOwned();
     },
     release() {
-      if (isOwned()) input.storage.removeItem(input.key);
+      if (!isOwned()) return;
+      try {
+        input.storage.removeItem(input.key);
+      } catch {
+        // Storage denial is already fail-closed; an expired fenced record is
+        // harmless and cannot grant another flush lane.
+      }
     },
   };
 }
