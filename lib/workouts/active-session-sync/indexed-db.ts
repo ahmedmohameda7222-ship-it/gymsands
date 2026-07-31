@@ -27,6 +27,10 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
   });
 }
 
+function onlineOrNonBrowser() {
+  return typeof navigator === "undefined" || navigator.onLine;
+}
+
 export function activeWorkoutSessionCacheKey(
   userId: string,
   workoutSessionId: string,
@@ -66,6 +70,10 @@ export async function readActiveWorkoutSessionCache(
   userId: string,
   workoutSessionId: string,
 ) {
+  // The durable snapshot is an offline recovery authority, not an online
+  // hydration dependency. Keeping IndexedDB off the connected critical path
+  // prevents local disk latency from delaying canonical server reads.
+  if (onlineOrNonBrowser()) return null;
   const database = await openActiveWorkoutDatabase();
   if (!database) return null;
   const transaction = database.transaction(SESSION_STORE, "readonly");
@@ -241,7 +249,7 @@ export async function clearActiveWorkoutUserData(userId: string) {
   database.close();
 }
 
-export async function clearStaleActiveWorkoutData(now = Date.now()) {
+async function clearStaleActiveWorkoutDataNow(now: number) {
   const database = await openActiveWorkoutDatabase();
   if (!database) return;
   const transaction = database.transaction(
@@ -272,4 +280,14 @@ export async function clearStaleActiveWorkoutData(now = Date.now()) {
   }
   await transactionDone(transaction);
   database.close();
+}
+
+export function clearStaleActiveWorkoutData(now = Date.now()): Promise<void> {
+  if (onlineOrNonBrowser()) {
+    // Retention cleanup is maintenance work while connected. Run it in the
+    // background and never place it ahead of canonical server hydration.
+    void clearStaleActiveWorkoutDataNow(now).catch(() => undefined);
+    return Promise.resolve();
+  }
+  return clearStaleActiveWorkoutDataNow(now);
 }
