@@ -47,7 +47,9 @@ replaceExactly(
   runnerPath,
   `      await setOffline(page, false, false);
       await page.waitForTimeout(250);
-      if (await takeover.isDisabled()) throw new Error("Takeover stayed disabled after reconnect.");
+      if (await takeover.isDisabled()) {
+        throw new Error("Takeover stayed disabled after reconnect.");
+      }
       await takeover.click({ timeout: 10_000 });`,
   `      await setOffline(page, false, false);
       await page.waitForFunction(() => {
