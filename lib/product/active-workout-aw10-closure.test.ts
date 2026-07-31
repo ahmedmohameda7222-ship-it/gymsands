@@ -27,6 +27,13 @@ describe("AW-10 canonical Active Workout closure", () => {
     expect(fixture).toContain("let performedLogs = []");
     expect(fixture).toContain("performedLogsSnapshot");
     expect(fixture).toContain("setServerRootStatus(status)");
+    expect(fixture).toContain("function persistedExerciseLogRow");
+    expect(fixture).toContain("exercise_log_id: exerciseLogId");
+    expect(fixture).toContain("workout_session_id: sessionId");
+    expect(fixture).toContain("user_id: userId");
+    expect(fixture).toContain("segment_id: segmentId");
+    expect(fixture).toContain("payload?.p_logs");
+    expect(fixture).not.toContain("payload?.p_final_logs");
   });
 
   it("runs once in canonical PR Quality and uploads the same evidence artifact", () => {
