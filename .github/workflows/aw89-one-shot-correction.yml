@@ -1,5 +1,6 @@
 name: AW-8 AW-9 one-shot correction
 
+# One-shot branch-only materialization. The job removes this workflow before its final push.
 on:
   push:
     branches:
