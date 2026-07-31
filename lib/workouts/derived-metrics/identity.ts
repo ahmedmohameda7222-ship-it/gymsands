@@ -30,4 +30,3 @@ export function derivedLogIdentity(log: DerivedMetricLog, index: number): string
   const setNumber = log.setNumber ?? log.set_number ?? index;
   return `${sessionId}:${derivedExerciseIdentity(log)}:${setNumber}`;
 }
-
