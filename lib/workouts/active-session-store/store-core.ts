@@ -739,18 +739,19 @@ export function createActiveSessionStore(input: {
     });
     const promise = (async () => {
       try {
+        const offline = isOffline();
         if (typeof indexedDB !== "undefined") {
           staleCleanupPromise ??= clearStaleActiveWorkoutData()
             .catch(() => undefined);
-          await staleCleanupPromise;
+          if (offline) await staleCleanupPromise;
         }
-        const cached = typeof indexedDB === "undefined"
+        const cached = !offline || typeof indexedDB === "undefined"
           ? null
           : await readActiveWorkoutSessionCache(
               snapshot.userId,
               snapshot.workoutSessionId
             ).catch(() => null);
-        if (cached && isOffline()) {
+        if (cached) {
           canonicalExecutionState = cached.executionState;
           canonicalPerformedLogs = [...cached.performedLogs];
           let localExecutionState = cached.executionState;
@@ -807,15 +808,23 @@ export function createActiveSessionStore(input: {
           if (localExecutionState) dispatcher.replace(localExecutionState);
           return;
         }
-        if (options.reconcile !== false && coordinator()) {
-          await coordinator()!.reconcile();
+        if (offline) {
+          throw new ActiveSessionError(
+            "hydration_failed",
+            "No durable offline snapshot is available for this workout."
+          );
         }
-        const [root, executionState, prescription, performedLogs] = await Promise.all([
+        const canonicalLoads = Promise.all([
           input.adapter.loadSessionRoot(snapshot.userId, snapshot.workoutSessionId),
           input.adapter.loadExecutionState(snapshot.userId, snapshot.workoutSessionId),
           input.adapter.loadPrescription(snapshot.userId, snapshot.workoutSessionId),
           input.adapter.loadPerformedLogs(snapshot.userId, snapshot.workoutSessionId)
         ]);
+        if (options.reconcile !== false && coordinator()) {
+          await coordinator()!.reconcile();
+        }
+        const [root, executionState, prescription, performedLogs] =
+          await canonicalLoads;
         if (disposed || generation !== snapshot.hydrationGeneration) return;
         validateHydrationIdentity(
           snapshot,

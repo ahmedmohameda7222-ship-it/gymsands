@@ -65,3 +65,7 @@ Tests enforce source code, schema, SQL verification, structured manifests, and o
 - `.codex/` and `.agents/` — implementation assistance, not runtime product code
 
 Applied migrations must never be renamed, rewritten, reordered, deleted, or replayed. Generated QA evidence belongs in workflow artifacts, not permanent source files.
+
+### AW-9 pending database migration
+
+`20260731090000_active_workout_aw9_offline_multi_device.sql` is repository-only and pending independent review. It has not been applied to Supabase Production. The Production compatibility marker remains unchanged; do not replay applied migrations.

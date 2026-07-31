@@ -62,3 +62,7 @@ Use these current sources:
 - exact-head Quality and Exact Release workflow artifacts
 
 Merged pull requests and Git history preserve historical implementation reports. Those reports are not current migration authority and are intentionally excluded from the active tree.
+
+### AW-9 pending database migration
+
+`20260731090000_active_workout_aw9_offline_multi_device.sql` is repository-only and pending independent review. It has not been applied to Supabase Production. The Production compatibility marker remains unchanged; do not replay applied migrations.
