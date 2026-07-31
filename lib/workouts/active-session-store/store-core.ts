@@ -475,7 +475,7 @@ export function createActiveSessionStore(input: {
     ) return;
     const sync = coordinator();
     if (!sync) return;
-    void sync.reconcile()
+    void sync.reconcile({ force: true })
       .then((state) => {
         if (state !== "online_synced") return;
         return hydrate({ force: true, reconcile: false });

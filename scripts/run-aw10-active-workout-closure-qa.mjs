@@ -493,10 +493,11 @@ async function prepareAction({ scenario, context, page, fixture, checks }) {
     checks.takeoverDisabledOffline = await takeover.isDisabled();
     if (scenario.action === "takeover-confirmation") {
       await setOffline(page, false, false);
-      await page.waitForTimeout(250);
-      if (await takeover.isDisabled()) {
-        throw new Error("Takeover stayed disabled after reconnect.");
-      }
+      await page.waitForFunction(() => {
+        const buttons = document.querySelectorAll("[data-aw9-device-conflict] button");
+        const takeoverButton = buttons.item(1);
+        return takeoverButton instanceof HTMLButtonElement && !takeoverButton.disabled;
+      }, undefined, { timeout: 3_000 });
       await takeover.click({ timeout: 10_000 });
       await visible(page, "[data-aw9-takeover-confirmation]").waitFor({ state: "visible", timeout: 10_000 });
       checks.takeoverConfirmation = true;

@@ -6,6 +6,7 @@ const fixture = readFileSync("scripts/train-layout-qa-fixture.mjs", "utf8");
 const workflow = readFileSync(".github/workflows/pr-quality.yml", "utf8");
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const store = readFileSync("lib/workouts/active-session-store/store-core.ts", "utf8");
+const coordinator = readFileSync("lib/workouts/active-session-sync/coordinator.ts", "utf8");
 
 describe("AW-10 canonical Active Workout closure", () => {
   it("defines exactly thirty production exact-head scenarios", () => {
@@ -44,6 +45,12 @@ describe("AW-10 canonical Active Workout closure", () => {
     expect(runner).toContain('operation.state === "applied" || operation.state === "discarded"');
     expect(runner).toContain('setOffline(page, false, false)');
     expect(store).toContain('if (state !== "online_synced") return;');
+    expect(store).toContain('sync.reconcile({ force: true })');
+    expect(coordinator).toContain('stale command must not');
+    expect(coordinator).toMatch(
+      /ActiveSessionRevisionConflictError[\s\S]*lastErrorCode: "revision_conflict_rehydrate"[\s\S]*continue;/,
+    );
+    expect(runner).toContain('takeoverButton instanceof HTMLButtonElement && !takeoverButton.disabled');
   });
 
   it("runs once in canonical PR Quality and uploads the same evidence artifact", () => {

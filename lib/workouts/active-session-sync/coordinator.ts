@@ -290,8 +290,9 @@ export function createActiveWorkoutSyncCoordinator(input: {
             nextRetryAt: null,
             lastErrorCode: "revision_conflict_rehydrate",
           });
-          input.onInvalidate?.();
-          return notify("retry_needed");
+          // The server execution state wins, but this stale command must not
+          // block independent durable operations that follow it in the lane.
+          continue;
         }
         if (error instanceof ActiveSessionIdempotencyConflictError) {
           await updateActiveWorkoutOperation(operation, {
