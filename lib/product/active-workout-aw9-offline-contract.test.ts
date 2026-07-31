@@ -14,7 +14,7 @@ const coordinator = readFileSync(
   "utf8",
 );
 const store = readFileSync(
-  "lib/workouts/active-session-store/store.ts",
+  "lib/workouts/active-session-store/store-core.ts",
   "utf8",
 );
 const workoutSessions = readFileSync(
