@@ -58,7 +58,7 @@ describe("approved Train Phase 1 UI contracts", () => {
   });
 
   it("localizes the day-focus session while preserving stable set and replacement identifiers", () => {
-    const controller = source("components/workouts/active-workout/active-workout-core-session.tsx");
+    const controller = source("components/workouts/active-workout/active-workout-core-session-implementation.tsx");
     const details = source("components/workouts/active-workout/active-workout-details-bridge.tsx");
     const shell = source("components/workouts/active-workout/active-workout-execution-shell.tsx");
     const activeWorkout = `${controller}\n${details}`;
