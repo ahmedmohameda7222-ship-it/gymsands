@@ -1,6 +1,7 @@
 import {
   ACTIVE_WORKOUT_INDEXED_DB_NAME,
   ACTIVE_WORKOUT_OFFLINE_RETENTION_MS,
+  ACTIVE_WORKOUT_SYNC_SCHEMA_VERSION,
   type ActiveWorkoutOperation,
   type ActiveWorkoutSessionCache,
 } from "./contracts";
@@ -196,16 +197,16 @@ export async function clearActiveWorkoutSessionData(
   transaction
     .objectStore(SESSION_STORE)
     .delete(activeWorkoutSessionCacheKey(userId, workoutSessionId));
-   const range = IDBKeyRange.bound(
-     [userId, workoutSessionId, 0],
-     [userId, workoutSessionId, Number.MAX_SAFE_INTEGER],
-   );
-   const operations = (await requestResult(
-     transaction
-       .objectStore(OPERATION_STORE)
-       .index("by_session_sequence")
-       .getAll(range),
-   )) as ActiveWorkoutOperation[];
+  const range = IDBKeyRange.bound(
+    [userId, workoutSessionId, 0],
+    [userId, workoutSessionId, Number.MAX_SAFE_INTEGER],
+  );
+  const operations = (await requestResult(
+    transaction
+      .objectStore(OPERATION_STORE)
+      .index("by_session_sequence")
+      .getAll(range),
+  )) as ActiveWorkoutOperation[];
   for (const operation of operations) {
     if (
       operation.userId === userId &&
