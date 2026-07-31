@@ -125,7 +125,10 @@ describe("AW-9 durable synchronization contract", () => {
   });
 
   it("uses scoped invalidation-only Realtime with cleanup and no polling", () => {
-    expect(realtime).toContain("env.productionQaBuild");
+    const qaGuard = realtime.indexOf("env.productionQaBuild");
+    const channelCreation = realtime.indexOf(".channel(");
+    expect(qaGuard).toBeGreaterThan(0);
+    expect(channelCreation).toBeGreaterThan(qaGuard);
     expect(realtime).toContain("postgres_changes");
     expect(realtime).toContain(
       "filter: `workout_session_id=eq.${input.workoutSessionId}`",
