@@ -50,6 +50,7 @@ export function ActiveWorkoutIndicator() {
   const [restLeft, setRestLeft] = useState(0);
   const [actionPending, setActionPending] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [controllerDeviceId, setControllerDeviceId] = useState<string | null>(null);
   const controllerRef = useRef<HTMLDivElement>(null);
   const controllerDeviceIdRef = useRef<string | null>(null);
   const activeSessionStoreRef = useRef<ActiveSessionStore | null>(null);
@@ -96,17 +97,20 @@ export function ActiveWorkoutIndicator() {
       setSession(null);
       setState(null);
       setSnapshot(null);
+      setControllerDeviceId(null);
       setLoadError(false);
       return;
     }
 
     try {
-      controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
+      const localControllerDeviceId = getActiveWorkoutDeviceId();
+      controllerDeviceIdRef.current = localControllerDeviceId;
+      setControllerDeviceId(localControllerDeviceId);
       const store = getActiveSessionStore({
         userId,
         workoutSessionId: open.id,
         adapter: activeSessionPersistenceAdapter,
-        controllerDeviceId: controllerDeviceIdRef.current,
+        controllerDeviceId: localControllerDeviceId,
         clearCompatibilityCache: () => clearActiveWorkoutState(userId)
       });
       activeSessionStoreRef.current = store;
@@ -117,7 +121,7 @@ export function ActiveWorkoutIndicator() {
       const next = activeWorkoutCacheFromExecution(persisted, {
         route,
         label: open.workout_name,
-        controllerDeviceId: controllerDeviceIdRef.current
+        controllerDeviceId: localControllerDeviceId
       });
       writeActiveWorkoutState(userId, next);
       setSession(open);
@@ -215,7 +219,7 @@ export function ActiveWorkoutIndicator() {
       || !store
       || !executionState
       || executionState.session_state === "review"
-      || executionState.controller_device_id !== controllerDeviceIdRef.current
+      || executionState.controller_device_id !== controllerDeviceId
     ) return;
     setActionPending(true);
     try {
@@ -224,7 +228,7 @@ export function ActiveWorkoutIndicator() {
         workoutSessionId: session.id,
         commandId: createSessionCommandId(),
         commandType: executionState.session_state === "paused" ? "resume" : "pause",
-        payload: { controller_device_id: controllerDeviceIdRef.current }
+        payload: { controller_device_id: controllerDeviceId }
       });
       setLoadError(false);
     } catch {
@@ -305,7 +309,7 @@ export function ActiveWorkoutIndicator() {
   }
   if (
     execution?.controller_device_id
-    && execution.controller_device_id !== controllerDeviceIdRef.current
+    && execution.controller_device_id !== controllerDeviceId
   ) {
     onAction = undefined;
     actionLabel = t("multiDevice.viewOnly");
