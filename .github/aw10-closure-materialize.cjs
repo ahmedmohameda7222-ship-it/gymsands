@@ -94,8 +94,10 @@ ${mergeBody}
 );
 
 const finalMergeBody = mergeBody
-  .replace('const incoming = Array.isArray(payload?.p_logs) ? payload.p_logs : [];',
-    'const incoming = Array.isArray(payload?.p_final_logs) ? payload.p_final_logs : [];');
+  .replace(
+    'const incoming = Array.isArray(payload?.p_logs) ? payload.p_logs : [];',
+    'const incoming = Array.isArray(payload?.p_final_logs) ? payload.p_final_logs : [];',
+  );
 replaceOnce(
   fixturePath,
   `    if (method === "POST" && pathname.includes("/rest/v1/rpc/complete_workout_session_atomic")) {
@@ -124,37 +126,6 @@ replaceOnce(
     },
     performedLogsSnapshot: () => JSON.parse(JSON.stringify(performedLogs)),
     muscleRequestCount: () => muscleRequestCount,`,
-);
-
-const workflowPath = '.github/workflows/pr-quality.yml';
-replaceOnce(
-  workflowPath,
-  `  ui:
-    name: ui-and-i18n
-    needs: classify
-    if: needs.classify.outputs.ui == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45`,
-  `  ui:
-    name: ui-and-i18n
-    needs: classify
-    if: needs.classify.outputs.ui == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60`,
-);
-replaceOnce(
-  workflowPath,
-  `          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="\${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=ci-reports/train-qa-evidence npm run qa:train'`,
-  `          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="\${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=ci-reports/train-qa-evidence npm run qa:train;
-          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="\${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_AW10_EVIDENCE_DIR=ci-reports/active-workout-aw10-evidence npm run qa:active-workout:aw10'`,
-);
-replaceOnce(
-  workflowPath,
-  `            ci-reports/rendered-qa-evidence/
-            ci-reports/train-qa-evidence/`,
-  `            ci-reports/rendered-qa-evidence/
-            ci-reports/train-qa-evidence/
-            ci-reports/active-workout-aw10-evidence/`,
 );
 
 const packagePath = 'package.json';
@@ -201,7 +172,7 @@ describe("AW-10 canonical Active Workout closure", () => {
 
   it("runs once in canonical PR Quality and uploads the same evidence artifact", () => {
     expect(workflow.match(/npm run qa:active-workout:aw10/g)).toHaveLength(1);
-    expect(workflow.match(/ci-reports\\/active-workout-aw10-evidence\\//g)).toHaveLength(2);
+    expect(workflow.match(/ci-reports\\/active-workout-aw10-evidence/g)).toHaveLength(2);
     expect(workflow).toContain("QA_AW10_EVIDENCE_DIR=ci-reports/active-workout-aw10-evidence");
     expect(packageJson.scripts["qa:active-workout:aw10"]).toBe(
       "node scripts/run-aw10-active-workout-closure-qa.mjs",
