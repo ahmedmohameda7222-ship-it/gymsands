@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const source = (path: string) => readFileSync(path, "utf8");
 
 const controller = source(
-  "components/workouts/active-workout/active-workout-core-session.tsx",
+  "components/workouts/active-workout/active-workout-core-session-implementation.tsx",
 );
 const shell = source(
   "components/workouts/active-workout/active-workout-execution-shell.tsx",
