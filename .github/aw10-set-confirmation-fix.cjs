@@ -45,6 +45,13 @@ replaceRegex(
   `    await waitForNoPendingOperations(page);\n    checks.pendingAfter = await operationCount(page);`,
 );
 
+const aw10ContractTest = "lib/product/active-workout-aw10-closure.test.ts";
+replaceOnce(
+  aw10ContractTest,
+  `    expect(runner).toContain('operation.state === "applied" || operation.state === "discarded"');`,
+  `    expect(runner).toContain("waitForNoPendingOperations");\n    expect(runner).toContain("stableZeroObservations >= 3");`,
+);
+
 writeFileSync(
   "lib/workouts/active-session-sync/contracts.test.ts",
   `import { describe, expect, it } from "vitest";\nimport type { ExerciseLog } from "@/types";\nimport type { CanonicalWorkoutSetWrite } from "@/lib/workouts/active-session-store/persistence-adapter";\nimport { fingerprintCanonicalExerciseLog, fingerprintCanonicalSetWrite } from "./contracts";\n\ndescribe("durable set fingerprints", () => {\n  it("matches canonical input to its hydrated database projection", () => {\n    const write: CanonicalWorkoutSetWrite = {\n      planExerciseId: "10000000-0000-4000-8000-000000000011",\n      exerciseOrder: 1,\n      exerciseName: "Barbell Squat",\n      setNumber: 1,\n      reps: 8,\n      weightKg: 80,\n      notes: null,\n      completedAt: "2026-07-27T08:10:00.000Z",\n      metricSource: "manual",\n      metricSourceProvider: "plaivra",\n      metricSourceVersion: "aw3c-v1",\n      setDetails: {\n        setType: "working",\n        rpe: null,\n        rir: null,\n        notes: null,\n        sideMode: "none",\n        plannedTempo: null,\n        performedTempo: null,\n        tempoAdherence: "not_recorded",\n        source: "manual",\n        sourceProvider: "plaivra",\n        sourceVersion: "aw3c-v1",\n      },\n    };\n    const hydrated = {\n      reps: 8,\n      weight_kg: 80,\n      notes: null,\n      completed_at: write.completedAt,\n      performance_metrics: [],\n      segments: [],\n      set_details: {\n        exercise_log_id: "25000000-0000-4000-8000-000000000001",\n        workout_session_id: "10000000-0000-4000-8000-000000000001",\n        user_id: "00000000-0000-4000-8000-000000000001",\n        schema_version: 1,\n        set_type: "working",\n        rpe: null,\n        rir: null,\n        notes: null,\n        side_mode: "none",\n        planned_tempo: null,\n        performed_tempo: null,\n        tempo_adherence: "not_recorded",\n        source: "manual",\n        source_provider: "plaivra",\n        source_version: "aw3c-v1",\n        created_at: write.completedAt,\n        updated_at: write.completedAt,\n      },\n    } as unknown as ExerciseLog;\n    expect(fingerprintCanonicalExerciseLog(hydrated)).toBe(\n      fingerprintCanonicalSetWrite(write),\n    );\n  });\n});\n`,
