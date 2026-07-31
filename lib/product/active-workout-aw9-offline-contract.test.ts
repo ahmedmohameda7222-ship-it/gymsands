@@ -17,6 +17,10 @@ const store = readFileSync(
   "lib/workouts/active-session-store/store.ts",
   "utf8",
 );
+const workoutSessions = readFileSync(
+  "services/database/workout-sessions.ts",
+  "utf8",
+);
 const realtime = readFileSync(
   "services/database/active-session-realtime.ts",
   "utf8",
@@ -30,15 +34,30 @@ describe("AW-9 durable synchronization contract", () => {
     expect(indexedDb).toContain("ACTIVE_WORKOUT_OFFLINE_RETENTION_MS");
   });
 
-  it("persists before optimistic command reduction and serializes reconciliation", () => {
-    const enqueue = store.indexOf("await sync.enqueue(");
-    const reduce = store.indexOf("const transition = reduceSessionCommand(");
-    expect(enqueue).toBeGreaterThan(0);
-    expect(reduce).toBeGreaterThan(enqueue);
+  it("validates locally before durable enqueue and serializes reconciliation", () => {
+    const offlineBranch = store.indexOf("if (isOffline()) {");
+    const validate = store.indexOf("const transition = planOfflineCommand(", offlineBranch);
+    const enqueue = store.indexOf("await sync.enqueue(", validate);
+    expect(offlineBranch).toBeGreaterThan(0);
+    expect(validate).toBeGreaterThan(offlineBranch);
+    expect(enqueue).toBeGreaterThan(validate);
     expect(coordinator).toContain("for (const operation of operations)");
+    expect(coordinator).toContain("payload.logs.length !== 1");
     expect(coordinator).toContain("MAX_ATTEMPTS = 6");
     expect(coordinator).toContain("controller_conflict");
-    expect(coordinator).toContain("revision_conflict");
+    expect(coordinator).toContain("revision_conflict_rehydrate");
+    expect(coordinator).toContain("target_conflict");
+  });
+
+  it("restores the exact candidate session from cache only after offline failure", () => {
+    expect(workoutSessions).toContain("readActiveWorkoutSessionCache");
+    expect(workoutSessions).toContain("if (!result.error || !candidateSessionId");
+    expect(workoutSessions).toContain("navigator.onLine");
+    expect(workoutSessions).toContain("root.id !== candidateSessionId");
+    expect(workoutSessions).toContain("root.user_id !== userId");
+    expect(workoutSessions).toContain('root.status !== "started"');
+    expect(store).toContain("projectPendingSetWrites");
+    expect(store).toContain('syncState: terminalPending ? "terminal_pending" : "offline_saved"');
   });
 
   it("uses scoped invalidation-only Realtime with cleanup and no polling", () => {
