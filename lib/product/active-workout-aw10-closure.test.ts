@@ -50,6 +50,11 @@ describe("AW-10 canonical Active Workout closure", () => {
     expect(coordinator).toMatch(
       /ActiveSessionRevisionConflictError[\s\S]*lastErrorCode: "revision_conflict_rehydrate"[\s\S]*continue;/,
     );
+    expect(coordinator).not.toContain('ifAvailable: true');
+    expect(coordinator).toContain('{ mode: "exclusive" }');
+    expect(coordinator).toContain('if (remaining.length) return run(force, ownsLane);');
+    expect(coordinator).toContain('Both resolution choices must drain companion operations');
+    expect(coordinator).toContain('Terminal server authority wins');
     expect(runner).toContain('takeoverButton instanceof HTMLButtonElement && !takeoverButton.disabled');
   });
 

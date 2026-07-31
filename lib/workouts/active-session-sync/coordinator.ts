@@ -307,7 +307,9 @@ export function createActiveWorkoutSyncCoordinator(input: {
           && error.code === "terminal_mutation_attempt"
         ) {
           await discardTerminalOperations();
-          return notify("online_synced");
+          // Terminal server authority wins. Continue draining in case another
+          // local producer appended work while terminal proof was resolving.
+          continue;
         }
         if (error instanceof ActiveSessionError && !isRetryableTransport(error)) {
           await updateActiveWorkoutOperation(operation, {
@@ -342,6 +344,11 @@ export function createActiveWorkoutSyncCoordinator(input: {
         return notify("retry_needed");
       }
     }
+    const remaining = await listActiveWorkoutOperations(
+      input.userId,
+      input.workoutSessionId,
+    );
+    if (remaining.length) return run(force, ownsLane);
     input.onInvalidate?.();
     return notify("online_synced");
   }
@@ -353,8 +360,8 @@ export function createActiveWorkoutSyncCoordinator(input: {
     ) {
       return navigator.locks.request(
         laneKey,
-        { mode: "exclusive", ifAvailable: true },
-        (lock) => lock ? run(force) : notify("retry_needed"),
+        { mode: "exclusive" },
+        () => run(force),
       );
     }
     if (typeof localStorage === "undefined") return run(force);
@@ -523,9 +530,9 @@ export function createActiveWorkoutSyncCoordinator(input: {
       }
       const remaining = await nextConflict();
       if (remaining) return notify("data_conflict");
-      return strategy === "local"
-        ? runAsLaneLeader(true)
-        : notify("online_synced");
+      // Both resolution choices must drain companion operations before the
+      // UI may claim that the durable lane is synchronized.
+      return runAsLaneLeader(true);
     },
     dispose() {
       disposed = true;
