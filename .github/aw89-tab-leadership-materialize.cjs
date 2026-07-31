@@ -10,15 +10,6 @@ function replaceOnce(path, before, after) {
   writeFileSync(path, source.replace(before, after), "utf8");
 }
 
-function replaceAllExact(path, before, after, expectedCount) {
-  const source = readFileSync(path, "utf8");
-  const count = source.split(before).length - 1;
-  if (count !== expectedCount) {
-    throw new Error(`${path}: expected ${expectedCount} replacement targets, found ${count}`);
-  }
-  writeFileSync(path, source.split(before).join(after), "utf8");
-}
-
 const corePath =
   "components/workouts/active-workout/active-workout-core-session-implementation.tsx";
 replaceOnce(
@@ -54,7 +45,7 @@ replaceOnce(
       if (tabLeadershipRef.current === leadership)
         tabLeadershipRef.current = null;`,
 );
-replaceAllExact(
+replaceOnce(
   corePath,
   `              onClick={() => {
                 setTabLeader(tabLeadershipRef.current?.acquire(true) ?? true);
@@ -64,7 +55,17 @@ replaceAllExact(
                 if (!leadership) return;
                 void leadership.acquire(true).then(setTabLeader);
               }}`,
-  1,
+);
+replaceOnce(
+  corePath,
+  `            onClick={() => {
+              setTabLeader(tabLeadershipRef.current?.acquire(true) ?? true);
+            }}`,
+  `            onClick={() => {
+              const leadership = tabLeadershipRef.current;
+              if (!leadership) return;
+              void leadership.acquire(true).then(setTabLeader);
+            }}`,
 );
 
 const packagePath = "package.json";
