@@ -12,6 +12,7 @@ import {
   listActiveWorkoutOperations,
   updateActiveWorkoutOperation,
 } from "./indexed-db";
+import { acquireActiveWorkoutFallbackLease } from "./fallback-lease";
 import {
   canonicalSetTargetIdentity,
   exerciseLogTargetIdentity,
@@ -193,8 +194,11 @@ export function createActiveWorkoutSyncCoordinator(input: {
     input.onInvalidate?.();
   }
 
-  async function run(force = false) {
-    if (disposed) return "retry_needed" as const;
+  async function run(
+    force = false,
+    ownsLane: () => boolean = () => true,
+  ) {
+    if (disposed || !ownsLane()) return "retry_needed" as const;
     if (typeof navigator !== "undefined" && !navigator.onLine)
       return notify("offline_saved");
     await notify("syncing");
@@ -203,6 +207,7 @@ export function createActiveWorkoutSyncCoordinator(input: {
       input.workoutSessionId,
     );
     for (const operation of operations) {
+      if (!ownsLane()) return notify("retry_needed");
       if (operation.state === "conflict") {
         return notify(
           operation.lastErrorCode === "controller_conflict"
@@ -226,6 +231,14 @@ export function createActiveWorkoutSyncCoordinator(input: {
         state: "sending",
         attemptCount: operation.attemptCount + 1,
       });
+      if (!ownsLane()) {
+        await updateActiveWorkoutOperation(operation, {
+          state: "pending",
+          attemptCount: operation.attemptCount,
+          nextRetryAt: operation.nextRetryAt,
+        });
+        return notify("retry_needed");
+      }
       try {
         await execute(operation);
         await updateActiveWorkoutOperation(operation, {
@@ -344,41 +357,23 @@ export function createActiveWorkoutSyncCoordinator(input: {
       );
     }
     if (typeof localStorage === "undefined") return run(force);
-    const acquireOrRenewLease = () => {
-      localStorage.setItem(
-        laneKey,
-        JSON.stringify({ tabId, expiresAt: Date.now() + FLUSH_LEASE_MS }),
-      );
-    };
-    const now = Date.now();
+    const lease = await acquireActiveWorkoutFallbackLease({
+      storage: localStorage,
+      key: laneKey,
+      ownerId: tabId,
+      leaseMs: FLUSH_LEASE_MS,
+    });
+    if (!lease) return notify("retry_needed");
+
+    let leaseLost = false;
+    const renewal = setInterval(() => {
+      if (!lease.renew()) leaseLost = true;
+    }, FLUSH_LEASE_MS / 3);
     try {
-      const lease = JSON.parse(localStorage.getItem(laneKey) ?? "null") as {
-        tabId?: unknown;
-        expiresAt?: unknown;
-      } | null;
-      if (
-        lease
-        && lease.tabId !== tabId
-        && typeof lease.expiresAt === "number"
-        && lease.expiresAt > now
-      ) return notify("retry_needed");
-    } catch {
-      // Invalid fallback lease data is replaced below.
-    }
-    acquireOrRenewLease();
-    const renewal = setInterval(acquireOrRenewLease, FLUSH_LEASE_MS / 3);
-    try {
-      return await run(force);
+      return await run(force, () => !leaseLost && lease.owns());
     } finally {
       clearInterval(renewal);
-      try {
-        const lease = JSON.parse(localStorage.getItem(laneKey) ?? "null") as {
-          tabId?: unknown;
-        } | null;
-        if (lease?.tabId === tabId) localStorage.removeItem(laneKey);
-      } catch {
-        localStorage.removeItem(laneKey);
-      }
+      lease.release();
     }
   }
 
