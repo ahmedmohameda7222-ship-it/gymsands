@@ -23,18 +23,27 @@ function functionBody(source: string, name: string, nextName: string) {
 }
 
 describe("AW-2A lifecycle preserved under AW-2B command authority", () => {
-  it("retains canonical-log-first set completion sequencing", () => {
+  it("retains canonical-log-first set completion sequencing online and offline", () => {
     const finishSet = functionBody(component, "finishSet", "restartSet");
     expect(finishSet).toContain("store.completeCanonicalSet");
     const completeCanonicalSet = store.slice(
       store.indexOf("async completeCanonicalSet"),
       store.indexOf(
-        "\n    async completeSession",
+        "\n    async saveCanonicalSets",
         store.indexOf("async completeCanonicalSet"),
       ),
     );
-    expect(completeCanonicalSet.indexOf("adapter.writeCanonicalSet"))
-      .toBeLessThan(completeCanonicalSet.indexOf("dispatch(setInput.executionIntent)"));
+    const offlineBranch = completeCanonicalSet.slice(
+      completeCanonicalSet.indexOf("if (isOffline())"),
+      completeCanonicalSet.indexOf("      try {", completeCanonicalSet.indexOf("if (isOffline())")),
+    );
+    const onlineBranch = completeCanonicalSet.slice(
+      completeCanonicalSet.indexOf("      try {", completeCanonicalSet.indexOf("if (isOffline())")),
+    );
+    expect(offlineBranch.indexOf('kind: "set_write"'))
+      .toBeLessThan(offlineBranch.indexOf("return dispatch(setInput.executionIntent)"));
+    expect(onlineBranch.indexOf("input.adapter.writeCanonicalSet"))
+      .toBeLessThan(onlineBranch.indexOf("return await dispatch(setInput.executionIntent)"));
     expect(finishSet).not.toContain("startRestTimer(");
     expect(finishSet).not.toContain("moveToNextSet(");
   });
