@@ -1,5 +1,5 @@
-name: AW-10 durable operation diagnostic
-run-name: AW-10 durable operation diagnostic / pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+name: AW-10 set confirmation materializer
+run-name: AW-10 set confirmation materializer / pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
 
 on:
   pull_request:
@@ -7,10 +7,10 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: aw10-durable-diagnostic-${{ github.event.pull_request.number }}
+  group: aw10-set-confirmation-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 env:
@@ -22,14 +22,15 @@ env:
   NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA: "true"
 
 jobs:
-  diagnose:
+  materialize:
     if: github.event.pull_request.head.ref == 'feat/active-workout-aw8-aw9-aw10-closure'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout writable branch
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: feat/active-workout-aw8-aw9-aw10-closure
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -37,8 +38,19 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Instrument three remaining scenarios
+      - name: Apply and validate correction
         run: |
+          set -euo pipefail
+          node .github/aw10-set-confirmation-fix.cjs
+          git rm -f .github/aw10-set-confirmation-fix.cjs
+          git diff --check
+          npm run typecheck
+          npx vitest run --config vitest.unit.config.mjs \
+            lib/workouts/active-session-sync/contracts.test.ts \
+            lib/workouts/active-session-store/store.test.ts \
+            lib/product/active-workout-aw10-closure.test.ts
+
+          cp scripts/run-aw10-active-workout-closure-qa.mjs /tmp/aw10-runner-after-fix.mjs
           node - <<'NODE'
           const fs = require('node:fs');
           const path = 'scripts/run-aw10-active-workout-closure-qa.mjs';
@@ -47,29 +59,15 @@ jobs:
             '}));\n\nfunction visible',
             `})).filter(({ name }) => new Set([\n  "21-reconnect-flush-mobile-en-390x844",\n  "23-server-terminal-wins-desktop-en-1440x900",\n  "30-data-conflict-use-local-desktop-en-1440x900"\n]).has(name));\n\nfunction visible`,
           );
-          source = source.replace(
-            'async function mutateFirstOperation(page, patch) {',
-            `async function operationDiagnostics(page) {\n  try {\n    await openDatabase(page);\n    return await page.evaluate(async () => {\n      const request = indexedDB.open("plaivra-active-workout-v1", 1);\n      const database = await new Promise((resolve, reject) => {\n        request.onsuccess = () => resolve(request.result);\n        request.onerror = () => reject(request.error);\n      });\n      const transaction = database.transaction("operations", "readonly");\n      const allRequest = transaction.objectStore("operations").getAll();\n      const operations = await new Promise((resolve, reject) => {\n        allRequest.onsuccess = () => resolve(allRequest.result);\n        allRequest.onerror = () => reject(allRequest.error);\n      });\n      database.close();\n      return operations.sort((a, b) => a.sequence - b.sequence).map((operation) => ({\n        id: operation.id,\n        sequence: operation.sequence,\n        state: operation.state,\n        kind: operation.payload?.kind ?? null,\n        commandType: operation.payload?.request?.commandType ?? null,\n        expectedRevision: operation.payload?.request?.expectedRevision ?? null,\n        attemptCount: operation.attemptCount,\n        nextRetryAt: operation.nextRetryAt,\n        lastErrorCode: operation.lastErrorCode,\n        targetIdentity: operation.targetIdentity,\n        baseTargetFingerprint: operation.baseTargetFingerprint\n      }));\n    });\n  } catch (error) {\n    return [{ diagnosticError: error instanceof Error ? error.message : String(error) }];\n  }\n}\n\nasync function mutateFirstOperation(page, patch) {`,
-          );
-          source = source.replace(
-            '      requestCount: requestHistory.length,\n      failures',
-            '      requestCount: requestHistory.length,\n      operationDiagnostics: await operationDiagnostics(capturePage),\n      failures',
-          );
-          if (!source.includes('operationDiagnostics: await operationDiagnostics')) {
-            throw new Error('AW-10 diagnostic instrumentation failed.');
-          }
-          if (!source.includes('21-reconnect-flush-mobile-en-390x844')) {
-            throw new Error('AW-10 diagnostic scenario filter failed.');
+          if (!source.includes(')).filter(({ name })')) {
+            throw new Error('Focused AW-10 scenario filter was not installed.');
           }
           fs.writeFileSync(path, source);
           NODE
           node --check scripts/run-aw10-active-workout-closure-qa.mjs
-      - name: Run focused production diagnostic
-        run: |
-          set -euo pipefail
-          mkdir -p ci-reports ci-reports/active-workout-aw10-diagnostic
-          npm run build
-          npm run start > ci-reports/aw10-diagnostic-server.log 2>&1 &
+          mkdir -p ci-reports/active-workout-aw10-focused
+          NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start > ci-reports/aw10-focused-server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           ready=false
@@ -80,43 +78,41 @@ jobs:
             fi
             sleep 1
           done
-          if [ "$ready" != "true" ]; then
-            cat ci-reports/aw10-diagnostic-server.log
-            exit 1
-          fi
+          test "$ready" = true
           set +e
           QA_SERVER_MODE=production \
           QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" \
           QA_START_COMMAND="npm run start" \
           QA_MOCK_AUTH_BUILD_VALUE=true \
-          QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" \
+          QA_HEAD_SHA="$(git rev-parse HEAD)" \
           QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" \
           QA_BASE_URL=http://localhost:3000 \
-          QA_AW10_EVIDENCE_DIR=ci-reports/active-workout-aw10-diagnostic \
+          QA_AW10_EVIDENCE_DIR=ci-reports/active-workout-aw10-focused \
           npm run qa:active-workout:aw10
-          qa_status=$?
           set -e
-          test -f ci-reports/active-workout-aw10-diagnostic/aw10-active-workout-closure-results.json
           node - <<'NODE'
           const fs = require('node:fs');
-          const report = JSON.parse(fs.readFileSync('ci-reports/active-workout-aw10-diagnostic/aw10-active-workout-closure-results.json', 'utf8'));
-          for (const result of report.results) {
-            console.log(`AW10_OPERATION_DIAGNOSTIC ${JSON.stringify({
-              name: result.name,
-              failures: result.failures,
-              checks: result.checks,
-              measured: result.measured,
-              operationDiagnostics: result.operationDiagnostics
-            })}`);
+          const report = JSON.parse(fs.readFileSync(
+            'ci-reports/active-workout-aw10-focused/aw10-active-workout-closure-results.json',
+            'utf8',
+          ));
+          if (report.results.length !== 3) {
+            throw new Error(`Expected 3 focused scenarios, found ${report.results.length}.`);
           }
+          const failed = report.results.filter((result) => result.failures.length);
+          if (failed.length) {
+            throw new Error(`Focused AW-10 failures: ${JSON.stringify(failed)}`);
+          }
+          console.log('Focused AW-10 durable scenarios passed 3/3.');
           NODE
-          echo "Focused AW-10 runner exit status: $qa_status"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: aw10-durable-operation-diagnostic-${{ github.run_id }}
-          path: |
-            ci-reports/active-workout-aw10-diagnostic/
-            ci-reports/aw10-diagnostic-server.log
-          if-no-files-found: warn
-          retention-days: 3
+          cp /tmp/aw10-runner-after-fix.mjs scripts/run-aw10-active-workout-closure-qa.mjs
+          rm -rf ci-reports
+          git diff --check
+      - name: Commit validated correction
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(active-workout): confirm durable canonical set writes"
+          git push origin HEAD:feat/active-workout-aw8-aw9-aw10-closure
