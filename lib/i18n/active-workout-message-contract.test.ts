@@ -94,7 +94,8 @@ const allowedIdenticalTokens = new Set([
   "Server",
   "kg",
   "lb",
-  "Optional"
+  "Optional",
+  "{weight} kg × {reps}"
 ]);
 const unsafeMessagePattern = /<script|javascript:|onerror\s*=|onclick\s*=/i;
 const placeholderOnlyPattern = /^\s*\{[A-Za-z][^}]*\}\s*$/;
