@@ -37,6 +37,10 @@ const realtime = readFileSync(
   "services/database/active-session-realtime.ts",
   "utf8",
 );
+const aw2bVerification = readFileSync(
+  "supabase/verification/active-workout-aw2b-integration.sql",
+  "utf8",
+);
 
 describe("AW-9 durable synchronization contract", () => {
   it("uses the versioned native IndexedDB schema and seven-day retention", () => {
@@ -114,7 +118,14 @@ describe("AW-9 durable synchronization contract", () => {
     expect(store).toContain('syncState: terminalPending ? "terminal_pending" : "offline_saved"');
   });
 
+  it("keeps internal command receipts private during authenticated verification", () => {
+    expect(aw2bVerification).toContain(
+      ") as controller_conflict_response \\gset\nreset role;\nselect pg_temp.assert_true(",
+    );
+  });
+
   it("uses scoped invalidation-only Realtime with cleanup and no polling", () => {
+    expect(realtime).toContain("env.productionQaBuild");
     expect(realtime).toContain("postgres_changes");
     expect(realtime).toContain(
       "filter: `workout_session_id=eq.${input.workoutSessionId}`",

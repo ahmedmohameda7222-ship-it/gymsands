@@ -178,6 +178,7 @@ select public.apply_workout_session_execution_command_atomic(
   :'owner_id'::uuid,:'session_id'::uuid,'a2b00000-0000-4000-8000-000000000104'::uuid,2,
   'pause','{"controller_device_id":"a2b00000-0000-4000-8000-000000000199"}'::jsonb
 ) as controller_conflict_response \gset
+reset role;
 select pg_temp.assert_true(
   (:'controller_conflict_response'::jsonb->>'outcome')='controller_conflict'
   and (:'controller_conflict_response'::jsonb->>'reason')='controller_not_claimed'
@@ -185,8 +186,6 @@ select pg_temp.assert_true(
   and (select revision=2 and updated_at=:'paused_updated_at'::timestamptz and controller_device_id is null from public.workout_session_execution_states where workout_session_id=:'session_id'::uuid)
   and (select count(*)=1 and min(outcome)='controller_conflict' from public.workout_session_execution_commands where workout_session_id=:'session_id'::uuid and command_id='a2b00000-0000-4000-8000-000000000104'::uuid),
   'Identity-bearing ordinary command bypassed claim_control or mutated the unclaimed session.');
-
-reset role;
 
 insert into public.user_workout_plans (id,user_id,name,is_active,is_default,source,created_at,updated_at)
 values ('a2b00000-0000-4000-8000-000000000020',:'owner_id'::uuid,'AW-2B legacy plan',false,false,'manual',now(),now());

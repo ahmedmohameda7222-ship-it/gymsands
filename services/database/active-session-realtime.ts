@@ -1,5 +1,6 @@
 "use client";
 
+import { env } from "@/lib/env";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 
@@ -9,7 +10,8 @@ export function subscribeToActiveSessionInvalidation(input: {
   onInvalidate: () => void;
 }) {
   if (
-    !supabase
+    env.productionQaBuild
+    || !supabase
     || !isUuid(input.userId)
     || !isUuid(input.workoutSessionId)
   ) return () => undefined;
