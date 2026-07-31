@@ -145,6 +145,7 @@ export async function installAw5CorrectionFixture(context, {
     status: "started",
     source: direct ? "manual" : "schedule"
   };
+  let performedLogs = [];
   let muscleRequestCount = 0;
   const snapshot = {
     id: snapshotId,
@@ -287,10 +288,16 @@ export async function installAw5CorrectionFixture(context, {
     if (method === "GET" && pathname.includes("/rest/v1/workout_session_prescription_sets")) {
       return respond(sets, 200, { "content-range": "0-1/2" });
     }
+    if (method === "GET" && pathname.includes("/rest/v1/exercise_logs")) {
+      return respond(performedLogs, 200, {
+        "content-range": performedLogs.length
+          ? "0-" + (performedLogs.length - 1) + "/" + performedLogs.length
+          : "*/0"
+      });
+    }
     if (method === "GET" && (
       pathname.includes("/rest/v1/workout_session_prescription_metric_targets")
       || pathname.includes("/rest/v1/workout_performance_metric_definitions")
-      || pathname.includes("/rest/v1/exercise_logs")
       || pathname.includes("/rest/v1/user_exercise_alternatives")
       || pathname.includes("/rest/v1/user_progression_targets")
     )) {
@@ -299,12 +306,80 @@ export async function installAw5CorrectionFixture(context, {
     if (method === "POST" && pathname.includes("/rest/v1/rpc/upsert_workout_set_logs_atomic")) {
       if (delayCanonical) await delayedCanonical.promise;
       const payload = request.postDataJSON();
-      await respond({ saved: payload?.p_logs?.length ?? 1, deleted: 0 });
+      const incoming = Array.isArray(payload?.p_logs) ? payload.p_logs : [];
+      for (const log of incoming) {
+        const exerciseIdentity = log.plan_exercise_id
+          ?? String(log.exercise_order ?? "none") + ":" + String(log.exercise_name ?? "").trim().toLowerCase();
+        const identity = exerciseIdentity + ":set:" + log.set_number;
+        const row = {
+          id: log.id
+            ?? "25000000-0000-4000-8000-" + String(log.set_number ?? 0).padStart(12, "0"),
+          workout_session_id: sessionId,
+          user_id: contract.userId,
+          plan_exercise_id: log.plan_exercise_id ?? null,
+          exercise_order: log.exercise_order ?? null,
+          exercise_name: log.exercise_name,
+          exercise_category: log.exercise_category ?? null,
+          planned_sets: log.planned_sets ?? null,
+          planned_reps: log.planned_reps ?? null,
+          planned_rest_seconds: log.planned_rest_seconds ?? null,
+          set_number: log.set_number,
+          reps: log.reps ?? null,
+          weight_kg: log.weight_kg ?? null,
+          notes: log.notes ?? null,
+          completed_at: log.completed_at ?? null,
+          set_details: log.set_details ?? null,
+          performance_metrics: log.performance_metrics ?? [],
+          segments: log.segments ?? []
+        };
+        const index = performedLogs.findIndex((existing) => {
+          const existingExercise = existing.plan_exercise_id
+            ?? String(existing.exercise_order ?? "none") + ":" + String(existing.exercise_name ?? "").trim().toLowerCase();
+          return existingExercise + ":set:" + existing.set_number === identity;
+        });
+        if (index >= 0) performedLogs[index] = row;
+        else performedLogs.push(row);
+      }
+      await respond({ saved: incoming.length, deleted: 0 });
       canonicalFinished.resolve();
       return;
     }
     if (method === "POST" && pathname.includes("/rest/v1/rpc/complete_workout_session_atomic")) {
       const payload = request.postDataJSON();
+      const incoming = Array.isArray(payload?.p_final_logs) ? payload.p_final_logs : [];
+      for (const log of incoming) {
+        const exerciseIdentity = log.plan_exercise_id
+          ?? String(log.exercise_order ?? "none") + ":" + String(log.exercise_name ?? "").trim().toLowerCase();
+        const identity = exerciseIdentity + ":set:" + log.set_number;
+        const row = {
+          id: log.id
+            ?? "25000000-0000-4000-8000-" + String(log.set_number ?? 0).padStart(12, "0"),
+          workout_session_id: sessionId,
+          user_id: contract.userId,
+          plan_exercise_id: log.plan_exercise_id ?? null,
+          exercise_order: log.exercise_order ?? null,
+          exercise_name: log.exercise_name,
+          exercise_category: log.exercise_category ?? null,
+          planned_sets: log.planned_sets ?? null,
+          planned_reps: log.planned_reps ?? null,
+          planned_rest_seconds: log.planned_rest_seconds ?? null,
+          set_number: log.set_number,
+          reps: log.reps ?? null,
+          weight_kg: log.weight_kg ?? null,
+          notes: log.notes ?? null,
+          completed_at: log.completed_at ?? null,
+          set_details: log.set_details ?? null,
+          performance_metrics: log.performance_metrics ?? [],
+          segments: log.segments ?? []
+        };
+        const index = performedLogs.findIndex((existing) => {
+          const existingExercise = existing.plan_exercise_id
+            ?? String(existing.exercise_order ?? "none") + ":" + String(existing.exercise_name ?? "").trim().toLowerCase();
+          return existingExercise + ":set:" + existing.set_number === identity;
+        });
+        if (index >= 0) performedLogs[index] = row;
+        else performedLogs.push(row);
+      }
       root = {
         ...root,
         status: "completed",
@@ -347,6 +422,16 @@ export async function installAw5CorrectionFixture(context, {
 
   return {
     sessionId,
+    setServerRootStatus(status) {
+      root = {
+        ...root,
+        status,
+        completed_at: status === "completed"
+          ? root.completed_at ?? "2026-07-27T09:00:00.000Z"
+          : null
+      };
+    },
+    performedLogsSnapshot: () => JSON.parse(JSON.stringify(performedLogs)),
     muscleRequestCount: () => muscleRequestCount,
     releaseCanonical: delayedCanonical.resolve,
     canonicalSettled: () => delayedCanonical.settled,
