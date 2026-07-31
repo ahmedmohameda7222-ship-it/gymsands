@@ -34,8 +34,9 @@ jobs:
           set -euo pipefail
           git fetch origin main
           git show origin/main:.github/workflows/pr-quality.yml > .github/workflows/pr-quality.yml
+          node .github/aw10-materializer-fix.cjs
           node .github/aw10-closure-materialize.cjs
-          git rm .github/aw10-closure-materialize.cjs
+          git rm .github/aw10-closure-materialize.cjs .github/aw10-materializer-fix.cjs
           git diff --check
           node --check scripts/run-aw10-active-workout-closure-qa.mjs
           npm ci
