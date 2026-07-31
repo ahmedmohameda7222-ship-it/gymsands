@@ -40,6 +40,31 @@ describe("AW-8 derived metrics", () => {
     expect(metrics.averageRir).toBe(2);
   });
 
+  it("uses direct structured values per key before segment and compatibility fallback", () => {
+    const metrics = deriveSessionMetrics([
+      {
+        id: "mixed",
+        exercise_name: "Row",
+        reps: 99,
+        weight_kg: 99,
+        completed_at: completedAt,
+        performance_metrics: [{ metric_key: "repetitions", value: 8 }],
+        segments: [{
+          metric_values: [
+            { metric_key: "repetitions", value: 12 },
+            { metric_key: "external_load_kg", value: 70 },
+            { metric_key: "duration_seconds", value: 30 },
+          ],
+        }],
+      },
+    ]);
+
+    expect(metrics.exercises[0].maxRepetitions).toBe(8);
+    expect(metrics.exercises[0].heaviestExternalLoadKg).toBe(70);
+    expect(metrics.durationSeconds).toBe(30);
+    expect(metrics.externalLoadVolume).toBe(840);
+  });
+
   it("deduplicates log identities and rejects invalid values", () => {
     const log = {
       id: "same-log",
@@ -120,6 +145,73 @@ describe("AW-8 derived metrics", () => {
     expect(
       metrics.personalRecords.some((record) => record.type === "max_repetitions"),
     ).toBe(true);
+  });
+
+  it("compares volume against the best historical session, not lifetime volume", () => {
+    const history = [
+      {
+        id: "history-a",
+        workout_session_id: "session-a",
+        exercise_name: "Bench Press",
+        reps: 10,
+        weight_kg: 50,
+        completed_at: completedAt,
+      },
+      {
+        id: "history-b",
+        workout_session_id: "session-b",
+        exercise_name: "Bench Press",
+        reps: 10,
+        weight_kg: 50,
+        completed_at: completedAt,
+      },
+    ];
+    const current = [
+      {
+        id: "current-a",
+        workout_session_id: "session-current",
+        exercise_name: "Bench Press",
+        reps: 11,
+        weight_kg: 50,
+        completed_at: completedAt,
+      },
+    ];
+    const metrics = deriveSessionMetrics(current, history);
+    expect(
+      metrics.personalRecords.some((record) =>
+        record.type === "session_volume" && record.value === 550
+      ),
+    ).toBe(true);
+  });
+
+  it("uses only eligible working sets for performance change", () => {
+    const metrics = deriveSessionMetrics([
+      {
+        id: "working-1",
+        exercise_name: "Bench Press",
+        reps: 10,
+        weight_kg: 100,
+        set_type: "working",
+        completed_at: completedAt,
+      },
+      {
+        id: "drop",
+        exercise_name: "Bench Press",
+        reps: 12,
+        weight_kg: 60,
+        set_type: "drop",
+        completed_at: completedAt,
+      },
+      {
+        id: "working-2",
+        exercise_name: "Bench Press",
+        reps: 8,
+        weight_kg: 100,
+        set_type: "working",
+        completed_at: completedAt,
+      },
+    ]);
+    expect(metrics.exercises[0].performanceChangePercent).toBeCloseTo(-5);
   });
 
   it("derives pace only when duration and distance both exist", () => {
