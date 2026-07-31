@@ -17,6 +17,7 @@ import {
 } from "./identity";
 
 type CanonicalSet = {
+  workoutSessionIdentity: string;
   exerciseIdentity: string;
   exerciseName: string;
   setType: string;
@@ -30,6 +31,14 @@ type CanonicalSet = {
   rir: number | null;
   eligibleEstimatedOneRepMaxKg: number | null;
 };
+
+const workingPerformanceSetTypes = new Set(["working", "normal", "failure"]);
+const comparableRepetitionSetTypes = new Set([
+  "working",
+  "normal",
+  "failure",
+  "amrap",
+]);
 
 function finiteNonNegative(value: unknown): number | null {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -57,9 +66,11 @@ function metricKey(metric: DerivedMetricValue): string {
   return String(metric.metricKey ?? metric.metric_key ?? "");
 }
 
-function metricValues(log: DerivedMetricLog): DerivedMetricValue[][] {
-  const direct = log.performanceMetrics ?? log.performance_metrics;
-  if (direct?.length) return [[...direct]];
+function directMetricValues(log: DerivedMetricLog): DerivedMetricValue[] {
+  return [...(log.performanceMetrics ?? log.performance_metrics ?? [])];
+}
+
+function segmentMetricValues(log: DerivedMetricLog): DerivedMetricValue[][] {
   return (log.segments ?? [])
     .map((segment) => [
       ...("metricValues" in segment
@@ -71,15 +82,19 @@ function metricValues(log: DerivedMetricLog): DerivedMetricValue[][] {
     .filter((segment) => segment.length > 0);
 }
 
-function metricFromSegment(
+function reduceMetricValues(
   metrics: readonly DerivedMetricValue[],
   key: string,
+  reducer: "sum" | "max",
 ): number | null {
   const values = metrics
     .filter((metric) => metricKey(metric) === key)
     .map((metric) => finiteNonNegative(metric.value))
     .filter((value): value is number => value !== null);
-  return values.length ? Math.max(...values) : null;
+  if (!values.length) return null;
+  return reducer === "sum"
+    ? values.reduce((sum, value) => sum + value, 0)
+    : Math.max(...values);
 }
 
 function compatibilityMetric(log: DerivedMetricLog, key: string): number | null {
@@ -91,18 +106,43 @@ function compatibilityMetric(log: DerivedMetricLog, key: string): number | null 
 
 function canonicalMetric(
   log: DerivedMetricLog,
+  direct: readonly DerivedMetricValue[],
   segments: readonly DerivedMetricValue[][],
   key: string,
   reducer: "sum" | "max",
 ): number | null {
-  const structured = segments
-    .map((segment) => metricFromSegment(segment, key))
+  const directValue = reduceMetricValues(direct, key, reducer);
+  if (directValue !== null) return directValue;
+
+  const segmentValues = segments
+    .map((segment) => reduceMetricValues(segment, key, reducer))
     .filter((value): value is number => value !== null);
-  if (structured.length)
+  if (segmentValues.length)
     return reducer === "sum"
-      ? structured.reduce((sum, value) => sum + value, 0)
-      : Math.max(...structured);
+      ? segmentValues.reduce((sum, value) => sum + value, 0)
+      : Math.max(...segmentValues);
+
   return compatibilityMetric(log, key);
+}
+
+function pairedStructuredVolume(
+  direct: readonly DerivedMetricValue[],
+  segments: readonly DerivedMetricValue[][],
+): number | null {
+  const directRepetitions = reduceMetricValues(direct, "repetitions", "sum");
+  const directLoad = reduceMetricValues(direct, "external_load_kg", "max");
+  if (directRepetitions !== null && directLoad !== null)
+    return directRepetitions * directLoad;
+
+  let foundPair = false;
+  const segmentVolume = segments.reduce((sum, segment) => {
+    const repetitions = reduceMetricValues(segment, "repetitions", "sum");
+    const load = reduceMetricValues(segment, "external_load_kg", "max");
+    if (repetitions === null || load === null) return sum;
+    foundPair = true;
+    return sum + repetitions * load;
+  }, 0);
+  return foundPair ? segmentVolume : null;
 }
 
 export function estimateEligibleOneRepMax(
@@ -130,7 +170,8 @@ function canonicalSet(log: DerivedMetricLog): CanonicalSet | null {
   const identity = derivedExerciseIdentity(log);
   if (!name || identity === "name:") return null;
 
-  const segments = metricValues(log);
+  const direct = directMetricValues(log);
+  const segments = segmentMetricValues(log);
   const details = log.setDetails ?? log.set_details;
   const setType = String(
     log.setType ??
@@ -139,34 +180,35 @@ function canonicalSet(log: DerivedMetricLog): CanonicalSet | null {
       details?.set_type ??
       "normal",
   );
-  const repetitions = canonicalMetric(log, segments, "repetitions", "sum");
+  const repetitions = canonicalMetric(
+    log,
+    direct,
+    segments,
+    "repetitions",
+    "sum",
+  );
   const externalLoadKg = canonicalMetric(
     log,
+    direct,
     segments,
     "external_load_kg",
     "max",
   );
   const durationSeconds =
-    canonicalMetric(log, segments, "duration_seconds", "sum") ?? 0;
+    canonicalMetric(log, direct, segments, "duration_seconds", "sum") ?? 0;
   const distanceMeters =
-    canonicalMetric(log, segments, "distance_meters", "sum") ?? 0;
-  const rounds = canonicalMetric(log, segments, "rounds", "sum") ?? 0;
-  const structuredVolume = segments.reduce((sum, segment) => {
-    const segmentReps = metricFromSegment(segment, "repetitions");
-    const segmentLoad = metricFromSegment(segment, "external_load_kg");
-    return sum +
-      (segmentReps !== null && segmentLoad !== null
-        ? segmentReps * segmentLoad
-        : 0);
-  }, 0);
-  const volume =
-    structuredVolume > 0
-      ? structuredVolume
-      : (repetitions ?? 0) * (externalLoadKg ?? 0);
+    canonicalMetric(log, direct, segments, "distance_meters", "sum") ?? 0;
+  const rounds =
+    canonicalMetric(log, direct, segments, "rounds", "sum") ?? 0;
+  const structuredVolume = pairedStructuredVolume(direct, segments);
+  const volume = structuredVolume ??
+    ((repetitions ?? 0) * (externalLoadKg ?? 0));
   const rpe = finiteInRange(log.rpe ?? details?.rpe, 0, 10);
   const rir = finiteInRange(log.rir ?? details?.rir, 0, 20);
 
   return {
+    workoutSessionIdentity:
+      String(log.workoutSessionId ?? log.workout_session_id ?? "unknown"),
     exerciseIdentity: identity,
     exerciseName: name,
     setType,
@@ -223,6 +265,25 @@ function bestByIdentity(
   return result;
 }
 
+function bestHistoricalSessionVolume(
+  sets: readonly CanonicalSet[],
+): Map<string, number> {
+  const bySessionExercise = new Map<string, number>();
+  for (const set of sets) {
+    const key = `${set.workoutSessionIdentity}:${set.exerciseIdentity}`;
+    bySessionExercise.set(key, (bySessionExercise.get(key) ?? 0) + set.volume);
+  }
+  const result = new Map<string, number>();
+  for (const [key, volume] of bySessionExercise) {
+    const exerciseIdentity = key.slice(key.indexOf(":") + 1);
+    result.set(
+      exerciseIdentity,
+      Math.max(result.get(exerciseIdentity) ?? 0, volume),
+    );
+  }
+  return result;
+}
+
 function record(
   set: CanonicalSet,
   type: DerivedPersonalRecordType,
@@ -254,17 +315,17 @@ export function buildPersonalRecordCandidates(
   );
   const previousReps = new Map<string, number>();
   for (const set of historical) {
-    if (set.repetitions === null) continue;
+    if (
+      set.repetitions === null ||
+      !comparableRepetitionSetTypes.has(set.setType)
+    ) continue;
     const key = comparableRepetitionKey(set);
-    previousReps.set(key, Math.max(previousReps.get(key) ?? -Infinity, set.repetitions));
-  }
-  const previousSessionVolume = new Map<string, number>();
-  for (const set of historical) {
-    previousSessionVolume.set(
-      set.exerciseIdentity,
-      (previousSessionVolume.get(set.exerciseIdentity) ?? 0) + set.volume,
+    previousReps.set(
+      key,
+      Math.max(previousReps.get(key) ?? -Infinity, set.repetitions),
     );
   }
+  const previousSessionVolume = bestHistoricalSessionVolume(historical);
 
   const candidates: DerivedPersonalRecord[] = [];
   const exercises = new Map<string, CanonicalSet[]>();
@@ -278,7 +339,10 @@ export function buildPersonalRecordCandidates(
     const first = sets[0];
     const maxLoad = [...sets]
       .filter((set) => (set.externalLoadKg ?? 0) > 0)
-      .sort((left, right) => (right.externalLoadKg ?? 0) - (left.externalLoadKg ?? 0))[0];
+      .sort(
+        (left, right) =>
+          (right.externalLoadKg ?? 0) - (left.externalLoadKg ?? 0),
+      )[0];
     if (
       maxLoad &&
       maxLoad.externalLoadKg !== null &&
@@ -311,7 +375,10 @@ export function buildPersonalRecordCandidates(
       );
 
     for (const set of sets) {
-      if (set.repetitions === null) continue;
+      if (
+        set.repetitions === null ||
+        !comparableRepetitionSetTypes.has(set.setType)
+      ) continue;
       const context = comparableRepetitionKey(set);
       if (set.repetitions > (previousReps.get(context) ?? 0))
         candidates.push(record(set, "max_repetitions", set.repetitions, context));
@@ -322,7 +389,9 @@ export function buildPersonalRecordCandidates(
       volume > 0 &&
       volume > (previousSessionVolume.get(first.exerciseIdentity) ?? 0)
     )
-      candidates.push(record(first, "session_volume", volume, first.exerciseIdentity));
+      candidates.push(
+        record(first, "session_volume", volume, first.exerciseIdentity),
+      );
   }
 
   const unique = new Map<string, DerivedPersonalRecord>();
@@ -347,9 +416,16 @@ function exerciseMetrics(
       ? []
       : [set.eligibleEstimatedOneRepMaxKg],
   );
+  const eligibleWorkingSets = sets.flatMap((set) =>
+    workingPerformanceSetTypes.has(set.setType) &&
+    set.eligibleEstimatedOneRepMaxKg !== null
+      ? [set.eligibleEstimatedOneRepMaxKg]
+      : [],
+  );
   const performanceChangePercent =
-    eligible.length > 1 && eligible[0] !== 0
-      ? ((eligible.at(-1)! - eligible[0]) / eligible[0]) * 100
+    eligibleWorkingSets.length > 1 && eligibleWorkingSets[0] !== 0
+      ? ((eligibleWorkingSets.at(-1)! - eligibleWorkingSets[0]) /
+          eligibleWorkingSets[0]) * 100
       : null;
   const loads = sets.flatMap((set) =>
     set.externalLoadKg === null ? [] : [set.externalLoadKg],
