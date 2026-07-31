@@ -134,7 +134,15 @@ async function completeCurrentSet(page, { skipRest = true } = {}) {
 }
 
 async function openReview(page) {
-  await visible(page, "[data-aw5-finish-action]").click({ timeout: 10_000 });
+  const mobileFinish = page.locator("[data-aw5-finish-action]:visible");
+  if (await mobileFinish.count()) {
+    await mobileFinish.first().click({ timeout: 10_000 });
+  } else {
+    await page.getByRole("button", { name: "Finish", exact: true })
+      .filter({ visible: true })
+      .last()
+      .click({ timeout: 10_000 });
+  }
   await visible(page, "[data-aw7-review-surface]").waitFor({
     state: "visible",
     timeout: 15_000
@@ -142,13 +150,13 @@ async function openReview(page) {
 }
 
 async function finishPartial(page) {
-  const finish = page.locator("[data-aw7-review-actions] button:visible").last();
-  await finish.click({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Finish partial workout", exact: true })
+    .click({ timeout: 10_000 });
   await visible(page, "[data-aw7-partial-confirmation]").waitFor({
     state: "visible",
     timeout: 10_000
   });
-  await page.locator("[data-aw7-partial-confirmation] button:visible").last()
+  await page.getByRole("button", { name: "Finish anyway", exact: true })
     .click({ timeout: 10_000 });
 }
 
@@ -211,13 +219,15 @@ async function operationCount(page) {
       request.onerror = () => reject(request.error);
     });
     const transaction = database.transaction("operations", "readonly");
-    const countRequest = transaction.objectStore("operations").count();
-    const count = await new Promise((resolve, reject) => {
-      countRequest.onsuccess = () => resolve(countRequest.result);
-      countRequest.onerror = () => reject(countRequest.error);
+    const allRequest = transaction.objectStore("operations").getAll();
+    const operations = await new Promise((resolve, reject) => {
+      allRequest.onsuccess = () => resolve(allRequest.result);
+      allRequest.onerror = () => reject(allRequest.error);
     });
     database.close();
-    return count;
+    return operations.filter((operation) =>
+      operation.state !== "applied" && operation.state !== "discarded"
+    ).length;
   });
 }
 
@@ -443,13 +453,15 @@ async function prepareAction({ scenario, context, page, fixture, checks }) {
         request.onerror = () => reject(request.error);
       });
       const transaction = database.transaction("operations", "readonly");
-      const countRequest = transaction.objectStore("operations").count();
-      const count = await new Promise((resolve, reject) => {
-        countRequest.onsuccess = () => resolve(countRequest.result);
-        countRequest.onerror = () => reject(countRequest.error);
+      const allRequest = transaction.objectStore("operations").getAll();
+      const operations = await new Promise((resolve, reject) => {
+        allRequest.onsuccess = () => resolve(allRequest.result);
+        allRequest.onerror = () => reject(allRequest.error);
       });
       database.close();
-      return count === 0;
+      return operations.every((operation) =>
+        operation.state === "applied" || operation.state === "discarded"
+      );
     }, undefined, { timeout: 20_000 });
     checks.pendingAfter = await operationCount(page);
     checks.serverTerminalWins = checks.pendingAfter === 0;
@@ -480,7 +492,7 @@ async function prepareAction({ scenario, context, page, fixture, checks }) {
     const takeover = page.locator("[data-aw9-device-conflict] button:visible").nth(1);
     checks.takeoverDisabledOffline = await takeover.isDisabled();
     if (scenario.action === "takeover-confirmation") {
-      await setOffline(page, false);
+      await setOffline(page, false, false);
       await page.waitForTimeout(250);
       if (await takeover.isDisabled()) {
         throw new Error("Takeover stayed disabled after reconnect.");
