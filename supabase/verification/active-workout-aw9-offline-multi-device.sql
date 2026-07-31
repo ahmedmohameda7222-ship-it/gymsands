@@ -50,8 +50,9 @@ begin
     raise exception 'AW-9 must not promote the compatibility marker.';
   end if;
 
-  if has_function_privilege('anon', 'public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)', 'EXECUTE')
-     or has_function_privilege('public', 'public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)', 'EXECUTE') then
+  -- The anon role inherits PUBLIC grants, so an explicit anon check detects
+  -- accidental broad execution without depending on a role named "public".
+  if has_function_privilege('anon', 'public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)', 'EXECUTE') then
     raise exception 'AW-9 public command authority grants execution too broadly.';
   end if;
   if not has_function_privilege('authenticated', 'public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)', 'EXECUTE')
