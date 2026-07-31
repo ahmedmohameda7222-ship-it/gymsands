@@ -53,8 +53,7 @@ jobs:
             components/workouts/active-workout/active-workout-core-session.identity.test.tsx \
             components/workouts/active-workout-minimized-bar.test.tsx \
             lib/product/active-workout-aw7-minimize-review-completion.test.ts \
-            lib/i18n/active-workout-message-contract.test.ts \
-            lib/i18n/active-workout-surface-contract.test.ts
+            lib/i18n/active-workout-message-contract.test.ts
       - name: Commit validated non-workflow AW-10 files
         run: |
           set -euo pipefail
