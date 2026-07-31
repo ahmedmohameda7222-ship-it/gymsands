@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+const authProvider = readFileSync(
+  "components/auth/auth-provider.tsx",
+  "utf8",
+);
 const indexedDb = readFileSync(
   "lib/workouts/active-session-sync/indexed-db.ts",
   "utf8",
@@ -62,6 +66,20 @@ describe("AW-9 durable synchronization contract", () => {
     expect(fallbackLease).toContain("await clock.sleep");
     expect(fallbackLease).toContain("if (!isOwned()) return null");
     expect(fallbackLease).toContain("if (isOwned()) input.storage.removeItem");
+  });
+
+  it("clears user-scoped offline state on explicit or remote sign-out", () => {
+    expect(authProvider).toContain("activeUserIdRef");
+    expect(authProvider).toContain(
+      "await clearActiveWorkoutClientState(previousUserId)",
+    );
+    expect(authProvider).toContain(
+      "releaseActiveSessionStoresForUser(userId)",
+    );
+    expect(authProvider).toContain("clearActiveWorkoutUserData(userId)");
+    expect(authProvider).toContain(
+      "const userId = session?.user.id ?? activeUserIdRef.current",
+    );
   });
 
   it("restores the exact candidate session from cache only after offline failure", () => {
