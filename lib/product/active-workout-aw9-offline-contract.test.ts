@@ -5,6 +5,10 @@ const authProvider = readFileSync(
   "components/auth/auth-provider.tsx",
   "utf8",
 );
+const activeWorkoutCore = readFileSync(
+  "components/workouts/active-workout/active-workout-core-session-implementation.tsx",
+  "utf8",
+);
 const indexedDb = readFileSync(
   "lib/workouts/active-session-sync/indexed-db.ts",
   "utf8",
@@ -67,6 +71,22 @@ describe("AW-9 durable synchronization contract", () => {
     expect(fallbackLease).toContain("if (!isOwned()) return null");
     expect(fallbackLease).toContain("if (!isOwned()) return");
     expect(fallbackLease).toContain("input.storage.removeItem(input.key)");
+  });
+
+  it("starts every same-device tab read-only until fenced leadership is proven", () => {
+    expect(activeWorkoutCore).toContain(
+      "const [tabLeader, setTabLeader] = useState(false)",
+    );
+    expect(activeWorkoutCore).toContain(
+      "void leadership.acquire().then(setTabLeader)",
+    );
+    expect(activeWorkoutCore).toContain(
+      "void leadership.acquire(true).then(setTabLeader)",
+    );
+    expect(activeWorkoutCore).toContain("leadership.dispose()");
+    expect(activeWorkoutCore).not.toContain(
+      "setTabLeader(tabLeadershipRef.current?.acquire(true) ?? true)",
+    );
   });
 
   it("clears user-scoped offline state on explicit or remote sign-out", () => {
