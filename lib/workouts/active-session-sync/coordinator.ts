@@ -28,6 +28,8 @@ const MAX_RETRY_MS = 30_000;
 const MAX_ATTEMPTS = 6;
 const FLUSH_LEASE_MS = 15_000;
 
+type DataConflictStrategy = "server" | "local";
+
 export type ActiveWorkoutSyncCoordinator = {
   enqueue(
     payload: ActiveWorkoutOperationPayload,
@@ -36,9 +38,10 @@ export type ActiveWorkoutSyncCoordinator = {
   ): Promise<ActiveWorkoutOperation>;
   reconcile(options?: { force?: boolean }): Promise<ActiveWorkoutSyncState>;
   pendingCount(): Promise<number>;
+  resolveDataConflict(strategy: DataConflictStrategy): Promise<ActiveWorkoutSyncState>;
   resolveDataConflict(
     operationId: string,
-    strategy: "server" | "local",
+    strategy: DataConflictStrategy,
   ): Promise<ActiveWorkoutSyncState>;
   dispose(): void;
 };
@@ -165,20 +168,8 @@ export function createActiveWorkoutSyncCoordinator(input: {
         !confirmedTarget
         || fingerprintCanonicalExerciseLog(confirmedTarget) !== desiredFingerprint
       ) {
-        throw new ActiveSessionTransportUncertainError(
-          {
-            userId: operation.userId,
-            workoutSessionId: operation.workoutSessionId,
-            commandId: operation.id,
-            commandType: "move_cursor",
-            expectedRevision: operation.baseRevision ?? 0,
-            payload: {
-              active_snapshot_item_id: null,
-              active_item_order: 1,
-              active_set_number: 1,
-            },
-          },
-          new Error("The canonical set write could not be confirmed."),
+        throw new Error(
+          "The canonical set write could not be confirmed because the connection is temporarily unavailable.",
         );
       }
       return;
@@ -474,13 +465,23 @@ export function createActiveWorkoutSyncCoordinator(input: {
       return reconciliation;
     },
     pendingCount,
-    async resolveDataConflict(operationIdValue, strategy) {
+    async resolveDataConflict(
+      operationIdOrStrategy: string,
+      maybeStrategy?: DataConflictStrategy,
+    ) {
       const operations = await listActiveWorkoutOperations(
         input.userId,
         input.workoutSessionId,
       );
+      const strategy = maybeStrategy
+        ?? operationIdOrStrategy as DataConflictStrategy;
+      const selectedOperationId = maybeStrategy
+        ? operationIdOrStrategy
+        : operations.find((item) => item.state === "conflict")?.id;
       const operation = operations.find(
-        (item) => item.id === operationIdValue && item.state === "conflict",
+        (item) =>
+          item.id === selectedOperationId
+          && item.state === "conflict",
       );
       if (!operation || operation.payload.kind !== "set_write") {
         throw new ActiveSessionError(
