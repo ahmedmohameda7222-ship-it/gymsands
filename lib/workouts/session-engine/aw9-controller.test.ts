@@ -105,4 +105,3 @@ describe("AW-9 controller authority", () => {
     expect(result.state.controller_device_id).toBe(fixtureIds.deviceId);
   });
 });
-
