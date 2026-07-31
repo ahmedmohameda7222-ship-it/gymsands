@@ -64,7 +64,7 @@ replaceAllExact(
                 if (!leadership) return;
                 void leadership.acquire(true).then(setTabLeader);
               }}`,
-  2,
+  1,
 );
 
 const packagePath = "package.json";
