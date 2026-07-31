@@ -49,7 +49,8 @@ export async function skipWorkoutSessionSnapshotItem(
   userId: string,
   workoutSessionId: string,
   snapshotItemId: string,
-  reason: WorkoutSessionExerciseSkipReason = "user_skipped"
+  reason: WorkoutSessionExerciseSkipReason = "user_skipped",
+  controllerDeviceId?: string,
 ) {
   if (!supabase || !isUuid(userId) || !isUuid(workoutSessionId) || !isUuid(snapshotItemId)) {
     throw new Error("Workout exercise skip request is invalid.");
@@ -58,7 +59,10 @@ export async function skipWorkoutSessionSnapshotItem(
     p_user_id: userId,
     p_session_id: workoutSessionId,
     p_snapshot_item_id: snapshotItemId,
-    p_reason: reason
+    p_reason: reason,
+    ...(controllerDeviceId
+      ? { p_controller_device_id: controllerDeviceId }
+      : {})
   });
   if (error) throw error;
   return data;

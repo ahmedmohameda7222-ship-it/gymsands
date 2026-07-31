@@ -161,16 +161,24 @@ vi.mock("@/lib/workouts/active-session-store/store", () => ({
   getActiveSessionStore: () => ({
     hydrate,
     getSnapshot,
+    subscribe: () => () => undefined,
     dispatch,
     saveCanonicalSets: vi.fn(),
     completeCanonicalSet: vi.fn(),
     completeSession,
     skipExercise: vi.fn(),
-    replaceExercise: vi.fn()
+    replaceExercise: vi.fn(),
+    cancelSession: vi.fn(),
+    retryPendingTransport: vi.fn(),
+    resolveConflict: vi.fn(),
+    setSecondaryProjection: vi.fn()
   })
 }));
 vi.mock("@/services/database/active-session-persistence-adapter", () => ({
   activeSessionPersistenceAdapter: {}
+}));
+vi.mock("@/services/database/active-session-realtime", () => ({
+  subscribeToActiveSessionInvalidation: () => () => undefined
 }));
 vi.mock("@/services/database/direct-workout-sessions", () => ({
   getOrStartWorkoutSession: (...args: unknown[]) => startDirectSession(...args)

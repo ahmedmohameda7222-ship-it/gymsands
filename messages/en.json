@@ -390,6 +390,12 @@
       "skippedExercise": "{name}: skipped",
       "replacedExercise": "{original} replaced by {current}",
       "finalMuscleLoad": "Final Muscle Load",
+      "performance": "Performance",
+      "averageRpe": "Average RPE",
+      "bestEstimatedOneRepMax": "Best estimated 1RM",
+      "performanceChange": "Performance change",
+      "neutralChange": "No comparable change",
+      "metricUnavailable": "Not available",
       "recoveryTitle": "Confirming workout completion",
       "retryDescription": "The workout is still active in review. Retry completion when you are ready.",
       "reconnectDescription": "Plaivra could not confirm the final workout state. Reconnect and retry without leaving this screen."
@@ -407,6 +413,7 @@
       "cancelFailedDescription": "The requested workout was not started. Retry or resume the current workout."
     },
     "offline": {
+      "banner": "You are offline. Workout changes are saved on this device and will sync when the connection returns.",
       "setSaveFailed": "This set could not be saved safely.",
       "keepOpenRetry": "Keep this screen open and try again.",
       "retry": "Retry",
@@ -418,7 +425,32 @@
       "takeOver": "Take over workout",
       "otherReadOnly": "The other device will become read-only.",
       "changedElsewhere": "This workout changed on another device.",
-      "unsavedPreserved": "Your unsaved values were preserved."
+      "unsavedPreserved": "Your unsaved values were preserved.",
+      "sameDeviceTab": "This workout is open in another tab.",
+      "continueThisTab": "Continue in this tab",
+      "viewCurrent": "View current workout",
+      "goBack": "Go back",
+      "takeoverConfirmTitle": "Continue on this device?",
+      "takeoverConfirmDescription": "The other device will become read-only. Your saved values will be checked before they sync.",
+      "confirmTakeover": "Continue on this device"
+    },
+    "sync": {
+      "online_synced": "Synced",
+      "offline_saved": "Saved on this device",
+      "syncing": "Syncing workout",
+      "retry_needed": "Workout needs another sync attempt",
+      "device_conflict": "Another device controls this workout",
+      "data_conflict": "Review changes from another device",
+      "terminal_pending": "Waiting to finish online",
+      "terminalPending": "Workout saved on this device",
+      "terminalPendingDescription": "Plaivra will show completion after the server confirms it.",
+      "setConflict": "Set {set} — {exercise}",
+      "thisDevice": "This device",
+      "server": "Server",
+      "setValues": "{weight} kg × {reps}",
+      "keepServer": "Keep server values",
+      "useLocal": "Use local values",
+      "pendingCount": "{count, plural, =0 {No pending changes} one {# pending change} other {# pending changes}}"
     },
     "validation": {
       "requiredValues": "Enter the required values.",

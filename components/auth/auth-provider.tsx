@@ -11,6 +11,8 @@ import {
   useState,
 } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { clearActiveWorkoutUserData } from "@/lib/workouts/active-session-sync";
+import { releaseActiveSessionStoresForUser } from "@/lib/workouts/active-session-store/store";
 import { env } from "@/lib/env";
 import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";
 import type { Profile } from "@/types";
@@ -190,6 +192,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdmin: profile?.role === "admin",
       refreshProfile,
       signOut: async () => {
+        if (session?.user.id) {
+          releaseActiveSessionStoresForUser(session.user.id);
+          await clearActiveWorkoutUserData(session.user.id).catch(() => undefined);
+        }
         if (supabase) await supabase.auth.signOut();
         setSession(null);
         setProfile(null);

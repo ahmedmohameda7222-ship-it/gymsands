@@ -2,6 +2,7 @@ import type { WorkoutSessionExecutionState } from "@/types";
 import type { ActiveSessionPersistenceAdapter } from "../active-session-store/persistence-adapter";
 import {
   ActiveSessionError,
+  ActiveSessionControllerConflictError,
   ActiveSessionIdempotencyConflictError,
   ActiveSessionRevisionConflictError,
   ActiveSessionTransportUncertainError,
@@ -93,6 +94,11 @@ export function createSessionCommandDispatcher(
         || error instanceof ActiveSessionIdempotencyConflictError
       ) {
         response = error.response;
+      } else if (
+        error instanceof ActiveSessionControllerConflictError
+        && error.response
+      ) {
+        response = error.response;
       } else {
         throw new ActiveSessionError(
           "adapter_failure",
@@ -108,6 +114,9 @@ export function createSessionCommandDispatcher(
     }
     if (response.outcome === "idempotency_conflict") {
       throw new ActiveSessionIdempotencyConflictError(response);
+    }
+    if (response.outcome === "controller_conflict") {
+      throw new ActiveSessionControllerConflictError(response);
     }
     return response;
   }
@@ -173,6 +182,7 @@ export async function dispatchWithTransportClassification(
   } catch (error) {
     if (
       error instanceof ActiveSessionRevisionConflictError
+      || error instanceof ActiveSessionControllerConflictError
       || error instanceof ActiveSessionIdempotencyConflictError
       || error instanceof ActiveSessionError
     ) throw error;

@@ -10,6 +10,9 @@ import type {
   SessionCommandResponse
 } from "@/lib/workouts/session-engine/contracts";
 import {
+  ActiveSessionControllerConflictError
+} from "@/lib/workouts/session-engine/contracts";
+import {
   executeWorkoutSessionExecutionCommand,
   getWorkoutSessionExecutionState
 } from "./workout-session-execution";
@@ -35,6 +38,21 @@ async function dispatchExecutionCommand(request: SessionCommandRequest) {
   );
 }
 
+function rethrowTypedControllerConflict(error: unknown): never {
+  const value = error as {
+    code?: unknown;
+    details?: unknown;
+    message?: unknown;
+  };
+  if (
+    value?.details === "controller_conflict"
+    || value?.message === "Workout controller conflict."
+  ) {
+    throw new ActiveSessionControllerConflictError();
+  }
+  throw error;
+}
+
 export const activeSessionPersistenceAdapter: ActiveSessionPersistenceAdapter = {
   async loadSessionRoot(userId, workoutSessionId) {
     return getWorkoutSessionRoot(userId, workoutSessionId);
@@ -45,19 +63,29 @@ export const activeSessionPersistenceAdapter: ActiveSessionPersistenceAdapter = 
     return getWorkoutSessionLogs(workoutSessionId);
   },
   dispatchExecutionCommand,
-  async writeCanonicalSet(workoutSessionId, logs) {
-    await saveWorkoutSetLogs(
-      workoutSessionId,
-      logs as WorkoutSetLogInput[]
-    );
+  async writeCanonicalSet(workoutSessionId, logs, controllerDeviceId) {
+    try {
+      await saveWorkoutSetLogs(
+        workoutSessionId,
+        logs as WorkoutSetLogInput[],
+        controllerDeviceId
+      );
+    } catch (error) {
+      rethrowTypedControllerConflict(error);
+    }
   },
   async completeSession(input) {
-    await completeWorkoutSession(
-      input.workoutSessionId,
-      input.notes,
-      input.durationMinutes,
-      input.finalLogs as WorkoutSetLogInput[] | undefined
-    );
+    try {
+      await completeWorkoutSession(
+        input.workoutSessionId,
+        input.notes,
+        input.durationMinutes,
+        input.finalLogs as WorkoutSetLogInput[] | undefined,
+        input.controllerDeviceId
+      );
+    } catch (error) {
+      rethrowTypedControllerConflict(error);
+    }
     const root = await getWorkoutSessionRoot(input.userId, input.workoutSessionId);
     if (!root || root.status !== "completed") {
       throw new Error("The completed workout session could not be confirmed.");
@@ -69,19 +97,31 @@ export const activeSessionPersistenceAdapter: ActiveSessionPersistenceAdapter = 
       input.userId,
       input.workoutSessionId,
       input.sourcePlanExerciseId,
-      input.replacement
-    );
+      input.replacement,
+      input.controllerDeviceId
+    ).catch(rethrowTypedControllerConflict);
   },
-  skipExercise(userId, workoutSessionId, snapshotItemId, reason) {
+  skipExercise(
+    userId,
+    workoutSessionId,
+    snapshotItemId,
+    reason,
+    controllerDeviceId
+  ) {
     return skipWorkoutSessionSnapshotItem(
       userId,
       workoutSessionId,
       snapshotItemId,
-      reason
-    );
+      reason,
+      controllerDeviceId
+    ).catch(rethrowTypedControllerConflict);
   },
-  async cancelSession(userId, workoutSessionId) {
-    await cancelWorkoutSession(workoutSessionId);
+  async cancelSession(userId, workoutSessionId, controllerDeviceId) {
+    try {
+      await cancelWorkoutSession(workoutSessionId, controllerDeviceId);
+    } catch (error) {
+      rethrowTypedControllerConflict(error);
+    }
     const root = await getWorkoutSessionRoot(userId, workoutSessionId);
     if (!root || root.status !== "cancelled") {
       throw new Error("The cancelled workout session could not be confirmed.");

@@ -390,6 +390,12 @@
       "skippedExercise": "{name}: übersprungen",
       "replacedExercise": "{original} ersetzt durch {current}",
       "finalMuscleLoad": "Finale Muskelbelastung",
+      "performance": "Leistung",
+      "averageRpe": "Durchschnittliche RPE",
+      "bestEstimatedOneRepMax": "Beste geschätzte 1RM",
+      "performanceChange": "Leistungsveränderung",
+      "neutralChange": "Keine vergleichbare Veränderung",
+      "metricUnavailable": "Nicht verfügbar",
       "recoveryTitle": "Trainingsabschluss wird bestätigt",
       "retryDescription": "Das Training ist weiterhin in der Prüfung aktiv. Versuche den Abschluss erneut.",
       "reconnectDescription": "Plaivra konnte den finalen Trainingsstatus nicht bestätigen. Stelle die Verbindung wieder her und versuche es auf diesem Bildschirm erneut."
@@ -407,6 +413,7 @@
       "cancelFailedDescription": "Das gewünschte Training wurde nicht gestartet. Versuche es erneut oder setze das aktuelle Training fort."
     },
     "offline": {
+      "banner": "Du bist offline. Trainingsänderungen werden auf diesem Gerät gespeichert und später synchronisiert.",
       "setSaveFailed": "Dieser Satz konnte nicht sicher gespeichert werden.",
       "keepOpenRetry": "Lass diesen Bildschirm geöffnet und versuche es erneut.",
       "retry": "Erneut versuchen",
@@ -418,7 +425,32 @@
       "takeOver": "Training übernehmen",
       "otherReadOnly": "Das andere Gerät wird schreibgeschützt.",
       "changedElsewhere": "Dieses Training wurde auf einem anderen Gerät geändert.",
-      "unsavedPreserved": "Deine ungespeicherten Werte wurden beibehalten."
+      "unsavedPreserved": "Deine ungespeicherten Werte wurden beibehalten.",
+      "sameDeviceTab": "Dieses Training ist in einem anderen Tab geöffnet.",
+      "continueThisTab": "In diesem Tab fortfahren",
+      "viewCurrent": "Aktuelles Training ansehen",
+      "goBack": "Zurück",
+      "takeoverConfirmTitle": "Auf diesem Gerät fortfahren?",
+      "takeoverConfirmDescription": "Das andere Gerät kann danach nur noch lesen. Deine gespeicherten Werte werden vor der Synchronisierung geprüft.",
+      "confirmTakeover": "Auf diesem Gerät fortfahren"
+    },
+    "sync": {
+      "online_synced": "Synchronisiert",
+      "offline_saved": "Auf diesem Gerät gespeichert",
+      "syncing": "Training wird synchronisiert",
+      "retry_needed": "Training muss erneut synchronisiert werden",
+      "device_conflict": "Ein anderes Gerät steuert dieses Training",
+      "data_conflict": "Änderungen von einem anderen Gerät prüfen",
+      "terminal_pending": "Warten auf Online-Abschluss",
+      "terminalPending": "Training auf diesem Gerät gespeichert",
+      "terminalPendingDescription": "Plaivra zeigt den Abschluss nach der Serverbestätigung.",
+      "setConflict": "Satz {set} — {exercise}",
+      "thisDevice": "Dieses Gerät",
+      "server": "Server",
+      "setValues": "{weight} kg × {reps}",
+      "keepServer": "Serverwerte behalten",
+      "useLocal": "Lokale Werte verwenden",
+      "pendingCount": "{count, plural, =0 {Keine ausstehenden Änderungen} one {# ausstehende Änderung} other {# ausstehende Änderungen}}"
     },
     "validation": {
       "requiredValues": "Gib die erforderlichen Werte ein.",

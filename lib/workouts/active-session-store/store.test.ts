@@ -71,7 +71,7 @@ function pauseIntent(commandId = fixtureIds.commandId) {
     workoutSessionId: fixtureIds.sessionId,
     commandId,
     commandType: "pause" as const,
-    payload: { controller_device_id: null }
+    payload: { controller_device_id: fixtureIds.deviceId }
   };
 }
 
@@ -346,7 +346,8 @@ describe("AW-4 official Active Workout store", () => {
       userId: fixtureIds.userId,
       workoutSessionId: fixtureIds.sessionId,
       sourcePlanExerciseId: fixtureIds.itemId,
-      replacement
+      replacement,
+      controllerDeviceId: fixtureIds.deviceId
     });
 
     await store.skipExercise(fixtureIds.itemId, "user_skipped");
@@ -354,7 +355,8 @@ describe("AW-4 official Active Workout store", () => {
       fixtureIds.userId,
       fixtureIds.sessionId,
       fixtureIds.itemId,
-      "user_skipped"
+      "user_skipped",
+      fixtureIds.deviceId
     );
     expect(loadSessionRoot).toHaveBeenCalledTimes(3);
   });

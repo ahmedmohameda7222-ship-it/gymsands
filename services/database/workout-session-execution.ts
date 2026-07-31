@@ -7,6 +7,7 @@ import {
   createWorkoutSessionExecutionCommandId,
   normalizeExecutionState,
   normalizeWorkoutSessionExecutionCommandResponse,
+  WorkoutSessionExecutionControllerConflictError,
   WorkoutSessionExecutionIdempotencyConflictError,
   WorkoutSessionExecutionRevisionConflictError,
   type WorkoutSessionExecutionCommandPayloadByType,
@@ -290,6 +291,9 @@ export async function executeWorkoutSessionExecutionCommand<T extends WorkoutSes
   }
   if (response.outcome === "idempotency_conflict") {
     throw new WorkoutSessionExecutionIdempotencyConflictError(response);
+  }
+  if (response.outcome === "controller_conflict") {
+    throw new WorkoutSessionExecutionControllerConflictError(response);
   }
   return response;
 }

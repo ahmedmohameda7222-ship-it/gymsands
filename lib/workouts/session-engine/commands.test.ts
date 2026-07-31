@@ -44,7 +44,7 @@ const pauseIntent = {
   workoutSessionId: fixtureIds.sessionId,
   commandId: fixtureIds.commandId,
   commandType: "pause" as const,
-  payload: { controller_device_id: null }
+  payload: { controller_device_id: fixtureIds.deviceId }
 };
 
 describe("AW-4 serialized command dispatcher", () => {

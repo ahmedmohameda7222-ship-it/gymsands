@@ -34,6 +34,7 @@ import { ActiveWorkoutIndicator } from "@/components/workouts/active-workout-ind
 import { MobileFloatingNav } from "@/components/layout/mobile-floating-nav";
 import { getTrainNavigationTarget } from "@/lib/navigation/mobile-nav";
 import { rememberPreviousActiveWorkoutRoute } from "@/lib/active-workout";
+import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
 
 type NavItem = {
   href: string;
@@ -115,6 +116,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, profile, isAdmin, signOut } = useAuth();
   const { settings } = useUserSettings();
   const { t } = useTranslation();
+  const { t: activeWorkoutT } = useActiveWorkoutTranslation();
   const hideProfileDetails = settings.hideProfileDetails || settings.privateProfileMode;
   const [isOffline, setIsOffline] = useState(false);
 
@@ -151,7 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="premium-page-bg relative min-h-dvh overflow-hidden text-foreground">
         {isOffline ? (
           <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg" role="status">
-            <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You are offline. New changes may not sync until connection returns.</p>
+            <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> {activeWorkoutT("offline.banner")}</p>
           </div>
         ) : null}
         <main id="main-content" className="min-h-dvh">{children}</main>
@@ -163,7 +165,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="premium-page-bg min-h-screen text-foreground" data-app-shell style={appShellBottomLayout}>
       {isOffline ? (
         <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72" role="status">
-          <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You are offline. New changes may not sync until connection returns.</p>
+          <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> {activeWorkoutT("offline.banner")}</p>
         </div>
       ) : null}
       <aside className="glass-shell fixed inset-y-0 left-0 z-40 hidden w-72 border-y-0 border-l-0 lg:flex lg:flex-col">

@@ -106,30 +106,13 @@ export function ActiveWorkoutIndicator() {
         userId,
         workoutSessionId: open.id,
         adapter: activeSessionPersistenceAdapter,
+        controllerDeviceId: controllerDeviceIdRef.current,
         clearCompatibilityCache: () => clearActiveWorkoutState(userId)
       });
       activeSessionStoreRef.current = store;
       await store.hydrate({ force });
-      let persisted = store.getSnapshot().executionState;
+      const persisted = store.getSnapshot().executionState;
       if (!persisted) throw new Error("Active execution state is unavailable.");
-      if (
-        controllerDeviceIdRef.current
-        && persisted.controller_device_id !== controllerDeviceIdRef.current
-      ) {
-        const response = await store.dispatch({
-          userId,
-          workoutSessionId: open.id,
-          commandId: createSessionCommandId(),
-          commandType: "move_cursor",
-          payload: {
-            active_snapshot_item_id: persisted.active_snapshot_item_id,
-            active_item_order: persisted.active_item_order,
-            active_set_number: persisted.active_set_number,
-            controller_device_id: controllerDeviceIdRef.current
-          }
-        });
-        persisted = response.state;
-      }
       const route = resolveActiveWorkoutRoute(open, stored);
       const next = activeWorkoutCacheFromExecution(persisted, {
         route,
@@ -232,6 +215,7 @@ export function ActiveWorkoutIndicator() {
       || !store
       || !executionState
       || executionState.session_state === "review"
+      || executionState.controller_device_id !== controllerDeviceIdRef.current
     ) return;
     setActionPending(true);
     try {
@@ -313,6 +297,18 @@ export function ActiveWorkoutIndicator() {
     timer = formatters.timer(restLeft);
     actionLabel = t("minimized.openWorkout");
     onAction = undefined;
+  }
+  if (snapshot && snapshot.syncState !== "online_synced") {
+    meta = `${meta} · ${t(`sync.${snapshot.syncState}`)} · ${t("sync.pendingCount", {
+      count: snapshot.pendingOperationCount
+    })}`;
+  }
+  if (
+    execution?.controller_device_id
+    && execution.controller_device_id !== controllerDeviceIdRef.current
+  ) {
+    onAction = undefined;
+    actionLabel = t("multiDevice.viewOnly");
   }
 
   return (

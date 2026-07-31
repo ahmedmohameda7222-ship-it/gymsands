@@ -80,7 +80,11 @@ export async function getWorkoutSessionRoot(userId: string, sessionId: string) {
   return data as WorkoutSession | null;
 }
 
-export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {
+export async function saveWorkoutSetLogs(
+  sessionId: string,
+  logs: WorkoutSetLogInput[],
+  controllerDeviceId?: string,
+) {
   requireSessionIdentity(sessionId, "Workout session");
   if (!logs.length) return true;
   const sessionResult = await supabase!
@@ -92,7 +96,10 @@ export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogI
   const { error } = await supabase!.rpc("upsert_workout_set_logs_atomic", {
     p_user_id: sessionResult.data.user_id,
     p_session_id: sessionId,
-    p_logs: serializeWorkoutSetLogs(logs)
+    p_logs: serializeWorkoutSetLogs(logs),
+    ...(controllerDeviceId
+      ? { p_controller_device_id: controllerDeviceId }
+      : {})
   });
   if (error) throw error;
   return true;
@@ -114,7 +121,10 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
   return result.session;
 }
 
-export async function cancelWorkoutSession(sessionId: string) {
+export async function cancelWorkoutSession(
+  sessionId: string,
+  controllerDeviceId?: string,
+) {
   requireSessionIdentity(sessionId, "Workout session");
   const sessionResult = await supabase!
     .from("workout_sessions")
@@ -125,7 +135,10 @@ export async function cancelWorkoutSession(sessionId: string) {
   const { error } = await supabase!.rpc("cancel_workout_session_atomic", {
     p_user_id: sessionResult.data.user_id,
     p_session_id: sessionId,
-    p_reason: "user_cancelled"
+    p_reason: "user_cancelled",
+    ...(controllerDeviceId
+      ? { p_controller_device_id: controllerDeviceId }
+      : {})
   });
   if (error) throw error;
   return true;

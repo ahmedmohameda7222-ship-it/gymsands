@@ -8,6 +8,13 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { InlineFeedback } from "@/components/motion";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toaster";
 import {
   buildActiveWorkoutQuickActions,
@@ -84,6 +91,12 @@ import {
   getActiveSessionStore,
   type ActiveSessionStore
 } from "@/lib/workouts/active-session-store/store";
+import {
+  createActiveWorkoutTabLeadership,
+  type ActiveWorkoutSetConflict,
+  type ActiveWorkoutSyncState,
+  type ActiveWorkoutTabLeadership
+} from "@/lib/workouts/active-session-sync";
 import { createSessionCommandId } from "@/lib/workouts/session-engine/commands";
 import { planSessionAfterSetCompletion } from "@/lib/workouts/session-engine/reducer";
 import {
@@ -93,6 +106,7 @@ import {
   executionStartedAtMs
 } from "@/lib/workouts/workout-session-execution";
 import { activeSessionPersistenceAdapter } from "@/services/database/active-session-persistence-adapter";
+import { subscribeToActiveSessionInvalidation } from "@/services/database/active-session-realtime";
 import { getOrStartWorkoutSession } from "@/services/database/direct-workout-sessions";
 import {
   createExerciseAlternative,
@@ -200,6 +214,15 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const [setFeedbackVariant, setSetFeedbackVariant] = useState<"info" | "error">("info");
   const [prFeedback, setPrFeedback] = useState("");
   const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
+  const [controllerConflictDeviceId, setControllerConflictDeviceId] =
+    useState<string | null>(null);
+  const [syncState, setSyncState] =
+    useState<ActiveWorkoutSyncState>("online_synced");
+  const [pendingOperationCount, setPendingOperationCount] = useState(0);
+  const [dataConflict, setDataConflict] =
+    useState<ActiveWorkoutSetConflict | null>(null);
+  const [tabLeader, setTabLeader] = useState(true);
+  const [takeoverConfirmationOpen, setTakeoverConfirmationOpen] = useState(false);
   const [executionCursorItems, setExecutionCursorItems] = useState<WorkoutSessionExecutionCursorRow[]>([]);
   const [muscleLoadRefreshRevision, setMuscleLoadRefreshRevision] = useState(0);
   const [detailsRequest, setDetailsRequest] = useState<{
@@ -207,15 +230,59 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     focusTarget: "guide-video" | null;
   }>({ section: "overview", focusTarget: null });
 
+  useEffect(() => {
+    if (!userId || !sessionId) return;
+    return subscribeToActiveSessionInvalidation({
+      userId,
+      workoutSessionId: sessionId,
+      onInvalidate: () => {
+        if (typeof navigator !== "undefined" && !navigator.onLine) return;
+        void activeSessionStoreRef.current
+          ?.hydrate({ force: true })
+          .catch(() => undefined);
+      }
+    });
+  }, [sessionId, userId]);
+
   const executionHydratedRef = useRef(false);
   const activeSessionStoreRef = useRef<ActiveSessionStore | null>(null);
   const restExpiryCommandRef = useRef<string | null>(null);
   const controllerDeviceIdRef = useRef<string | null>(null);
   const setDetailsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const minimizePendingRef = useRef(false);
+  const tabLeadershipRef = useRef<ActiveWorkoutTabLeadership | null>(null);
   const exerciseStatesRef = useRef(exerciseStates);
   const autosaveAdapterRef = useRef<WorkoutSetAutosaveAdapter<ActiveWorkoutExerciseState[]> | null>(null);
   const autosaveCoordinatorRef = useRef<WorkoutSetAutosaveCoordinator | null>(null);
+
+  useEffect(() => {
+    if (!userId || !sessionId) return;
+    const leadership = createActiveWorkoutTabLeadership({
+      userId,
+      workoutSessionId: sessionId
+    });
+    tabLeadershipRef.current = leadership;
+    setTabLeader(leadership.acquire());
+    const unsubscribe = leadership.subscribe(setTabLeader);
+    const renew = () => {
+      if (leadership.isLeader()) leadership.renew();
+    };
+    const acquireOnFocus = () => setTabLeader(leadership.acquire());
+    window.addEventListener("pointerdown", renew, { passive: true });
+    window.addEventListener("keydown", renew);
+    window.addEventListener("focus", acquireOnFocus);
+    window.addEventListener("pagehide", leadership.release);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("pointerdown", renew);
+      window.removeEventListener("keydown", renew);
+      window.removeEventListener("focus", acquireOnFocus);
+      window.removeEventListener("pagehide", leadership.release);
+      leadership.release();
+      if (tabLeadershipRef.current === leadership)
+        tabLeadershipRef.current = null;
+    };
+  }, [sessionId, userId]);
   const muscleLoadController = useActiveWorkoutMuscleLoad({
     sessionId,
     refreshRevision: muscleLoadRefreshRevision,
@@ -298,6 +365,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   useEffect(() => {
     let active = true;
+    let unsubscribeStore: (() => void) | null = null;
     executionHydratedRef.current = false;
     activeSessionStoreRef.current = null;
     setIsStarting(true);
@@ -367,9 +435,25 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           userId,
           workoutSessionId: nextSession.id,
           adapter: activeSessionPersistenceAdapter,
+          controllerDeviceId: controllerDeviceIdRef.current,
           clearCompatibilityCache: () => clearActiveWorkoutState(userId)
         });
         activeSessionStoreRef.current = store;
+        unsubscribeStore = store.subscribe(() => {
+          const latest = store.getSnapshot();
+          setSyncState(latest.syncState);
+          setPendingOperationCount(latest.pendingOperationCount);
+          setDataConflict(latest.dataConflict);
+          if (
+            latest.executionState
+            && latest.executionState.controller_device_id !==
+              controllerDeviceIdRef.current
+          ) {
+            setControllerConflictDeviceId(
+              latest.executionState.controller_device_id
+            );
+          }
+        });
         const hydration = store.hydrate({
           legacyCache: {
             userId,
@@ -394,28 +478,58 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         let authoritativeState = hydrated.executionState;
         const cursorItems = [...hydrated.prescription];
         const existingLogs = [...hydrated.performedLogs];
+        if (!authoritativeState && hydrated.finalProjection) {
+          const terminalStates = hydrateStates(
+            cursorItems.map((item) =>
+              makeFrozenExerciseState(item, currentDay.exercises)
+            ),
+            existingLogs
+          );
+          setExerciseStates(terminalStates);
+          exerciseStatesRef.current = terminalStates;
+          setSession(nextSession);
+          setHistory(workoutHistory.filter((item) => item.id !== nextSession.id));
+          const summary = buildSummary(
+            terminalStates,
+            workoutHistory.filter((item) => item.id !== nextSession.id),
+            Math.max(1, nextSession.duration_minutes ?? 1),
+            nextSession.notes ?? "",
+            trRef.current,
+            formatters,
+            hydrated.finalProjection.performedLogs
+          );
+          finalizeVerifiedCompletion(summary);
+          executionHydratedRef.current = true;
+          return;
+        }
         if (!authoritativeState) throw new Error("The active workout has no execution state.");
 
         if (
           controllerDeviceIdRef.current
-          && authoritativeState.controller_device_id !== controllerDeviceIdRef.current
+          && authoritativeState.controller_device_id === null
         ) {
           const response = await store.dispatch({
             userId,
             workoutSessionId: nextSession.id,
             commandId: createSessionCommandId(),
-            commandType: "move_cursor",
+            commandType: "claim_control",
             payload: {
-              active_snapshot_item_id: authoritativeState.active_snapshot_item_id,
-              active_item_order: authoritativeState.active_item_order,
-              active_set_number: authoritativeState.active_set_number,
-              controller_device_id: controllerDeviceIdRef.current
+              controller_device_id: controllerDeviceIdRef.current,
+              expected_controller_device_id: null,
+              takeover: false
             }
           });
           authoritativeState = response.state;
         }
+        const controllerConflict =
+          authoritativeState.controller_device_id !== controllerDeviceIdRef.current;
+        setControllerConflictDeviceId(
+          controllerConflict ? authoritativeState.controller_device_id : null
+        );
 
         if (
+          !controllerConflict
+          &&
           authoritativeState.view_state === "rest"
           && executionRestSecondsLeft(authoritativeState) <= 0
         ) {
@@ -438,8 +552,23 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           ? cursorItems
           : mockPrescriptionItemsFromPlan(currentDay.exercises, nextSession.id, userId);
         setExecutionCursorItems(authoritativeItems);
+        const cachedSecondaryProjection = hydrated.lastValidSecondaryProjection;
+        const cachedStates = Array.isArray(cachedSecondaryProjection)
+          && cachedSecondaryProjection.every((item) =>
+            typeof item === "object"
+            && item !== null
+            && "exercise" in item
+            && "prescriptionItem" in item
+            && "sets" in item
+            && Array.isArray(item.sets)
+          )
+          ? cachedSecondaryProjection as ActiveWorkoutExerciseState[]
+          : null;
         const hydratedStates = hydrateStates(
-          authoritativeItems.map((item) => makeFrozenExerciseState(item, currentDay.exercises)),
+          cachedStates
+            ?? authoritativeItems.map((item) =>
+              makeFrozenExerciseState(item, currentDay.exercises)
+            ),
           existingLogs
         );
         setExerciseStates(hydratedStates);
@@ -499,7 +628,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         if (active) setIsStarting(false);
       });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+      unsubscribeStore?.();
+    };
   }, [
     bumpMuscleLoadRefreshRevision,
     mirrorExecutionState,
@@ -809,6 +941,9 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   useEffect(() => {
     exerciseStatesRef.current = exerciseStates;
+    if (exerciseStates.length > 0) {
+      activeSessionStoreRef.current?.setSecondaryProjection(exerciseStates);
+    }
   }, [exerciseStates]);
 
   useEffect(() => {
@@ -1291,14 +1426,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       setActionsOpen(true);
       return;
     }
-    const summary = buildSummary(
-      exerciseStates,
-      history,
-      durationMinutes,
-      sessionNotes,
-      tr,
-      formatters
-    );
     const store = activeSessionStoreRef.current;
     if (!store) return;
     setIsSaving(true);
@@ -1316,16 +1443,45 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           : buildCanonicalLogRows(exerciseStates)
       });
       const terminal = store.getSnapshot();
+      if (terminal.syncState === "terminal_pending") {
+        setSyncState("terminal_pending");
+        setPendingOperationCount(terminal.pendingOperationCount);
+        setFinishOpen(true);
+        toastRef.current({
+          title: tr("sync.terminalPending"),
+          description: tr("sync.terminalPendingDescription")
+        });
+        return;
+      }
       if (
         !terminal.root
         || terminal.root.status === "started"
         || terminal.executionState
       ) throw new Error("The completed workout session could not be confirmed.");
+      const summary = buildSummary(
+        exerciseStates,
+        history,
+        durationMinutes,
+        sessionNotes,
+        tr,
+        formatters,
+        terminal.finalProjection?.performedLogs
+      );
       finalizeVerifiedCompletion(summary);
     } catch (error) {
       try {
         const recovered = await restoreReviewAfterCompletionFailure();
         if (recovered === "terminal") {
+          const recoveredTerminal = store.getSnapshot();
+          const summary = buildSummary(
+            exerciseStates,
+            history,
+            durationMinutes,
+            sessionNotes,
+            tr,
+            formatters,
+            recoveredTerminal.finalProjection?.performedLogs
+          );
           finalizeVerifiedCompletion(summary);
         } else {
           setCompletionRecovery("retry");
@@ -1342,6 +1498,41 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           description: userSafeError(error, tr("completion.reconnectDescription"))
         });
       }
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function takeOverWorkout() {
+    const store = activeSessionStoreRef.current;
+    const localDeviceId = controllerDeviceIdRef.current;
+    const latest = store?.getSnapshot().executionState;
+    if (!userId || !store || !localDeviceId || !latest || !navigator.onLine) return;
+    setIsSaving(true);
+    try {
+      const response = await store.dispatch({
+        userId,
+        workoutSessionId: latest.workout_session_id,
+        commandId: createSessionCommandId(),
+        commandType: "claim_control",
+        payload: {
+          controller_device_id: localDeviceId,
+          expected_controller_device_id: latest.controller_device_id,
+          takeover: true
+        }
+      });
+      setExecutionState(response.state);
+      setControllerConflictDeviceId(null);
+      await store.hydrate({ force: true });
+    } catch (error) {
+      await store.hydrate({ force: true }).catch(() => undefined);
+      setControllerConflictDeviceId(
+        store.getSnapshot().executionState?.controller_device_id ?? null
+      );
+      toastRef.current({
+        title: tr("multiDevice.changedElsewhere"),
+        description: userSafeError(error, tr("multiDevice.unsavedPreserved"))
+      });
     } finally {
       setIsSaving(false);
     }
@@ -1654,6 +1845,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     completedSummary
     || isSaving
     || isStarting
+    || !tabLeader
+    || controllerConflictDeviceId !== null
     || !sessionId
     || (!isPaused && !restActive && !isFinished && (
       Boolean(activeSet.completedAt)
@@ -1680,7 +1873,94 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       void finishSet(activeExerciseIndex, activeSetIndex);
     }
   };
-  const busy = isSaving || isStarting;
+  const busy =
+    isSaving
+    || isStarting
+    || controllerConflictDeviceId !== null
+    || !tabLeader;
+  const syncNotice =
+    syncState === "online_synced" || controllerConflictDeviceId
+      ? null
+      : (
+    <section
+      data-aw9-sync-state={syncState}
+      role="status"
+      className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] mx-auto max-w-xl rounded-[16px] border border-border/70 bg-background/95 px-4 py-3 shadow-lg backdrop-blur lg:bottom-4"
+    >
+      <p className="text-sm font-semibold">{tr(`sync.${syncState}`)}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        {tr("sync.pendingCount", { count: pendingOperationCount })}
+      </p>
+      {syncState === "data_conflict" ? (
+        <>
+          {dataConflict ? (
+            <div className="mt-2 rounded-xl bg-muted/55 p-3 text-sm">
+              <p className="font-semibold">
+                {tr("sync.setConflict", {
+                  set: formatters.integer(dataConflict.local.setNumber),
+                  exercise: isolateBidiText(dataConflict.local.exerciseName)
+                })}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                {tr("sync.thisDevice")}: {tr("sync.setValues", {
+                  weight: formatters.decimal(dataConflict.local.weightKg ?? 0),
+                  reps: formatters.integer(dataConflict.local.reps ?? 0)
+                })}
+              </p>
+              <p className="text-muted-foreground">
+                {tr("sync.server")}: {dataConflict.server
+                  ? tr("sync.setValues", {
+                      weight: formatters.decimal(dataConflict.server.weight_kg ?? 0),
+                      reps: formatters.integer(dataConflict.server.reps ?? 0)
+                    })
+                  : tr("completion.metricUnavailable")}
+              </p>
+            </div>
+          ) : null}
+          <div className="mt-2 grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-10"
+            onClick={() => {
+              void activeSessionStoreRef.current
+                ?.resolveDataConflict("server")
+                .catch(() => undefined);
+            }}
+          >
+            {tr("sync.keepServer")}
+          </Button>
+          <Button
+            type="button"
+            className="min-h-10"
+            onClick={() => {
+              void activeSessionStoreRef.current
+                ?.resolveDataConflict("local")
+                .catch(() => undefined);
+            }}
+          >
+            {tr("sync.useLocal")}
+          </Button>
+          </div>
+        </>
+      ) : null}
+      {syncState === "retry_needed"
+        || syncState === "device_conflict" ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2 min-h-10 w-full"
+            onClick={() => {
+              void activeSessionStoreRef.current
+                ?.retryPendingTransport()
+                .catch(() => undefined);
+            }}
+          >
+            {tr("common.retry")}
+          </Button>
+        ) : null}
+    </section>
+  );
   const allQuickActions = buildActiveWorkoutQuickActions({
     sourceKind,
     hasGuideOrVideo: Boolean(currentGuideUrl || currentCustomVideoUrl),
@@ -1715,6 +1995,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setDetailsRequest({ section, focusTarget });
     setActionsOpen(true);
   };
+  const deviceConflictBackHref = userId
+    ? readPreviousActiveWorkoutRoute(userId)
+      ?? (sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts")
+    : "/workouts";
   const handleQuickAction = (
     action: ActiveWorkoutQuickAction,
     trigger: HTMLButtonElement
@@ -1746,6 +2030,26 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   if (completedSummary || reviewOpen) {
     return (
       <div data-active-workout-controller className="contents">
+        {syncNotice}
+        {!tabLeader ? (
+          <section
+            data-aw9-tab-conflict
+            role="status"
+            className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur"
+          >
+            <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 min-h-11 w-full"
+              onClick={() => {
+                setTabLeader(tabLeadershipRef.current?.acquire(true) ?? true);
+              }}
+            >
+              {tr("multiDevice.continueThisTab")}
+            </Button>
+          </section>
+        ) : null}
         <ActiveWorkoutReviewBridge
           open={reviewOpen}
           busy={busy}
@@ -1778,6 +2082,106 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   return (
     <div data-active-workout-controller className="contents">
+      {syncNotice}
+      {!tabLeader ? (
+        <section
+          data-aw9-tab-conflict
+          role="status"
+          className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur"
+        >
+          <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {tr("multiDevice.viewOnly")}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 min-h-11 w-full"
+            onClick={() => {
+              setTabLeader(tabLeadershipRef.current?.acquire(true) ?? true);
+            }}
+          >
+            {tr("multiDevice.continueThisTab")}
+          </Button>
+        </section>
+      ) : null}
+      {controllerConflictDeviceId ? (
+        <section
+          data-aw9-device-conflict
+          role="status"
+          className="fixed inset-x-3 top-3 z-[65] mx-auto max-w-xl rounded-[18px] border border-warning/40 bg-background/95 p-4 shadow-lg backdrop-blur"
+        >
+          <h2 className="font-semibold">{tr("multiDevice.activeElsewhere")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {tr("multiDevice.viewOnly")}
+          </p>
+          <div className="mt-3 grid gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 w-full"
+              onClick={() => {
+                document
+                  .querySelector("[data-aw5-execution-shell]")
+                  ?.scrollIntoView({ block: "start" });
+              }}
+            >
+              {tr("multiDevice.viewCurrent")}
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11 w-full"
+              onClick={() => setTakeoverConfirmationOpen(true)}
+              disabled={
+                isSaving
+                || (typeof navigator !== "undefined" && !navigator.onLine)
+              }
+            >
+              {tr("multiDevice.takeOver")}
+            </Button>
+            <Button asChild variant="ghost" className="min-h-11 w-full">
+              <Link href={deviceConflictBackHref} prefetch={false}>
+                {tr("multiDevice.goBack")}
+              </Link>
+            </Button>
+          </div>
+        </section>
+      ) : null}
+      <Dialog
+        open={takeoverConfirmationOpen}
+        onOpenChange={setTakeoverConfirmationOpen}
+      >
+        <DialogContent data-aw9-takeover-confirmation className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tr("multiDevice.takeoverConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {tr("multiDevice.takeoverConfirmDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-12"
+              onClick={() => setTakeoverConfirmationOpen(false)}
+              disabled={isSaving}
+            >
+              {tr("common.back")}
+            </Button>
+            <Button
+              type="button"
+              className="min-h-12"
+              onClick={() => {
+                setTakeoverConfirmationOpen(false);
+                void takeOverWorkout();
+              }}
+              disabled={isSaving}
+            >
+              {tr("multiDevice.confirmTakeover")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <ActiveWorkoutExecutionShell
         direction={dir}
         sessionLabel={sourceKind === "direct" ? tr("header.workoutSession") : day.day_name}

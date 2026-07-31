@@ -390,6 +390,12 @@
       "skippedExercise": "{name}: متخطى",
       "replacedExercise": "تم استبدال {original} بـ {current}",
       "finalMuscleLoad": "الحمل العضلي النهائي",
+      "performance": "الأداء",
+      "averageRpe": "متوسط RPE",
+      "bestEstimatedOneRepMax": "أفضل 1RM تقديري",
+      "performanceChange": "تغير الأداء",
+      "neutralChange": "لا يوجد تغير قابل للمقارنة",
+      "metricUnavailable": "غير متاح",
       "recoveryTitle": "جارٍ تأكيد اكتمال التمرين",
       "retryDescription": "ما زال التمرين نشطًا في المراجعة. أعد محاولة الإنهاء عندما تكون جاهزًا.",
       "reconnectDescription": "تعذر على Plaivra تأكيد الحالة النهائية للتمرين. أعد الاتصال والمحاولة دون مغادرة هذه الشاشة."
@@ -407,6 +413,7 @@
       "cancelFailedDescription": "لم يبدأ التمرين المطلوب. أعد المحاولة أو استأنف التمرين الحالي."
     },
     "offline": {
+      "banner": "أنت غير متصل. تُحفظ تغييرات التمرين على هذا الجهاز وستتم مزامنتها عند عودة الاتصال.",
       "setSaveFailed": "تعذر حفظ هذه المجموعة بأمان.",
       "keepOpenRetry": "أبقِ هذه الشاشة مفتوحة وحاول مرة أخرى.",
       "retry": "إعادة المحاولة",
@@ -418,7 +425,32 @@
       "takeOver": "تولي التمرين",
       "otherReadOnly": "سيصبح الجهاز الآخر للعرض فقط.",
       "changedElsewhere": "تغير هذا التمرين على جهاز آخر.",
-      "unsavedPreserved": "تم الاحتفاظ بقيمك غير المحفوظة."
+      "unsavedPreserved": "تم الاحتفاظ بقيمك غير المحفوظة.",
+      "sameDeviceTab": "هذا التمرين مفتوح في علامة تبويب أخرى.",
+      "continueThisTab": "المتابعة في علامة التبويب هذه",
+      "viewCurrent": "عرض التمرين الحالي",
+      "goBack": "رجوع",
+      "takeoverConfirmTitle": "هل تريد المتابعة على هذا الجهاز؟",
+      "takeoverConfirmDescription": "سيصبح الجهاز الآخر للعرض فقط. سيتم التحقق من قيمك المحفوظة قبل مزامنتها.",
+      "confirmTakeover": "المتابعة على هذا الجهاز"
+    },
+    "sync": {
+      "online_synced": "تمت المزامنة",
+      "offline_saved": "محفوظ على هذا الجهاز",
+      "syncing": "جارٍ مزامنة التمرين",
+      "retry_needed": "يحتاج التمرين إلى محاولة مزامنة أخرى",
+      "device_conflict": "جهاز آخر يتحكم في هذا التمرين",
+      "data_conflict": "راجع التغييرات من جهاز آخر",
+      "terminal_pending": "بانتظار الإنهاء عبر الإنترنت",
+      "terminalPending": "تم حفظ التمرين على هذا الجهاز",
+      "terminalPendingDescription": "ستعرض Plaivra الاكتمال بعد تأكيد الخادم.",
+      "setConflict": "المجموعة {set} — {exercise}",
+      "thisDevice": "هذا الجهاز",
+      "server": "الخادم",
+      "setValues": "{weight} كجم × {reps}",
+      "keepServer": "الاحتفاظ بقيم الخادم",
+      "useLocal": "استخدام القيم المحلية",
+      "pendingCount": "{count, plural, =0 {لا تغييرات معلقة} one {تغيير واحد معلق} two {تغييران معلقان} few {# تغييرات معلقة} many {# تغييرًا معلقًا} other {# تغيير معلق}}"
     },
     "validation": {
       "requiredValues": "أدخل القيم المطلوبة.",
