@@ -7,7 +7,9 @@ describe("AW-3C effective runtime source contract", () => {
   it("uses one frozen projection service and canonical direct snake_case writes", () => {
     const execution = read("services/database/workout-session-execution.ts");
     const direct = read("services/database/direct-workout-sessions.ts");
-    const controller = read("components/workouts/active-workout/active-workout-core-session.tsx");
+    const controller = read(
+      "components/workouts/active-workout/active-workout-core-session-implementation.tsx",
+    );
     const runtimeModel = [
       read("components/workouts/active-workout/active-workout-runtime-model.ts"),
       read("components/workouts/active-workout/active-workout-runtime-model-core.ts")
