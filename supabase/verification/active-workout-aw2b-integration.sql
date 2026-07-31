@@ -177,12 +177,14 @@ select updated_at as paused_updated_at from public.workout_session_execution_sta
 select public.apply_workout_session_execution_command_atomic(
   :'owner_id'::uuid,:'session_id'::uuid,'a2b00000-0000-4000-8000-000000000104'::uuid,2,
   'pause','{"controller_device_id":"a2b00000-0000-4000-8000-000000000199"}'::jsonb
-) as noop_response \gset
+) as controller_conflict_response \gset
 select pg_temp.assert_true(
-  (:'noop_response'::jsonb->>'outcome')='no_op'
-  and (:'noop_response'::jsonb->>'revisionAfter')::bigint=2
-  and (select revision=2 and updated_at=:'paused_updated_at'::timestamptz and controller_device_id is null from public.workout_session_execution_states where workout_session_id=:'session_id'::uuid),
-  'Pause no-op advanced revision, changed updated_at, or wrote controller metadata.');
+  (:'controller_conflict_response'::jsonb->>'outcome')='controller_conflict'
+  and (:'controller_conflict_response'::jsonb->>'reason')='controller_not_claimed'
+  and (:'controller_conflict_response'::jsonb->>'revisionAfter')::bigint=2
+  and (select revision=2 and updated_at=:'paused_updated_at'::timestamptz and controller_device_id is null from public.workout_session_execution_states where workout_session_id=:'session_id'::uuid)
+  and (select count(*)=1 and min(outcome)='controller_conflict' from public.workout_session_execution_commands where workout_session_id=:'session_id'::uuid and command_id='a2b00000-0000-4000-8000-000000000104'::uuid),
+  'Identity-bearing ordinary command bypassed claim_control or mutated the unclaimed session.');
 
 reset role;
 
