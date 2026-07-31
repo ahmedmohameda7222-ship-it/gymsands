@@ -1,9 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const component = readFileSync("components/workouts/active-workout/active-workout-core-session.tsx", "utf8").replaceAll("\r\n", "\n");
-const service = readFileSync("services/database/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
-const store = readFileSync("lib/workouts/active-session-store/store.ts", "utf8").replaceAll("\r\n", "\n");
+const component = readFileSync(
+  "components/workouts/active-workout/active-workout-core-session-implementation.tsx",
+  "utf8",
+).replaceAll("\r\n", "\n");
+const service = readFileSync(
+  "services/database/workout-session-execution.ts",
+  "utf8",
+).replaceAll("\r\n", "\n");
+const store = readFileSync(
+  "lib/workouts/active-session-store/store-core.ts",
+  "utf8",
+).replaceAll("\r\n", "\n");
 
 function functionBody(source: string, name: string, nextName: string) {
   const start = source.indexOf(`  async function ${name}`);
@@ -19,7 +28,10 @@ describe("AW-2A lifecycle preserved under AW-2B command authority", () => {
     expect(finishSet).toContain("store.completeCanonicalSet");
     const completeCanonicalSet = store.slice(
       store.indexOf("async completeCanonicalSet"),
-      store.indexOf("\n    async completeSession", store.indexOf("async completeCanonicalSet"))
+      store.indexOf(
+        "\n    async completeSession",
+        store.indexOf("async completeCanonicalSet"),
+      ),
     );
     expect(completeCanonicalSet.indexOf("adapter.writeCanonicalSet"))
       .toBeLessThan(completeCanonicalSet.indexOf("dispatch(setInput.executionIntent)"));
@@ -38,7 +50,7 @@ describe("AW-2A lifecycle preserved under AW-2B command authority", () => {
       "active_set_number",
       "view_state",
       "rest_duration_seconds",
-      "controller_device_id"
+      "controller_device_id",
     ]) expect(operation).toContain(field);
     expect(operation).not.toContain("rest_started_at:");
     expect(operation).not.toContain("rest_ends_at:");
