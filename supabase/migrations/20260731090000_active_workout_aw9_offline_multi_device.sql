@@ -378,7 +378,7 @@ begin
     );
   end if;
 
-  if jsonb_object_length(v_payload) <> 3
+  if (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(v_payload)) <> 3
      or not (v_payload ?& array[
        'controller_device_id',
        'expected_controller_device_id',
