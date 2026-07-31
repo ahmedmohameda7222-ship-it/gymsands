@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: pr-quality-${{ github.event.pull_request.number }}
+  group: aw89-materializer-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
