@@ -1,24 +1,27 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Evidence captured:** 2026-07-26
+**Evidence captured:** 2026-07-31
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Reconciled through AW-4
+**Status:** AW-4 applied; AW-9 pending independent review
 
 This document is a human-readable summary only. It does not authorize migration replay, merge, deployment, compatibility-marker promotion, or Production writes.
 
 ## Current state
 
 - Physical Production migration records: **75**
-- Repository classifications: **75**
+- Repository classifications: **76**
 - Exact applications (`state = applied`): **63**
 - Generated-version aliases (`state = applied_version_alias`): **12**
-- `pendingCount = 0`
+- Repository-only pending migrations: **1**
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- `release_ready = false`
 - Released compatibility marker: `20260724232734`
-- Latest physical record: `20260726114212_active_workout_aw4_session_engine`
+- Latest physical Production record: `20260726114212_active_workout_aw4_session_engine`
+- Expected Production migration while AW-9 remains pending: `20260726114212_active_workout_aw4_session_engine`
 
 Physical schema advancement and compatibility-marker promotion are deliberately separate release operations.
 
@@ -28,7 +31,7 @@ Physical schema advancement and compatibility-marker promotion are deliberately 
 Repository 20260726075737_active_workout_aw4_session_engine.sql
 Production 20260726114212_active_workout_aw4_session_engine
 State      applied_version_alias
-Evidence   bc22cb06e1683cf1bcf5dbf2330bb20c711da6a0
+Evidence   020a17d0b82ec3c50aed7d5f1ad03e5e19b5abc9
 Git blob   e79d74a90adcc62b044ce5eec83018416fdbabab
 SHA-256    b9d5af90a8b7c277bf9892cdae8c412c58284641b7e51f19d220c683eb272d93
 ```
@@ -51,6 +54,18 @@ Both migrations were applied exactly once to Plaivra Production. The repository 
 
 Post-application evidence records 86 normalized prescription sets, 15 metric targets, zero duplicate/orphan/owner-path violations, zero non-contiguous prescription items, and private canonicalization/materialization authority unavailable to anonymous or authenticated callers.
 
+## AW-9 pending identity
+
+```text
+Repository 20260731090000_active_workout_aw9_offline_multi_device.sql
+State      pending
+Evidence   020a17d0b82ec3c50aed7d5f1ad03e5e19b5abc9
+Git blob   f1ffadfa2a0fc3b149afc6cfbf3c82751f18230c
+SHA-256    1e727c81e333b08bfe4cc4f2aae50014ac07064bc25625913b14b27f41f7bf3e
+```
+
+The AW-9 migration is repository-only and pending independent review. It has not been applied to Supabase Production. The Production migration count and compatibility marker remain unchanged. Applied migrations must not be replayed.
+
 ## Authority and verification
 
 Use these current sources:
@@ -62,7 +77,3 @@ Use these current sources:
 - exact-head Quality and Exact Release workflow artifacts
 
 Merged pull requests and Git history preserve historical implementation reports. Those reports are not current migration authority and are intentionally excluded from the active tree.
-
-### AW-9 pending database migration
-
-`20260731090000_active_workout_aw9_offline_multi_device.sql` is repository-only and pending independent review. It has not been applied to Supabase Production. The Production compatibility marker remains unchanged; do not replay applied migrations.
