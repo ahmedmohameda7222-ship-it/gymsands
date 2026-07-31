@@ -7,7 +7,7 @@ const routeSurfaces = [
 ] as const;
 
 const authoritySurfaces = [
-  "components/workouts/active-workout/active-workout-core-session.tsx",
+  "components/workouts/active-workout/active-workout-core-session-implementation.tsx",
   "components/workouts/active-workout-indicator.tsx"
 ] as const;
 
