@@ -16,6 +16,12 @@ function memoryStorage() {
   };
 }
 
+const testClock = {
+  now: () => 1_000,
+  token: () => "fence-a",
+  sleep: async () => undefined,
+};
+
 describe("AW-9 fenced localStorage fallback lease", () => {
   it("refuses a live lease owned by another tab", async () => {
     const storage = memoryStorage();
@@ -31,9 +37,8 @@ describe("AW-9 fenced localStorage fallback lease", () => {
       ownerId: "tab-b",
       leaseMs: 1_000,
       clock: {
-        now: () => 1_000,
+        ...testClock,
         token: () => "fence-b",
-        sleep: async () => undefined,
       },
     });
 
@@ -52,8 +57,7 @@ describe("AW-9 fenced localStorage fallback lease", () => {
       ownerId: "tab-a",
       leaseMs: 1_000,
       clock: {
-        now: () => 1_000,
-        token: () => "fence-a",
+        ...testClock,
         sleep: async () => {
           storage.setItem("lane", JSON.stringify({
             ownerId: "tab-b",
@@ -65,6 +69,28 @@ describe("AW-9 fenced localStorage fallback lease", () => {
     });
 
     expect(lease).toBeNull();
+  });
+
+  it("fails closed when browser storage access is denied", async () => {
+    const deniedStorage = {
+      getItem() {
+        throw new DOMException("Blocked", "SecurityError");
+      },
+      setItem() {
+        throw new DOMException("Blocked", "SecurityError");
+      },
+      removeItem() {
+        throw new DOMException("Blocked", "SecurityError");
+      },
+    };
+
+    await expect(acquireActiveWorkoutFallbackLease({
+      storage: deniedStorage,
+      key: "lane",
+      ownerId: "tab-a",
+      leaseMs: 1_000,
+      clock: testClock,
+    })).resolves.toBeNull();
   });
 
   it("never renews or releases a lease after its fence token is lost", async () => {
