@@ -65,6 +65,22 @@ function adapter(
   };
 }
 
+function createStore(
+  persistenceAdapter: ActiveSessionPersistenceAdapter,
+  options: {
+    commandId?: () => string;
+    clearCompatibilityCache?: () => void;
+  } = {}
+) {
+  return createActiveSessionStore({
+    userId: fixtureIds.userId,
+    workoutSessionId: fixtureIds.sessionId,
+    controllerDeviceId: fixtureIds.deviceId,
+    adapter: persistenceAdapter,
+    ...options
+  });
+}
+
 function pauseIntent(commandId = fixtureIds.commandId) {
   return {
     userId: fixtureIds.userId,
@@ -91,11 +107,7 @@ describe("AW-4 official Active Workout store", () => {
       loadPrescription: vi.fn(async () => { calls.push("prescription"); await gate.promise; return [prescriptionFixture()]; }),
       loadPerformedLogs: vi.fn(async () => { calls.push("logs"); await gate.promise; return []; })
     });
-    const store = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: mock
-    });
+    const store = createStore(mock);
     const first = store.hydrate();
     const second = store.hydrate();
     expect(first).toBe(second);
@@ -120,11 +132,7 @@ describe("AW-4 official Active Workout store", () => {
       loadPrescription: vi.fn(async () => [prescriptionFixture()]),
       loadPerformedLogs: vi.fn(async () => [])
     });
-    const store = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: mock
-    });
+    const store = createStore(mock);
     const stale = store.hydrate();
     await Promise.resolve();
     const current = store.hydrate({ force: true });
@@ -136,31 +144,19 @@ describe("AW-4 official Active Workout store", () => {
   });
 
   it("rejects cross-user hydration and divergent equal revisions", async () => {
-    const wrong = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: adapter({
-        loadSessionRoot: vi.fn(async () => ({ ...root(), user_id: "other-user" }))
-      })
-    });
+    const wrong = createStore(adapter({
+      loadSessionRoot: vi.fn(async () => ({ ...root(), user_id: "other-user" }))
+    }));
     await expect(wrong.hydrate()).rejects.toMatchObject({ code: "identity_mismatch" });
 
-    const store = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: adapter()
-    });
+    const store = createStore(adapter());
     await store.hydrate();
     expect(() => store.reconcile(executionFixture({ active_set_number: 2 })))
       .toThrow(/same revision/i);
   });
 
   it("notifies only selectors whose selected slice changed", async () => {
-    const store = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: adapter()
-    });
+    const store = createStore(adapter());
     await store.hydrate();
     const cursorListener = vi.fn();
     const surfaceListener = vi.fn();
@@ -191,16 +187,11 @@ describe("AW-4 official Active Workout store", () => {
         bootstrap_source: "client_cache_import",
         updated_at: "2026-07-26T08:00:01.000Z"
       })));
-    const store = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: adapter({
-        loadExecutionState: vi.fn(async () =>
-          executionFixture({ bootstrap_source: "legacy_backfill" })),
-        dispatchExecutionCommand: dispatch
-      }),
-      commandId: () => fixtureIds.commandId
-    });
+    const store = createStore(adapter({
+      loadExecutionState: vi.fn(async () =>
+        executionFixture({ bootstrap_source: "legacy_backfill" })),
+      dispatchExecutionCommand: dispatch
+    }), { commandId: () => fixtureIds.commandId });
     await store.hydrate({
       legacyCache: {
         userId: fixtureIds.userId,
@@ -212,11 +203,7 @@ describe("AW-4 official Active Workout store", () => {
     expect(store.getSnapshot().executionState?.bootstrap_source)
       .toBe("client_cache_import");
 
-    const untrusted = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: adapter({ dispatchExecutionCommand: dispatch })
-    });
+    const untrusted = createStore(adapter({ dispatchExecutionCommand: dispatch }));
     await untrusted.hydrate({
       legacyCache: {
         userId: "another-user",
@@ -231,11 +218,7 @@ describe("AW-4 official Active Workout store", () => {
     const send = vi.fn(async (request: SessionCommandRequest) => {
       throw new ActiveSessionTransportUncertainError(request, new TypeError("lost"));
     });
-    const store = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: adapter({ dispatchExecutionCommand: send })
-    });
+    const store = createStore(adapter({ dispatchExecutionCommand: send }));
     await store.hydrate();
     await expect(store.dispatch(pauseIntent())).rejects
       .toBeInstanceOf(ActiveSessionTransportUncertainError);
@@ -277,11 +260,7 @@ describe("AW-4 official Active Workout store", () => {
           updated_at: "2026-07-26T08:00:01.000Z"
         }))
     });
-    const store = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: mock
-    });
+    const store = createStore(mock);
     await store.hydrate();
     await expect(store.completeCanonicalSet({
       logs: [{
@@ -302,12 +281,7 @@ describe("AW-4 official Active Workout store", () => {
 
   it("cleans durable authority after confirmed terminal success", async () => {
     const clearCompatibilityCache = vi.fn();
-    const store = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: adapter(),
-      clearCompatibilityCache
-    });
+    const store = createStore(adapter(), { clearCompatibilityCache });
     await store.hydrate();
     await store.completeSession({ notes: "", durationMinutes: 30 });
     expect(store.getSnapshot()).toMatchObject({
@@ -326,11 +300,7 @@ describe("AW-4 official Active Workout store", () => {
     const skipExercise = vi.fn(async () => ({}));
     const loadSessionRoot = vi.fn(async () => root());
     const mock = adapter({ replaceExercise, skipExercise, loadSessionRoot });
-    const store = createActiveSessionStore({
-      userId: fixtureIds.userId,
-      workoutSessionId: fixtureIds.sessionId,
-      adapter: mock
-    });
+    const store = createStore(mock);
     await store.hydrate();
     const replacement = {
       id: fixtureIds.itemId,
