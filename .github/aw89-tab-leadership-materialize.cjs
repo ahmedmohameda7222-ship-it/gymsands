@@ -68,6 +68,71 @@ replaceOnce(
             }}`,
 );
 
+const offlineContractPath =
+  "lib/product/active-workout-aw9-offline-contract.test.ts";
+replaceOnce(
+  offlineContractPath,
+  `    expect(fallbackLease).toContain("if (isOwned()) input.storage.removeItem");`,
+  `    expect(fallbackLease).toContain("if (!isOwned()) return");
+    expect(fallbackLease).toContain("input.storage.removeItem(input.key)");`,
+);
+
+const identityTestPath =
+  "components/workouts/active-workout/active-workout-core-session.identity.test.tsx";
+replaceOnce(
+  identityTestPath,
+  `vi.mock("@/lib/workouts/active-session-store/store", () => ({
+  getActiveSessionStore: () => ({
+    hydrate,
+    getSnapshot,
+    subscribe: () => () => undefined,
+    dispatch,
+    saveCanonicalSets: vi.fn(),
+    completeCanonicalSet: vi.fn(),
+    completeSession,
+    skipExercise: vi.fn(),
+    replaceExercise: vi.fn(),
+    cancelSession: vi.fn(),
+    retryPendingTransport: vi.fn(),
+    resolveConflict: vi.fn(),
+    setSecondaryProjection: vi.fn()
+  })
+}));
+vi.mock("@/services/database/active-session-persistence-adapter", () => ({`,
+  `vi.mock("@/lib/workouts/active-session-store/store", () => ({
+  getActiveSessionStore: () => ({
+    hydrate,
+    getSnapshot,
+    subscribe: () => () => undefined,
+    dispatch,
+    saveCanonicalSets: vi.fn(),
+    completeCanonicalSet: vi.fn(),
+    completeSession,
+    skipExercise: vi.fn(),
+    replaceExercise: vi.fn(),
+    cancelSession: vi.fn(),
+    retryPendingTransport: vi.fn(),
+    resolveConflict: vi.fn(),
+    setSecondaryProjection: vi.fn()
+  })
+}));
+vi.mock("@/lib/workouts/active-session-sync", () => ({
+  createActiveWorkoutTabLeadership: () => ({
+    tabId: "tab-1",
+    isLeader: () => true,
+    acquire: async () => true,
+    renew: () => true,
+    release: () => undefined,
+    dispose: () => undefined,
+    subscribe: (listener: (leader: boolean) => void) => {
+      listener(true);
+      return () => undefined;
+    }
+  })
+}));
+vi.mock("@/services/database/active-session-persistence-adapter", () => ({`,
+);
+
 const packagePath = "package.json";
 const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
 const scriptName = "test:active-workout:aw8-aw10";
