@@ -34,6 +34,10 @@ describe("AW-10 canonical Active Workout closure", () => {
     expect(fixture).toContain("segment_id: segmentId");
     expect(fixture).toContain("payload?.p_logs");
     expect(fixture).not.toContain("payload?.p_final_logs");
+    expect(fixture).toContain("Those documents have no storage authority");
+    expect(runner).toContain(
+      'controllerCount: document.querySelectorAll("[data-active-workout-controller]").length',
+    );
   });
 
   it("runs once in canonical PR Quality and uploads the same evidence artifact", () => {

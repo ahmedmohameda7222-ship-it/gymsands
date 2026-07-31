@@ -283,10 +283,15 @@ export async function installAw5CorrectionFixture(context, {
     sameSite: "Lax"
   }]);
   await context.addInitScript(({ languageValue, themeId }) => {
-    localStorage.setItem("plaivra.qa.train-scenario", "active");
-    localStorage.setItem("plaivra.qa.train-variant", "active-default-success");
-    localStorage.setItem("plaivra.language.v1", languageValue);
-    localStorage.setItem("plaivra-theme-id", themeId);
+    try {
+      localStorage.setItem("plaivra.qa.train-scenario", "active");
+      localStorage.setItem("plaivra.qa.train-variant", "active-default-success");
+      localStorage.setItem("plaivra.language.v1", languageValue);
+      localStorage.setItem("plaivra-theme-id", themeId);
+    } catch {
+      // Playwright also evaluates init scripts in origin-less documents.
+      // Those documents have no storage authority and are intentionally ignored.
+    }
   }, {
     languageValue: language,
     themeId: theme === "dark" ? "elite-noir" : "olive"

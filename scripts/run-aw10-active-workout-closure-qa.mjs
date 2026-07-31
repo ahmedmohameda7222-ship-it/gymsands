@@ -325,7 +325,7 @@ async function measure(page) {
       horizontalOverflowPx: Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - innerWidth,
       clippedControls,
       frameworkOverlay: Boolean(document.querySelector("nextjs-portal") || overlayText),
-      controllerCount: [...document.querySelectorAll("[data-active-workout-controller]")].filter(isVisible).length,
+      controllerCount: document.querySelectorAll("[data-active-workout-controller]").length,
       shellCount: [...document.querySelectorAll("[data-aw5-execution-shell]")].filter(isVisible).length,
       shellState: document.querySelector("[data-aw5-execution-shell]")?.getAttribute("data-aw5-session-state") ?? null,
       reviewCount: [...document.querySelectorAll("[data-aw7-review-surface]")].filter(isVisible).length,
