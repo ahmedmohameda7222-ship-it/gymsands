@@ -231,6 +231,18 @@ async function operationCount(page) {
   });
 }
 
+async function waitForNoPendingOperations(page, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let stableZeroObservations = 0;
+  while (Date.now() < deadline) {
+    const count = await operationCount(page);
+    stableZeroObservations = count === 0 ? stableZeroObservations + 1 : 0;
+    if (stableZeroObservations >= 3) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error("Durable operations did not reach a stable resolved state.");
+}
+
 async function mutateFirstOperation(page, patch) {
   await openDatabase(page);
   return page.evaluate(async (nextPatch) => {
@@ -446,23 +458,7 @@ async function prepareAction({ scenario, context, page, fixture, checks }) {
     checks.pendingBefore = await operationCount(page);
     fixture.setServerRootStatus("completed");
     await setOffline(page, false);
-    await page.waitForFunction(async () => {
-      const request = indexedDB.open("plaivra-active-workout-v1", 1);
-      const database = await new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      const transaction = database.transaction("operations", "readonly");
-      const allRequest = transaction.objectStore("operations").getAll();
-      const operations = await new Promise((resolve, reject) => {
-        allRequest.onsuccess = () => resolve(allRequest.result);
-        allRequest.onerror = () => reject(allRequest.error);
-      });
-      database.close();
-      return operations.every((operation) =>
-        operation.state === "applied" || operation.state === "discarded"
-      );
-    }, undefined, { timeout: 20_000 });
+    await waitForNoPendingOperations(page);
     checks.pendingAfter = await operationCount(page);
     checks.serverTerminalWins = checks.pendingAfter === 0;
     return page;

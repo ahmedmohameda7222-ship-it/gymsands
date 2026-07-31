@@ -42,7 +42,8 @@ describe("AW-10 canonical Active Workout closure", () => {
     );
     expect(runner).toContain('{ name: "Finish anyway", exact: true }');
     expect(runner).toContain('operation.state !== "applied" && operation.state !== "discarded"');
-    expect(runner).toContain('operation.state === "applied" || operation.state === "discarded"');
+    expect(runner).toContain("waitForNoPendingOperations");
+    expect(runner).toContain("stableZeroObservations >= 3");
     expect(runner).toContain('setOffline(page, false, false)');
     expect(store).toContain('if (state !== "online_synced") return;');
     expect(store).toContain('sync.reconcile({ force: true })');

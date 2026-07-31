@@ -307,9 +307,9 @@ export function createActiveWorkoutSyncCoordinator(input: {
           && error.code === "terminal_mutation_attempt"
         ) {
           await discardTerminalOperations();
-          // Terminal server authority wins. Continue draining in case another
-          // local producer appended work while terminal proof was resolving.
-          continue;
+          // Terminal server authority wins. Stop immediately so no stale
+          // operation can be reinserted after terminal cache cleanup.
+          return notify("online_synced");
         }
         if (error instanceof ActiveSessionError && !isRetryableTransport(error)) {
           await updateActiveWorkoutOperation(operation, {
