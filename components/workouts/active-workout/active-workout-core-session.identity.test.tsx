@@ -138,6 +138,8 @@ vi.mock("@/lib/active-workout", () => ({
   clearActiveWorkoutState: vi.fn(),
   isValidActiveWorkoutRoute: () => true,
   readActiveWorkoutState: () => null,
+  readPreviousActiveWorkoutRoute: () => null,
+  resolveActiveWorkoutRoute: () => "/workouts/session/day/day-1",
   writeActiveWorkoutState: vi.fn()
 }));
 vi.mock("@/lib/error-formatting", () => ({
