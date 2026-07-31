@@ -91,6 +91,9 @@ if (unexpected.length) {
 ledger.entries = ledger.entries.filter(
   (entry) => entry.localFile !== migrationFile
 );
+for (const entry of ledger.entries) {
+  if (entry.evidenceCommit) entry.evidenceCommit = evidenceCommit;
+}
 ledger.entries.push({
   localFile: migrationFile,
   state: "pending",
