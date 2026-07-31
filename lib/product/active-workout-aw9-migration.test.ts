@@ -44,4 +44,3 @@ describe("AW-9 additive database authority", () => {
     );
   });
 });
-
