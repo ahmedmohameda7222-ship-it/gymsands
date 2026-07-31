@@ -1,6 +1,48 @@
+begin;
+
 -- AW-9 Offline & Multi-Device.
 -- Forward-only controller authority and guarded Active Workout mutation overloads.
 -- This migration intentionally does not promote release_schema_compatibility.
+
+do $aw9_preflight$
+declare
+  v_marker text;
+begin
+  if to_regclass('public.workout_session_execution_states') is null
+     or to_regclass('public.workout_session_execution_commands') is null
+     or to_regclass('public.workout_sessions') is null
+     or to_regprocedure('public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)') is null
+     or to_regprocedure('public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)') is null
+     or to_regprocedure('public.complete_workout_session_atomic(uuid,uuid,jsonb,integer,text)') is null
+     or to_regprocedure('public.replace_workout_session_snapshot_item_atomic(uuid,uuid,uuid,text,text,text)') is null
+     or to_regprocedure('public.skip_workout_session_snapshot_item_atomic(uuid,uuid,uuid,text)') is null
+     or to_regprocedure('public.cancel_workout_session_atomic(uuid,uuid,text)') is null
+     or to_regprocedure('public.assert_workout_actor(uuid)') is null then
+    raise exception 'AW-9 requires the reviewed AW-4 Active Workout authorities.';
+  end if;
+
+  if to_regprocedure('public.aw9_pre_apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)') is not null
+     or to_regprocedure('private.assert_active_workout_controller(uuid,uuid,uuid)') is not null
+     or to_regprocedure('public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb,uuid)') is not null
+     or to_regprocedure('public.complete_workout_session_atomic(uuid,uuid,jsonb,integer,text,uuid)') is not null
+     or to_regprocedure('public.replace_workout_session_snapshot_item_atomic(uuid,uuid,uuid,text,text,text,uuid)') is not null
+     or to_regprocedure('public.skip_workout_session_snapshot_item_atomic(uuid,uuid,uuid,text,uuid)') is not null
+     or to_regprocedure('public.cancel_workout_session_atomic(uuid,uuid,text,uuid)') is not null then
+    raise exception 'AW-9 controller authority already exists or is partially applied.';
+  end if;
+
+  select migration_version into strict v_marker
+  from public.release_schema_compatibility
+  where singleton;
+
+  if (select version from public.release_schema_compatibility where singleton) <> '2'
+     or v_marker <> '20260724232734' then
+    raise exception
+      'AW-9 requires compatibility schema version 2 and marker 20260724232734, found %.',
+      v_marker;
+  end if;
+end
+$aw9_preflight$;
 
 alter table public.workout_session_execution_commands
   drop constraint workout_session_execution_commands_type_check;
@@ -29,6 +71,7 @@ alter table public.workout_session_execution_commands
     'applied',
     'no_op',
     'revision_conflict',
+    'idempotency_conflict',
     'controller_conflict'
   ));
 
@@ -124,7 +167,7 @@ declare
   v_takeover boolean;
   v_outcome text;
   v_reason text;
-  v_exception_detail text;
+  v_has_controller boolean := false;
 begin
   perform public.assert_workout_actor(p_user_id);
   if p_user_id is null or p_workout_session_id is null or p_command_id is null then
@@ -157,6 +200,7 @@ begin
     ),
     'hex'
   );
+
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       p_workout_session_id::text || ':' || p_command_id::text,
@@ -168,6 +212,7 @@ begin
   from public.workout_session_execution_commands command
   where command.workout_session_id = p_workout_session_id
     and command.command_id = p_command_id;
+
   if found then
     if v_existing.user_id <> p_user_id
        or v_existing.command_type <> p_command_type
@@ -187,6 +232,7 @@ begin
         'state', v_existing.result_state
       );
     end if;
+
     return jsonb_build_object(
       'schemaVersion', 1,
       'workoutSessionId', p_workout_session_id,
@@ -202,77 +248,6 @@ begin
     );
   end if;
 
-  if p_command_type <> 'claim_control' then
-    begin
-      perform private.assert_active_workout_controller(
-        p_user_id,
-        p_workout_session_id,
-        nullif(v_payload->>'controller_device_id', '')::uuid
-      );
-    exception
-      when invalid_text_representation then
-        raise exception 'controller_device_id must be a UUID.'
-          using errcode = '22023';
-      when raise_exception then
-        get stacked diagnostics v_exception_detail = pg_exception_detail;
-        if v_exception_detail = 'controller_conflict' then
-          select * into strict v_state
-          from public.workout_session_execution_states state
-          where state.workout_session_id = p_workout_session_id;
-          return jsonb_build_object(
-            'schemaVersion', 1,
-            'workoutSessionId', p_workout_session_id,
-            'commandId', p_command_id,
-            'commandType', p_command_type,
-            'outcome', 'controller_conflict',
-            'replayed', false,
-            'expectedRevision', p_expected_revision,
-            'revisionBefore', v_state.revision,
-            'revisionAfter', v_state.revision,
-            'reason', 'controller_device_mismatch',
-            'state', to_jsonb(v_state)
-          );
-        end if;
-        raise;
-    end;
-    return public.aw9_pre_apply_workout_session_execution_command_atomic(
-      p_user_id,
-      p_workout_session_id,
-      p_command_id,
-      p_expected_revision,
-      p_command_type,
-      v_payload
-    );
-  end if;
-
-  if (
-    select count(*)
-    from jsonb_object_keys(v_payload)
-  ) <> 3
-     or not (v_payload ?& array[
-       'controller_device_id',
-       'expected_controller_device_id',
-       'takeover'
-     ]) then
-    raise exception 'claim_control payload keys are invalid.'
-      using errcode = '22023';
-  end if;
-  begin
-    v_controller := (v_payload->>'controller_device_id')::uuid;
-    v_expected_controller := nullif(
-      v_payload->>'expected_controller_device_id',
-      ''
-    )::uuid;
-    v_takeover := (v_payload->>'takeover')::boolean;
-  exception when others then
-    raise exception 'claim_control payload values are invalid.'
-      using errcode = '22023';
-  end;
-  if v_controller is null or v_takeover is null then
-    raise exception 'claim_control requires a controller and takeover intent.'
-      using errcode = '22023';
-  end if;
-
   select * into v_state
   from public.workout_session_execution_states state
   where state.workout_session_id = p_workout_session_id
@@ -281,10 +256,12 @@ begin
     raise exception 'Workout execution state does not exist.'
       using errcode = 'P0002';
   end if;
+
   select session.user_id, session.status::text
     into v_root_user_id, v_root_status
   from public.workout_sessions session
   where session.id = p_workout_session_id;
+
   if v_root_user_id is null
      or v_root_user_id <> p_user_id
      or v_state.user_id <> p_user_id then
@@ -296,11 +273,143 @@ begin
       using errcode = '23514';
   end if;
 
+  -- Preserve the existing expected-revision contract before controller checks.
   if v_state.revision <> p_expected_revision then
-    v_outcome := 'revision_conflict';
-    v_reason := 'expected_revision_mismatch';
-    v_result := v_state;
-  elsif v_state.controller_device_id is distinct from v_expected_controller::text
+    return public.aw9_pre_apply_workout_session_execution_command_atomic(
+      p_user_id,
+      p_workout_session_id,
+      p_command_id,
+      p_expected_revision,
+      p_command_type,
+      v_payload
+    );
+  end if;
+
+  if p_command_type <> 'claim_control' then
+    v_has_controller := v_payload ? 'controller_device_id'
+      and jsonb_typeof(v_payload->'controller_device_id') <> 'null';
+
+    if v_has_controller then
+      if jsonb_typeof(v_payload->'controller_device_id') <> 'string' then
+        raise exception 'controller_device_id must be a UUID.'
+          using errcode = '22023';
+      end if;
+      begin
+        v_controller := (v_payload->>'controller_device_id')::uuid;
+      exception when invalid_text_representation then
+        raise exception 'controller_device_id must be a UUID.'
+          using errcode = '22023';
+      end;
+    end if;
+
+    -- Backward compatibility is limited to sessions that have never been
+    -- claimed and legacy requests that omit controller identity. Once a
+    -- controller exists, every ordinary mutation must carry the exact device.
+    if (
+      v_state.controller_device_id is null
+      and not v_has_controller
+    ) then
+      return public.aw9_pre_apply_workout_session_execution_command_atomic(
+        p_user_id,
+        p_workout_session_id,
+        p_command_id,
+        p_expected_revision,
+        p_command_type,
+        v_payload
+      );
+    end if;
+
+    if v_state.controller_device_id is null then
+      v_reason := 'controller_not_claimed';
+    elsif not v_has_controller
+       or v_state.controller_device_id <> v_controller::text then
+      v_reason := 'controller_device_mismatch';
+    else
+      return public.aw9_pre_apply_workout_session_execution_command_atomic(
+        p_user_id,
+        p_workout_session_id,
+        p_command_id,
+        p_expected_revision,
+        p_command_type,
+        v_payload
+      );
+    end if;
+
+    insert into public.workout_session_execution_commands (
+      workout_session_id,
+      user_id,
+      command_id,
+      command_type,
+      expected_revision,
+      request_payload,
+      request_hash,
+      outcome,
+      revision_before,
+      revision_after,
+      result_state,
+      reason
+    ) values (
+      p_workout_session_id,
+      p_user_id,
+      p_command_id,
+      p_command_type,
+      p_expected_revision,
+      v_payload,
+      v_hash,
+      'controller_conflict',
+      v_state.revision,
+      v_state.revision,
+      to_jsonb(v_state),
+      v_reason
+    );
+
+    return jsonb_build_object(
+      'schemaVersion', 1,
+      'workoutSessionId', p_workout_session_id,
+      'commandId', p_command_id,
+      'commandType', p_command_type,
+      'outcome', 'controller_conflict',
+      'replayed', false,
+      'expectedRevision', p_expected_revision,
+      'revisionBefore', v_state.revision,
+      'revisionAfter', v_state.revision,
+      'reason', v_reason,
+      'state', to_jsonb(v_state)
+    );
+  end if;
+
+  if jsonb_object_length(v_payload) <> 3
+     or not (v_payload ?& array[
+       'controller_device_id',
+       'expected_controller_device_id',
+       'takeover'
+     ])
+     or jsonb_typeof(v_payload->'controller_device_id') <> 'string'
+     or jsonb_typeof(v_payload->'takeover') <> 'boolean'
+     or jsonb_typeof(v_payload->'expected_controller_device_id')
+        not in ('string', 'null') then
+    raise exception 'claim_control payload keys or value types are invalid.'
+      using errcode = '22023';
+  end if;
+
+  begin
+    v_controller := (v_payload->>'controller_device_id')::uuid;
+    v_expected_controller := nullif(
+      v_payload->>'expected_controller_device_id',
+      ''
+    )::uuid;
+    v_takeover := (v_payload->>'takeover')::boolean;
+  exception when invalid_text_representation then
+    raise exception 'claim_control controller values are invalid.'
+      using errcode = '22023';
+  end;
+
+  if v_controller is null or v_takeover is null then
+    raise exception 'claim_control requires a controller and takeover intent.'
+      using errcode = '22023';
+  end if;
+
+  if v_state.controller_device_id is distinct from v_expected_controller::text
      or (
        v_state.controller_device_id is not null
        and v_state.controller_device_id <> v_controller::text
@@ -516,3 +625,5 @@ grant execute on function public.cancel_workout_session_atomic(uuid,uuid,text,uu
 
 comment on function private.assert_active_workout_controller(uuid,uuid,uuid) is
   'AW-9 FOR UPDATE controller gate for every Active Workout mutation outside claim_control.';
+
+commit;
