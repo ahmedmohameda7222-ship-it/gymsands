@@ -221,7 +221,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const [pendingOperationCount, setPendingOperationCount] = useState(0);
   const [dataConflict, setDataConflict] =
     useState<ActiveWorkoutSetConflict | null>(null);
-  const [tabLeader, setTabLeader] = useState(true);
+  const [tabLeader, setTabLeader] = useState(false);
   const [takeoverConfirmationOpen, setTakeoverConfirmationOpen] = useState(false);
   const [executionCursorItems, setExecutionCursorItems] = useState<WorkoutSessionExecutionCursorRow[]>([]);
   const [muscleLoadRefreshRevision, setMuscleLoadRefreshRevision] = useState(0);
@@ -262,12 +262,14 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       workoutSessionId: sessionId
     });
     tabLeadershipRef.current = leadership;
-    setTabLeader(leadership.acquire());
+    void leadership.acquire().then(setTabLeader);
     const unsubscribe = leadership.subscribe(setTabLeader);
     const renew = () => {
       if (leadership.isLeader()) leadership.renew();
     };
-    const acquireOnFocus = () => setTabLeader(leadership.acquire());
+    const acquireOnFocus = () => {
+      void leadership.acquire().then(setTabLeader);
+    };
     window.addEventListener("pointerdown", renew, { passive: true });
     window.addEventListener("keydown", renew);
     window.addEventListener("focus", acquireOnFocus);
@@ -278,7 +280,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       window.removeEventListener("keydown", renew);
       window.removeEventListener("focus", acquireOnFocus);
       window.removeEventListener("pagehide", leadership.release);
-      leadership.release();
+      leadership.dispose();
       if (tabLeadershipRef.current === leadership)
         tabLeadershipRef.current = null;
     };
@@ -2043,7 +2045,9 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
               variant="outline"
               className="mt-3 min-h-11 w-full"
               onClick={() => {
-                setTabLeader(tabLeadershipRef.current?.acquire(true) ?? true);
+                const leadership = tabLeadershipRef.current;
+                if (!leadership) return;
+                void leadership.acquire(true).then(setTabLeader);
               }}
             >
               {tr("multiDevice.continueThisTab")}
@@ -2098,7 +2102,9 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             variant="outline"
             className="mt-3 min-h-11 w-full"
             onClick={() => {
-              setTabLeader(tabLeadershipRef.current?.acquire(true) ?? true);
+              const leadership = tabLeadershipRef.current;
+              if (!leadership) return;
+              void leadership.acquire(true).then(setTabLeader);
             }}
           >
             {tr("multiDevice.continueThisTab")}

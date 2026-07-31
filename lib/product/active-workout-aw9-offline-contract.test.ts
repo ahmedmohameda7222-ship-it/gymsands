@@ -65,7 +65,8 @@ describe("AW-9 durable synchronization contract", () => {
     expect(fallbackLease).toContain("fenceToken");
     expect(fallbackLease).toContain("await clock.sleep");
     expect(fallbackLease).toContain("if (!isOwned()) return null");
-    expect(fallbackLease).toContain("if (isOwned()) input.storage.removeItem");
+    expect(fallbackLease).toContain("if (!isOwned()) return");
+    expect(fallbackLease).toContain("input.storage.removeItem(input.key)");
   });
 
   it("clears user-scoped offline state on explicit or remote sign-out", () => {

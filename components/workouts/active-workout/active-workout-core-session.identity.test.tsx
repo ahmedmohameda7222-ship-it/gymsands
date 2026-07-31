@@ -176,6 +176,20 @@ vi.mock("@/lib/workouts/active-session-store/store", () => ({
     setSecondaryProjection: vi.fn()
   })
 }));
+vi.mock("@/lib/workouts/active-session-sync", () => ({
+  createActiveWorkoutTabLeadership: () => ({
+    tabId: "tab-1",
+    isLeader: () => true,
+    acquire: async () => true,
+    renew: () => true,
+    release: () => undefined,
+    dispose: () => undefined,
+    subscribe: (listener: (leader: boolean) => void) => {
+      listener(true);
+      return () => undefined;
+    }
+  })
+}));
 vi.mock("@/services/database/active-session-persistence-adapter", () => ({
   activeSessionPersistenceAdapter: {}
 }));
