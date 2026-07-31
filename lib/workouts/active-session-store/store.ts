@@ -25,6 +25,7 @@ import {
 } from "../session-engine/invariants";
 import { reduceSessionCommand } from "../session-engine/reducer";
 import {
+  canonicalSetTargetIdentity,
   createActiveWorkoutSyncCoordinator,
   exerciseLogTargetIdentity,
   fingerprintCanonicalExerciseLog,
@@ -33,6 +34,7 @@ import {
   listActiveWorkoutOperations,
   readActiveWorkoutSessionCache,
   writeActiveWorkoutSessionCache,
+  type ActiveWorkoutOperation,
   type ActiveWorkoutSyncCoordinator,
   type ActiveWorkoutSetConflict,
   type ActiveWorkoutSyncState
@@ -251,6 +253,103 @@ function eligibleLegacyCache(
   );
 }
 
+function pendingSetDetails(
+  operation: ActiveWorkoutOperation,
+  write: CanonicalWorkoutSetWrite,
+  exerciseLogId: string
+): ExerciseLog["set_details"] {
+  if (!write.setDetails) return null;
+  const details = write.setDetails;
+  return {
+    exercise_log_id: exerciseLogId,
+    workout_session_id: operation.workoutSessionId,
+    user_id: operation.userId,
+    schema_version: details.schemaVersion ?? 1,
+    set_type: details.setType,
+    rpe: details.rpe ?? null,
+    rir: details.rir ?? null,
+    notes: details.notes ?? write.notes ?? null,
+    side_mode: details.sideMode ?? "none",
+    planned_tempo: details.plannedTempo ?? null,
+    performed_tempo: details.performedTempo ?? null,
+    tempo_adherence: details.tempoAdherence ?? "not_recorded",
+    source: details.source ?? write.metricSource ?? "manual",
+    source_provider:
+      details.sourceProvider ?? write.metricSourceProvider ?? null,
+    source_version:
+      details.sourceVersion ?? write.metricSourceVersion ?? null,
+    created_at: operation.createdAt,
+    updated_at: operation.updatedAt
+  };
+}
+
+function pendingWriteProjection(
+  operation: ActiveWorkoutOperation,
+  write: CanonicalWorkoutSetWrite,
+  existing: ExerciseLog | undefined
+): ExerciseLog {
+  const id = existing?.id ?? `offline:${operation.id}`;
+  return {
+    id,
+    workout_session_id: operation.workoutSessionId,
+    plan_exercise_id: write.planExerciseId ?? existing?.plan_exercise_id ?? null,
+    plan_activity_id: existing?.plan_activity_id ?? null,
+    source_workout_id: existing?.source_workout_id ?? null,
+    exercise_order: write.exerciseOrder ?? existing?.exercise_order ?? null,
+    exercise_name: write.exerciseName,
+    exercise_category:
+      write.exerciseCategory ?? existing?.exercise_category ?? null,
+    planned_sets: write.plannedSets ?? existing?.planned_sets ?? null,
+    planned_reps: write.plannedReps ?? existing?.planned_reps ?? null,
+    planned_rest_seconds:
+      write.plannedRestSeconds ?? existing?.planned_rest_seconds ?? null,
+    set_number: write.setNumber,
+    reps: write.reps,
+    weight_kg: write.weightKg,
+    notes: write.notes ?? write.setDetails?.notes ?? null,
+    completed_at: write.completedAt ?? null,
+    created_at: existing?.created_at ?? operation.createdAt,
+    set_type: write.setDetails?.setType ?? existing?.set_type,
+    set_details:
+      pendingSetDetails(operation, write, id) ?? existing?.set_details ?? null,
+    performance_metrics: existing?.performance_metrics,
+    segments: existing?.segments
+  };
+}
+
+function projectPendingSetWrites(
+  baseLogs: readonly ExerciseLog[],
+  operations: readonly ActiveWorkoutOperation[]
+): ExerciseLog[] {
+  const projected = new Map<string, ExerciseLog>();
+  const order: string[] = [];
+  for (const log of baseLogs) {
+    const identity = exerciseLogTargetIdentity(log);
+    if (!projected.has(identity)) order.push(identity);
+    projected.set(identity, log);
+  }
+  for (const operation of operations) {
+    if (
+      operation.payload.kind !== "set_write"
+      || operation.payload.logs.length !== 1
+      || operation.state === "applied"
+      || operation.state === "discarded"
+    ) continue;
+    const write = operation.payload.logs[0];
+    const identity = canonicalSetTargetIdentity(write);
+    const existing = projected.get(identity);
+    if (!projected.has(identity)) order.push(identity);
+    projected.set(
+      identity,
+      pendingWriteProjection(operation, write, existing)
+    );
+  }
+  return order.flatMap((identity) => {
+    const log = projected.get(identity);
+    return log ? [log] : [];
+  });
+}
+
 export function createActiveSessionStore(input: {
   userId: string;
   workoutSessionId: string;
@@ -258,6 +357,7 @@ export function createActiveSessionStore(input: {
   clearCompatibilityCache?: () => void;
   commandId?: () => string;
   controllerDeviceId?: string | null;
+  tabId?: string;
 }): ActiveSessionStore {
   let snapshot = initialSnapshot(input.userId, input.workoutSessionId);
   let hydrationPromise: Promise<void> | null = null;
@@ -282,8 +382,7 @@ export function createActiveSessionStore(input: {
   }
 
   function requireLocalController() {
-    const controllerDeviceId =
-      input.controllerDeviceId ?? snapshot.executionState?.controller_device_id;
+    const controllerDeviceId = input.controllerDeviceId;
     if (
       !controllerDeviceId
       || snapshot.executionState?.controller_device_id !== controllerDeviceId
@@ -336,23 +435,25 @@ export function createActiveSessionStore(input: {
       userId: snapshot.userId,
       workoutSessionId: snapshot.workoutSessionId,
       controllerDeviceId: input.controllerDeviceId,
+      tabId: input.tabId,
       adapter: input.adapter,
       onState(syncState, pendingOperationCount) {
         if (!disposed) publish({ syncState, pendingOperationCount });
       },
       onDataConflict(dataConflict) {
         if (!disposed) publish({ dataConflict });
+      },
+      onInvalidate() {
+        if (disposed || isOffline() || hydrationPromise) return;
+        void hydrate({ force: true, reconcile: false }).catch(() => undefined);
       }
     });
     return syncCoordinator;
   }
 
   function baseFingerprint(log: CanonicalWorkoutSetWrite) {
-    const targetIdentity =
-      log.planExerciseId
-        ? `${log.planExerciseId}:set:${log.setNumber}`
-        : `${log.exerciseOrder ?? "none"}:${log.exerciseName.trim().toLocaleLowerCase("en")}:set:${log.setNumber}`;
-    const existing = snapshot.performedLogs.find(
+    const targetIdentity = canonicalSetTargetIdentity(log);
+    const existing = canonicalPerformedLogs.find(
       (performed) => exerciseLogTargetIdentity(performed) === targetIdentity
     );
     return existing ? fingerprintCanonicalExerciseLog(existing) : null;
@@ -408,6 +509,24 @@ export function createActiveSessionStore(input: {
     });
   }
 
+  function planOfflineCommand(
+    current: WorkoutSessionExecutionState,
+    intent: SessionCommandIntent
+  ) {
+    return reduceSessionCommand(
+      current,
+      intent,
+      {
+        userId: snapshot.userId,
+        workoutSessionId: snapshot.workoutSessionId,
+        rootStatus: snapshot.root?.status ?? "started",
+        prescription: snapshot.prescription,
+        performedLogs: snapshot.performedLogs
+      },
+      Date.now()
+    );
+  }
+
   async function dispatch(
     intent: SessionCommandIntent
   ): Promise<SessionCommandResponse> {
@@ -430,6 +549,7 @@ export function createActiveSessionStore(input: {
     if (isOffline()) {
       const controllerDeviceId = requireLocalController();
       const current = snapshot.executionState;
+      const transition = planOfflineCommand(current, intent);
       const request: SessionCommandRequest = {
         ...intent,
         expectedRevision: current.revision
@@ -444,18 +564,6 @@ export function createActiveSessionStore(input: {
       await sync.enqueue(
         { kind: "command", request },
         current.revision
-      );
-      const transition = reduceSessionCommand(
-        current,
-        intent,
-        {
-          userId: snapshot.userId,
-          workoutSessionId: snapshot.workoutSessionId,
-          rootStatus: snapshot.root.status,
-          prescription: snapshot.prescription,
-          performedLogs: snapshot.performedLogs
-        },
-        Date.now()
       );
       const state = transition.outcome === "applied"
         ? {
@@ -646,13 +754,25 @@ export function createActiveSessionStore(input: {
           canonicalExecutionState = cached.executionState;
           canonicalPerformedLogs = [...cached.performedLogs];
           let localExecutionState = cached.executionState;
+          const pendingOperations = await listActiveWorkoutOperations(
+            snapshot.userId,
+            snapshot.workoutSessionId
+          );
+          let localPerformedLogs = [...cached.performedLogs];
+          let terminalPending = false;
           if (localExecutionState && cached.root.status === "started") {
-            const pendingOperations = await listActiveWorkoutOperations(
-              snapshot.userId,
-              snapshot.workoutSessionId
-            );
             for (const operation of pendingOperations) {
-              if (operation.payload.kind !== "command") continue;
+              if (operation.payload.kind === "set_write") {
+                localPerformedLogs = projectPendingSetWrites(
+                  localPerformedLogs,
+                  [operation]
+                );
+                continue;
+              }
+              if (operation.payload.kind === "complete_session") {
+                terminalPending = true;
+                continue;
+              }
               const transition = reduceSessionCommand(
                 localExecutionState,
                 operation.payload.request,
@@ -661,7 +781,7 @@ export function createActiveSessionStore(input: {
                   workoutSessionId: snapshot.workoutSessionId,
                   rootStatus: cached.root.status,
                   prescription: cached.prescription,
-                  performedLogs: cached.performedLogs
+                  performedLogs: localPerformedLogs
                 },
                 Date.parse(operation.createdAt)
               );
@@ -677,13 +797,12 @@ export function createActiveSessionStore(input: {
             root: cached.root,
             executionState: localExecutionState,
             prescription: cached.prescription,
-            performedLogs: cached.performedLogs,
+            performedLogs: localPerformedLogs,
             presentationSurface: cached.presentationSurface,
             lastValidSecondaryProjection: cached.lastValidSecondaryProjection,
             hydrationStatus: "ready",
-            syncState: "offline_saved",
-            pendingOperationCount:
-              await coordinator()?.pendingCount() ?? 0
+            syncState: terminalPending ? "terminal_pending" : "offline_saved",
+            pendingOperationCount: pendingOperations.length
           });
           if (localExecutionState) dispatcher.replace(localExecutionState);
           return;
@@ -742,27 +861,29 @@ export function createActiveSessionStore(input: {
           && eligibleLegacyCache(snapshot, executionState, options.legacyCache)
         ) {
           const cache = options.legacyCache!;
-          try {
-            await dispatch({
-              userId: snapshot.userId,
-              workoutSessionId: snapshot.workoutSessionId,
-              commandId: createSessionCommandId(input.commandId),
-              commandType: "import_legacy_cache",
-              payload: {
-                cached_started_at: cache.startedAtMs === null
-                  ? null
-                  : new Date(cache.startedAtMs).toISOString(),
-                cached_rest_ends_at: cache.restEndsAtMs == null
-                  ? null
-                  : new Date(cache.restEndsAtMs).toISOString(),
-                cached_rest_duration_seconds: cache.restDurationSeconds ?? null,
-                controller_device_id:
-                  cache.controllerDeviceId
-                  ?? executionState.controller_device_id
-              }
-            });
-          } catch {
-            // Canonical hydration remains usable; dispatch records the bounded typed error.
+          const localControllerDeviceId =
+            input.controllerDeviceId ?? cache.controllerDeviceId ?? null;
+          if (localControllerDeviceId) {
+            try {
+              await dispatch({
+                userId: snapshot.userId,
+                workoutSessionId: snapshot.workoutSessionId,
+                commandId: createSessionCommandId(input.commandId),
+                commandType: "import_legacy_cache",
+                payload: {
+                  cached_started_at: cache.startedAtMs === null
+                    ? null
+                    : new Date(cache.startedAtMs).toISOString(),
+                  cached_rest_ends_at: cache.restEndsAtMs == null
+                    ? null
+                    : new Date(cache.restEndsAtMs).toISOString(),
+                  cached_rest_duration_seconds: cache.restDurationSeconds ?? null,
+                  controller_device_id: localControllerDeviceId
+                }
+              });
+            } catch {
+              // Canonical hydration remains usable; dispatch records the bounded typed error.
+            }
           }
         }
       } catch (error) {
@@ -892,27 +1013,43 @@ export function createActiveSessionStore(input: {
     },
     async resolveDataConflict(strategy) {
       const sync = coordinator();
-      if (!sync) return;
-      await sync.resolveDataConflict(strategy);
+      const conflict = snapshot.dataConflict;
+      if (!sync || !conflict) return;
+      await sync.resolveDataConflict(conflict.operationId, strategy);
       await hydrate({ force: true, reconcile: false });
     },
     async completeCanonicalSet(setInput) {
       requireUsable();
       if (isOffline()) {
         const controllerDeviceId = requireLocalController();
+        const current = snapshot.executionState;
+        if (!current) {
+          throw new ActiveSessionError(
+            "hydration_failed",
+            "Workout execution state is unavailable."
+          );
+        }
+        planOfflineCommand(current, setInput.executionIntent);
         const sync = coordinator();
         if (!sync) throw new ActiveSessionError(
           "adapter_failure",
           "Offline workout storage is unavailable."
         );
+        const queuedOperations: ActiveWorkoutOperation[] = [];
         for (const log of setInput.logs) {
-          await sync.enqueue({
+          queuedOperations.push(await sync.enqueue({
             kind: "set_write",
             workoutSessionId: snapshot.workoutSessionId,
             controllerDeviceId,
             logs: [log]
-          }, snapshot.executionState?.revision ?? null, baseFingerprint(log));
+          }, current.revision, baseFingerprint(log)));
         }
+        publish({
+          performedLogs: projectPendingSetWrites(
+            snapshot.performedLogs,
+            queuedOperations
+          )
+        });
         return dispatch(setInput.executionIntent);
       }
       try {
@@ -939,6 +1076,7 @@ export function createActiveSessionStore(input: {
             input.adapter.loadExecutionState(snapshot.userId, snapshot.workoutSessionId)
           ]);
           if (executionState) acceptState(executionState);
+          canonicalPerformedLogs = [...performedLogs];
           publish({ performedLogs });
         } catch {
           // Preserve the confirmed save and original typed synchronization failure.
@@ -961,15 +1099,20 @@ export function createActiveSessionStore(input: {
           "adapter_failure",
           "Offline workout storage is unavailable."
         );
+        const queuedOperations: ActiveWorkoutOperation[] = [];
         for (const log of logs) {
-          await sync.enqueue({
+          queuedOperations.push(await sync.enqueue({
             kind: "set_write",
             workoutSessionId: snapshot.workoutSessionId,
             controllerDeviceId,
             logs: [log]
-          }, snapshot.executionState?.revision ?? null, baseFingerprint(log));
+          }, snapshot.executionState?.revision ?? null, baseFingerprint(log)));
         }
         publish({
+          performedLogs: projectPendingSetWrites(
+            snapshot.performedLogs,
+            queuedOperations
+          ),
           syncState: "offline_saved",
           pendingOperationCount: await sync.pendingCount()
         });
@@ -1116,6 +1259,7 @@ export function getActiveSessionStore(input: {
   adapter: ActiveSessionPersistenceAdapter;
   clearCompatibilityCache?: () => void;
   controllerDeviceId?: string | null;
+  tabId?: string;
 }) {
   const key = storeKey(input.userId, input.workoutSessionId);
   const existing = activeSessionStores.get(key);
