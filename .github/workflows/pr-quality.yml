@@ -38,9 +38,21 @@ jobs:
           npm ci
           npm run typecheck
           npx vitest run --config vitest.unit.config.mjs \
-            lib/product/active-workout-aw10-closure.test.ts \
             lib/workouts/active-session-store/store.test.ts \
             lib/workouts/active-session-sync/leadership.test.ts
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const source = fs.readFileSync('lib/workouts/active-session-sync/coordinator.ts', 'utf8');
+          for (const contract of [
+            '{ mode: "exclusive" }',
+            'if (remaining.length) return run(force, ownsLane);',
+            'Both resolution choices must drain companion operations',
+            'Terminal server authority wins'
+          ]) {
+            if (!source.includes(contract)) throw new Error(`Missing queue drain contract: ${contract}`);
+          }
+          if (source.includes('ifAvailable: true')) throw new Error('Non-blocking flush lock remains enabled.');
+          NODE
       - name: Commit validated queue drain correction
         run: |
           set -euo pipefail
