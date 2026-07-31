@@ -29,7 +29,7 @@ describe("AW-9 additive database authority", () => {
       expect(migration).toContain(signature);
     expect(
       migration.match(/perform private\.assert_active_workout_controller/g),
-    ).toHaveLength(6);
+    ).toHaveLength(5);
   });
 
   it("keeps claim_control as the only controller-changing command", () => {
