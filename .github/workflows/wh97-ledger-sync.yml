@@ -1,0 +1,43 @@
+name: WH97 Ledger Sync
+
+on:
+  push:
+    branches:
+      - feat/workout-history-program
+    paths:
+      - .github/workflows/wh97-ledger-sync.yml
+      - scripts/update-wh97-pending-migration-ledger.mjs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wh97-ledger-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch head
+        uses: actions/checkout@v4
+        with:
+          ref: feat/workout-history-program
+          fetch-depth: 0
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Update pending ledger and documentation
+        run: node scripts/update-wh97-pending-migration-ledger.mjs
+      - name: Commit generated authority files
+        run: |
+          if git diff --quiet -- supabase/migration-ledger.json README.md docs/architecture/migration-ledger-reconciliation.md; then
+            echo "Ledger already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/migration-ledger.json README.md docs/architecture/migration-ledger-reconciliation.md
+          git commit -m "chore(history): reconcile pending migration ledger"
+          git push origin HEAD:feat/workout-history-program
