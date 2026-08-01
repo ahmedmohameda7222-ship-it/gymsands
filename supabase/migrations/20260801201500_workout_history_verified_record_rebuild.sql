@@ -100,19 +100,26 @@ begin
     end if;
 
     begin
-      select log.*,session.* into v_log,v_session
+      select * into v_log
       from public.exercise_logs log
-      join public.workout_sessions session on session.id=log.workout_session_id
       where log.id=nullif(v_item->>'exercise_log_id','')::uuid
-        and session.user_id=p_user_id
-        and session.deleted_at is null
-        and session.status::text in ('completed','cancelled')
-      for share of log,session;
+      for share;
     exception when invalid_text_representation then
       raise exception 'Derived record source log is invalid.' using errcode='22023';
     end;
-    if v_log.id is null or v_session.id is null then
+    if v_log.id is null then
       raise exception 'Derived record source log is invalid.' using errcode='23514';
+    end if;
+
+    select * into v_session
+    from public.workout_sessions session
+    where session.id=v_log.workout_session_id
+      and session.user_id=p_user_id
+      and session.deleted_at is null
+      and session.status::text in ('completed','cancelled')
+    for share;
+    if v_session.id is null then
+      raise exception 'Derived record source session is invalid.' using errcode='23514';
     end if;
 
     v_identity_kind:=nullif(v_item->>'exercise_identity_kind','');
