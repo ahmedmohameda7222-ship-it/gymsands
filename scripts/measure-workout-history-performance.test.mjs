@@ -3,8 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   BENCHMARK_API_EXCLUDES,
+  LOCAL_PROJECT_ID,
   assertDisposableLocalDatabaseUrl,
   benchmarkApiStartArgs,
+  benchmarkApiStopArgs,
   buildCommittedFixtureSql,
   cleanupFixtureSql,
   parseSupabaseStatusEnv,
@@ -70,14 +72,13 @@ test("benchmark enforces psql errors through the CLI variable contract", async (
     new URL("./measure-workout-history-performance.mjs", import.meta.url),
     "utf8",
   );
-  assert.match(
-    source,
-    /\[databaseUrl, "-X", "-v", "ON_ERROR_STOP=1"\]/u,
-  );
+  assert.match(source, /\[databaseUrl, "-X", "-v", "ON_ERROR_STOP=1"\]/u);
   assert.doesNotMatch(source, /`\\?set ON_ERROR_STOP on/u);
 });
 
-test("benchmark starts only the local API services required for real PostgREST reads", () => {
+test("benchmark performs a data-preserving transition to the minimal local API profile", async () => {
+  assert.deepEqual(benchmarkApiStopArgs(), ["stop", "--project-id", LOCAL_PROJECT_ID]);
+  assert.equal(benchmarkApiStopArgs().includes("--no-backup"), false);
   assert.deepEqual(benchmarkApiStartArgs(), [
     "start",
     "--exclude",
@@ -89,6 +90,12 @@ test("benchmark starts only the local API services required for real PostgREST r
   for (const requiredService of ["gotrue", "kong", "postgrest"]) {
     assert.equal(BENCHMARK_API_EXCLUDES.includes(requiredService), false);
   }
+
+  const source = await readFile(
+    new URL("./measure-workout-history-performance.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /transitionToLocalBenchmarkApi\(\);\n  const local = localSupabaseEnvironment\(\);\n  runPsql\(databaseUrl, cleanupSql\);/u);
 });
 
 test("real benchmark executes the versioned list and detail services", async () => {
