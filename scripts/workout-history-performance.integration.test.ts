@@ -12,13 +12,16 @@ import type { WorkoutHistoryListRequest } from "@/types/workout-history";
 
 const userId = "b9000000-0000-4000-8000-000000000001";
 const cursorSecret = "wh9-real-service-benchmark-cursor-secret-at-least-32-characters";
-const outputPath = process.env.WORKOUT_HISTORY_PERFORMANCE_OUTPUT;
-const apiUrl = process.env.PLAIVRA_LOCAL_SUPABASE_API_URL;
-const serviceRoleKey = process.env.PLAIVRA_LOCAL_SUPABASE_SERVICE_ROLE_KEY;
 
-if (!outputPath || !apiUrl || !serviceRoleKey) {
-  throw new Error("WH-9 service benchmark environment is incomplete.");
+function requiredEnvironment(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`WH-9 service benchmark environment is incomplete: ${name}.`);
+  return value;
 }
+
+const outputPath = requiredEnvironment("WORKOUT_HISTORY_PERFORMANCE_OUTPUT");
+const apiUrl = requiredEnvironment("PLAIVRA_LOCAL_SUPABASE_API_URL");
+const serviceRoleKey = requiredEnvironment("PLAIVRA_LOCAL_SUPABASE_SERVICE_ROLE_KEY");
 
 export const REAL_SERVICE_BUDGETS = Object.freeze({
   firstPageP95Ms: 1_500,
