@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { isUuid } from "@/lib/utils";
 import { getWorkoutHistorySessionDetail } from "@/services/workouts/history/server-reader";
+import { readSharedWorkoutHistorySessionMetrics } from "@/services/workouts/history/shared-session-metrics";
 
 export const runtime = "nodejs";
 
@@ -24,8 +25,25 @@ export async function GET(
   const context = await requireUser(request);
   if (context instanceof NextResponse) return withWorkoutHistoryHeaders(context);
   try {
+    const [detail, sharedMetrics] = await Promise.all([
+      getWorkoutHistorySessionDetail(context.supabase, context.user.id, sessionId),
+      readSharedWorkoutHistorySessionMetrics(
+        context.supabase,
+        context.user.id,
+        sessionId,
+      ),
+    ]);
     return NextResponse.json(
-      await getWorkoutHistorySessionDetail(context.supabase, context.user.id, sessionId),
+      {
+        ...detail,
+        summary: {
+          ...detail.summary,
+          reliableVolume:
+            sharedMetrics.externalLoadVolume > 0
+              ? sharedMetrics.externalLoadVolume
+              : null,
+        },
+      },
       { headers: WORKOUT_HISTORY_HEADERS },
     );
   } catch (error) {
