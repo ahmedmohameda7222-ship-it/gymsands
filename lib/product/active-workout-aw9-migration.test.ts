@@ -12,6 +12,14 @@ const aw4Verification = readFileSync(
   "supabase/verification/active-workout-aw4-session-engine.sql",
   "utf8",
 );
+const aw9Verification = readFileSync(
+  "supabase/verification/active-workout-aw9-offline-multi-device.sql",
+  "utf8",
+);
+const databaseVerificationRunner = readFileSync(
+  "scripts/run-database-verification.mjs",
+  "utf8",
+);
 
 describe("AW-9 additive database authority", () => {
   it("adds claim_control without modifying an applied migration", () => {
@@ -78,6 +86,18 @@ describe("AW-9 additive database authority", () => {
     );
     expect(aw2bVerification).toContain(
       "Identity-bearing ordinary command bypassed claim_control",
+    );
+  });
+
+  it("runs the AW-9 SQL verifier and accepts PostgreSQL empty search_path encodings", () => {
+    expect(databaseVerificationRunner).toContain(
+      "supabase/verification/active-workout-aw9-offline-multi-device.sql",
+    );
+    expect(aw9Verification).toContain(
+      "'search_path=' = any(proconfig)",
+    );
+    expect(aw9Verification).toContain(
+      "'search_path=\"\"' = any(proconfig)",
     );
   });
 });
