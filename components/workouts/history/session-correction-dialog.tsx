@@ -123,6 +123,19 @@ function editableExercises(
   }));
 }
 
+function draftHasChanges(draft: EditableExercise[]) {
+  return draft.some((exercise) => exercise.sets.some((set) => {
+    if (set.added || set.removed) return true;
+    if (!set.original) return false;
+    return set.reps !== numberText(set.original.reps)
+      || set.weightKg !== numberText(set.original.weightKg)
+      || set.setType !== (set.original.setType ?? "normal")
+      || set.rpe !== numberText(set.original.rpe)
+      || set.rir !== numberText(set.original.rir)
+      || set.notes !== (set.original.notes ?? "");
+  }));
+}
+
 function parseNonNegativeNumber(value: string): number | null | undefined {
   const normalized = value.trim();
   if (!normalized) return null;
@@ -291,13 +304,21 @@ export function SessionCorrectionDialog({
   }, [draft]);
   const sessionChanged = note !== (notes ?? "")
     || duration !== (durationMinutes?.toString() ?? "");
-  const hasChanges = sessionChanged || preview.length > 0;
+  const hasChanges = sessionChanged || draftHasChanges(draft);
 
   async function request(path: string, body: unknown) {
+    const token = session?.access_token;
+    if (!token) {
+      throw new HistoryMutationRequestError(
+        "Sign in is required to update workout history.",
+        401,
+        "unauthorized",
+      );
+    }
     const response = await fetch(path, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${session?.access_token ?? ""}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -326,6 +347,24 @@ export function SessionCorrectionDialog({
             sets: exercise.sets.map((set) =>
               set.key === setKey ? { ...set, ...patch } : set),
           }));
+  }
+
+  function toggleRemoved(exerciseIdentity: string, setKey: string) {
+    setDraft((current) => current.map((exercise) => {
+      if (exercise.identity !== exerciseIdentity) return exercise;
+      const target = exercise.sets.find((set) => set.key === setKey);
+      if (target?.added) {
+        return {
+          ...exercise,
+          sets: exercise.sets.filter((set) => set.key !== setKey),
+        };
+      }
+      return {
+        ...exercise,
+        sets: exercise.sets.map((set) =>
+          set.key === setKey ? { ...set, removed: !set.removed } : set),
+      };
+    }));
   }
 
   function addSet(exerciseIdentity: string) {
@@ -509,8 +548,8 @@ export function SessionCorrectionDialog({
                   {exercise.sets.map((set) => (
                     <fieldset
                       key={set.key}
-                      className="rounded-xl border border-border/60 bg-muted/15 p-3 disabled:opacity-55"
-                      disabled={set.removed}
+                      aria-disabled={set.removed}
+                      className={`rounded-xl border border-border/60 bg-muted/15 p-3 ${set.removed ? "opacity-55" : ""}`}
                     >
                       <legend className="px-1 text-xs font-semibold text-muted-foreground">
                         {tr("historySetNumber", { count: set.setNumber })}
@@ -520,31 +559,31 @@ export function SessionCorrectionDialog({
                           <>
                             <label className="grid gap-1 text-xs font-medium">
                               {copy.repetitions}
-                              <Input inputMode="numeric" value={set.reps} onChange={(event) => updateSet(exercise.identity, set.key, { reps: event.target.value })} />
+                              <Input disabled={set.removed} inputMode="numeric" value={set.reps} onChange={(event) => updateSet(exercise.identity, set.key, { reps: event.target.value })} />
                             </label>
                             <label className="grid gap-1 text-xs font-medium">
                               {copy.loadKg}
-                              <Input inputMode="decimal" value={set.weightKg} onChange={(event) => updateSet(exercise.identity, set.key, { weightKg: event.target.value })} />
+                              <Input disabled={set.removed} inputMode="decimal" value={set.weightKg} onChange={(event) => updateSet(exercise.identity, set.key, { weightKg: event.target.value })} />
                             </label>
                           </>
                         ) : null}
                         <label className="grid gap-1 text-xs font-medium">
                           {copy.setType}
-                          <select className="min-h-10 rounded-lg border border-input bg-background px-2 text-sm" value={set.setType} onChange={(event) => updateSet(exercise.identity, set.key, { setType: event.target.value })}>
+                          <select disabled={set.removed} className="min-h-10 rounded-lg border border-input bg-background px-2 text-sm" value={set.setType} onChange={(event) => updateSet(exercise.identity, set.key, { setType: event.target.value })}>
                             {setTypes.map((type) => <option key={type} value={type}>{type}</option>)}
                           </select>
                         </label>
                         <label className="grid gap-1 text-xs font-medium">
                           {copy.rpe}
-                          <Input inputMode="decimal" value={set.rpe} onChange={(event) => updateSet(exercise.identity, set.key, { rpe: event.target.value })} />
+                          <Input disabled={set.removed} inputMode="decimal" value={set.rpe} onChange={(event) => updateSet(exercise.identity, set.key, { rpe: event.target.value })} />
                         </label>
                         <label className="grid gap-1 text-xs font-medium">
                           {copy.rir}
-                          <Input inputMode="decimal" value={set.rir} onChange={(event) => updateSet(exercise.identity, set.key, { rir: event.target.value })} />
+                          <Input disabled={set.removed} inputMode="decimal" value={set.rir} onChange={(event) => updateSet(exercise.identity, set.key, { rir: event.target.value })} />
                         </label>
                         <label className="grid gap-1 text-xs font-medium sm:col-span-3">
                           {copy.setNote}
-                          <Input maxLength={4000} value={set.notes} onChange={(event) => updateSet(exercise.identity, set.key, { notes: event.target.value })} />
+                          <Input disabled={set.removed} maxLength={4000} value={set.notes} onChange={(event) => updateSet(exercise.identity, set.key, { notes: event.target.value })} />
                         </label>
                       </div>
                       <Button
@@ -552,7 +591,7 @@ export function SessionCorrectionDialog({
                         size="sm"
                         variant={set.removed ? "outline" : "ghost"}
                         className="mt-2"
-                        onClick={() => updateSet(exercise.identity, set.key, { removed: !set.removed })}
+                        onClick={() => toggleRemoved(exercise.identity, set.key)}
                       >
                         {set.removed ? <RotateCcw className="size-4" /> : <Trash2 className="size-4" />}
                         {set.removed ? copy.undoRemove : copy.removeSet}
