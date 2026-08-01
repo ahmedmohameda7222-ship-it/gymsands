@@ -28,6 +28,7 @@ export const AW3B_HARDENING_VERSION = "20260722224500";
 export const AW3C_VERSION = "20260725013000";
 export const MARKER_AFTER_AW3A_PROMOTION = "20260722161542";
 export const MARKER_AFTER_AW3B_PROMOTION = "20260724232734";
+const LOCAL_PROJECT_ID = "gymsands";
 const AW2C_FILE = `${AW2C_VERSION}_active_workout_aw2c_timeline_events.sql`;
 const LEGACY_HELPER = fileURLToPath(new URL("./replay-local-migration-chain-legacy.mjs", import.meta.url));
 
@@ -55,6 +56,17 @@ function parseArguments(argv) {
   return { logPath };
 }
 
+function writeProcessOutput(result, logPath) {
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+    appendFileSync(logPath, result.stdout, "utf8");
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+    appendFileSync(logPath, result.stderr, "utf8");
+  }
+}
+
 function run(command, args, cwd, logPath) {
   const result = spawnSync(command, args, {
     cwd,
@@ -65,17 +77,28 @@ function run(command, args, cwd, logPath) {
   const rendered = `$ ${[command, ...args].join(" ")}\n`;
   process.stdout.write(rendered);
   appendFileSync(logPath, rendered, "utf8");
-  if (result.stdout) {
-    process.stdout.write(result.stdout);
-    appendFileSync(logPath, result.stdout, "utf8");
-  }
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
-    appendFileSync(logPath, result.stderr, "utf8");
-  }
+  writeProcessOutput(result, logPath);
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} exited with status ${result.status ?? "unknown"}.`);
   return result.stdout.trim();
+}
+
+function runBestEffort(command, args, cwd, logPath) {
+  const result = spawnSync(command, args, {
+    cwd,
+    env: process.env,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const rendered = `$ ${[command, ...args].join(" ")} (best effort)\n`;
+  process.stdout.write(rendered);
+  appendFileSync(logPath, rendered, "utf8");
+  writeProcessOutput(result, logPath);
+  if (result.error) {
+    appendFileSync(logPath, `Best-effort command could not start: ${result.error.message}\n`, "utf8");
+  } else if (result.status !== 0) {
+    appendFileSync(logPath, `Best-effort command exited with status ${result.status ?? "unknown"}.\n`, "utf8");
+  }
 }
 
 function git(cwd, ...args) {
@@ -146,6 +169,15 @@ async function main() {
   if (AW2B_VERSION >= AW2C_VERSION) throw new Error("AW-2C migration must sort after AW-2B.");
 
   try {
+    // Hosted and self-hosted runners can retain a cancelled local stack. Stop only
+    // Plaivra's named disposable project before binding the fixed local ports.
+    runBestEffort(
+      "supabase",
+      ["stop", "--project-id", LOCAL_PROJECT_ID, "--no-backup"],
+      repositoryRoot,
+      logPath,
+    );
+
     staged = stageAw2cAndFutureMigrations(repositoryRoot, stagedDirectory);
     const aw2c = staged.filter(({ version }) => version === AW2C_VERSION);
     const future = staged.filter(({ version }) => version > AW2C_VERSION);
