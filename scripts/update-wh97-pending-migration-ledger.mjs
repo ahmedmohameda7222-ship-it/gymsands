@@ -1,0 +1,65 @@
+import { readFile, writeFile } from "node:fs/promises";
+
+const pendingFiles = [
+  "20260801140043_workout_history_verified_records.sql",
+  "20260801160000_workout_history_correction_and_soft_delete.sql",
+  "20260801180000_workout_history_repeat_session.sql",
+  "20260801194500_workout_history_verified_record_authority_hardening.sql",
+  "20260801201500_workout_history_verified_record_rebuild.sql",
+  "20260801203000_workout_history_set_detail_patch_semantics.sql",
+  "20260801210000_workout_history_correction_muscle_reconcile.sql",
+  "20260801220000_workout_history_keyset_read_authority.sql",
+];
+
+const ledgerPath = "supabase/migration-ledger.json";
+const readmePath = "README.md";
+const reconciliationPath = "docs/architecture/migration-ledger-reconciliation.md";
+
+const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
+const byFile = new Map(ledger.entries.map((entry) => [entry.localFile, entry]));
+for (const localFile of pendingFiles) {
+  if (!byFile.has(localFile)) {
+    ledger.entries.push({
+      localFile,
+      state: "pending",
+      note: "Repository-only Workout History forward migration. It has not been applied to Production. Do not replay or apply without a separately approved release operation.",
+    });
+  }
+}
+ledger.entries.sort((left, right) => left.localFile.localeCompare(right.localFile));
+const pendingCount = ledger.entries.filter((entry) => entry.state === "pending").length;
+const unresolvedCount = ledger.entries.filter((entry) => !["applied", "applied_version_alias"].includes(entry.state)).length;
+ledger.pendingCount = pendingCount;
+ledger.unresolvedCount = unresolvedCount;
+ledger.historyRepair = {
+  ...ledger.historyRepair,
+  state: "pending",
+  pendingCount,
+  unresolvedCount,
+  schemaAppliedUntrackedCount: ledger.schemaVerifiedUntrackedCount ?? 0,
+  note: `Production history remains reconciled through the latest applied AW-9 identity. ${pendingFiles.join(", ")} are repository-only pending Workout History migrations. Do not replay or apply any pending migration without explicit release authorization.`,
+};
+await writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, "utf8");
+
+const pendingInline = pendingFiles.map((file) => `\`${file}\``).join(", ");
+let readme = await readFile(readmePath, "utf8");
+readme = readme.replace(
+  /^- Plaivra Production contains 76 physical migration records\..*$/mu,
+  `- Plaivra Production contains 76 physical migration records. The ledger classifies 63 exact applications and 13 generated-version aliases. ${pendingInline} are repository-only pending and have not been applied to Production.`,
+);
+await writeFile(readmePath, readme, "utf8");
+
+let reconciliation = await readFile(reconciliationPath, "utf8");
+reconciliation = reconciliation
+  .replace(/\*\*Status:\*\*.*$/mu, "**Status:** AW-9 applied; eight Workout History migrations pending")
+  .replace(/- Repository classifications: \*\*\d+\*\*/u, `- Repository classifications: **${ledger.entries.length}**`)
+  .replace(/- Repository-only pending migrations: \*\*\d+\*\*/u, `- Repository-only pending migrations: **${pendingCount}**`)
+  .replace(/- `pendingCount = \d+`/u, `- \`pendingCount = ${pendingCount}\``)
+  .replace(/- `unresolvedCount = \d+`/u, `- \`unresolvedCount = ${unresolvedCount}\``)
+  .replace(
+    /`20260801140043_workout_history_verified_records\.sql`.*?Production writes\./su,
+    `${pendingInline} are approved forward repository migrations for the Workout History program and its independent QA/QC corrections. They exist only in the repository, are classified as pending, and have not been applied to Production. Applying them requires separate explicit authorization; this implementation program does not authorize Production writes.`,
+  );
+await writeFile(reconciliationPath, reconciliation, "utf8");
+
+console.log(`Updated migration ledger: pending=${pendingCount} unresolved=${unresolvedCount} entries=${ledger.entries.length}`);
