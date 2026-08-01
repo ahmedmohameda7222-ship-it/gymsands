@@ -92,6 +92,38 @@ export const WORKOUT_HISTORY_QA_SCENARIOS = Object.freeze(
       "correction",
     ],
     [
+      "correction-edit-set",
+      2,
+      "en",
+      "light",
+      `/workout-history/${DETAIL_ID}`,
+      "correction-edit",
+    ],
+    [
+      "correction-add-set",
+      3,
+      "de",
+      "dark",
+      `/workout-history/${DETAIL_ID}`,
+      "correction-add",
+    ],
+    [
+      "correction-remove-set",
+      4,
+      "ar",
+      "light",
+      `/workout-history/${DETAIL_ID}`,
+      "correction-remove",
+    ],
+    [
+      "correction-revision-conflict",
+      5,
+      "en",
+      "dark",
+      `/workout-history/${DETAIL_ID}`,
+      "correction-conflict",
+    ],
+    [
       "post-correction-detail",
       5,
       "en",
@@ -277,7 +309,15 @@ export async function installWorkoutHistoryQaFixture(
   await context.route(`${origin}/api/workouts/history/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    state.requests.push({ method: request.method(), path: url.pathname });
+    let body = null;
+    if (request.method() !== "GET" && request.method() !== "HEAD") {
+      try {
+        body = request.postDataJSON();
+      } catch {
+        body = {};
+      }
+    }
+    state.requests.push({ method: request.method(), path: url.pathname, body });
     if (url.pathname.endsWith("/repeat-preview")) {
       await route.fulfill({
         status: 200,
@@ -326,11 +366,33 @@ export async function installWorkoutHistoryQaFixture(
       });
       return;
     }
-    if (url.pathname.endsWith("/correct") || url.pathname.endsWith("/delete")) {
+    if (url.pathname.endsWith("/correct")) {
+      if (scenario.name === "correction-revision-conflict") {
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Workout history revision conflict.",
+            code: "40001",
+          }),
+        });
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ historyRevision: 2 }),
+        body: JSON.stringify({
+          history_revision: 2,
+          projection_refresh_pending: false,
+        }),
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/delete")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ history_revision: 2 }),
       });
       return;
     }
