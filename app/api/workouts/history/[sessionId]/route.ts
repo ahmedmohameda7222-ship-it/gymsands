@@ -4,8 +4,10 @@ import { WORKOUT_HISTORY_HEADERS, withWorkoutHistoryHeaders, workoutHistoryError
 import { requireUser } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { isUuid } from "@/lib/utils";
+import { workoutHistoryRecordProjectionIsCurrent } from "@/services/workouts/history/record-projection-state";
 import { getWorkoutHistorySessionDetail } from "@/services/workouts/history/server-reader";
 import { readSharedWorkoutHistorySessionMetrics } from "@/services/workouts/history/shared-session-metrics";
+import type { WorkoutHistoryDetailNotice } from "@/types/workout-history";
 
 export const runtime = "nodejs";
 
@@ -25,14 +27,23 @@ export async function GET(
   const context = await requireUser(request);
   if (context instanceof NextResponse) return withWorkoutHistoryHeaders(context);
   try {
-    const [detail, sharedMetrics] = await Promise.all([
+    const projectionState = workoutHistoryRecordProjectionIsCurrent(
+      context.supabase,
+      context.user.id,
+      sessionId,
+    ).catch(() => null);
+    const [detail, sharedMetrics, recordsAreCurrent] = await Promise.all([
       getWorkoutHistorySessionDetail(context.supabase, context.user.id, sessionId),
       readSharedWorkoutHistorySessionMetrics(
         context.supabase,
         context.user.id,
         sessionId,
       ),
+      projectionState,
     ]);
+    const notices = new Set<WorkoutHistoryDetailNotice>(detail.notices);
+    if (recordsAreCurrent === false) notices.add("user-action-required");
+    else if (recordsAreCurrent === null) notices.add("partial-availability");
     return NextResponse.json(
       {
         ...detail,
@@ -43,6 +54,7 @@ export async function GET(
               ? sharedMetrics.externalLoadVolume
               : null,
         },
+        notices: [...notices],
       },
       { headers: WORKOUT_HISTORY_HEADERS },
     );
