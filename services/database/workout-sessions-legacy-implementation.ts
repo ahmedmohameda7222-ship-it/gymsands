@@ -7,6 +7,7 @@ import { todayIso } from "@/lib/date-utils";
 import { getMockTrainActivity } from "@/lib/fixtures/train-mock";
 import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { getCanonicalWorkoutActivity } from "@/services/workouts/history/client";
+import { refreshVerifiedRecordsAuthenticated } from "@/services/workouts/history/verified-records-client";
 import type {
   ExerciseLog,
   UserExerciseLog,
@@ -502,17 +503,10 @@ export async function replaceWorkoutSessionExercise(
 
 export async function refreshVerifiedRecordsAfterWorkoutCompletion(sessionId: string) {
   try {
-    const response = await fetch(`/api/workouts/history/${encodeURIComponent(sessionId)}/verified-records`, {
-      method: "POST",
-      credentials: "same-origin",
-      keepalive: true,
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) throw new Error(`Verified record refresh failed (${response.status}).`);
-    return await response.json();
+    return await refreshVerifiedRecordsAuthenticated(sessionId);
   } catch (error) {
     console.warn(
-      "Plaivra saved the workout, but personal records could not be refreshed.",
+      "Plaivra saved the workout, but verified records remain pending.",
       error,
     );
     return null;
