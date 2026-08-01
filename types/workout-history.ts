@@ -122,20 +122,96 @@ export type WorkoutHistoryExerciseSetDetail = {
   weightKg: number | null;
   completedAt: string | null;
   notes: string | null;
+  setType: string | null;
+  rpe: number | null;
+  rir: number | null;
+  matchState: "matched" | "unplanned";
+  plannedSet: WorkoutHistoryPlannedSet | null;
+  metrics: WorkoutHistoryMetricValue[];
+  segments: WorkoutHistorySetSegment[];
+};
+
+export type WorkoutHistoryMetricValue = {
+  metricKey: string;
+  side: "none" | "bilateral" | "left" | "right";
+  value: number;
+  unit: string | null;
+};
+
+export type WorkoutHistoryPlannedMetricTarget = {
+  metricKey: string;
+  side: "none" | "bilateral" | "left" | "right";
+  targetMode: string;
+  targetValue: number | null;
+  minimumValue: number | null;
+  maximumValue: number | null;
+};
+
+export type WorkoutHistoryPlannedSet = {
+  id: string;
+  setOrder: number;
+  setType: string;
+  targetMode: string;
+  sideMode: string;
+  restSeconds: number | null;
+  tempoTarget: string | null;
+  targets: WorkoutHistoryPlannedMetricTarget[];
+};
+
+export type WorkoutHistorySetSegment = {
+  id: string;
+  segmentOrder: number;
+  segmentKind: string;
+  side: string;
+  metrics: WorkoutHistoryMetricValue[];
 };
 
 export type WorkoutHistoryExerciseDetail = {
   identity: string;
   exerciseId: string | null;
+  snapshotItemId: string | null;
   name: string;
+  plannedName: string | null;
+  state: "planned" | "replaced" | "skipped" | "adjusted" | "completed" | null;
   category: string | null;
   plannedSetCount: number | null;
   performedSets: WorkoutHistoryExerciseSetDetail[];
+  missingPlannedSets: WorkoutHistoryPlannedSet[];
+};
+
+export type WorkoutHistoryDetailSummary = {
+  exerciseCount: number | null;
+  completedSetCount: number | null;
+  reliableVolume: number | null;
+  verifiedRecordCount: number | null;
+};
+
+export type WorkoutHistorySnapshotHeader = {
+  id: string;
+  schemaVersion: string;
+  frozenAt: string;
+} | null;
+
+export type WorkoutHistoryTimelineEntryType =
+  | "workout_started"
+  | "set_completed"
+  | "set_corrected"
+  | "exercise_replaced"
+  | "workout_completed";
+
+export type WorkoutHistoryTimelineEntry = {
+  id: string;
+  type: WorkoutHistoryTimelineEntryType;
+  occurredAt: string;
+  exerciseName: string | null;
 };
 
 export type WorkoutHistorySessionDetailResponse = {
   contractVersion: typeof WORKOUT_HISTORY_CONTRACT_VERSION;
   activity: CanonicalWorkoutActivity;
+  summary: WorkoutHistoryDetailSummary;
+  snapshot: WorkoutHistorySnapshotHeader;
   exercises: WorkoutHistoryExerciseDetail[];
+  timeline: WorkoutHistoryTimelineEntry[];
   notices: WorkoutHistoryListNotice[];
 };

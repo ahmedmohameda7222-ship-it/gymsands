@@ -16,7 +16,9 @@ export function WorkoutHistoryCard({ item, selected = false, onSelect }: { item:
   }).format(new Date(item.effectiveAt));
   const detailId = item.canonicalSessionId ?? item.scheduledSessionId;
   const href = detailId
-    ? `/workout-history/${encodeURIComponent(detailId)}${item.sourceKind === "scheduled_fallback" ? "?source=scheduled" : ""}`
+    ? item.sourceKind === "scheduled_fallback"
+      ? `/workout-history/scheduled/${encodeURIComponent(detailId)}`
+      : `/workout-history/${encodeURIComponent(detailId)}`
     : "/workout-history";
   const lifecycle = item.lifecycle === "partial"
     ? tr("historyPartial")

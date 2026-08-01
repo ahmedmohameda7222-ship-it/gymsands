@@ -12,6 +12,15 @@ const componentPaths = [
   "components/workouts/history/workout-history-card.tsx",
   "components/workouts/history/workout-history-state-view.tsx",
   "components/workouts/history/workout-history-load-more.tsx",
+  "components/workouts/history/session-history-page.tsx",
+  "components/workouts/history/session-history-summary.tsx",
+  "components/workouts/history/session-history-muscle-summary.tsx",
+  "components/workouts/history/exercise-history-section.tsx",
+  "components/workouts/history/set-history-row.tsx",
+  "components/workouts/history/session-history-insight.tsx",
+  "components/workouts/history/session-history-notes.tsx",
+  "components/workouts/history/session-history-timeline.tsx",
+  "components/workouts/history/session-history-actions.tsx",
 ] as const;
 const surface = componentPaths.map((path) => readFileSync(path, "utf8")).join("\n");
 

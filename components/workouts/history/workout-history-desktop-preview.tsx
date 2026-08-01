@@ -44,7 +44,9 @@ export function WorkoutHistoryDesktopPreview({
   }
   const detailId = item.canonicalSessionId ?? item.scheduledSessionId;
   const detailHref = detailId
-    ? `/workout-history/${encodeURIComponent(detailId)}${item.sourceKind === "scheduled_fallback" ? "?source=scheduled" : ""}`
+    ? item.sourceKind === "scheduled_fallback"
+      ? `/workout-history/scheduled/${encodeURIComponent(detailId)}`
+      : `/workout-history/${encodeURIComponent(detailId)}`
     : "/workout-history";
   const metrics = [
     item.durationMinutes === null ? null : { icon: Clock3, label: tr("historyDurationMetric"), value: tr("historyMinutesShort", { count: item.durationMinutes }) },

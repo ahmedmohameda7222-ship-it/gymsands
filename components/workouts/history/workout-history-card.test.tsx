@@ -80,4 +80,14 @@ describe("Workout History mobile card", () => {
     expect(completed).not.toContain("historyPartial");
     expect(partial).toContain("historyPartial");
   });
+
+  it("routes reduced scheduled fallbacks through their separate canonical namespace", () => {
+    const markup = renderToStaticMarkup(<WorkoutHistoryCard item={item({
+      sourceKind: "scheduled_fallback",
+      canonicalSessionId: null,
+      scheduledSessionId: "33333333-3333-4333-8333-333333333333",
+    })} />);
+    expect(markup).toContain('/workout-history/scheduled/33333333-3333-4333-8333-333333333333');
+    expect(markup).not.toContain("source=scheduled");
+  });
 });

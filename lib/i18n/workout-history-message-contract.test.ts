@@ -17,6 +17,15 @@ const requiredKeys = [
   "historyFilterTitle", "historyFilterDescription", "historyStatusLabel",
   "historyCompletedStatus", "historyPartialStatus", "historySkippedStatus",
   "historyCancelledStatus", "historyProgressOnly", "historyApplyFilters", "historyCloseFilters",
+  "historyBackToList", "historyDetailLoading", "historyDetailLoadFailed", "historyDetailNotFound",
+  "historyPrimaryHighlight", "historySavedSetsHighlight", "historyMuscleSummary",
+  "historyExercisesTitle", "historyPlannedPerformed", "historyBestReliableSet",
+  "historyNoPerformedSets", "historySetNumber", "historyPlannedTarget", "historyActualResult",
+  "historyUnplannedSet", "historyMissingPlannedSet", "historySetTypeLabel", "historyRpeLabel",
+  "historyRirLabel", "historySessionNotes", "historyTimelineTitle", "historyTimelineDescription",
+  "historyTimelineStarted", "historyTimelineSetCompleted", "historyTimelineSetCorrected",
+  "historyTimelineExerciseReplaced", "historyTimelineCompleted", "historyRepeatWorkout",
+  "historyRepeatPending", "historyScheduledFallbackNotice", "historyReplacedFrom",
 ] as const satisfies readonly TrainKey[];
 
 describe("Workout History message contract", () => {
