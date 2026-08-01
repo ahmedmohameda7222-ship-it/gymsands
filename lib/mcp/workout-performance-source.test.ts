@@ -19,7 +19,7 @@ function contextWith(supabase: unknown): McpContext {
 
 function queryResult(data: unknown) {
   const query: Record<string, ReturnType<typeof vi.fn>> = {};
-  for (const method of ["select", "eq"]) query[method] = vi.fn(() => query);
+  for (const method of ["select", "eq", "is"]) query[method] = vi.fn(() => query);
   query.maybeSingle = vi.fn(async () => ({ data, error: null }));
   return query;
 }

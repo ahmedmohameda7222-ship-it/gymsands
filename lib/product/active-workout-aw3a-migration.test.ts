@@ -149,8 +149,10 @@ describe("AW-3A migration and runtime authority", () => {
     expect(mcpBoundary).toContain('AW3A_MCP_METRIC_SOURCE_PROVIDER = "openai"');
     expect(migration).toContain("coalesce(auth.role(),'')='service_role'");
     const progress = readFileSync("services/database/progress.ts", "utf8");
-    expect(progress).toContain("reps");
-    expect(progress).toContain("weight_kg");
+    const historyReader = readFileSync("services/workouts/history/server-reader.ts", "utf8");
+    expect(progress).toContain('.from("current_personal_records")');
+    expect(historyReader).toContain("reps: log.reps");
+    expect(historyReader).toContain("weightKg: log.weight_kg");
   });
 
   it("includes owned metric values in privacy export without exporting definitions", () => {
