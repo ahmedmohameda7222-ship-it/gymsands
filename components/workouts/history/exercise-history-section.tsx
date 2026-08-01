@@ -1,22 +1,14 @@
 "use client";
 
-import { Award, CircleDashed } from "lucide-react";
+import { CircleDashed } from "lucide-react";
 
 import { Disclosure } from "@/components/ui/disclosure";
 import { SetHistoryRow } from "@/components/workouts/history/set-history-row";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import type { WorkoutHistoryExerciseDetail } from "@/types/workout-history";
 
-function bestSet(exercise: WorkoutHistoryExerciseDetail) {
-  return [...exercise.performedSets]
-    .filter((set) => set.weightKg !== null && set.reps !== null)
-    .sort((left, right) => (right.weightKg! * right.reps!) - (left.weightKg! * left.reps!))[0] ?? null;
-}
-
 export function ExerciseHistorySection({ exercise, defaultOpen }: { exercise: WorkoutHistoryExerciseDetail; defaultOpen: boolean }) {
-  const { locale, tr } = useTrainTranslation();
-  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
-  const best = bestSet(exercise);
+  const { tr } = useTrainTranslation();
   const description = exercise.plannedSetCount === null
     ? exercise.performedSets.length
       ? tr("historySavedSetsHighlight", { count: exercise.performedSets.length })
@@ -31,13 +23,6 @@ export function ExerciseHistorySection({ exercise, defaultOpen }: { exercise: Wo
       description={description}
       toggleLabel={`${exercise.name}: ${description}`}
     >
-      {best ? (
-        <div className="mb-3 flex items-center gap-2 rounded-xl bg-primary/5 p-3 text-sm">
-          <Award className="size-4 text-primary" aria-hidden="true" />
-          <span className="text-muted-foreground">{tr("historyBestReliableSet")}</span>
-          <bdi dir="ltr" className="ms-auto font-semibold text-foreground">{number.format(best.weightKg!)} kg × {number.format(best.reps!)} reps</bdi>
-        </div>
-      ) : null}
       <div className="space-y-2">
         {exercise.performedSets.map((set) => <SetHistoryRow key={set.id} set={set} />)}
         {exercise.missingPlannedSets.map((set) => (
