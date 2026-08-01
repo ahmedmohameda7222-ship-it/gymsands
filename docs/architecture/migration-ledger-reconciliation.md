@@ -3,6 +3,7 @@
 **Project:** `bkwezjxvapaeasfvlhvv`
 **Evidence captured:** 2026-08-01
 **Machine authority:** `supabase/migration-ledger.json`
+**Audit baseline:** `73944677c11222044520991fc1f18c8edd81a78e`
 **Status:** AW-9 applied and migration history reconciled
 
 This document is a human-readable summary only. It does not authorize migration replay, merge, deployment, compatibility-marker promotion, or Production writes.
@@ -31,7 +32,7 @@ Physical schema advancement and compatibility-marker promotion are deliberately 
 Repository 20260731090000_active_workout_aw9_offline_multi_device.sql
 Production 20260801045628_active_workout_aw9_offline_multi_device
 State      applied_version_alias
-Evidence   20536ad5fb77221735dd8e2824e366a72d7c1c42
+Evidence   73944677c11222044520991fc1f18c8edd81a78e
 Git blob   f1ffadfa2a0fc3b149afc6cfbf3c82751f18230c
 SHA-256    1e727c81e333b08bfe4cc4f2aae50014ac07064bc25625913b14b27f41f7bf3e
 ```
@@ -46,7 +47,7 @@ One Active Workout session was open at application time. It had a valid executio
 Repository 20260726075737_active_workout_aw4_session_engine.sql
 Production 20260726114212_active_workout_aw4_session_engine
 State      applied_version_alias
-Evidence   20536ad5fb77221735dd8e2824e366a72d7c1c42
+Evidence   73944677c11222044520991fc1f18c8edd81a78e
 Git blob   e79d74a90adcc62b044ce5eec83018416fdbabab
 SHA-256    b9d5af90a8b7c277bf9892cdae8c412c58284641b7e51f19d220c683eb272d93
 ```
