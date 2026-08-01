@@ -161,6 +161,10 @@ function execute(command, args, options = {}) {
   return result;
 }
 
+export function ensureLocalSupabaseServicePlane(executeImpl = execute) {
+  return executeImpl("supabase", ["start"]);
+}
+
 function runPsql(databaseUrl, sql) {
   execute(
     "psql",
@@ -204,10 +208,10 @@ async function main() {
   const cleanupSql = cleanupFixtureSql();
   await mkdir(path.dirname(outputPath), { recursive: true });
 
-  // The chronological migration replay owns the local stack lifecycle. Reusing
-  // that exact stack preserves the database volume and schema that passed the
-  // preceding gates. Reload and prove PostgREST's relation cache before the
-  // benchmark so a schema-contract failure is explicit rather than a generic 503.
+  // Chronological replay deliberately owns and leaves a database-only stack.
+  // Start the missing local API service plane in place, without stopping or
+  // replacing the migrated database volume, then prove the exact read contract.
+  ensureLocalSupabaseServicePlane();
   const local = localSupabaseEnvironment();
   runPsql(databaseUrl, "notify pgrst, 'reload schema';\n");
   await waitForWorkoutHistorySchema(local);
