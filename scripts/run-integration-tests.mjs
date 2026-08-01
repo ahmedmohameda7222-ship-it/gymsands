@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
 
@@ -142,9 +143,9 @@ export function stopDisposablePostgres(containerName) {
 async function main() {
   const config = resolveIntegrationDatabaseConfig();
   const disposable = await startDisposablePostgres(config);
-  const executable = process.platform === "win32" ? "npx.cmd" : "npx";
+  const executable = process.execPath;
   const args = [
-    "vitest",
+    resolve("node_modules/vitest/vitest.mjs"),
     "run",
     "--config",
     "vitest.integration.config.mjs",

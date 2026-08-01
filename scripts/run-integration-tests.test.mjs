@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   DEFAULT_INTEGRATION_DATABASE,
@@ -55,4 +56,11 @@ test("integration execution fails closed without a replayed local database autho
     () => resolveIntegrationDatabaseConfig({}),
     /PLAIVRA_AW2A_TEST_DATABASE_URL or PLAIVRA_LOCAL_DATABASE_URL is required/,
   );
+});
+
+test("integration execution launches the installed Vitest entrypoint without a platform shell shim", () => {
+  const runner = readFileSync(new URL("./run-integration-tests.mjs", import.meta.url), "utf8");
+  assert.match(runner, /const executable = process\.execPath/);
+  assert.match(runner, /resolve\("node_modules\/vitest\/vitest\.mjs"\)/);
+  assert.doesNotMatch(runner, /npx\.cmd/);
 });
