@@ -53,11 +53,26 @@ test("extracts a committed 5,000-session setup from the deterministic fixture", 
   assert.match(setup, /commit;\s*$/u);
 });
 
-test("cleanup remains scoped to the deterministic fixture owner", () => {
+test("cleanup remains executable SQL scoped to the deterministic fixture owner", () => {
   const cleanup = cleanupFixtureSql();
+  assert.match(cleanup, /^begin;\n/u);
   assert.match(cleanup, /b9000000-0000-4000-8000-000000000001/u);
   assert.match(cleanup, /delete from public\.profiles/u);
   assert.match(cleanup, /commit;\s*$/u);
+  assert.doesNotMatch(cleanup, /(?:^|\n)\s*set\s+ON_ERROR_STOP\s+on/u);
+  assert.doesNotMatch(cleanup, /(?:^|\n)\s*\\set\s+ON_ERROR_STOP\s+on/u);
+});
+
+test("benchmark enforces psql errors through the CLI variable contract", async () => {
+  const source = await readFile(
+    new URL("./measure-workout-history-performance.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /\[databaseUrl, "-X", "-v", "ON_ERROR_STOP=1"\]/u,
+  );
+  assert.doesNotMatch(source, /`\\?set ON_ERROR_STOP on/u);
 });
 
 test("real benchmark executes the versioned list and detail services", async () => {
