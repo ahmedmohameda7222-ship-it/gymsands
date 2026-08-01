@@ -204,6 +204,7 @@ export function WorkoutHistoryPage() {
       setResponse((current) => current ? {
         ...next,
         summary: current.summary,
+        filterOptions: current.filterOptions,
         items: [...current.items, ...next.items.filter((candidate) =>
           !current.items.some((item) => item.activityId === candidate.activityId))],
       } : next);
@@ -335,39 +336,26 @@ export function WorkoutHistoryPage() {
         />
       </div>
 
-      {pageState === "ready" && visibleNotice ? (
-        <WorkoutHistoryStateView state="ready" notice={visibleNotice} onRetry={loadFirstPage} onClearFilters={clearFilters} />
+      {visibleNotice ? (
+        <p className="rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground" role="status">
+          {visibleNotice === "stale-data" ? "" : ""}
+        </p>
       ) : null}
 
-      <div className="lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] lg:items-start lg:gap-6 xl:gap-8" data-workout-history-responsive-layout>
-        <div className="min-w-0 md:max-w-[760px] lg:max-w-none" data-workout-history-timeline-column>
-          {pageState !== "ready" ? (
-            <WorkoutHistoryStateView state={pageState} onRetry={loadFirstPage} onClearFilters={clearFilters} />
-          ) : response ? (
-            <>
-              <WorkoutHistoryTimeline
-                items={response.items}
-                timezone={range.timezone}
-                selectedId={selectedId}
-                onSelect={selectDesktopItem}
-              />
-              {response.nextCursor || loadMoreError ? (
-                <WorkoutHistoryLoadMore loading={loadingMore} error={loadMoreError} onLoadMore={loadMore} />
-              ) : null}
-            </>
-          ) : null}
-        </div>
+      <WorkoutHistoryStateView state={pageState} onRetry={() => void loadFirstPage()} onClearFilters={clearFilters}>
         {response ? (
-          <div className="hidden lg:block">
-            <WorkoutHistoryDesktopPreview
-              item={selectedItem}
-              summary={response.summary}
-              range={range}
-              periodDays={periodDays}
-            />
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)] lg:items-start">
+            <div className="space-y-4">
+              <WorkoutHistoryTimeline items={response.items} selectedId={selectedId} onSelect={selectDesktopItem} />
+              <WorkoutHistoryLoadMore hasMore={Boolean(nextCursor)} loading={loadingMore} failed={loadMoreError} onLoadMore={() => void loadMore()} />
+            </div>
+            <div className="hidden space-y-4 lg:block lg:sticky lg:top-24">
+              <WorkoutHistorySummary summary={response.summary} periodDays={periodDays} />
+              <WorkoutHistoryDesktopPreview item={selectedItem ?? response.items[0] ?? null} />
+            </div>
           </div>
         ) : null}
-      </div>
+      </WorkoutHistoryStateView>
     </TrainPageContainer>
   );
 }
