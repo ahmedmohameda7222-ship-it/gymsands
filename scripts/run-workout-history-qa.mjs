@@ -214,10 +214,9 @@ async function prepareScenario(page, scenario, observation) {
   }
 }
 
-function correctionOperation(fixtureRequests) {
-  const request = fixtureRequests.find((candidate) =>
-    candidate.method === "POST" && candidate.path.endsWith("/correct"));
-  return request?.body?.setOperations ?? null;
+function correctionRequest(fixtureRequests) {
+  return fixtureRequests.find((candidate) =>
+    candidate.method === "POST" && candidate.path.endsWith("/correct")) ?? null;
 }
 
 await mkdir(outputDir, { recursive: true });
@@ -347,7 +346,9 @@ try {
             .slice(0, 500) || "",
       };
     });
-    const setOperations = correctionOperation(fixtureState.requests);
+    const request = correctionRequest(fixtureState.requests);
+    const requestBody = request?.body ?? null;
+    const setOperations = requestBody?.setOperations ?? null;
     Object.assign(observation, {
       httpStatus: response?.status() ?? null,
       screenshot: fileName,
@@ -358,12 +359,20 @@ try {
         opaque: image.isOpaque,
       },
       dom,
+      correctionRequestBody: requestBody,
       correctionSetOperations: setOperations,
       fixtureRequests: fixtureState.requests,
     });
     const hasCorrectionKind = (kind) =>
       Array.isArray(setOperations) &&
       setOperations.some((operation) => operation?.kind === kind);
+    const conflictPayloadValid =
+      requestBody?.expectedHistoryRevision === 0
+      && /^history-correct:[0-9a-f-]{36}$/iu.test(String(requestBody?.idempotencyKey ?? ""))
+      && requestBody?.sessionPatch?.notes === "Concurrent correction attempt"
+      && requestBody?.sessionPatch?.durationMinutes === 52
+      && Array.isArray(setOperations)
+      && setOperations.length === 0;
     const scenarioFailed =
       observation.httpStatus !== 200 ||
       observation.pageErrors.length > 0 ||
@@ -393,7 +402,7 @@ try {
       (scenario.action === "correction-remove" && !hasCorrectionKind("remove")) ||
       (scenario.action === "correction-conflict" &&
         (
-          !hasCorrectionKind("update")
+          !conflictPayloadValid
           || !dom.hasDialog
           || !dom.alertText
           || observation.expectedConflictResponses !== 1
