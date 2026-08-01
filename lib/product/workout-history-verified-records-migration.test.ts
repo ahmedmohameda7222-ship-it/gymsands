@@ -14,7 +14,14 @@ const verification = readFileSync(
   "utf8",
 );
 const progress = readFileSync("services/database/progress.ts", "utf8");
-const completion = readFileSync("services/database/active-session-persistence-adapter.ts", "utf8");
+const completionAdapter = readFileSync(
+  "services/database/active-session-persistence-adapter.ts",
+  "utf8",
+);
+const completionAuthority = readFileSync(
+  "services/database/workout-sessions-legacy-implementation.ts",
+  "utf8",
+);
 const refreshClient = readFileSync(
   "services/workouts/history/verified-records-client.ts",
   "utf8",
@@ -61,10 +68,12 @@ describe("WH-6 verified record migration authority", () => {
     expect(migration).toContain("derived_records_evaluated_at=clock_timestamp()");
   });
 
-  it("refreshes only after canonical terminal confirmation with member auth", () => {
+  it("refreshes once after canonical completion with authenticated member authority", () => {
     expect(progress).not.toContain("autoDetectPersonalRecordsFromExerciseLogs");
-    expect(completion).toContain("refreshVerifiedRecordsAuthenticated");
-    expect(completion).toContain('root.status !== "completed"');
+    expect(completionAuthority).toContain("refreshVerifiedRecordsAuthenticated");
+    expect(completionAuthority).toContain("void refreshVerifiedRecordsAfterWorkoutCompletion(sessionId)");
+    expect(completionAdapter).toContain('root.status !== "completed"');
+    expect(completionAdapter).not.toContain("refreshVerifiedRecordsAuthenticated");
     expect(refreshClient).toContain("supabase.auth.getSession()");
     expect(refreshClient).toContain("Authorization: `Bearer ${token}`");
     expect(route).toContain("createSupabaseServerClient(null, true)");
