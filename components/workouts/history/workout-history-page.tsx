@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { WorkoutHistoryDesktopPreview } from "@/components/workouts/history/workout-history-desktop-preview";
 import { WorkoutHistoryFilters, type WorkoutHistoryFilterValue } from "@/components/workouts/history/workout-history-filters";
 import { WorkoutHistoryHeader } from "@/components/workouts/history/workout-history-header";
 import { WorkoutHistoryLoadMore } from "@/components/workouts/history/workout-history-load-more";
@@ -36,6 +38,9 @@ export function WorkoutHistoryPage() {
   const { user } = useAuth();
   const userId = user?.id;
   const { dir } = useTrainTranslation();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const [mode, setMode] = useState<WorkoutHistoryPeriodMode>("month");
   const [anchor, setAnchor] = useState(() => new Date());
@@ -143,6 +148,15 @@ export function WorkoutHistoryPage() {
     : response?.notices.includes("partial-availability")
       ? "partial-availability"
       : null;
+  const selectedId = searchParams.get("session");
+  const selectedItem = response?.items.find((item) => item.activityId === selectedId) ?? null;
+  const periodDays = Math.max(1, (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
+
+  const selectDesktopItem = useCallback((item: WorkoutHistoryListResponse["items"][number]) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("session", item.activityId);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   function clearFilters() {
     setSearchInput("");
@@ -181,10 +195,9 @@ export function WorkoutHistoryPage() {
       />
 
       {pageState === "ready" && response ? (
-        <WorkoutHistorySummary
-          summary={response.summary}
-          periodDays={Math.max(1, (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000)}
-        />
+        <div className="lg:hidden">
+          <WorkoutHistorySummary summary={response.summary} periodDays={periodDays} />
+        </div>
       ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -199,21 +212,39 @@ export function WorkoutHistoryPage() {
         />
       </div>
 
-      <WorkoutHistoryStateView
-        state={pageState}
-        notice={pageState === "ready" ? visibleNotice : null}
-        onRetry={loadFirstPage}
-        onClearFilters={clearFilters}
-      />
-
-      {pageState === "ready" && response ? (
-        <>
-          <WorkoutHistoryTimeline items={response.items} timezone={range.timezone} />
-          {response.nextCursor || loadMoreError ? (
-            <WorkoutHistoryLoadMore loading={loadingMore} error={loadMoreError} onLoadMore={loadMore} />
-          ) : null}
-        </>
+      {pageState === "ready" && visibleNotice ? (
+        <WorkoutHistoryStateView state="ready" notice={visibleNotice} onRetry={loadFirstPage} onClearFilters={clearFilters} />
       ) : null}
+
+      <div className="lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] lg:items-start lg:gap-6 xl:gap-8" data-workout-history-responsive-layout>
+        <div className="min-w-0 md:max-w-[760px] lg:max-w-none" data-workout-history-timeline-column>
+          {pageState !== "ready" ? (
+            <WorkoutHistoryStateView state={pageState} onRetry={loadFirstPage} onClearFilters={clearFilters} />
+          ) : response ? (
+            <>
+              <WorkoutHistoryTimeline
+                items={response.items}
+                timezone={range.timezone}
+                selectedId={selectedId}
+                onSelect={selectDesktopItem}
+              />
+              {response.nextCursor || loadMoreError ? (
+                <WorkoutHistoryLoadMore loading={loadingMore} error={loadMoreError} onLoadMore={loadMore} />
+              ) : null}
+            </>
+          ) : null}
+        </div>
+        {response ? (
+          <div className="hidden lg:block">
+            <WorkoutHistoryDesktopPreview
+              item={selectedItem}
+              summary={response.summary}
+              range={range}
+              periodDays={periodDays}
+            />
+          </div>
+        ) : null}
+      </div>
     </TrainPageContainer>
   );
 }

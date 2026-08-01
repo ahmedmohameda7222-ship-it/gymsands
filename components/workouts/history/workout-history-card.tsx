@@ -7,7 +7,7 @@ import { useTrainTranslation } from "@/lib/i18n/train";
 import { cn } from "@/lib/utils";
 import type { WorkoutHistorySessionSummary } from "@/types/workout-history";
 
-export function WorkoutHistoryCard({ item }: { item: WorkoutHistorySessionSummary }) {
+export function WorkoutHistoryCard({ item, selected = false, onSelect }: { item: WorkoutHistorySessionSummary; selected?: boolean; onSelect?: (item: WorkoutHistorySessionSummary) => void }) {
   const { locale, tr } = useTrainTranslation();
   const date = new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
@@ -44,8 +44,18 @@ export function WorkoutHistoryCard({ item }: { item: WorkoutHistorySessionSummar
   ].filter((metric): metric is { icon: typeof Clock3; label: string; value: string } => Boolean(metric)).slice(0, 3);
 
   return (
-    <article className="group relative min-h-[158px] overflow-hidden rounded-[18px] border border-border/70 bg-card shadow-sm transition hover:border-primary/30 hover:shadow-md focus-within:ring-2 focus-within:ring-primary/40" data-workout-history-card>
-      <Link href={href} className="flex min-h-[158px] flex-col p-4 outline-none" aria-label={`${tr("historyOpenDetails")}: ${item.title}`}>
+    <article className={cn("group relative min-h-[158px] overflow-hidden rounded-[18px] border border-border/70 bg-card shadow-sm transition motion-reduce:transition-none hover:border-primary/30 hover:shadow-md focus-within:ring-2 focus-within:ring-primary/40", selected && "border-primary/50 ring-2 ring-primary/20")} data-workout-history-card data-selected={selected || undefined}>
+      <Link
+        href={href}
+        className="flex min-h-[158px] flex-col p-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+        aria-label={`${selected ? `${tr("historySelectedWorkout")}: ` : ""}${tr("historyOpenDetails")}: ${item.title}`}
+        onClick={(event) => {
+          if (onSelect && window.matchMedia("(min-width: 1024px)").matches) {
+            event.preventDefault();
+            onSelect(item);
+          }
+        }}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="line-clamp-2 text-base font-semibold leading-5 text-foreground">{item.title}</h3>
@@ -69,7 +79,7 @@ export function WorkoutHistoryCard({ item }: { item: WorkoutHistorySessionSummar
                   <Icon className="size-3" aria-hidden="true" />
                   <span className="truncate">{label}</span>
                 </dt>
-                <dd className="mt-1 truncate text-sm font-semibold tabular-nums text-foreground">{value}</dd>
+                <dd className="mt-1 truncate text-sm font-semibold tabular-nums text-foreground"><bdi dir="ltr">{value}</bdi></dd>
               </div>
             ))}
           </dl>

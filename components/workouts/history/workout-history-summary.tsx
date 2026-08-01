@@ -3,7 +3,7 @@
 import { useTrainTranslation } from "@/lib/i18n/train";
 import type { WorkoutHistoryListSummary } from "@/types/workout-history";
 
-export function WorkoutHistorySummary({ summary, periodDays }: { summary: WorkoutHistoryListSummary; periodDays: number }) {
+export function WorkoutHistorySummary({ summary, periodDays, compact = false }: { summary: WorkoutHistoryListSummary; periodDays: number; compact?: boolean }) {
   const { locale, tr } = useTrainTranslation();
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
   const metrics = [
@@ -30,11 +30,11 @@ export function WorkoutHistorySummary({ summary, periodDays }: { summary: Workou
   ].filter((metric): metric is { label: string; value: string } => Boolean(metric)).slice(0, 4);
 
   return (
-    <section className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={tr("historyPageTitle")}>
+    <section className={compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-2 gap-2 sm:grid-cols-4"} aria-label={tr("historyPageTitle")}>
       {metrics.map((metric) => (
         <div key={metric.label} className="min-w-0 rounded-2xl border border-border/70 bg-card p-3">
           <p className="truncate text-xs text-muted-foreground">{metric.label}</p>
-          <p className="mt-1 truncate text-lg font-semibold tabular-nums text-foreground">{metric.value}</p>
+          <p className="mt-1 truncate text-lg font-semibold tabular-nums text-foreground"><bdi dir="ltr">{metric.value}</bdi></p>
         </div>
       ))}
     </section>

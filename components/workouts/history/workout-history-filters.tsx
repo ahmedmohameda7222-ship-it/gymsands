@@ -55,8 +55,16 @@ export function WorkoutHistoryFilters({
     && draft.statuses.every((status) => value.statuses.includes(status));
 
   function changeOpen(nextOpen: boolean) {
-    if (nextOpen) setDraft(value);
     onOpenChange(nextOpen);
+  }
+
+  function clearAll() {
+    const cleared: WorkoutHistoryFilterValue = {
+      statuses: ["completed", "partial"],
+      progressOnly: false,
+    };
+    setDraft(cleared);
+    onClear();
   }
 
   return (
@@ -72,7 +80,7 @@ export function WorkoutHistoryFilters({
           </span>
         ))}
         {activeLabels.length ? (
-          <Button type="button" variant="ghost" size="sm" onClick={onClear}>
+          <Button type="button" variant="ghost" size="sm" onClick={clearAll}>
             <X className="size-4" aria-hidden="true" />
             {tr("historyClearFilters")}
           </Button>
@@ -117,7 +125,7 @@ export function WorkoutHistoryFilters({
                 ? tr("historyFiltersAction")
                 : tr("historyApplyFilters", { count: resultCount })}
             </Button>
-            <Button type="button" variant="outline" className="min-h-12" onClick={onClear}>
+            <Button type="button" variant="outline" className="min-h-12" onClick={clearAll}>
               {tr("historyClearFilters")}
             </Button>
           </div>

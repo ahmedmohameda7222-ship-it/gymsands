@@ -13,7 +13,7 @@ function localDateKey(value: Date, timezone: string): string {
   }).format(value);
 }
 
-export function WorkoutHistoryTimeline({ items, timezone }: { items: WorkoutHistorySessionSummary[]; timezone: string }) {
+export function WorkoutHistoryTimeline({ items, timezone, selectedId, onSelect }: { items: WorkoutHistorySessionSummary[]; timezone: string; selectedId?: string | null; onSelect?: (item: WorkoutHistorySessionSummary) => void }) {
   const { locale, tr } = useTrainTranslation();
   const now = new Date();
   const today = localDateKey(now, timezone);
@@ -25,6 +25,8 @@ export function WorkoutHistoryTimeline({ items, timezone }: { items: WorkoutHist
     const key = localDateKey(new Date(item.effectiveAt), timezone);
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
+  // Preserve the server's newest-first logical order in both LTR and RTL. Direction mirrors
+  // the presentation, never the chronology of the member's activity history.
   const fullDate = new Intl.DateTimeFormat(locale, {
     weekday: "long",
     day: "numeric",
@@ -48,7 +50,14 @@ export function WorkoutHistoryTimeline({ items, timezone }: { items: WorkoutHist
               <span className="h-px flex-1 bg-border/70" aria-hidden="true" />
             </div>
             <div className="space-y-3">
-              {group.map((item) => <WorkoutHistoryCard key={item.activityId} item={item} />)}
+              {group.map((item) => (
+                <WorkoutHistoryCard
+                  key={item.activityId}
+                  item={item}
+                  selected={selectedId === item.activityId}
+                  onSelect={onSelect}
+                />
+              ))}
             </div>
           </section>
         );

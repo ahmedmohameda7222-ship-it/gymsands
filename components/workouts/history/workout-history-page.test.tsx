@@ -12,6 +12,11 @@ vi.mock("@/lib/i18n/train", () => ({
     tr: (key: string, values?: Record<string, string | number>) => values?.count === undefined ? key : `${key}:${values.count}`,
   }),
 }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/workout-history",
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock("@/services/workouts/history/client", () => ({ getWorkoutHistoryList: vi.fn() }));
 
 import { WorkoutHistoryPage } from "@/components/workouts/history/workout-history-page";

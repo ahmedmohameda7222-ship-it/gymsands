@@ -54,6 +54,8 @@ export function WorkoutHistoryPeriodControl({
             variant={mode === value ? "default" : "ghost"}
             className="min-h-10 shrink-0 rounded-xl px-3"
             aria-pressed={mode === value}
+            aria-expanded={value === "custom" ? mode === "custom" : undefined}
+            aria-controls={value === "custom" ? "workout-history-custom-period" : undefined}
             onClick={() => onModeChange(value)}
           >
             {labels[value]}
@@ -74,7 +76,7 @@ export function WorkoutHistoryPeriodControl({
       </div>
 
       {mode === "custom" ? (
-        <div className="mt-3">
+        <div id="workout-history-custom-period" className="mt-3">
           <div className="grid gap-3 border-t border-border/70 pt-3 sm:grid-cols-2">
             <Label className="space-y-1.5 text-xs text-muted-foreground">
               <span>{tr("historyCustomFrom")}</span>
