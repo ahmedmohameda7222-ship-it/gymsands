@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   detail: vi.fn(),
+  filterOptions: vi.fn(),
   list: vi.fn(),
   rateLimit: vi.fn(() => null as Response | null),
   requireUser: vi.fn(),
@@ -15,6 +16,9 @@ vi.mock("@/lib/integrations/env", () => ({
   serverEnv: { workoutHistoryCursorSecret: "route-test-secret-that-is-at-least-32-characters" },
 }));
 vi.mock("@/lib/integrations/rate-limit", () => ({ rateLimit: mocks.rateLimit }));
+vi.mock("@/services/workouts/history/filter-options", () => ({
+  readWorkoutHistoryFilterOptions: mocks.filterOptions,
+}));
 vi.mock("@/services/workouts/history/server-list-reader", () => ({
   listWorkoutHistoryKeyset: mocks.list,
 }));
@@ -38,6 +42,12 @@ import { WorkoutHistoryReaderError } from "@/services/workouts/history/server-re
 const ownerId = "11111111-1111-4111-8111-111111111111";
 const sessionId = "22222222-2222-4222-8222-222222222222";
 const supabase = { from: vi.fn(), rpc: vi.fn() };
+const periodOptions = {
+  workoutTypes: [{ value: "strength", label: "Strength" }],
+  muscles: [{ value: "pectoralis_major", label: "Pectoralis Major" }],
+  exercises: [{ value: "global:exercise", label: "Bench press" }],
+  plans: [{ value: "plan", label: "Strength plan" }],
+};
 
 describe("Workout History API routes", () => {
   beforeEach(() => {
@@ -59,6 +69,7 @@ describe("Workout History API routes", () => {
       notices: [],
       filterOptions: { workoutTypes: [], muscles: [], exercises: [], plans: [] },
     });
+    mocks.filterOptions.mockResolvedValue(periodOptions);
     mocks.sharedMetrics.mockResolvedValue({ externalLoadVolume: 0 });
   });
 
@@ -72,7 +83,7 @@ describe("Workout History API routes", () => {
     expect(mocks.requireUser).not.toHaveBeenCalled();
   });
 
-  it("requires the authenticated owner and passes normalized bounded query input", async () => {
+  it("requires the authenticated owner and attaches period-wide first-page options", async () => {
     const unauthorized = NextResponse.json({ error: "Sign in required." }, { status: 401 });
     mocks.requireUser.mockResolvedValueOnce(unauthorized);
     expect((await getList(new Request("https://plaivra.test/api/workouts/history"))).status)
@@ -98,9 +109,24 @@ describe("Workout History API routes", () => {
       }),
       expect.any(String),
     );
+    expect(mocks.filterOptions).toHaveBeenCalledWith(
+      supabase,
+      ownerId,
+      expect.objectContaining({ search: "Push Day", statuses: ["completed"] }),
+    );
+    expect(await response.json()).toMatchObject({ filterOptions: periodOptions });
   });
 
-  it("rejects invalid periods, limits, filters, and cursors with stable codes", async () => {
+  it("does not repeat the period filter-option scan for cursor pages", async () => {
+    const response = await getList(new Request(
+      "https://plaivra.test/api/workouts/history?cursor=opaque-signed-cursor",
+      { headers: { Authorization: "Bearer owner-token" } },
+    ));
+    expect(response.status).toBe(200);
+    expect(mocks.filterOptions).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid periods, limits, filters, and oversized cursors with stable codes", async () => {
     const cases = [
       ["?from=bad&to=worse&timezone=UTC", "invalid_period"],
       ["?limit=51", "invalid_limit"],
