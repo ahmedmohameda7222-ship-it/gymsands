@@ -4,6 +4,7 @@ import type {
   WorkoutSessionPrescriptionItem
 } from "@/types";
 import {
+  ActiveSessionControllerConflictError,
   ActiveSessionError,
   MAX_ACTIVITY_TIMER_DURATION_SECONDS,
   validateSessionCommandIntent,
@@ -20,15 +21,6 @@ import { activityTimerProjection, restSecondsRemaining, sessionElapsedSeconds } 
 
 function iso(nowMs: number) {
   return new Date(nowMs).toISOString();
-}
-
-function withDevice(
-  state: WorkoutSessionExecutionState,
-  payload: { controller_device_id?: string | null }
-) {
-  return Object.prototype.hasOwnProperty.call(payload, "controller_device_id")
-    ? { ...state, controller_device_id: payload.controller_device_id ?? null }
-    : state;
 }
 
 function validateDuration(value: number, maximum = 86_400) {
@@ -164,10 +156,35 @@ export function reduceSessionCommand(
     throw new ActiveSessionError("identity_mismatch", "Workout command identity does not match the store.");
   }
 
-  let next = withDevice(current, intent.payload as { controller_device_id?: string | null });
+  let next = current;
   let reason: string | null = null;
 
+  if (intent.commandType === "claim_control") {
+    const payload = intent.payload;
+    if (
+      current.controller_device_id !== payload.expected_controller_device_id
+      || (
+        current.controller_device_id !== null
+        && current.controller_device_id !== payload.controller_device_id
+        && !payload.takeover
+      )
+    ) {
+      throw new ActiveSessionControllerConflictError();
+    }
+    next = {
+      ...current,
+      controller_device_id: payload.controller_device_id
+    };
+  } else if (
+    current.controller_device_id === null
+    || intent.payload.controller_device_id !== current.controller_device_id
+  ) {
+    throw new ActiveSessionControllerConflictError();
+  }
+
   switch (intent.commandType) {
+    case "claim_control":
+      break;
     case "move_cursor": {
       const payload = intent.payload;
       next = {

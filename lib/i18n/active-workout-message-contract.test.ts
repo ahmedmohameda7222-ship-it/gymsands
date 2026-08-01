@@ -61,9 +61,19 @@ const requiredKeys = [
   "review.progress", "review.jumpToSet", "review.reopenSet", "review.finishAnyway",
   "completion.title", "completion.savedHistory", "completion.backToWorkouts", "completion.viewDetails",
   "completion.backToToday", "completion.finalMuscleLoad", "completion.recoveryTitle",
-  "offline.setSaveFailed", "offline.keepOpenRetry", "offline.retry",
+  "completion.performance", "completion.averageRpe", "completion.bestEstimatedOneRepMax",
+  "completion.performanceChange", "completion.neutralChange", "completion.metricUnavailable",
+  "offline.banner", "offline.setSaveFailed", "offline.keepOpenRetry", "offline.retry",
   "multiDevice.activeElsewhere", "multiDevice.viewOnly", "multiDevice.takeOver",
   "multiDevice.otherReadOnly", "multiDevice.changedElsewhere", "multiDevice.unsavedPreserved",
+  "multiDevice.sameDeviceTab", "multiDevice.continueThisTab",
+  "multiDevice.viewCurrent", "multiDevice.goBack", "multiDevice.takeoverConfirmTitle",
+  "multiDevice.takeoverConfirmDescription", "multiDevice.confirmTakeover",
+  "sync.online_synced", "sync.offline_saved", "sync.syncing", "sync.retry_needed",
+  "sync.device_conflict", "sync.data_conflict", "sync.terminal_pending",
+  "sync.terminalPending", "sync.terminalPendingDescription", "sync.pendingCount",
+  "sync.setConflict", "sync.thisDevice", "sync.server", "sync.setValues",
+  "sync.keepServer", "sync.useLocal",
   "validation.requiredValues", "validation.validNumber", "validation.nonNegative",
   "validation.wholeReps", "validation.unusualValue",
   "notifications.restFinished", "notifications.nextSetReady",
@@ -74,7 +84,19 @@ const requiredKeys = [
   "accessibility.openCurrentSessionHeat", "accessibility.switchFront", "accessibility.switchBack"
 ] as const;
 
-const allowedIdenticalTokens = new Set(["Plaivra", "ChatGPT", "RPE", "RIR", "AMRAP", "PR", "kg", "lb", "Optional"]);
+const allowedIdenticalTokens = new Set([
+  "Plaivra",
+  "ChatGPT",
+  "RPE",
+  "RIR",
+  "AMRAP",
+  "PR",
+  "Server",
+  "kg",
+  "lb",
+  "Optional",
+  "{weight} kg × {reps}"
+]);
 const unsafeMessagePattern = /<script|javascript:|onerror\s*=|onclick\s*=/i;
 const placeholderOnlyPattern = /^\s*\{[A-Za-z][^}]*\}\s*$/;
 

@@ -41,7 +41,8 @@ describe("AW-4 session reducer", () => {
       active_snapshot_item_id: fixtureIds.itemId,
       active_item_order: 1,
       active_set_number: 1,
-      view_state: "session_review"
+      view_state: "session_review",
+      controller_device_id: fixtureIds.deviceId
     }), context, now);
     expect(entered.state).toMatchObject({
       session_state: "review",
@@ -53,7 +54,8 @@ describe("AW-4 session reducer", () => {
       active_snapshot_item_id: fixtureIds.itemId,
       active_item_order: 1,
       active_set_number: 1,
-      view_state: "set_entry"
+      view_state: "set_entry",
+      controller_device_id: fixtureIds.deviceId
     }), context, now + 1000);
     expect(left.state).toMatchObject({ session_state: "active", view_state: "set_entry" });
   });
@@ -61,7 +63,7 @@ describe("AW-4 session reducer", () => {
   it("plans rest, pause, and resume from injected time", () => {
     const resting = reduceSessionCommand(executionFixture(), intent("start_rest", {
       duration_seconds: 90,
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now);
     expect(resting.state).toMatchObject({
       view_state: "rest",
@@ -69,7 +71,7 @@ describe("AW-4 session reducer", () => {
       rest_ends_at: "2026-07-26T08:02:30.000Z"
     });
     const paused = reduceSessionCommand(resting.state, intent("pause", {
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now + 30_000);
     expect(paused.state).toMatchObject({
       session_state: "paused",
@@ -77,7 +79,7 @@ describe("AW-4 session reducer", () => {
       rest_duration_seconds: 60
     });
     const resumed = reduceSessionCommand(paused.state, intent("resume", {
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now + 60_000);
     expect(resumed.state).toMatchObject({
       session_state: "active",
@@ -89,11 +91,11 @@ describe("AW-4 session reducer", () => {
     const started = reduceSessionCommand(executionFixture(), intent("start_activity_timer", {
       kind: "block",
       duration_seconds: 120,
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now);
     expect(started.state.activity_timer_ends_at).toBe("2026-07-26T08:03:00.000Z");
     const paused = reduceSessionCommand(started.state, intent("pause", {
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now + 30_000);
     expect(paused.state).toMatchObject({
       activity_timer_elapsed_seconds: 30,
@@ -101,16 +103,16 @@ describe("AW-4 session reducer", () => {
       activity_timer_ends_at: null
     });
     const resumed = reduceSessionCommand(paused.state, intent("resume", {
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now + 60_000);
     expect(resumed.state.activity_timer_ends_at).toBe("2026-07-26T08:03:30.000Z");
     const reset = reduceSessionCommand(resumed.state, intent("reset_activity_timer", {
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now + 70_000);
     expect(reset.state.activity_timer_elapsed_seconds).toBe(0);
     expect(reduceSessionCommand(reset.state, intent("clear_activity_timer", {
       completion_reason: "completed",
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now + 80_000).state.activity_timer_kind).toBeNull();
   });
 
@@ -120,7 +122,7 @@ describe("AW-4 session reducer", () => {
       session_running_since: null
     });
     expect(reduceSessionCommand(paused, intent("pause", {
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now)).toMatchObject({ outcome: "no_op", reason: "already_paused" });
     const activeTimer = executionFixture({
       activity_timer_kind: "timed_set",
@@ -129,7 +131,7 @@ describe("AW-4 session reducer", () => {
     expect(reduceSessionCommand(activeTimer, intent("start_activity_timer", {
       kind: "timed_set",
       duration_seconds: null,
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), context, now)).toMatchObject({
       outcome: "no_op",
       reason: "activity_timer_already_running"
@@ -138,7 +140,7 @@ describe("AW-4 session reducer", () => {
 
   it("rejects terminal mutation, skipped items, cursor mismatch, and invalid set bounds", () => {
     expect(() => reduceSessionCommand(executionFixture(), intent("pause", {
-      controller_device_id: null
+      controller_device_id: fixtureIds.deviceId
     }), { ...context, rootStatus: "completed" }, now)).toThrow(/terminal/i);
     expect(() => assertCursorInvariants(executionFixture(), {
       ...context,
@@ -202,7 +204,7 @@ describe("AW-4 session reducer", () => {
       reduceSessionCommand(executionFixture(), intent("start_activity_timer", {
         kind: "block",
         duration_seconds: null,
-        controller_device_id: null
+        controller_device_id: fixtureIds.deviceId
       }), context, now);
       throw new Error("expected failure");
     } catch (error) {
@@ -230,7 +232,7 @@ describe("AW-4 session reducer", () => {
       workoutSessionId: fixtureIds.sessionId,
       prescription: [first, second],
       restDurationSeconds: 90,
-      controllerDeviceId: null
+      controllerDeviceId: fixtureIds.deviceId
     };
 
     expect(planSessionAfterSetCompletion({

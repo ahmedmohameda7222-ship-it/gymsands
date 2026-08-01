@@ -8,9 +8,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { clearActiveWorkoutUserData } from "@/lib/workouts/active-session-sync";
+import { releaseActiveSessionStoresForUser } from "@/lib/workouts/active-session-store/store";
 import { env } from "@/lib/env";
 import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";
 import type { Profile } from "@/types";
@@ -35,6 +38,12 @@ const mockUser = {
   email: "member@plaivra.test",
 } as User;
 
+async function clearActiveWorkoutClientState(userId: string | null) {
+  if (!userId) return;
+  releaseActiveSessionStoresForUser(userId);
+  await clearActiveWorkoutUserData(userId).catch(() => undefined);
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (env.useMockAuth && isProduction && !env.productionQaBuild) {
     throw new Error(
@@ -45,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const activeUserIdRef = useRef<string | null>(null);
   const router = useRouter();
 
   const loadProfile = useCallback(
@@ -123,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function boot() {
       try {
         if (mockAuthEnabled) {
+          activeUserIdRef.current = MOCK_AUTH_USER_ID;
           setSession({ user: mockUser } as Session);
           await loadProfile(MOCK_AUTH_USER_ID);
           return;
@@ -132,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.warn(
             "Plaivra Supabase configuration is missing. Sign in is disabled until it is configured.",
           );
+          activeUserIdRef.current = null;
           setSession(null);
           setProfile(null);
           return;
@@ -144,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             error.message,
           );
         if (!mounted) return;
+        activeUserIdRef.current = data.session?.user.id ?? null;
         setSession(data.session);
         if (data.session?.user) {
           await loadProfile(data.session.user.id, data.session.user.email);
@@ -159,6 +172,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, nextSession) => {
+        const previousUserId = activeUserIdRef.current;
+        const nextUserId = nextSession?.user.id ?? null;
+        activeUserIdRef.current = nextUserId;
         setSession(nextSession);
         setIsLoading(false);
         if (nextSession?.user) {
@@ -167,6 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }, 0);
         } else {
           setProfile(null);
+          await clearActiveWorkoutClientState(previousUserId);
         }
       },
     );
@@ -190,6 +207,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdmin: profile?.role === "admin",
       refreshProfile,
       signOut: async () => {
+        const userId = session?.user.id ?? activeUserIdRef.current;
+        activeUserIdRef.current = null;
+        await clearActiveWorkoutClientState(userId);
         if (supabase) await supabase.auth.signOut();
         setSession(null);
         setProfile(null);

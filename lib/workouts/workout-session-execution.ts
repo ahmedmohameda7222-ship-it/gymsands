@@ -4,6 +4,7 @@ import type {
   WorkoutSessionExecutionState
 } from "@/types";
 import {
+  ActiveSessionControllerConflictError,
   ActiveSessionIdempotencyConflictError,
   ActiveSessionRevisionConflictError,
   sessionCommandOutcomes,
@@ -114,6 +115,17 @@ export class WorkoutSessionExecutionIdempotencyConflictError
   }
 }
 
+export class WorkoutSessionExecutionControllerConflictError
+  extends ActiveSessionControllerConflictError {
+  readonly response: WorkoutSessionExecutionCommandResponse;
+
+  constructor(response: WorkoutSessionExecutionCommandResponse) {
+    super(response);
+    this.name = "WorkoutSessionExecutionControllerConflictError";
+    this.response = response;
+  }
+}
+
 const commandTypes = new Set<WorkoutSessionExecutionCommandType>(workoutSessionExecutionCommandTypes);
 const commandOutcomes = new Set<WorkoutSessionExecutionCommandOutcome>(workoutSessionExecutionCommandOutcomes);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -190,7 +202,14 @@ export function normalizeWorkoutSessionExecutionCommandResponse(
   if (row.outcome === "applied" && row.revisionAfter !== row.revisionBefore + 1) {
     throw new Error("Applied workout execution commands must advance revision exactly once.");
   }
-  if ((row.outcome === "no_op" || row.outcome === "revision_conflict") && row.revisionAfter !== row.revisionBefore) {
+  if (
+    (
+      row.outcome === "no_op"
+      || row.outcome === "revision_conflict"
+      || row.outcome === "controller_conflict"
+    )
+    && row.revisionAfter !== row.revisionBefore
+  ) {
     throw new Error("Non-applied workout execution commands cannot advance revision.");
   }
   return row as WorkoutSessionExecutionCommandResponse;

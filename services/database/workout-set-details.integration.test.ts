@@ -11,7 +11,7 @@ const legacy = readFileSync(
   "utf8",
 );
 const controller = readFileSync(
-  "components/workouts/active-workout/active-workout-core-session.tsx",
+  "components/workouts/active-workout/active-workout-core-session-implementation.tsx",
   "utf8",
 );
 const runtimeModel = [

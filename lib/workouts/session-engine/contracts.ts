@@ -9,6 +9,7 @@ export const ACTIVE_SESSION_STORE_SCHEMA_VERSION = 1 as const;
 export const MAX_ACTIVITY_TIMER_DURATION_SECONDS = 86_400;
 
 export const sessionCommandTypes = [
+  "claim_control",
   "move_cursor",
   "complete_set_transition",
   "start_rest",
@@ -39,6 +40,12 @@ export type MoveCursorPayload = {
   controller_device_id?: string | null;
 };
 
+export type ClaimControlPayload = {
+  controller_device_id: string;
+  expected_controller_device_id: string | null;
+  takeover: boolean;
+};
+
 export type CompleteSetTransitionPayload = {
   active_snapshot_item_id: string | null;
   active_item_order: number;
@@ -49,6 +56,7 @@ export type CompleteSetTransitionPayload = {
 };
 
 export type SessionCommandPayloadByType = {
+  claim_control: ClaimControlPayload;
   move_cursor: MoveCursorPayload;
   complete_set_transition: CompleteSetTransitionPayload;
   start_rest: { duration_seconds: number; controller_device_id: string | null };
@@ -98,13 +106,15 @@ export type SessionCommandOutcome =
   | "applied"
   | "no_op"
   | "revision_conflict"
-  | "idempotency_conflict";
+  | "idempotency_conflict"
+  | "controller_conflict";
 
 export const sessionCommandOutcomes = [
   "applied",
   "no_op",
   "revision_conflict",
-  "idempotency_conflict"
+  "idempotency_conflict",
+  "controller_conflict"
 ] as const satisfies readonly SessionCommandOutcome[];
 
 export type SessionCommandResponse = {
@@ -138,6 +148,7 @@ export type SessionTransitionPlan = {
 export type ActiveSessionErrorCode =
   | "revision_conflict"
   | "idempotency_conflict"
+  | "controller_conflict"
   | "transport_uncertainty"
   | "canonical_set_saved_execution_sync_failed"
   | "hydration_failed"
@@ -177,6 +188,32 @@ export class ActiveSessionIdempotencyConflictError extends ActiveSessionError {
     super("idempotency_conflict", "The command identity is already bound to another request.");
     this.name = "ActiveSessionIdempotencyConflictError";
     this.response = response;
+  }
+}
+
+export class ActiveSessionControllerConflictError extends ActiveSessionError {
+  readonly response?: SessionCommandResponse;
+
+  constructor(response?: SessionCommandResponse) {
+    super(
+      "controller_conflict",
+      "This workout is controlled by another device."
+    );
+    this.name = "ActiveSessionControllerConflictError";
+    this.response = response;
+  }
+}
+
+export class ActiveSessionDataConflictError extends ActiveSessionError {
+  readonly targetIdentity: string;
+
+  constructor(targetIdentity: string) {
+    super(
+      "revision_conflict",
+      "This set changed on the server while local work was pending."
+    );
+    this.name = "ActiveSessionDataConflictError";
+    this.targetIdentity = targetIdentity;
   }
 }
 
@@ -238,12 +275,11 @@ function assertBoundedDuration(value: unknown, nullable: boolean) {
   }
 }
 
-function assertController(payload: Record<string, unknown>, optional = false) {
-  if (
-    optional
-    && !Object.prototype.hasOwnProperty.call(payload, "controller_device_id")
-  ) return;
+function assertController(payload: Record<string, unknown>) {
   assertUuidOrNull(payload.controller_device_id, "Controller identity");
+  if (payload.controller_device_id === null) {
+    invalidIntent("Controller identity is required.");
+  }
 }
 
 function assertEnum(value: unknown, allowed: readonly string[], label: string) {
@@ -293,6 +329,24 @@ export function validateSessionCommandIntent(
   }
 
   switch (value.commandType as SessionCommandType) {
+    case "claim_control":
+      assertExactKeys(payload, [
+        "controller_device_id",
+        "expected_controller_device_id",
+        "takeover"
+      ]);
+      assertUuidOrNull(payload.controller_device_id, "Controller identity");
+      if (payload.controller_device_id === null) {
+        invalidIntent("Controller identity is required.");
+      }
+      assertUuidOrNull(
+        payload.expected_controller_device_id,
+        "Expected controller identity"
+      );
+      if (typeof payload.takeover !== "boolean") {
+        invalidIntent("Takeover intent is invalid.");
+      }
+      break;
     case "move_cursor":
       assertExactKeys(
         payload,
@@ -309,7 +363,7 @@ export function validateSessionCommandIntent(
           "Workout view"
         );
       }
-      assertController(payload, true);
+      assertController(payload);
       break;
     case "complete_set_transition":
       assertExactKeys(payload, [
@@ -354,7 +408,7 @@ export function validateSessionCommandIntent(
           "Rest completion reason"
         );
       }
-      assertController(payload, true);
+      assertController(payload);
       break;
     case "reset_timer":
     case "pause":

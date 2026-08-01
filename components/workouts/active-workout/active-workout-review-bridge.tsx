@@ -158,6 +158,65 @@ function WorkoutSummaryCard({
                   {summary.notes || tr("review.noWorkoutNote")}
                 </p>
               </section>
+              <section
+                data-aw8-performance
+                className="rounded-[16px] border border-border/70 p-4"
+                aria-labelledby="aw8-performance-title"
+              >
+                <h2 id="aw8-performance-title" className="text-sm font-semibold">
+                  {tr("completion.performance")}
+                </h2>
+                {summary.performance ? (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <InfoStat
+                      label={tr("review.volume")}
+                      value={formatters.measurement(
+                        summary.performance.externalLoadVolume,
+                        "kg"
+                      )}
+                    />
+                    <InfoStat
+                      label={tr("completion.averageRpe")}
+                      value={summary.performance.averageRpe === null
+                        ? tr("completion.metricUnavailable")
+                        : formatters.decimal(summary.performance.averageRpe, 1)}
+                    />
+                    <InfoStat
+                      label={tr("completion.bestEstimatedOneRepMax")}
+                      value={summary.performance.exercises.some(
+                        (exercise) => exercise.bestEstimatedOneRepMaxKg !== null
+                      )
+                        ? formatters.measurement(
+                            Math.max(
+                              ...summary.performance.exercises.map(
+                                (exercise) => exercise.bestEstimatedOneRepMaxKg ?? 0
+                              )
+                            ),
+                            "kg"
+                          )
+                        : tr("completion.metricUnavailable")}
+                    />
+                    <InfoStat
+                      label={tr("completion.performanceChange")}
+                      value={(() => {
+                        const changes = summary.performance.exercises.flatMap(
+                          (exercise) => exercise.performanceChangePercent === null
+                            ? []
+                            : [exercise.performanceChangePercent]
+                        );
+                        if (!changes.length) return tr("completion.neutralChange");
+                        const value = changes.reduce((sum, item) => sum + item, 0) / changes.length;
+                        return `${value > 0 ? "+" : ""}${formatters.decimal(value, 1)}%`;
+                      })()}
+                      valueDirection="ltr"
+                    />
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {tr("completion.metricUnavailable")}
+                  </p>
+                )}
+              </section>
               {(summary.partialExercises.length
                 || summary.skippedExercises.length
                 || summary.replacedExercises.length) ? (

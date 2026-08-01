@@ -17,6 +17,13 @@ import type {
 } from "@/lib/i18n/active-workout";
 import { isolateBidiText } from "@/lib/i18n/active-workout";
 import {
+  deriveSessionMetrics,
+  estimateEligibleOneRepMax,
+  normalizeDerivedExerciseName,
+  type DerivedMetricLog,
+  type DerivedSessionMetrics
+} from "@/lib/workouts/derived-metrics";
+import {
   frozenLogCompatibility,
   frozenRepetitionsEntryDefault,
   frozenRepetitionsProjection
@@ -99,6 +106,7 @@ export type ActiveWorkoutSummary = {
   prs: string[];
   suggestions: string[];
   notes: string;
+  performance: DerivedSessionMetrics | null;
 };
 
 export type ActiveWorkoutReviewSet = {
@@ -412,14 +420,7 @@ export function formatPlannedReps(
 }
 
 export function normalizeExerciseName(value: string) {
-  const normalized = value
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/^[a-z]\p{N}+\s*[:.)-]\s*/u, "");
-  const identity = normalized
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-  return identity || normalized.trim();
+  return normalizeDerivedExerciseName(value);
 }
 
 export function roundWorkoutMetric(value: number) {
@@ -427,8 +428,7 @@ export function roundWorkoutMetric(value: number) {
 }
 
 export function estimateOneRepMax(weightKg: number, reps: number) {
-  if (weightKg <= 0 || reps <= 0) return 0;
-  return Math.round(weightKg * (1 + reps / 30) * 10) / 10;
+  return estimateEligibleOneRepMax(weightKg, reps, "working") ?? 0;
 }
 
 function parseRepRangeTop(value: string | null | undefined) {
@@ -525,6 +525,61 @@ export function historicalSets(
   );
 }
 
+function derivedLogsForStates(
+  states: ActiveWorkoutExerciseState[]
+): DerivedMetricLog[] {
+  return states.flatMap((item) => item.sets.map((set) => ({
+    id: `${item.prescriptionItem.id}:${set.setNumber}`,
+    exerciseName: item.exercise.exercise_name,
+    planActivityId: item.prescriptionItem.sourcePlanActivityId,
+    planExerciseId: item.prescriptionItem.sourcePlanExerciseId,
+    sourceWorkoutId: item.exercise.source_workout_id,
+    setNumber: set.setNumber,
+    reps: set.reps,
+    weightKg: set.weightKg,
+    completedAt: set.completedAt,
+    setType: set.setType,
+    rpe: set.rpe,
+    rir: set.rir
+  })));
+}
+
+function derivedHistoricalLogs(
+  history: WorkoutSessionSummary[]
+): DerivedMetricLog[] {
+  return history.flatMap((session) =>
+    (session.exercise_logs ?? []).map((log) => ({
+      ...log,
+      completedAt: log.completed_at ?? session.completed_at ?? session.started_at
+    }))
+  );
+}
+
+export function deriveActiveWorkoutMetrics(
+  states: ActiveWorkoutExerciseState[],
+  history: WorkoutSessionSummary[]
+) {
+  return deriveSessionMetrics(
+    derivedLogsForStates(states),
+    derivedHistoricalLogs(history)
+  );
+}
+
+function safelyDeriveActiveWorkoutMetrics(
+  states: ActiveWorkoutExerciseState[],
+  history: WorkoutSessionSummary[]
+) {
+  try {
+    return deriveActiveWorkoutMetrics(states, history);
+  } catch (error) {
+    console.warn(
+      "Plaivra could not derive workout performance metrics.",
+      error instanceof Error ? error.message : String(error)
+    );
+    return null;
+  }
+}
+
 export function previousPerformance(
   history: WorkoutSessionSummary[],
   exerciseName: string,
@@ -609,58 +664,28 @@ export function buildPrs(
   tr: ActiveWorkoutTranslator,
   formatters: ActiveWorkoutFormatters
 ) {
-  const currentByExercise = new Map<string, ActiveWorkoutSessionSetSummary[]>();
-  buildSessionSets(states).forEach((set) => {
-    const key = normalizeExerciseName(set.exerciseName);
-    currentByExercise.set(key, [...(currentByExercise.get(key) ?? []), set]);
-  });
-
-  const prs: string[] = [];
-  currentByExercise.forEach((sets, key) => {
-    const exerciseName = sets[0]?.exerciseName ?? key;
-    const previous = historicalSets(history, exerciseName);
-    const prevMaxWeight = Math.max(0, ...previous.map((set) => set.weightKg));
-    const prevMaxReps = Math.max(0, ...previous.map((set) => set.reps));
-    const prevMaxOneRep = Math.max(0, ...previous.map((set) => set.estimatedOneRepMax));
-    const currentMaxWeight = Math.max(0, ...sets.map((set) => set.weightKg));
-    const currentMaxReps = Math.max(0, ...sets.map((set) => set.reps));
-    const currentMaxOneRep = Math.max(0, ...sets.map((set) => estimateOneRepMax(set.weightKg, set.reps)));
-    const currentVolume = sets.reduce((sum, set) => sum + set.weightKg * set.reps, 0);
-    const previousSessionVolumes = new Map<string, number>();
-    history.forEach((session) => {
-      const volume = (session.exercise_logs ?? [])
-        .filter((log) => normalizeExerciseName(log.exercise_name) === key)
-        .reduce((sum, log) => sum + Number(log.weight_kg ?? 0) * Number(log.reps ?? 0), 0);
-      if (volume > 0) previousSessionVolumes.set(session.id, volume);
+  return (safelyDeriveActiveWorkoutMetrics(states, history)?.personalRecords ?? []).map((record) => {
+    const name = isolateBidiText(record.exerciseName);
+    if (record.type === "highest_load")
+      return tr("completion.highestWeightPr", {
+        name,
+        weight: formatters.measurement(roundWorkoutMetric(record.value), "kg")
+      });
+    if (record.type === "max_repetitions")
+      return tr("completion.maxRepsPr", {
+        name,
+        reps: formatters.integer(record.value)
+      });
+    if (record.type === "estimated_one_rep_max")
+      return tr("completion.estimatedOneRepMaxPr", {
+        name,
+        weight: formatters.measurement(roundWorkoutMetric(record.value), "kg")
+      });
+    return tr("completion.volumePr", {
+      name,
+      volume: formatters.measurement(roundWorkoutMetric(record.value), "kg")
     });
-    const prevMaxVolume = Math.max(0, ...previousSessionVolumes.values());
-    const isolatedName = isolateBidiText(exerciseName);
-    if (currentMaxWeight > 0 && currentMaxWeight > prevMaxWeight) {
-      prs.push(tr("completion.highestWeightPr", {
-        name: isolatedName,
-        weight: formatters.measurement(currentMaxWeight, "kg")
-      }));
-    }
-    if (currentMaxReps > 0 && currentMaxReps > prevMaxReps) {
-      prs.push(tr("completion.maxRepsPr", {
-        name: isolatedName,
-        reps: formatters.integer(currentMaxReps)
-      }));
-    }
-    if (currentMaxOneRep > 0 && currentMaxOneRep > prevMaxOneRep) {
-      prs.push(tr("completion.estimatedOneRepMaxPr", {
-        name: isolatedName,
-        weight: formatters.measurement(roundWorkoutMetric(currentMaxOneRep), "kg")
-      }));
-    }
-    if (currentVolume > 0 && currentVolume > prevMaxVolume) {
-      prs.push(tr("completion.volumePr", {
-        name: isolatedName,
-        volume: formatters.measurement(roundWorkoutMetric(currentVolume), "kg")
-      }));
-    }
   });
-  return prs;
 }
 
 export function buildSummary(
@@ -669,9 +694,24 @@ export function buildSummary(
   durationMinutes: number,
   notes: string,
   tr: ActiveWorkoutTranslator,
-  formatters: ActiveWorkoutFormatters
+  formatters: ActiveWorkoutFormatters,
+  canonicalLogs?: readonly ExerciseLog[]
 ): ActiveWorkoutSummary {
-  const sessionSets = buildSessionSets(states);
+  let performance: DerivedSessionMetrics | null;
+  try {
+    performance = canonicalLogs
+      ? deriveSessionMetrics(
+          canonicalLogs,
+          derivedHistoricalLogs(history)
+        )
+      : safelyDeriveActiveWorkoutMetrics(states, history);
+  } catch (error) {
+    console.warn(
+      "Plaivra could not derive canonical workout performance metrics.",
+      error instanceof Error ? error.message : String(error)
+    );
+    performance = null;
+  }
   const review = buildActiveWorkoutReview(states);
   const completedExercises = states.filter((item) =>
     item.sets.length > 0 && item.sets.every((set) => set.completedAt)
@@ -696,10 +736,8 @@ export function buildSummary(
     }));
   return {
     durationMinutes,
-    totalVolume: roundWorkoutMetric(
-      sessionSets.reduce((sum, set) => sum + set.weightKg * set.reps, 0)
-    ),
-    completedSets: sessionSets.length,
+    totalVolume: roundWorkoutMetric(performance?.externalLoadVolume ?? 0),
+    completedSets: performance?.completedSetCount ?? 0,
     totalPlannedSets: review.totalSets,
     completedExercises,
     totalExercises: states.length,
@@ -709,7 +747,8 @@ export function buildSummary(
     replacedExercises,
     prs: buildPrs(states, history, tr, formatters),
     suggestions: states.map((item) => buildProgressiveSuggestion(item, tr, formatters)),
-    notes
+    notes,
+    performance
   };
 }
 

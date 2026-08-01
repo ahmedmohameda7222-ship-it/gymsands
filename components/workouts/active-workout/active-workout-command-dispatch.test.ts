@@ -9,6 +9,7 @@ import {
   type ActiveWorkoutExecutionDispatchContext
 } from "./active-workout-command-dispatch";
 
+const deviceId = "33333333-3333-4333-8333-333333333333";
 const state = {
   workout_session_id: "session-1",
   user_id: "user-1",
@@ -52,7 +53,7 @@ describe("active workout command dispatch modes", () => {
       await expect(dispatchActiveWorkoutExecutionBackground(
         context,
         "clear_rest",
-        { view_state: "set_entry", controller_device_id: null },
+        { view_state: "set_entry", controller_device_id: deviceId },
         { rollback }
       )).resolves.toBeUndefined();
       await new Promise((resolve) => setImmediate(resolve));
@@ -72,7 +73,7 @@ describe("active workout command dispatch modes", () => {
     const { context, feedback, toast } = setup(dispatch);
     const callerCatch = vi.fn();
 
-    await dispatchActiveWorkoutExecutionAwaited(context, "pause", { controller_device_id: null })
+    await dispatchActiveWorkoutExecutionAwaited(context, "pause", { controller_device_id: deviceId })
       .catch(callerCatch);
 
     expect(callerCatch).toHaveBeenCalledTimes(1);
@@ -84,8 +85,8 @@ describe("active workout command dispatch modes", () => {
     const dispatch = vi.fn().mockResolvedValue({ state });
     const { context, mirrorState } = setup(dispatch);
 
-    await dispatchActiveWorkoutExecutionAwaited(context, "pause", { controller_device_id: null });
-    await dispatchActiveWorkoutExecutionBackground(context, "resume", { controller_device_id: null });
+    await dispatchActiveWorkoutExecutionAwaited(context, "pause", { controller_device_id: deviceId });
+    await dispatchActiveWorkoutExecutionBackground(context, "resume", { controller_device_id: deviceId });
 
     expect(mirrorState).toHaveBeenCalledTimes(2);
     expect(dispatch).toHaveBeenCalledTimes(2);

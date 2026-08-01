@@ -161,7 +161,8 @@ export function buildSummary(
   durationMinutes: number,
   notes: string,
   tr: ActiveWorkoutTranslator,
-  formatters: ActiveWorkoutFormatters
+  formatters: ActiveWorkoutFormatters,
+  canonicalLogs?: readonly import("@/types").ExerciseLog[]
 ): ActiveWorkoutSummary {
   const base = buildSummaryCore(
     states,
@@ -169,7 +170,8 @@ export function buildSummary(
     durationMinutes,
     notes,
     tr,
-    formatters
+    formatters,
+    canonicalLogs
   );
   const review = buildActiveWorkoutReview(states);
 

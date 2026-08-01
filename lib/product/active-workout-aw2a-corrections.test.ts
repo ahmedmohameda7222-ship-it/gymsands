@@ -1,9 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const component = readFileSync("components/workouts/active-workout/active-workout-core-session.tsx", "utf8").replaceAll("\r\n", "\n");
-const service = readFileSync("services/database/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
-const store = readFileSync("lib/workouts/active-session-store/store.ts", "utf8").replaceAll("\r\n", "\n");
+const component = readFileSync(
+  "components/workouts/active-workout/active-workout-core-session-implementation.tsx",
+  "utf8",
+).replaceAll("\r\n", "\n");
+const service = readFileSync(
+  "services/database/workout-session-execution.ts",
+  "utf8",
+).replaceAll("\r\n", "\n");
+const store = readFileSync(
+  "lib/workouts/active-session-store/store-core.ts",
+  "utf8",
+).replaceAll("\r\n", "\n");
 
 function functionBody(source: string, name: string, nextName: string) {
   const start = source.indexOf(`  async function ${name}`);
@@ -14,15 +23,27 @@ function functionBody(source: string, name: string, nextName: string) {
 }
 
 describe("AW-2A lifecycle preserved under AW-2B command authority", () => {
-  it("retains canonical-log-first set completion sequencing", () => {
+  it("retains canonical-log-first set completion sequencing online and offline", () => {
     const finishSet = functionBody(component, "finishSet", "restartSet");
     expect(finishSet).toContain("store.completeCanonicalSet");
     const completeCanonicalSet = store.slice(
       store.indexOf("async completeCanonicalSet"),
-      store.indexOf("\n    async completeSession", store.indexOf("async completeCanonicalSet"))
+      store.indexOf(
+        "\n    async saveCanonicalSets",
+        store.indexOf("async completeCanonicalSet"),
+      ),
     );
-    expect(completeCanonicalSet.indexOf("adapter.writeCanonicalSet"))
-      .toBeLessThan(completeCanonicalSet.indexOf("dispatch(setInput.executionIntent)"));
+    const offlineBranch = completeCanonicalSet.slice(
+      completeCanonicalSet.indexOf("if (isOffline())"),
+      completeCanonicalSet.indexOf("      try {", completeCanonicalSet.indexOf("if (isOffline())")),
+    );
+    const onlineBranch = completeCanonicalSet.slice(
+      completeCanonicalSet.indexOf("      try {", completeCanonicalSet.indexOf("if (isOffline())")),
+    );
+    expect(offlineBranch.indexOf('kind: "set_write"'))
+      .toBeLessThan(offlineBranch.indexOf("return dispatch(setInput.executionIntent)"));
+    expect(onlineBranch.indexOf("input.adapter.writeCanonicalSet"))
+      .toBeLessThan(onlineBranch.indexOf("return await dispatch(setInput.executionIntent)"));
     expect(finishSet).not.toContain("startRestTimer(");
     expect(finishSet).not.toContain("moveToNextSet(");
   });
@@ -38,7 +59,7 @@ describe("AW-2A lifecycle preserved under AW-2B command authority", () => {
       "active_set_number",
       "view_state",
       "rest_duration_seconds",
-      "controller_device_id"
+      "controller_device_id",
     ]) expect(operation).toContain(field);
     expect(operation).not.toContain("rest_started_at:");
     expect(operation).not.toContain("rest_ends_at:");

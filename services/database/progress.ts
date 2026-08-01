@@ -2,6 +2,11 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
+import {
+  buildPersonalRecordCandidates,
+  type DerivedMetricLog,
+  type DerivedPersonalRecord,
+} from "@/lib/workouts/derived-metrics";
 import type { BodyMeasurement, PersonalRecord, ProgressEntry } from "@/types";
 
 function canUseUserData(userId: string | null | undefined) {
@@ -47,14 +52,7 @@ export async function upsertPersonalRecord(input: PersonalRecordInput) {
   return data as PersonalRecord;
 }
 
-type AutoPrSet = {
-  exercise_name?: string | null;
-  exerciseName?: string | null;
-  set_number?: number | null;
-  reps: number | null;
-  weight_kg?: number | null;
-  weightKg?: number | null;
-};
+type AutoPrSet = DerivedMetricLog;
 
 type PrCandidate = {
   exerciseName: string;
@@ -65,88 +63,45 @@ type PrCandidate = {
   notes: string;
 };
 
-function estimateOneRepMax(weightKg: number, reps: number) {
-  return Math.round(weightKg * (1 + reps / 30) * 10) / 10;
-}
-
 function numeric(value: number | null | undefined) {
   return Number.isFinite(value) ? Number(value) : null;
 }
 
-function buildPersonalRecordCandidates(logs: AutoPrSet[]) {
-  const byExercise = logs.reduce<Record<string, AutoPrSet[]>>((groups, log) => {
-    const exerciseName = (log.exercise_name ?? log.exerciseName ?? "").trim();
-    if (!exerciseName) return groups;
-    groups[exerciseName] = [...(groups[exerciseName] ?? []), log];
-    return groups;
-  }, {});
+function progressCandidate(candidate: DerivedPersonalRecord): PrCandidate {
+  const recordTypes: Record<
+    DerivedPersonalRecord["type"],
+    PrCandidate["recordType"]
+  > = {
+    highest_load: "Max weight",
+    max_repetitions: "Max reps",
+    estimated_one_rep_max: "Estimated 1RM",
+    session_volume: "Best volume",
+  };
+  const recordType = recordTypes[candidate.type];
+  return {
+    exerciseName: candidate.exerciseName,
+    recordType,
+    weightKg:
+      candidate.type === "max_repetitions" ? candidate.externalLoadKg : candidate.value,
+    reps:
+      candidate.type === "max_repetitions"
+        ? candidate.repetitions
+        : candidate.type === "estimated_one_rep_max"
+          ? candidate.repetitions
+          : null,
+    score: candidate.value,
+    notes: `Auto-detected by ${candidate.type} (${candidate.comparableContext}).`,
+  };
+}
 
-  const candidates: PrCandidate[] = [];
-  Object.entries(byExercise).forEach(([exerciseName, exerciseLogs]) => {
-    const sets = exerciseLogs
-      .map((log) => ({
-        reps: numeric(log.reps),
-        weightKg: numeric(log.weight_kg ?? log.weightKg)
-      }))
-      .filter((set) => set.reps !== null || set.weightKg !== null);
-
-    const weightedSets = sets.filter((set): set is { reps: number | null; weightKg: number } => set.weightKg !== null);
-    const repSets = sets.filter((set): set is { reps: number; weightKg: number | null } => set.reps !== null);
-
-    const maxWeight = [...weightedSets].sort((a, b) => b.weightKg - a.weightKg)[0] ?? null;
-    if (maxWeight) {
-      candidates.push({
-        exerciseName,
-        recordType: "Max weight",
-        weightKg: maxWeight.weightKg,
-        reps: maxWeight.reps,
-        score: maxWeight.weightKg,
-        notes: "Auto-detected from a saved workout session."
-      });
-    }
-
-    const maxReps = [...repSets].sort((a, b) => b.reps - a.reps)[0] ?? null;
-    if (maxReps) {
-      candidates.push({
-        exerciseName,
-        recordType: "Max reps",
-        weightKg: maxReps.weightKg,
-        reps: maxReps.reps,
-        score: maxReps.reps,
-        notes: "Auto-detected from a saved workout session."
-      });
-    }
-
-    const oneRepMax = weightedSets
-      .filter((set): set is { reps: number; weightKg: number } => set.reps !== null && set.reps > 0)
-      .map((set) => ({ ...set, estimate: estimateOneRepMax(set.weightKg, set.reps) }))
-      .sort((a, b) => b.estimate - a.estimate)[0] ?? null;
-    if (oneRepMax) {
-      candidates.push({
-        exerciseName,
-        recordType: "Estimated 1RM",
-        weightKg: oneRepMax.estimate,
-        reps: oneRepMax.reps,
-        score: oneRepMax.estimate,
-        notes: `Auto-detected from ${oneRepMax.weightKg} kg x ${oneRepMax.reps}.`
-      });
-    }
-
-    const volume = weightedSets.reduce((sum, set) => sum + set.weightKg * Math.max(0, set.reps ?? 0), 0);
-    if (volume > 0) {
-      const roundedVolume = Math.round(volume * 10) / 10;
-      candidates.push({
-        exerciseName,
-        recordType: "Best volume",
-        weightKg: roundedVolume,
-        reps: null,
-        score: roundedVolume,
-        notes: "Auto-detected total session volume in kg."
-      });
-    }
-  });
-
-  return candidates;
+function progressCandidates(logs: AutoPrSet[]) {
+  const strongest = new Map<string, PrCandidate>();
+  for (const candidate of buildPersonalRecordCandidates(logs).map(progressCandidate)) {
+    const key = `${candidate.exerciseName.toLocaleLowerCase("en")}::${candidate.recordType}`;
+    const existing = strongest.get(key);
+    if (!existing || candidate.score > existing.score) strongest.set(key, candidate);
+  }
+  return [...strongest.values()];
 }
 
 function existingRecordScore(record: PersonalRecord) {
@@ -156,7 +111,7 @@ function existingRecordScore(record: PersonalRecord) {
 
 export async function autoDetectPersonalRecordsFromExerciseLogs(userId: string, logs: AutoPrSet[], recordDate: string) {
   if (!canUseUserData(userId) || !logs.length) return [];
-  const candidates = buildPersonalRecordCandidates(logs);
+  const candidates = progressCandidates(logs);
   if (!candidates.length) return [];
 
   const exerciseNames = Array.from(new Set(candidates.map((candidate) => candidate.exerciseName)));

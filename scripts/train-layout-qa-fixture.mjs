@@ -115,6 +115,79 @@ function activeMuscleAnalysisPayload(sessionId, scenario, mode = "active") {
   };
 }
 
+function persistedExerciseLogRow(log, sessionId, userId) {
+  const setNumber = Number(log.set_number ?? 0);
+  const exerciseLogId = log.id
+    ?? "25000000-0000-4000-8000-" + String(setNumber).padStart(12, "0");
+  const ownership = {
+    exercise_log_id: exerciseLogId,
+    workout_session_id: sessionId,
+    user_id: userId
+  };
+  const timestamp = log.completed_at ?? "2026-07-27T08:00:00.000Z";
+  const setDetails = log.set_details
+    ? {
+        ...log.set_details,
+        id: log.set_details.id
+          ?? "26000000-0000-4000-8000-" + String(setNumber).padStart(12, "0"),
+        ...ownership,
+        created_at: log.set_details.created_at ?? timestamp,
+        updated_at: log.set_details.updated_at ?? timestamp
+      }
+    : null;
+  const segments = (Array.isArray(log.segments) ? log.segments : []).map(
+    (segment, segmentIndex) => {
+      const segmentOrder = Number(segment.segment_order ?? segmentIndex + 1);
+      const segmentId = segment.id
+        ?? "27000000-0000-4000-8000-" + String(setNumber * 100 + segmentOrder).padStart(12, "0");
+      const metricValues = (
+        Array.isArray(segment.metric_values) ? segment.metric_values : []
+      ).map((metric, metricIndex) => ({
+        ...metric,
+        id: metric.id
+          ?? "28000000-0000-4000-8000-" + String(
+            setNumber * 10000 + segmentOrder * 100 + metricIndex + 1
+          ).padStart(12, "0"),
+        segment_id: segmentId,
+        ...ownership,
+        created_at: metric.created_at ?? timestamp,
+        updated_at: metric.updated_at ?? timestamp
+      }));
+      return {
+        ...segment,
+        id: segmentId,
+        ...ownership,
+        segment_order: segmentOrder,
+        metric_values: metricValues,
+        created_at: segment.created_at ?? timestamp,
+        updated_at: segment.updated_at ?? timestamp
+      };
+    }
+  );
+  return {
+    id: exerciseLogId,
+    workout_session_id: sessionId,
+    user_id: userId,
+    plan_exercise_id: log.plan_exercise_id ?? null,
+    exercise_order: log.exercise_order ?? null,
+    exercise_name: log.exercise_name,
+    exercise_category: log.exercise_category ?? null,
+    planned_sets: log.planned_sets ?? null,
+    planned_reps: log.planned_reps ?? null,
+    planned_rest_seconds: log.planned_rest_seconds ?? null,
+    set_number: log.set_number,
+    reps: log.reps ?? null,
+    weight_kg: log.weight_kg ?? null,
+    notes: log.notes ?? null,
+    completed_at: log.completed_at ?? null,
+    set_details: setDetails,
+    performance_metrics: log.performance_metrics ?? [],
+    segments,
+    created_at: log.created_at ?? timestamp,
+    updated_at: log.updated_at ?? timestamp
+  };
+}
+
 export async function installAw5CorrectionFixture(context, {
   direct,
   language,
@@ -145,6 +218,7 @@ export async function installAw5CorrectionFixture(context, {
     status: "started",
     source: direct ? "manual" : "schedule"
   };
+  let performedLogs = [];
   let muscleRequestCount = 0;
   const snapshot = {
     id: snapshotId,
@@ -209,10 +283,15 @@ export async function installAw5CorrectionFixture(context, {
     sameSite: "Lax"
   }]);
   await context.addInitScript(({ languageValue, themeId }) => {
-    localStorage.setItem("plaivra.qa.train-scenario", "active");
-    localStorage.setItem("plaivra.qa.train-variant", "active-default-success");
-    localStorage.setItem("plaivra.language.v1", languageValue);
-    localStorage.setItem("plaivra-theme-id", themeId);
+    try {
+      localStorage.setItem("plaivra.qa.train-scenario", "active");
+      localStorage.setItem("plaivra.qa.train-variant", "active-default-success");
+      localStorage.setItem("plaivra.language.v1", languageValue);
+      localStorage.setItem("plaivra-theme-id", themeId);
+    } catch {
+      // Playwright also evaluates init scripts in origin-less documents.
+      // Those documents have no storage authority and are intentionally ignored.
+    }
   }, {
     languageValue: language,
     themeId: theme === "dark" ? "elite-noir" : "olive"
@@ -287,10 +366,16 @@ export async function installAw5CorrectionFixture(context, {
     if (method === "GET" && pathname.includes("/rest/v1/workout_session_prescription_sets")) {
       return respond(sets, 200, { "content-range": "0-1/2" });
     }
+    if (method === "GET" && pathname.includes("/rest/v1/exercise_logs")) {
+      return respond(performedLogs, 200, {
+        "content-range": performedLogs.length
+          ? "0-" + (performedLogs.length - 1) + "/" + performedLogs.length
+          : "*/0"
+      });
+    }
     if (method === "GET" && (
       pathname.includes("/rest/v1/workout_session_prescription_metric_targets")
       || pathname.includes("/rest/v1/workout_performance_metric_definitions")
-      || pathname.includes("/rest/v1/exercise_logs")
       || pathname.includes("/rest/v1/user_exercise_alternatives")
       || pathname.includes("/rest/v1/user_progression_targets")
     )) {
@@ -299,12 +384,40 @@ export async function installAw5CorrectionFixture(context, {
     if (method === "POST" && pathname.includes("/rest/v1/rpc/upsert_workout_set_logs_atomic")) {
       if (delayCanonical) await delayedCanonical.promise;
       const payload = request.postDataJSON();
-      await respond({ saved: payload?.p_logs?.length ?? 1, deleted: 0 });
+      const incoming = Array.isArray(payload?.p_logs) ? payload.p_logs : [];
+      for (const log of incoming) {
+        const exerciseIdentity = log.plan_exercise_id
+          ?? String(log.exercise_order ?? "none") + ":" + String(log.exercise_name ?? "").trim().toLowerCase();
+        const identity = exerciseIdentity + ":set:" + log.set_number;
+        const row = persistedExerciseLogRow(log, sessionId, contract.userId);
+        const index = performedLogs.findIndex((existing) => {
+          const existingExercise = existing.plan_exercise_id
+            ?? String(existing.exercise_order ?? "none") + ":" + String(existing.exercise_name ?? "").trim().toLowerCase();
+          return existingExercise + ":set:" + existing.set_number === identity;
+        });
+        if (index >= 0) performedLogs[index] = row;
+        else performedLogs.push(row);
+      }
+      await respond({ saved: incoming.length, deleted: 0 });
       canonicalFinished.resolve();
       return;
     }
     if (method === "POST" && pathname.includes("/rest/v1/rpc/complete_workout_session_atomic")) {
       const payload = request.postDataJSON();
+      const incoming = Array.isArray(payload?.p_logs) ? payload.p_logs : [];
+      for (const log of incoming) {
+        const exerciseIdentity = log.plan_exercise_id
+          ?? String(log.exercise_order ?? "none") + ":" + String(log.exercise_name ?? "").trim().toLowerCase();
+        const identity = exerciseIdentity + ":set:" + log.set_number;
+        const row = persistedExerciseLogRow(log, sessionId, contract.userId);
+        const index = performedLogs.findIndex((existing) => {
+          const existingExercise = existing.plan_exercise_id
+            ?? String(existing.exercise_order ?? "none") + ":" + String(existing.exercise_name ?? "").trim().toLowerCase();
+          return existingExercise + ":set:" + existing.set_number === identity;
+        });
+        if (index >= 0) performedLogs[index] = row;
+        else performedLogs.push(row);
+      }
       root = {
         ...root,
         status: "completed",
@@ -347,6 +460,16 @@ export async function installAw5CorrectionFixture(context, {
 
   return {
     sessionId,
+    setServerRootStatus(status) {
+      root = {
+        ...root,
+        status,
+        completed_at: status === "completed"
+          ? root.completed_at ?? "2026-07-27T09:00:00.000Z"
+          : null
+      };
+    },
+    performedLogsSnapshot: () => JSON.parse(JSON.stringify(performedLogs)),
     muscleRequestCount: () => muscleRequestCount,
     releaseCanonical: delayedCanonical.resolve,
     canonicalSettled: () => delayedCanonical.settled,

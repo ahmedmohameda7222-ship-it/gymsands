@@ -76,12 +76,15 @@ begin
        'public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)'
      ) is null
      or to_regprocedure(
+       'public.aw9_pre_apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)'
+     ) is null
+     or to_regprocedure(
        'private.aw2c_core_apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)'
      ) is null
      or to_regprocedure(
        'private.aw4_pre_session_engine_apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)'
      ) is null then
-    raise exception 'AW-4 command authority chain is incomplete.';
+    raise exception 'AW-4 additive command authority chain is incomplete.';
   end if;
 
   select pg_get_functiondef(
@@ -101,12 +104,21 @@ begin
   select pg_get_functiondef(
     'public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)'::regprocedure
   ) into strict v_definition;
+  if v_definition not like '%public.aw9_pre_apply_workout_session_execution_command_atomic%'
+     or v_definition not like '%claim_control%'
+     or v_definition not like '%controller_conflict%' then
+    raise exception 'AW-9 public authority wrapper does not preserve the AW-4 delegation boundary.';
+  end if;
+
+  select pg_get_functiondef(
+    'public.aw9_pre_apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)'::regprocedure
+  ) into strict v_definition;
   if v_definition not like '%completion_reason%'
      or v_definition not like '%p_payload->>''completion_reason''%'
      or v_definition not like '%v_rest_end_reason%'
      or v_definition not like '%session_paused%'
      or v_definition not like '%session_resumed%' then
-    raise exception 'AW-4 public timeline wrapper is incomplete.';
+    raise exception 'AW-4 preserved public timeline wrapper is incomplete.';
   end if;
 
   if has_function_privilege(

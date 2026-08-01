@@ -138,6 +138,8 @@ vi.mock("@/lib/active-workout", () => ({
   clearActiveWorkoutState: vi.fn(),
   isValidActiveWorkoutRoute: () => true,
   readActiveWorkoutState: () => null,
+  readPreviousActiveWorkoutRoute: () => null,
+  resolveActiveWorkoutRoute: () => "/workouts/session/day/day-1",
   writeActiveWorkoutState: vi.fn()
 }));
 vi.mock("@/lib/error-formatting", () => ({
@@ -161,16 +163,38 @@ vi.mock("@/lib/workouts/active-session-store/store", () => ({
   getActiveSessionStore: () => ({
     hydrate,
     getSnapshot,
+    subscribe: () => () => undefined,
     dispatch,
     saveCanonicalSets: vi.fn(),
     completeCanonicalSet: vi.fn(),
     completeSession,
     skipExercise: vi.fn(),
-    replaceExercise: vi.fn()
+    replaceExercise: vi.fn(),
+    cancelSession: vi.fn(),
+    retryPendingTransport: vi.fn(),
+    resolveConflict: vi.fn(),
+    setSecondaryProjection: vi.fn()
+  })
+}));
+vi.mock("@/lib/workouts/active-session-sync", () => ({
+  createActiveWorkoutTabLeadership: () => ({
+    tabId: "tab-1",
+    isLeader: () => true,
+    acquire: async () => true,
+    renew: () => true,
+    release: () => undefined,
+    dispose: () => undefined,
+    subscribe: (listener: (leader: boolean) => void) => {
+      listener(true);
+      return () => undefined;
+    }
   })
 }));
 vi.mock("@/services/database/active-session-persistence-adapter", () => ({
   activeSessionPersistenceAdapter: {}
+}));
+vi.mock("@/services/database/active-session-realtime", () => ({
+  subscribeToActiveSessionInvalidation: () => () => undefined
 }));
 vi.mock("@/services/database/direct-workout-sessions", () => ({
   getOrStartWorkoutSession: (...args: unknown[]) => startDirectSession(...args)

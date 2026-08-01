@@ -50,6 +50,7 @@ export function ActiveWorkoutIndicator() {
   const [restLeft, setRestLeft] = useState(0);
   const [actionPending, setActionPending] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [controllerDeviceId, setControllerDeviceId] = useState<string | null>(null);
   const controllerRef = useRef<HTMLDivElement>(null);
   const controllerDeviceIdRef = useRef<string | null>(null);
   const activeSessionStoreRef = useRef<ActiveSessionStore | null>(null);
@@ -96,45 +97,31 @@ export function ActiveWorkoutIndicator() {
       setSession(null);
       setState(null);
       setSnapshot(null);
+      setControllerDeviceId(null);
       setLoadError(false);
       return;
     }
 
     try {
-      controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
+      const localControllerDeviceId = getActiveWorkoutDeviceId();
+      controllerDeviceIdRef.current = localControllerDeviceId;
+      setControllerDeviceId(localControllerDeviceId);
       const store = getActiveSessionStore({
         userId,
         workoutSessionId: open.id,
         adapter: activeSessionPersistenceAdapter,
+        controllerDeviceId: localControllerDeviceId,
         clearCompatibilityCache: () => clearActiveWorkoutState(userId)
       });
       activeSessionStoreRef.current = store;
       await store.hydrate({ force });
-      let persisted = store.getSnapshot().executionState;
+      const persisted = store.getSnapshot().executionState;
       if (!persisted) throw new Error("Active execution state is unavailable.");
-      if (
-        controllerDeviceIdRef.current
-        && persisted.controller_device_id !== controllerDeviceIdRef.current
-      ) {
-        const response = await store.dispatch({
-          userId,
-          workoutSessionId: open.id,
-          commandId: createSessionCommandId(),
-          commandType: "move_cursor",
-          payload: {
-            active_snapshot_item_id: persisted.active_snapshot_item_id,
-            active_item_order: persisted.active_item_order,
-            active_set_number: persisted.active_set_number,
-            controller_device_id: controllerDeviceIdRef.current
-          }
-        });
-        persisted = response.state;
-      }
       const route = resolveActiveWorkoutRoute(open, stored);
       const next = activeWorkoutCacheFromExecution(persisted, {
         route,
         label: open.workout_name,
-        controllerDeviceId: controllerDeviceIdRef.current
+        controllerDeviceId: localControllerDeviceId
       });
       writeActiveWorkoutState(userId, next);
       setSession(open);
@@ -232,6 +219,7 @@ export function ActiveWorkoutIndicator() {
       || !store
       || !executionState
       || executionState.session_state === "review"
+      || executionState.controller_device_id !== controllerDeviceId
     ) return;
     setActionPending(true);
     try {
@@ -240,7 +228,7 @@ export function ActiveWorkoutIndicator() {
         workoutSessionId: session.id,
         commandId: createSessionCommandId(),
         commandType: executionState.session_state === "paused" ? "resume" : "pause",
-        payload: { controller_device_id: controllerDeviceIdRef.current }
+        payload: { controller_device_id: controllerDeviceId }
       });
       setLoadError(false);
     } catch {
@@ -313,6 +301,18 @@ export function ActiveWorkoutIndicator() {
     timer = formatters.timer(restLeft);
     actionLabel = t("minimized.openWorkout");
     onAction = undefined;
+  }
+  if (snapshot && snapshot.syncState !== "online_synced") {
+    meta = `${meta} · ${t(`sync.${snapshot.syncState}`)} · ${t("sync.pendingCount", {
+      count: snapshot.pendingOperationCount
+    })}`;
+  }
+  if (
+    execution?.controller_device_id
+    && execution.controller_device_id !== controllerDeviceId
+  ) {
+    onAction = undefined;
+    actionLabel = t("multiDevice.viewOnly");
   }
 
   return (

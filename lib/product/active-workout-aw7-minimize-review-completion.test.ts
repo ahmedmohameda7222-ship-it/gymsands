@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const source = (path: string) => readFileSync(path, "utf8");
 
-const core = source("components/workouts/active-workout/active-workout-core-session.tsx");
+const core = source("components/workouts/active-workout/active-workout-core-session-implementation.tsx");
 const indicator = source("components/workouts/active-workout-indicator.tsx");
 const minimizedBar = source("components/workouts/active-workout-minimized-bar.tsx");
 const review = source(

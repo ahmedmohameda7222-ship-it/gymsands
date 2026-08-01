@@ -40,6 +40,7 @@ export type CompleteActiveSessionInput = {
   workoutSessionId: string;
   notes: string;
   durationMinutes: number;
+  controllerDeviceId: string;
   finalLogs?: CanonicalWorkoutSetWrite[];
 };
 
@@ -47,6 +48,7 @@ export type ReplaceActiveSessionExerciseInput = {
   userId: string;
   workoutSessionId: string;
   sourcePlanExerciseId: string;
+  controllerDeviceId: string;
   replacement: Workout;
 };
 
@@ -62,14 +64,23 @@ export type ActiveSessionPersistenceAdapter = {
   ): Promise<WorkoutSessionPrescriptionItem[]>;
   loadPerformedLogs(userId: string, workoutSessionId: string): Promise<ExerciseLog[]>;
   dispatchExecutionCommand(request: SessionCommandRequest): Promise<SessionCommandResponse>;
-  writeCanonicalSet(workoutSessionId: string, logs: CanonicalWorkoutSetWrite[]): Promise<void>;
+  writeCanonicalSet(
+    workoutSessionId: string,
+    logs: CanonicalWorkoutSetWrite[],
+    controllerDeviceId: string
+  ): Promise<void>;
   completeSession(input: CompleteActiveSessionInput): Promise<WorkoutSession>;
   replaceExercise(input: ReplaceActiveSessionExerciseInput): Promise<unknown>;
   skipExercise(
     userId: string,
     workoutSessionId: string,
     snapshotItemId: string,
-    reason?: WorkoutSessionExerciseSkipReason
+    reason: WorkoutSessionExerciseSkipReason | undefined,
+    controllerDeviceId: string
   ): Promise<unknown>;
-  cancelSession(userId: string, workoutSessionId: string): Promise<WorkoutSession>;
+  cancelSession(
+    userId: string,
+    workoutSessionId: string,
+    controllerDeviceId: string
+  ): Promise<WorkoutSession>;
 };

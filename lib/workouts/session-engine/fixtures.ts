@@ -5,7 +5,8 @@ export const fixtureIds = {
   sessionId: "22222222-2222-4222-8222-222222222222",
   itemId: "33333333-3333-4333-8333-333333333333",
   setId: "44444444-4444-4444-8444-444444444444",
-  commandId: "55555555-5555-4555-8555-555555555555"
+  commandId: "55555555-5555-4555-8555-555555555555",
+  deviceId: "99999999-9999-4999-8999-999999999999"
 } as const;
 
 export function executionFixture(
@@ -31,7 +32,7 @@ export function executionFixture(
     activity_timer_running_since: null,
     activity_timer_duration_seconds: null,
     activity_timer_ends_at: null,
-    controller_device_id: null,
+    controller_device_id: fixtureIds.deviceId,
     bootstrap_source: "session_start",
     created_at: "2026-07-26T08:00:00.000Z",
     updated_at: "2026-07-26T08:00:00.000Z",

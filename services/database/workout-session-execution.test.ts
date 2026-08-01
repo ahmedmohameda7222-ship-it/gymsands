@@ -30,7 +30,7 @@ function row(overrides: Partial<WorkoutSessionExecutionState> = {}): WorkoutSess
     activity_timer_running_since: null,
     activity_timer_duration_seconds: null,
     activity_timer_ends_at: null,
-    controller_device_id: null,
+    controller_device_id: deviceId,
     bootstrap_source: "legacy_backfill",
     created_at: "2026-07-22T00:00:00.000Z",
     updated_at: "2026-07-22T00:00:00.000Z",
@@ -226,7 +226,7 @@ describe("AW-2B workout execution database service", () => {
       commandId: "55555555-5555-4555-8555-555555555555",
       expectedRevision: 7,
       commandType: "resume",
-      payload: { controller_device_id: null }
+      payload: { controller_device_id: deviceId }
     })).resolves.toMatchObject({ outcome: "applied", revisionAfter: 8 });
 
     mocks.state.rpcOutcome = "no_op";
@@ -237,7 +237,7 @@ describe("AW-2B workout execution database service", () => {
       commandId: "66666666-6666-4666-8666-666666666666",
       expectedRevision: 7,
       commandType: "resume",
-      payload: { controller_device_id: null }
+      payload: { controller_device_id: deviceId }
     })).resolves.toMatchObject({ outcome: "no_op", revisionAfter: 7, reason: "already_running" });
   });
 
@@ -250,7 +250,7 @@ describe("AW-2B workout execution database service", () => {
       commandId: "77777777-7777-4777-8777-777777777777",
       expectedRevision: 6,
       commandType: "pause",
-      payload: { controller_device_id: null }
+      payload: { controller_device_id: deviceId }
     })).rejects.toBeInstanceOf(WorkoutSessionExecutionRevisionConflictError);
 
     mocks.state.rpcOutcome = "idempotency_conflict";
@@ -261,7 +261,7 @@ describe("AW-2B workout execution database service", () => {
       commandId: "88888888-8888-4888-8888-888888888888",
       expectedRevision: 7,
       commandType: "pause",
-      payload: { controller_device_id: null }
+      payload: { controller_device_id: deviceId }
     })).rejects.toBeInstanceOf(WorkoutSessionExecutionIdempotencyConflictError);
   });
 

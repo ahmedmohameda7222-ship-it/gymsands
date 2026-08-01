@@ -410,6 +410,7 @@ export async function updateWorkoutSessionDuration(
 export async function saveWorkoutSetLogs(
   sessionId: string,
   logs: WorkoutSetLogInput[],
+  controllerDeviceId?: string,
 ) {
   requireWorkoutPersistence(sessionId, "Workout sets");
   if (!logs.length) return true;
@@ -418,6 +419,9 @@ export async function saveWorkoutSetLogs(
     p_user_id: session.user_id,
     p_session_id: sessionId,
     p_logs: serializeWorkoutSetLogs(logs),
+    ...(controllerDeviceId
+      ? { p_controller_device_id: controllerDeviceId }
+      : {}),
   });
   if (error) throw error;
   return true;
@@ -428,6 +432,7 @@ export async function completeWorkoutSession(
   notes: string,
   durationMinutes: number,
   finalLogs?: WorkoutSetLogInput[],
+  controllerDeviceId?: string,
 ) {
   requireWorkoutPersistence(sessionId, "Workout session");
   const session = await getWorkoutSessionIdentity(sessionId);
@@ -440,6 +445,9 @@ export async function completeWorkoutSession(
       p_logs: rows,
       p_duration_minutes: Math.max(0, durationMinutes),
       p_notes: notes.trim() || null,
+      ...(controllerDeviceId
+        ? { p_controller_device_id: controllerDeviceId }
+        : {}),
     },
   );
   if (error) {
@@ -464,6 +472,7 @@ export async function replaceWorkoutSessionExercise(
   sessionId: string,
   planExerciseId: string,
   replacement: Workout,
+  controllerDeviceId?: string,
 ) {
   requireWorkoutPersistence(userId, "Workout replacement");
   requireWorkoutPersistence(sessionId, "Workout session");
@@ -488,6 +497,9 @@ export async function replaceWorkoutSessionExercise(
         replacementType === "provider_activity"
           ? "plaivra_activity_catalog"
           : null,
+      ...(controllerDeviceId
+        ? { p_controller_device_id: controllerDeviceId }
+        : {}),
     },
   );
   if (error) {
@@ -616,14 +628,25 @@ export async function getOpenWorkoutSessionWithStatus(
   };
 }
 
-export async function cancelWorkoutSession(sessionId: string) {
+export async function cancelWorkoutSession(
+  sessionId: string,
+  controllerDeviceId?: string,
+) {
   if (!supabase || !isUuid(sessionId))
     throw new Error("Workout session is invalid.");
-  const { error } = await supabase
-    .from("workout_sessions")
-    .delete()
-    .eq("id", sessionId)
-    .eq("status", "started");
+  const session = await getWorkoutSessionIdentity(sessionId);
+  const { error } = controllerDeviceId
+    ? await supabase.rpc("cancel_workout_session_atomic", {
+        p_user_id: session.user_id,
+        p_session_id: sessionId,
+        p_reason: "user_cancelled",
+        p_controller_device_id: controllerDeviceId,
+      })
+    : await supabase
+        .from("workout_sessions")
+        .delete()
+        .eq("id", sessionId)
+        .eq("status", "started");
   if (error) throw error;
   return true;
 }

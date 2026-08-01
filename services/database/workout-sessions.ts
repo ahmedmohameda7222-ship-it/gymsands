@@ -2,13 +2,16 @@
 
 export * from "./workout-sessions-legacy";
 
+import { readActiveWorkoutSessionCache } from "@/lib/workouts/active-session-sync";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import type { Weekday, Workout, WorkoutSession } from "@/types";
 import {
   getOrStartWorkoutSession as startOrResumeDirectWorkoutSession
 } from "./direct-workout-sessions";
-import { getOpenWorkoutSessionWithStatus } from "./workout-sessions-legacy";
+import {
+  getOpenWorkoutSessionWithStatus as getOpenWorkoutSessionWithStatusLegacy
+} from "./workout-sessions-legacy";
 import { serializeWorkoutSetLogs } from "./workout-set-log-serialization";
 import type { WorkoutSetLogInput } from "./workout-set-log-serialization";
 
@@ -43,6 +46,45 @@ function directWorkoutIdentity(workout: Workout, resolvedWorkoutId?: string | nu
     catalog_version: null,
     is_global: true
   };
+}
+
+export async function getOpenWorkoutSessionWithStatus(
+  userId: string,
+  planDayId?: string | null,
+  candidateSessionId?: string | null,
+) {
+  let result: Awaited<ReturnType<typeof getOpenWorkoutSessionWithStatusLegacy>>;
+  try {
+    result = await getOpenWorkoutSessionWithStatusLegacy(
+      userId,
+      planDayId,
+      candidateSessionId,
+    );
+  } catch (error) {
+    result = {
+      session: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+  if (!result.error || !candidateSessionId || typeof indexedDB === "undefined") {
+    return result;
+  }
+  if (typeof navigator !== "undefined" && navigator.onLine) return result;
+
+  const cached = await readActiveWorkoutSessionCache(
+    userId,
+    candidateSessionId,
+  ).catch(() => null);
+  const root = cached?.root ?? null;
+  if (
+    !root
+    || root.id !== candidateSessionId
+    || root.user_id !== userId
+    || root.status !== "started"
+    || (planDayId && root.plan_day_id !== planDayId)
+  ) return result;
+
+  return { session: root, error: null };
 }
 
 export async function startWorkoutSession(
@@ -80,7 +122,11 @@ export async function getWorkoutSessionRoot(userId: string, sessionId: string) {
   return data as WorkoutSession | null;
 }
 
-export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {
+export async function saveWorkoutSetLogs(
+  sessionId: string,
+  logs: WorkoutSetLogInput[],
+  controllerDeviceId?: string,
+) {
   requireSessionIdentity(sessionId, "Workout session");
   if (!logs.length) return true;
   const sessionResult = await supabase!
@@ -92,7 +138,10 @@ export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogI
   const { error } = await supabase!.rpc("upsert_workout_set_logs_atomic", {
     p_user_id: sessionResult.data.user_id,
     p_session_id: sessionId,
-    p_logs: serializeWorkoutSetLogs(logs)
+    p_logs: serializeWorkoutSetLogs(logs),
+    ...(controllerDeviceId
+      ? { p_controller_device_id: controllerDeviceId }
+      : {})
   });
   if (error) throw error;
   return true;
@@ -114,7 +163,10 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
   return result.session;
 }
 
-export async function cancelWorkoutSession(sessionId: string) {
+export async function cancelWorkoutSession(
+  sessionId: string,
+  controllerDeviceId?: string,
+) {
   requireSessionIdentity(sessionId, "Workout session");
   const sessionResult = await supabase!
     .from("workout_sessions")
@@ -125,7 +177,10 @@ export async function cancelWorkoutSession(sessionId: string) {
   const { error } = await supabase!.rpc("cancel_workout_session_atomic", {
     p_user_id: sessionResult.data.user_id,
     p_session_id: sessionId,
-    p_reason: "user_cancelled"
+    p_reason: "user_cancelled",
+    ...(controllerDeviceId
+      ? { p_controller_device_id: controllerDeviceId }
+      : {})
   });
   if (error) throw error;
   return true;
