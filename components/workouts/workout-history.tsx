@@ -15,9 +15,9 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
-import { getScheduledWorkoutHistoryWithStatus, getWorkoutHistoryDetailedWithStatus } from "@/services/database/workout-sessions";
+import { getCanonicalWorkoutActivity } from "@/services/workouts/history/client";
 import { cn } from "@/lib/utils";
-import type { ExerciseLog, UserWorkoutSession, WorkoutSessionSummary } from "@/types";
+import type { CanonicalWorkoutActivity } from "@/types";
 
 type FilterMode = "all" | "week" | "month";
 type HistoryExercise = {
@@ -34,42 +34,15 @@ type HistoryItem = {
   title: string;
   category: string;
   date: string;
-  durationMinutes: number;
+  durationMinutes: number | null;
   notes: string | null;
   exercises: HistoryExercise[];
-  status: "completed" | "skipped";
+  status: "completed" | "partial" | "skipped" | "cancelled";
   planId: string | null;
   planDayId: string | null;
+  sourceKind: CanonicalWorkoutActivity["sourceKind"];
+  hasPerformedSets: boolean;
 };
-
-function groupLogs(logs: ExerciseLog[]) {
-  const groups = new Map<string, ExerciseLog[]>();
-  logs.forEach((log) => {
-    const key = log.plan_exercise_id || (log.exercise_order ? `${log.exercise_order}-${log.exercise_name}` : log.exercise_name || log.id);
-    groups.set(key, [...(groups.get(key) ?? []), log].sort((a, b) => a.set_number - b.set_number));
-  });
-  return Array.from(groups.values());
-}
-
-function setNotes(logs: ExerciseLog[]) {
-  return logs.map((log) => log.notes).filter(Boolean).join("; ");
-}
-
-function formatSetLine(log: Pick<ExerciseLog, "set_number" | "reps" | "weight_kg" | "planned_reps">) {
-  const reps = log.reps === null || log.reps === undefined ? log.planned_reps || "Custom reps" : `${log.reps} reps`;
-  const weight = log.weight_kg === null || log.weight_kg === undefined ? "" : ` x ${Number(log.weight_kg)}kg`;
-  return `Set ${log.set_number}: ${reps}${weight}`;
-}
-
-function parseSetCount(value: string | number | null | undefined) {
-  if (typeof value === "number") return Math.max(1, value);
-  const parsed = value?.match(/\d+/)?.[0];
-  return parsed ? Math.max(1, Number(parsed)) : 1;
-}
-
-function normalizeText(value: string | null | undefined) {
-  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
 
 function toIsoWeekInput(date: Date) {
   const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -80,64 +53,20 @@ function toIsoWeekInput(date: Date) {
   return `${target.getUTCFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
 }
 
-function normalizeLegacyHistory(session: WorkoutSessionSummary): HistoryItem {
-  const logs = session.exercise_logs ?? [];
-  const groups = groupLogs(logs);
-  const category = session.workout_category || logs[0]?.exercise_category || "Workout";
+function normalizeCanonicalHistory(session: CanonicalWorkoutActivity): HistoryItem {
   return {
-    id: session.id,
-    title: session.workout_day_name || session.workout_name,
-    category,
-    date: session.completed_at || session.started_at,
-    durationMinutes: session.duration_minutes ?? 0,
+    id: session.activityId,
+    title: session.title,
+    category: session.category || "Workout",
+    date: session.effectiveAt,
+    durationMinutes: session.durationMinutes,
     notes: session.notes,
-    status: session.status === "skipped" ? "skipped" : "completed",
-    planId: session.plan_id ?? null,
-    planDayId: session.plan_day_id ?? null,
-    exercises: groups.map((logsForExercise, index) => {
-      const first = logsForExercise[0];
-      return {
-        id: first?.plan_exercise_id || first?.id || `${session.id}-${index}`,
-        name: first?.exercise_name || session.workout_name,
-        category: first?.exercise_category || category,
-        sets: `${logsForExercise.length} sets`,
-        setDetails: logsForExercise.map(formatSetLine),
-        notes: setNotes(logsForExercise)
-      };
-    })
-  };
-}
-
-function normalizeScheduledHistory(session: UserWorkoutSession): HistoryItem {
-  return {
-    id: session.id,
-    title: session.day_title,
-    category: `Week ${session.week_index}`,
-    date: session.completed_at || session.skipped_at || session.started_at || `${session.scheduled_date}T00:00:00`,
-    durationMinutes: session.duration_minutes ?? 0,
-    notes: session.notes,
-    status: session.status === "skipped" ? "skipped" : "completed",
-    planId: session.user_workout_plan_id,
-    planDayId: session.plan_day_id,
-    exercises: session.logs.map((log) => {
-      const setCount = parseSetCount(log.planned_sets);
-      const setDetails = Array.from({ length: setCount }, (_, index) =>
-        formatSetLine({
-          set_number: index + 1,
-          reps: log.reps,
-          weight_kg: log.weight_kg,
-          planned_reps: log.planned_reps
-        })
-      );
-      return {
-        id: log.id,
-        name: log.exercise_name,
-        category: `${log.planned_sets || "Custom"} sets`,
-        sets: log.planned_sets ? `${log.planned_sets} sets` : "Custom",
-        setDetails,
-        notes: log.notes ?? ""
-      };
-    })
+    status: session.lifecycle,
+    planId: session.planId,
+    planDayId: session.planDayId,
+    sourceKind: session.sourceKind,
+    hasPerformedSets: session.hasPerformedSets,
+    exercises: []
   };
 }
 
@@ -160,8 +89,7 @@ export function WorkoutHistory() {
   const userId = user?.id;
   const { toast } = useToast();
   const { dir, locale, tr } = useTrainTranslation();
-  const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
-  const [scheduledHistory, setScheduledHistory] = useState<UserWorkoutSession[]>([]);
+  const [history, setHistory] = useState<CanonicalWorkoutActivity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [sourceWarnings, setSourceWarnings] = useState<string[]>([]);
@@ -176,24 +104,19 @@ export function WorkoutHistory() {
     setLoadError("");
     setSourceWarnings([]);
     try {
-      const [legacyResult, scheduledResult] = await Promise.all([
-        getWorkoutHistoryDetailedWithStatus(userId),
-        getScheduledWorkoutHistoryWithStatus(userId)
-      ]);
-      setHistory(legacyResult.data);
-      setScheduledHistory(scheduledResult.data);
-      const warnings = [legacyResult.status, scheduledResult.status]
+      const result = await getCanonicalWorkoutActivity(userId, 100);
+      setHistory(result.activities);
+      const warnings = [result.sources.performed, result.sources.scheduledFallback]
         .filter((status) => status.state !== "loaded" && status.message)
         .map((status) => status.message as string);
       setSourceWarnings(Array.from(new Set(warnings)));
-      const bothFailed = [legacyResult.status, scheduledResult.status].every((status) => status.state === "failed");
+      const bothFailed = [result.sources.performed, result.sources.scheduledFallback].every((status) => status.state === "failed");
       if (bothFailed) {
         setLoadError("Workout history could not load. Retry before treating this as an empty history.");
       }
     } catch (error) {
       const message = userSafeError(error, tr("planLoadFailedDescription"));
       setHistory([]);
-      setScheduledHistory([]);
       setLoadError(message);
       toast({ title: tr("workoutHistory"), description: message });
     } finally {
@@ -206,19 +129,17 @@ export function WorkoutHistory() {
   }, [loadHistory]);
 
   const filteredHistory = useMemo(() => {
-    const items = [...history.map(normalizeLegacyHistory), ...scheduledHistory.map(normalizeScheduledHistory)].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+    const items = history.map(normalizeCanonicalHistory);
     return items.filter((session) => {
       const date = new Date(session.date);
       if (filterMode === "week") return toIsoWeekInput(date) === weekFilter;
       if (filterMode === "month") return date.toISOString().slice(0, 7) === monthFilter;
       return true;
     });
-  }, [filterMode, scheduledHistory, history, monthFilter, weekFilter]);
+  }, [filterMode, history, monthFilter, weekFilter]);
 
-  const totalHistoryCount = history.length + scheduledHistory.length;
-  const stats = useMemo(() => computeStats([...history.map(normalizeLegacyHistory), ...scheduledHistory.map(normalizeScheduledHistory)]), [history, scheduledHistory]);
+  const totalHistoryCount = history.length;
+  const stats = useMemo(() => computeStats(history.map(normalizeCanonicalHistory)), [history]);
   const isFiltered = filterMode !== "all";
   const activeFilterLabel = filterMode === "week" ? `${tr("week")} ${weekFilter}` : filterMode === "month" ? monthFilter : tr("all");
 
@@ -334,7 +255,6 @@ export function WorkoutHistory() {
 
           {filteredHistory.map((session) => {
             const sessionDate = new Date(session.date);
-            const totalSets = session.exercises.reduce((sum, ex) => sum + parseSetCount(ex.sets), 0);
             return (
               <div id={`workout-session-${session.id}`} key={session.id} className={cn("solid-row scroll-mt-24 p-4 transition-colors hover:border-primary/40 hover:bg-muted/30", highlightedSessionId === session.id && "border-primary bg-primary/5 ring-2 ring-primary/20")}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -346,8 +266,8 @@ export function WorkoutHistory() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Badge>{session.category}</Badge>
-                    <Badge variant="outline">{session.durationMinutes} min</Badge>
-                    <Badge variant={session.status === "skipped" ? "warning" : "success"}>{session.status === "skipped" ? tr("skippedToday") : tr("completed")}</Badge>
+                    {session.durationMinutes === null ? null : <Badge variant="outline">{session.durationMinutes} min</Badge>}
+                    <Badge variant={session.status === "skipped" ? "warning" : "success"}>{session.status === "skipped" ? tr("skippedToday") : session.status === "partial" ? tr("incomplete") : tr("completed")}</Badge>
                     {session.planId ? <Button asChild variant="ghost" className="min-h-11 px-2"><Link href={`/my-workout/plans/${session.planId}${session.planDayId ? `?day=${encodeURIComponent(session.planDayId)}` : ""}`}>{tr("viewPlan")}</Link></Button> : null}
                   </div>
                 </div>
@@ -360,7 +280,11 @@ export function WorkoutHistory() {
                         {tr("sessionDetails")}
                       </span>
                       <span>
-                        {session.exercises.length} exercises - {totalSets} sets - {session.durationMinutes} min
+                        {session.sourceKind === "scheduled_fallback"
+                          ? tr("statusUnavailable")
+                          : session.hasPerformedSets
+                            ? tr("realWorkoutHistory")
+                            : tr("noSetData")}
                       </span>
                     </span>
                     <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition group-open:rotate-180" />
