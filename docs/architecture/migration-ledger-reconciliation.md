@@ -4,20 +4,20 @@
 **Evidence captured:** 2026-08-01
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `73944677c11222044520991fc1f18c8edd81a78e`
-**Status:** AW-9 applied; Workout History migration pending
+**Status:** AW-9 applied; eight Workout History migrations pending
 
 This document is a human-readable summary only. It does not authorize migration replay, merge, deployment, compatibility-marker promotion, or Production writes.
 
 ## Current state
 
 - Physical Production migration records: **76**
-- Repository classifications: **78**
+- Repository classifications: **84**
 - Exact applications (`state = applied`): **63**
 - Generated-version aliases (`state = applied_version_alias`): **13**
-- Repository-only pending migrations: **2**
-- `pendingCount = 2`
+- Repository-only pending migrations: **8**
+- `pendingCount = 8`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 2`
+- `unresolvedCount = 8`
 - `historyRepair.state = pending`
 - `release_ready = false`
 - Released compatibility marker: `20260724232734`
@@ -28,7 +28,7 @@ Physical schema advancement and compatibility-marker promotion are deliberately 
 
 ## Workout History pending identity
 
-`20260801140043_workout_history_verified_records.sql`, `20260801160000_workout_history_correction_and_soft_delete.sql`, and `20260801180000_workout_history_repeat_session.sql` are approved forward migrations for WH-6, WH-7, and WH-8. They exist only in the repository, are classified as pending, and have not been applied to Production. Applying them requires separate explicit authorization; this implementation program does not authorize Production writes.
+`20260801140043_workout_history_verified_records.sql`, `20260801160000_workout_history_correction_and_soft_delete.sql`, `20260801180000_workout_history_repeat_session.sql`, `20260801194500_workout_history_verified_record_authority_hardening.sql`, `20260801201500_workout_history_verified_record_rebuild.sql`, `20260801203000_workout_history_set_detail_patch_semantics.sql`, `20260801210000_workout_history_correction_muscle_reconcile.sql`, `20260801220000_workout_history_keyset_read_authority.sql` are approved forward repository migrations for the Workout History program and its independent QA/QC corrections. They exist only in the repository, are classified as pending, and have not been applied to Production. Applying them requires separate explicit authorization; this implementation program does not authorize Production writes.
 
 ## AW-9 applied identity
 

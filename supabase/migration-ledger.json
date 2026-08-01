@@ -5,14 +5,14 @@
   "auditedRepositoryCommit": "73944677c11222044520991fc1f18c8edd81a78e",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 3,
-  "unresolvedCount": 3,
+  "pendingCount": 8,
+  "unresolvedCount": 8,
   "historyRepair": {
     "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 3,
-    "unresolvedCount": 3,
-    "note": "Plaivra Production contains 76 physical migration records and is reconciled through generated AW-9 migration 20260801045628. Workout History migrations 20260801140043 and 20260801160000 remain repository-only pending and are not applied to Production. Repository migration identities remain immutable; generated aliases preserve exact application history. Do not replay any applied migration."
+    "pendingCount": 8,
+    "unresolvedCount": 8,
+    "note": "Production history remains reconciled through the latest applied AW-9 identity. 20260801140043_workout_history_verified_records.sql, 20260801160000_workout_history_correction_and_soft_delete.sql, 20260801180000_workout_history_repeat_session.sql, 20260801194500_workout_history_verified_record_authority_hardening.sql, 20260801201500_workout_history_verified_record_rebuild.sql, 20260801203000_workout_history_set_detail_patch_semantics.sql, 20260801210000_workout_history_correction_muscle_reconcile.sql, 20260801220000_workout_history_keyset_read_authority.sql are repository-only pending Workout History migrations. Do not replay or apply any pending migration without explicit release authorization."
   },
   "entries": [
     {
@@ -516,6 +516,31 @@
       "localFile": "20260801180000_workout_history_repeat_session.sql",
       "state": "pending",
       "note": "Approved WH-8 forward migration. Repository-only pending; not applied to Production."
+    },
+    {
+      "localFile": "20260801194500_workout_history_verified_record_authority_hardening.sql",
+      "state": "pending",
+      "note": "Repository-only Workout History forward migration. It has not been applied to Production. Do not replay or apply without a separately approved release operation."
+    },
+    {
+      "localFile": "20260801201500_workout_history_verified_record_rebuild.sql",
+      "state": "pending",
+      "note": "Repository-only Workout History forward migration. It has not been applied to Production. Do not replay or apply without a separately approved release operation."
+    },
+    {
+      "localFile": "20260801203000_workout_history_set_detail_patch_semantics.sql",
+      "state": "pending",
+      "note": "Repository-only Workout History forward migration. It has not been applied to Production. Do not replay or apply without a separately approved release operation."
+    },
+    {
+      "localFile": "20260801210000_workout_history_correction_muscle_reconcile.sql",
+      "state": "pending",
+      "note": "Repository-only Workout History forward migration. It has not been applied to Production. Do not replay or apply without a separately approved release operation."
+    },
+    {
+      "localFile": "20260801220000_workout_history_keyset_read_authority.sql",
+      "state": "pending",
+      "note": "Repository-only Workout History forward migration. It has not been applied to Production. Do not replay or apply without a separately approved release operation."
     }
   ],
   "productionRecordCount": 76
