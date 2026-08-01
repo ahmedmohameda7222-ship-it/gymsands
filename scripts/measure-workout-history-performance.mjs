@@ -87,10 +87,7 @@ export function buildCommittedFixtureSql(source) {
 }
 
 export function cleanupFixtureSql() {
-  return `begin;
-delete from public.profiles where id='${FIXTURE_USER_ID}'::uuid;
-commit;
-`;
+  return `begin;\ndelete from public.profiles where id='${FIXTURE_USER_ID}'::uuid;\ncommit;\n`;
 }
 
 export function workoutHistorySchemaProbeUrl(apiUrl) {
@@ -218,6 +215,10 @@ async function main() {
   runPsql(databaseUrl, cleanupSql);
   try {
     runPsql(databaseUrl, setupSql);
+    // Probe again after fixture insertion. An empty-table schema probe can pass
+    // while a real row still fails PostgREST serialization; this converts that
+    // condition into the raw HTTP/database error before service wrappers hide it.
+    await waitForWorkoutHistorySchema(local);
     execute(
       process.execPath,
       [
