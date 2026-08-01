@@ -126,8 +126,12 @@ test("integration validation isolates legacy fixtures and exports both database 
   assert.match(integrationRunner, /"run"[\s\S]*"--detach"[\s\S]*POSTGRES_DB=/);
   assert.match(integrationRunner, /docker\(\["port", containerName, "5432\/tcp"\]\)/);
   assert.match(integrationRunner, /pg_isready/);
-  assert.match(integrationRunner, /DATABASE_URL: disposable\.databaseUrl/);
-  assert.match(integrationRunner, /PLAIVRA_AW2A_TEST_DATABASE_URL: config\.aw2aDatabaseUrl/);
+  assert.match(integrationRunner, /runVitest\(disposable\.databaseUrl, config\.aw2aDatabaseUrl\)/);
+  assert.match(integrationRunner, /DATABASE_URL: databaseUrl/);
+  assert.match(integrationRunner, /PLAIVRA_AW2A_TEST_DATABASE_URL: aw2aDatabaseUrl/);
+  assert.match(integrationRunner, /dockerBestEffort\(\["inspect", "--format", "\{\{json \.State\}\}", containerName\]\)/);
+  assert.match(integrationRunner, /dockerBestEffort\(\["logs", "--timestamps", containerName\]\)/);
+  assert.match(integrationRunner, /isRetryableContainerState\(diagnostics\.inspect\.state\)/);
   assert.match(quality, /npm run test:integration/);
   assert.match(prQuality, /npm run test:integration/);
 });
