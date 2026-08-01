@@ -16,18 +16,30 @@ const DEFAULT_OUTPUT = path.join(
   "report.json",
 );
 const FIXTURE_USER_ID = "b9000000-0000-4000-8000-000000000001";
-export const LOCAL_PROJECT_ID = "gymsands";
-export const BENCHMARK_API_EXCLUDES = Object.freeze([
-  "realtime",
-  "storage-api",
-  "imgproxy",
-  "mailpit",
-  "postgres-meta",
-  "studio",
-  "edge-runtime",
-  "logflare",
-  "vector",
-  "supavisor",
+
+export const REQUIRED_WORKOUT_SESSION_COLUMNS = Object.freeze([
+  "id",
+  "user_id",
+  "scheduled_session_id",
+  "workout_name",
+  "workout_day_name",
+  "workout_category",
+  "started_at",
+  "completed_at",
+  "skipped_at",
+  "cancelled_at",
+  "duration_minutes",
+  "notes",
+  "status",
+  "plan_id",
+  "plan_day_id",
+  "plan_week_id",
+  "plan_session_id",
+  "deleted_at",
+  "history_revision",
+  "derived_record_schema_version",
+  "derived_record_formula_version",
+  "derived_records_evaluated_at",
 ]);
 
 export function assertDisposableLocalDatabaseUrl(value) {
@@ -81,12 +93,52 @@ commit;
 `;
 }
 
-export function benchmarkApiStopArgs() {
-  return ["stop", "--project-id", LOCAL_PROJECT_ID];
+export function workoutHistorySchemaProbeUrl(apiUrl) {
+  const url = new URL("/rest/v1/workout_sessions", apiUrl);
+  url.searchParams.set("select", REQUIRED_WORKOUT_SESSION_COLUMNS.join(","));
+  url.searchParams.set("limit", "1");
+  return url.toString();
 }
 
-export function benchmarkApiStartArgs() {
-  return ["start", "--exclude", BENCHMARK_API_EXCLUDES.join(",")];
+function defaultSleep(delayMs) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
+export async function waitForWorkoutHistorySchema({
+  apiUrl,
+  serviceRoleKey,
+  attempts = 30,
+  delayMs = 250,
+  fetchImpl = fetch,
+  sleepImpl = defaultSleep,
+}) {
+  const probeUrl = workoutHistorySchemaProbeUrl(apiUrl);
+  let lastFailure = "PostgREST did not respond.";
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(probeUrl, {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${serviceRoleKey}`,
+          apikey: serviceRoleKey,
+        },
+      });
+      const body = await response.text();
+      if (response.ok) return;
+      lastFailure = `HTTP ${response.status}: ${body.slice(0, 1_000)}`;
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : String(error);
+    }
+    if (attempt < attempts) await sleepImpl(delayMs);
+  }
+
+  throw new Error(
+    "WH-9 local PostgREST schema is not ready for the Workout History read contract. "
+    + `Last probe failure: ${lastFailure}`,
+  );
 }
 
 function argumentValue(name) {
@@ -120,11 +172,6 @@ function runPsql(databaseUrl, sql) {
   );
 }
 
-function transitionToLocalBenchmarkApi() {
-  execute("supabase", benchmarkApiStopArgs());
-  execute("supabase", benchmarkApiStartArgs());
-}
-
 function localSupabaseEnvironment() {
   const result = execute("supabase", ["status", "-o", "env"]);
   const values = parseSupabaseStatusEnv(result.stdout);
@@ -133,7 +180,7 @@ function localSupabaseEnvironment() {
   if (!apiUrl || !serviceRoleKey) {
     const availableKeys = Object.keys(values).sort().join(", ") || "none";
     throw new Error(
-      `Local Supabase API URL or service-role key could not be resolved after the benchmark profile transition. Available keys: ${availableKeys}.`,
+      `Local Supabase API URL or service-role key could not be resolved from the migrated stack. Available keys: ${availableKeys}.`,
     );
   }
   const parsed = new URL(apiUrl);
@@ -160,8 +207,14 @@ async function main() {
   const cleanupSql = cleanupFixtureSql();
   await mkdir(path.dirname(outputPath), { recursive: true });
 
-  transitionToLocalBenchmarkApi();
+  // The chronological migration replay owns the local stack lifecycle. Reusing
+  // that exact stack preserves the database volume and schema that passed the
+  // preceding gates. Reload and prove PostgREST's relation cache before the
+  // benchmark so a schema-contract failure is explicit rather than a generic 503.
   const local = localSupabaseEnvironment();
+  runPsql(databaseUrl, "notify pgrst, 'reload schema';\n");
+  await waitForWorkoutHistorySchema(local);
+
   runPsql(databaseUrl, cleanupSql);
   try {
     runPsql(databaseUrl, setupSql);
