@@ -50,7 +50,7 @@ function inputDate(value: Date, timezone: string): string {
 export function WorkoutHistoryPage() {
   const { user } = useAuth();
   const userId = user?.id;
-  const { dir } = useTrainTranslation();
+  const { dir, tr } = useTrainTranslation();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -338,7 +338,9 @@ export function WorkoutHistoryPage() {
 
       {visibleNotice ? (
         <p className="rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground" role="status">
-          {visibleNotice === "stale-data" ? "" : ""}
+          {visibleNotice === "stale-data"
+            ? tr("historyStaleNotice")
+            : tr("historyPartialNotice")}
         </p>
       ) : null}
 
