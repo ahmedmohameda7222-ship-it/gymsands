@@ -335,6 +335,24 @@ export async function installAw5CorrectionFixture(context, {
     });
   });
 
+  await context.route(
+    /\/api\/workouts\/history\/[^/]+\/verified-records(?:\?.*)?$/,
+    async (route) => {
+      requestHistory.push(
+        requestRecord(route.request(), "fulfilled:verified-records"),
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: {
+          "cache-control": "private, no-store",
+          "x-plaivra-qa-fixture": "aw5-empty-verified-records",
+        },
+        body: JSON.stringify({ records: [], rebuilt: true }),
+      });
+    },
+  );
+
   await context.route(/^https:\/\/[^/]+\.supabase\.co\//, async (route) => {
     const request = route.request();
     const method = request.method();
