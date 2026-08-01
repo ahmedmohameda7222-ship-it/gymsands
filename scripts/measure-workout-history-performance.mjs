@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,33 +9,26 @@ const FIXTURE_PATH = path.join(
   SCRIPT_DIR,
   "workout-history-performance-fixture.sql",
 );
-const REPORT_PREFIX = "PLAIVRA_WH9_REPORT:";
 const DEFAULT_OUTPUT = path.join(
   REPO_ROOT,
   "quality-reports",
   "workout-history-performance",
   "report.json",
 );
-
-export const PERFORMANCE_BUDGETS = Object.freeze({
-  listP95Ms: 150,
-  summaryP95Ms: 200,
-  detailP95Ms: 200,
-  filterP95Ms: 250,
-  searchP95Ms: 300,
-  listPayloadBytes: 150 * 1024,
-  detailPayloadBytes: 300 * 1024,
-});
+const FIXTURE_USER_ID = "b9000000-0000-4000-8000-000000000001";
 
 export function assertDisposableLocalDatabaseUrl(value) {
   if (!value) {
     throw new Error("PLAIVRA_LOCAL_DATABASE_URL is required.");
   }
-
   const url = new URL(value);
   const localHost =
     url.hostname === "127.0.0.1" || url.hostname === "localhost";
-  if (url.protocol !== "postgresql:" || !localHost || url.port !== "54322") {
+  if (
+    !new Set(["postgresql:", "postgres:"]).has(url.protocol)
+    || !localHost
+    || url.port !== "54322"
+  ) {
     throw new Error(
       "WH-9 performance fixtures may run only on the disposable local Supabase database at localhost:54322.",
     );
@@ -44,54 +36,37 @@ export function assertDisposableLocalDatabaseUrl(value) {
   return value;
 }
 
-export function evaluatePerformanceBudgets(databaseReport) {
-  const timings = databaseReport.timings;
-  const primaryFilters = [
-    "filter_status",
-    "filter_type",
-    "filter_exercise",
-    "filter_repeated",
-  ];
-  const checks = {
-    defaultMonthList:
-      timings.default_month.p95Ms <= PERFORMANCE_BUDGETS.listP95Ms,
-    threeMonthList: timings.three_month.p95Ms <= PERFORMANCE_BUDGETS.listP95Ms,
-    multiYearList: timings.multi_year.p95Ms <= PERFORMANCE_BUDGETS.listP95Ms,
-    periodSummary:
-      timings.period_summary.p95Ms <= PERFORMANCE_BUDGETS.summaryP95Ms,
-    sessionDetail:
-      timings.session_detail.p95Ms <= PERFORMANCE_BUDGETS.detailP95Ms,
-    primaryFilters: primaryFilters.every(
-      (label) => timings[label].p95Ms <= PERFORMANCE_BUDGETS.filterP95Ms,
-    ),
-    search: timings.search.p95Ms <= PERFORMANCE_BUDGETS.searchP95Ms,
-    listPayload:
-      databaseReport.payloadBytes.list_20 <=
-      PERFORMANCE_BUDGETS.listPayloadBytes,
-    detailPayload:
-      databaseReport.payloadBytes.session_detail <=
-      PERFORMANCE_BUDGETS.detailPayloadBytes,
-    boundedQueries:
-      databaseReport.queryCounts.bounded === true &&
-      databaseReport.queryCounts.nPlusOne === false,
-  };
-
-  return {
-    checks,
-    passed: Object.values(checks).every(Boolean),
-  };
+export function parseSupabaseStatusEnv(output) {
+  const values = {};
+  for (const line of output.split(/\r?\n/u)) {
+    const match = /^([A-Z][A-Z0-9_]*)=(?:"([^"]*)"|'([^']*)'|(.*))$/u.exec(
+      line.trim(),
+    );
+    if (!match) continue;
+    values[match[1]] = match[2] ?? match[3] ?? match[4] ?? "";
+  }
+  return values;
 }
 
-export function parseDatabaseReport(output) {
-  const line = output
-    .split(/\r?\n/u)
-    .find((candidate) => candidate.startsWith(REPORT_PREFIX));
-  if (!line) {
-    throw new Error(
-      "The WH-9 SQL fixture did not emit its machine-readable report.",
-    );
+export function buildCommittedFixtureSql(source) {
+  const marker = "\ncreate temp table wh9_timings";
+  const cutoff = source.indexOf(marker);
+  if (cutoff < 0) {
+    throw new Error("WH-9 fixture measurement boundary was not found.");
   }
-  return JSON.parse(line.slice(REPORT_PREFIX.length));
+  const setup = source.slice(0, cutoff).trimEnd();
+  if (!/generate_series\(1, 5000\)/u.test(setup)) {
+    throw new Error("WH-9 committed setup does not contain 5,000 sessions.");
+  }
+  return `${setup}\n\ncommit;\n`;
+}
+
+export function cleanupFixtureSql() {
+  return `\set ON_ERROR_STOP on
+begin;
+delete from public.profiles where id='${FIXTURE_USER_ID}'::uuid;
+commit;
+`;
 }
 
 function argumentValue(name) {
@@ -99,86 +74,115 @@ function argumentValue(name) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+function execute(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    maxBuffer: 128 * 1024 * 1024,
+    ...options,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    if (result.stdout) process.stderr.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    throw new Error(
+      `${command} ${args.join(" ")} failed with exit code ${result.status}.`,
+    );
+  }
+  return result;
+}
+
+function runPsql(databaseUrl, sql) {
+  execute(
+    "psql",
+    [databaseUrl, "-X", "-v", "ON_ERROR_STOP=1"],
+    { input: sql },
+  );
+}
+
+function localSupabaseEnvironment() {
+  const result = execute("supabase", ["status", "-o", "env"]);
+  const values = parseSupabaseStatusEnv(result.stdout);
+  const apiUrl = values.API_URL;
+  const serviceRoleKey = values.SERVICE_ROLE_KEY;
+  if (!apiUrl || !serviceRoleKey) {
+    throw new Error(
+      "Local Supabase API URL or service-role key could not be resolved.",
+    );
+  }
+  const parsed = new URL(apiUrl);
+  if (
+    !new Set(["127.0.0.1", "localhost"]).has(parsed.hostname)
+    || parsed.port !== "54321"
+  ) {
+    throw new Error("WH-9 refused a non-local Supabase API endpoint.");
+  }
+  return { apiUrl, serviceRoleKey };
+}
+
 async function main() {
   const databaseUrl = assertDisposableLocalDatabaseUrl(
     process.env.PLAIVRA_LOCAL_DATABASE_URL,
   );
   const outputPath = path.resolve(
-    argumentValue("--output") ||
-      process.env.WORKOUT_HISTORY_PERFORMANCE_OUTPUT ||
-      DEFAULT_OUTPUT,
+    argumentValue("--output")
+      || process.env.WORKOUT_HISTORY_PERFORMANCE_OUTPUT
+      || DEFAULT_OUTPUT,
   );
-  const fixtureSql = await readFile(FIXTURE_PATH, "utf8");
-  const startedAt = new Date().toISOString();
-  const result = spawnSync(
-    "psql",
-    [databaseUrl, "-X", "-v", "ON_ERROR_STOP=1"],
-    {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      input: fixtureSql,
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
-
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    process.stderr.write(result.stdout || "");
-    process.stderr.write(result.stderr || "");
-    throw new Error(
-      `WH-9 SQL measurement failed with exit code ${result.status}.`,
-    );
-  }
-
-  const database = parseDatabaseReport(result.stdout);
-  const budget = evaluatePerformanceBudgets(database);
-  const git = spawnSync("git", ["rev-parse", "HEAD"], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-  });
-  const report = {
-    schemaVersion: 1,
-    generatedAt: new Date().toISOString(),
-    startedAt,
-    environment: {
-      platform: `${os.platform()} ${os.release()} ${os.arch()}`,
-      node: process.version,
-      cpuModel: os.cpus()[0]?.model || "unknown",
-      logicalCpuCount: os.cpus().length,
-      totalMemoryBytes: os.totalmem(),
-      localDatabase: "Supabase PostgreSQL on localhost:54322",
-      gitHead: git.status === 0 ? git.stdout.trim() : null,
-    },
-    budgets: PERFORMANCE_BUDGETS,
-    budget,
-    database: {
-      ...database,
-      optimizationDecision: budget.passed
-        ? "no_new_index"
-        : "budget_failure_requires_query_shape_review_before_any_index",
-    },
-    fixtureLifecycle: {
-      deterministic: true,
-      disposable: true,
-      productionAllowed: false,
-      cleanup: "single transaction rolled back after measurement",
-    },
-  };
-
+  const fixtureSource = await readFile(FIXTURE_PATH, "utf8");
+  const setupSql = buildCommittedFixtureSql(fixtureSource);
+  const cleanupSql = cleanupFixtureSql();
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  process.stdout.write(
-    `WH-9 performance report: ${outputPath}\nBudgets: ${budget.passed ? "PASS" : "FAIL"}\nIndex decision: ${report.database.optimizationDecision}\n`,
-  );
-  if (!budget.passed) process.exitCode = 1;
+
+  runPsql(databaseUrl, cleanupSql);
+  try {
+    runPsql(databaseUrl, setupSql);
+    const local = localSupabaseEnvironment();
+    execute(
+      process.execPath,
+      [
+        path.join(REPO_ROOT, "node_modules", "vitest", "vitest.mjs"),
+        "run",
+        "--config",
+        "vitest.integration.config.mjs",
+        "scripts/workout-history-performance.integration.test.ts",
+      ],
+      {
+        env: {
+          ...process.env,
+          PLAIVRA_LOCAL_SUPABASE_API_URL: local.apiUrl,
+          PLAIVRA_LOCAL_SUPABASE_SERVICE_ROLE_KEY: local.serviceRoleKey,
+          WORKOUT_HISTORY_PERFORMANCE_OUTPUT: outputPath,
+        },
+      },
+    );
+    const report = JSON.parse(await readFile(outputPath, "utf8"));
+    process.stdout.write(
+      `WH-9 real service performance report: ${outputPath}\n`
+      + `Budgets: ${report.passed ? "PASS" : "FAIL"}\n`
+      + `First page requests: ${report.queryCounts?.firstPage ?? "unknown"}\n`
+      + `Second page requests: ${report.queryCounts?.secondPage ?? "unknown"}\n`
+      + `Index decision: ${report.optimizationDecision}\n`,
+    );
+    if (!report.passed) process.exitCode = 1;
+  } finally {
+    try {
+      runPsql(databaseUrl, cleanupSql);
+    } catch (error) {
+      process.stderr.write(
+        `WH-9 fixture cleanup failed: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      process.exitCode = 1;
+    }
+  }
 }
 
 if (
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  process.argv[1]
+  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   main().catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(error instanceof Error ? error.stack ?? error.message : error);
     process.exitCode = 1;
   });
 }
