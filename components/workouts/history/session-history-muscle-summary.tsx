@@ -34,14 +34,14 @@ const qaAdvancedMapping: AdvancedMuscleMappingReference = {
     {
       muscleId: "triceps.lateral_head",
       role: "secondary",
-      contribution: 0.55,
+      contribution: 0.5,
       sideScope: "bilateral",
       sortOrder: 2,
     },
     {
       muscleId: "deltoid.anterior",
       role: "stabilizer",
-      contribution: 0.3,
+      contribution: 0,
       sideScope: "bilateral",
       sortOrder: 3,
     },
@@ -61,7 +61,7 @@ const qaAdvancedAnalysis = calculateAdvancedExposure({
 
 const qaBroadAnalysis = projectBroadMuscleCompatibility(
   calculateMuscleLoad({
-    mode: "performed",
+    mode: "completed",
     period: { kind: "session" },
     items: [
       {
@@ -84,14 +84,14 @@ const qaBroadAnalysis = projectBroadMuscleCompatibility(
             {
               muscleId: "triceps_brachii",
               role: "secondary",
-              contribution: 0.55,
+              contribution: 0.5,
               sideScope: "bilateral",
               sortOrder: 2,
             },
             {
               muscleId: "anterior_deltoid",
               role: "stabilizer",
-              contribution: 0.3,
+              contribution: 0,
               sideScope: "bilateral",
               sortOrder: 3,
             },
@@ -156,9 +156,14 @@ function LiveSessionHistoryMuscleSummary({ sessionId }: { sessionId: string }) {
     mode: "completed",
   });
   if (["empty", "unavailable", "error"].includes(controller.state)) return null;
+  const state = controller.state === "loading"
+    ? "loading"
+    : controller.state === "partial"
+      ? "partial"
+      : "ready";
   return (
     <SessionHistoryMuscleFrame
-      state={controller.state === "loading" ? "loading" : controller.state}
+      state={state}
       analysis={controller.analysis}
       analysisKind="live"
     />
