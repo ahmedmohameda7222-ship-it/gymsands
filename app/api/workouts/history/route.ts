@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireUser, serverEnv } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { parseWorkoutHistoryListRequest, WorkoutHistoryRequestError } from "@/lib/workouts/history/request";
+import { readWorkoutHistoryFilterOptions } from "@/services/workouts/history/filter-options";
 import { listWorkoutHistoryKeyset } from "@/services/workouts/history/server-list-reader";
 import { WorkoutHistoryReaderError } from "@/services/workouts/history/server-reader";
 import { WORKOUT_HISTORY_HEADERS, withWorkoutHistoryHeaders, workoutHistoryError } from "@/app/api/workouts/history/_shared";
@@ -30,13 +31,25 @@ export async function GET(request: Request) {
     if (!serverEnv.workoutHistoryCursorSecret) {
       throw new WorkoutHistoryReaderError("history_unavailable", "Workout history could not load.", 503);
     }
-    const response = await listWorkoutHistoryKeyset(
-      context.supabase,
-      context.user.id,
-      input,
-      serverEnv.workoutHistoryCursorSecret,
+    const [response, periodOptions] = await Promise.all([
+      listWorkoutHistoryKeyset(
+        context.supabase,
+        context.user.id,
+        input,
+        serverEnv.workoutHistoryCursorSecret,
+      ),
+      input.cursor
+        ? Promise.resolve(null)
+        : readWorkoutHistoryFilterOptions(
+            context.supabase,
+            context.user.id,
+            input,
+          ),
+    ]);
+    return NextResponse.json(
+      periodOptions ? { ...response, filterOptions: periodOptions } : response,
+      { headers: WORKOUT_HISTORY_HEADERS },
     );
-    return NextResponse.json(response, { headers: WORKOUT_HISTORY_HEADERS });
   } catch (error) {
     return workoutHistoryError(error);
   }
