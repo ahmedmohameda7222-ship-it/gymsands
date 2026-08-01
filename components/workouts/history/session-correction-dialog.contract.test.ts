@@ -16,7 +16,7 @@ describe("Workout History correction draft recovery", () => {
 
   it("keeps Undo remove interactive while disabling only the removed set inputs", () => {
     expect(source).toContain("aria-disabled={set.removed}");
-    expect(source).not.toMatch(/<fieldset[^>]*\bdisabled=/u);
+    expect(source).not.toMatch(/<fieldset[^>]*\sdisabled=/u);
     expect(source).toContain("<Input disabled={set.removed}");
     expect(source).toContain("<select disabled={set.removed}");
     expect(source).toContain("onClick={() => toggleRemoved(exercise.identity, set.key)}");
