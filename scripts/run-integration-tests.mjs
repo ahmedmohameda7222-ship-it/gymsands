@@ -8,6 +8,7 @@ import process from "node:process";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 export const DEFAULT_INTEGRATION_DATABASE = "plaivra_ci_test";
 export const DEFAULT_INTEGRATION_POSTGRES_IMAGE = "postgres:15-alpine";
+const MAX_DOCKER_ATTEMPTS = 2;
 
 export function requireLocalPostgresUrl(value, label, { requireTestName = false } = {}) {
   if (typeof value !== "string" || !value.trim()) {
@@ -76,6 +77,37 @@ export function parsePublishedPostgresPort(value) {
   return port;
 }
 
+export function buildDisposablePostgresArgs(containerName, image) {
+  return [
+    "run",
+    "--detach",
+    "--name",
+    containerName,
+    "--label",
+    "plaivra.scope=integration-test",
+    "--env",
+    "POSTGRES_PASSWORD=postgres",
+    "--env",
+    `POSTGRES_DB=${DEFAULT_INTEGRATION_DATABASE}`,
+    "--health-cmd",
+    `pg_isready -U postgres -d ${DEFAULT_INTEGRATION_DATABASE}`,
+    "--health-interval",
+    "1s",
+    "--health-timeout",
+    "5s",
+    "--health-retries",
+    "30",
+    "--publish",
+    "127.0.0.1::5432",
+    image,
+  ];
+}
+
+export function isRetryableContainerState(state) {
+  if (!state || typeof state !== "object") return false;
+  return state.Running === false || state.Health?.Status === "unhealthy";
+}
+
 function docker(args, options = {}) {
   return execFileSync("docker", args, {
     cwd: process.cwd(),
@@ -85,13 +117,26 @@ function docker(args, options = {}) {
   });
 }
 
+function dockerBestEffort(args) {
+  return spawnSync("docker", args, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
+    stdio: "pipe",
+  });
+}
+
 async function waitForDisposablePostgres(containerName) {
   for (let attempt = 1; attempt <= 60; attempt += 1) {
-    const readiness = spawnSync(
-      "docker",
-      ["exec", containerName, "pg_isready", "-U", "postgres", "-d", DEFAULT_INTEGRATION_DATABASE],
-      { cwd: process.cwd(), encoding: "utf8", stdio: "pipe" },
-    );
+    const readiness = dockerBestEffort([
+      "exec",
+      containerName,
+      "pg_isready",
+      "-U",
+      "postgres",
+      "-d",
+      DEFAULT_INTEGRATION_DATABASE,
+    ]);
     if (readiness.status === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
@@ -105,20 +150,7 @@ export async function startDisposablePostgres(config) {
 
   const containerName = `plaivra-integration-postgres-${process.pid}-${Date.now()}`;
   try {
-    docker([
-      "run",
-      "--detach",
-      "--rm",
-      "--name",
-      containerName,
-      "--env",
-      "POSTGRES_PASSWORD=postgres",
-      "--env",
-      `POSTGRES_DB=${DEFAULT_INTEGRATION_DATABASE}`,
-      "--publish",
-      "127.0.0.1::5432",
-      config.image,
-    ]);
+    docker(buildDisposablePostgresArgs(containerName, config.image));
     await waitForDisposablePostgres(containerName);
     const port = parsePublishedPostgresPort(docker(["port", containerName, "5432/tcp"]));
     return {
@@ -126,23 +158,62 @@ export async function startDisposablePostgres(config) {
       databaseUrl: `postgresql://postgres:postgres@127.0.0.1:${port}/${DEFAULT_INTEGRATION_DATABASE}`,
     };
   } catch (error) {
-    try {
-      docker(["rm", "--force", containerName]);
-    } catch {
-      // Preserve the original startup failure.
-    }
+    dockerBestEffort(["rm", "--force", containerName]);
     throw error;
   }
 }
 
 export function stopDisposablePostgres(containerName) {
   if (!containerName) return;
-  docker(["rm", "--force", containerName]);
+  const result = dockerBestEffort(["rm", "--force", containerName]);
+  if (result.error) throw result.error;
+  if (result.status !== 0 && !result.stderr.includes("No such container")) {
+    throw new Error(`Unable to remove disposable PostgreSQL container ${containerName}: ${result.stderr.trim()}`);
+  }
 }
 
-async function main() {
-  const config = resolveIntegrationDatabaseConfig();
-  const disposable = await startDisposablePostgres(config);
+function inspectDisposablePostgres(containerName) {
+  if (!containerName) return { available: false, state: null, error: "explicit database mode" };
+  const result = dockerBestEffort(["inspect", "--format", "{{json .State}}", containerName]);
+  if (result.error) {
+    return { available: false, state: null, error: result.error.message };
+  }
+  if (result.status !== 0) {
+    return { available: false, state: null, error: result.stderr.trim() || `docker inspect exited ${result.status}` };
+  }
+  try {
+    return { available: true, state: JSON.parse(result.stdout.trim()), error: null };
+  } catch (error) {
+    return {
+      available: false,
+      state: null,
+      error: `Invalid docker inspect JSON: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+function collectDisposablePostgresDiagnostics(containerName, attempt) {
+  const inspect = inspectDisposablePostgres(containerName);
+  const logsResult = containerName
+    ? dockerBestEffort(["logs", "--timestamps", containerName])
+    : { status: null, stdout: "", stderr: "" };
+  const diagnostics = {
+    attempt,
+    containerName,
+    collectedAt: new Date().toISOString(),
+    inspect,
+    logsExitCode: logsResult.status,
+  };
+
+  process.stderr.write(`\n=== Disposable PostgreSQL diagnostics (attempt ${attempt}) ===\n`);
+  process.stderr.write(`${JSON.stringify(diagnostics, null, 2)}\n`);
+  if (logsResult.stdout) process.stderr.write(`--- docker logs stdout ---\n${logsResult.stdout}\n`);
+  if (logsResult.stderr) process.stderr.write(`--- docker logs stderr ---\n${logsResult.stderr}\n`);
+  process.stderr.write("=== End disposable PostgreSQL diagnostics ===\n");
+  return diagnostics;
+}
+
+function runVitest(databaseUrl, aw2aDatabaseUrl) {
   const executable = process.execPath;
   const args = [
     resolve("node_modules/vitest/vitest.mjs"),
@@ -152,23 +223,60 @@ async function main() {
     ...process.argv.slice(2),
   ];
 
-  let result;
-  try {
-    result = spawnSync(executable, args, {
-      cwd: process.cwd(),
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        DATABASE_URL: disposable.databaseUrl,
-        PLAIVRA_AW2A_TEST_DATABASE_URL: config.aw2aDatabaseUrl,
-      },
-    });
-  } finally {
-    stopDisposablePostgres(disposable.containerName);
+  return spawnSync(executable, args, {
+    cwd: process.cwd(),
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      PLAIVRA_AW2A_TEST_DATABASE_URL: aw2aDatabaseUrl,
+    },
+  });
+}
+
+async function main() {
+  const config = resolveIntegrationDatabaseConfig();
+  const maximumAttempts = config.mode === "docker" ? MAX_DOCKER_ATTEMPTS : 1;
+  let finalResult;
+
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    const disposable = await startDisposablePostgres(config);
+    let result;
+    let cleanupError;
+    try {
+      result = runVitest(disposable.databaseUrl, config.aw2aDatabaseUrl);
+      const failed = Boolean(result.error) || result.status !== 0;
+      if (failed) {
+        const diagnostics = collectDisposablePostgresDiagnostics(disposable.containerName, attempt);
+        const retryable =
+          config.mode === "docker" &&
+          attempt < maximumAttempts &&
+          diagnostics.inspect.available &&
+          isRetryableContainerState(diagnostics.inspect.state);
+        if (retryable) {
+          process.stderr.write(
+            `Disposable PostgreSQL terminated during integration attempt ${attempt}; retrying once with a fresh isolated container.\n`,
+          );
+          continue;
+        }
+      }
+      finalResult = result;
+      break;
+    } finally {
+      try {
+        stopDisposablePostgres(disposable.containerName);
+      } catch (error) {
+        cleanupError = error;
+        process.stderr.write(
+          `Disposable PostgreSQL cleanup failed: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      }
+      if (cleanupError && result && !result.error && result.status === 0) throw cleanupError;
+    }
   }
 
-  if (result?.error) throw result.error;
-  process.exitCode = result?.status ?? 1;
+  if (finalResult?.error) throw finalResult.error;
+  process.exitCode = finalResult?.status ?? 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
