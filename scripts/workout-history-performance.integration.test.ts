@@ -5,6 +5,8 @@ import { performance } from "node:perf_hooks";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { readWorkoutHistoryFilterOptions } from "@/services/workouts/history/filter-options";
+import { workoutHistoryRecordProjectionIsCurrent } from "@/services/workouts/history/record-projection-state";
 import { listWorkoutHistoryKeyset } from "@/services/workouts/history/server-list-reader";
 import { getWorkoutHistorySessionDetail } from "@/services/workouts/history/server-reader";
 import { readSharedWorkoutHistorySessionMetrics } from "@/services/workouts/history/shared-session-metrics";
@@ -147,6 +149,14 @@ function request(overrides: Partial<WorkoutHistoryListRequest> = {}): WorkoutHis
   };
 }
 
+async function readFirstPage(input: WorkoutHistoryListRequest) {
+  const [response] = await Promise.all([
+    listWorkoutHistoryKeyset(supabase, userId, input, cursorSecret),
+    readWorkoutHistoryFilterOptions(supabase, userId, input),
+  ]);
+  return response;
+}
+
 function fixtureSessionId(number: number): string {
   const hex = createHash("md5").update(`plaivra-wh9-session-${number}`).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
@@ -199,7 +209,7 @@ async function writeReport() {
       apiUrl,
       fixtureUserId: userId,
       fixtureSessions: 5_000,
-      measurement: "real listWorkoutHistoryKeyset and detail service through local PostgREST",
+      measurement: "complete list and detail route read shapes through local PostgREST",
     },
     budgets: REAL_SERVICE_BUDGETS,
     scenarios: scenarioReports,
@@ -221,12 +231,7 @@ afterAll(async () => {
 
 describe.sequential("WH-9 real service performance and transfer budgets", () => {
   it("measures first and second multi-year keyset pages", async () => {
-    const first = await measure(() => listWorkoutHistoryKeyset(
-      supabase,
-      userId,
-      request(),
-      cursorSecret,
-    ));
+    const first = await measure(() => readFirstPage(request()));
     expect(first.value.items).toHaveLength(20);
     expect(first.value.nextCursor).toBeTruthy();
     scenarioReports.multi_year_first_page = first.report;
@@ -246,60 +251,37 @@ describe.sequential("WH-9 real service performance and transfer budgets", () => 
   }, 90_000);
 
   it("measures owner-bounded status and workout-type filters", async () => {
-    const status = await measure(() => listWorkoutHistoryKeyset(
-      supabase,
-      userId,
-      request({ statuses: ["completed"] }),
-      cursorSecret,
-    ));
+    const status = await measure(() => readFirstPage(request({ statuses: ["completed"] })));
     expect(status.value.items.every((item) => item.lifecycle === "completed" || item.lifecycle === "partial")).toBe(true);
     scenarioReports.filter_status = status.report;
 
-    const type = await measure(() => listWorkoutHistoryKeyset(
-      supabase,
-      userId,
-      request({ workoutTypes: ["strength"] }),
-      cursorSecret,
-    ));
+    const type = await measure(() => readFirstPage(request({ workoutTypes: ["strength"] })));
     scenarioReports.filter_type = type.report;
   }, 90_000);
 
   it("measures exercise filtering and bounded member-facing search", async () => {
-    const base = await listWorkoutHistoryKeyset(
-      supabase,
-      userId,
-      request(),
-      cursorSecret,
-    );
+    const base = await readFirstPage(request());
     const exerciseId = base.items.flatMap((item) => item.exerciseIds)[0];
     expect(exerciseId).toBeTruthy();
-    const exercise = await measure(() => listWorkoutHistoryKeyset(
-      supabase,
-      userId,
-      request({ exerciseIds: [exerciseId!] }),
-      cursorSecret,
-    ));
+    const exercise = await measure(() => readFirstPage(request({ exerciseIds: [exerciseId!] })));
     scenarioReports.filter_exercise = exercise.report;
 
-    const search = await measure(() => listWorkoutHistoryKeyset(
-      supabase,
-      userId,
-      request({ search: "controlled execution" }),
-      cursorSecret,
-    ));
+    const search = await measure(() => readFirstPage(request({ search: "controlled execution" })));
     expect(search.value.items.length).toBeGreaterThan(0);
     scenarioReports.search = search.report;
   }, 90_000);
 
-  it("measures the real detail reader plus shared metric authority", async () => {
+  it("measures the complete detail read shape", async () => {
     const sessionId = fixtureSessionId(4_999);
     const detail = await measure(async () => {
-      const [response, metrics] = await Promise.all([
+      const [response, metrics, projectionCurrent] = await Promise.all([
         getWorkoutHistorySessionDetail(supabase, userId, sessionId),
         readSharedWorkoutHistorySessionMetrics(supabase, userId, sessionId),
+        workoutHistoryRecordProjectionIsCurrent(supabase, userId, sessionId),
       ]);
       return {
         ...response,
+        projectionCurrent,
         summary: {
           ...response.summary,
           reliableVolume: metrics.externalLoadVolume > 0
@@ -309,6 +291,7 @@ describe.sequential("WH-9 real service performance and transfer budgets", () => 
       };
     });
     expect(detail.value.activity.canonicalSessionId).toBe(sessionId);
+    expect(detail.value.projectionCurrent).toBe(true);
     scenarioReports.session_detail = detail.report;
     await writeReport();
   }, 90_000);
