@@ -101,6 +101,9 @@ export type WorkoutHistoryListSummary = {
 };
 
 export type WorkoutHistoryListNotice = "stale-data" | "partial-availability";
+export type WorkoutHistoryDetailNotice =
+  | WorkoutHistoryListNotice
+  | "user-action-required";
 
 export type WorkoutHistoryFilterOption = {
   value: string;
@@ -238,5 +241,5 @@ export type WorkoutHistorySessionDetailResponse = {
   snapshot: WorkoutHistorySnapshotHeader;
   exercises: WorkoutHistoryExerciseDetail[];
   timeline: WorkoutHistoryTimelineEntry[];
-  notices: WorkoutHistoryListNotice[];
+  notices: WorkoutHistoryDetailNotice[];
 };
