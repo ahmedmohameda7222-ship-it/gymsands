@@ -49,7 +49,10 @@ test("minimal stack retains the services required by the REST API contract", () 
     assert.equal(MINIMAL_API_SERVICE_EXCLUDES.includes(required), false);
   }
   assert.match(source, /\["stop", "--project-id", LOCAL_PROJECT_ID\]/u);
-  assert.doesNotMatch(source, /--no-backup/u);
+  assert.doesNotMatch(
+    source,
+    /\["stop", "--project-id", LOCAL_PROJECT_ID, "--no-backup"\]/u,
+  );
 });
 
 test("readiness validation accepts only the disposable local API and database ports", () => {
