@@ -136,14 +136,16 @@ async function prepareScenario(page, scenario, observation) {
     await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
   } else if (scenario.action === "correction-add") {
     await openCorrection(page);
-    await page
+    const addButton = page
       .getByRole("button", { name: /add set|satz hinzufügen|إضافة مجموعة/iu })
-      .first()
-      .click();
-    await page.getByLabel(/repetitions|wiederholungen|التكرارات/iu).last().fill("12");
-    await page.getByLabel(/load \(kg\)|gewicht \(kg\)|الوزن \(كجم\)/iu).last().fill("55");
-    await page.getByLabel(/^RPE$/iu).last().fill("8");
-    await page.getByLabel(/^RIR$/iu).last().fill("2");
+      .first();
+    const exerciseCard = addButton.locator("xpath=ancestor::div[.//fieldset][1]");
+    await addButton.click();
+    const addedSet = exerciseCard.locator("fieldset").last();
+    await addedSet.getByLabel(/repetitions|wiederholungen|التكرارات/iu).fill("12");
+    await addedSet.getByLabel(/load \(kg\)|gewicht \(kg\)|الوزن \(كجم\)/iu).fill("55");
+    await addedSet.getByLabel(/^RPE$/iu).fill("8");
+    await addedSet.getByLabel(/^RIR$/iu).fill("2");
     await saveCorrection(page);
     await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
   } else if (scenario.action === "correction-remove") {
@@ -217,6 +219,11 @@ async function prepareScenario(page, scenario, observation) {
 function correctionRequest(fixtureRequests) {
   return fixtureRequests.find((candidate) =>
     candidate.method === "POST" && candidate.path.endsWith("/correct")) ?? null;
+}
+
+function metricValue(operation, metricKey) {
+  return operation?.values?.performanceMetrics?.find((metric) =>
+    metric?.metricKey === metricKey)?.value ?? null;
 }
 
 await mkdir(outputDir, { recursive: true });
@@ -363,9 +370,29 @@ try {
       correctionSetOperations: setOperations,
       fixtureRequests: fixtureState.requests,
     });
-    const hasCorrectionKind = (kind) =>
-      Array.isArray(setOperations) &&
-      setOperations.some((operation) => operation?.kind === kind);
+    const exactOperation = (kind) =>
+      Array.isArray(setOperations)
+      && setOperations.length === 1
+      && setOperations[0]?.kind === kind
+      ? setOperations[0]
+      : null;
+    const editOperation = exactOperation("update");
+    const addOperation = exactOperation("add");
+    const removeOperation = exactOperation("remove");
+    const editPayloadValid =
+      editOperation?.patch?.reps === 11
+      && editOperation?.patch?.weightKg === 72.5
+      && editOperation?.patch?.setDetails?.rpe === 8.5
+      && editOperation?.patch?.setDetails?.rir === 1.5
+      && editOperation?.patch?.setDetails?.notes === "Controlled corrected set";
+    const addPayloadValid =
+      addOperation?.values?.reps === 12
+      && addOperation?.values?.weightKg === 55
+      && addOperation?.values?.setDetails?.rpe === 8
+      && addOperation?.values?.setDetails?.rir === 2
+      && metricValue(addOperation, "repetitions") === 12
+      && metricValue(addOperation, "external_load_kg") === 55;
+    const removePayloadValid = Boolean(removeOperation?.exerciseLogId);
     const conflictPayloadValid =
       requestBody?.expectedHistoryRevision === 0
       && /^history-correct:[0-9a-f-]{36}$/iu.test(String(requestBody?.idempotencyKey ?? ""))
@@ -397,9 +424,9 @@ try {
           !dom.muscleSummary ||
           dom.muscleSvgCount < 2
         )) ||
-      (scenario.action === "correction-edit" && !hasCorrectionKind("update")) ||
-      (scenario.action === "correction-add" && !hasCorrectionKind("add")) ||
-      (scenario.action === "correction-remove" && !hasCorrectionKind("remove")) ||
+      (scenario.action === "correction-edit" && !editPayloadValid) ||
+      (scenario.action === "correction-add" && !addPayloadValid) ||
+      (scenario.action === "correction-remove" && !removePayloadValid) ||
       (scenario.action === "correction-conflict" &&
         (
           !conflictPayloadValid
