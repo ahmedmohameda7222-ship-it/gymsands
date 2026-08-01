@@ -75,7 +75,12 @@ begin
       and (
         not prosecdef
         or proconfig is null
-        or not ('search_path=' = any(proconfig))
+        -- PostgreSQL serializes SET search_path = '' as search_path="".
+        -- Accept the unquoted representation as well for version portability.
+        or not (
+          'search_path=' = any(proconfig)
+          or 'search_path=""' = any(proconfig)
+        )
       )
   ) then
     raise exception 'AW-9 trusted functions must be SECURITY DEFINER with an empty search_path.';
