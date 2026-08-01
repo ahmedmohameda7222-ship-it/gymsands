@@ -15,7 +15,7 @@ export type PerformedWorkoutHistoryRow = {
   skipped_at?: string | null;
   cancelled_at?: string | null;
   duration_minutes: number | null;
-  notes: string | null;
+  notes?: string | null;
   status: "started" | "completed" | "skipped" | "cancelled";
   plan_id?: string | null;
   plan_day_id?: string | null;
@@ -50,7 +50,7 @@ export type ScheduledWorkoutHistoryRow = {
   completed_at: string | null;
   skipped_at: string | null;
   duration_minutes: number | null;
-  notes: string | null;
+  notes?: string | null;
 };
 
 export type WorkoutHistoryEligibilityOptions = {

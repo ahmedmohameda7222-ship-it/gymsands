@@ -17,6 +17,7 @@ export const serverEnv = {
   plaivraMcpBaseUrl: process.env.PLAIVRA_MCP_BASE_URL || process.env.FITLIFE_MCP_BASE_URL || `${publicEnv.appUrl}/api/mcp`,
   plaivraOAuthIssuer: process.env.PLAIVRA_OAUTH_ISSUER || publicEnv.appUrl,
   plaivraMcpTokenSecret: process.env.PLAIVRA_MCP_TOKEN_SECRET || process.env.FITLIFE_MCP_TOKEN_SECRET || "",
+  workoutHistoryCursorSecret: process.env.PLAIVRA_WORKOUT_HISTORY_CURSOR_SECRET || process.env.PLAIVRA_MCP_TOKEN_SECRET || process.env.FITLIFE_MCP_TOKEN_SECRET || "",
   plaivraMcpOAuthClientId: process.env.PLAIVRA_MCP_OAUTH_CLIENT_ID || process.env.FITLIFE_MCP_OAUTH_CLIENT_ID || "",
   plaivraMcpOAuthClientSecret: process.env.PLAIVRA_MCP_OAUTH_CLIENT_SECRET || process.env.FITLIFE_MCP_OAUTH_CLIENT_SECRET || "",
   plaivraAllowLegacyMcpClientId: process.env.PLAIVRA_ALLOW_LEGACY_MCP_CLIENT_ID === "true",
