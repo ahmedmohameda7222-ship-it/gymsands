@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/integrations/env";
+import {
+  createSupabaseServerClient,
+  requireUser,
+  serverEnv,
+} from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { isUuid } from "@/lib/utils";
 import {
@@ -22,10 +26,16 @@ export async function POST(
     );
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
+  if (!serverEnv.supabaseServiceRoleKey)
+    return NextResponse.json(
+      { error: "Workout correction is temporarily unavailable." },
+      { status: 503 },
+    );
   try {
     return NextResponse.json(
       await correctCompletedSession(
         auth.supabase,
+        createSupabaseServerClient(null, true),
         auth.user.id,
         sessionId,
         await request.json(),
