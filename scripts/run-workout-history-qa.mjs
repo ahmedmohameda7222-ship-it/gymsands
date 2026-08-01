@@ -66,6 +66,18 @@ async function prepareScenario(page, scenario, observation) {
   await page.waitForSelector(rootSelector, { timeout: 20_000 });
   await page.waitForTimeout(150);
 
+  if (scenario.name === "v1-muscle-snapshot") {
+    await page.waitForSelector(
+      '[data-history-muscle-analysis-kind="v1-broad"]',
+      { timeout: 10_000 },
+    );
+  } else if (scenario.name === "v2-muscle-snapshot") {
+    await page.waitForSelector(
+      '[data-history-muscle-analysis-kind="v2-advanced"]',
+      { timeout: 10_000 },
+    );
+  }
+
   if (scenario.action === "load-more") {
     await page
       .getByRole("button", { name: /load more|mehr laden|تحميل المزيد/iu })
@@ -212,6 +224,9 @@ try {
       const active = document.activeElement;
       const activeStyle =
         active instanceof HTMLElement ? getComputedStyle(active) : null;
+      const muscleSummary = document.querySelector(
+        "[data-session-history-muscle-summary]",
+      );
       return {
         lang: document.documentElement.lang,
         dir: document.documentElement.dir,
@@ -228,6 +243,10 @@ try {
           document
             .querySelector("[data-session-history-page]")
             ?.getAttribute("data-snapshot-version") || null,
+        muscleSummary: Boolean(muscleSummary),
+        muscleAnalysisKind:
+          muscleSummary?.getAttribute("data-history-muscle-analysis-kind") || null,
+        muscleSvgCount: muscleSummary?.querySelectorAll("svg").length ?? 0,
         focused:
           active && active !== document.body
             ? {
@@ -269,9 +288,19 @@ try {
       (scenario.action === "keyboard" && !dom.focused) ||
       (scenario.action === "reduced-motion" && !dom.reducedMotion) ||
       (scenario.name === "v1-muscle-snapshot" &&
-        dom.snapshotVersion !== "workout_session_muscle_snapshot_v1") ||
+        (
+          dom.snapshotVersion !== "workout_session_muscle_snapshot_v1" ||
+          dom.muscleAnalysisKind !== "v1-broad" ||
+          !dom.muscleSummary ||
+          dom.muscleSvgCount < 2
+        )) ||
       (scenario.name === "v2-muscle-snapshot" &&
-        dom.snapshotVersion !== "workout_session_muscle_snapshot_v2");
+        (
+          dom.snapshotVersion !== "workout_session_muscle_snapshot_v2" ||
+          dom.muscleAnalysisKind !== "v2-advanced" ||
+          !dom.muscleSummary ||
+          dom.muscleSvgCount < 2
+        ));
     observation.passed = !scenarioFailed;
     failed ||= scenarioFailed;
     observations.push(observation);
