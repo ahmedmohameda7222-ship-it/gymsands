@@ -62,8 +62,7 @@ export function buildCommittedFixtureSql(source) {
 }
 
 export function cleanupFixtureSql() {
-  return `\set ON_ERROR_STOP on
-begin;
+  return `begin;
 delete from public.profiles where id='${FIXTURE_USER_ID}'::uuid;
 commit;
 `;
