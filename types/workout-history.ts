@@ -233,6 +233,7 @@ export type WorkoutHistoryTimelineEntry = {
 export type WorkoutHistorySessionDetailResponse = {
   contractVersion: typeof WORKOUT_HISTORY_CONTRACT_VERSION;
   activity: CanonicalWorkoutActivity;
+  historyRevision?: number;
   summary: WorkoutHistoryDetailSummary;
   snapshot: WorkoutHistorySnapshotHeader;
   exercises: WorkoutHistoryExerciseDetail[];

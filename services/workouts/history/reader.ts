@@ -57,6 +57,7 @@ const PERFORMED_SELECT = [
   "plan_day_id",
   "plan_week_id",
   "plan_session_id",
+  "deleted_at",
 ].join(",");
 
 const SCHEDULED_SELECT = [
@@ -101,6 +102,7 @@ async function readPerformedCandidates(
     .select(PERFORMED_SELECT)
     .eq("user_id", userId)
     .in("status", ["completed", "skipped", "cancelled"])
+    .is("deleted_at", null)
     .order("started_at", { ascending: false })
     .limit(limit);
   if (roots.error) return { data: null, error: roots.error };

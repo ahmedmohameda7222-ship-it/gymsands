@@ -142,6 +142,7 @@ async function requireWorkoutSession(ctx: McpContext, sessionId: string) {
     .select("id,user_id,scheduled_session_id,plan_day_id,status")
     .eq("id", sessionId)
     .eq("user_id", ctx.userId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Workout session not found for this user.");

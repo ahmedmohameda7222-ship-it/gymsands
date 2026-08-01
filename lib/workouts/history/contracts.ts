@@ -22,6 +22,7 @@ export type PerformedWorkoutHistoryRow = {
   plan_week_id?: string | null;
   plan_session_id?: string | null;
   deleted_at?: string | null;
+  history_revision?: number;
   derived_record_schema_version?: number | null;
   derived_record_formula_version?: string | null;
   derived_records_evaluated_at?: string | null;

@@ -122,6 +122,7 @@ async function loadStrictWorkoutHistory(userId: string): Promise<DashboardWorkou
       .from("workout_sessions")
       .select("*")
       .eq("user_id", userId)
+      .is("deleted_at", null)
       .in("status", ["completed", "skipped"])
       .order("started_at", { ascending: false })
       .limit(20),

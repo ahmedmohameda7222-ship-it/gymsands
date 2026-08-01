@@ -289,7 +289,7 @@ export async function getWorkoutSessionMuscleAnalysis(
 
   const snapshot = snapshotResult.data as SessionMuscleSnapshotEnvelope;
   const snapshotVersion = supportedSnapshotVersion(snapshot);
-  const sessionResult = await supabase.from("workout_sessions").select("status").eq("id", sessionId).eq("user_id", userId).maybeSingle();
+  const sessionResult = await supabase.from("workout_sessions").select("status").eq("id", sessionId).eq("user_id", userId).is("deleted_at", null).maybeSingle();
   if (sessionResult.error) throw new SessionMuscleAnalysisError("snapshot_read_failed", "Workout state could not be verified.", 503);
   if (mode === "completed" && !["completed", "skipped"].includes(sessionResult.data?.status ?? "")) {
     throw new SessionMuscleAnalysisError("session_not_terminal", "Completed analysis is available after the workout is completed or skipped.", 409);

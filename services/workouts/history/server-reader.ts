@@ -307,9 +307,10 @@ async function readPeriodSources(
     for (let offset = 0; ; offset += PERIOD_ROOT_PAGE_SIZE) {
       const page = await supabase
         .from("workout_sessions")
-        .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,notes,status,plan_id,plan_day_id,plan_week_id,plan_session_id,derived_record_schema_version,derived_record_formula_version,derived_records_evaluated_at")
+        .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,notes,status,plan_id,plan_day_id,plan_week_id,plan_session_id,deleted_at,history_revision,derived_record_schema_version,derived_record_formula_version,derived_records_evaluated_at")
         .eq("user_id", userId)
         .eq("status", status)
+        .is("deleted_at", null)
         .or(effectiveFilter(timestampColumns))
         .order("started_at", { ascending: false })
         .order("id", { ascending: false })
@@ -343,21 +344,34 @@ async function readPeriodSources(
     }
   }
 
-  const [completed, skipped, cancelled, scheduledCompleted, scheduledSkipped] = await Promise.all([
+  async function readSuppressedScheduledIds() {
+    const ids = new Set<string>();
+    for (let offset = 0; ; offset += PERIOD_ROOT_PAGE_SIZE) {
+      const page = await supabase.from("workout_sessions").select("scheduled_session_id")
+        .eq("user_id", userId).not("scheduled_session_id", "is", null)
+        .range(offset, offset + PERIOD_ROOT_PAGE_SIZE - 1);
+      if (page.error) return { ids, error: page.error };
+      for (const row of page.data ?? []) if (row.scheduled_session_id) ids.add(row.scheduled_session_id);
+      if ((page.data ?? []).length < PERIOD_ROOT_PAGE_SIZE) return { ids, error: null };
+    }
+  }
+
+  const [completed, skipped, cancelled, scheduledCompleted, scheduledSkipped, suppression] = await Promise.all([
     readPerformedStatus("completed", ["completed_at", "started_at"]),
     readPerformedStatus("skipped", ["skipped_at", "completed_at", "started_at"]),
     readPerformedStatus("cancelled", ["cancelled_at", "completed_at", "started_at"]),
     readScheduledStatus("completed", ["completed_at", "started_at"]),
     readScheduledStatus("skipped", ["skipped_at", "completed_at", "started_at"]),
+    readSuppressedScheduledIds(),
   ]);
   const performedError = completed.error ?? skipped.error ?? cancelled.error;
-  const scheduledError = scheduledCompleted.error ?? scheduledSkipped.error;
+  const scheduledError = scheduledCompleted.error ?? scheduledSkipped.error ?? suppression.error;
   const performed = performedError
     ? { data: null, error: performedError }
     : { data: [...(completed.data ?? []), ...(skipped.data ?? []), ...(cancelled.data ?? [])], error: null };
   const scheduled = scheduledError
     ? { data: null, error: scheduledError }
-    : { data: [...(scheduledCompleted.data ?? []), ...(scheduledSkipped.data ?? [])], error: null };
+    : { data: [...(scheduledCompleted.data ?? []), ...(scheduledSkipped.data ?? [])].filter((row) => !suppression.ids.has(row.id)), error: null };
   return { performed, scheduled };
 }
 
@@ -932,9 +946,10 @@ export async function getWorkoutHistorySessionDetail(
 ): Promise<WorkoutHistorySessionDetailResponse> {
   const root = await supabase
     .from("workout_sessions")
-    .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,notes,status,plan_id,plan_day_id,plan_week_id,plan_session_id,derived_record_schema_version,derived_record_formula_version,derived_records_evaluated_at")
+    .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,notes,status,plan_id,plan_day_id,plan_week_id,plan_session_id,deleted_at,history_revision,derived_record_schema_version,derived_record_formula_version,derived_records_evaluated_at")
     .eq("id", sessionId)
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (root.error) throw new WorkoutHistoryReaderError("history_detail_unavailable", "Workout details could not load.", 503);
   if (!root.data) throw new WorkoutHistoryReaderError("history_not_found", "Workout history item was not found.", 404);
@@ -1022,6 +1037,7 @@ export async function getWorkoutHistorySessionDetail(
   return {
     contractVersion: WORKOUT_HISTORY_CONTRACT_VERSION,
     activity,
+    historyRevision: rootSession.history_revision ?? 0,
     summary: {
       exerciseCount: exercises.filter((exercise) => exercise.performedSets.length > 0).length,
       completedSetCount: completedLogs.length,

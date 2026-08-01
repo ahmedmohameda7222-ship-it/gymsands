@@ -94,7 +94,7 @@ insert into public.workout_sessions(
   id,user_id,workout_name,status,started_at,completed_at,plan_id,plan_day_id,source,created_at,updated_at
 ) values (
   'b6000000-0000-4000-8000-000000000020','b6000000-0000-4000-8000-000000000001',
-  'WH-6 completed session','completed','2026-08-01T10:00:00Z','2026-08-01T11:00:00Z',
+  'WH-6 completed session','started','2026-08-01T10:00:00Z',null,
   'b6000000-0000-4000-8000-000000000010','b6000000-0000-4000-8000-000000000011','manual',now(),now()
 );
 insert into public.exercise_logs(
@@ -105,6 +105,9 @@ insert into public.exercise_logs(
   'WH-6 squat',1,5,100,'b6000000-0000-4000-8000-000000000012',
   '2026-08-01T10:30:00Z',1,'manual','normal','2026-08-01T10:30:00Z'
 );
+update public.workout_sessions
+set status='completed',completed_at='2026-08-01T11:00:00Z'
+where id='b6000000-0000-4000-8000-000000000020';
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','b6000000-0000-4000-8000-000000000001',true);

@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { ExerciseHistorySection } from "@/components/workouts/history/exercise-history-section";
 import { SessionHistoryActions } from "@/components/workouts/history/session-history-actions";
+import { SessionCorrectionDialog } from "@/components/workouts/history/session-correction-dialog";
 import { SessionHistoryInsight } from "@/components/workouts/history/session-history-insight";
 import { SessionHistoryMuscleSummary } from "@/components/workouts/history/session-history-muscle-summary";
 import { SessionHistoryNotes } from "@/components/workouts/history/session-history-notes";
@@ -116,6 +117,7 @@ export function SessionHistoryPage({ source, id }: { source: "performed" | "sche
         </div>
       </div>
       <SessionHistoryActions capabilities={detail.activity.capabilities} />
+      {detail.activity.canonicalSessionId && detail.activity.capabilities.correctSession ? <SessionCorrectionDialog sessionId={detail.activity.canonicalSessionId} title={detail.activity.title} historyRevision={detail.historyRevision ?? 0} notes={detail.activity.notes} durationMinutes={detail.activity.durationMinutes} onChanged={() => void load()} /> : null}
     </TrainPageContainer>
   );
 }

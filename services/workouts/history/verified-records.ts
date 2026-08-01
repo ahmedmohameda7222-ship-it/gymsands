@@ -123,6 +123,7 @@ export async function replaceVerifiedRecordsForSession(
     .select("id,user_id,status,workout_id")
     .eq("id", sessionId)
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (sessionResult.error) throw new VerifiedRecordError("verified_records_read_failed", "Workout records could not be refreshed.", 503);
   if (!sessionResult.data) throw new VerifiedRecordError("history_not_found", "Workout history item was not found.", 404);

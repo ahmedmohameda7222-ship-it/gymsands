@@ -20,7 +20,7 @@ function detailClient(rows: Record<string, unknown[]>) {
     from: vi.fn((table: string) => {
       calls.push(table);
       const builder: Record<string, unknown> = {};
-      for (const method of ["select", "eq", "in", "order"] as const) builder[method] = vi.fn(() => builder);
+      for (const method of ["select", "eq", "is", "in", "order"] as const) builder[method] = vi.fn(() => builder);
       builder.maybeSingle = vi.fn(async () => ({ data: rows[table]?.[0] ?? null, error: null }));
       builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
         Promise.resolve({ data: rows[table] ?? [], error: null }).then(resolve, reject);

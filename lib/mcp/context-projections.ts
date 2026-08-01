@@ -264,7 +264,7 @@ async function dailyExecution(supabase: SupabaseClient, userId: string, scopes: 
   if (hasScope(scopes, MCP_SCOPES.workoutsRead)) queries.push((async () => {
     const result = await supabase.from("workout_sessions")
       .select("id,workout_name,status,started_at,completed_at,skipped_at,duration_minutes,plan_id,plan_day_id")
-      .eq("user_id", userId).gte("started_at", `${date}T00:00:00.000Z`).lt("started_at", `${date}T23:59:59.999Z`)
+      .eq("user_id", userId).is("deleted_at", null).gte("started_at", `${date}T00:00:00.000Z`).lt("started_at", `${date}T23:59:59.999Z`)
       .order("started_at", { ascending: false }).limit(5);
     throwQueryError(result.error, "Daily workout");
     sections.workouts = ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
@@ -340,7 +340,7 @@ async function progressReview(supabase: SupabaseClient, userId: string, input: R
       .eq("user_id", userId).gte("entry_date", start).lte("entry_date", end).order("entry_date").limit(200),
     supabase.from("workout_sessions")
       .select("id,status,started_at,completed_at,duration_minutes")
-      .eq("user_id", userId).gte("started_at", `${start}T00:00:00.000Z`).lte("started_at", `${end}T23:59:59.999Z`).limit(500),
+      .eq("user_id", userId).is("deleted_at", null).gte("started_at", `${start}T00:00:00.000Z`).lte("started_at", `${end}T23:59:59.999Z`).limit(500),
     supabase.from("current_personal_records")
       .select("id,exercise_name,record_type,weight_kg,reps,record_date,created_at,source_kind,derived_record_type,record_value,record_unit")
       .eq("user_id", userId).gte("record_date", start).lte("record_date", end).limit(200)
@@ -379,7 +379,7 @@ async function workoutAdjustment(supabase: SupabaseClient, userId: string, input
       .eq("user_id", userId).maybeSingle(),
     supabase.from("workout_sessions")
       .select("id,started_at,completed_at,status,exercise_logs(id,plan_exercise_id,exercise_name,set_number,reps,weight_kg,completed_at)")
-      .eq("user_id", userId).order("started_at", { ascending: false }).limit(10)
+      .eq("user_id", userId).is("deleted_at", null).order("started_at", { ascending: false }).limit(10)
   ]);
   throwQueryError(plans.error, "Active workout plan");
   throwQueryError(constraints.error, "Functional constraint");

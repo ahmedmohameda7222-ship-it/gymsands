@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { InlineFeedback } from "@/components/motion";
+import { RecentlyDeletedWorkouts } from "@/components/workouts/history/recently-deleted-workouts";
 
 type PrivacySettingKey =
   | "hideBodyWeightOnDashboard"
@@ -293,6 +294,8 @@ export default function DataPrivacyPage() {
           <Button asChild variant="outline" className="min-h-12 w-full sm:w-auto"><Link href="/settings/account">Account requests</Link></Button>
         </CardContent>
       </Card>
+
+      <RecentlyDeletedWorkouts />
 
       <Card className="border-destructive/30">
         <CardHeader>

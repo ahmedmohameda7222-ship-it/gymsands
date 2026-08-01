@@ -17,7 +17,7 @@ function queryClient(rows: Record<string, unknown[]>) {
     from: vi.fn((table: string) => {
       const builder: Record<string, unknown> = {};
       const equalities = new Map<string, unknown>();
-      for (const method of ["select", "in", "order", "or"] as const) {
+      for (const method of ["select", "in", "order", "or", "not"] as const) {
         builder[method] = vi.fn((...args: unknown[]) => {
           calls.push({ table, method, args });
           return builder;
@@ -28,11 +28,18 @@ function queryClient(rows: Record<string, unknown[]>) {
         equalities.set(String(args[0]), args[1]);
         return builder;
       });
+      builder.is = vi.fn((...args: unknown[]) => {
+        calls.push({ table, method: "is", args });
+        equalities.set(String(args[0]), args[1]);
+        return builder;
+      });
       builder.range = vi.fn((from: number, to: number) => {
         calls.push({ table, method: "range", args: [from, to] });
         const selected = (rows[table] ?? []).filter((row) =>
-          [...equalities].every(([key, value]) =>
-            (row as Record<string, unknown>)[key] === value));
+          [...equalities].every(([key, value]) => {
+            const actual = (row as Record<string, unknown>)[key];
+            return value === null ? actual == null : actual === value;
+          }));
         return Promise.resolve({ data: selected, error: null });
       });
       builder.then = (

@@ -29,6 +29,7 @@ export const serverEnv = {
   cronSecret: process.env.CRON_SECRET || "",
   privacyDeletionExecutionEnabled: process.env.PRIVACY_DELETION_EXECUTION_ENABLED === "true",
   privacyRetentionExecutionEnabled: process.env.PRIVACY_RETENTION_EXECUTION_ENABLED === "true",
+  workoutHistoryPurgeExecutionEnabled: process.env.WORKOUT_HISTORY_PURGE_EXECUTION_ENABLED === "true",
   privacyRetentionMcpAuditDays: process.env.PRIVACY_RETENTION_MCP_AUDIT_DAYS || "",
   privacyRetentionSecurityLogDays: process.env.PRIVACY_RETENTION_SECURITY_LOG_DAYS || "",
   privacyRetentionCompletedRequestDays: process.env.PRIVACY_RETENTION_COMPLETED_REQUEST_DAYS || "",

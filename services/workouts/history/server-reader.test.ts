@@ -13,7 +13,7 @@ function queryClient(rows: Record<string, unknown[]>, failures: string[] = []) {
     from: vi.fn((table: string) => {
       calls.push(table);
       const builder: Record<string, unknown> = {};
-      for (const method of ["select", "eq", "in", "order", "limit"] as const) {
+      for (const method of ["select", "eq", "is", "in", "order", "limit"] as const) {
         builder[method] = vi.fn(() => builder);
       }
       builder.then = (

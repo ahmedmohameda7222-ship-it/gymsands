@@ -11,13 +11,13 @@ This document is a human-readable summary only. It does not authorize migration 
 ## Current state
 
 - Physical Production migration records: **76**
-- Repository classifications: **77**
+- Repository classifications: **78**
 - Exact applications (`state = applied`): **63**
 - Generated-version aliases (`state = applied_version_alias`): **13**
-- Repository-only pending migrations: **1**
-- `pendingCount = 1`
+- Repository-only pending migrations: **2**
+- `pendingCount = 2`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 1`
+- `unresolvedCount = 2`
 - `historyRepair.state = pending`
 - `release_ready = false`
 - Released compatibility marker: `20260724232734`
@@ -28,7 +28,7 @@ Physical schema advancement and compatibility-marker promotion are deliberately 
 
 ## Workout History pending identity
 
-`20260801140043_workout_history_verified_records.sql` is an approved forward migration for WH-6. It exists only in the repository, is classified as pending, and has not been applied to Production. Applying it requires separate explicit authorization; this implementation phase does not authorize Production writes.
+`20260801140043_workout_history_verified_records.sql` and `20260801160000_workout_history_correction_and_soft_delete.sql` are approved forward migrations for WH-6 and WH-7. They exist only in the repository, are classified as pending, and have not been applied to Production. Applying them requires separate explicit authorization; this implementation program does not authorize Production writes.
 
 ## AW-9 applied identity
 
