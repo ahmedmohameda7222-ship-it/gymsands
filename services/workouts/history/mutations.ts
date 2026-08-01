@@ -2,7 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { replaceVerifiedRecordsForSession } from "@/services/workouts/history/verified-records";
+import {
+  readVerifiedRecordIdentityScope,
+  rebuildVerifiedRecordsForIdentities,
+  replaceVerifiedRecordsForSession,
+} from "@/services/workouts/history/verified-records";
 
 export type CompletedSessionCorrection = {
   expectedHistoryRevision: number;
@@ -58,8 +62,16 @@ function validKey(value: unknown): value is string {
   );
 }
 
+function withProjectionState<T extends object>(
+  result: T,
+  projectionRefreshPending: boolean,
+): T & { projection_refresh_pending: boolean } {
+  return { ...result, projection_refresh_pending: projectionRefreshPending };
+}
+
 export async function correctCompletedSession(
   supabase: SupabaseClient,
+  authority: SupabaseClient,
   userId: string,
   sessionId: string,
   input: CompletedSessionCorrection,
@@ -90,17 +102,21 @@ export async function correctCompletedSession(
     },
   );
   if (result.error) mutationError(result.error, "Workout correction failed.");
-  if (
-    (result.data as { performance_changed?: boolean } | null)
-      ?.performance_changed
-  ) {
-    await replaceVerifiedRecordsForSession(supabase, userId, sessionId);
+  const value = (result.data ?? {}) as Record<string, unknown>;
+  let projectionRefreshPending = false;
+  if (value.performance_changed === true) {
+    try {
+      await replaceVerifiedRecordsForSession(authority, userId, sessionId);
+    } catch {
+      projectionRefreshPending = true;
+    }
   }
-  return result.data;
+  return withProjectionState(value, projectionRefreshPending);
 }
 
 export async function softDeleteSession(
   supabase: SupabaseClient,
+  authority: SupabaseClient,
   userId: string,
   sessionId: string,
   idempotencyKey: string,
@@ -111,17 +127,37 @@ export async function softDeleteSession(
       "Deletion request key is invalid.",
       400,
     );
+  const scope = await readVerifiedRecordIdentityScope(
+    supabase,
+    userId,
+    sessionId,
+  );
   const result = await supabase.rpc("soft_delete_workout_session_atomic", {
     p_user_id: userId,
     p_session_id: sessionId,
     p_idempotency_key: idempotencyKey,
   });
   if (result.error) mutationError(result.error, "Workout deletion failed.");
-  return result.data;
+  let projectionRefreshPending = false;
+  try {
+    await rebuildVerifiedRecordsForIdentities(
+      authority,
+      userId,
+      scope.identities,
+      sessionId,
+    );
+  } catch {
+    projectionRefreshPending = true;
+  }
+  return withProjectionState(
+    (result.data ?? {}) as Record<string, unknown>,
+    projectionRefreshPending,
+  );
 }
 
 export async function restoreSession(
   supabase: SupabaseClient,
+  authority: SupabaseClient,
   userId: string,
   sessionId: string,
   idempotencyKey: string,
@@ -138,12 +174,16 @@ export async function restoreSession(
     p_idempotency_key: idempotencyKey,
   });
   if (result.error) mutationError(result.error, "Workout restore failed.");
+  let projectionRefreshPending = false;
   try {
-    await replaceVerifiedRecordsForSession(supabase, userId, sessionId);
+    await replaceVerifiedRecordsForSession(authority, userId, sessionId);
   } catch {
-    /* freshness stays explicit until retry */
+    projectionRefreshPending = true;
   }
-  return result.data;
+  return withProjectionState(
+    (result.data ?? {}) as Record<string, unknown>,
+    projectionRefreshPending,
+  );
 }
 
 export async function purgeSession(
