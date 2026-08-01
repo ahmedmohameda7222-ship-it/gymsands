@@ -16,6 +16,7 @@ const DEFAULT_OUTPUT = path.join(
   "report.json",
 );
 const FIXTURE_USER_ID = "b9000000-0000-4000-8000-000000000001";
+export const LOCAL_PROJECT_ID = "gymsands";
 export const BENCHMARK_API_EXCLUDES = Object.freeze([
   "realtime",
   "storage-api",
@@ -80,6 +81,10 @@ commit;
 `;
 }
 
+export function benchmarkApiStopArgs() {
+  return ["stop", "--project-id", LOCAL_PROJECT_ID];
+}
+
 export function benchmarkApiStartArgs() {
   return ["start", "--exclude", BENCHMARK_API_EXCLUDES.join(",")];
 }
@@ -115,7 +120,8 @@ function runPsql(databaseUrl, sql) {
   );
 }
 
-function ensureLocalBenchmarkApi() {
+function transitionToLocalBenchmarkApi() {
+  execute("supabase", benchmarkApiStopArgs());
   execute("supabase", benchmarkApiStartArgs());
 }
 
@@ -125,8 +131,9 @@ function localSupabaseEnvironment() {
   const apiUrl = values.API_URL;
   const serviceRoleKey = values.SERVICE_ROLE_KEY;
   if (!apiUrl || !serviceRoleKey) {
+    const availableKeys = Object.keys(values).sort().join(", ") || "none";
     throw new Error(
-      "Local Supabase API URL or service-role key could not be resolved after starting the benchmark API profile.",
+      `Local Supabase API URL or service-role key could not be resolved after the benchmark profile transition. Available keys: ${availableKeys}.`,
     );
   }
   const parsed = new URL(apiUrl);
@@ -153,11 +160,11 @@ async function main() {
   const cleanupSql = cleanupFixtureSql();
   await mkdir(path.dirname(outputPath), { recursive: true });
 
+  transitionToLocalBenchmarkApi();
+  const local = localSupabaseEnvironment();
   runPsql(databaseUrl, cleanupSql);
   try {
     runPsql(databaseUrl, setupSql);
-    ensureLocalBenchmarkApi();
-    const local = localSupabaseEnvironment();
     execute(
       process.execPath,
       [
