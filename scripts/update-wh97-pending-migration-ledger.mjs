@@ -9,6 +9,7 @@ const pendingFiles = [
   "20260801203000_workout_history_set_detail_patch_semantics.sql",
   "20260801210000_workout_history_correction_muscle_reconcile.sql",
   "20260801220000_workout_history_keyset_read_authority.sql",
+  "20260801223000_workout_history_filter_options.sql",
 ];
 
 const ledgerPath = "supabase/migration-ledger.json";
@@ -51,7 +52,7 @@ await writeFile(readmePath, readme, "utf8");
 
 let reconciliation = await readFile(reconciliationPath, "utf8");
 reconciliation = reconciliation
-  .replace(/\*\*Status:\*\*.*$/mu, "**Status:** AW-9 applied; eight Workout History migrations pending")
+  .replace(/\*\*Status:\*\*.*$/mu, `**Status:** AW-9 applied; ${pendingCount} Workout History migrations pending`)
   .replace(/- Repository classifications: \*\*\d+\*\*/u, `- Repository classifications: **${ledger.entries.length}**`)
   .replace(/- Repository-only pending migrations: \*\*\d+\*\*/u, `- Repository-only pending migrations: **${pendingCount}**`)
   .replace(/- `pendingCount = \d+`/u, `- \`pendingCount = ${pendingCount}\``)
