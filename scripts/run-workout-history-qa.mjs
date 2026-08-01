@@ -48,6 +48,11 @@ function safeText(value, limit = 1_000) {
     .slice(0, limit);
 }
 
+function expectedConsoleError(scenario, message) {
+  return scenario.action === "correction-conflict"
+    && /Failed to load resource: the server responded with a status of 409 \(Conflict\)/iu.test(message);
+}
+
 async function openCorrection(page) {
   await page
     .getByRole("button", {
@@ -251,20 +256,33 @@ try {
       action: scenario.action,
       pageErrors: [],
       consoleErrors: [],
+      expectedConflictResponses: 0,
       nativeDialog: null,
     };
     page.on("pageerror", (error) =>
       observation.pageErrors.push(safeText(error.message)),
     );
     page.on("console", (message) => {
+      const text = message.text();
       if (
         message.type() === "error" &&
         !(
           developmentVerification &&
-          /React requires eval\(\) in development mode/iu.test(message.text())
-        )
-      )
-        observation.consoleErrors.push(safeText(message.text()));
+          /React requires eval\(\) in development mode/iu.test(text)
+        ) &&
+        !expectedConsoleError(scenario, text)
+      ) {
+        observation.consoleErrors.push(safeText(text));
+      }
+    });
+    page.on("response", (networkResponse) => {
+      if (
+        scenario.action === "correction-conflict"
+        && networkResponse.status() === 409
+        && networkResponse.url().endsWith("/correct")
+      ) {
+        observation.expectedConflictResponses += 1;
+      }
     });
     const response = await page.goto(`${baseUrl}${scenario.route}`, {
       waitUntil: "domcontentloaded",
@@ -374,7 +392,12 @@ try {
       (scenario.action === "correction-add" && !hasCorrectionKind("add")) ||
       (scenario.action === "correction-remove" && !hasCorrectionKind("remove")) ||
       (scenario.action === "correction-conflict" &&
-        (!hasCorrectionKind("update") || !dom.hasDialog || !dom.alertText));
+        (
+          !hasCorrectionKind("update")
+          || !dom.hasDialog
+          || !dom.alertText
+          || observation.expectedConflictResponses !== 1
+        ));
     observation.passed = !scenarioFailed;
     failed ||= scenarioFailed;
     observations.push(observation);
