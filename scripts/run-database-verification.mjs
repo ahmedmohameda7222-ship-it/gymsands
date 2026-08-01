@@ -17,6 +17,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/active-workout-aw3c-integration.sql",
   "supabase/verification/active-workout-aw4-session-engine.sql",
   "supabase/verification/active-workout-aw4-integration.sql",
+  "supabase/verification/active-workout-aw9-offline-multi-device.sql",
   "supabase/verification/train-atomic-rpc-security.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);

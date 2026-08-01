@@ -48,7 +48,8 @@ Tests enforce source code, schema, SQL verification, structured manifests, and o
 - AW-2 provides persisted execution state, command authority, idempotency receipts, and durable timeline events.
 - AW-3A provides structured performed metrics; AW-3B provides structured set details; AW-3C provides immutable normalized prescription snapshots and deterministic frozen hydration.
 - AW-4 provides the shared deterministic session engine, serialized command dispatcher, official Active Workout store, and timestamp-projected timer engine. AW-4 is merged; its Production migration was applied exactly once.
-- Plaivra Production contains 75 physical migration records. The ledger classifies 63 exact applications and 12 generated-version aliases, with zero pending, schema-untracked, or unresolved migrations.
+- AW-8 provides derived metrics; AW-9 provides offline and multi-device controller authority; AW-10 closes the Active Workout QA/QC matrix.
+- Plaivra Production contains 76 physical migration records. The ledger classifies 63 exact applications and 13 generated-version aliases, with zero pending, schema-untracked, or unresolved migrations.
 - The released compatibility marker remains `20260724232734`. Physical migration advancement and application-release promotion remain separate operations.
 - Repository state alone does not authorize merge, manual deployment, or compatibility-marker promotion.
 
@@ -66,6 +67,6 @@ Tests enforce source code, schema, SQL verification, structured manifests, and o
 
 Applied migrations must never be renamed, rewritten, reordered, deleted, or replayed. Generated QA evidence belongs in workflow artifacts, not permanent source files.
 
-### AW-9 pending database migration
+### AW-9 Production migration
 
-`20260731090000_active_workout_aw9_offline_multi_device.sql` is repository-only and pending independent review. It has not been applied to Supabase Production. The Production compatibility marker remains unchanged; do not replay applied migrations.
+`20260731090000_active_workout_aw9_offline_multi_device.sql` was applied exactly once to Supabase Production as generated migration `20260801045628_active_workout_aw9_offline_multi_device`. The immutable repository SQL remains unchanged. The Production compatibility marker remains `20260724232734`; do not replay applied migrations.
