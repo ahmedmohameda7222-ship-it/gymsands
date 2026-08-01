@@ -15,6 +15,7 @@ const pendingFiles = [
 const ledgerPath = "supabase/migration-ledger.json";
 const readmePath = "README.md";
 const reconciliationPath = "docs/architecture/migration-ledger-reconciliation.md";
+const packagePath = "package.json";
 
 const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
 const byFile = new Map(ledger.entries.map((entry) => [entry.localFile, entry]));
@@ -62,5 +63,13 @@ reconciliation = reconciliation
     `${pendingInline} are approved forward repository migrations for the Workout History program and its independent QA/QC corrections. They exist only in the repository, are classified as pending, and have not been applied to Production. Applying them requires separate explicit authorization; this implementation program does not authorize Production writes.`,
   );
 await writeFile(reconciliationPath, reconciliation, "utf8");
+
+const packageDocument = JSON.parse(await readFile(packagePath, "utf8"));
+const keysetTest = "services/workouts/history/server-list-reader.integration.test.ts";
+if (!packageDocument.scripts["test:workout-history:integration"].includes(keysetTest)) {
+  packageDocument.scripts["test:workout-history:integration"] =
+    `${packageDocument.scripts["test:workout-history:integration"]} ${keysetTest}`;
+}
+await writeFile(packagePath, `${JSON.stringify(packageDocument, null, 2)}\n`, "utf8");
 
 console.log(`Updated migration ledger: pending=${pendingCount} unresolved=${unresolvedCount} entries=${ledger.entries.length}`);
