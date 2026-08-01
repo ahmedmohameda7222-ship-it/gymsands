@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   rateLimit: vi.fn(() => null as Response | null),
   requireUser: vi.fn(),
   scheduledDetail: vi.fn(),
+  sharedMetrics: vi.fn(),
 }));
 
 vi.mock("@/lib/integrations/env", () => ({
@@ -16,6 +17,9 @@ vi.mock("@/lib/integrations/env", () => ({
 vi.mock("@/lib/integrations/rate-limit", () => ({ rateLimit: mocks.rateLimit }));
 vi.mock("@/services/workouts/history/server-list-reader", () => ({
   listWorkoutHistoryKeyset: mocks.list,
+}));
+vi.mock("@/services/workouts/history/shared-session-metrics", () => ({
+  readSharedWorkoutHistorySessionMetrics: mocks.sharedMetrics,
 }));
 vi.mock("@/services/workouts/history/server-reader", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/services/workouts/history/server-reader")>();
@@ -55,6 +59,7 @@ describe("Workout History API routes", () => {
       notices: [],
       filterOptions: { workoutTypes: [], muscles: [], exercises: [], plans: [] },
     });
+    mocks.sharedMetrics.mockResolvedValue({ externalLoadVolume: 0 });
   });
 
   it("applies rate limiting before authentication and preserves no-store headers", async () => {
@@ -134,6 +139,27 @@ describe("Workout History API routes", () => {
     expect(missing.status).toBe(404);
     expect(await missing.json()).toMatchObject({ code: "history_not_found" });
     expect(mocks.detail).toHaveBeenCalledWith(supabase, ownerId, sessionId);
+  });
+
+  it("replaces compatibility volume with the shared AW-8 metric result", async () => {
+    mocks.detail.mockResolvedValue({
+      contractVersion: 1,
+      activity: {},
+      summary: { reliableVolume: 123 },
+      exercises: [],
+      timeline: [],
+      notices: [],
+    });
+    mocks.sharedMetrics.mockResolvedValue({ externalLoadVolume: 500 });
+    const response = await getDetail(
+      new Request(`https://plaivra.test/api/workouts/history/${sessionId}`),
+      { params: Promise.resolve({ sessionId }) },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      summary: { reliableVolume: 500 },
+    });
+    expect(mocks.sharedMetrics).toHaveBeenCalledWith(supabase, ownerId, sessionId);
   });
 
   it("keeps performed and scheduled detail namespaces separate", async () => {
