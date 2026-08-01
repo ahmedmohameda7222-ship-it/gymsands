@@ -208,4 +208,75 @@ describe("Workout History server list integration", () => {
     expect(new Set([...first.items, ...second.items].map((item) => item.activityId)).size)
       .toBe(3);
   });
+
+  it.each([
+    ["100%_ effort", performedId],
+    ["قوة", performedId],
+    ["Rücken", "66666666-6666-4666-8666-666666666666"],
+  ])("searches only the bounded member-facing corpus for %s", async (search, expectedId) => {
+    const secondId = "66666666-6666-4666-8666-666666666666";
+    const outsiderId = "77777777-7777-4777-8777-777777777777";
+    const planId = "88888888-8888-4888-8888-888888888888";
+    const session = (id: string, userId: string, name: string, plan: string | null) => ({
+      id,
+      user_id: userId,
+      scheduled_session_id: null,
+      workout_name: name,
+      workout_day_name: null,
+      workout_category: "strength",
+      started_at: "2026-08-03T08:00:00.000Z",
+      completed_at: "2026-08-03T09:00:00.000Z",
+      skipped_at: null,
+      cancelled_at: null,
+      duration_minutes: 60,
+      notes: null,
+      status: "completed",
+      plan_id: plan,
+      plan_day_id: null,
+      plan_week_id: null,
+      plan_session_id: null,
+    });
+    const log = (id: string, sessionId: string, name: string) => ({
+      id,
+      workout_session_id: sessionId,
+      plan_exercise_id: null,
+      plan_activity_id: null,
+      exercise_order: 1,
+      exercise_name: name,
+      exercise_category: "strength",
+      set_number: 1,
+      reps: 10,
+      weight_kg: 20,
+      notes: null,
+      completed_at: "2026-08-03T08:30:00.000Z",
+    });
+    const { client, calls } = queryClient({
+      workout_sessions: [
+        session(performedId, ownerId, "Push day", planId),
+        session(secondId, ownerId, "Rücken Einheit", null),
+        session(outsiderId, "99999999-9999-4999-8999-999999999999", "Private outsider", null),
+      ],
+      user_workout_sessions: [],
+      exercise_logs: [
+        log("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", performedId, "Bench press"),
+        log("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", secondId, "Row"),
+      ],
+      exercise_log_set_details: [{ workout_session_id: performedId, notes: "100%_ effort" }],
+      exercise_log_metric_values: [],
+      workout_session_prescription_sets: [],
+      workout_session_muscle_snapshots: [],
+      workout_session_muscle_snapshot_items: [],
+      user_workout_plans: [{ id: planId, name: "خطة قوة" }],
+    });
+    const result = await listWorkoutHistory(client, ownerId, {
+      from: "2026-08-01T00:00:00.000Z",
+      to: "2026-09-01T00:00:00.000Z",
+      timezone: "UTC",
+      statuses: ["completed"],
+      search,
+    }, secret);
+    expect(result.items.map((item) => item.canonicalSessionId)).toEqual([expectedId]);
+    expect(JSON.stringify(result)).not.toContain("100%_ effort");
+    expect(calls).toContainEqual({ table: "workout_sessions", method: "eq", args: ["user_id", ownerId] });
+  });
 });

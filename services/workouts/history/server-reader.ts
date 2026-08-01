@@ -25,6 +25,7 @@ import {
   WORKOUT_HISTORY_CONTRACT_VERSION,
   type CanonicalWorkoutActivity,
   type WorkoutHistoryExerciseDetail,
+  type WorkoutHistoryFilterOptions,
   type WorkoutHistoryMetricValue,
   type WorkoutHistoryPlannedSet,
   type WorkoutHistoryListRequest,
@@ -63,6 +64,13 @@ type SnapshotItemRow = {
   activity_name_snapshot: string;
   planned_global_exercise_id?: string | null;
   actual_global_exercise_id?: string | null;
+  planned_custom_exercise_id?: string | null;
+  actual_custom_exercise_id?: string | null;
+  planned_provider?: string | null;
+  actual_provider?: string | null;
+  planned_provider_activity_id?: string | null;
+  actual_provider_activity_id?: string | null;
+  actual_name_snapshot?: string | null;
   planned_mapping_set_id?: string | null;
   actual_mapping_set_id?: string | null;
   planned_custom_mapping_entries?: unknown;
@@ -71,6 +79,9 @@ type SnapshotItemRow = {
   performed_total_sets?: number | null;
 };
 type SnapshotMappingEntryRow = { mapping_set_id: string; muscle_id: string };
+type PlanNameRow = { id: string; name: string };
+type ScheduledSearchRow = { user_workout_session_id: string; exercise_name: string; notes: string | null };
+type SetNoteRow = { workout_session_id: string; notes: string | null };
 
 type DetailSnapshotRow = {
   id: string;
@@ -165,6 +176,40 @@ function unique(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
 }
 
+function snapshotExerciseIdentity(item: SnapshotItemRow): string {
+  const provider = item.actual_provider ?? item.planned_provider;
+  const providerActivityId = item.actual_provider_activity_id ?? item.planned_provider_activity_id;
+  if (provider && providerActivityId) return `provider:${provider}:${providerActivityId}`;
+  const globalId = item.actual_global_exercise_id ?? item.planned_global_exercise_id;
+  if (globalId) return `global:${globalId}`;
+  const customId = item.actual_custom_exercise_id ?? item.planned_custom_exercise_id;
+  if (customId) return `custom:${customId}`;
+  return `name:${normalizedText(item.actual_name_snapshot ?? item.activity_name_snapshot)}`;
+}
+
+function humanizeIdentityLabel(value: string): string {
+  return value.replace(/[_-]+/g, " ").replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase());
+}
+
+async function readPlanNames(
+  supabase: SupabaseClient,
+  userId: string,
+  planIds: string[],
+): Promise<Map<string, string>> {
+  if (!planIds.length) return new Map();
+  const results = await Promise.all(Array.from(
+    { length: Math.ceil(planIds.length / IN_FILTER_CHUNK) },
+    (_, index) => supabase
+      .from("user_workout_plans")
+      .select("id,name")
+      .eq("user_id", userId)
+      .in("id", planIds.slice(index * IN_FILTER_CHUNK, (index + 1) * IN_FILTER_CHUNK)),
+  ));
+  const failure = results.find((result) => result.error)?.error;
+  if (failure) throw new WorkoutHistoryReaderError("history_read_failed", "Workout history could not load.", 503);
+  return new Map(results.flatMap((result) => (result.data ?? []) as unknown as PlanNameRow[]).map((plan) => [plan.id, plan.name]));
+}
+
 async function readRowsInChunks<T>(
   supabase: SupabaseClient,
   table: string,
@@ -223,7 +268,7 @@ async function readPeriodSources(
     for (let offset = 0; ; offset += PERIOD_ROOT_PAGE_SIZE) {
       const page = await supabase
         .from("workout_sessions")
-        .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,status,plan_id,plan_day_id,plan_week_id,plan_session_id")
+        .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,notes,status,plan_id,plan_day_id,plan_week_id,plan_session_id")
         .eq("user_id", userId)
         .eq("status", status)
         .or(effectiveFilter(timestampColumns))
@@ -245,7 +290,7 @@ async function readPeriodSources(
     for (let offset = 0; ; offset += PERIOD_ROOT_PAGE_SIZE) {
       const page = await supabase
         .from("user_workout_sessions")
-        .select("id,user_id,user_workout_plan_id,plan_day_id,plan_week_id,plan_session_id,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes")
+        .select("id,user_id,user_workout_plan_id,plan_day_id,plan_week_id,plan_session_id,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes")
         .eq("user_id", userId)
         .eq("status", status)
         .or(effectiveFilter(timestampColumns, "scheduled_date"))
@@ -297,7 +342,7 @@ async function buildPerformedCandidates(
   const snapshotItems = await readRowsInChunks<SnapshotItemRow>(
     supabase,
     "workout_session_muscle_snapshot_items",
-    "snapshot_id,source_plan_exercise_id,source_plan_activity_id,activity_name_snapshot,planned_global_exercise_id,actual_global_exercise_id,planned_mapping_set_id,actual_mapping_set_id,planned_custom_mapping_entries,actual_custom_mapping_entries,planned_sets,performed_total_sets",
+    "snapshot_id,source_plan_exercise_id,source_plan_activity_id,activity_name_snapshot,actual_name_snapshot,planned_global_exercise_id,actual_global_exercise_id,planned_custom_exercise_id,actual_custom_exercise_id,planned_provider,actual_provider,planned_provider_activity_id,actual_provider_activity_id,planned_mapping_set_id,actual_mapping_set_id,planned_custom_mapping_entries,actual_custom_mapping_entries,planned_sets,performed_total_sets",
     "snapshot_id",
     snapshots.map((snapshot) => snapshot.id),
   );
@@ -339,16 +384,15 @@ async function buildPerformedCandidates(
     if (!sessionId) continue;
     snapshotItemsBySession.set(sessionId, [...(snapshotItemsBySession.get(sessionId) ?? []), item]);
     const muscleIds = muscleIdsBySession.get(sessionId) ?? new Set<string>();
-    for (const mappingSetId of [item.actual_mapping_set_id, item.planned_mapping_set_id]) {
+    for (const mappingSetId of [item.actual_mapping_set_id ?? item.planned_mapping_set_id]) {
       if (!mappingSetId) continue;
       for (const muscleId of muscleIdsByMappingSet.get(mappingSetId) ?? []) {
         muscleIds.add(muscleId);
       }
     }
-    for (const customEntries of [
-      item.actual_custom_mapping_entries,
-      item.planned_custom_mapping_entries,
-    ]) {
+    for (const customEntries of [Array.isArray(item.actual_custom_mapping_entries)
+      ? item.actual_custom_mapping_entries
+      : item.planned_custom_mapping_entries]) {
       if (!Array.isArray(customEntries)) continue;
       for (const entry of customEntries) {
         if (!entry || typeof entry !== "object") continue;
@@ -383,13 +427,7 @@ function metadataForActivity(
   const logs = logsBySession.get(activity.canonicalSessionId) ?? [];
   const completedLogs = logs.filter((log) => Boolean(log.completed_at));
   const snapshotItems = snapshotItemsBySession.get(activity.canonicalSessionId) ?? [];
-  const identities = unique([
-    ...completedLogs.map((log) => log.plan_activity_id ?? log.plan_exercise_id),
-    ...snapshotItems.flatMap((item) => [
-      item.actual_global_exercise_id,
-      item.planned_global_exercise_id,
-    ]),
-  ]);
+  const identities = unique(snapshotItems.map(snapshotExerciseIdentity));
   const performedExerciseIdentities = unique([
     ...completedLogs.map((log) =>
       log.plan_activity_id ?? log.plan_exercise_id ?? `name:${normalizedText(log.exercise_name)}`),
@@ -435,13 +473,16 @@ function compareSummary(sort: WorkoutHistorySort) {
   };
 }
 
-function matchesRequest(item: WorkoutHistorySessionSummary, request: WorkoutHistoryListRequest): boolean {
+function matchesRequest(
+  item: WorkoutHistorySessionSummary,
+  request: WorkoutHistoryListRequest,
+  searchText: string,
+): boolean {
   const effective = Date.parse(item.effectiveAt);
   if (effective < Date.parse(request.from) || effective >= Date.parse(request.to)) return false;
   if (request.search) {
     const query = normalizedText(request.search);
-    const searchable = normalizedText([item.title, item.category, ...item.exerciseNames].filter(Boolean).join(" "));
-    if (!searchable.includes(query)) return false;
+    if (!searchText.includes(query)) return false;
   }
   if (request.workoutTypes?.length && !request.workoutTypes.some((type) => normalizedText(type) === normalizedText(item.category))) return false;
   if (request.planIds?.length && (!item.planId || !request.planIds.includes(item.planId))) return false;
@@ -501,6 +542,16 @@ export async function listWorkoutHistory(
     throw new WorkoutHistoryReaderError("history_unavailable", "Workout history could not load.", 503);
   }
 
+  const performedRoots = ((sourceResults.performed.data ?? []) as unknown as PerformedWorkoutHistoryRow[])
+    .filter((session) => !request.workoutTypes?.length || request.workoutTypes.some((type) => normalizedText(type) === normalizedText(session.workout_category)))
+    .filter((session) => !request.planIds?.length || Boolean(session.plan_id && request.planIds.includes(session.plan_id)));
+  const scheduledRoots = ((sourceResults.scheduled.data ?? []) as unknown as ScheduledWorkoutHistoryRow[])
+    .filter(() => !request.workoutTypes?.length)
+    .filter((session) => !request.planIds?.length || request.planIds.includes(session.user_workout_plan_id));
+  const planNamesById = await readPlanNames(supabase, userId, unique([
+    ...performedRoots.map((session) => session.plan_id),
+    ...scheduledRoots.map((session) => session.user_workout_plan_id),
+  ]));
   let candidates: PerformedWorkoutHistoryCandidate[] = [];
   let logsBySession = new Map<string, PerformedLogRow[]>();
   let snapshotItemsBySession = new Map<string, SnapshotItemRow[]>();
@@ -508,7 +559,7 @@ export async function listWorkoutHistory(
   if (!performedFailed) {
     const performedMetadata = await buildPerformedCandidates(
       supabase,
-      (sourceResults.performed.data ?? []) as unknown as PerformedWorkoutHistoryRow[],
+      performedRoots,
     );
     candidates = performedMetadata.candidates;
     logsBySession = performedMetadata.logsBySession;
@@ -517,7 +568,41 @@ export async function listWorkoutHistory(
   }
   const scheduled = scheduledFailed
     ? []
-    : ((sourceResults.scheduled.data ?? []) as unknown as ScheduledWorkoutHistoryRow[]);
+    : scheduledRoots;
+  const scheduledSearchRows = request.search
+    ? await readRowsInChunks<ScheduledSearchRow>(
+        supabase,
+        "user_exercise_logs",
+        "user_workout_session_id,exercise_name,notes",
+        "user_workout_session_id",
+        scheduled.map((session) => session.id),
+      )
+    : [];
+  const setNoteRows = request.search
+    ? await readRowsInChunks<SetNoteRow>(
+        supabase,
+        "exercise_log_set_details",
+        "workout_session_id,notes",
+        "workout_session_id",
+        candidates.map((candidate) => candidate.session.id),
+      )
+    : [];
+  const setNotesBySession = new Map<string, string[]>();
+  for (const row of setNoteRows) {
+    if (!row.notes) continue;
+    setNotesBySession.set(row.workout_session_id, [
+      ...(setNotesBySession.get(row.workout_session_id) ?? []),
+      row.notes,
+    ]);
+  }
+  const scheduledSearchById = new Map<string, string[]>();
+  for (const row of scheduledSearchRows) {
+    scheduledSearchById.set(row.user_workout_session_id, [
+      ...(scheduledSearchById.get(row.user_workout_session_id) ?? []),
+      row.exercise_name,
+      row.notes ?? "",
+    ]);
+  }
   const statuses = request.statuses?.length
     ? request.statuses
     : (["completed", "partial"] as const);
@@ -528,7 +613,7 @@ export async function listWorkoutHistory(
     eligibility: { statuses },
   });
   const sort = request.sort ?? "newest";
-  const allItems = activities
+  const unfilteredItems = activities
     .map((activity) => presentWorkoutHistorySession(
       activity,
       metadataForActivity(
@@ -537,8 +622,31 @@ export async function listWorkoutHistory(
         snapshotItemsBySession,
         muscleIdsBySession,
       ),
-    ))
-    .filter((item) => matchesRequest(item, request))
+    ));
+  const searchTextByActivity = new Map(unfilteredItems.map((item) => {
+    const logs = item.canonicalSessionId ? (logsBySession.get(item.canonicalSessionId) ?? []) : [];
+    const scheduledSearch = item.scheduledSessionId ? (scheduledSearchById.get(item.scheduledSessionId) ?? []) : [];
+    return [item.activityId, normalizedText([
+      item.title,
+      item.planId ? planNamesById.get(item.planId) : "",
+      ...item.exerciseNames,
+      item.notes,
+      ...logs.flatMap((log) => [log.exercise_name, log.notes]),
+      ...(item.canonicalSessionId ? (setNotesBySession.get(item.canonicalSessionId) ?? []) : []),
+      ...scheduledSearch,
+    ].filter(Boolean).join(" "))];
+  }));
+  const filterOptions: WorkoutHistoryFilterOptions = {
+    workoutTypes: unique(unfilteredItems.map((item) => item.category)).sort().map((value) => ({ value, label: humanizeIdentityLabel(value) })),
+    muscles: unique(unfilteredItems.flatMap((item) => item.muscleIds)).sort().map((value) => ({ value, label: humanizeIdentityLabel(value) })),
+    exercises: [...new Map(unfilteredItems.flatMap((item) => item.exerciseIds.map((value, index) => [
+      value,
+      { value, label: item.exerciseNames[index] ?? humanizeIdentityLabel(value.replace(/^[^:]+:/, "")), degraded: value.startsWith("name:") || undefined },
+    ]))).values()].sort((left, right) => left.label.localeCompare(right.label)),
+    plans: [...planNamesById].map(([value, label]) => ({ value, label })).sort((left, right) => left.label.localeCompare(right.label)),
+  };
+  const allItems = unfilteredItems
+    .filter((item) => matchesRequest(item, request, searchTextByActivity.get(item.activityId) ?? ""))
     .sort(compareSummary(sort));
   let cursor: WorkoutHistoryCursorPayload | null = null;
   if (request.cursor) {
@@ -568,6 +676,7 @@ export async function listWorkoutHistory(
       ? encodeWorkoutHistoryCursor(cursorForItem(items.at(-1)!, sort), cursorSecret)
       : null,
     notices: performedFailed || scheduledFailed ? ["partial-availability"] : [],
+    filterOptions,
   };
 }
 

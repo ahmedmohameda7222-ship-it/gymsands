@@ -1,12 +1,16 @@
 "use client";
 
 import { Filter, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTrainTranslation } from "@/lib/i18n/train";
-import type { WorkoutHistoryLifecycle } from "@/types/workout-history";
+import type {
+  WorkoutHistoryFilterOptions,
+  WorkoutHistoryLifecycle,
+  WorkoutHistorySort,
+} from "@/types/workout-history";
 
 const lifecycleKeys: Array<[WorkoutHistoryLifecycle, "historyCompletedStatus" | "historyPartialStatus" | "historySkippedStatus" | "historyCancelledStatus"]> = [
   ["completed", "historyCompletedStatus"],
@@ -18,12 +22,18 @@ const lifecycleKeys: Array<[WorkoutHistoryLifecycle, "historyCompletedStatus" | 
 export type WorkoutHistoryFilterValue = {
   statuses: WorkoutHistoryLifecycle[];
   progressOnly: boolean;
+  workoutType: string;
+  muscle: string;
+  exercise: string;
+  plan: string;
+  sort: WorkoutHistorySort;
 };
 
 export function WorkoutHistoryFilters({
   open,
   value,
   resultCount,
+  options,
   onOpenChange,
   onChange,
   onClear,
@@ -31,17 +41,22 @@ export function WorkoutHistoryFilters({
   open: boolean;
   value: WorkoutHistoryFilterValue;
   resultCount: number | null;
+  options?: WorkoutHistoryFilterOptions;
   onOpenChange: (open: boolean) => void;
   onChange: (value: WorkoutHistoryFilterValue) => void;
   onClear: () => void;
 }) {
   const { tr } = useTrainTranslation();
   const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    if (open) setDraft(value);
+  }, [open, value]);
   const activeLabels = [
     ...value.statuses
       .filter((status) => status === "skipped" || status === "cancelled")
       .map((status) => tr(status === "skipped" ? "historySkippedStatus" : "historyCancelledStatus")),
     ...(value.progressOnly ? [tr("historyProgressOnly")] : []),
+    ...[value.workoutType, value.muscle, value.exercise, value.plan].filter(Boolean),
   ].slice(0, 3);
 
   function toggleStatus(status: WorkoutHistoryLifecycle) {
@@ -51,6 +66,11 @@ export function WorkoutHistoryFilters({
     setDraft({ ...draft, statuses });
   }
   const draftMatchesApplied = draft.progressOnly === value.progressOnly
+    && draft.workoutType === value.workoutType
+    && draft.muscle === value.muscle
+    && draft.exercise === value.exercise
+    && draft.plan === value.plan
+    && draft.sort === value.sort
     && draft.statuses.length === value.statuses.length
     && draft.statuses.every((status) => value.statuses.includes(status));
 
@@ -62,6 +82,11 @@ export function WorkoutHistoryFilters({
     const cleared: WorkoutHistoryFilterValue = {
       statuses: ["completed", "partial"],
       progressOnly: false,
+      workoutType: "",
+      muscle: "",
+      exercise: "",
+      plan: "",
+      sort: "newest",
     };
     setDraft(cleared);
     onClear();
@@ -107,6 +132,42 @@ export function WorkoutHistoryFilters({
               </label>
             ))}
           </fieldset>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {([
+              ["workoutType", "historyWorkoutTypeLabel", options?.workoutTypes ?? []],
+              ["muscle", "historyMuscleLabel", options?.muscles ?? []],
+              ["exercise", "historyExerciseLabel", options?.exercises ?? []],
+              ["plan", "historyPlanLabel", options?.plans ?? []],
+            ] as const).map(([field, labelKey, choices]) => (
+              <label key={field} className="grid gap-1.5 text-sm font-medium">
+                <span>{tr(labelKey)}</span>
+                <select
+                  className="min-h-12 rounded-xl border border-border bg-background px-3 text-sm"
+                  value={draft[field]}
+                  onChange={(event) => setDraft({ ...draft, [field]: event.target.value })}
+                >
+                  <option value="">{tr("historyAnyOption")}</option>
+                  {choices.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.degraded ? tr("historyLegacyExercise", { name: option.label }) : option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <label className="grid gap-1.5 text-sm font-medium">
+              <span>{tr("historySortLabel")}</span>
+              <select
+                className="min-h-12 rounded-xl border border-border bg-background px-3 text-sm"
+                value={draft.sort}
+                onChange={(event) => setDraft({ ...draft, sort: event.target.value as WorkoutHistorySort })}
+              >
+                <option value="newest">{tr("historySortNewest")}</option>
+                <option value="oldest">{tr("historySortOldest")}</option>
+                <option value="longest_duration">{tr("historySortLongest")}</option>
+              </select>
+            </label>
+          </div>
           <label className="mt-3 flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-border/70 px-3 text-sm">
             <input
               type="checkbox"

@@ -102,6 +102,19 @@ export type WorkoutHistoryListSummary = {
 
 export type WorkoutHistoryListNotice = "stale-data" | "partial-availability";
 
+export type WorkoutHistoryFilterOption = {
+  value: string;
+  label: string;
+  degraded?: boolean;
+};
+
+export type WorkoutHistoryFilterOptions = {
+  workoutTypes: WorkoutHistoryFilterOption[];
+  muscles: WorkoutHistoryFilterOption[];
+  exercises: WorkoutHistoryFilterOption[];
+  plans: WorkoutHistoryFilterOption[];
+};
+
 export type WorkoutHistoryListResponse = {
   contractVersion: typeof WORKOUT_HISTORY_CONTRACT_VERSION;
   period: {
@@ -113,6 +126,7 @@ export type WorkoutHistoryListResponse = {
   items: WorkoutHistorySessionSummary[];
   nextCursor: string | null;
   notices: WorkoutHistoryListNotice[];
+  filterOptions?: WorkoutHistoryFilterOptions;
 };
 
 export type WorkoutHistoryExerciseSetDetail = {

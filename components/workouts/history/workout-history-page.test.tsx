@@ -39,10 +39,12 @@ describe("Workout History mobile page", () => {
 
   it("uses a 300 ms search debounce, cursor loading, and abortable first-page reads", () => {
     const source = readFileSync("components/workouts/history/workout-history-page.tsx", "utf8");
-    expect(source).toContain("), 300)");
+    expect(source).toContain("}, 300)");
     expect(source).toContain("new AbortController()");
     expect(source).toContain("cursor: nextCursor");
     expect(source).toContain("current.items.some");
+    expect(source).toContain("requestGeneration.accepts");
+    expect(source).not.toContain("setResponse(null)");
   });
 
   it("leaves the old component as one compatibility export", () => {

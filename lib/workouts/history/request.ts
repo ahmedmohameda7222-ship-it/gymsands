@@ -35,6 +35,16 @@ function uuidList(params: URLSearchParams, key: string): string[] | undefined {
   return values;
 }
 
+const EXERCISE_IDENTITY = /^(?:global|custom):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^(?:provider|name):[^\u0000-\u001f\u007f]{1,200}$/iu;
+
+function exerciseIdentityList(params: URLSearchParams, key: string): string[] | undefined {
+  const values = listValues(params, key);
+  if (values?.some((value) => !EXERCISE_IDENTITY.test(value))) {
+    throw new WorkoutHistoryRequestError("invalid_filters", "Workout History filters are invalid.");
+  }
+  return values;
+}
+
 function normalizedSearch(value: string | null): string | undefined {
   if (!value) return undefined;
   const normalized = value.normalize("NFKC").replace(/\s+/g, " ").trim();
@@ -87,7 +97,7 @@ export function parseWorkoutHistoryListRequest(url: URL, now = new Date()): Work
     search: normalizedSearch(url.searchParams.get("search")),
     workoutTypes: listValues(url.searchParams, "workoutType"),
     muscleIds: listValues(url.searchParams, "muscleId"),
-    exerciseIds: uuidList(url.searchParams, "exerciseId"),
+    exerciseIds: exerciseIdentityList(url.searchParams, "exerciseId"),
     planIds: uuidList(url.searchParams, "planId"),
     statuses: statusValues as WorkoutHistoryLifecycle[] | undefined,
     progressOnly: progressValue === "true" ? true : undefined,

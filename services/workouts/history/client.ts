@@ -84,12 +84,20 @@ function mockHistoryList(userId: string, request: WorkoutHistoryListRequest): Wo
       completedSetCount: activity.lifecycle === "completed" ? 8 : null,
       reliableVolume: activity.lifecycle === "completed" ? 5_420 : null,
       exerciseNames: activity.lifecycle === "completed" ? ["Bench press", "Row"] : [],
+      exerciseIds: activity.lifecycle === "completed"
+        ? ["global:40000000-0000-4000-8000-000000000001", "global:40000000-0000-4000-8000-000000000002"]
+        : [],
+      muscleIds: activity.lifecycle === "completed" ? ["pectoralis_major_sternal"] : [],
     }))
     .filter((item) => {
       const effectiveAt = Date.parse(item.effectiveAt);
       if (effectiveAt < Date.parse(request.from) || effectiveAt >= Date.parse(request.to)) return false;
       if (request.statuses?.length && !request.statuses.includes(item.lifecycle)) return false;
       if (request.progressOnly && !item.hasMeaningfulPerformance) return false;
+      if (request.workoutTypes?.length && (!item.category || !request.workoutTypes.includes(item.category))) return false;
+      if (request.muscleIds?.length && !request.muscleIds.some((id) => item.muscleIds.includes(id))) return false;
+      if (request.exerciseIds?.length && !request.exerciseIds.some((id) => item.exerciseIds.includes(id))) return false;
+      if (request.planIds?.length && (!item.planId || !request.planIds.includes(item.planId))) return false;
       return !search || [item.title, ...item.exerciseNames]
         .join(" ")
         .toLocaleLowerCase("en-US")
@@ -102,6 +110,15 @@ function mockHistoryList(userId: string, request: WorkoutHistoryListRequest): Wo
     items: items.slice(0, request.limit ?? 20),
     nextCursor: null,
     notices: [],
+    filterOptions: {
+      workoutTypes: [{ value: "strength", label: "Strength" }],
+      muscles: [{ value: "pectoralis_major_sternal", label: "Pectoralis major" }],
+      exercises: [
+        { value: "global:40000000-0000-4000-8000-000000000001", label: "Bench press" },
+        { value: "global:40000000-0000-4000-8000-000000000002", label: "Row" },
+      ],
+      plans: [],
+    },
   };
 }
 

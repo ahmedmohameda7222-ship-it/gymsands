@@ -18,20 +18,33 @@ import { useTrainTranslation } from "@/lib/i18n/train";
 import {
   customWorkoutHistoryPeriodRange,
   shiftWorkoutHistoryPeriodAnchor,
+  workoutHistoryTimeZoneParts,
   workoutHistoryPeriodRange,
   type WorkoutHistoryDateRange,
   type WorkoutHistoryPeriodMode,
 } from "@/lib/workouts/history/date-range";
+import {
+  parseWorkoutHistoryNavigationState,
+  workoutHistoryNavigationSearchParams,
+  type WorkoutHistoryNavigationState,
+} from "@/lib/workouts/history/navigation-state";
+import { WorkoutHistoryRequestGeneration } from "@/lib/workouts/history/request-generation";
 import { getWorkoutHistoryList } from "@/services/workouts/history/client";
 import type { WorkoutHistoryListResponse } from "@/types/workout-history";
 
 const defaultFilters: WorkoutHistoryFilterValue = {
   statuses: ["completed", "partial"],
   progressOnly: false,
+  workoutType: "",
+  muscle: "",
+  exercise: "",
+  plan: "",
+  sort: "newest",
 };
 
-function inputDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
+function inputDate(value: Date, timezone: string): string {
+  const parts = workoutHistoryTimeZoneParts(value, timezone);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
 export function WorkoutHistoryPage() {
@@ -42,14 +55,23 @@ export function WorkoutHistoryPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const [mode, setMode] = useState<WorkoutHistoryPeriodMode>("month");
-  const [anchor, setAnchor] = useState(() => new Date());
-  const [customFrom, setCustomFrom] = useState(() => inputDate(new Date()));
-  const [customTo, setCustomTo] = useState(() => inputDate(new Date()));
-  const [customRange, setCustomRange] = useState<WorkoutHistoryDateRange | null>(null);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState(defaultFilters);
+  const initialNavigation = parseWorkoutHistoryNavigationState(searchParams, new Date(), timezone);
+  const [mode, setMode] = useState<WorkoutHistoryPeriodMode>(initialNavigation.period);
+  const [anchor, setAnchor] = useState(() => new Date(initialNavigation.range.from));
+  const [customFrom, setCustomFrom] = useState(() => inputDate(new Date(initialNavigation.range.from), timezone));
+  const [customTo, setCustomTo] = useState(() => inputDate(new Date(Date.parse(initialNavigation.range.to) - 1), timezone));
+  const [customRange, setCustomRange] = useState<WorkoutHistoryDateRange | null>(initialNavigation.period === "custom" ? initialNavigation.range : null);
+  const [searchInput, setSearchInput] = useState(initialNavigation.search);
+  const [search, setSearch] = useState(initialNavigation.search);
+  const [filters, setFilters] = useState<WorkoutHistoryFilterValue>({
+    statuses: initialNavigation.statuses,
+    progressOnly: initialNavigation.progressOnly,
+    workoutType: initialNavigation.workoutType,
+    muscle: initialNavigation.muscle,
+    exercise: initialNavigation.exercise,
+    plan: initialNavigation.plan,
+    sort: initialNavigation.sort,
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [response, setResponse] = useState<WorkoutHistoryListResponse | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -57,6 +79,8 @@ export function WorkoutHistoryPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
   const activeRequestRef = useRef<AbortController | null>(null);
+  const loadMoreRequestRef = useRef<AbortController | null>(null);
+  const [requestGeneration] = useState(() => new WorkoutHistoryRequestGeneration());
   const queryKeyRef = useRef("");
   const hasUsableResponseRef = useRef(false);
 
@@ -65,19 +89,18 @@ export function WorkoutHistoryPage() {
     return workoutHistoryPeriodRange(mode === "custom" ? "month" : mode, anchor, timezone);
   }, [anchor, customRange, mode, timezone]);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(searchInput.normalize("NFKC").replace(/\s+/g, " ").trim()), 300);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
-
   const request = useMemo(() => ({
     ...range,
     limit: 20,
     search: search || undefined,
+    workoutTypes: filters.workoutType ? [filters.workoutType] : undefined,
+    muscleIds: filters.muscle ? [filters.muscle] : undefined,
+    exerciseIds: filters.exercise ? [filters.exercise] : undefined,
+    planIds: filters.plan ? [filters.plan] : undefined,
     statuses: filters.statuses,
     progressOnly: filters.progressOnly || undefined,
-    sort: "newest" as const,
-  }), [filters.progressOnly, filters.statuses, range, search]);
+    sort: filters.sort,
+  }), [filters, range, search]);
   const queryKey = useMemo(() => JSON.stringify(request), [request]);
   const nextCursor = response?.nextCursor ?? null;
 
@@ -85,28 +108,79 @@ export function WorkoutHistoryPage() {
     hasUsableResponseRef.current = Boolean(response?.items.length);
   }, [response?.items.length]);
 
+  const navigationState = useMemo<WorkoutHistoryNavigationState>(() => ({
+    period: mode,
+    range,
+    search,
+    workoutType: filters.workoutType,
+    muscle: filters.muscle,
+    exercise: filters.exercise,
+    plan: filters.plan,
+    statuses: filters.statuses,
+    progressOnly: filters.progressOnly,
+    sort: filters.sort,
+    selected: searchParams.get("selected"),
+  }), [filters, mode, range, search, searchParams]);
+
+  const writeNavigation = useCallback((next: WorkoutHistoryNavigationState) => {
+    const params = workoutHistoryNavigationSearchParams(next);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const normalized = searchInput.normalize("NFKC").replace(/\s+/g, " ").trim();
+      if (normalized === search) return;
+      setSearch(normalized);
+      writeNavigation({ ...navigationState, search: normalized });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [navigationState, search, searchInput, writeNavigation]);
+
+  const urlKey = searchParams.toString();
+  useEffect(() => {
+    const restored = parseWorkoutHistoryNavigationState(new URLSearchParams(urlKey), new Date(), timezone);
+    setMode(restored.period);
+    setAnchor(new Date(restored.range.from));
+    setCustomFrom(inputDate(new Date(restored.range.from), timezone));
+    setCustomTo(inputDate(new Date(Date.parse(restored.range.to) - 1), timezone));
+    setCustomRange(restored.period === "custom" ? restored.range : null);
+    setSearchInput(restored.search);
+    setSearch(restored.search);
+    setFilters({
+      statuses: restored.statuses,
+      progressOnly: restored.progressOnly,
+      workoutType: restored.workoutType,
+      muscle: restored.muscle,
+      exercise: restored.exercise,
+      plan: restored.plan,
+      sort: restored.sort,
+    });
+  }, [timezone, urlKey]);
+
   const loadFirstPage = useCallback(async () => {
     if (!userId) return;
     activeRequestRef.current?.abort();
     const controller = new AbortController();
     activeRequestRef.current = controller;
+    loadMoreRequestRef.current?.abort();
+    const generation = requestGeneration.begin();
     const queryChanged = queryKeyRef.current !== queryKey;
     queryKeyRef.current = queryKey;
     if (queryChanged) {
-      setResponse(null);
-      setInitialLoading(true);
+      if (!hasUsableResponseRef.current) setInitialLoading(true);
     }
     setBlockingError(false);
     setLoadMoreError(false);
     try {
       const next = await getWorkoutHistoryList(userId, request, { signal: controller.signal });
-      if (!controller.signal.aborted) setResponse(next);
+      if (requestGeneration.accepts(generation, controller.signal)) setResponse(next);
     } catch {
-      if (!controller.signal.aborted) setBlockingError(!hasUsableResponseRef.current);
+      if (requestGeneration.accepts(generation, controller.signal)) setBlockingError(!hasUsableResponseRef.current);
     } finally {
-      if (!controller.signal.aborted) setInitialLoading(false);
+      if (requestGeneration.accepts(generation, controller.signal)) setInitialLoading(false);
     }
-  }, [queryKey, request, userId]);
+  }, [queryKey, request, requestGeneration, userId]);
 
   useEffect(() => {
     void loadFirstPage();
@@ -115,13 +189,18 @@ export function WorkoutHistoryPage() {
 
   const loadMore = useCallback(async () => {
     if (!userId || !nextCursor || loadingMore) return;
+    const controller = new AbortController();
+    loadMoreRequestRef.current?.abort();
+    loadMoreRequestRef.current = controller;
+    const generation = requestGeneration.current();
     setLoadingMore(true);
     setLoadMoreError(false);
     try {
       const next = await getWorkoutHistoryList(userId, {
         ...request,
         cursor: nextCursor,
-      });
+      }, { signal: controller.signal });
+      if (!requestGeneration.accepts(generation, controller.signal)) return;
       setResponse((current) => current ? {
         ...next,
         summary: current.summary,
@@ -129,14 +208,19 @@ export function WorkoutHistoryPage() {
           !current.items.some((item) => item.activityId === candidate.activityId))],
       } : next);
     } catch {
-      setLoadMoreError(true);
+      if (requestGeneration.accepts(generation, controller.signal)) setLoadMoreError(true);
     } finally {
-      setLoadingMore(false);
+      if (requestGeneration.accepts(generation, controller.signal)) setLoadingMore(false);
     }
-  }, [loadingMore, nextCursor, request, userId]);
+  }, [loadingMore, nextCursor, request, requestGeneration, userId]);
 
   const hasFilters = search.length > 0
     || filters.progressOnly
+    || filters.workoutType.length > 0
+    || filters.muscle.length > 0
+    || filters.exercise.length > 0
+    || filters.plan.length > 0
+    || filters.sort !== defaultFilters.sort
     || filters.statuses.length !== defaultFilters.statuses.length
     || filters.statuses.some((status) => !defaultFilters.statuses.includes(status));
   let pageState: WorkoutHistoryPageState = "ready";
@@ -148,31 +232,46 @@ export function WorkoutHistoryPage() {
     : response?.notices.includes("partial-availability")
       ? "partial-availability"
       : null;
-  const selectedId = searchParams.get("session");
+  const selectedId = searchParams.get("selected");
   const selectedItem = response?.items.find((item) => item.activityId === selectedId) ?? null;
   const periodDays = Math.max(1, (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
 
   const selectDesktopItem = useCallback((item: WorkoutHistoryListResponse["items"][number]) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("session", item.activityId);
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams]);
+    writeNavigation({ ...navigationState, selected: item.activityId });
+  }, [navigationState, writeNavigation]);
 
   function clearFilters() {
     setSearchInput("");
     setSearch("");
     setFilters(defaultFilters);
     setFiltersOpen(false);
+    writeNavigation({
+      ...navigationState,
+      search: "",
+      workoutType: "",
+      muscle: "",
+      exercise: "",
+      plan: "",
+      statuses: defaultFilters.statuses,
+      progressOnly: false,
+      sort: "newest",
+      selected: null,
+    });
   }
 
   function selectMode(nextMode: WorkoutHistoryPeriodMode) {
     setMode(nextMode);
     if (nextMode !== "custom") setCustomRange(null);
+    const nextRange = workoutHistoryPeriodRange(nextMode === "custom" ? "month" : nextMode, new Date(), timezone);
+    setAnchor(new Date());
+    writeNavigation({ ...navigationState, period: nextMode, range: nextRange, selected: null });
   }
 
   function applyCustomRange() {
     try {
-      setCustomRange(customWorkoutHistoryPeriodRange(customFrom, customTo, timezone));
+      const nextRange = customWorkoutHistoryPeriodRange(customFrom, customTo, timezone);
+      setCustomRange(nextRange);
+      writeNavigation({ ...navigationState, period: "custom", range: nextRange, selected: null });
     } catch {
       setCustomRange(null);
     }
@@ -187,8 +286,18 @@ export function WorkoutHistoryPage() {
         customFrom={customFrom}
         customTo={customTo}
         onModeChange={selectMode}
-        onPrevious={() => setAnchor((current) => shiftWorkoutHistoryPeriodAnchor(current, mode === "custom" ? "month" : mode, -1))}
-        onNext={() => setAnchor((current) => shiftWorkoutHistoryPeriodAnchor(current, mode === "custom" ? "month" : mode, 1))}
+        onPrevious={() => setAnchor((current) => {
+          const nextAnchor = shiftWorkoutHistoryPeriodAnchor(current, mode === "custom" ? "month" : mode, -1);
+          const nextRange = workoutHistoryPeriodRange(mode === "custom" ? "month" : mode, nextAnchor, timezone);
+          writeNavigation({ ...navigationState, range: nextRange, selected: null });
+          return nextAnchor;
+        })}
+        onNext={() => setAnchor((current) => {
+          const nextAnchor = shiftWorkoutHistoryPeriodAnchor(current, mode === "custom" ? "month" : mode, 1);
+          const nextRange = workoutHistoryPeriodRange(mode === "custom" ? "month" : mode, nextAnchor, timezone);
+          writeNavigation({ ...navigationState, range: nextRange, selected: null });
+          return nextAnchor;
+        })}
         onCustomFromChange={setCustomFrom}
         onCustomToChange={setCustomTo}
         onApplyCustom={applyCustomRange}
@@ -206,8 +315,22 @@ export function WorkoutHistoryPage() {
           open={filtersOpen}
           value={filters}
           resultCount={response?.summary.eligibleWorkoutCount ?? null}
+          options={response?.filterOptions}
           onOpenChange={setFiltersOpen}
-          onChange={setFilters}
+          onChange={(nextFilters) => {
+            setFilters(nextFilters);
+            writeNavigation({
+              ...navigationState,
+              workoutType: nextFilters.workoutType,
+              muscle: nextFilters.muscle,
+              exercise: nextFilters.exercise,
+              plan: nextFilters.plan,
+              statuses: nextFilters.statuses,
+              progressOnly: nextFilters.progressOnly,
+              sort: nextFilters.sort,
+              selected: null,
+            });
+          }}
           onClear={clearFilters}
         />
       </div>
