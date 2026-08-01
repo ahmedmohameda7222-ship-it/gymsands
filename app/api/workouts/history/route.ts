@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { requireUser, serverEnv } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { parseWorkoutHistoryListRequest, WorkoutHistoryRequestError } from "@/lib/workouts/history/request";
-import { listWorkoutHistory, WorkoutHistoryReaderError } from "@/services/workouts/history/server-reader";
+import { listWorkoutHistoryKeyset } from "@/services/workouts/history/server-list-reader";
+import { WorkoutHistoryReaderError } from "@/services/workouts/history/server-reader";
 import { WORKOUT_HISTORY_HEADERS, withWorkoutHistoryHeaders, workoutHistoryError } from "@/app/api/workouts/history/_shared";
 
 export const runtime = "nodejs";
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     if (!serverEnv.workoutHistoryCursorSecret) {
       throw new WorkoutHistoryReaderError("history_unavailable", "Workout history could not load.", 503);
     }
-    const response = await listWorkoutHistory(
+    const response = await listWorkoutHistoryKeyset(
       context.supabase,
       context.user.id,
       input,
