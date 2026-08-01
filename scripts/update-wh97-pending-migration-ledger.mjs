@@ -16,6 +16,7 @@ const ledgerPath = "supabase/migration-ledger.json";
 const readmePath = "README.md";
 const reconciliationPath = "docs/architecture/migration-ledger-reconciliation.md";
 const packagePath = "package.json";
+const completionPath = "services/database/workout-sessions-legacy-implementation.ts";
 
 const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
 const byFile = new Map(ledger.entries.map((entry) => [entry.localFile, entry]));
@@ -71,5 +72,34 @@ if (!packageDocument.scripts["test:workout-history:integration"].includes(keyset
     `${packageDocument.scripts["test:workout-history:integration"]} ${keysetTest}`;
 }
 await writeFile(packagePath, `${JSON.stringify(packageDocument, null, 2)}\n`, "utf8");
+
+let completion = await readFile(completionPath, "utf8");
+if (!completion.includes('from "@/services/workouts/history/verified-records-client"')) {
+  completion = completion.replace(
+    'import { getCanonicalWorkoutActivity } from "@/services/workouts/history/client";',
+    'import { getCanonicalWorkoutActivity } from "@/services/workouts/history/client";\nimport { refreshVerifiedRecordsAuthenticated } from "@/services/workouts/history/verified-records-client";',
+  );
+}
+const refreshPattern = /export async function refreshVerifiedRecordsAfterWorkoutCompletion\(sessionId: string\) \{[\s\S]*?\n\}\n\nexport async function getOpenWorkoutSession/u;
+if (!refreshPattern.test(completion)) {
+  throw new Error("Legacy verified-record refresh function boundary was not found.");
+}
+completion = completion.replace(
+  refreshPattern,
+  `export async function refreshVerifiedRecordsAfterWorkoutCompletion(sessionId: string) {
+  try {
+    return await refreshVerifiedRecordsAuthenticated(sessionId);
+  } catch (error) {
+    console.warn(
+      "Plaivra saved the workout, but verified records remain pending.",
+      error,
+    );
+    return null;
+  }
+}
+
+export async function getOpenWorkoutSession`,
+);
+await writeFile(completionPath, completion, "utf8");
 
 console.log(`Updated migration ledger: pending=${pendingCount} unresolved=${unresolvedCount} entries=${ledger.entries.length}`);
