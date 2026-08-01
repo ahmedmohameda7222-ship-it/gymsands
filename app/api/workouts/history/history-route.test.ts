@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   detail: vi.fn(),
   filterOptions: vi.fn(),
   list: vi.fn(),
+  projectionCurrent: vi.fn(),
   rateLimit: vi.fn(() => null as Response | null),
   requireUser: vi.fn(),
   scheduledDetail: vi.fn(),
@@ -18,6 +19,9 @@ vi.mock("@/lib/integrations/env", () => ({
 vi.mock("@/lib/integrations/rate-limit", () => ({ rateLimit: mocks.rateLimit }));
 vi.mock("@/services/workouts/history/filter-options", () => ({
   readWorkoutHistoryFilterOptions: mocks.filterOptions,
+}));
+vi.mock("@/services/workouts/history/record-projection-state", () => ({
+  workoutHistoryRecordProjectionIsCurrent: mocks.projectionCurrent,
 }));
 vi.mock("@/services/workouts/history/server-list-reader", () => ({
   listWorkoutHistoryKeyset: mocks.list,
@@ -49,6 +53,18 @@ const periodOptions = {
   plans: [{ value: "plan", label: "Strength plan" }],
 };
 
+function detailResponse() {
+  return {
+    contractVersion: 1,
+    activity: {},
+    summary: { reliableVolume: 123 },
+    snapshot: null,
+    exercises: [],
+    timeline: [],
+    notices: [],
+  };
+}
+
 describe("Workout History API routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -70,6 +86,8 @@ describe("Workout History API routes", () => {
       filterOptions: { workoutTypes: [], muscles: [], exercises: [], plans: [] },
     });
     mocks.filterOptions.mockResolvedValue(periodOptions);
+    mocks.detail.mockResolvedValue(detailResponse());
+    mocks.projectionCurrent.mockResolvedValue(true);
     mocks.sharedMetrics.mockResolvedValue({ externalLoadVolume: 0 });
   });
 
@@ -168,14 +186,6 @@ describe("Workout History API routes", () => {
   });
 
   it("replaces compatibility volume with the shared AW-8 metric result", async () => {
-    mocks.detail.mockResolvedValue({
-      contractVersion: 1,
-      activity: {},
-      summary: { reliableVolume: 123 },
-      exercises: [],
-      timeline: [],
-      notices: [],
-    });
     mocks.sharedMetrics.mockResolvedValue({ externalLoadVolume: 500 });
     const response = await getDetail(
       new Request(`https://plaivra.test/api/workouts/history/${sessionId}`),
@@ -184,8 +194,33 @@ describe("Workout History API routes", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       summary: { reliableVolume: 500 },
+      notices: [],
     });
     expect(mocks.sharedMetrics).toHaveBeenCalledWith(supabase, ownerId, sessionId);
+  });
+
+  it("marks an explicitly stale derived projection for authenticated repair", async () => {
+    mocks.projectionCurrent.mockResolvedValueOnce(false);
+    const response = await getDetail(
+      new Request(`https://plaivra.test/api/workouts/history/${sessionId}`),
+      { params: Promise.resolve({ sessionId }) },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      notices: ["user-action-required"],
+    });
+  });
+
+  it("keeps canonical details readable when the optional freshness check fails", async () => {
+    mocks.projectionCurrent.mockRejectedValueOnce(new Error("temporary projection check failure"));
+    const response = await getDetail(
+      new Request(`https://plaivra.test/api/workouts/history/${sessionId}`),
+      { params: Promise.resolve({ sessionId }) },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      notices: ["partial-availability"],
+    });
   });
 
   it("keeps performed and scheduled detail namespaces separate", async () => {
@@ -199,6 +234,7 @@ describe("Workout History API routes", () => {
     expect(response.status).toBe(200);
     expect(mocks.scheduledDetail).toHaveBeenCalledWith(supabase, ownerId, sessionId);
     expect(mocks.detail).not.toHaveBeenCalled();
+    expect(mocks.projectionCurrent).not.toHaveBeenCalled();
   });
 
   it("redacts unexpected database details", async () => {
