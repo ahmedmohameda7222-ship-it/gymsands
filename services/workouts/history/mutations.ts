@@ -6,6 +6,8 @@ import {
   readVerifiedRecordIdentityScope,
   rebuildVerifiedRecordsForIdentities,
   replaceVerifiedRecordsForSession,
+  VerifiedRecordError,
+  type VerifiedRecordIdentityScope,
 } from "@/services/workouts/history/verified-records";
 
 export type CompletedSessionCorrection = {
@@ -114,6 +116,23 @@ export async function correctCompletedSession(
   return withProjectionState(value, projectionRefreshPending);
 }
 
+async function deletionIdentityScope(
+  supabase: SupabaseClient,
+  userId: string,
+  sessionId: string,
+): Promise<VerifiedRecordIdentityScope | null> {
+  try {
+    return await readVerifiedRecordIdentityScope(supabase, userId, sessionId);
+  } catch (error) {
+    // A repeated delete request reaches an already soft-deleted canonical root.
+    // The mutation RPC is intentionally idempotent, so absence from the active
+    // History reader must not turn a safe replay into a 404.
+    if (error instanceof VerifiedRecordError && error.code === "history_not_found")
+      return null;
+    throw error;
+  }
+}
+
 export async function softDeleteSession(
   supabase: SupabaseClient,
   authority: SupabaseClient,
@@ -127,27 +146,25 @@ export async function softDeleteSession(
       "Deletion request key is invalid.",
       400,
     );
-  const scope = await readVerifiedRecordIdentityScope(
-    supabase,
-    userId,
-    sessionId,
-  );
+  const scope = await deletionIdentityScope(supabase, userId, sessionId);
   const result = await supabase.rpc("soft_delete_workout_session_atomic", {
     p_user_id: userId,
     p_session_id: sessionId,
     p_idempotency_key: idempotencyKey,
   });
   if (result.error) mutationError(result.error, "Workout deletion failed.");
-  let projectionRefreshPending = false;
-  try {
-    await rebuildVerifiedRecordsForIdentities(
-      authority,
-      userId,
-      scope.identities,
-      sessionId,
-    );
-  } catch {
-    projectionRefreshPending = true;
+  let projectionRefreshPending = scope === null;
+  if (scope) {
+    try {
+      await rebuildVerifiedRecordsForIdentities(
+        authority,
+        userId,
+        scope.identities,
+        sessionId,
+      );
+    } catch {
+      projectionRefreshPending = true;
+    }
   }
   return withProjectionState(
     (result.data ?? {}) as Record<string, unknown>,
