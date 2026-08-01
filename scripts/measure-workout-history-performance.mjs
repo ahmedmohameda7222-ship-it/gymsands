@@ -16,6 +16,18 @@ const DEFAULT_OUTPUT = path.join(
   "report.json",
 );
 const FIXTURE_USER_ID = "b9000000-0000-4000-8000-000000000001";
+export const BENCHMARK_API_EXCLUDES = Object.freeze([
+  "realtime",
+  "storage-api",
+  "imgproxy",
+  "mailpit",
+  "postgres-meta",
+  "studio",
+  "edge-runtime",
+  "logflare",
+  "vector",
+  "supavisor",
+]);
 
 export function assertDisposableLocalDatabaseUrl(value) {
   if (!value) {
@@ -68,6 +80,10 @@ commit;
 `;
 }
 
+export function benchmarkApiStartArgs() {
+  return ["start", "--exclude", BENCHMARK_API_EXCLUDES.join(",")];
+}
+
 function argumentValue(name) {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -99,6 +115,10 @@ function runPsql(databaseUrl, sql) {
   );
 }
 
+function ensureLocalBenchmarkApi() {
+  execute("supabase", benchmarkApiStartArgs());
+}
+
 function localSupabaseEnvironment() {
   const result = execute("supabase", ["status", "-o", "env"]);
   const values = parseSupabaseStatusEnv(result.stdout);
@@ -106,7 +126,7 @@ function localSupabaseEnvironment() {
   const serviceRoleKey = values.SERVICE_ROLE_KEY;
   if (!apiUrl || !serviceRoleKey) {
     throw new Error(
-      "Local Supabase API URL or service-role key could not be resolved.",
+      "Local Supabase API URL or service-role key could not be resolved after starting the benchmark API profile.",
     );
   }
   const parsed = new URL(apiUrl);
@@ -136,6 +156,7 @@ async function main() {
   runPsql(databaseUrl, cleanupSql);
   try {
     runPsql(databaseUrl, setupSql);
+    ensureLocalBenchmarkApi();
     const local = localSupabaseEnvironment();
     execute(
       process.execPath,
