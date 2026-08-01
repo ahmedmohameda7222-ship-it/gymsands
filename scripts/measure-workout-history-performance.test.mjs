@@ -6,6 +6,7 @@ import {
   assertDisposableLocalDatabaseUrl,
   buildCommittedFixtureSql,
   cleanupFixtureSql,
+  ensureLocalSupabaseServicePlane,
   parseSupabaseStatusEnv,
   waitForWorkoutHistorySchema,
   workoutHistorySchemaProbeUrl,
@@ -156,18 +157,26 @@ test("schema readiness reports the underlying PostgREST failure without exposing
   );
 });
 
-test("benchmark preserves the exact migrated stack and proves schema readiness", async () => {
+test("benchmark starts only the missing API service plane", () => {
+  const calls = [];
+  const result = ensureLocalSupabaseServicePlane((command, args) => {
+    calls.push({ command, args });
+    return { status: 0 };
+  });
+  assert.deepEqual(calls, [{ command: "supabase", args: ["start"] }]);
+  assert.deepEqual(result, { status: 0 });
+});
+
+test("benchmark preserves the migrated database while activating PostgREST", async () => {
   const source = await readFile(
     new URL("./measure-workout-history-performance.mjs", import.meta.url),
     "utf8",
   );
-  assert.doesNotMatch(
-    source,
-    /execute\("supabase", \["(?:stop|start)"/u,
-  );
+  assert.doesNotMatch(source, /execute\("supabase", \["stop"/u);
+  assert.doesNotMatch(source, /execute\("supabase", \["db", "reset"/u);
   assert.match(
     source,
-    /const local = localSupabaseEnvironment\(\);\n  runPsql\(databaseUrl, "notify pgrst, 'reload schema';\\n"\);\n  await waitForWorkoutHistorySchema\(local\);\n\n  runPsql\(databaseUrl, cleanupSql\);/u,
+    /ensureLocalSupabaseServicePlane\(\);\n  const local = localSupabaseEnvironment\(\);\n  runPsql\(databaseUrl, "notify pgrst, 'reload schema';\\n"\);\n  await waitForWorkoutHistorySchema\(local\);\n\n  runPsql\(databaseUrl, cleanupSql\);/u,
   );
 });
 
