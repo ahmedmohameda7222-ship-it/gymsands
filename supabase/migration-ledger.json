@@ -5,14 +5,14 @@
   "auditedRepositoryCommit": "73944677c11222044520991fc1f18c8edd81a78e",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 8,
-  "unresolvedCount": 8,
+  "pendingCount": 9,
+  "unresolvedCount": 9,
   "historyRepair": {
     "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 8,
-    "unresolvedCount": 8,
-    "note": "Production history remains reconciled through the latest applied AW-9 identity. 20260801140043_workout_history_verified_records.sql, 20260801160000_workout_history_correction_and_soft_delete.sql, 20260801180000_workout_history_repeat_session.sql, 20260801194500_workout_history_verified_record_authority_hardening.sql, 20260801201500_workout_history_verified_record_rebuild.sql, 20260801203000_workout_history_set_detail_patch_semantics.sql, 20260801210000_workout_history_correction_muscle_reconcile.sql, 20260801220000_workout_history_keyset_read_authority.sql are repository-only pending Workout History migrations. Do not replay or apply any pending migration without explicit release authorization."
+    "pendingCount": 9,
+    "unresolvedCount": 9,
+    "note": "Production history remains reconciled through the latest applied AW-9 identity. 20260801140043_workout_history_verified_records.sql, 20260801160000_workout_history_correction_and_soft_delete.sql, 20260801180000_workout_history_repeat_session.sql, 20260801194500_workout_history_verified_record_authority_hardening.sql, 20260801201500_workout_history_verified_record_rebuild.sql, 20260801203000_workout_history_set_detail_patch_semantics.sql, 20260801210000_workout_history_correction_muscle_reconcile.sql, 20260801220000_workout_history_keyset_read_authority.sql, 20260801223000_workout_history_filter_options.sql are repository-only pending Workout History migrations. Do not replay or apply any pending migration without explicit release authorization."
   },
   "entries": [
     {
@@ -539,6 +539,11 @@
     },
     {
       "localFile": "20260801220000_workout_history_keyset_read_authority.sql",
+      "state": "pending",
+      "note": "Repository-only Workout History forward migration. It has not been applied to Production. Do not replay or apply without a separately approved release operation."
+    },
+    {
+      "localFile": "20260801223000_workout_history_filter_options.sql",
       "state": "pending",
       "note": "Repository-only Workout History forward migration. It has not been applied to Production. Do not replay or apply without a separately approved release operation."
     }
