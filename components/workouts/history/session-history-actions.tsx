@@ -1,26 +1,27 @@
 "use client";
 
-import { CopyPlus } from "lucide-react";
-
-import { ActionMenu, ActionMenuItem } from "@/components/ui/action-menu";
-import { Button } from "@/components/ui/button";
+import { RepeatWorkoutReview } from "@/components/workouts/history/repeat-workout-review";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import type { WorkoutHistoryCapabilities } from "@/types/workout-history";
 
-export function SessionHistoryActions({ capabilities }: { capabilities: WorkoutHistoryCapabilities }) {
+export function SessionHistoryActions({
+  capabilities,
+  sessionId,
+  title,
+}: {
+  capabilities: WorkoutHistoryCapabilities;
+  sessionId: string;
+  title: string;
+}) {
   const { tr } = useTrainTranslation();
-  if (!capabilities.repeatWorkout && !capabilities.correctSession && !capabilities.softDeleteSession) return null;
+  if (!capabilities.repeatWorkout) return null;
   return (
-    <section className="grid gap-2 sm:grid-cols-[1fr_auto]" aria-label={tr("historyMoreActions")} data-session-history-actions>
-      {capabilities.repeatWorkout ? (
-        <Button type="button" className="min-h-12" disabled title={tr("historyRepeatPending")}>
-          <CopyPlus className="size-4" aria-hidden="true" />
-          {tr("historyRepeatWorkout")}
-        </Button>
-      ) : <span />}
-      <ActionMenu label={tr("historyMoreActions")} visibleLabel={tr("historyMoreActions")}>
-        <ActionMenuItem disabled onSelect={() => undefined}>{tr("historyRepeatPending")}</ActionMenuItem>
-      </ActionMenu>
+    <section
+      className="grid gap-2"
+      aria-label={tr("historyMoreActions")}
+      data-session-history-actions
+    >
+      <RepeatWorkoutReview sessionId={sessionId} title={title} />
     </section>
   );
 }

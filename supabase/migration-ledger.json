@@ -5,13 +5,13 @@
   "auditedRepositoryCommit": "73944677c11222044520991fc1f18c8edd81a78e",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 2,
-  "unresolvedCount": 2,
+  "pendingCount": 3,
+  "unresolvedCount": 3,
   "historyRepair": {
     "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 2,
-    "unresolvedCount": 2,
+    "pendingCount": 3,
+    "unresolvedCount": 3,
     "note": "Plaivra Production contains 76 physical migration records and is reconciled through generated AW-9 migration 20260801045628. Workout History migrations 20260801140043 and 20260801160000 remain repository-only pending and are not applied to Production. Repository migration identities remain immutable; generated aliases preserve exact application history. Do not replay any applied migration."
   },
   "entries": [
@@ -511,6 +511,11 @@
       "localFile": "20260801160000_workout_history_correction_and_soft_delete.sql",
       "state": "pending",
       "note": "Approved WH-7 forward migration. Repository-only pending; not applied to Production."
+    },
+    {
+      "localFile": "20260801180000_workout_history_repeat_session.sql",
+      "state": "pending",
+      "note": "Approved WH-8 forward migration. Repository-only pending; not applied to Production."
     }
   ],
   "productionRecordCount": 76

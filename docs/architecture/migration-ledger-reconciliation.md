@@ -28,7 +28,7 @@ Physical schema advancement and compatibility-marker promotion are deliberately 
 
 ## Workout History pending identity
 
-`20260801140043_workout_history_verified_records.sql` and `20260801160000_workout_history_correction_and_soft_delete.sql` are approved forward migrations for WH-6 and WH-7. They exist only in the repository, are classified as pending, and have not been applied to Production. Applying them requires separate explicit authorization; this implementation program does not authorize Production writes.
+`20260801140043_workout_history_verified_records.sql`, `20260801160000_workout_history_correction_and_soft_delete.sql`, and `20260801180000_workout_history_repeat_session.sql` are approved forward migrations for WH-6, WH-7, and WH-8. They exist only in the repository, are classified as pending, and have not been applied to Production. Applying them requires separate explicit authorization; this implementation program does not authorize Production writes.
 
 ## AW-9 applied identity
 

@@ -116,7 +116,7 @@ export function SessionHistoryPage({ source, id }: { source: "performed" | "sche
           <SessionHistoryTimeline entries={detail.timeline} timezone={timezone} />
         </div>
       </div>
-      <SessionHistoryActions capabilities={detail.activity.capabilities} />
+      <SessionHistoryActions capabilities={detail.activity.capabilities} sessionId={detail.activity.canonicalSessionId ?? id} title={detail.activity.title} />
       {detail.activity.canonicalSessionId && detail.activity.capabilities.correctSession ? <SessionCorrectionDialog sessionId={detail.activity.canonicalSessionId} title={detail.activity.title} historyRevision={detail.historyRevision ?? 0} notes={detail.activity.notes} durationMinutes={detail.activity.durationMinutes} onChanged={() => void load()} /> : null}
     </TrainPageContainer>
   );
