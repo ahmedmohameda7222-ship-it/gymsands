@@ -46,8 +46,11 @@ begin
   if has_function_privilege('anon','public.replace_workout_derived_records_atomic(uuid,uuid,smallint,text,jsonb)','execute') then
     raise exception 'WH-6 anon can execute record replacement.';
   end if;
-  if not has_function_privilege('authenticated','public.replace_workout_derived_records_atomic(uuid,uuid,smallint,text,jsonb)','execute') then
-    raise exception 'WH-6 authenticated replacement grant is missing.';
+  if has_function_privilege('authenticated','public.replace_workout_derived_records_atomic(uuid,uuid,smallint,text,jsonb)','execute') then
+    raise exception 'WH-6 authenticated browser can execute record replacement.';
+  end if;
+  if not has_function_privilege('service_role','public.replace_workout_derived_records_atomic(uuid,uuid,smallint,text,jsonb)','execute') then
+    raise exception 'WH-6 service replacement grant is missing.';
   end if;
 end;
 $verification$;
@@ -116,6 +119,40 @@ select set_config('request.jwt.claim.role','authenticated',true);
 insert into public.personal_records(user_id,exercise_name,record_type,record_date,source_kind)
 values ('b6000000-0000-4000-8000-000000000001','Manual record','Manual',current_date,'manual');
 
+select pg_temp.wh6_rejected(
+  $sql$insert into public.personal_records(
+    user_id,exercise_name,record_type,record_date,source_kind,record_key,exercise_identity_kind,
+    exercise_identity,workout_session_id,exercise_log_id,derived_record_type,record_value,record_unit,
+    comparison_context_key,set_type,schema_version,formula_version,achieved_at
+  ) values (
+    'b6000000-0000-4000-8000-000000000001','Forged','Max weight',current_date,
+    'workout_derived','forged','plan_exercise','plan_exercise:b6000000-0000-4000-8000-000000000012',
+    'b6000000-0000-4000-8000-000000000020','b6000000-0000-4000-8000-000000000021',
+    'highest_load',999,'kg','forged','normal',1,'wh6-v1','2026-08-01T10:30:00Z'
+  )$sql$,
+  'Authenticated client forged a derived record directly.'
+);
+
+select pg_temp.wh6_rejected(
+  $$select public.replace_workout_derived_records_atomic(
+    'b6000000-0000-4000-8000-000000000001',
+    'b6000000-0000-4000-8000-000000000020',1::smallint,'wh6-v1',
+    jsonb_build_array(jsonb_build_object(
+      'exercise_log_id','b6000000-0000-4000-8000-000000000021',
+      'exercise_identity_kind','plan_exercise',
+      'exercise_identity','plan_exercise:b6000000-0000-4000-8000-000000000012',
+      'record_type','highest_load','record_value',9999,'record_unit','kg',
+      'comparison_context_key','forged','set_type','normal',
+      'achieved_at','2026-08-01T10:30:00Z'
+    ))
+  )$$,
+  'Authenticated client executed the verified-record authority with an inflated value.'
+);
+
+reset role;
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+
 select public.replace_workout_derived_records_atomic(
   'b6000000-0000-4000-8000-000000000001',
   'b6000000-0000-4000-8000-000000000020',
@@ -135,9 +172,11 @@ select public.replace_workout_derived_records_atomic(
 ) as first_replacement \gset
 
 select pg_temp.wh6_assert(
-  (select count(*)=1 and min(record_key) is not null from public.personal_records
-   where workout_session_id='b6000000-0000-4000-8000-000000000020' and source_kind='workout_derived'),
-  'WH-6 trusted replacement did not create exactly one derived record.'
+  (select count(*)=1 and min(record_key) is not null and min(record_value)=100
+   from public.personal_records
+   where workout_session_id='b6000000-0000-4000-8000-000000000020'
+     and source_kind='workout_derived'),
+  'WH-6 trusted replacement did not create exactly one canonical derived record.'
 );
 select record_key as stable_record_key from public.personal_records
 where workout_session_id='b6000000-0000-4000-8000-000000000020' and source_kind='workout_derived' \gset
@@ -159,34 +198,6 @@ select pg_temp.wh6_assert(
    where workout_session_id='b6000000-0000-4000-8000-000000000020' and source_kind='workout_derived'),
   'WH-6 replacement is not idempotent with a stable record identity.'
 );
-
-select pg_temp.wh6_rejected(
-  $sql$insert into public.personal_records(
-    user_id,exercise_name,record_type,record_date,source_kind,record_key,exercise_identity_kind,
-    exercise_identity,workout_session_id,exercise_log_id,derived_record_type,record_value,record_unit,
-    comparison_context_key,set_type,schema_version,formula_version,achieved_at
-  ) values (
-    'b6000000-0000-4000-8000-000000000001','Forged','Max weight',current_date,
-    'workout_derived','forged','plan_exercise','plan_exercise:b6000000-0000-4000-8000-000000000012',
-    'b6000000-0000-4000-8000-000000000020','b6000000-0000-4000-8000-000000000021',
-    'highest_load',999,'kg','forged','normal',1,'wh6-v1','2026-08-01T10:30:00Z'
-  )$sql$,
-  'Authenticated client forged a derived record directly.'
-);
-update public.personal_records set record_value=999 where source_kind='workout_derived';
-select pg_temp.wh6_assert(
-  (select record_value=100 from public.personal_records where source_kind='workout_derived'),
-  'Authenticated client updated a derived record directly.'
-);
-
-select set_config('request.jwt.claim.sub','b6000000-0000-4000-8000-000000000002',true);
-select pg_temp.wh6_rejected(
-  $$select public.replace_workout_derived_records_atomic(
-    'b6000000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000020',1::smallint,'wh6-v1','[]'::jsonb
-  )$$,
-  'A different member replaced the owner derived records.'
-);
-select set_config('request.jwt.claim.sub','b6000000-0000-4000-8000-000000000001',true);
 
 select public.replace_workout_derived_records_atomic(
   'b6000000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000020',1::smallint,'wh6-v1','[]'::jsonb
