@@ -2,14 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
-  BENCHMARK_API_EXCLUDES,
-  LOCAL_PROJECT_ID,
+  REQUIRED_WORKOUT_SESSION_COLUMNS,
   assertDisposableLocalDatabaseUrl,
-  benchmarkApiStartArgs,
-  benchmarkApiStopArgs,
   buildCommittedFixtureSql,
   cleanupFixtureSql,
   parseSupabaseStatusEnv,
+  waitForWorkoutHistorySchema,
+  workoutHistorySchemaProbeUrl,
 } from "./measure-workout-history-performance.mjs";
 
 test("permits only the disposable local Supabase database", () => {
@@ -76,26 +75,100 @@ test("benchmark enforces psql errors through the CLI variable contract", async (
   assert.doesNotMatch(source, /`\\?set ON_ERROR_STOP on/u);
 });
 
-test("benchmark performs a data-preserving transition to the minimal local API profile", async () => {
-  assert.deepEqual(benchmarkApiStopArgs(), ["stop", "--project-id", LOCAL_PROJECT_ID]);
-  assert.equal(benchmarkApiStopArgs().includes("--no-backup"), false);
-  assert.deepEqual(benchmarkApiStartArgs(), [
-    "start",
-    "--exclude",
-    BENCHMARK_API_EXCLUDES.join(","),
-  ]);
-  for (const service of ["realtime", "storage-api", "studio", "edge-runtime", "logflare", "vector", "supavisor"]) {
-    assert.equal(BENCHMARK_API_EXCLUDES.includes(service), true);
-  }
-  for (const requiredService of ["gotrue", "kong", "postgrest"]) {
-    assert.equal(BENCHMARK_API_EXCLUDES.includes(requiredService), false);
+test("schema probe covers the complete direct workout-session read contract", () => {
+  for (const column of [
+    "scheduled_session_id",
+    "history_revision",
+    "derived_record_schema_version",
+    "derived_record_formula_version",
+    "derived_records_evaluated_at",
+  ]) {
+    assert.equal(REQUIRED_WORKOUT_SESSION_COLUMNS.includes(column), true);
   }
 
+  const url = new URL(
+    workoutHistorySchemaProbeUrl("http://127.0.0.1:54321"),
+  );
+  assert.equal(url.pathname, "/rest/v1/workout_sessions");
+  assert.equal(url.searchParams.get("limit"), "1");
+  assert.deepEqual(
+    url.searchParams.get("select")?.split(","),
+    [...REQUIRED_WORKOUT_SESSION_COLUMNS],
+  );
+});
+
+test("schema readiness retries PostgREST and preserves service-role authorization", async () => {
+  const calls = [];
+  const sleeps = [];
+  const responses = [
+    { ok: false, status: 400, body: '{"message":"schema cache stale"}' },
+    { ok: true, status: 200, body: "[]" },
+  ];
+
+  await waitForWorkoutHistorySchema({
+    apiUrl: "http://127.0.0.1:54321",
+    serviceRoleKey: "local-service-role",
+    attempts: 2,
+    delayMs: 10,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      const response = responses.shift();
+      return {
+        ok: response.ok,
+        status: response.status,
+        text: async () => response.body,
+      };
+    },
+    sleepImpl: async (delayMs) => {
+      sleeps.push(delayMs);
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.deepEqual(sleeps, [10]);
+  assert.equal(
+    calls[0].init.headers.Authorization,
+    "Bearer local-service-role",
+  );
+  assert.equal(calls[0].init.headers.apikey, "local-service-role");
+});
+
+test("schema readiness reports the underlying PostgREST failure without exposing credentials", async () => {
+  await assert.rejects(
+    waitForWorkoutHistorySchema({
+      apiUrl: "http://127.0.0.1:54321",
+      serviceRoleKey: "do-not-print-this-secret",
+      attempts: 1,
+      fetchImpl: async () => ({
+        ok: false,
+        status: 400,
+        text: async () => '{"code":"PGRST204","message":"missing column"}',
+      }),
+      sleepImpl: async () => {},
+    }),
+    (error) => {
+      assert.match(error.message, /HTTP 400/u);
+      assert.match(error.message, /PGRST204/u);
+      assert.match(error.message, /missing column/u);
+      assert.doesNotMatch(error.message, /do-not-print-this-secret/u);
+      return true;
+    },
+  );
+});
+
+test("benchmark preserves the exact migrated stack and proves schema readiness", async () => {
   const source = await readFile(
     new URL("./measure-workout-history-performance.mjs", import.meta.url),
     "utf8",
   );
-  assert.match(source, /transitionToLocalBenchmarkApi\(\);\n  const local = localSupabaseEnvironment\(\);\n  runPsql\(databaseUrl, cleanupSql\);/u);
+  assert.doesNotMatch(
+    source,
+    /execute\("supabase", \["(?:stop|start)"/u,
+  );
+  assert.match(
+    source,
+    /const local = localSupabaseEnvironment\(\);\n  runPsql\(databaseUrl, "notify pgrst, 'reload schema';\\n"\);\n  await waitForWorkoutHistorySchema\(local\);\n\n  runPsql\(databaseUrl, cleanupSql\);/u,
+  );
 });
 
 test("real benchmark executes the versioned list and detail services", async () => {
