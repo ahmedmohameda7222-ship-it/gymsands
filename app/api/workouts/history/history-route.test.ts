@@ -14,13 +14,15 @@ vi.mock("@/lib/integrations/env", () => ({
   serverEnv: { workoutHistoryCursorSecret: "route-test-secret-that-is-at-least-32-characters" },
 }));
 vi.mock("@/lib/integrations/rate-limit", () => ({ rateLimit: mocks.rateLimit }));
+vi.mock("@/services/workouts/history/server-list-reader", () => ({
+  listWorkoutHistoryKeyset: mocks.list,
+}));
 vi.mock("@/services/workouts/history/server-reader", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/services/workouts/history/server-reader")>();
   return {
     ...original,
     getScheduledWorkoutHistoryDetail: mocks.scheduledDetail,
     getWorkoutHistorySessionDetail: mocks.detail,
-    listWorkoutHistory: mocks.list,
   };
 });
 
@@ -31,7 +33,7 @@ import { WorkoutHistoryReaderError } from "@/services/workouts/history/server-re
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
 const sessionId = "22222222-2222-4222-8222-222222222222";
-const supabase = { from: vi.fn() };
+const supabase = { from: vi.fn(), rpc: vi.fn() };
 
 describe("Workout History API routes", () => {
   beforeEach(() => {
@@ -41,10 +43,17 @@ describe("Workout History API routes", () => {
     mocks.list.mockResolvedValue({
       contractVersion: 1,
       period: { from: "2026-08-01T00:00:00.000Z", to: "2026-09-01T00:00:00.000Z", timezone: "UTC" },
-      summary: { sessionCount: 0 },
+      summary: {
+        eligibleWorkoutCount: 0,
+        trustedDurationMinutes: null,
+        completedSetCount: null,
+        reliableVolume: null,
+        verifiedRecordCount: null,
+      },
       items: [],
       nextCursor: null,
       notices: [],
+      filterOptions: { workoutTypes: [], muscles: [], exercises: [], plans: [] },
     });
   });
 
