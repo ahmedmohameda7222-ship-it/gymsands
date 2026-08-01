@@ -250,6 +250,7 @@ export function SessionHistoryPage({
           historyRevision={detail.historyRevision ?? 0}
           notes={detail.activity.notes}
           durationMinutes={detail.activity.durationMinutes}
+          exercises={detail.exercises}
           onChanged={() => void load()}
         />
       ) : null}
