@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  BENCHMARK_API_EXCLUDES,
   assertDisposableLocalDatabaseUrl,
+  benchmarkApiStartArgs,
   buildCommittedFixtureSql,
   cleanupFixtureSql,
   parseSupabaseStatusEnv,
@@ -73,6 +75,20 @@ test("benchmark enforces psql errors through the CLI variable contract", async (
     /\[databaseUrl, "-X", "-v", "ON_ERROR_STOP=1"\]/u,
   );
   assert.doesNotMatch(source, /`\\?set ON_ERROR_STOP on/u);
+});
+
+test("benchmark starts only the local API services required for real PostgREST reads", () => {
+  assert.deepEqual(benchmarkApiStartArgs(), [
+    "start",
+    "--exclude",
+    BENCHMARK_API_EXCLUDES.join(","),
+  ]);
+  for (const service of ["realtime", "storage-api", "studio", "edge-runtime", "logflare", "vector", "supavisor"]) {
+    assert.equal(BENCHMARK_API_EXCLUDES.includes(service), true);
+  }
+  for (const requiredService of ["gotrue", "kong", "postgrest"]) {
+    assert.equal(BENCHMARK_API_EXCLUDES.includes(requiredService), false);
+  }
 });
 
 test("real benchmark executes the versioned list and detail services", async () => {
