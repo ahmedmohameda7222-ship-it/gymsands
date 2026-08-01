@@ -29,6 +29,7 @@ test("permanent verification chain covers the current Active Workout authority",
     "workout-history-verified-records.sql",
     "workout-history-correction-delete.sql",
     "workout-history-correction-muscle-reconcile.sql",
+    "workout-history-keyset-read.sql",
     "workout-history-repeat.sql",
     "production-release-migration-preflight.sql",
   ]) {
