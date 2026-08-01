@@ -8,6 +8,7 @@ const dayId = "33333333-3333-4333-8333-333333333333";
 const exerciseId = "44444444-4444-4444-8444-444444444444";
 const sessionId = "55555555-5555-4555-8555-555555555555";
 const scheduledId = "77777777-7777-4777-8777-777777777777";
+const verifiedRecordToken = "verified-record-test-access-token";
 
 const { state, supabase, verifiedRecordFetch } = vi.hoisted(() => {
   const state: {
@@ -36,7 +37,13 @@ const { state, supabase, verifiedRecordFetch } = vi.hoisted(() => {
   }
 
   const supabase = {
-    auth: { getUser: vi.fn(async () => ({ data: { user: { id: userId } }, error: null })) },
+    auth: {
+      getUser: vi.fn(async () => ({ data: { user: { id: userId } }, error: null })),
+      getSession: vi.fn(async () => ({
+        data: { session: { access_token: "verified-record-test-access-token" } },
+        error: null,
+      })),
+    },
     from: vi.fn(from),
     rpc: vi.fn(async (name: string) => ({
       data: state.rpcData[name] ?? null,
@@ -254,7 +261,7 @@ describe("atomic plan-day workout sessions", () => {
     });
   });
 
-  it("serializes structured final logs through completion and preserves Personal Record refresh behavior", async () => {
+  it("serializes final logs and performs one authenticated, non-blocking record refresh", async () => {
     state.singleData = session;
     state.rpcData.complete_workout_session_atomic = {
       session: { ...session, status: "completed" },
@@ -286,7 +293,6 @@ describe("atomic plan-day workout sessions", () => {
 
     expect(verifiedRecordFetch).not.toHaveBeenCalled();
     await expect(completeWorkoutSession(sessionId, "Done", 42, finalLogs)).resolves.toBe(true);
-    await Promise.resolve();
 
     expect(supabase.rpc).toHaveBeenCalledOnce();
     expect(supabase.rpc).toHaveBeenCalledWith("complete_workout_session_atomic", {
@@ -319,22 +325,33 @@ describe("atomic plan-day workout sessions", () => {
       p_duration_minutes: 42,
       p_notes: "Done"
     });
+    await vi.waitFor(() => {
+      expect(verifiedRecordFetch).toHaveBeenCalledTimes(1);
+    });
+    expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
     expect(verifiedRecordFetch).toHaveBeenCalledWith(
       `/api/workouts/history/${sessionId}/verified-records`,
-      expect.objectContaining({ method: "POST", credentials: "same-origin" }),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${verifiedRecordToken}`,
+        }),
+      }),
     );
   });
+
   it("keeps standalone workout start on the canonical direct RPC path", async () => {
-  const directSession = { ...session, plan_id: null, plan_day_id: null, workout_id: workout.id, workout_name: workout.name };
-  state.rpcData.start_or_resume_direct_workout_session_atomic = { session: directSession, resumed: false };
-  const { startWorkoutSession } = await import("@/services/database/workout-sessions");
-  await expect(startWorkoutSession(userId, workout)).resolves.toMatchObject({ id: sessionId });
-  expect(supabase.rpc).toHaveBeenCalledWith("start_or_resume_direct_workout_session_atomic", expect.objectContaining({
-    p_user_id: userId,
-    p_target_type: "global_exercise",
-    p_identity: workout.id,
-    p_candidate_session_id: null
-  }));
-  expect(supabase.from).not.toHaveBeenCalled();
-});
+    const directSession = { ...session, plan_id: null, plan_day_id: null, workout_id: workout.id, workout_name: workout.name };
+    state.rpcData.start_or_resume_direct_workout_session_atomic = { session: directSession, resumed: false };
+    const { startWorkoutSession } = await import("@/services/database/workout-sessions");
+    await expect(startWorkoutSession(userId, workout)).resolves.toMatchObject({ id: sessionId });
+    expect(supabase.rpc).toHaveBeenCalledWith("start_or_resume_direct_workout_session_atomic", expect.objectContaining({
+      p_user_id: userId,
+      p_target_type: "global_exercise",
+      p_identity: workout.id,
+      p_candidate_session_id: null
+    }));
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
 });
