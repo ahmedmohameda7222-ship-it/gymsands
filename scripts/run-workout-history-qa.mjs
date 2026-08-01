@@ -48,6 +48,23 @@ function safeText(value, limit = 1_000) {
     .slice(0, limit);
 }
 
+async function openCorrection(page) {
+  await page
+    .getByRole("button", {
+      name: /correct session|training korrigieren|تصحيح الجلسة/iu,
+    })
+    .click();
+  await page.waitForSelector('[role="dialog"]');
+}
+
+async function saveCorrection(page) {
+  await page
+    .getByRole("button", {
+      name: /save correction|korrektur speichern|حفظ التصحيح/iu,
+    })
+    .click();
+}
+
 async function prepareScenario(page, scenario, observation) {
   if (scenario.action === "initial") {
     await page.waitForSelector("[data-workout-history-page]", {
@@ -102,11 +119,47 @@ async function prepareScenario(page, scenario, observation) {
     );
     if ((await toggles.count()) > 1) await toggles.nth(1).click();
   } else if (scenario.action === "correction") {
+    await openCorrection(page);
+  } else if (scenario.action === "correction-edit") {
+    await openCorrection(page);
+    await page.getByLabel(/repetitions|wiederholungen|التكرارات/iu).first().fill("11");
+    await page.getByLabel(/load \(kg\)|gewicht \(kg\)|الوزن \(كجم\)/iu).first().fill("72.5");
+    await page.getByLabel(/^RPE$/iu).first().fill("8.5");
+    await page.getByLabel(/^RIR$/iu).first().fill("1.5");
+    await page.getByLabel(/set note|satznotiz|ملاحظة المجموعة/iu).first().fill("Controlled corrected set");
+    await saveCorrection(page);
+    await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+  } else if (scenario.action === "correction-add") {
+    await openCorrection(page);
+    await page
+      .getByRole("button", { name: /add set|satz hinzufügen|إضافة مجموعة/iu })
+      .first()
+      .click();
+    await page.getByLabel(/repetitions|wiederholungen|التكرارات/iu).last().fill("12");
+    await page.getByLabel(/load \(kg\)|gewicht \(kg\)|الوزن \(كجم\)/iu).last().fill("55");
+    await page.getByLabel(/^RPE$/iu).last().fill("8");
+    await page.getByLabel(/^RIR$/iu).last().fill("2");
+    await saveCorrection(page);
+    await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+  } else if (scenario.action === "correction-remove") {
+    await openCorrection(page);
+    await page
+      .getByRole("button", { name: /remove set|satz entfernen|حذف المجموعة/iu })
+      .first()
+      .click();
+    await saveCorrection(page);
+    await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+  } else if (scenario.action === "correction-conflict") {
+    await openCorrection(page);
+    await page
+      .getByLabel(/session note|trainingsnotiz|ملاحظة الجلسة/iu)
+      .fill("Concurrent correction attempt");
+    await saveCorrection(page);
     await page
       .getByRole("button", {
-        name: /correct session|training korrigieren|تصحيح الجلسة/iu,
+        name: /reload latest workout|aktuellen stand laden|تحميل أحدث نسخة/iu,
       })
-      .click();
+      .waitFor();
   } else if (scenario.action === "delete-confirmation") {
     page.once("dialog", async (dialog) => {
       observation.nativeDialog = safeText(dialog.message());
@@ -154,6 +207,12 @@ async function prepareScenario(page, scenario, observation) {
   } else if (scenario.action === "keyboard") {
     for (let count = 0; count < 5; count += 1) await page.keyboard.press("Tab");
   }
+}
+
+function correctionOperation(fixtureRequests) {
+  const request = fixtureRequests.find((candidate) =>
+    candidate.method === "POST" && candidate.path.endsWith("/correct"));
+  return request?.body?.setOperations ?? null;
 }
 
 await mkdir(outputDir, { recursive: true });
@@ -257,6 +316,11 @@ try {
               }
             : null,
         hasDialog: Boolean(document.querySelector('[role="dialog"]')),
+        alertText:
+          document.querySelector('[role="alert"]')?.textContent
+            ?.replace(/\s+/gu, " ")
+            .trim()
+            .slice(0, 500) || "",
         text:
           document
             .querySelector("main")
@@ -265,6 +329,7 @@ try {
             .slice(0, 500) || "",
       };
     });
+    const setOperations = correctionOperation(fixtureState.requests);
     Object.assign(observation, {
       httpStatus: response?.status() ?? null,
       screenshot: fileName,
@@ -275,8 +340,12 @@ try {
         opaque: image.isOpaque,
       },
       dom,
+      correctionSetOperations: setOperations,
       fixtureRequests: fixtureState.requests,
     });
+    const hasCorrectionKind = (kind) =>
+      Array.isArray(setOperations) &&
+      setOperations.some((operation) => operation?.kind === kind);
     const scenarioFailed =
       observation.httpStatus !== 200 ||
       observation.pageErrors.length > 0 ||
@@ -300,7 +369,12 @@ try {
           dom.muscleAnalysisKind !== "v2-advanced" ||
           !dom.muscleSummary ||
           dom.muscleSvgCount < 2
-        ));
+        )) ||
+      (scenario.action === "correction-edit" && !hasCorrectionKind("update")) ||
+      (scenario.action === "correction-add" && !hasCorrectionKind("add")) ||
+      (scenario.action === "correction-remove" && !hasCorrectionKind("remove")) ||
+      (scenario.action === "correction-conflict" &&
+        (!hasCorrectionKind("update") || !dom.hasDialog || !dom.alertText));
     observation.passed = !scenarioFailed;
     failed ||= scenarioFailed;
     observations.push(observation);
