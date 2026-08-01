@@ -1,8 +1,8 @@
 # Production migration ledger reconciliation
 
-**Project:** `bkwezjxvapaeasfvlhvv`  
-**Evidence captured:** 2026-08-01  
-**Machine authority:** `supabase/migration-ledger.json`  
+**Project:** `bkwezjxvapaeasfvlhvv`
+**Evidence captured:** 2026-08-01
+**Machine authority:** `supabase/migration-ledger.json`
 **Status:** AW-9 applied and migration history reconciled
 
 This document is a human-readable summary only. It does not authorize migration replay, merge, deployment, compatibility-marker promotion, or Production writes.
