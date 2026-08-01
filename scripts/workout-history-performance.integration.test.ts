@@ -46,6 +46,7 @@ type CapturedCall = {
   durationMs: number;
   responseBytes: number;
   rowCount: number;
+  errorBody?: string;
 };
 
 type Sample = {
@@ -79,6 +80,22 @@ function responseRowCount(text: string): number {
   }
 }
 
+function sanitizeFailureBody(text: string): string {
+  return text.replaceAll(serviceRoleKey, "[redacted]").slice(0, 2_000);
+}
+
+function failedCallDiagnostics(): string {
+  const failures = captured
+    .filter((call) => call.status < 200 || call.status >= 300)
+    .map((call) => ({
+      method: call.method,
+      path: call.path.slice(0, 2_000),
+      status: call.status,
+      errorBody: call.errorBody ?? "",
+    }));
+  return failures.length ? JSON.stringify(failures, null, 2) : "<none captured>";
+}
+
 const instrumentedFetch: typeof fetch = async (input, init) => {
   const started = performance.now();
   const response = await fetch(input, init);
@@ -91,6 +108,7 @@ const instrumentedFetch: typeof fetch = async (input, init) => {
     durationMs: performance.now() - started,
     responseBytes: new TextEncoder().encode(text).byteLength,
     rowCount: responseRowCount(text),
+    ...(response.ok ? {} : { errorBody: sanitizeFailureBody(text) }),
   });
   return response;
 };
@@ -124,7 +142,15 @@ async function measure<T>(operation: () => Promise<T>, repetitions = 7) {
   for (let sample = 0; sample < repetitions; sample += 1) {
     captured.length = 0;
     const started = performance.now();
-    lastValue = await operation();
+    try {
+      lastValue = await operation();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `WH-9 measured service operation failed: ${message}\n`
+        + `Non-2xx PostgREST calls:\n${failedCallDiagnostics()}`,
+      );
+    }
     const elapsedMs = performance.now() - started;
     samples.push({
       elapsedMs: Number(elapsedMs.toFixed(3)),
