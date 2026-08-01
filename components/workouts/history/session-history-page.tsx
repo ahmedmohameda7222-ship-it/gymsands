@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CalendarDays } from "lucide-react";
 
@@ -21,7 +21,13 @@ import {
   getWorkoutHistoryDetail,
   WorkoutHistoryClientError,
 } from "@/services/workouts/history/client";
+import { refreshVerifiedRecordsAuthenticated } from "@/services/workouts/history/verified-records-client";
 import type { WorkoutHistorySessionDetailResponse } from "@/types/workout-history";
+
+type DetailLoadOptions = {
+  preserveContent?: boolean;
+  allowProjectionRepair?: boolean;
+};
 
 export function SessionHistoryPage({
   source,
@@ -38,18 +44,38 @@ export function SessionHistoryPage({
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [failed, setFailed] = useState(false);
+  const projectionRepairAttemptRef = useRef<string | null>(null);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
   const load = useCallback(
-    async (signal?: AbortSignal) => {
+    async (signal?: AbortSignal, options: DetailLoadOptions = {}) => {
       if (!userId) return;
-      setLoading(true);
+      if (!options.preserveContent) setLoading(true);
       setFailed(false);
       setNotFound(false);
       try {
-        const next = await getWorkoutHistoryDetail(userId, source, id, {
+        let next = await getWorkoutHistoryDetail(userId, source, id, {
           signal,
         });
+        const canonicalSessionId = next.activity.canonicalSessionId;
+        const shouldRepairProjection =
+          options.allowProjectionRepair !== false
+          && source === "performed"
+          && Boolean(canonicalSessionId)
+          && next.notices.includes("user-action-required")
+          && projectionRepairAttemptRef.current !== canonicalSessionId;
+        if (shouldRepairProjection && canonicalSessionId) {
+          projectionRepairAttemptRef.current = canonicalSessionId;
+          try {
+            const repaired = await refreshVerifiedRecordsAuthenticated(canonicalSessionId);
+            if (repaired && !signal?.aborted) {
+              next = await getWorkoutHistoryDetail(userId, source, id, { signal });
+            }
+          } catch {
+            // Canonical workout detail remains readable. The explicit notice stays
+            // visible and reconnect or a later page visit can retry the projection.
+          }
+        }
         if (!signal?.aborted) setDetail(next);
       } catch (error) {
         if (signal?.aborted) return;
@@ -68,10 +94,21 @@ export function SessionHistoryPage({
   );
 
   useEffect(() => {
+    projectionRepairAttemptRef.current = null;
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  useEffect(() => {
+    if (source !== "performed") return;
+    const handleOnline = () => {
+      projectionRepairAttemptRef.current = null;
+      void load(undefined, { preserveContent: true });
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [load, source]);
 
   if (loading) {
     return (
@@ -150,6 +187,11 @@ export function SessionHistoryPage({
     timeStyle: "short",
     timeZone: timezone,
   }).format(new Date(detail.activity.effectiveAt));
+  const projectionNotice = detail.notices.includes("user-action-required")
+    ? tr("historyActionRequiredNotice")
+    : detail.notices.includes("partial-availability")
+      ? tr("historyPartialNotice")
+      : null;
 
   return (
     <TrainPageContainer
@@ -192,6 +234,14 @@ export function SessionHistoryPage({
 
       <SessionHistorySummary detail={detail} />
       <SessionHistoryInsight detail={detail} />
+      {projectionNotice ? (
+        <p
+          className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm leading-6 text-muted-foreground"
+          role="status"
+        >
+          {projectionNotice}
+        </p>
+      ) : null}
       {detail.activity.sourceKind === "scheduled_fallback" ? (
         <p
           className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm leading-6 text-muted-foreground"
@@ -251,7 +301,10 @@ export function SessionHistoryPage({
           notes={detail.activity.notes}
           durationMinutes={detail.activity.durationMinutes}
           exercises={detail.exercises}
-          onChanged={() => void load()}
+          onChanged={() => {
+            projectionRepairAttemptRef.current = null;
+            void load();
+          }}
         />
       ) : null}
     </TrainPageContainer>
