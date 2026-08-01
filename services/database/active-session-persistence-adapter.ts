@@ -12,6 +12,7 @@ import type {
 import {
   ActiveSessionControllerConflictError
 } from "@/lib/workouts/session-engine/contracts";
+import { refreshVerifiedRecordsAuthenticated } from "@/services/workouts/history/verified-records-client";
 import {
   executeWorkoutSessionExecutionCommand,
   getWorkoutSessionExecutionState
@@ -90,6 +91,15 @@ export const activeSessionPersistenceAdapter: ActiveSessionPersistenceAdapter = 
     if (!root || root.status !== "completed") {
       throw new Error("The completed workout session could not be confirmed.");
     }
+    // The canonical workout is already terminal at this point. Verified records
+    // are a rebuildable projection, so refresh failure must not roll back or
+    // misreport the completed workout. Freshness remains explicit until retry.
+    void refreshVerifiedRecordsAuthenticated(input.workoutSessionId).catch((error) => {
+      console.warn(
+        "Plaivra completed the workout, but verified records remain pending.",
+        error,
+      );
+    });
     return root;
   },
   replaceExercise(input) {
