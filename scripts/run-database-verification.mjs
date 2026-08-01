@@ -21,6 +21,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/workout-history-verified-records.sql",
   "supabase/verification/workout-history-correction-delete.sql",
   "supabase/verification/workout-history-correction-muscle-reconcile.sql",
+  "supabase/verification/workout-history-keyset-read.sql",
   "supabase/verification/workout-history-repeat.sql",
   "supabase/verification/train-atomic-rpc-security.sql",
   "supabase/verification/production-release-migration-preflight.sql",
