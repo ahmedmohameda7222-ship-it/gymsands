@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { requireUser } from "@/lib/integrations/env";
+import {
+  createSupabaseServerClient,
+  requireUser,
+  serverEnv,
+} from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { isUuid } from "@/lib/utils";
 import {
@@ -19,8 +23,22 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   }
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
+  if (!serverEnv.supabaseServiceRoleKey) {
+    return NextResponse.json(
+      { error: "Workout records could not be refreshed.", code: "verified_records_unavailable" },
+      { status: 503, headers: { "Cache-Control": "private, no-store" } },
+    );
+  }
   try {
-    const result = await replaceVerifiedRecordsForSession(auth.supabase, auth.user.id, sessionId);
+    // Authentication and account-state checks are performed with the member
+    // client above. The write projection itself is service-role only so a
+    // browser cannot choose and submit a forged derived value directly.
+    const authority = createSupabaseServerClient(null, true);
+    const result = await replaceVerifiedRecordsForSession(
+      authority,
+      auth.user.id,
+      sessionId,
+    );
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (error instanceof VerifiedRecordError) {
