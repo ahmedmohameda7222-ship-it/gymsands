@@ -13,10 +13,6 @@ const { supabase } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase/client", () => ({ supabase }));
-vi.mock("@/services/database/progress", () => ({
-  autoDetectPersonalRecordsFromExerciseLogs: vi.fn(async () => [])
-}));
-
 function externalWorkout(overrides: Partial<Workout> = {}): Workout {
   return {
     id: externalId,

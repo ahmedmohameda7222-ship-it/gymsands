@@ -341,8 +341,8 @@ async function progressReview(supabase: SupabaseClient, userId: string, input: R
     supabase.from("workout_sessions")
       .select("id,status,started_at,completed_at,duration_minutes")
       .eq("user_id", userId).gte("started_at", `${start}T00:00:00.000Z`).lte("started_at", `${end}T23:59:59.999Z`).limit(500),
-    supabase.from("personal_records")
-      .select("id,exercise_name,record_type,weight_kg,reps,record_date,created_at")
+    supabase.from("current_personal_records")
+      .select("id,exercise_name,record_type,weight_kg,reps,record_date,created_at,source_kind,derived_record_type,record_value,record_unit")
       .eq("user_id", userId).gte("record_date", start).lte("record_date", end).limit(200)
   ]);
   throwQueryError(progress.error, "Progress entries");

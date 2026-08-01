@@ -49,7 +49,7 @@ Tests enforce source code, schema, SQL verification, structured manifests, and o
 - AW-3A provides structured performed metrics; AW-3B provides structured set details; AW-3C provides immutable normalized prescription snapshots and deterministic frozen hydration.
 - AW-4 provides the shared deterministic session engine, serialized command dispatcher, official Active Workout store, and timestamp-projected timer engine. AW-4 is merged; its Production migration was applied exactly once.
 - AW-8 provides derived metrics; AW-9 provides offline and multi-device controller authority; AW-10 closes the Active Workout QA/QC matrix.
-- Plaivra Production contains 76 physical migration records. The ledger classifies 63 exact applications and 13 generated-version aliases, with zero pending, schema-untracked, or unresolved migrations.
+- Plaivra Production contains 76 physical migration records. The ledger classifies 63 exact applications and 13 generated-version aliases. `20260801140043_workout_history_verified_records.sql` is repository-only pending and has not been applied to Production.
 - The released compatibility marker remains `20260724232734`. Physical migration advancement and application-release promotion remain separate operations.
 - Repository state alone does not authorize merge, manual deployment, or compatibility-marker promotion.
 

@@ -634,7 +634,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       }
 
       case "get_personal_records": {
-        let request = ctx.supabase.from("personal_records").select("*").eq("user_id", ctx.userId).order("record_date", { ascending: false });
+        let request = ctx.supabase.from("current_personal_records").select("*").eq("user_id", ctx.userId).order("record_date", { ascending: false });
         const exercise = getOptionalString(input, "exercise_name");
         if (exercise) request = request.ilike("exercise_name", `%${exercise}%`);
         const { data, error } = await request;

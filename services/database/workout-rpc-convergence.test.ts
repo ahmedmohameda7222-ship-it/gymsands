@@ -9,7 +9,7 @@ const exerciseId = "44444444-4444-4444-8444-444444444444";
 const sessionId = "55555555-5555-4555-8555-555555555555";
 const scheduledId = "77777777-7777-4777-8777-777777777777";
 
-const { state, supabase, autoDetectPersonalRecordsFromExerciseLogs } = vi.hoisted(() => {
+const { state, supabase, verifiedRecordFetch } = vi.hoisted(() => {
   const state: {
     rpcData: Record<string, unknown>;
     rpcError: Record<string, { message: string } | undefined>;
@@ -46,12 +46,11 @@ const { state, supabase, autoDetectPersonalRecordsFromExerciseLogs } = vi.hoiste
   return {
     state,
     supabase,
-    autoDetectPersonalRecordsFromExerciseLogs: vi.fn(async () => [])
+    verifiedRecordFetch: vi.fn(async () => new Response(JSON.stringify({ status: "current" }), { status: 200 }))
   };
 });
 
 vi.mock("@/lib/supabase/client", () => ({ supabase }));
-vi.mock("@/services/database/progress", () => ({ autoDetectPersonalRecordsFromExerciseLogs }));
 
 const workout: Workout = {
   id: "66666666-6666-4666-8666-666666666666",
@@ -108,6 +107,8 @@ beforeEach(() => {
   state.singleData = null;
   state.orderData = [];
   vi.clearAllMocks();
+  verifiedRecordFetch.mockResolvedValue(new Response(JSON.stringify({ status: "current" }), { status: 200 }));
+  vi.stubGlobal("fetch", verifiedRecordFetch);
 });
 
 describe("atomic workout plan browser persistence", () => {
@@ -259,7 +260,7 @@ describe("atomic plan-day workout sessions", () => {
       session: { ...session, status: "completed" },
       logs: [{ exercise_name: "Single-arm row", reps: null, weight_kg: null }]
     };
-    autoDetectPersonalRecordsFromExerciseLogs.mockRejectedValueOnce(new Error("PR unavailable"));
+    verifiedRecordFetch.mockResolvedValueOnce(new Response("Unavailable", { status: 503 }));
     const { completeWorkoutSession } = await import("@/services/database/workout-sessions");
     const capturedAt = "2026-07-13T10:30:00.000Z";
     const finalLogs: WorkoutSetLogInput[] = [{
@@ -283,7 +284,7 @@ describe("atomic plan-day workout sessions", () => {
       ]
     }];
 
-    expect(autoDetectPersonalRecordsFromExerciseLogs).not.toHaveBeenCalled();
+    expect(verifiedRecordFetch).not.toHaveBeenCalled();
     await expect(completeWorkoutSession(sessionId, "Done", 42, finalLogs)).resolves.toBe(true);
     await Promise.resolve();
 
@@ -318,7 +319,10 @@ describe("atomic plan-day workout sessions", () => {
       p_duration_minutes: 42,
       p_notes: "Done"
     });
-    expect(autoDetectPersonalRecordsFromExerciseLogs).toHaveBeenCalledOnce();
+    expect(verifiedRecordFetch).toHaveBeenCalledWith(
+      `/api/workouts/history/${sessionId}/verified-records`,
+      expect.objectContaining({ method: "POST", credentials: "same-origin" }),
+    );
   });
   it("keeps standalone workout start on the canonical direct RPC path", async () => {
   const directSession = { ...session, plan_id: null, plan_day_id: null, workout_id: workout.id, workout_name: workout.name };

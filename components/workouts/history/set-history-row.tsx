@@ -3,6 +3,19 @@
 import { useTrainTranslation } from "@/lib/i18n/train";
 import type { WorkoutHistoryExerciseSetDetail, WorkoutHistoryPlannedSet } from "@/types/workout-history";
 
+function recordLabel(record: WorkoutHistoryExerciseSetDetail["verifiedRecords"][number], tr: ReturnType<typeof useTrainTranslation>["tr"]): string {
+  if (record.recordType === "highest_load") return tr("historyHighestLoadRecord");
+  if (record.recordType === "same_load_max_repetitions") return tr("historySameLoadRepsRecord");
+  if (record.recordType === "estimated_one_rep_max") return tr("historyEstimatedOneRepMaxRecord");
+  return tr("historySessionVolumeRecord");
+}
+
+function recordValue(value: number, unit: WorkoutHistoryExerciseSetDetail["verifiedRecords"][number]["unit"], number: Intl.NumberFormat): string {
+  if (unit === "repetitions") return `${number.format(value)} reps`;
+  if (unit === "kg_repetitions") return `${number.format(value)} kg × reps`;
+  return `${number.format(value)} kg`;
+}
+
 function plannedText(set: WorkoutHistoryPlannedSet, number: Intl.NumberFormat): string {
   return set.targets.map((target) => {
     const values = target.targetMode === "range"
@@ -58,6 +71,23 @@ export function SetHistoryRow({ set }: { set: WorkoutHistoryExerciseSetDetail })
           <dd className="mt-1 text-sm font-medium text-foreground"><bdi dir="ltr">{actualText(set, number) || tr("historyNoMetric")}</bdi></dd>
         </div>
       </dl>
+      {set.verifiedRecords.length ? (
+        <div className="mt-3 space-y-2" aria-label={tr("historyVerifiedRecord")}>
+          {set.verifiedRecords.map((record) => (
+            <div key={record.id} className="rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-xs font-semibold text-primary">{recordLabel(record, tr)}</p>
+                <p className="text-sm font-semibold text-foreground"><bdi dir="ltr">{recordValue(record.currentValue, record.unit, number)}</bdi></p>
+              </div>
+              {record.previousValue !== null ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {tr("historyPreviousComparable", { value: recordValue(record.previousValue, record.unit, number) })}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
       {set.notes ? <p className="mt-3 border-s-2 border-primary/30 ps-3 text-sm leading-6 text-muted-foreground">{set.notes}</p> : null}
     </div>
   );

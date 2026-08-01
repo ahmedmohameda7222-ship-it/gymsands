@@ -143,6 +143,16 @@ export type WorkoutHistoryExerciseSetDetail = {
   plannedSet: WorkoutHistoryPlannedSet | null;
   metrics: WorkoutHistoryMetricValue[];
   segments: WorkoutHistorySetSegment[];
+  verifiedRecords: WorkoutHistoryVerifiedRecord[];
+};
+
+export type WorkoutHistoryVerifiedRecord = {
+  id: string;
+  recordType: "highest_load" | "same_load_max_repetitions" | "estimated_one_rep_max" | "exercise_session_volume";
+  currentValue: number;
+  previousValue: number | null;
+  unit: "kg" | "repetitions" | "kg_repetitions";
+  estimated: boolean;
 };
 
 export type WorkoutHistoryMetricValue = {

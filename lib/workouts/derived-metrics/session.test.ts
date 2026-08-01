@@ -124,6 +124,8 @@ describe("AW-8 derived metrics", () => {
     const current = [
       {
         id: "current",
+        workout_session_id: "session-current",
+        plan_exercise_id: "pull-up",
         exercise_name: "Pull-up",
         reps: 12,
         weight_kg: 0,
@@ -134,6 +136,8 @@ describe("AW-8 derived metrics", () => {
     const differentContextHistory = [
       {
         id: "history",
+        workout_session_id: "session-history",
+        plan_exercise_id: "pull-up",
         exercise_name: "Pull-up",
         reps: 20,
         weight_kg: 20,
@@ -143,7 +147,7 @@ describe("AW-8 derived metrics", () => {
     ];
     const metrics = deriveSessionMetrics(current, differentContextHistory);
     expect(
-      metrics.personalRecords.some((record) => record.type === "max_repetitions"),
+      metrics.personalRecords.some((record) => record.recordType === "same_load_max_repetitions"),
     ).toBe(true);
   });
 
@@ -152,6 +156,7 @@ describe("AW-8 derived metrics", () => {
       {
         id: "history-a",
         workout_session_id: "session-a",
+        plan_exercise_id: "bench-press",
         exercise_name: "Bench Press",
         reps: 10,
         weight_kg: 50,
@@ -160,6 +165,7 @@ describe("AW-8 derived metrics", () => {
       {
         id: "history-b",
         workout_session_id: "session-b",
+        plan_exercise_id: "bench-press",
         exercise_name: "Bench Press",
         reps: 10,
         weight_kg: 50,
@@ -170,6 +176,7 @@ describe("AW-8 derived metrics", () => {
       {
         id: "current-a",
         workout_session_id: "session-current",
+        plan_exercise_id: "bench-press",
         exercise_name: "Bench Press",
         reps: 11,
         weight_kg: 50,
@@ -179,7 +186,7 @@ describe("AW-8 derived metrics", () => {
     const metrics = deriveSessionMetrics(current, history);
     expect(
       metrics.personalRecords.some((record) =>
-        record.type === "session_volume" && record.value === 550
+        record.recordType === "exercise_session_volume" && record.recordValue === 550
       ),
     ).toBe(true);
   });

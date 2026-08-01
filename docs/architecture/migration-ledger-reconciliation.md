@@ -4,27 +4,31 @@
 **Evidence captured:** 2026-08-01
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `73944677c11222044520991fc1f18c8edd81a78e`
-**Status:** AW-9 applied and migration history reconciled
+**Status:** AW-9 applied; Workout History migration pending
 
 This document is a human-readable summary only. It does not authorize migration replay, merge, deployment, compatibility-marker promotion, or Production writes.
 
 ## Current state
 
 - Physical Production migration records: **76**
-- Repository classifications: **76**
+- Repository classifications: **77**
 - Exact applications (`state = applied`): **63**
 - Generated-version aliases (`state = applied_version_alias`): **13**
-- Repository-only pending migrations: **0**
-- `pendingCount = 0`
+- Repository-only pending migrations: **1**
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- `release_ready = true`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- `release_ready = false`
 - Released compatibility marker: `20260724232734`
 - Latest physical Production record: `20260801045628_active_workout_aw9_offline_multi_device`
 - Expected Production migration: `20260801045628_active_workout_aw9_offline_multi_device`
 
 Physical schema advancement and compatibility-marker promotion are deliberately separate release operations.
+
+## Workout History pending identity
+
+`20260801140043_workout_history_verified_records.sql` is an approved forward migration for WH-6. It exists only in the repository, is classified as pending, and has not been applied to Production. Applying it requires separate explicit authorization; this implementation phase does not authorize Production writes.
 
 ## AW-9 applied identity
 

@@ -225,13 +225,21 @@ function mockHistoryDetail(
       plannedSet: plannedSet(setNumber),
       metrics: [],
       segments: [],
+      verifiedRecords: exerciseIndex === 0 && setNumber === 2 ? [{
+        id: "70000000-0000-4000-8000-000000000001",
+        recordType: "highest_load" as const,
+        currentValue: 82.5,
+        previousValue: 80,
+        unit: "kg" as const,
+        estimated: false,
+      }] : [],
     })),
     missingPlannedSets: [],
   }));
   return {
     contractVersion: WORKOUT_HISTORY_CONTRACT_VERSION,
     activity: { ...activity, notes: "Good control and consistent tempo." },
-    summary: { exerciseCount: 2, completedSetCount: 8, reliableVolume: 5_420, verifiedRecordCount: null },
+    summary: { exerciseCount: 2, completedSetCount: 8, reliableVolume: 5_420, verifiedRecordCount: 1 },
     snapshot: null,
     exercises,
     timeline: [

@@ -6,7 +6,6 @@ import { isUuid } from "@/lib/utils";
 import { todayIso } from "@/lib/date-utils";
 import { getMockTrainActivity } from "@/lib/fixtures/train-mock";
 import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
-import { autoDetectPersonalRecordsFromExerciseLogs } from "@/services/database/progress";
 import { getCanonicalWorkoutActivity } from "@/services/workouts/history/client";
 import type {
   ExerciseLog,
@@ -452,13 +451,7 @@ export async function completeWorkoutSession(
     );
     throw error;
   }
-  const result = data as { logs?: ExerciseLog[] } | null;
-  const completedLogs = result?.logs;
-  void detectPersonalRecordsAfterWorkoutCompletion(
-    session.user_id,
-    sessionId,
-    completedLogs,
-  );
+  void refreshVerifiedRecordsAfterWorkoutCompletion(sessionId);
   return true;
 }
 
@@ -507,24 +500,22 @@ export async function replaceWorkoutSessionExercise(
   return data;
 }
 
-export async function detectPersonalRecordsAfterWorkoutCompletion(
-  userId: string,
-  sessionId: string,
-  completedLogs?: ExerciseLog[],
-) {
+export async function refreshVerifiedRecordsAfterWorkoutCompletion(sessionId: string) {
   try {
-    const logs = completedLogs ?? (await getWorkoutSessionLogs(sessionId));
-    return await autoDetectPersonalRecordsFromExerciseLogs(
-      userId,
-      logs,
-      new Date().toISOString().slice(0, 10),
-    );
+    const response = await fetch(`/api/workouts/history/${encodeURIComponent(sessionId)}/verified-records`, {
+      method: "POST",
+      credentials: "same-origin",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) throw new Error(`Verified record refresh failed (${response.status}).`);
+    return await response.json();
   } catch (error) {
     console.warn(
       "Plaivra saved the workout, but personal records could not be refreshed.",
       error,
     );
-    return [];
+    return null;
   }
 }
 

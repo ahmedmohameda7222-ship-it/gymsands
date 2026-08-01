@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Clock3, Dumbbell, Layers3 } from "lucide-react";
+import { ChevronRight, Clock3, Dumbbell, Layers3, Trophy } from "lucide-react";
 
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { cn } from "@/lib/utils";
@@ -89,6 +89,14 @@ export function WorkoutHistoryCard({ item, selected = false, onSelect }: { item:
 
         <div className="mt-auto flex items-end justify-between gap-3 pt-3">
           <div className="flex min-w-0 flex-wrap gap-1.5">
+            {(item.verifiedRecordCount ?? 0) > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                <Trophy className="size-3" aria-hidden="true" />
+                {item.verifiedRecordCount === 1
+                  ? tr("historyPrCountOne")
+                  : tr("historyPrCount", { count: item.verifiedRecordCount ?? 0 })}
+              </span>
+            ) : null}
             {item.category ? <span className="max-w-40 truncate rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">{item.category}</span> : null}
             {item.exerciseNames.slice(0, 2).map((name) => (
               <span key={name} className="max-w-32 truncate rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">{name}</span>

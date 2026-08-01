@@ -14,6 +14,7 @@ import {
   type WorkoutHistoryCursorPayload,
 } from "@/lib/workouts/history/cursor";
 import { summarizeWorkoutHistory } from "@/lib/workouts/history/metrics";
+import { DERIVED_METRICS_FORMULA_VERSION, DERIVED_METRICS_SCHEMA_VERSION } from "@/lib/workouts/derived-metrics";
 import { presentWorkoutHistorySession } from "@/lib/workouts/history/presentation";
 import { resolveCanonicalWorkoutActivity } from "@/lib/workouts/history/resolve-activity";
 import {
@@ -33,6 +34,7 @@ import {
   type WorkoutHistorySessionDetailResponse,
   type WorkoutHistorySessionSummary,
   type WorkoutHistorySort,
+  type WorkoutHistoryVerifiedRecord,
 } from "@/types/workout-history";
 
 const PERIOD_ROOT_PAGE_SIZE = 1_000;
@@ -82,6 +84,20 @@ type SnapshotMappingEntryRow = { mapping_set_id: string; muscle_id: string };
 type PlanNameRow = { id: string; name: string };
 type ScheduledSearchRow = { user_workout_session_id: string; exercise_name: string; notes: string | null };
 type SetNoteRow = { workout_session_id: string; notes: string | null };
+type VerifiedRecordRow = {
+  id: string;
+  workout_session_id: string;
+  exercise_log_id: string;
+  exercise_identity: string;
+  derived_record_type: WorkoutHistoryVerifiedRecord["recordType"];
+  record_value: number | string;
+  record_unit: WorkoutHistoryVerifiedRecord["unit"];
+  comparison_context_key: string;
+  achieved_at: string;
+  schema_version: number;
+  formula_version: string;
+  source_kind: string;
+};
 
 type DetailSnapshotRow = {
   id: string;
@@ -210,6 +226,29 @@ async function readPlanNames(
   return new Map(results.flatMap((result) => (result.data ?? []) as unknown as PlanNameRow[]).map((plan) => [plan.id, plan.name]));
 }
 
+async function readVerifiedRecords(
+  supabase: SupabaseClient,
+  userId: string,
+  field: "workout_session_id" | "exercise_identity",
+  values: string[],
+): Promise<VerifiedRecordRow[]> {
+  if (!values.length) return [];
+  const results = await Promise.all(Array.from(
+    { length: Math.ceil(values.length / IN_FILTER_CHUNK) },
+    (_, index) => supabase
+      .from("current_personal_records")
+      .select("id,workout_session_id,exercise_log_id,exercise_identity,derived_record_type,record_value,record_unit,comparison_context_key,achieved_at,schema_version,formula_version,source_kind")
+      .eq("user_id", userId)
+      .eq("source_kind", "workout_derived")
+      .eq("schema_version", DERIVED_METRICS_SCHEMA_VERSION)
+      .eq("formula_version", DERIVED_METRICS_FORMULA_VERSION)
+      .in(field, values.slice(index * IN_FILTER_CHUNK, (index + 1) * IN_FILTER_CHUNK)),
+  ));
+  const failure = results.find((result) => result.error)?.error;
+  if (failure) throw new WorkoutHistoryReaderError("history_read_failed", "Workout history could not load.", 503);
+  return results.flatMap((result) => (result.data ?? []) as unknown as VerifiedRecordRow[]);
+}
+
 async function readRowsInChunks<T>(
   supabase: SupabaseClient,
   table: string,
@@ -268,7 +307,7 @@ async function readPeriodSources(
     for (let offset = 0; ; offset += PERIOD_ROOT_PAGE_SIZE) {
       const page = await supabase
         .from("workout_sessions")
-        .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,notes,status,plan_id,plan_day_id,plan_week_id,plan_session_id")
+        .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,notes,status,plan_id,plan_day_id,plan_week_id,plan_session_id,derived_record_schema_version,derived_record_formula_version,derived_records_evaluated_at")
         .eq("user_id", userId)
         .eq("status", status)
         .or(effectiveFilter(timestampColumns))
@@ -324,10 +363,11 @@ async function readPeriodSources(
 
 async function buildPerformedCandidates(
   supabase: SupabaseClient,
+  userId: string,
   sessions: PerformedWorkoutHistoryRow[],
 ) {
   const sessionIds = sessions.map((session) => session.id);
-  const [logs, metrics, prescriptions, snapshots] = await Promise.all([
+  const [logs, metrics, prescriptions, snapshots, verifiedRecords] = await Promise.all([
     readRowsInChunks<PerformedLogRow>(
       supabase,
       "exercise_logs",
@@ -338,6 +378,7 @@ async function buildPerformedCandidates(
     readRowsInChunks<StructuredMetricRow>(supabase, "exercise_log_metric_values", "workout_session_id", "workout_session_id", sessionIds),
     readRowsInChunks<PrescriptionSetRow>(supabase, "workout_session_prescription_sets", "workout_session_id", "workout_session_id", sessionIds),
     readRowsInChunks<SnapshotRow>(supabase, "workout_session_muscle_snapshots", "id,workout_session_id", "workout_session_id", sessionIds),
+    readVerifiedRecords(supabase, userId, "workout_session_id", sessionIds),
   ]);
   const snapshotItems = await readRowsInChunks<SnapshotItemRow>(
     supabase,
@@ -366,6 +407,15 @@ async function buildPerformedCandidates(
   const snapshotItemsBySession = new Map<string, SnapshotItemRow[]>();
   const muscleIdsBySession = new Map<string, Set<string>>();
   const muscleIdsByMappingSet = new Map<string, string[]>();
+  const verifiedRecordCountBySession = new Map<string, number>();
+  const sessionById = new Map(sessions.map((session) => [session.id, session]));
+  for (const record of verifiedRecords) {
+    const session = sessionById.get(record.workout_session_id);
+    if (!session?.derived_records_evaluated_at
+      || session.derived_record_schema_version !== DERIVED_METRICS_SCHEMA_VERSION
+      || session.derived_record_formula_version !== DERIVED_METRICS_FORMULA_VERSION) continue;
+    increment(verifiedRecordCountBySession, record.workout_session_id);
+  }
   for (const entry of mappingEntries) {
     muscleIdsByMappingSet.set(entry.mapping_set_id, [
       ...(muscleIdsByMappingSet.get(entry.mapping_set_id) ?? []),
@@ -414,7 +464,7 @@ async function buildPerformedCandidates(
       plannedSetCount: plannedSetCount.has(session.id) ? (plannedSetCount.get(session.id) ?? 0) : null,
     },
   }));
-  return { candidates, logsBySession, snapshotItemsBySession, muscleIdsBySession };
+  return { candidates, logsBySession, snapshotItemsBySession, muscleIdsBySession, verifiedRecordCountBySession };
 }
 
 function metadataForActivity(
@@ -422,6 +472,7 @@ function metadataForActivity(
   logsBySession: Map<string, PerformedLogRow[]>,
   snapshotItemsBySession: Map<string, SnapshotItemRow[]>,
   muscleIdsBySession: Map<string, Set<string>>,
+  verifiedRecordCountBySession: Map<string, number>,
 ) {
   if (!activity.canonicalSessionId) return undefined;
   const logs = logsBySession.get(activity.canonicalSessionId) ?? [];
@@ -451,7 +502,7 @@ function metadataForActivity(
     reliableVolume: reliableVolumeValues.length
       ? reliableVolumeValues.reduce((sum, value) => sum + value, 0)
       : null,
-    verifiedRecordCount: null,
+    verifiedRecordCount: verifiedRecordCountBySession.get(activity.canonicalSessionId) ?? 0,
     exerciseIds: identities,
     exerciseNames: names,
     muscleIds: [...(muscleIdsBySession.get(activity.canonicalSessionId) ?? [])],
@@ -556,15 +607,18 @@ export async function listWorkoutHistory(
   let logsBySession = new Map<string, PerformedLogRow[]>();
   let snapshotItemsBySession = new Map<string, SnapshotItemRow[]>();
   let muscleIdsBySession = new Map<string, Set<string>>();
+  let verifiedRecordCountBySession = new Map<string, number>();
   if (!performedFailed) {
     const performedMetadata = await buildPerformedCandidates(
       supabase,
+      userId,
       performedRoots,
     );
     candidates = performedMetadata.candidates;
     logsBySession = performedMetadata.logsBySession;
     snapshotItemsBySession = performedMetadata.snapshotItemsBySession;
     muscleIdsBySession = performedMetadata.muscleIdsBySession;
+    verifiedRecordCountBySession = performedMetadata.verifiedRecordCountBySession;
   }
   const scheduled = scheduledFailed
     ? []
@@ -621,6 +675,7 @@ export async function listWorkoutHistory(
         logsBySession,
         snapshotItemsBySession,
         muscleIdsBySession,
+        verifiedRecordCountBySession,
       ),
     ));
   const searchTextByActivity = new Map(unfilteredItems.map((item) => {
@@ -741,6 +796,32 @@ function presentPlannedSet(
   };
 }
 
+function presentVerifiedRecord(
+  row: VerifiedRecordRow,
+  comparable: readonly VerifiedRecordRow[],
+): WorkoutHistoryVerifiedRecord | null {
+  const currentValue = numberOrNull(row.record_value);
+  if (currentValue === null) return null;
+  const previousValues = comparable
+    .filter((candidate) =>
+      candidate.id !== row.id
+      && candidate.exercise_identity === row.exercise_identity
+      && candidate.derived_record_type === row.derived_record_type
+      && candidate.record_unit === row.record_unit
+      && candidate.comparison_context_key === row.comparison_context_key
+      && Date.parse(candidate.achieved_at) < Date.parse(row.achieved_at))
+    .map((candidate) => numberOrNull(candidate.record_value))
+    .filter((value): value is number => value !== null);
+  return {
+    id: row.id,
+    recordType: row.derived_record_type,
+    currentValue,
+    previousValue: previousValues.length ? Math.max(...previousValues) : null,
+    unit: row.record_unit,
+    estimated: row.derived_record_type === "estimated_one_rep_max",
+  };
+}
+
 function groupExerciseDetail(input: {
   logs: PerformedLogRow[];
   snapshotItems: DetailSnapshotItemRow[];
@@ -750,6 +831,7 @@ function groupExerciseDetail(input: {
   setDetails: DetailSetRow[];
   segments: DetailSegmentRow[];
   segmentMetrics: DetailSegmentMetricRow[];
+  verifiedRecordsByLog: Map<string, WorkoutHistoryVerifiedRecord[]>;
 }): WorkoutHistoryExerciseDetail[] {
   type Group = { identity: string; item: DetailSnapshotItemRow | null; logs: PerformedLogRow[] };
   const groups = new Map<string, Group>();
@@ -824,6 +906,7 @@ function groupExerciseDetail(input: {
               side: segment.side,
               metrics: segmentMetricsBySegment.get(segment.id) ?? [],
             })),
+          verifiedRecords: input.verifiedRecordsByLog.get(log.id) ?? [],
         };
       });
     const firstLog = group.logs[0];
@@ -849,13 +932,19 @@ export async function getWorkoutHistorySessionDetail(
 ): Promise<WorkoutHistorySessionDetailResponse> {
   const root = await supabase
     .from("workout_sessions")
-    .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,notes,status,plan_id,plan_day_id,plan_week_id,plan_session_id")
+    .select("id,user_id,scheduled_session_id,workout_name,workout_day_name,workout_category,started_at,completed_at,skipped_at,cancelled_at,duration_minutes,notes,status,plan_id,plan_day_id,plan_week_id,plan_session_id,derived_record_schema_version,derived_record_formula_version,derived_records_evaluated_at")
     .eq("id", sessionId)
     .eq("user_id", userId)
     .maybeSingle();
   if (root.error) throw new WorkoutHistoryReaderError("history_detail_unavailable", "Workout details could not load.", 503);
   if (!root.data) throw new WorkoutHistoryReaderError("history_not_found", "Workout history item was not found.", 404);
-  const [logs, prescriptions, prescriptionTargets, metrics, setDetails, segments, segmentMetrics, snapshots, timelineRows] = await Promise.all([
+  const rootSession = root.data as unknown as PerformedWorkoutHistoryRow;
+  const recordsAreCurrent = Boolean(
+    rootSession.derived_records_evaluated_at
+    && rootSession.derived_record_schema_version === DERIVED_METRICS_SCHEMA_VERSION
+    && rootSession.derived_record_formula_version === DERIVED_METRICS_FORMULA_VERSION,
+  );
+  const [logs, prescriptions, prescriptionTargets, metrics, setDetails, segments, segmentMetrics, snapshots, timelineRows, currentVerifiedRecords] = await Promise.all([
     readRowsInChunks<PerformedLogRow>(supabase, "exercise_logs", "id,workout_session_id,plan_exercise_id,plan_activity_id,exercise_order,exercise_name,exercise_category,set_number,reps,weight_kg,notes,completed_at,set_type", "workout_session_id", [sessionId]),
     readRowsInChunks<DetailPrescriptionSetRow>(supabase, "workout_session_prescription_sets", "id,snapshot_item_id,set_order,performed_order_hint,set_type,target_mode,side_mode,rest_seconds,tempo_target", "workout_session_id", [sessionId]),
     readRowsInChunks<DetailPrescriptionTargetRow>(supabase, "workout_session_prescription_metric_targets", "prescription_set_id,metric_key,side,target_mode,target_value,minimum_value,maximum_value", "workout_session_id", [sessionId]),
@@ -865,6 +954,7 @@ export async function getWorkoutHistorySessionDetail(
     readRowsInChunks<DetailSegmentMetricRow>(supabase, "exercise_log_set_segment_metric_values", "segment_id,exercise_log_id,metric_key,side,value", "workout_session_id", [sessionId]),
     readRowsInChunks<DetailSnapshotRow>(supabase, "workout_session_muscle_snapshots", "id,workout_session_id,snapshot_schema_version,frozen_at", "workout_session_id", [sessionId]),
     readRowsInChunks<WorkoutHistoryTimelineSourceRow & { sequence_number: number }>(supabase, "workout_session_timeline_events", "id,event_type,occurred_at,exercise_log_id,snapshot_item_id,sequence_number", "workout_session_id", [sessionId]),
+    recordsAreCurrent ? readVerifiedRecords(supabase, userId, "workout_session_id", [sessionId]) : Promise.resolve([]),
   ]);
   const snapshot = snapshots.length === 1 ? snapshots[0] : null;
   const snapshotItems = snapshot
@@ -876,6 +966,23 @@ export async function getWorkoutHistorySessionDetail(
       [snapshot.id],
     )
     : [];
+  const comparableRecords = currentVerifiedRecords.length
+    ? await readVerifiedRecords(
+        supabase,
+        userId,
+        "exercise_identity",
+        unique(currentVerifiedRecords.map((record) => record.exercise_identity)),
+      )
+    : [];
+  const verifiedRecordsByLog = new Map<string, WorkoutHistoryVerifiedRecord[]>();
+  for (const record of currentVerifiedRecords) {
+    const presented = presentVerifiedRecord(record, comparableRecords);
+    if (!presented) continue;
+    verifiedRecordsByLog.set(record.exercise_log_id, [
+      ...(verifiedRecordsByLog.get(record.exercise_log_id) ?? []),
+      presented,
+    ]);
+  }
   const candidates: PerformedWorkoutHistoryCandidate[] = [{
     session: root.data as unknown as PerformedWorkoutHistoryRow,
     metadata: {
@@ -901,6 +1008,7 @@ export async function getWorkoutHistorySessionDetail(
     setDetails,
     segments,
     segmentMetrics,
+    verifiedRecordsByLog,
   });
   const completedLogs = logs.filter((log) => Boolean(log.completed_at));
   const reliableVolumeValues = completedLogs
@@ -918,7 +1026,7 @@ export async function getWorkoutHistorySessionDetail(
       exerciseCount: exercises.filter((exercise) => exercise.performedSets.length > 0).length,
       completedSetCount: completedLogs.length,
       reliableVolume: reliableVolumeValues.length ? reliableVolumeValues.reduce((sum, value) => sum + value, 0) : null,
-      verifiedRecordCount: null,
+      verifiedRecordCount: currentVerifiedRecords.length,
     },
     snapshot: snapshot ? {
       id: snapshot.id,

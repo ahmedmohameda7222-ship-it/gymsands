@@ -73,7 +73,7 @@ function detail(sourceKind: "performed" | "scheduled_fallback" = "performed"): W
         id: "set-1", setNumber: 1, reps: 8, weightKg: 80, completedAt: "2026-08-01T08:15:00.000Z",
         notes: "Controlled", setType: "working", rpe: 8, rir: 2, matchState: "matched",
         plannedSet: { id: "planned-1", setOrder: 1, setType: "working", targetMode: "range", sideMode: "bilateral", restSeconds: 90, tempoTarget: null, targets: [] },
-        metrics: [], segments: [],
+        metrics: [], segments: [], verifiedRecords: [],
       }] : [],
       missingPlannedSets: performed ? [{ id: "planned-2", setOrder: 2, setType: "working", targetMode: "range", sideMode: "bilateral", restSeconds: 90, tempoTarget: null, targets: [] }] : [],
     }],

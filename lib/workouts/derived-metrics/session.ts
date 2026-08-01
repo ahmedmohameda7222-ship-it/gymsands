@@ -11,16 +11,23 @@ import {
   DERIVED_METRICS_SCHEMA_VERSION,
 } from "./contracts";
 import {
-  derivedExerciseIdentity,
+  derivedExerciseIdentityParts,
   derivedExerciseName,
   derivedLogIdentity,
 } from "./identity";
 
 type CanonicalSet = {
+  exerciseLogId: string;
+  achievedAt: string;
   workoutSessionIdentity: string;
+  exerciseIdentityKind: DerivedPersonalRecord["exerciseIdentityKind"];
   exerciseIdentity: string;
+  recordEligible: boolean;
   exerciseName: string;
   setType: string;
+  resistanceMode: "external" | "bodyweight" | "bodyweight_added" | "assisted";
+  assistanceKg: number | null;
+  sideContext: string;
   repetitions: number | null;
   externalLoadKg: number | null;
   durationSeconds: number;
@@ -82,6 +89,17 @@ function segmentMetricValues(log: DerivedMetricLog): DerivedMetricValue[][] {
     .filter((segment) => segment.length > 0);
 }
 
+function uniqueMetricSides(
+  direct: readonly DerivedMetricValue[],
+  segments: readonly DerivedMetricValue[][],
+): string {
+  const sides = [...new Set([...direct, ...segments.flat()]
+    .map((metric) => metric.side ?? "none")
+    .filter((side) => side !== "none"))]
+    .sort();
+  return sides.length ? sides.join("+") : "none";
+}
+
 function reduceMetricValues(
   metrics: readonly DerivedMetricValue[],
   key: string,
@@ -89,7 +107,13 @@ function reduceMetricValues(
 ): number | null {
   const values = metrics
     .filter((metric) => metricKey(metric) === key)
-    .map((metric) => finiteNonNegative(metric.value))
+    .map((metric) => {
+      const value = finiteNonNegative(metric.value);
+      if (value === null) return null;
+      return key === "external_load_kg" && metric.unit === "lb"
+        ? value / 2.2046226218
+        : value;
+    })
     .filter((value): value is number => value !== null);
   if (!values.length) return null;
   return reducer === "sum"
@@ -99,8 +123,10 @@ function reduceMetricValues(
 
 function compatibilityMetric(log: DerivedMetricLog, key: string): number | null {
   if (key === "repetitions") return finiteNonNegative(log.reps);
-  if (key === "external_load_kg")
-    return finiteNonNegative(log.weightKg ?? log.weight_kg);
+  if (key === "external_load_kg") {
+    const value = finiteNonNegative(log.weightKg ?? log.weight_kg);
+    return value !== null && log.weightUnit === "lb" ? value / 2.2046226218 : value;
+  }
   return null;
 }
 
@@ -167,8 +193,8 @@ function canonicalSet(log: DerivedMetricLog): CanonicalSet | null {
   const completedAt = log.completedAt ?? log.completed_at;
   if (!completedAt) return null;
   const name = derivedExerciseName(log);
-  const identity = derivedExerciseIdentity(log);
-  if (!name || identity === "name:") return null;
+  const identity = derivedExerciseIdentityParts(log);
+  if (!name || identity.identity === "name:") return null;
 
   const direct = directMetricValues(log);
   const segments = segmentMetricValues(log);
@@ -194,6 +220,18 @@ function canonicalSet(log: DerivedMetricLog): CanonicalSet | null {
     "external_load_kg",
     "max",
   );
+  const bodyweightKg = canonicalMetric(log, direct, segments, "bodyweight_kg", "max");
+  const assistanceKg = canonicalMetric(log, direct, segments, "assistance_kg", "max");
+  const resistanceMode = log.resistanceMode ?? (
+    assistanceKg !== null
+      ? "assisted"
+      : bodyweightKg !== null && (externalLoadKg ?? 0) > 0
+        ? "bodyweight_added"
+        : bodyweightKg !== null
+          ? "bodyweight"
+          : "external"
+  );
+  const sideContext = uniqueMetricSides(direct, segments);
   const durationSeconds =
     canonicalMetric(log, direct, segments, "duration_seconds", "sum") ?? 0;
   const distanceMeters =
@@ -207,11 +245,18 @@ function canonicalSet(log: DerivedMetricLog): CanonicalSet | null {
   const rir = finiteInRange(log.rir ?? details?.rir, 0, 20);
 
   return {
+    exerciseLogId: String(log.id ?? ""),
+    achievedAt: completedAt,
     workoutSessionIdentity:
       String(log.workoutSessionId ?? log.workout_session_id ?? "unknown"),
-    exerciseIdentity: identity,
+    exerciseIdentityKind: identity.kind,
+    exerciseIdentity: identity.identity,
+    recordEligible: !identity.degraded && Boolean(log.id) && Boolean(log.workoutSessionId ?? log.workout_session_id),
     exerciseName: name,
     setType,
+    resistanceMode,
+    assistanceKg,
+    sideContext,
     repetitions,
     externalLoadKg,
     durationSeconds,
@@ -221,7 +266,7 @@ function canonicalSet(log: DerivedMetricLog): CanonicalSet | null {
     rpe,
     rir,
     eligibleEstimatedOneRepMaxKg:
-      repetitions !== null && externalLoadKg !== null
+      resistanceMode === "external" && repetitions !== null && externalLoadKg !== null
         ? estimateEligibleOneRepMax(externalLoadKg, repetitions, setType)
         : null,
   };
@@ -245,11 +290,25 @@ function distribution(sets: readonly CanonicalSet[]): Record<string, number> {
   }, {});
 }
 
-function comparableRepetitionKey(set: CanonicalSet): string {
-  return `${set.exerciseIdentity}:${set.setType}:${set.externalLoadKg ?? "bodyweight"}`;
+function comparisonBaseKey(set: CanonicalSet): string {
+  return [
+    set.exerciseIdentity,
+    `resistance:${set.resistanceMode}`,
+    `side:${set.sideContext}`,
+    `set:${set.setType}`,
+    "unit:kg",
+    `formula:${DERIVED_METRICS_FORMULA_VERSION}`,
+  ].join("|");
 }
 
-function bestByIdentity(
+function comparableRepetitionKey(set: CanonicalSet): string {
+  const load = set.resistanceMode === "assisted"
+    ? `assistance:${set.assistanceKg ?? "unknown"}`
+    : `load:${set.externalLoadKg ?? "bodyweight"}`;
+  return `${comparisonBaseKey(set)}|${load}`;
+}
+
+function bestByContext(
   sets: readonly CanonicalSet[],
   selector: (set: CanonicalSet) => number | null,
 ): Map<string, number> {
@@ -257,48 +316,53 @@ function bestByIdentity(
   for (const set of sets) {
     const value = selector(set);
     if (value === null) continue;
-    result.set(
-      set.exerciseIdentity,
-      Math.max(result.get(set.exerciseIdentity) ?? -Infinity, value),
-    );
+    const context = comparisonBaseKey(set);
+    result.set(context, Math.max(result.get(context) ?? -Infinity, value));
   }
   return result;
 }
 
-function bestHistoricalSessionVolume(
-  sets: readonly CanonicalSet[],
-): Map<string, number> {
-  const bySessionExercise = new Map<string, number>();
+function bestHistoricalSessionVolume(sets: readonly CanonicalSet[]): Map<string, number> {
+  const bySessionContext = new Map<string, number>();
   for (const set of sets) {
-    const key = `${set.workoutSessionIdentity}:${set.exerciseIdentity}`;
-    bySessionExercise.set(key, (bySessionExercise.get(key) ?? 0) + set.volume);
+    const key = `${set.workoutSessionIdentity}::${comparisonBaseKey(set)}`;
+    bySessionContext.set(key, (bySessionContext.get(key) ?? 0) + set.volume);
   }
   const result = new Map<string, number>();
-  for (const [key, volume] of bySessionExercise) {
-    const exerciseIdentity = key.slice(key.indexOf(":") + 1);
-    result.set(
-      exerciseIdentity,
-      Math.max(result.get(exerciseIdentity) ?? 0, volume),
-    );
+  for (const [key, volume] of bySessionContext) {
+    const context = key.slice(key.indexOf("::") + 2);
+    result.set(context, Math.max(result.get(context) ?? 0, volume));
   }
   return result;
 }
 
 function record(
   set: CanonicalSet,
-  type: DerivedPersonalRecordType,
-  value: number,
-  context: string,
+  recordType: DerivedPersonalRecordType,
+  recordValue: number,
+  comparisonContextKey: string,
 ): DerivedPersonalRecord {
+  const recordUnit = recordType === "same_load_max_repetitions"
+    ? "repetitions"
+    : recordType === "exercise_session_volume"
+      ? "kg_repetitions"
+      : "kg";
   return {
+    workoutSessionId: set.workoutSessionIdentity,
+    exerciseLogId: set.exerciseLogId,
+    exerciseIdentityKind: set.exerciseIdentityKind,
     exerciseIdentity: set.exerciseIdentity,
     exerciseName: set.exerciseName,
-    type,
-    value,
+    recordType,
+    recordValue,
+    recordUnit,
     externalLoadKg: set.externalLoadKg,
     repetitions: set.repetitions,
     setType: set.setType,
-    comparableContext: context,
+    comparisonContextKey,
+    schemaVersion: DERIVED_METRICS_SCHEMA_VERSION,
+    formulaVersion: DERIVED_METRICS_FORMULA_VERSION,
+    achievedAt: set.achievedAt,
   };
 }
 
@@ -307,98 +371,63 @@ export function buildPersonalRecordCandidates(
   historicalLogs: readonly DerivedMetricLog[] = [],
 ): DerivedPersonalRecord[] {
   const current = canonicalSets(currentLogs);
-  const historical = canonicalSets(historicalLogs);
-  const previousLoad = bestByIdentity(historical, (set) => set.externalLoadKg);
-  const previousOneRepMax = bestByIdentity(
-    historical,
-    (set) => set.eligibleEstimatedOneRepMaxKg,
-  );
+  const historical = canonicalSets(historicalLogs).filter((set) => set.recordEligible);
+  const previousLoad = bestByContext(historical, (set) =>
+    set.resistanceMode === "assisted" ? null : set.externalLoadKg);
+  const previousOneRepMax = bestByContext(historical, (set) => set.eligibleEstimatedOneRepMaxKg);
   const previousReps = new Map<string, number>();
   for (const set of historical) {
-    if (
-      set.repetitions === null ||
-      !comparableRepetitionSetTypes.has(set.setType)
-    ) continue;
+    if (set.repetitions === null || !comparableRepetitionSetTypes.has(set.setType)) continue;
     const key = comparableRepetitionKey(set);
-    previousReps.set(
-      key,
-      Math.max(previousReps.get(key) ?? -Infinity, set.repetitions),
-    );
+    previousReps.set(key, Math.max(previousReps.get(key) ?? -Infinity, set.repetitions));
   }
   const previousSessionVolume = bestHistoricalSessionVolume(historical);
 
   const candidates: DerivedPersonalRecord[] = [];
-  const exercises = new Map<string, CanonicalSet[]>();
-  for (const set of current)
-    exercises.set(set.exerciseIdentity, [
-      ...(exercises.get(set.exerciseIdentity) ?? []),
-      set,
-    ]);
+  const contexts = new Map<string, CanonicalSet[]>();
+  for (const set of current.filter((candidate) =>
+    candidate.recordEligible && candidate.setType !== "warmup" && candidate.setType !== "timed")) {
+    const context = comparisonBaseKey(set);
+    contexts.set(context, [...(contexts.get(context) ?? []), set]);
+  }
 
-  for (const sets of exercises.values()) {
+  for (const sets of contexts.values()) {
     const first = sets[0];
     const maxLoad = [...sets]
-      .filter((set) => (set.externalLoadKg ?? 0) > 0)
-      .sort(
-        (left, right) =>
-          (right.externalLoadKg ?? 0) - (left.externalLoadKg ?? 0),
-      )[0];
-    if (
-      maxLoad &&
-      maxLoad.externalLoadKg !== null &&
-      maxLoad.externalLoadKg > (previousLoad.get(first.exerciseIdentity) ?? 0)
-    )
-      candidates.push(
-        record(maxLoad, "highest_load", maxLoad.externalLoadKg, maxLoad.setType),
-      );
+      .filter((set) => set.resistanceMode !== "assisted" && workingPerformanceSetTypes.has(set.setType) && (set.externalLoadKg ?? 0) > 0)
+      .sort((left, right) => (right.externalLoadKg ?? 0) - (left.externalLoadKg ?? 0))[0];
+    if (maxLoad?.externalLoadKg !== null && maxLoad?.externalLoadKg !== undefined &&
+        maxLoad.externalLoadKg > (previousLoad.get(comparisonBaseKey(maxLoad)) ?? 0)) {
+      candidates.push(record(maxLoad, "highest_load", maxLoad.externalLoadKg, comparisonBaseKey(maxLoad)));
+    }
 
     const maxOneRep = [...sets]
       .filter((set) => set.eligibleEstimatedOneRepMaxKg !== null)
-      .sort(
-        (left, right) =>
-          (right.eligibleEstimatedOneRepMaxKg ?? 0) -
-          (left.eligibleEstimatedOneRepMaxKg ?? 0),
-      )[0];
-    if (
-      maxOneRep &&
-      maxOneRep.eligibleEstimatedOneRepMaxKg !== null &&
-      maxOneRep.eligibleEstimatedOneRepMaxKg >
-        (previousOneRepMax.get(first.exerciseIdentity) ?? 0)
-    )
-      candidates.push(
-        record(
-          maxOneRep,
-          "estimated_one_rep_max",
-          maxOneRep.eligibleEstimatedOneRepMaxKg,
-          maxOneRep.setType,
-        ),
-      );
+      .sort((left, right) => (right.eligibleEstimatedOneRepMaxKg ?? 0) - (left.eligibleEstimatedOneRepMaxKg ?? 0))[0];
+    if (maxOneRep?.eligibleEstimatedOneRepMaxKg !== null && maxOneRep?.eligibleEstimatedOneRepMaxKg !== undefined &&
+        maxOneRep.eligibleEstimatedOneRepMaxKg > (previousOneRepMax.get(comparisonBaseKey(maxOneRep)) ?? 0)) {
+      candidates.push(record(maxOneRep, "estimated_one_rep_max", maxOneRep.eligibleEstimatedOneRepMaxKg, comparisonBaseKey(maxOneRep)));
+    }
 
     for (const set of sets) {
-      if (
-        set.repetitions === null ||
-        !comparableRepetitionSetTypes.has(set.setType)
-      ) continue;
+      if (set.repetitions === null || !comparableRepetitionSetTypes.has(set.setType)) continue;
       const context = comparableRepetitionKey(set);
-      if (set.repetitions > (previousReps.get(context) ?? 0))
-        candidates.push(record(set, "max_repetitions", set.repetitions, context));
+      if (set.repetitions > (previousReps.get(context) ?? 0)) {
+        candidates.push(record(set, "same_load_max_repetitions", set.repetitions, context));
+      }
     }
 
     const volume = sets.reduce((sum, set) => sum + set.volume, 0);
-    if (
-      volume > 0 &&
-      volume > (previousSessionVolume.get(first.exerciseIdentity) ?? 0)
-    )
-      candidates.push(
-        record(first, "session_volume", volume, first.exerciseIdentity),
-      );
+    if (volume > 0 && volume > (previousSessionVolume.get(comparisonBaseKey(first)) ?? 0)) {
+      candidates.push(record(first, "exercise_session_volume", volume, comparisonBaseKey(first)));
+    }
   }
 
   const unique = new Map<string, DerivedPersonalRecord>();
   for (const candidate of candidates) {
-    const key = `${candidate.exerciseIdentity}:${candidate.type}:${candidate.comparableContext}`;
+    const key = `${candidate.exerciseIdentity}:${candidate.recordType}:${candidate.comparisonContextKey}`;
     const existing = unique.get(key);
-    if (!existing || candidate.value > existing.value) unique.set(key, candidate);
+    if (!existing || candidate.recordValue > existing.recordValue) unique.set(key, candidate);
   }
   return [...unique.values()];
 }
@@ -481,7 +510,7 @@ export function deriveSessionMetrics(
   );
   const highlights = personalRecords
     .slice(0, 3)
-    .map((item) => `${item.exerciseName}:${item.type}`);
+    .map((item) => `${item.exerciseName}:${item.recordType}`);
   return {
     schemaVersion: DERIVED_METRICS_SCHEMA_VERSION,
     formulaVersion: DERIVED_METRICS_FORMULA_VERSION,

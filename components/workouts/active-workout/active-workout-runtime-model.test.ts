@@ -353,7 +353,6 @@ describe("active workout runtime model", () => {
       }))
     })), history, tr, formatters);
 
-    expect(prs.some((item) => item.includes("ضغط الصدر"))).toBe(true);
-    expect(prs.some((item) => item.includes("سحب أمامي"))).toBe(true);
+    expect(prs).toEqual([]);
   });
 });

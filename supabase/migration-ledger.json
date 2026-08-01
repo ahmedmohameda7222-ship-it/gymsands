@@ -5,14 +5,14 @@
   "auditedRepositoryCommit": "73944677c11222044520991fc1f18c8edd81a78e",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 0,
-  "unresolvedCount": 0,
+  "pendingCount": 1,
+  "unresolvedCount": 1,
   "historyRepair": {
-    "state": "reconciled",
+    "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 0,
-    "unresolvedCount": 0,
-    "note": "Plaivra Production contains 76 physical migration records and is reconciled through generated AW-9 migration 20260801045628. Repository migration identities remain immutable; generated aliases preserve exact application history. Do not replay any applied migration."
+    "pendingCount": 1,
+    "unresolvedCount": 1,
+    "note": "Plaivra Production contains 76 physical migration records and is reconciled through generated AW-9 migration 20260801045628. Workout History migration 20260801140043 remains repository-only pending and is not applied to Production. Repository migration identities remain immutable; generated aliases preserve exact application history. Do not replay any applied migration."
   },
   "entries": [
     {
@@ -501,6 +501,11 @@
       "evidenceCommit": "73944677c11222044520991fc1f18c8edd81a78e",
       "repositorySha256": "1e727c81e333b08bfe4cc4f2aae50014ac07064bc25625913b14b27f41f7bf3e",
       "repositoryGitBlob": "f1ffadfa2a0fc3b149afc6cfbf3c82751f18230c"
+    },
+    {
+      "localFile": "20260801140043_workout_history_verified_records.sql",
+      "state": "pending",
+      "note": "Approved WH-6 forward migration. Repository-only pending; not applied to Production."
     }
   ],
   "productionRecordCount": 76
