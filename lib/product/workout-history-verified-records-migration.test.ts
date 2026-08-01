@@ -5,12 +5,24 @@ const migration = readFileSync(
   "supabase/migrations/20260801140043_workout_history_verified_records.sql",
   "utf8",
 );
+const hardening = readFileSync(
+  "supabase/migrations/20260801194500_workout_history_verified_record_authority_hardening.sql",
+  "utf8",
+);
 const verification = readFileSync(
   "supabase/verification/workout-history-verified-records.sql",
   "utf8",
 );
 const progress = readFileSync("services/database/progress.ts", "utf8");
-const completion = readFileSync("services/database/workout-sessions-legacy-implementation.ts", "utf8");
+const completion = readFileSync("services/database/active-session-persistence-adapter.ts", "utf8");
+const refreshClient = readFileSync(
+  "services/workouts/history/verified-records-client.ts",
+  "utf8",
+);
+const route = readFileSync(
+  "app/api/workouts/history/[sessionId]/verified-records/route.ts",
+  "utf8",
+);
 const exportSource = readFileSync("lib/privacy/data-export-legacy.ts", "utf8");
 
 describe("WH-6 verified record migration authority", () => {
@@ -32,6 +44,14 @@ describe("WH-6 verified record migration authority", () => {
     expect(migration).toContain("revoke all on function private.replace_workout_derived_records_atomic");
   });
 
+  it("makes the derived replacement authority service-owned", () => {
+    expect(hardening).toContain("from public,anon,authenticated");
+    expect(hardening).toContain("to service_role");
+    expect(hardening).toContain("has_function_privilege");
+    expect(verification).toContain("authenticated browser can execute record replacement");
+    expect(verification).toContain("record_value',9999");
+  });
+
   it("uses one bounded idempotent trusted replacement authority", () => {
     expect(migration).toContain("jsonb_array_length(p_records)>500");
     expect(migration).toContain("perform public.assert_workout_actor(p_user_id)");
@@ -41,10 +61,14 @@ describe("WH-6 verified record migration authority", () => {
     expect(migration).toContain("derived_records_evaluated_at=clock_timestamp()");
   });
 
-  it("removes the legacy client writer and keeps export/purge coverage", () => {
+  it("refreshes only after canonical terminal confirmation with member auth", () => {
     expect(progress).not.toContain("autoDetectPersonalRecordsFromExerciseLogs");
-    expect(completion).toContain("refreshVerifiedRecordsAfterWorkoutCompletion");
-    expect(completion).toContain("/verified-records");
+    expect(completion).toContain("refreshVerifiedRecordsAuthenticated");
+    expect(completion).toContain('root.status !== "completed"');
+    expect(refreshClient).toContain("supabase.auth.getSession()");
+    expect(refreshClient).toContain("Authorization: `Bearer ${token}`");
+    expect(route).toContain("createSupabaseServerClient(null, true)");
+    expect(route).toContain("serverEnv.supabaseServiceRoleKey");
     expect(exportSource).toContain('"personal_records"');
   });
 
