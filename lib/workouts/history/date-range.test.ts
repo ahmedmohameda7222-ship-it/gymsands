@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  customWorkoutHistoryPeriodRange,
   currentMonthWorkoutHistoryRange,
+  shiftWorkoutHistoryPeriodAnchor,
   validateWorkoutHistoryDateRange,
+  workoutHistoryPeriodRange,
   zonedLocalDateTimeToIso,
 } from "@/lib/workouts/history/date-range";
 
@@ -16,6 +19,35 @@ describe("Workout History calendar ranges", () => {
       to: "2026-03-31T22:00:00.000Z",
       timezone: "Europe/Berlin",
     });
+  });
+
+  it("builds week, three-month, custom, and shifted calendar periods in the user timezone", () => {
+    expect(workoutHistoryPeriodRange(
+      "week",
+      new Date("2026-08-05T12:00:00.000Z"),
+      "Europe/Berlin",
+    )).toMatchObject({
+      from: "2026-08-02T22:00:00.000Z",
+      to: "2026-08-09T22:00:00.000Z",
+    });
+    expect(workoutHistoryPeriodRange(
+      "three-months",
+      new Date("2026-08-05T12:00:00.000Z"),
+      "Europe/Berlin",
+    )).toMatchObject({
+      from: "2026-05-31T22:00:00.000Z",
+      to: "2026-08-31T22:00:00.000Z",
+    });
+    expect(customWorkoutHistoryPeriodRange("2026-08-01", "2026-08-03", "Europe/Berlin"))
+      .toMatchObject({
+        from: "2026-07-31T22:00:00.000Z",
+        to: "2026-08-03T22:00:00.000Z",
+      });
+    expect(shiftWorkoutHistoryPeriodAnchor(
+      new Date("2026-08-05T12:00:00.000Z"),
+      "month",
+      -1,
+    ).toISOString()).toBe("2026-07-01T12:00:00.000Z");
   });
 
   it("converts local midnight using the offset active on that date", () => {

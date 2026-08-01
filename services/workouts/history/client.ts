@@ -4,11 +4,13 @@ import { env } from "@/lib/env";
 import { getMockTrainActivity } from "@/lib/fixtures/train-mock";
 import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { currentMonthWorkoutHistoryRange } from "@/lib/workouts/history/date-range";
+import { summarizeWorkoutHistory } from "@/lib/workouts/history/metrics";
 import {
   readWorkoutHistoryCache,
   writeWorkoutHistoryCache,
 } from "@/lib/workouts/history/offline-cache";
 import { resolveCanonicalWorkoutActivity } from "@/lib/workouts/history/resolve-activity";
+import { presentWorkoutHistorySession } from "@/lib/workouts/history/presentation";
 import { workoutHistoryRequestSearchParams } from "@/lib/workouts/history/request";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
@@ -54,7 +56,7 @@ function mockHistory(userId: string, limit: number): CanonicalWorkoutActivityRea
       cancelled_at: null,
     },
     metadata: {
-      completedSetCount: 0,
+      completedSetCount: session.status === "completed" ? 8 : 0,
       structuredPerformedMetricCount: 0,
       actualPerformedSnapshotCount: 0,
       plannedSetCount: null,
@@ -71,6 +73,35 @@ function mockHistory(userId: string, limit: number): CanonicalWorkoutActivityRea
       performed: { source: "performed", state: "loaded" },
       scheduledFallback: { source: "scheduled_fallback", state: "loaded" },
     },
+  };
+}
+
+function mockHistoryList(userId: string, request: WorkoutHistoryListRequest): WorkoutHistoryListResponse {
+  const search = request.search?.toLocaleLowerCase("en-US") ?? "";
+  const items = mockHistory(userId, 100).activities
+    .map((activity) => presentWorkoutHistorySession(activity, {
+      exerciseCount: activity.lifecycle === "completed" ? 4 : null,
+      completedSetCount: activity.lifecycle === "completed" ? 8 : null,
+      reliableVolume: activity.lifecycle === "completed" ? 5_420 : null,
+      exerciseNames: activity.lifecycle === "completed" ? ["Bench press", "Row"] : [],
+    }))
+    .filter((item) => {
+      const effectiveAt = Date.parse(item.effectiveAt);
+      if (effectiveAt < Date.parse(request.from) || effectiveAt >= Date.parse(request.to)) return false;
+      if (request.statuses?.length && !request.statuses.includes(item.lifecycle)) return false;
+      if (request.progressOnly && !item.hasMeaningfulPerformance) return false;
+      return !search || [item.title, ...item.exerciseNames]
+        .join(" ")
+        .toLocaleLowerCase("en-US")
+        .includes(search);
+    });
+  return {
+    contractVersion: WORKOUT_HISTORY_CONTRACT_VERSION,
+    period: { from: request.from, to: request.to, timezone: request.timezone },
+    summary: summarizeWorkoutHistory(items),
+    items: items.slice(0, request.limit ?? 20),
+    nextCursor: null,
+    notices: [],
   };
 }
 
@@ -114,6 +145,7 @@ export async function getWorkoutHistoryList(
   options?: { signal?: AbortSignal },
 ): Promise<WorkoutHistoryListResponse> {
   if (!isUuid(userId)) throw new WorkoutHistoryClientError("sign_in_required", "Please sign in to view workout history.", 401);
+  if (env.useMockAuth && isMockAuthUserId(userId)) return mockHistoryList(userId, request);
   const params = workoutHistoryRequestSearchParams(request);
   const requestKey = params.toString();
   if (isOffline()) {
