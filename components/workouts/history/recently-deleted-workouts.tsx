@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toaster";
+import { useTrainTranslation } from "@/lib/i18n/train";
 
 type DeletedWorkout = {
   id: string;
@@ -24,6 +25,7 @@ type DeletedWorkout = {
 export function RecentlyDeletedWorkouts() {
   const { session } = useAuth();
   const { toast } = useToast();
+  const { locale, tr } = useTrainTranslation();
   const [items, setItems] = useState<DeletedWorkout[]>([]);
   const [loading, setLoading] = useState(true);
   const accessToken = session?.access_token;
@@ -33,7 +35,6 @@ export function RecentlyDeletedWorkouts() {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     const response = await fetch("/api/workouts/history/recently-deleted", {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -53,7 +54,7 @@ export function RecentlyDeletedWorkouts() {
     if (
       kind === "purge" &&
       !window.confirm(
-        `Delete ${item.workout_name} permanently? This cannot be undone.`,
+        tr("historyPermanentDeleteConfirmation", { title: item.workout_name }),
       )
     )
       return;
@@ -70,21 +71,23 @@ export function RecentlyDeletedWorkouts() {
           : { confirmPermanent: true },
       ),
     });
-
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       toast({
         title:
-          kind === "restore" ? "Restore failed" : "Permanent deletion failed",
+          kind === "restore"
+            ? tr("historyRestoreFailed")
+            : tr("historyPermanentDeleteFailed"),
         description: data.error,
         variant: "error",
       });
       return;
     }
-
     toast({
       title:
-        kind === "restore" ? "Workout restored" : "Workout permanently deleted",
+        kind === "restore"
+          ? tr("historyWorkoutRestored")
+          : tr("historyWorkoutPermanentlyDeleted"),
     });
     void load();
   }
@@ -92,19 +95,21 @@ export function RecentlyDeletedWorkouts() {
   return (
     <Card className="border-border/70">
       <CardHeader>
-        <CardTitle className="text-base">Recently deleted workouts</CardTitle>
+        <CardTitle className="text-base">
+          {tr("historyRecentlyDeletedTitle")}
+        </CardTitle>
         <CardDescription>
-          Restore workouts for 30 days, or remove them permanently.
+          {tr("historyRecentlyDeletedDescription")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {loading ? (
           <p className="text-sm text-muted-foreground">
-            Loading recently deleted workouts…
+            {tr("historyRecentlyDeletedLoading")}
           </p>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No recently deleted workouts.
+            {tr("historyRecentlyDeletedEmpty")}
           </p>
         ) : (
           items.map((item) => (
@@ -115,8 +120,10 @@ export function RecentlyDeletedWorkouts() {
               <div>
                 <p className="font-medium">{item.workout_name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {new Date(item.started_at).toLocaleDateString()} ·{" "}
-                  {item.days_remaining} days remaining
+                  {new Date(item.started_at).toLocaleDateString(locale)} ·{" "}
+                  {tr("historyDaysRemaining", {
+                    count: item.days_remaining,
+                  })}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -126,7 +133,7 @@ export function RecentlyDeletedWorkouts() {
                   onClick={() => void mutate(item, "restore")}
                 >
                   <RotateCcw className="size-4" />
-                  Restore
+                  {tr("historyRestore")}
                 </Button>
                 <Button
                   type="button"
@@ -134,7 +141,7 @@ export function RecentlyDeletedWorkouts() {
                   onClick={() => void mutate(item, "purge")}
                 >
                   <Trash2 className="size-4" />
-                  Delete permanently
+                  {tr("historyDeletePermanently")}
                 </Button>
               </div>
             </div>

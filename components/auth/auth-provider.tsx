@@ -39,6 +39,15 @@ const mockUser = {
   email: "member@plaivra.test",
 } as User;
 
+const mockSession = {
+  user: mockUser,
+  access_token: "plaivra-rendered-qa-access-token",
+  token_type: "bearer",
+  expires_in: 3600,
+  expires_at: 4_102_444_800,
+  refresh_token: "plaivra-rendered-qa-refresh-token",
+} as Session;
+
 async function clearUserOwnedClientState(userId: string | null) {
   if (!userId) return;
   releaseActiveSessionStoresForUser(userId);
@@ -138,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         if (mockAuthEnabled) {
           activeUserIdRef.current = MOCK_AUTH_USER_ID;
-          setSession({ user: mockUser } as Session);
+          setSession(mockSession);
           await loadProfile(MOCK_AUTH_USER_ID);
           return;
         }

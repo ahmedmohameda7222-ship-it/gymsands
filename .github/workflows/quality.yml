@@ -205,6 +205,36 @@ jobs:
           --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
           -- npm run test:integration
 
+      - name: Gate — Workout History focused tests
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name workout-history-tests
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm run test:workout-history
+
+      - name: Gate — Workout History integration tests
+        env:
+          PLAIVRA_AW2A_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name workout-history-integration
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm run test:workout-history:integration
+
+      - name: Gate — Workout History performance and storage audit
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name workout-history-performance
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm run measure:workout-history --
+          --output quality-reports/workout-history-performance/report.json
+
       - name: Gate — script and i18n tests
         run: >-
           node scripts/run-quality-gate.mjs
@@ -283,6 +313,7 @@ jobs:
           curl --fail --silent http://localhost:3000/ > /dev/null;
           QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="$PLAIVRA_COMMIT_SHA" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered;
           QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="$PLAIVRA_COMMIT_SHA" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train;
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="$PLAIVRA_COMMIT_SHA" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_WORKOUT_HISTORY_EVIDENCE_DIR=quality-reports/workout-history-qa-evidence npm run qa:workout-history;
           kill "$server_pid" 2>/dev/null || true;
           wait "$server_pid" 2>/dev/null || true;
           trap - EXIT;
@@ -355,6 +386,7 @@ jobs:
             quality-reports/database-preflight.log \
             quality-reports/migration-ledger.log \
             quality-reports/integration.log \
+            quality-reports/workout-history-integration.log \
             > quality-reports/database-validation.log
 
       - name: Record canonical artifact metadata
@@ -408,7 +440,8 @@ jobs:
           test -f quality-reports/database-validation.log
           for evidence in \
             integrity full-migration-chain database-lint database-preflight migration-ledger \
-            dependency-audit lint typecheck unit integration script-tests telemetry-tests \
+            dependency-audit lint typecheck unit workout-history-tests integration workout-history-integration \
+            workout-history-performance script-tests telemetry-tests \
             environment-validation release-metadata build rendered-qa; do
             test -f "quality-reports/${evidence}.log"
             test -f "quality-reports/${evidence}.exit"

@@ -1,9 +1,33 @@
 import { supabase } from "@/lib/supabase/client";
-import { defaultThemeId, isThemeId, type ThemeId } from "@/lib/themes";
+import { env } from "@/lib/env";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
+import {
+  defaultThemeId,
+  isThemeId,
+  themeCacheKey,
+  type ThemeId,
+} from "@/lib/themes";
 import { isUuid } from "@/lib/utils";
 
-export type QuickLogSection = "water" | "meal" | "weight" | "workout" | "progress" | "sleep" | "supplements" | "wellness";
-const allQuickLogSections: QuickLogSection[] = ["water", "meal", "weight", "workout", "progress", "sleep", "supplements", "wellness"];
+export type QuickLogSection =
+  | "water"
+  | "meal"
+  | "weight"
+  | "workout"
+  | "progress"
+  | "sleep"
+  | "supplements"
+  | "wellness";
+const allQuickLogSections: QuickLogSection[] = [
+  "water",
+  "meal",
+  "weight",
+  "workout",
+  "progress",
+  "sleep",
+  "supplements",
+  "wellness",
+];
 
 export type UserAppSettings = {
   id?: string;
@@ -182,15 +206,21 @@ export const defaultUserAppSettings: UserAppSettings = {
   hideProgressPhotos: false,
   hideProfileDetails: false,
   privateProfileMode: false,
-  quickLogSections: [...allQuickLogSections]
+  quickLogSections: [...allQuickLogSections],
 };
 
 function canUseUserSettings(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
 }
 
-function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
-  return typeof value === "string" && allowed.includes(value as T) ? (value as T) : fallback;
+function pick<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  return typeof value === "string" && allowed.includes(value as T)
+    ? (value as T)
+    : fallback;
 }
 
 function stringOrNull(value: unknown) {
@@ -205,27 +235,80 @@ function bool(value: unknown, fallback = false) {
 
 function quickLogSections(value: unknown) {
   if (!Array.isArray(value)) return [...allQuickLogSections];
-  const selected = value.filter((item): item is QuickLogSection => typeof item === "string" && allQuickLogSections.includes(item as QuickLogSection));
+  const selected = value.filter(
+    (item): item is QuickLogSection =>
+      typeof item === "string" &&
+      allQuickLogSections.includes(item as QuickLogSection),
+  );
   return [...new Set(selected)];
 }
 
-function normalizeSettings(value: Partial<UserAppSettings>, userId: string): UserAppSettings {
+function normalizeSettings(
+  value: Partial<UserAppSettings>,
+  userId: string,
+): UserAppSettings {
   return {
     ...defaultUserAppSettings,
     ...value,
     userId,
-    themeId: isThemeId(value.themeId) ? value.themeId : defaultUserAppSettings.themeId,
-    theme: pick(value.theme, ["light", "dark", "system"], defaultUserAppSettings.theme),
-    accentColor: pick(value.accentColor, ["olive", "champagne", "sage"], defaultUserAppSettings.accentColor),
-    language: pick(value.language, ["en", "de", "ar", "system"], defaultUserAppSettings.language),
-    weightUnit: pick(value.weightUnit, ["kg", "lb"], defaultUserAppSettings.weightUnit),
-    heightUnit: pick(value.heightUnit, ["cm", "ft-in"], defaultUserAppSettings.heightUnit),
-    distanceUnit: pick(value.distanceUnit, ["km", "miles"], defaultUserAppSettings.distanceUnit),
-    liquidUnit: pick(value.liquidUnit, ["ml", "oz"], defaultUserAppSettings.liquidUnit),
-    energyUnit: pick(value.energyUnit, ["kcal", "kJ"], defaultUserAppSettings.energyUnit),
-    bodyMeasurementUnit: pick(value.bodyMeasurementUnit, ["cm", "inches"], defaultUserAppSettings.bodyMeasurementUnit),
-    weekStartsOn: pick(value.weekStartsOn, ["monday", "sunday"], defaultUserAppSettings.weekStartsOn),
-    defaultStartPage: pick(value.defaultStartPage, ["today", "dashboard", "train", "eat", "progress"], defaultUserAppSettings.defaultStartPage),
+    themeId: isThemeId(value.themeId)
+      ? value.themeId
+      : defaultUserAppSettings.themeId,
+    theme: pick(
+      value.theme,
+      ["light", "dark", "system"],
+      defaultUserAppSettings.theme,
+    ),
+    accentColor: pick(
+      value.accentColor,
+      ["olive", "champagne", "sage"],
+      defaultUserAppSettings.accentColor,
+    ),
+    language: pick(
+      value.language,
+      ["en", "de", "ar", "system"],
+      defaultUserAppSettings.language,
+    ),
+    weightUnit: pick(
+      value.weightUnit,
+      ["kg", "lb"],
+      defaultUserAppSettings.weightUnit,
+    ),
+    heightUnit: pick(
+      value.heightUnit,
+      ["cm", "ft-in"],
+      defaultUserAppSettings.heightUnit,
+    ),
+    distanceUnit: pick(
+      value.distanceUnit,
+      ["km", "miles"],
+      defaultUserAppSettings.distanceUnit,
+    ),
+    liquidUnit: pick(
+      value.liquidUnit,
+      ["ml", "oz"],
+      defaultUserAppSettings.liquidUnit,
+    ),
+    energyUnit: pick(
+      value.energyUnit,
+      ["kcal", "kJ"],
+      defaultUserAppSettings.energyUnit,
+    ),
+    bodyMeasurementUnit: pick(
+      value.bodyMeasurementUnit,
+      ["cm", "inches"],
+      defaultUserAppSettings.bodyMeasurementUnit,
+    ),
+    weekStartsOn: pick(
+      value.weekStartsOn,
+      ["monday", "sunday"],
+      defaultUserAppSettings.weekStartsOn,
+    ),
+    defaultStartPage: pick(
+      value.defaultStartPage,
+      ["today", "dashboard", "train", "eat", "progress"],
+      defaultUserAppSettings.defaultStartPage,
+    ),
     compactMode: bool(value.compactMode),
     reduceAnimations: bool(value.reduceAnimations),
     largeTextMode: bool(value.largeTextMode),
@@ -250,7 +333,7 @@ function normalizeSettings(value: Partial<UserAppSettings>, userId: string): Use
     hideProgressPhotos: bool(value.hideProgressPhotos),
     hideProfileDetails: bool(value.hideProfileDetails),
     privateProfileMode: bool(value.privateProfileMode),
-    quickLogSections: quickLogSections(value.quickLogSections)
+    quickLogSections: quickLogSections(value.quickLogSections),
   };
 }
 
@@ -267,9 +350,11 @@ function rowToSettings(row: UserAppSettingsRow): UserAppSettings {
       distanceUnit: row.distance_unit as UserAppSettings["distanceUnit"],
       liquidUnit: row.liquid_unit as UserAppSettings["liquidUnit"],
       energyUnit: row.energy_unit as UserAppSettings["energyUnit"],
-      bodyMeasurementUnit: row.body_measurement_unit as UserAppSettings["bodyMeasurementUnit"],
+      bodyMeasurementUnit:
+        row.body_measurement_unit as UserAppSettings["bodyMeasurementUnit"],
       weekStartsOn: row.week_starts_on as UserAppSettings["weekStartsOn"],
-      defaultStartPage: row.default_start_page as UserAppSettings["defaultStartPage"],
+      defaultStartPage:
+        row.default_start_page as UserAppSettings["defaultStartPage"],
       compactMode: row.compact_mode,
       reduceAnimations: row.reduce_animations,
       largeTextMode: row.large_text_mode,
@@ -313,9 +398,9 @@ function rowToSettings(row: UserAppSettingsRow): UserAppSettings {
       privateProfileMode: row.private_profile_mode,
       quickLogSections: quickLogSections(row.quick_log_sections),
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     },
-    row.user_id
+    row.user_id,
   );
 }
 
@@ -375,7 +460,7 @@ function settingsToDatabase(settings: UserAppSettings) {
     hide_progress_photos: settings.hideProgressPhotos,
     hide_profile_details: settings.hideProfileDetails,
     private_profile_mode: settings.privateProfileMode,
-    quick_log_sections: settings.quickLogSections
+    quick_log_sections: settings.quickLogSections,
   };
 }
 
@@ -383,7 +468,33 @@ function fallbackSettings(userId: string): UserAppSettings {
   return normalizeSettings(defaultUserAppSettings, userId);
 }
 
-export async function getUserAppSettings(userId: string): Promise<UserAppSettings> {
+export async function getUserAppSettings(
+  userId: string,
+): Promise<UserAppSettings> {
+  if (env.useMockAuth && isMockAuthUserId(userId)) {
+    const cachedTheme =
+      typeof window === "undefined"
+        ? null
+        : window.localStorage.getItem(themeCacheKey);
+    const cachedLanguage =
+      typeof window === "undefined"
+        ? null
+        : window.localStorage.getItem("plaivra.language.v1");
+    return normalizeSettings(
+      {
+        ...defaultUserAppSettings,
+        themeId: isThemeId(cachedTheme)
+          ? cachedTheme
+          : defaultUserAppSettings.themeId,
+        language: pick(
+          cachedLanguage,
+          ["en", "de", "ar", "system"] as const,
+          defaultUserAppSettings.language,
+        ),
+      },
+      userId,
+    );
+  }
   if (!canUseUserSettings(userId)) return fallbackSettings(userId);
 
   const { data, error } = await supabase!
@@ -406,8 +517,12 @@ export async function getUserAppSettings(userId: string): Promise<UserAppSetting
   return rowToSettings(inserted.data as UserAppSettingsRow);
 }
 
-export async function upsertUserAppSettings(userId: string, patch: Partial<UserAppSettings>): Promise<UserAppSettings> {
-  if (!canUseUserSettings(userId)) return normalizeSettings({ ...defaultUserAppSettings, ...patch }, userId);
+export async function upsertUserAppSettings(
+  userId: string,
+  patch: Partial<UserAppSettings>,
+): Promise<UserAppSettings> {
+  if (!canUseUserSettings(userId))
+    return normalizeSettings({ ...defaultUserAppSettings, ...patch }, userId);
 
   const current = await getUserAppSettings(userId);
   const next = normalizeSettings({ ...current, ...patch }, userId);
@@ -422,7 +537,9 @@ export async function upsertUserAppSettings(userId: string, patch: Partial<UserA
   return rowToSettings(data as UserAppSettingsRow);
 }
 
-export async function resetUserAppSettings(userId: string): Promise<UserAppSettings> {
+export async function resetUserAppSettings(
+  userId: string,
+): Promise<UserAppSettings> {
   if (!canUseUserSettings(userId)) return fallbackSettings(userId);
 
   const defaults = fallbackSettings(userId);
@@ -436,7 +553,9 @@ export async function resetUserAppSettings(userId: string): Promise<UserAppSetti
   return rowToSettings(data as UserAppSettingsRow);
 }
 
-export function defaultStartPageToPath(startPage: UserAppSettings["defaultStartPage"]) {
+export function defaultStartPageToPath(
+  startPage: UserAppSettings["defaultStartPage"],
+) {
   switch (startPage) {
     case "dashboard":
     case "today":

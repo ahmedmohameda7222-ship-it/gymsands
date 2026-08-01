@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
-import { expectedMigrationVersion, validationRequestId } from "./release-identity-contract.mjs";
+import {
+  expectedMigrationVersion,
+  validationRequestId,
+} from "./release-identity-contract.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -11,7 +14,9 @@ export const EXPECTED_REPOSITORY = "ahmedmohameda7222-ship-it/gymsands";
 export const EXPECTED_SCHEMA_COMPATIBILITY = "2";
 
 export function currentExpectedDatabaseMigration() {
-  const ledger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
+  const ledger = JSON.parse(
+    readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"),
+  );
   const state = deriveMigrationLedgerState(ledger);
   return expectedMigrationVersion(
     state.latestAppliedMigrationVersion,
@@ -36,7 +41,10 @@ export const REQUIRED_QUALITY_GATES = Object.freeze({
   lint: "lint",
   typecheck: "typecheck",
   unitTests: "unit",
+  workoutHistoryTests: "workout-history-tests",
   integrationTests: "integration",
+  workoutHistoryIntegration: "workout-history-integration",
+  workoutHistoryPerformance: "workout-history-performance",
   scriptTests: "script-tests",
   telemetryTests: "telemetry-tests",
   environmentValidation: "environment-validation",
@@ -45,13 +53,19 @@ export const REQUIRED_QUALITY_GATES = Object.freeze({
   renderedBrowserQa: "rendered-qa",
 });
 
-export const REQUIRED_QUALITY_GATE_NAMES = Object.freeze(Object.keys(REQUIRED_QUALITY_GATES));
-export const REQUIRED_QUALITY_EVIDENCE_NAMES = Object.freeze(Object.values(REQUIRED_QUALITY_GATES));
+export const REQUIRED_QUALITY_GATE_NAMES = Object.freeze(
+  Object.keys(REQUIRED_QUALITY_GATES),
+);
+export const REQUIRED_QUALITY_EVIDENCE_NAMES = Object.freeze(
+  Object.values(REQUIRED_QUALITY_GATES),
+);
 
 export const REQUIRED_CANONICAL_FILES = Object.freeze([
   "artifact-metadata.json",
   "database-validation.log",
   "unit-failure-parity.json",
+  "workout-history-performance/report.json",
+  "workout-history-qa-evidence/workout-history-qa-results.json",
 ]);
 
 export function sha256File(path) {
@@ -61,10 +75,10 @@ export function sha256File(path) {
 export function safeRelativePath(value, label = "Evidence path") {
   const normalized = value?.replaceAll("\\", "/").replace(/^\.\//, "");
   if (
-    !normalized
-    || normalized.startsWith("/")
-    || normalized.includes("..")
-    || !/^[a-z0-9][a-z0-9._/-]{0,240}$/i.test(normalized)
+    !normalized ||
+    normalized.startsWith("/") ||
+    normalized.includes("..") ||
+    !/^[a-z0-9][a-z0-9._/-]{0,240}$/i.test(normalized)
   ) {
     throw new Error(`${label} must be a safe relative path.`);
   }
@@ -87,7 +101,8 @@ export function numericRunId(value, label = "Workflow run ID") {
 
 export function exactTimestamp(value, label = "Timestamp") {
   const parsed = new Date(value ?? "");
-  if (Number.isNaN(parsed.getTime())) throw new Error(`${label} must be valid.`);
+  if (Number.isNaN(parsed.getTime()))
+    throw new Error(`${label} must be valid.`);
   return parsed.toISOString();
 }
 
