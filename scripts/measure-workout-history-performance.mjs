@@ -171,7 +171,7 @@ async function main() {
         path.join(REPO_ROOT, "node_modules", "vitest", "vitest.mjs"),
         "run",
         "--config",
-        "vitest.integration.config.mjs",
+        "vitest.workout-history-performance.config.mjs",
         "scripts/workout-history-performance.integration.test.ts",
       ],
       {
