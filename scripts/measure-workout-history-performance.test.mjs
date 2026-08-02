@@ -5,6 +5,7 @@ import {
   REQUIRED_WORKOUT_SESSION_COLUMNS,
   assertDisposableLocalDatabaseUrl,
   buildCommittedFixtureSql,
+  buildCurrentDetailProjectionSql,
   cleanupFixtureSql,
   ensureLocalSupabaseServicePlane,
   parseSupabaseStatusEnv,
@@ -55,6 +56,18 @@ test("extracts a committed 5,000-session setup from the deterministic fixture", 
   assert.match(setup, /workout_session_prescription_metric_targets/u);
   assert.doesNotMatch(setup, /create temp table wh9_timings/u);
   assert.match(setup, /commit;\s*$/u);
+});
+
+test("prepares the measured detail session through the atomic projection contract", () => {
+  const sql = buildCurrentDetailProjectionSql();
+  assert.match(sql, /^begin;\n/u);
+  assert.match(sql, /plaivra-wh9-session-4999/u);
+  assert.match(sql, /replace_workout_derived_records_atomic/u);
+  assert.match(sql, /derived_record_schema_version=1/u);
+  assert.match(sql, /derived_record_formula_version='wh6-v1'/u);
+  assert.match(sql, /derived_records_evaluated_at is not null/u);
+  assert.match(sql, /commit;\s*$/u);
+  assert.doesNotMatch(sql, /update\s+public\.workout_sessions/iu);
 });
 
 test("cleanup remains executable SQL scoped to the deterministic fixture owner", () => {
@@ -176,8 +189,17 @@ test("benchmark preserves the migrated database while activating PostgREST", asy
   assert.doesNotMatch(source, /execute\("supabase", \["db", "reset"/u);
   assert.match(
     source,
-    /ensureLocalSupabaseServicePlane\(\);\n  const local = localSupabaseEnvironment\(\);\n  runPsql\(databaseUrl, "notify pgrst, 'reload schema';\\n"\);\n  await waitForWorkoutHistorySchema\(local\);\n\n  runPsql\(databaseUrl, cleanupSql\);/u,
+    /ensureLocalSupabaseServicePlane\(\);\n  const local = localSupabaseEnvironment\(\);\n  runPsql\(databaseUrl, "notify pgrst, 'reload schema';\\n"\);\n  await waitForWorkoutHistorySchema\(local\);/u,
   );
+  const setupIndex = source.indexOf("runPsql(databaseUrl, setupSql);");
+  const projectionIndex = source.indexOf("runPsql(databaseUrl, detailProjectionSql);");
+  const measuredProbeIndex = source.indexOf(
+    "await waitForWorkoutHistorySchema(local);",
+    setupIndex,
+  );
+  assert.ok(setupIndex >= 0);
+  assert.ok(projectionIndex > setupIndex);
+  assert.ok(measuredProbeIndex > projectionIndex);
 });
 
 test("real benchmark executes the versioned list and detail services", async () => {
