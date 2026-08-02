@@ -9,7 +9,7 @@ import { readWorkoutHistoryFilterOptions } from "@/services/workouts/history/fil
 import { workoutHistoryRecordProjectionIsCurrent } from "@/services/workouts/history/record-projection-state";
 import { listWorkoutHistoryKeyset } from "@/services/workouts/history/server-list-reader";
 import { getWorkoutHistorySessionDetail } from "@/services/workouts/history/server-reader";
-import { readSharedWorkoutHistorySessionMetrics } from "@/services/workouts/history/shared-session-metrics";
+import { readSharedWorkoutHistorySessionMetricsForKnownOwnerScopedSession } from "@/services/workouts/history/shared-session-metrics";
 import type { WorkoutHistoryListRequest } from "@/types/workout-history";
 
 const userId = "b9000000-0000-4000-8000-000000000001";
@@ -35,7 +35,10 @@ export const REAL_SERVICE_BUDGETS = Object.freeze({
   maxListRowsTransferred: 650,
   maxDetailRequests: 14,
   maxDetailRowsTransferred: 1_000,
-  listPayloadBytes: 150 * 1024,
+  // The canonical 20-card route includes structured AW-8 metric inputs and
+  // first-page period options. The measured bounded baseline is 175–182 KiB;
+  // retain explicit headroom without weakening row, request, or N+1 limits.
+  listPayloadBytes: 192 * 1024,
   detailPayloadBytes: 300 * 1024,
 });
 
@@ -302,7 +305,10 @@ describe.sequential("WH-9 real service performance and transfer budgets", () => 
     const detail = await measure(async () => {
       const [response, metrics, projectionCurrent] = await Promise.all([
         getWorkoutHistorySessionDetail(supabase, userId, sessionId),
-        readSharedWorkoutHistorySessionMetrics(supabase, userId, sessionId),
+        readSharedWorkoutHistorySessionMetricsForKnownOwnerScopedSession(
+          supabase,
+          sessionId,
+        ),
         workoutHistoryRecordProjectionIsCurrent(supabase, userId, sessionId),
       ]);
       return {
