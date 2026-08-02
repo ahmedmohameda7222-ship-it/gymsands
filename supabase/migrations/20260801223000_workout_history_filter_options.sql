@@ -23,12 +23,12 @@ begin
   perform public.assert_workout_actor(p_user_id);
   return query
   with roots as materialized (
-    select *
+    select root.source_kind,root.root_id
     from private.workout_history_filtered_roots_v1(
       p_user_id,p_from,p_to,p_statuses,p_search,
       array[]::text[],array[]::text[],array[]::text[],array[]::uuid[],
       p_progress_only
-    )
+    ) root
   ),
   performed_roots as materialized (
     select root.root_id
@@ -40,27 +40,54 @@ begin
     from roots root
     where root.source_kind='scheduled_fallback'
   ),
+  performed_sessions as materialized (
+    select session.id,session.workout_category,session.plan_id
+    from performed_roots root
+    join public.workout_sessions session on session.id=root.root_id
+  ),
+  selected_items as materialized (
+    select
+      item.source_plan_exercise_id,
+      item.source_plan_activity_id,
+      item.activity_name_snapshot,
+      item.actual_name_snapshot,
+      item.planned_global_exercise_id,
+      item.actual_global_exercise_id,
+      item.planned_custom_exercise_id,
+      item.actual_custom_exercise_id,
+      item.planned_provider,
+      item.actual_provider,
+      item.planned_provider_activity_id,
+      item.actual_provider_activity_id,
+      item.planned_mapping_set_id,
+      item.actual_mapping_set_id,
+      item.planned_custom_mapping_entries,
+      item.actual_custom_mapping_entries
+    from performed_roots root
+    join public.workout_session_muscle_snapshots snapshot
+      on snapshot.workout_session_id=root.root_id and snapshot.user_id=p_user_id
+    join public.workout_session_muscle_snapshot_items item
+      on item.snapshot_id=snapshot.id and item.user_id=p_user_id
+  ),
   options as (
-    select distinct
+    select
       'workout_type'::text as option_kind,
       session.workout_category::text as option_value,
       initcap(replace(replace(session.workout_category,'_',' '),'-',' '))::text as option_label,
       false as degraded
-    from performed_roots root
-    join public.workout_sessions session on session.id=root.root_id
+    from performed_sessions session
     where nullif(btrim(coalesce(session.workout_category,'')),'') is not null
 
     union all
 
-    select distinct
+    select
       'plan'::text,
       plan.id::text,
       plan.name::text,
       false
     from (
       select session.plan_id
-      from performed_roots root
-      join public.workout_sessions session on session.id=root.root_id
+      from performed_sessions session
       where session.plan_id is not null
       union
       select scheduled.user_workout_plan_id
@@ -72,16 +99,12 @@ begin
 
     union all
 
-    select distinct
+    select
       'exercise'::text,
       identity.option_value,
       identity.option_label,
       identity.degraded
-    from performed_roots root
-    join public.workout_session_muscle_snapshots snapshot
-      on snapshot.workout_session_id=root.root_id and snapshot.user_id=p_user_id
-    join public.workout_session_muscle_snapshot_items item
-      on item.snapshot_id=snapshot.id and item.user_id=p_user_id
+    from selected_items item
     cross join lateral (
       select
         case
@@ -115,22 +138,18 @@ begin
 
     union all
 
-    select distinct
+    select
       'muscle'::text,
       entry.muscle_id::text,
       initcap(replace(replace(entry.muscle_id,'_',' '),'.',' '))::text,
       false
-    from performed_roots root
-    join public.workout_session_muscle_snapshots snapshot
-      on snapshot.workout_session_id=root.root_id and snapshot.user_id=p_user_id
-    join public.workout_session_muscle_snapshot_items item
-      on item.snapshot_id=snapshot.id and item.user_id=p_user_id
+    from selected_items item
     join public.exercise_muscle_mapping_entries entry
       on entry.mapping_set_id=coalesce(item.actual_mapping_set_id,item.planned_mapping_set_id)
 
     union all
 
-    select distinct
+    select
       'muscle'::text,
       coalesce(custom_entry->>'muscleId',custom_entry->>'muscle_id')::text,
       initcap(replace(replace(
@@ -138,11 +157,7 @@ begin
         '_',' '
       ),'.',' '))::text,
       false
-    from performed_roots root
-    join public.workout_session_muscle_snapshots snapshot
-      on snapshot.workout_session_id=root.root_id and snapshot.user_id=p_user_id
-    join public.workout_session_muscle_snapshot_items item
-      on item.snapshot_id=snapshot.id and item.user_id=p_user_id
+    from selected_items item
     cross join lateral jsonb_array_elements(
       case
         when jsonb_typeof(coalesce(item.actual_custom_mapping_entries,item.planned_custom_mapping_entries))='array'
