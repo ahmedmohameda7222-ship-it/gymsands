@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+
+import { resolveReleaseCompatibilityContract } from "../lib/release/compatibility-contract.mjs";
 import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
 
 export const PLAIVRA_PROJECT_REF = "bkwezjxvapaeasfvlhvv";
@@ -11,6 +14,9 @@ export const VALIDATION_CONTEXTS = Object.freeze([
 
 const SAFE_REQUEST_ID = /^[a-z0-9][a-z0-9._-]{7,127}$/i;
 const MIGRATION_VERSION = /^\d{12,14}$/;
+const releaseCompatibilityContract = Object.freeze(JSON.parse(
+  readFileSync(new URL("../config/release-compatibility.json", import.meta.url), "utf8"),
+));
 
 export function validationRequestId(value, label = "Validation request ID") {
   const normalized = String(value ?? "").trim();
@@ -30,11 +36,23 @@ export function expectedMigrationVersion(value, label = "Expected migration") {
 
 export function deriveReleaseTarget(ledger) {
   const state = deriveMigrationLedgerState(ledger);
+  const compatibility = resolveReleaseCompatibilityContract({
+    ledger,
+    contract: releaseCompatibilityContract,
+  });
+  if (state.latestAppliedMigrationVersion !== compatibility.latestAppliedMigrationVersion) {
+    throw new Error("Migration ledger and release compatibility contract resolved different physical heads.");
+  }
   return Object.freeze({
     expectedMigration: expectedMigrationVersion(
-      state.latestAppliedMigrationVersion,
+      compatibility.expectedDatabaseMigrationVersion,
+      "Declared Production compatibility marker",
+    ),
+    latestAppliedMigrationVersion: expectedMigrationVersion(
+      compatibility.latestAppliedMigrationVersion,
       "Latest resolved Production migration",
     ),
+    schemaCompatibilityVersion: compatibility.schemaCompatibilityVersion,
     reconciliationState: state.reconciliationState,
     pendingCount: state.pendingCount,
     schemaAppliedUntrackedCount: state.schemaAppliedUntrackedCount,
