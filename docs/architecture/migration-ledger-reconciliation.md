@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
-**Project:** `bkwezjxvapaeasfvlhvv`  
-**Evidence captured:** 2026-08-02T11:55:00.000Z  
-**Machine authority:** `supabase/migration-ledger.json`  
-**Audit baseline:** `0e9e08ac2a5fda053612035762613ef94128e815`  
+**Project:** `bkwezjxvapaeasfvlhvv`
+**Evidence captured:** 2026-08-02T11:55:00.000Z
+**Machine authority:** `supabase/migration-ledger.json`
+**Audit baseline:** `0e9e08ac2a5fda053612035762613ef94128e815`
 **Status:** Workout History Production migrations applied and reconciled
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
