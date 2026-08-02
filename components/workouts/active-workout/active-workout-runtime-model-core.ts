@@ -663,29 +663,14 @@ export function buildPrs(
   history: WorkoutSessionSummary[],
   tr: ActiveWorkoutTranslator,
   formatters: ActiveWorkoutFormatters
-) {
-  return (safelyDeriveActiveWorkoutMetrics(states, history)?.personalRecords ?? []).map((record) => {
-    const name = isolateBidiText(record.exerciseName);
-    if (record.type === "highest_load")
-      return tr("completion.highestWeightPr", {
-        name,
-        weight: formatters.measurement(roundWorkoutMetric(record.value), "kg")
-      });
-    if (record.type === "max_repetitions")
-      return tr("completion.maxRepsPr", {
-        name,
-        reps: formatters.integer(record.value)
-      });
-    if (record.type === "estimated_one_rep_max")
-      return tr("completion.estimatedOneRepMaxPr", {
-        name,
-        weight: formatters.measurement(roundWorkoutMetric(record.value), "kg")
-      });
-    return tr("completion.volumePr", {
-      name,
-      volume: formatters.measurement(roundWorkoutMetric(record.value), "kg")
-    });
-  });
+): string[] {
+  void states;
+  void history;
+  void tr;
+  void formatters;
+  // Completion-time estimates are not verified records. History shows only
+  // server-recomputed, provenance-backed rows whose session freshness matches.
+  return [];
 }
 
 export function buildSummary(

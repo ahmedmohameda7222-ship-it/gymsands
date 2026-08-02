@@ -74,13 +74,13 @@ describe("approved Train Phase 1 UI contracts", () => {
 
   it("localizes detail, history filters, direct-session failures, and the active workout controller", () => {
     const detail = source("app/(private)/workouts/[id]/page.tsx");
-    const history = source("components/workouts/workout-history.tsx");
+    const history = source("components/workouts/history/workout-history-period-control.tsx");
     const directSession = source("app/(private)/workouts/session/[id]/page.tsx");
     const activeWorkout = source("components/workouts/active-workout-indicator.tsx");
     const translations = source("lib/i18n/train.ts");
     const keys = [
       "exerciseVideoLoadWarning", "customVideoSavedTitle", "exerciseNotFoundDescription",
-      "filterWorkoutHistoryWeek", "filterWorkoutHistoryMonth", "workoutSessionOpenFailed",
+      "historyPeriodWeek", "historyPeriodMonth", "historyPreviousPeriod", "historyNextPeriod", "workoutSessionOpenFailed",
       "couldNotStartWorkout", "activeWorkoutLoadFailed", "returnToWorkout",
       "finishActiveWorkoutQuestion", "cancelActiveWorkoutQuestion"
     ];
@@ -88,8 +88,10 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(detail).toContain('warnings.push(tr("exerciseVideoLoadWarning"))');
     expect(detail).toContain('const metadata = metadataLine(formatExerciseDisplayList(item.target_muscle, language, "muscle"), formatExerciseDisplayList(item.equipment, language, "equipment"))');
     expect(detail).toContain("{metadata ? <p");
-    expect(history.match(/aria-label=\{tr\("filterWorkoutHistoryWeek"\)\}/g)?.length).toBe(2);
-    expect(history.match(/aria-label=\{tr\("filterWorkoutHistoryMonth"\)\}/g)?.length).toBe(2);
+    expect(history).toContain('week: tr("historyPeriodWeek")');
+    expect(history).toContain('month: tr("historyPeriodMonth")');
+    expect(history).toContain('aria-label={tr("historyPreviousPeriod")}');
+    expect(history).toContain('aria-label={tr("historyNextPeriod")}');
     expect(directSession).toContain('userSafeError(error, tr("workoutSessionOpenFailed"))');
     expect(directSession).toContain("const userId = user?.id ?? null");
     expect(directSession).toContain("const workoutId = params.id");
@@ -104,7 +106,8 @@ describe("approved Train Phase 1 UI contracts", () => {
 
   it("localizes Train destinations and preserves the hidden session shell with safe actions", () => {
     const library = source("app/(private)/workouts/page.tsx");
-    const history = source("app/(private)/workout-history/page.tsx");
+    const historyRoute = source("app/(private)/workout-history/page.tsx");
+    const history = source("components/workouts/history/workout-history-page.tsx");
     const session = source("app/(private)/workouts/session/[id]/page.tsx");
     const sessionForm = source("components/workouts/active-workout/active-workout-execution-shell.tsx");
     const sticky = source("components/layout/mobile-sticky-actions.tsx");
@@ -115,6 +118,7 @@ describe("approved Train Phase 1 UI contracts", () => {
       expect(route).toContain("<TrainPageContainer");
       expect(route).toContain("dir={dir}");
     }
+    expect(historyRoute).toContain("<WorkoutHistoryScreen />");
     expect(session).toContain('<WorkoutSessionScreen fallbackHref="/workouts">');
     expect(session).not.toContain("confirmExit");
     expect(sessionForm).toContain("<MobileStickyActions");

@@ -13,6 +13,8 @@ test("rendered QA preserves the 126-route matrix and isolates every observation"
   assert.match(qa, /navigationEvidence/);
   assert.match(qa, /failureScreenshot/);
   assert.match(qa, /x-plaivra-qa-fixture/);
+  assert.match(qa, /\/api\/billing\/entitlements/);
+  assert.match(qa, /\/api\/workouts\/history\/recently-deleted/);
   assert.doesNotMatch(qa, /route\.abort/);
   assert.doesNotMatch(qa, /\[dashboard\\\.load\]/);
 });

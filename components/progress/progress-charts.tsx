@@ -12,14 +12,14 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { ProgressEntry, WorkoutSession } from "@/types";
+import type { CanonicalWorkoutActivity, ProgressEntry } from "@/types";
 
 export function ProgressCharts({
   entries,
   workoutActivity = [],
 }: {
   entries: ProgressEntry[];
-  workoutActivity?: WorkoutSession[];
+  workoutActivity?: CanonicalWorkoutActivity[];
 }) {
   const progressData = entries.map((entry) => ({
     date: formatShortDate(entry.entry_date),
@@ -143,26 +143,23 @@ function EmptyChartText({ text }: { text: string }) {
   );
 }
 
-function buildWorkoutData(activity: WorkoutSession[]) {
+function buildWorkoutData(activity: CanonicalWorkoutActivity[]) {
   const byDate = new Map<
     string,
     { date: string; completed: number; skipped: number }
   >();
   activity.forEach((session) => {
-    const key = (
-      session.completed_at ||
-      session.skipped_at ||
-      session.started_at ||
-      ""
-    ).slice(0, 10);
+    const key = session.effectiveAt.slice(0, 10);
     if (!key) return;
     const current = byDate.get(key) ?? {
       date: formatShortDate(key),
       completed: 0,
       skipped: 0,
     };
-    if (session.status === "completed") current.completed += 1;
-    if (session.status === "skipped") current.skipped += 1;
+    if (session.lifecycle === "completed" || session.lifecycle === "partial") {
+      current.completed += 1;
+    }
+    if (session.lifecycle === "skipped") current.skipped += 1;
     byDate.set(key, current);
   });
   return Array.from(byDate.entries())

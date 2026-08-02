@@ -6,7 +6,8 @@ import { isUuid } from "@/lib/utils";
 import { todayIso } from "@/lib/date-utils";
 import { getMockTrainActivity } from "@/lib/fixtures/train-mock";
 import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
-import { autoDetectPersonalRecordsFromExerciseLogs } from "@/services/database/progress";
+import { getCanonicalWorkoutActivity } from "@/services/workouts/history/client";
+import { refreshVerifiedRecordsAuthenticated } from "@/services/workouts/history/verified-records-client";
 import type {
   ExerciseLog,
   UserExerciseLog,
@@ -255,12 +256,6 @@ function normalizeScheduledSession(
   };
 }
 
-function sessionDateForSort(session: WorkoutSession) {
-  return new Date(
-    session.completed_at || session.skipped_at || session.started_at,
-  );
-}
-
 function sortExerciseLogsByWorkoutOrder(logs: ExerciseLog[]) {
   return [...logs].sort((a, b) => {
     const orderA = a.exercise_order ?? Number.MAX_SAFE_INTEGER;
@@ -457,13 +452,7 @@ export async function completeWorkoutSession(
     );
     throw error;
   }
-  const result = data as { logs?: ExerciseLog[] } | null;
-  const completedLogs = result?.logs;
-  void detectPersonalRecordsAfterWorkoutCompletion(
-    session.user_id,
-    sessionId,
-    completedLogs,
-  );
+  void refreshVerifiedRecordsAfterWorkoutCompletion(sessionId);
   return true;
 }
 
@@ -512,24 +501,15 @@ export async function replaceWorkoutSessionExercise(
   return data;
 }
 
-export async function detectPersonalRecordsAfterWorkoutCompletion(
-  userId: string,
-  sessionId: string,
-  completedLogs?: ExerciseLog[],
-) {
+export async function refreshVerifiedRecordsAfterWorkoutCompletion(sessionId: string) {
   try {
-    const logs = completedLogs ?? (await getWorkoutSessionLogs(sessionId));
-    return await autoDetectPersonalRecordsFromExerciseLogs(
-      userId,
-      logs,
-      new Date().toISOString().slice(0, 10),
-    );
+    return await refreshVerifiedRecordsAuthenticated(sessionId);
   } catch (error) {
     console.warn(
-      "Plaivra saved the workout, but personal records could not be refreshed.",
+      "Plaivra saved the workout, but verified records remain pending.",
       error,
     );
-    return [];
+    return null;
   }
 }
 
@@ -684,40 +664,9 @@ export async function updateSkippedWorkoutFollowup(
   return normalizeWorkoutSession(data as WorkoutSession);
 }
 
+/** @deprecated Use the versioned Workout History client contract. */
 export async function getWorkoutHistory(userId: string) {
-  if (!canUseUserData(userId)) return [];
-  let { data, error } = await supabase!
-    .from("workout_sessions")
-    .select("*")
-    .eq("user_id", userId)
-    .in("status", ["completed", "skipped"])
-    .order("started_at", { ascending: false })
-    .limit(20);
-  if (error && isSchemaCompatibilityError(error)) {
-    const compatible = await supabase!
-      .from("workout_sessions")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "completed")
-      .order("started_at", { ascending: false })
-      .limit(20);
-    data = compatible.data;
-    error = compatible.error;
-  }
-  if (error) {
-    console.warn("Plaivra could not load workout history.", error.message);
-    return getScheduledWorkoutActivity(userId, 20);
-  }
-  const legacyHistory = ((data ?? []) as WorkoutSession[]).map(
-    normalizeWorkoutSession,
-  );
-  const scheduledHistory = await getScheduledWorkoutActivity(userId, 20);
-  return [...legacyHistory, ...scheduledHistory]
-    .sort(
-      (a, b) =>
-        sessionDateForSort(b).getTime() - sessionDateForSort(a).getTime(),
-    )
-    .slice(0, 20);
+  return getWorkoutActivity(userId, 20);
 }
 
 export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
@@ -813,50 +762,41 @@ export async function getWorkoutHistoryDetailedWithStatus(
   };
 }
 
+/** @deprecated Compatibility shape for proven non-History consumers. */
 export async function getWorkoutActivity(
   userId: string,
   limit = 180,
   options?: { throwOnError?: boolean },
 ) {
-  if (env.useMockAuth && isMockAuthUserId(userId))
-    return getMockTrainActivity().slice(0, limit);
-  if (!canUseUserData(userId)) return [];
-  let { data, error } = await supabase!
-    .from("workout_sessions")
-    .select("*")
-    .eq("user_id", userId)
-    .in("status", ["completed", "skipped"])
-    .order("started_at", { ascending: false })
-    .limit(limit);
-  if (error && isSchemaCompatibilityError(error)) {
-    const compatible = await supabase!
-      .from("workout_sessions")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "completed")
-      .order("started_at", { ascending: false })
-      .limit(limit);
-    data = compatible.data;
-    error = compatible.error;
-  }
-
-  if (error) {
-    console.warn("Plaivra could not load workout activity.", error.message);
-    if (options?.throwOnError)
-      throw new Error(`Could not load workout activity. ${error.message}`);
-    return getScheduledWorkoutActivity(userId, limit);
-  }
-
-  const legacyActivity = ((data ?? []) as WorkoutSession[]).map(
-    normalizeWorkoutSession,
+  const result = await getCanonicalWorkoutActivity(userId, limit);
+  const failedSources = Object.values(result.sources).filter(
+    (source) => source.state === "failed",
   );
-  const scheduledActivity = await getScheduledWorkoutActivity(userId, limit);
-  return [...legacyActivity, ...scheduledActivity]
-    .sort(
-      (a, b) =>
-        sessionDateForSort(b).getTime() - sessionDateForSort(a).getTime(),
-    )
-    .slice(0, limit);
+  if (options?.throwOnError && failedSources.length) {
+    throw new Error("Could not load complete workout activity.");
+  }
+  return result.activities.map((activity): WorkoutSession => ({
+    id: activity.canonicalSessionId ?? activity.scheduledSessionId ?? activity.activityId,
+    user_id: activity.userId,
+    workout_id: null,
+    plan_id: activity.planId,
+    plan_day_id: activity.planDayId,
+    plan_week_id: activity.planWeekId,
+    plan_session_id: activity.planSessionId,
+    workout_day_name: activity.title,
+    workout_category: activity.category,
+    workout_name: activity.title,
+    started_at: activity.startedAt ?? activity.effectiveAt,
+    completed_at: activity.completedAt,
+    skipped_at: activity.skippedAt,
+    cancelled_at: activity.cancelledAt,
+    duration_minutes: activity.durationMinutes,
+    notes: activity.notes,
+    status:
+      activity.lifecycle === "partial"
+        ? "completed"
+        : activity.lifecycle,
+  }));
 }
 
 export async function getScheduledWorkoutHistory(userId: string, limit = 100) {

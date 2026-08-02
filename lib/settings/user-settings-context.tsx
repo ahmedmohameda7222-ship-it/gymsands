@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { readStoredLanguagePreference } from "@/lib/i18n/client-language-preference";
@@ -11,7 +18,7 @@ import {
   getUserAppSettings,
   resetUserAppSettings,
   upsertUserAppSettings,
-  type UserAppSettings
+  type UserAppSettings,
 } from "@/services/database/user-settings";
 
 type UserSettingsContextValue = {
@@ -28,12 +35,16 @@ type UserSettingsProviderProps = {
   initialLanguagePreference: LanguagePreference;
 };
 
-const UserSettingsContext = createContext<UserSettingsContextValue | null>(null);
+const UserSettingsContext = createContext<UserSettingsContextValue | null>(
+  null,
+);
 
 function readCachedThemeId() {
   if (typeof window === "undefined") return null;
   try {
-    const cached = window.localStorage.getItem(themeCacheKey) ?? window.localStorage.getItem(legacyThemeCacheKey);
+    const cached =
+      window.localStorage.getItem(themeCacheKey) ??
+      window.localStorage.getItem(legacyThemeCacheKey);
     return isThemeId(cached) ? cached : null;
   } catch {
     return null;
@@ -50,7 +61,10 @@ function cacheThemeId(themeId: UserAppSettings["themeId"]) {
   }
 }
 
-function withUser(settings: UserAppSettings, userId: string | null | undefined) {
+function withUser(
+  settings: UserAppSettings,
+  userId: string | null | undefined,
+) {
   return { ...settings, userId: userId ?? settings.userId };
 }
 
@@ -61,21 +75,26 @@ function withCachedTheme(settings: UserAppSettings) {
 
 function withDevicePublicPreferences(
   settings: UserAppSettings,
-  initialLanguagePreference: LanguagePreference
+  initialLanguagePreference: LanguagePreference,
 ): UserAppSettings {
   return {
     ...withCachedTheme(settings),
-    language: readStoredLanguagePreference() ?? initialLanguagePreference
+    language: readStoredLanguagePreference() ?? initialLanguagePreference,
   };
 }
 
-export function UserSettingsProvider({ children, initialLanguagePreference }: UserSettingsProviderProps) {
+export function UserSettingsProvider({
+  children,
+  initialLanguagePreference,
+}: UserSettingsProviderProps) {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
-  const [settings, setSettings] = useState<UserAppSettings>(() => ({
-    ...defaultUserAppSettings,
-    language: initialLanguagePreference
-  }));
+  const [settings, setSettings] = useState<UserAppSettings>(() =>
+    withCachedTheme({
+      ...defaultUserAppSettings,
+      language: initialLanguagePreference,
+    }),
+  );
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -90,7 +109,12 @@ export function UserSettingsProvider({ children, initialLanguagePreference }: Us
     async function load() {
       if (isLoading) return;
       if (!user?.id) {
-        setSettings(withDevicePublicPreferences(defaultUserAppSettings, initialLanguagePreference));
+        setSettings(
+          withDevicePublicPreferences(
+            defaultUserAppSettings,
+            initialLanguagePreference,
+          ),
+        );
         setIsLoadingSettings(false);
         return;
       }
@@ -102,17 +126,27 @@ export function UserSettingsProvider({ children, initialLanguagePreference }: Us
         cacheThemeId(loaded.themeId);
         const accountAuthoritative = {
           ...withCachedTheme(loaded),
-          language: loaded.language
+          language: loaded.language,
         };
         if (mounted) setSettings(accountAuthoritative);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Settings could not be loaded.";
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Settings could not be loaded.";
         if (mounted) {
-          const fallback = withDevicePublicPreferences(defaultUserAppSettings, initialLanguagePreference);
+          const fallback = withDevicePublicPreferences(
+            defaultUserAppSettings,
+            initialLanguagePreference,
+          );
           setSettings(withUser(fallback, user.id));
           setSaveError(message);
         }
-        toast({ title: "Settings could not be loaded", description: message, variant: "error" });
+        toast({
+          title: "Settings could not be loaded",
+          description: message,
+          variant: "error",
+        });
       } finally {
         if (mounted) setIsLoadingSettings(false);
       }
@@ -141,17 +175,24 @@ export function UserSettingsProvider({ children, initialLanguagePreference }: Us
         setSettings(saved);
         return saved;
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Settings could not be saved.";
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Settings could not be saved.";
         setSettings(previous);
         cacheThemeId(previous.themeId);
         setSaveError(message);
-        toast({ title: "Settings could not be saved", description: message, variant: "error" });
+        toast({
+          title: "Settings could not be saved",
+          description: message,
+          variant: "error",
+        });
         throw error;
       } finally {
         setIsSavingSettings(false);
       }
     },
-    [settings, toast, user]
+    [settings, toast, user],
   );
 
   const resetSettings = useCallback(async () => {
@@ -169,11 +210,16 @@ export function UserSettingsProvider({ children, initialLanguagePreference }: Us
       setSettings(saved);
       return saved;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Settings could not be reset.";
+      const message =
+        error instanceof Error ? error.message : "Settings could not be reset.";
       setSettings(previous);
       cacheThemeId(previous.themeId);
       setSaveError(message);
-      toast({ title: "Settings could not be reset", description: message, variant: "error" });
+      toast({
+        title: "Settings could not be reset",
+        description: message,
+        variant: "error",
+      });
       throw error;
     } finally {
       setIsSavingSettings(false);
@@ -181,11 +227,29 @@ export function UserSettingsProvider({ children, initialLanguagePreference }: Us
   }, [settings, toast, user]);
 
   const value = useMemo(
-    () => ({ settings, isLoadingSettings, isSavingSettings, saveError, updateSettings, resetSettings }),
-    [isLoadingSettings, isSavingSettings, resetSettings, saveError, settings, updateSettings]
+    () => ({
+      settings,
+      isLoadingSettings,
+      isSavingSettings,
+      saveError,
+      updateSettings,
+      resetSettings,
+    }),
+    [
+      isLoadingSettings,
+      isSavingSettings,
+      resetSettings,
+      saveError,
+      settings,
+      updateSettings,
+    ],
   );
 
-  return <UserSettingsContext.Provider value={value}>{children}</UserSettingsContext.Provider>;
+  return (
+    <UserSettingsContext.Provider value={value}>
+      {children}
+    </UserSettingsContext.Provider>
+  );
 }
 
 export function useUserSettings() {

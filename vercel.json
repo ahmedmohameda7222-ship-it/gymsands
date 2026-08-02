@@ -16,6 +16,10 @@
       "schedule": "47 3 * * *"
     },
     {
+      "path": "/api/internal/maintenance/workout-history-lifecycle",
+      "schedule": "37 3 * * *"
+    },
+    {
       "path": "/api/internal/maintenance/billing-events",
       "schedule": "7 4 * * *"
     }

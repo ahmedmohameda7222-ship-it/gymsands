@@ -26,6 +26,11 @@ test("permanent verification chain covers the current Active Workout authority",
     "active-workout-aw3c-immutable-prescription-snapshots.sql",
     "active-workout-aw4-session-engine.sql",
     "active-workout-aw4-integration.sql",
+    "workout-history-verified-records.sql",
+    "workout-history-correction-delete.sql",
+    "workout-history-correction-muscle-reconcile.sql",
+    "workout-history-keyset-read.sql",
+    "workout-history-repeat.sql",
     "production-release-migration-preflight.sql",
   ]) {
     assert.equal(DATABASE_VERIFICATION_FILES.some((file) => file.endsWith(required)), true, required);

@@ -142,6 +142,7 @@ async function requireWorkoutSession(ctx: McpContext, sessionId: string) {
     .select("id,user_id,scheduled_session_id,plan_day_id,status")
     .eq("id", sessionId)
     .eq("user_id", ctx.userId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Workout session not found for this user.");
@@ -634,7 +635,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       }
 
       case "get_personal_records": {
-        let request = ctx.supabase.from("personal_records").select("*").eq("user_id", ctx.userId).order("record_date", { ascending: false });
+        let request = ctx.supabase.from("current_personal_records").select("*").eq("user_id", ctx.userId).order("record_date", { ascending: false });
         const exercise = getOptionalString(input, "exercise_name");
         if (exercise) request = request.ilike("exercise_name", `%${exercise}%`);
         const { data, error } = await request;

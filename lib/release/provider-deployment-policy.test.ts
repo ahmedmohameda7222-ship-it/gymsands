@@ -37,6 +37,7 @@ describe("provider deployment policy", () => {
     expect(vercelConfig.crons).toEqual([
       { path: "/api/internal/maintenance/oauth-cleanup", schedule: "17 3 * * *" },
       { path: "/api/internal/maintenance/privacy-lifecycle", schedule: "47 3 * * *" },
+      { path: "/api/internal/maintenance/workout-history-lifecycle", schedule: "37 3 * * *" },
       { path: "/api/internal/maintenance/billing-events", schedule: "7 4 * * *" }
     ]);
     expect(existsSync(obsoleteVercelScript)).toBe(false);

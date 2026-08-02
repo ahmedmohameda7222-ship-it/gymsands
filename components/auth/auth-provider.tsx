@@ -14,6 +14,7 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { clearActiveWorkoutUserData } from "@/lib/workouts/active-session-sync";
 import { releaseActiveSessionStoresForUser } from "@/lib/workouts/active-session-store/store";
+import { clearWorkoutHistoryOwnerCache } from "@/lib/workouts/history/offline-cache";
 import { env } from "@/lib/env";
 import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";
 import type { Profile } from "@/types";
@@ -38,10 +39,22 @@ const mockUser = {
   email: "member@plaivra.test",
 } as User;
 
-async function clearActiveWorkoutClientState(userId: string | null) {
+const mockSession = {
+  user: mockUser,
+  access_token: "plaivra-rendered-qa-access-token",
+  token_type: "bearer",
+  expires_in: 3600,
+  expires_at: 4_102_444_800,
+  refresh_token: "plaivra-rendered-qa-refresh-token",
+} as Session;
+
+async function clearUserOwnedClientState(userId: string | null) {
   if (!userId) return;
   releaseActiveSessionStoresForUser(userId);
-  await clearActiveWorkoutUserData(userId).catch(() => undefined);
+  await Promise.all([
+    clearActiveWorkoutUserData(userId).catch(() => undefined),
+    clearWorkoutHistoryOwnerCache(userId).catch(() => undefined),
+  ]);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -134,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         if (mockAuthEnabled) {
           activeUserIdRef.current = MOCK_AUTH_USER_ID;
-          setSession({ user: mockUser } as Session);
+          setSession(mockSession);
           await loadProfile(MOCK_AUTH_USER_ID);
           return;
         }
@@ -177,13 +190,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeUserIdRef.current = nextUserId;
         setSession(nextSession);
         setIsLoading(false);
+        if (previousUserId && previousUserId !== nextUserId) {
+          await clearUserOwnedClientState(previousUserId);
+        }
         if (nextSession?.user) {
           setTimeout(() => {
             loadProfile(nextSession.user.id, nextSession.user.email);
           }, 0);
         } else {
           setProfile(null);
-          await clearActiveWorkoutClientState(previousUserId);
         }
       },
     );
@@ -209,7 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signOut: async () => {
         const userId = session?.user.id ?? activeUserIdRef.current;
         activeUserIdRef.current = null;
-        await clearActiveWorkoutClientState(userId);
+        await clearUserOwnedClientState(userId);
         if (supabase) await supabase.auth.signOut();
         setSession(null);
         setProfile(null);

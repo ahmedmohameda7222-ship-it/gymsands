@@ -4,13 +4,14 @@ import type {
 } from "@/types";
 
 export const DERIVED_METRICS_SCHEMA_VERSION = 1 as const;
-export const DERIVED_METRICS_FORMULA_VERSION = "aw8-v1" as const;
+export const DERIVED_METRICS_FORMULA_VERSION = "wh6-v1" as const;
 
 export type DerivedMetricValue = {
   metricKey?: WorkoutPerformanceMetricKey | string;
   metric_key?: WorkoutPerformanceMetricKey | string;
   value: number | string;
   side?: string | null;
+  unit?: "kg" | "lb" | string | null;
 };
 
 export type DerivedMetricSegment = {
@@ -36,8 +37,16 @@ export type DerivedMetricLog = {
   plan_exercise_id?: string | null;
   sourceWorkoutId?: string | null;
   source_workout_id?: string | null;
+  actualExerciseIdentityKind?: "global" | "custom" | "provider" | null;
+  actualExerciseIdentity?: string | null;
+  plannedExerciseIdentityKind?: "global" | "custom" | "provider" | null;
+  plannedExerciseIdentity?: string | null;
+  resistanceMode?: "external" | "bodyweight" | "bodyweight_added" | "assisted" | null;
+  weightUnit?: "kg" | "lb" | null;
   setNumber?: number | null;
   set_number?: number | null;
+  exerciseOrder?: number | null;
+  exercise_order?: number | null;
   reps?: number | string | null;
   weightKg?: number | string | null;
   weight_kg?: number | string | null;
@@ -63,18 +72,34 @@ export type DerivedMetricLog = {
 export type DerivedPersonalRecordType =
   | "highest_load"
   | "estimated_one_rep_max"
-  | "session_volume"
-  | "max_repetitions";
+  | "exercise_session_volume"
+  | "same_load_max_repetitions";
+
+export type DerivedExerciseIdentityKind =
+  | "global"
+  | "custom"
+  | "provider"
+  | "plan_activity"
+  | "plan_exercise"
+  | "source_workout"
+  | "name_degraded";
 
 export type DerivedPersonalRecord = {
+  workoutSessionId: string;
+  exerciseLogId: string;
+  exerciseIdentityKind: DerivedExerciseIdentityKind;
   exerciseIdentity: string;
   exerciseName: string;
-  type: DerivedPersonalRecordType;
-  value: number;
+  recordType: DerivedPersonalRecordType;
+  recordValue: number;
+  recordUnit: "kg" | "repetitions" | "kg_repetitions";
   externalLoadKg: number | null;
   repetitions: number | null;
   setType: string;
-  comparableContext: string;
+  comparisonContextKey: string;
+  schemaVersion: typeof DERIVED_METRICS_SCHEMA_VERSION;
+  formulaVersion: typeof DERIVED_METRICS_FORMULA_VERSION;
+  achievedAt: string;
 };
 
 export type DerivedExerciseMetrics = {

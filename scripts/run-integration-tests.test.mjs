@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   DEFAULT_INTEGRATION_DATABASE,
   DEFAULT_INTEGRATION_POSTGRES_IMAGE,
+  buildDisposablePostgresArgs,
+  isRetryableContainerState,
   parsePublishedPostgresPort,
   requireLocalPostgresUrl,
   resolveIntegrationDatabaseConfig,
@@ -55,4 +58,28 @@ test("integration execution fails closed without a replayed local database autho
     () => resolveIntegrationDatabaseConfig({}),
     /PLAIVRA_AW2A_TEST_DATABASE_URL or PLAIVRA_LOCAL_DATABASE_URL is required/,
   );
+});
+
+test("disposable PostgreSQL remains inspectable until explicit cleanup", () => {
+  const args = buildDisposablePostgresArgs("plaivra-integration-postgres-test", DEFAULT_INTEGRATION_POSTGRES_IMAGE);
+  assert.equal(args.includes("--rm"), false);
+  assert.equal(args.includes("--health-cmd"), true);
+  assert.equal(args.includes("plaivra.scope=integration-test"), true);
+});
+
+test("only proven container termination or unhealthy state is retryable", () => {
+  assert.equal(isRetryableContainerState(null), false);
+  assert.equal(isRetryableContainerState({ Running: true, Health: { Status: "healthy" } }), false);
+  assert.equal(isRetryableContainerState({ Running: false, ExitCode: 0 }), true);
+  assert.equal(isRetryableContainerState({ Running: false, ExitCode: 137, OOMKilled: true }), true);
+  assert.equal(isRetryableContainerState({ Running: true, Health: { Status: "unhealthy" } }), true);
+});
+
+test("integration execution launches the installed Vitest entrypoint without a platform shell shim", () => {
+  const runner = readFileSync(new URL("./run-integration-tests.mjs", import.meta.url), "utf8");
+  assert.match(runner, /const executable = process\.execPath/);
+  assert.match(runner, /resolve\("node_modules\/vitest\/vitest\.mjs"\)/);
+  assert.match(runner, /collectDisposablePostgresDiagnostics/);
+  assert.match(runner, /retrying once with a fresh isolated container/);
+  assert.doesNotMatch(runner, /npx\.cmd/);
 });

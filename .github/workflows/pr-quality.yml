@@ -148,6 +148,10 @@ jobs:
         env:
           PLAIVRA_AW2A_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
         run: node scripts/run-ci-check.mjs --name integration -- npm run test:integration
+      - name: Workout History integration tests
+        env:
+          PLAIVRA_AW2A_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
+        run: node scripts/run-ci-check.mjs --name workout-history-integration -- npm run test:workout-history:integration
       - name: Upload focused failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -175,6 +179,8 @@ jobs:
       - run: npm ci
       - name: Message contracts
         run: node scripts/run-ci-check.mjs --name i18n -- npm run test:i18n
+      - name: Workout History focused tests
+        run: node scripts/run-ci-check.mjs --name workout-history -- npm run test:workout-history
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Rendered UI QA
@@ -192,7 +198,8 @@ jobs:
           curl --fail --silent http://localhost:3000/ > /dev/null;
           QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=ci-reports/rendered-qa-evidence npm run qa:rendered;
           QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=ci-reports/train-qa-evidence npm run qa:train;
-          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_AW10_EVIDENCE_DIR=ci-reports/active-workout-aw10-evidence npm run qa:active-workout:aw10'
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_AW10_EVIDENCE_DIR=ci-reports/active-workout-aw10-evidence npm run qa:active-workout:aw10;
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_WORKOUT_HISTORY_EVIDENCE_DIR=ci-reports/workout-history-qa-evidence npm run qa:workout-history'
       - name: Upload successful rendered evidence
         uses: actions/upload-artifact@v4
         with:
@@ -201,6 +208,7 @@ jobs:
             ci-reports/rendered-qa-evidence/
             ci-reports/train-qa-evidence/
             ci-reports/active-workout-aw10-evidence/
+            ci-reports/workout-history-qa-evidence/
           if-no-files-found: error
           retention-days: 14
       - name: Upload focused failure diagnostics

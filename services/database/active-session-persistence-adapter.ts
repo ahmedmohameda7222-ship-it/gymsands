@@ -90,6 +90,9 @@ export const activeSessionPersistenceAdapter: ActiveSessionPersistenceAdapter = 
     if (!root || root.status !== "completed") {
       throw new Error("The completed workout session could not be confirmed.");
     }
+    // The canonical workout is already terminal at this point. Verified records
+    // are a rebuildable projection, so refresh failure must not roll back or
+    // misreport the completed workout. Freshness remains explicit until retry.
     return root;
   },
   replaceExercise(input) {

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -59,6 +59,8 @@ async function authCommand(query: string) {
 beforeAll(() => {
   if (!disposableDatabaseUrl) return;
   sql(`
+    delete from public.workout_sessions where user_id='${ownerId}'::uuid;
+    delete from public.user_workout_sessions where user_id='${ownerId}'::uuid;
     delete from auth.users where id='${ownerId}'::uuid;
     insert into auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
     values ('${ownerId}','authenticated','authenticated','aw2b-concurrency@example.test','',
@@ -98,6 +100,15 @@ beforeAll(() => {
   }
   activeSnapshotItemId = snapshotItemId;
   activeItemOrder = parsedItemOrder;
+});
+
+afterAll(() => {
+  if (!disposableDatabaseUrl) return;
+  sql(`
+    delete from public.workout_sessions where user_id='${ownerId}'::uuid;
+    delete from public.user_workout_sessions where user_id='${ownerId}'::uuid;
+    delete from auth.users where id='${ownerId}'::uuid;
+  `);
 });
 
 databaseDescribe("AW-2B PostgreSQL command concurrency", () => {

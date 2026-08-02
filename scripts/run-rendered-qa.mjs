@@ -63,6 +63,25 @@ async function createDeterministicContext(browser, viewport) {
     reducedMotion: "reduce",
     colorScheme: "light",
   });
+  await context.route("**/api/billing/entitlements", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "x-plaivra-qa-fixture": "empty-entitlements-v1" },
+      body: JSON.stringify({ entitlements: [] }),
+    });
+  });
+  await context.route(
+    "**/api/workouts/history/recently-deleted",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "x-plaivra-qa-fixture": "empty-deleted-history-v1" },
+        body: JSON.stringify({ items: [] }),
+      });
+    },
+  );
   await context.route(/^https:\/\/[^/]+\.supabase\.co\//, async (route) => {
     const method = route.request().method();
     let requestBody = null;

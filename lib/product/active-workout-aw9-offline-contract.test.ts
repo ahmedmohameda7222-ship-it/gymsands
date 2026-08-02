@@ -96,12 +96,13 @@ describe("AW-9 durable synchronization contract", () => {
   it("clears user-scoped offline state on explicit or remote sign-out", () => {
     expect(authProvider).toContain("activeUserIdRef");
     expect(authProvider).toContain(
-      "await clearActiveWorkoutClientState(previousUserId)",
+      "await clearUserOwnedClientState(previousUserId)",
     );
     expect(authProvider).toContain(
       "releaseActiveSessionStoresForUser(userId)",
     );
     expect(authProvider).toContain("clearActiveWorkoutUserData(userId)");
+    expect(authProvider).toContain("clearWorkoutHistoryOwnerCache(userId)");
     expect(authProvider).toContain(
       "const userId = session?.user.id ?? activeUserIdRef.current",
     );

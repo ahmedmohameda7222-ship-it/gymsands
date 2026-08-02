@@ -121,6 +121,11 @@ test("AW-3B rendered QA proves hydration before asserting autosave", () => {
   assert.match(qaSource, /hydrationPrecondition\?\.passed/);
 });
 
+test("AW-5 completion QA isolates the verified-record refresh introduced by History", () => {
+  assert.match(correctionFixtureSource, /fulfilled:verified-records/);
+  assert.match(correctionFixtureSource, /aw5-empty-verified-records/);
+});
+
 test("AW-4 rendered QA hydrates the complete official session-store projection", () => {
   assert.match(qaSource, /const sessionRoot = directSession/);
   assert.match(qaSource, /const hasOpenSession = scenario === "active"/);

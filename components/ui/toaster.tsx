@@ -10,6 +10,8 @@ type Toast = {
   title: string;
   description?: string;
   variant?: "success" | "error" | "warning" | "info";
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
 type ToastContextValue = {
@@ -78,6 +80,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">{item.title}</p>
                 {item.description ? <p className="mt-1 text-sm text-muted-foreground">{item.description}</p> : null}
+                {item.actionLabel && item.onAction ? (
+                  <Button type="button" variant="ghost" className="mt-1 h-auto min-h-0 p-0 text-primary" onClick={item.onAction}>
+                    {item.actionLabel}
+                  </Button>
+                ) : null}
               </div>
               <Button variant="ghost" size="icon" onClick={() => removeToast(item.id)} aria-label={`Dismiss ${item.title} notification`} title="Dismiss notification">
                 <X className="h-4 w-4" />

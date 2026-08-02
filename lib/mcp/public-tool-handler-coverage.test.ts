@@ -37,7 +37,7 @@ function initialTables(): Record<string, Row[]> {
     user_workout_plan_days: [{ id: DAY_ID, plan_id: PLAN_ID, day_number: 1, day_name: "Day 1", focus: "Full body" }],
     user_workout_plan_exercises: [{ id: EXERCISE_ID, plan_day_id: DAY_ID, exercise_name: "Squat", sets: 3, reps: "8", sort_order: 1 }],
     user_workout_sessions: [{ id: SCHEDULED_ID, user_id: USER_ID, user_workout_plan_id: PLAN_ID, plan_day_id: DAY_ID, scheduled_date: "2026-07-11", session_number: 1, status: "scheduled" }],
-    workout_sessions: [{ id: SESSION_ID, user_id: USER_ID, scheduled_session_id: SCHEDULED_ID, plan_id: PLAN_ID, plan_day_id: DAY_ID, status: "in_progress", started_at: UPDATED_AT }],
+    workout_sessions: [{ id: SESSION_ID, user_id: USER_ID, scheduled_session_id: SCHEDULED_ID, plan_id: PLAN_ID, plan_day_id: DAY_ID, status: "in_progress", started_at: UPDATED_AT, deleted_at: null }],
     exercise_logs: [],
     progress_entries: [],
     body_measurements: [],
