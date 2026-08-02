@@ -37,6 +37,7 @@ test("next.config bundles deterministic release and migration metadata", async (
   const moduleUrl = new URL(`../next.config.mjs?test=${Date.now()}`, import.meta.url);
   const { default: config, releaseMetadata } = await import(moduleUrl.href);
   const ledger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
+  const compatibility = JSON.parse(readFileSync(resolve(root, "config/release-compatibility.json"), "utf8"));
   const latestResolvedMigration = latestResolvedProductionMigration(ledger);
 
   assert.equal(releaseMetadata.commitSha, fullSha);
@@ -47,10 +48,21 @@ test("next.config bundles deterministic release and migration metadata", async (
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, String(ledger.schemaVerifiedUntrackedCount));
   assert.equal(releaseMetadata.unresolvedMigrationCount, String(ledger.unresolvedCount));
   assert.match(releaseMetadata.expectedDatabaseMigrationVersion, /^\d{12,14}$/);
-  assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, latestResolvedMigration);
+  assert.equal(
+    releaseMetadata.expectedDatabaseMigrationVersion,
+    compatibility.databaseMigrationMarkerVersion
+  );
+  assert.equal(releaseMetadata.latestAppliedMigrationVersion, latestResolvedMigration);
+  assert.notEqual(
+    releaseMetadata.expectedDatabaseMigrationVersion,
+    releaseMetadata.latestAppliedMigrationVersion
+  );
   assert.equal(config.env.PLAIVRA_COMMIT_SHA, fullSha);
   assert.equal(config.env.PLAIVRA_BUILD_TIMESTAMP, "2026-07-14T01:02:03.000Z");
-  assert.equal(config.env.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION, latestResolvedMigration);
+  assert.equal(
+    config.env.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION,
+    compatibility.databaseMigrationMarkerVersion
+  );
 });
 
 test("post-deploy smoke rejects abbreviated release SHAs before network access", () => {
