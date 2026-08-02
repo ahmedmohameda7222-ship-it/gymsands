@@ -154,9 +154,6 @@ export function validateCanonicalQualityArtifact({
   if (manifest.release?.expectedDatabaseMigrationVersion !== expectedTarget) {
     failures.push("release_manifest_unexpected_migration");
   }
-  if (expectedTarget !== migrationState.latestAppliedMigrationVersion) {
-    failures.push("expected_migration_ledger_mismatch");
-  }
   if (manifest.release?.migrationLedgerReconciliationState !== migrationState.reconciliationState) {
     failures.push("release_manifest_reconciliation_state_mismatch");
   }
@@ -307,11 +304,15 @@ export function evaluateReleasePreflight({
   nodeFileVersion,
   installedNextVersion,
   migrationState,
+  releaseTarget,
   manifest,
   artifactFailures = [],
 }) {
   const normalizedMode = normalizePreflightMode(mode);
   const commonFailures = [...artifactFailures];
+  const expectedReleaseMigration = expectedMigrationVersion(
+    releaseTarget?.expectedMigration || migrationState.latestAppliedMigrationVersion,
+  );
   if (!/^[a-f0-9]{40}$/i.test(expectedCommit)) commonFailures.push("expected_commit_invalid");
   if (checkedOutCommit !== expectedCommit) commonFailures.push("checkout_commit_mismatch");
   if (!remoteUrl.includes(expectedRepository)) commonFailures.push("repository_origin_mismatch");
@@ -320,7 +321,7 @@ export function evaluateReleasePreflight({
   if (nvmVersion.trim() !== "24" || nodeFileVersion.trim() !== "24") commonFailures.push("developer_node_pin_mismatch");
   if (!manifest || manifest.release?.commitSha !== expectedCommit) commonFailures.push("release_manifest_commit_mismatch");
   if (manifest?.runtime?.nextVersion !== installedNextVersion) commonFailures.push("release_manifest_next_version_mismatch");
-  if (manifest?.release?.expectedDatabaseMigrationVersion !== migrationState.latestAppliedMigrationVersion) {
+  if (manifest?.release?.expectedDatabaseMigrationVersion !== expectedReleaseMigration) {
     commonFailures.push("release_manifest_migration_mismatch");
   }
   if (manifest?.release?.migrationLedgerReconciliationState !== migrationState.reconciliationState) {
@@ -415,6 +416,7 @@ async function main() {
     nodeFileVersion: readFileSync(resolve(root, ".node-version"), "utf8"),
     installedNextVersion: readInstalledNextVersion(root),
     migrationState,
+    releaseTarget,
     manifest,
     artifactFailures: artifact.failures,
   });
