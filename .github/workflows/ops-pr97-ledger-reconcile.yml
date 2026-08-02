@@ -1,0 +1,251 @@
+name: Ops PR97 Production Ledger Reconcile
+
+on:
+  pull_request:
+    branches:
+      - ops/pr97-ledger-base
+    types:
+      - opened
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: ops-pr97-production-ledger-reconcile
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.head_ref == 'ops/pr97-ledger-trigger'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_BRANCH: feat/workout-history-program
+      REVIEWED_COMMIT: 0e9e08ac2a5fda053612035762613ef94128e815
+      PR_NUMBER: '97'
+      TEMP_PR_NUMBER: ${{ github.event.pull_request.number }}
+      OPS_BASE_BRANCH: ops/pr97-ledger-base
+      OPS_TRIGGER_BRANCH: ops/pr97-ledger-trigger
+    steps:
+      - name: Checkout exact reviewed feature head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Verify immutable source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEWED_COMMIT"
+          test "$(git rev-parse origin/$TARGET_BRANCH)" = "$REVIEWED_COMMIT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Reconcile Production ledger and release documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { createHash } = require('node:crypto');
+          const { execFileSync } = require('node:child_process');
+          const { readFileSync, writeFileSync } = require('node:fs');
+
+          const auditCommit = process.env.REVIEWED_COMMIT;
+          const ledgerPath = 'supabase/migration-ledger.json';
+          const ledger = JSON.parse(readFileSync(ledgerPath, 'utf8'));
+          const applied = new Map([
+            ['20260801140043_workout_history_verified_records.sql', ['20260802113958', 'workout_history_verified_records']],
+            ['20260801160000_workout_history_correction_and_soft_delete.sql', ['20260802114200', 'workout_history_correction_and_soft_delete']],
+            ['20260801180000_workout_history_repeat_session.sql', ['20260802114311', 'workout_history_repeat_session']],
+            ['20260801194500_workout_history_verified_record_authority_hardening.sql', ['20260802114332', 'workout_history_verified_record_authority_hardening']],
+            ['20260801201500_workout_history_verified_record_rebuild.sql', ['20260802114422', 'workout_history_verified_record_rebuild']],
+            ['20260801203000_workout_history_set_detail_patch_semantics.sql', ['20260802114455', 'workout_history_set_detail_patch_semantics']],
+            ['20260801210000_workout_history_correction_muscle_reconcile.sql', ['20260802114534', 'workout_history_correction_muscle_reconcile']],
+            ['20260801220000_workout_history_keyset_read_authority.sql', ['20260802114654', 'workout_history_keyset_read_authority']],
+            ['20260801223000_workout_history_filter_options.sql', ['20260802114733', 'workout_history_filter_options']],
+          ]);
+
+          const evidenceEntry = (entry) =>
+            Boolean(entry.evidenceCommit || entry.repositorySha256 || entry.repositoryGitBlob || applied.has(entry.localFile));
+
+          for (const entry of ledger.entries) {
+            if (applied.has(entry.localFile)) {
+              const [productionVersion, productionName] = applied.get(entry.localFile);
+              const repositoryVersion = entry.localFile.split('_', 1)[0];
+              entry.state = 'applied_version_alias';
+              entry.productionVersion = productionVersion;
+              entry.productionName = productionName;
+              entry.note = `Applied exactly once to Plaivra Production on 2026-08-02 through Supabase apply_migration. The generated production version ${productionVersion} differs from immutable repository version ${repositoryVersion}; this alias preserves both identities. Compatibility marker was not promoted and Activity Catalog was not modified. Do not replay.`;
+            }
+
+            if (evidenceEntry(entry)) {
+              const path = `supabase/migrations/${entry.localFile}`;
+              const bytes = readFileSync(path);
+              entry.evidenceCommit = auditCommit;
+              entry.repositorySha256 = createHash('sha256').update(bytes).digest('hex');
+              entry.repositoryGitBlob = execFileSync('git', ['rev-parse', `${auditCommit}:${path}`], { encoding: 'utf8' }).trim();
+            }
+          }
+
+          const missing = [...applied.keys()].filter((file) => !ledger.entries.some((entry) => entry.localFile === file));
+          if (missing.length) throw new Error(`Ledger is missing applied migrations: ${missing.join(', ')}`);
+
+          ledger.capturedAt = new Date().toISOString();
+          ledger.auditedRepositoryCommit = auditCommit;
+          ledger.productionMigrationCount = ledger.entries.filter((entry) => entry.state === 'applied').length;
+          ledger.schemaVerifiedUntrackedCount = 0;
+          ledger.pendingCount = 0;
+          ledger.unresolvedCount = 0;
+          ledger.historyRepair = {
+            state: 'reconciled',
+            schemaAppliedUntrackedCount: 0,
+            pendingCount: 0,
+            unresolvedCount: 0,
+            note: 'Workout History Production migration history is reconciled through 20260802114733_workout_history_filter_options. All nine generated-version aliases preserve their immutable repository identities. The compatibility marker remains 20260724232734 and Activity Catalog was not modified. Do not replay any applied migration.'
+          };
+          ledger.productionRecordCount = 85;
+          writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`);
+
+          const rows = [...applied.entries()].map(([file, [version, name]]) =>
+            `| \`${file}\` | \`${version}_${name}\` | \`applied_version_alias\` |`
+          ).join('\n');
+          const captured = ledger.capturedAt;
+          const architecture = `# Production migration ledger reconciliation
+
+**Project:** \`bkwezjxvapaeasfvlhvv\`  
+**Evidence captured:** ${captured}  
+**Machine authority:** \`supabase/migration-ledger.json\`  
+**Audit baseline:** \`${auditCommit}\`  
+**Status:** Workout History Production migrations applied and reconciled
+
+This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
+
+## Current state
+
+- Physical Production migration records: **85**
+- Repository classifications: **85**
+- Exact applications (\`state = applied\`): **63**
+- Generated-version aliases (\`state = applied_version_alias\`): **22**
+- Repository-only pending migrations: **0**
+- \`pendingCount = 0\`
+- \`schemaVerifiedUntrackedCount = 0\`
+- \`unresolvedCount = 0\`
+- \`historyRepair.state = reconciled\`
+- \`release_ready = true\`
+- Released compatibility marker: \`20260724232734\`
+- Latest physical Production record: \`20260802114733_workout_history_filter_options\`
+- Expected Production migration: \`20260802114733_workout_history_filter_options\`
+- Activity Catalog migration count: **0**
+
+Physical schema advancement and compatibility-marker promotion remain separate release operations. The Workout History application did not promote the compatibility marker.
+
+## Workout History applied identities
+
+| Immutable repository migration | Generated Production identity | State |
+|---|---|---|
+${rows}
+
+All nine migrations were applied exactly once to Plaivra Production on 2026-08-02 through Supabase \`apply_migration\`. Their immutable repository SQL bytes are bound in the machine ledger through SHA-256, Git blob, and the audit commit. Do not replay them.
+
+## Production verification
+
+Independent read-only verification after application proved:
+
+- all required Workout History columns, RPC authorities, views, and the correction muscle-reconciliation trigger exist;
+- authenticated clients cannot execute the server-owned verified-record replacement authority;
+- the service role retains the replacement authority;
+- anonymous users cannot execute Workout History root-page or filter-option reads;
+- authenticated users retain the intended owner-scoped read authorities;
+- the compatibility marker remains \`20260724232734\`;
+- Plaivra Activity Catalog remains isolated and unmodified.
+
+## Prior applied authorities
+
+AW-9 remains represented by repository migration \`20260731090000_active_workout_aw9_offline_multi_device.sql\` and generated Production identity \`20260801045628_active_workout_aw9_offline_multi_device\`. AW-4 and earlier generated aliases remain preserved in the machine ledger with immutable evidence.
+
+## Authority and verification
+
+Use these current sources:
+
+- \`supabase/migration-ledger.json\`
+- immutable files under \`supabase/migrations/\`
+- executable contracts under \`supabase/verification/\`
+- \`scripts/check-migration-ledger.mjs\`
+- exact-head Quality and Exact Release workflow artifacts
+`;
+          writeFileSync('docs/architecture/migration-ledger-reconciliation.md', architecture);
+
+          const releasePath = 'docs/release/README.md';
+          const releaseDoc = readFileSync(releasePath, 'utf8');
+          const replacement = `## Current Production migration state
+
+Verified from the reconciled machine ledger and the Workout History Production application on 2026-08-02:
+
+- 85 physical Production migration records;
+- 63 exact applications and 22 immutable generated-version aliases;
+- latest physical identity \`20260802114733_workout_history_filter_options\`;
+- \`pendingCount=0\`, \`schemaVerifiedUntrackedCount=0\`, and \`unresolvedCount=0\`;
+- \`historyRepair.state=reconciled\` and \`release_ready=true\`;
+- released compatibility marker remains \`20260724232734\`.
+
+The nine Workout History migrations were applied exactly once to Plaivra Production and not to Activity Catalog. Applied repository SQL remains immutable. The machine authority is \`supabase/migration-ledger.json\`; the human summary is \`docs/architecture/migration-ledger-reconciliation.md\`.
+
+Physical schema advancement does not independently authorize merge, deployment, or compatibility-marker promotion.
+
+## Required exact-head evidence`;
+          const updatedRelease = releaseDoc.replace(
+            /## Current Production migration state[\s\S]*?## Required exact-head evidence/,
+            replacement
+          );
+          if (updatedRelease === releaseDoc) throw new Error('Release README Production-state section was not replaced.');
+          writeFileSync(releasePath, updatedRelease);
+          NODE
+
+          node scripts/check-migration-ledger.mjs
+          git diff --check
+
+      - name: Commit reconciled authority to PR branch
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'plaivra-release-ops'
+          git config user.email 'plaivra-release-ops@users.noreply.github.com'
+          git add supabase/migration-ledger.json docs/architecture/migration-ledger-reconciliation.md docs/release/README.md
+          git commit -m 'chore(release): reconcile Workout History Production migrations'
+          commit_sha="$(git rev-parse HEAD)"
+          git push origin "HEAD:$TARGET_BRANCH"
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Record success on PR 97
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "WORKOUT_HISTORY_PRODUCTION_LEDGER_RECONCILED
+
+- pre_application_head: \`$REVIEWED_COMMIT\`
+- reconciliation_commit: \`${{ steps.commit.outputs.commit_sha }}\`
+- physical_migration_count: \`85\`
+- latest_physical_migration: \`20260802114733_workout_history_filter_options\`
+- pending: \`0\`
+- unresolved: \`0\`
+- compatibility_marker: \`20260724232734\`
+- activity_catalog_modified: \`false\`"
+
+      - name: Cleanup temporary operations refs
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          gh pr close "$TEMP_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --comment 'One-shot ledger reconciliation operation completed; temporary PR closed.'
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$OPS_TRIGGER_BRANCH"
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$OPS_BASE_BRANCH"
+          exit 0
