@@ -1,101 +1,14 @@
-name: Ops PR97 Exact Release Dispatch
+name: Ops PR97 Exact Release Dispatch (retired)
 
 on:
-  push:
-    branches:
-      - ops/pr97-exact-release-0e9e08ac
+  workflow_dispatch:
 
 permissions:
-  actions: write
-  contents: write
-  issues: write
-  pull-requests: write
-
-concurrency:
-  group: ops-pr97-exact-release-0e9e08ac
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  dispatch-and-wait:
+  retired:
+    if: ${{ false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 190
-    env:
-      GH_TOKEN: ${{ github.token }}
-      OPS_BRANCH: ops/pr97-exact-release-0e9e08ac
-      TARGET_BRANCH: feat/workout-history-program
-      REVIEWED_COMMIT: 0e9e08ac2a5fda053612035762613ef94128e815
-      COMPARISON_BASE: edf06318994121928dc1d1aaa70e51214525926f
-      QUALITY_RUN_ID: "30726502954"
-      PR_NUMBER: "97"
     steps:
-      - name: Verify immutable dispatch target
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$GITHUB_REF_NAME" = "$OPS_BRANCH"
-          target_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$TARGET_BRANCH" --jq .object.sha)"
-          test "$target_sha" = "$REVIEWED_COMMIT"
-
-      - name: Dispatch Exact Release and wait
-        id: exact
-        shell: bash
-        run: |
-          set -euo pipefail
-          started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          jq -n \
-            --arg ref "$TARGET_BRANCH" \
-            --arg reviewed_commit "$REVIEWED_COMMIT" \
-            --arg comparison_base "$COMPARISON_BASE" \
-            --arg quality_run_id "$QUALITY_RUN_ID" \
-            '{ref:$ref,inputs:{reviewed_commit:$reviewed_commit,comparison_base:$comparison_base,quality_run_id:$quality_run_id}}' \
-            | gh api --method POST \
-                "repos/$GITHUB_REPOSITORY/actions/workflows/exact-release-quality-validation.yml/dispatches" \
-                --input -
-
-          run_id=""
-          run_url=""
-          for attempt in $(seq 1 90); do
-            candidate="$(gh run list \
-              --repo "$GITHUB_REPOSITORY" \
-              --workflow exact-release-quality-validation.yml \
-              --branch "$TARGET_BRANCH" \
-              --event workflow_dispatch \
-              --limit 50 \
-              --json databaseId,headSha,status,conclusion,url,createdAt \
-              | jq -c --arg sha "$REVIEWED_COMMIT" --arg started "$started_at" \
-                '[.[] | select(.headSha == $sha and .createdAt >= $started)] | sort_by(.createdAt) | last // empty')"
-            if [[ -n "$candidate" ]]; then
-              run_id="$(jq -r .databaseId <<<"$candidate")"
-              run_url="$(jq -r .url <<<"$candidate")"
-              break
-            fi
-            sleep 2
-          done
-          test -n "$run_id"
-
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "run_url=$run_url" >> "$GITHUB_OUTPUT"
-
-          set +e
-          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
-          watch_status=$?
-          set -e
-
-          conclusion="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)"
-          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "OPS_EXACT_RELEASE_RESULT
-
-- reviewed_commit: \`$REVIEWED_COMMIT\`
-- quality_run_id: \`$QUALITY_RUN_ID\`
-- exact_release_run_id: \`$run_id\`
-- conclusion: \`$conclusion\`
-- run: $run_url"
-
-          test "$watch_status" -eq 0
-          test "$conclusion" = "success"
-
-      - name: Delete temporary operations branch
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$OPS_BRANCH"
+      - run: echo retired
