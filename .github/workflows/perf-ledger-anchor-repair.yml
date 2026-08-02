@@ -1,0 +1,77 @@
+name: Temporary PERF ledger anchor repair
+
+on:
+  push:
+    branches:
+      - perf/platform-performance-foundation
+    paths:
+      - .github/workflows/perf-ledger-anchor-repair.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: perf-ledger-anchor-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout performance branch
+        uses: actions/checkout@v4
+        with:
+          ref: perf/platform-performance-foundation
+          fetch-depth: 0
+
+      - name: Rebind immutable evidence to reachable squash merge
+        env:
+          OLD_ANCHOR: 0e9e08ac2a5fda053612035762613ef94128e815
+          NEW_ANCHOR: dfa14c3bc2c1524ff185b1ee4e170f4537a80230
+        run: |
+          python - <<'PY'
+          import datetime
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("supabase/migration-ledger.json")
+          ledger = json.loads(path.read_text(encoding="utf-8"))
+          old = os.environ["OLD_ANCHOR"]
+          new = os.environ["NEW_ANCHOR"]
+
+          if ledger.get("auditedRepositoryCommit") != old:
+              raise SystemExit("unexpected auditedRepositoryCommit; refusing repair")
+
+          rebound = 0
+          for entry in ledger.get("entries", []):
+              if entry.get("evidenceCommit") == old:
+                  entry["evidenceCommit"] = new
+                  rebound += 1
+
+          if rebound != 1:
+              raise SystemExit(f"expected exactly one evidence entry, found {rebound}")
+
+          ledger["auditedRepositoryCommit"] = new
+          ledger["capturedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+          note = ledger["historyRepair"]["note"]
+          addition = (
+              " Durable Git evidence was rebound to the reachable Workout History squash merge "
+              f"{new}; the attested AW-9 migration bytes and Git blob are unchanged."
+          )
+          if addition.strip() not in note:
+              ledger["historyRepair"]["note"] = note + addition
+
+          path.write_text(json.dumps(ledger, separators=(",", ":")) + "\n", encoding="utf-8")
+          PY
+
+          test "$(git rev-parse dfa14c3bc2c1524ff185b1ee4e170f4537a80230:supabase/migrations/20260731090000_active_workout_aw9_offline_multi_device.sql)" = "f1ffadfa2a0fc3b149afc6cfbf3c82751f18230c"
+          git rm .github/workflows/perf-ledger-anchor-repair.yml
+
+      - name: Commit durable ledger repair
+        run: |
+          git config user.name "Plaivra Release Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add supabase/migration-ledger.json
+          git commit -m "fix(release): rebind ledger evidence to squash merge"
+          git push origin HEAD:perf/platform-performance-foundation
