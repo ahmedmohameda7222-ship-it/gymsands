@@ -84,7 +84,9 @@ test("synthetic pending ledgers remain reviewable but cannot become release-read
   const currentTarget = deriveReleaseTarget(current);
   const resolvedTarget = currentTarget.expectedMigration;
   const expectedPendingCount = currentTarget.pendingCount + 1;
-  const futureVersion = (BigInt(resolvedTarget) + 1n).toString().padStart(resolvedTarget.length, "0");
+  const futureVersion = (BigInt(currentTarget.latestAppliedMigrationVersion) + 1n)
+    .toString()
+    .padStart(currentTarget.latestAppliedMigrationVersion.length, "0");
   pending.entries.push({
     productionVersion: null,
     productionName: null,
@@ -110,7 +112,7 @@ test("synthetic pending ledgers remain reviewable but cannot become release-read
   assert.throws(() => deriveReleaseReadyTarget(pending), /not release-ready/);
 });
 
-test("future reconciled ledger automatically derives its later target", () => {
+test("future reconciled physical migrations do not silently promote the compatibility marker", () => {
   const current = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
   const reconciled = structuredClone(current);
   reconciled.entries = reconciled.entries.filter((entry) => entry.state !== "pending");
@@ -121,10 +123,12 @@ test("future reconciled ledger automatically derives its later target", () => {
     state: "reconciled",
     pendingCount: 0,
     unresolvedCount: 0,
-    note: "Synthetic future-target fixture with every migration resolved.",
+    note: "Synthetic future physical-head fixture with every migration resolved.",
   };
-  const currentTarget = deriveReleaseTarget(reconciled).expectedMigration;
-  const futureVersion = (BigInt(currentTarget) + 1n).toString().padStart(currentTarget.length, "0");
+  const currentTarget = deriveReleaseTarget(reconciled);
+  const futureVersion = (BigInt(currentTarget.latestAppliedMigrationVersion) + 1n)
+    .toString()
+    .padStart(currentTarget.latestAppliedMigrationVersion.length, "0");
   const future = structuredClone(reconciled);
   future.entries.push({
     productionVersion: futureVersion,
@@ -133,10 +137,12 @@ test("future reconciled ledger automatically derives its later target", () => {
     state: "applied",
   });
   future.productionMigrationCount += 1;
-  assert.equal(deriveReleaseTarget(future).expectedMigration, futureVersion);
+  const futureTarget = deriveReleaseTarget(future);
+  assert.equal(futureTarget.expectedMigration, currentTarget.expectedMigration);
+  assert.equal(futureTarget.latestAppliedMigrationVersion, futureVersion);
 });
 
-test("generic workflow and evidence code contain no pinned AW-2A migration", () => {
+test("generic workflow and evidence code derive release identity without a pinned AW-2A migration", () => {
   for (const path of [
     ".github/workflows/quality.yml",
     "scripts/quality-evidence-contract.mjs",
@@ -148,9 +154,11 @@ test("generic workflow and evidence code contain no pinned AW-2A migration", () 
   assert.match(quality, /quality-ledger-target\.mjs/);
   assert.match(quality, /validation_request_id/);
   const qualityTarget = source("scripts/quality-ledger-target.mjs");
-  assert.match(qualityTarget, /deriveMigrationLedgerState/);
-  assert.match(qualityTarget, /expectedMigrationVersion/);
-  assert.match(source("scripts/release-identity-contract.mjs"), /deriveReleaseTarget/);
+  assert.match(qualityTarget, /deriveReleaseTarget/);
+  assert.match(qualityTarget, /latestAppliedMigrationVersion/);
+  const releaseAuthority = source("scripts/release-identity-contract.mjs");
+  assert.match(releaseAuthority, /resolveReleaseCompatibilityContract/);
+  assert.match(releaseAuthority, /deriveReleaseTarget/);
   const preflight = source(".github/workflows/release-preflight.yml");
   assert.match(preflight, /type: choice[\s\S]*stage1-infrastructure-validation[\s\S]*production-marker-promotion-authorization/);
   assert.match(preflight, /comparison_base/);
