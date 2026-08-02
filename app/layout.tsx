@@ -4,6 +4,7 @@ import { getMessages, getTranslations } from "next-intl/server";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { SuccessFeedbackProvider } from "@/components/feedback/success-feedback";
+import { PerformanceReporter } from "@/components/observability/performance-reporter";
 import { AppPreferenceEffects } from "@/components/settings/app-preference-effects";
 import { ToastProvider } from "@/components/ui/toaster";
 import { getLocaleMetadata } from "@/lib/i18n/config";
@@ -49,6 +50,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         >
           {common("skipToContent")}
         </a>
+        <PerformanceReporter />
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ToastProvider>
             <AuthProvider>
