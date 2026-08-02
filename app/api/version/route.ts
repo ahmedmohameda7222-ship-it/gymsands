@@ -10,12 +10,14 @@ export async function GET() {
   const release = getReleaseVersion();
   const database = await getDatabaseSchemaCompatibility();
   const response = buildVersionResponse(release, database);
+  const computeRegion = process.env.VERCEL_REGION?.trim() || "local";
 
   return NextResponse.json(response.body, {
     status: response.status,
     headers: {
       "Cache-Control": "no-store, max-age=0",
-      "X-Content-Type-Options": "nosniff"
+      "X-Content-Type-Options": "nosniff",
+      "X-Plaivra-Compute-Region": computeRegion
     }
   });
 }
