@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { validatePerformanceMetricPayload } from "./performance-metric";
+import {
+  performanceReportingEnabled,
+  validatePerformanceMetricPayload,
+} from "./performance-metric";
 
 const release = {
   commitSha: "60a204d5fc20fc396be1b1b47e748c42ebba6abf",
@@ -26,6 +29,12 @@ function validPayload() {
 }
 
 describe("performance metric envelope", () => {
+  it("enables RUM only for real production builds", () => {
+    expect(performanceReportingEnabled({ nodeEnv: "production", productionQaBuild: false })).toBe(true);
+    expect(performanceReportingEnabled({ nodeEnv: "production", productionQaBuild: true })).toBe(false);
+    expect(performanceReportingEnabled({ nodeEnv: "test", productionQaBuild: false })).toBe(false);
+  });
+
   it("accepts bounded metrics and strips dynamic route identifiers", () => {
     const result = validatePerformanceMetricPayload(validPayload());
     expect(result).toEqual({
