@@ -6,7 +6,10 @@ on:
       - main
 
 permissions:
+  actions: write
   contents: read
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: phase-a-diff-${{ github.workflow }}-${{ github.ref }}
@@ -29,3 +32,105 @@ jobs:
 
       - name: Check branch diff formatting against main
         run: git diff --check origin/main...HEAD
+
+  exact-release-dispatch:
+    if: github.head_ref == 'ops/pr97-exact-release-863db28a'
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_BRANCH: feat/workout-history-program
+      REVIEWED_COMMIT: 863db28a26338249842813b099095ff769354200
+      COMPARISON_BASE: edf06318994121928dc1d1aaa70e51214525926f
+      QUALITY_RUN_ID: '30747372909'
+      QUALITY_ARTIFACT_NAME: quality-reports-30747372909
+      QUALITY_ARTIFACT_DIGEST: sha256:608354b1aa734ebbdd5a6149f0503462bc0cde73b26caf99efa322889a854206
+      PR_NUMBER: '97'
+    steps:
+      - name: Verify immutable release candidate and canonical artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_HEAD_REF" = "ops/pr97-exact-release-863db28a"
+          target_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$TARGET_BRANCH" --jq .object.sha)"
+          test "$target_sha" = "$REVIEWED_COMMIT"
+
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALITY_RUN_ID")"
+          test "$(jq -r .head_sha <<<"$run_json")" = "$REVIEWED_COMMIT"
+          test "$(jq -r .event <<<"$run_json")" = "pull_request"
+          test "$(jq -r .status <<<"$run_json")" = "completed"
+          test "$(jq -r .conclusion <<<"$run_json")" = "success"
+          test "$(jq -r .run_attempt <<<"$run_json")" = "1"
+
+          artifact_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALITY_RUN_ID/artifacts")"
+          artifact_count="$(jq --arg name "$QUALITY_ARTIFACT_NAME" '[.artifacts[] | select(.name==$name and .expired==false)] | length' <<<"$artifact_json")"
+          test "$artifact_count" = "1"
+          artifact_digest="$(jq -r --arg name "$QUALITY_ARTIFACT_NAME" '.artifacts[] | select(.name==$name and .expired==false) | .digest' <<<"$artifact_json")"
+          test "$artifact_digest" = "$QUALITY_ARTIFACT_DIGEST"
+
+      - name: Dispatch Exact Release
+        id: dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          jq -n \
+            --arg ref "$TARGET_BRANCH" \
+            --arg reviewed_commit "$REVIEWED_COMMIT" \
+            --arg comparison_base "$COMPARISON_BASE" \
+            --arg quality_run_id "$QUALITY_RUN_ID" \
+            '{ref:$ref,inputs:{reviewed_commit:$reviewed_commit,comparison_base:$comparison_base,quality_run_id:$quality_run_id}}' \
+            | gh api --method POST \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/exact-release-quality-validation.yml/dispatches" \
+                --input -
+
+          run_id=""
+          run_url=""
+          for attempt in $(seq 1 120); do
+            candidate="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow exact-release-quality-validation.yml \
+              --branch "$TARGET_BRANCH" \
+              --event workflow_dispatch \
+              --limit 100 \
+              --json databaseId,headSha,status,conclusion,url,createdAt \
+              | jq -c --arg sha "$REVIEWED_COMMIT" --arg started "$started_at" \
+                '[.[] | select(.headSha==$sha and .createdAt >= $started)] | sort_by(.createdAt) | last // empty')"
+            if [[ -n "$candidate" ]]; then
+              run_id="$(jq -r .databaseId <<<"$candidate")"
+              run_url="$(jq -r .url <<<"$candidate")"
+              break
+            fi
+            sleep 2
+          done
+          test -n "$run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "run_url=$run_url" >> "$GITHUB_OUTPUT"
+
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "EXACT_RELEASE_DISPATCHED
+
+- reviewed_commit: \`$REVIEWED_COMMIT\`
+- quality_run_id: \`$QUALITY_RUN_ID\`
+- exact_release_run_id: \`$run_id\`
+- run: $run_url"
+
+      - name: Wait for Exact Release and record result
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="${{ steps.dispatch.outputs.run_id }}"
+          run_url="${{ steps.dispatch.outputs.run_url }}"
+          set +e
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+          watch_status=$?
+          set -e
+          conclusion="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "EXACT_RELEASE_RESULT
+
+- reviewed_commit: \`$REVIEWED_COMMIT\`
+- quality_run_id: \`$QUALITY_RUN_ID\`
+- exact_release_run_id: \`$run_id\`
+- conclusion: \`$conclusion\`
+- run: $run_url"
+          test "$watch_status" -eq 0
+          test "$conclusion" = "success"
