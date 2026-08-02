@@ -27,6 +27,15 @@ test("declared database marker remains distinct from newer compatible physical m
   assert.equal(resolved.unresolvedMigrationCount, 0);
 });
 
+test("Next build metadata binds the declared compatibility marker", async () => {
+  const { releaseMetadata } = await import("../next.config.mjs");
+
+  assert.equal(releaseMetadata.schemaCompatibilityVersion, "2");
+  assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, "20260724232734");
+  assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20260802114733");
+  assert.equal(releaseMetadata.migrationLedgerReconciliationState, "reconciled");
+});
+
 test("rejects a marker that is not represented by a resolved Production migration", () => {
   assert.throws(
     () => resolveReleaseCompatibilityContract({
