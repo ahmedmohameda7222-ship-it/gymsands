@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/integrations/rate-limit";
 import { isUuid } from "@/lib/utils";
 import { workoutHistoryRecordProjectionIsCurrent } from "@/services/workouts/history/record-projection-state";
 import { getWorkoutHistorySessionDetail } from "@/services/workouts/history/server-reader";
-import { readSharedWorkoutHistorySessionMetrics } from "@/services/workouts/history/shared-session-metrics";
+import { readSharedWorkoutHistorySessionMetricsForKnownOwnerScopedSession } from "@/services/workouts/history/shared-session-metrics";
 import type { WorkoutHistoryDetailNotice } from "@/types/workout-history";
 
 export const runtime = "nodejs";
@@ -34,9 +34,11 @@ export async function GET(
     ).catch(() => null);
     const [detail, sharedMetrics, recordsAreCurrent] = await Promise.all([
       getWorkoutHistorySessionDetail(context.supabase, context.user.id, sessionId),
-      readSharedWorkoutHistorySessionMetrics(
+      // The canonical detail read in this same request owns the explicit
+      // user/session root validation. Reuse the member-scoped client for the
+      // metric graph instead of issuing a second root query.
+      readSharedWorkoutHistorySessionMetricsForKnownOwnerScopedSession(
         context.supabase,
-        context.user.id,
         sessionId,
       ),
       projectionState,
