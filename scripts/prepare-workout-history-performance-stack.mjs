@@ -39,11 +39,35 @@ export function localStackRepairPlan(values) {
   return "start";
 }
 
-function execute(command, args, { allowFailure = false } = {}) {
+export function localServiceRoleReadParitySql() {
+  return [
+    "grant usage on schema public to service_role;",
+    "grant select on all tables in schema public to service_role;",
+    "do $workout_history_service_role_read_parity$",
+    "begin",
+    "  if to_regclass('public.workout_sessions') is null then",
+    "    raise exception 'Workout History local read parity requires public.workout_sessions.';",
+    "  end if;",
+    "  if not has_table_privilege('service_role', 'public.workout_sessions', 'SELECT') then",
+    "    raise exception 'Workout History local service_role read parity was not restored.';",
+    "  end if;",
+    "end",
+    "$workout_history_service_role_read_parity$;",
+    "notify pgrst, 'reload schema';",
+    "",
+  ].join("\n");
+}
+
+function execute(
+  command,
+  args,
+  { allowFailure = false, input = undefined } = {},
+) {
   const result = spawnSync(command, args, {
     cwd: REPO_ROOT,
     encoding: "utf8",
     env: process.env,
+    input,
     maxBuffer: 128 * 1024 * 1024,
   });
   if (result.stdout) process.stdout.write(result.stdout);
@@ -98,6 +122,18 @@ export function assertLocalApiReady(values) {
   }
 }
 
+export function restoreLocalServiceRoleReadParity(
+  values,
+  executeImpl = execute,
+) {
+  assertLocalApiReady(values);
+  return executeImpl(
+    "psql",
+    [values.DB_URL, "-X", "-v", "ON_ERROR_STOP=1"],
+    { input: localServiceRoleReadParitySql() },
+  );
+}
+
 export function prepareLocalPerformanceStack() {
   const before = statusEnvironment();
   const plan = localStackRepairPlan(before);
@@ -118,8 +154,10 @@ export function prepareLocalPerformanceStack() {
   }
 
   const after = statusEnvironment();
-  assertLocalApiReady(after);
-  process.stdout.write("Workout History local Supabase API plane is ready.\n");
+  restoreLocalServiceRoleReadParity(after);
+  process.stdout.write(
+    "Workout History local Supabase API plane is ready with hosted read-role parity.\n",
+  );
   return after;
 }
 
