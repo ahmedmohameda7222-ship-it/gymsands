@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SkeletonLine } from "@/components/ui/state-views";
 import { useAuth } from "@/components/auth/auth-provider";
+import { AuthenticatedAppBootReporter } from "@/components/observability/performance-reporter";
 import { getOnboarding } from "@/services/database/profile";
 import { hasRequiredConsents } from "@/services/database/consents";
 import { checkUserLaunchEligibility } from "@/lib/auth/eligibility";
@@ -188,7 +189,7 @@ export function ProtectedRoute({
     );
   }
 
-  return <>{children}</>;
+  return <><AuthenticatedAppBootReporter />{children}</>;
 }
 
 function PlaivraLoadingState() {
