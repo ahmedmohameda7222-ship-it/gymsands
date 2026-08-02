@@ -27,7 +27,7 @@ vi.mock("@/services/workouts/history/server-list-reader", () => ({
   listWorkoutHistoryKeyset: mocks.list,
 }));
 vi.mock("@/services/workouts/history/shared-session-metrics", () => ({
-  readSharedWorkoutHistorySessionMetrics: mocks.sharedMetrics,
+  readSharedWorkoutHistorySessionMetricsForKnownOwnerScopedSession: mocks.sharedMetrics,
 }));
 vi.mock("@/services/workouts/history/server-reader", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/services/workouts/history/server-reader")>();
@@ -196,7 +196,7 @@ describe("Workout History API routes", () => {
       summary: { reliableVolume: 500 },
       notices: [],
     });
-    expect(mocks.sharedMetrics).toHaveBeenCalledWith(supabase, ownerId, sessionId);
+    expect(mocks.sharedMetrics).toHaveBeenCalledWith(supabase, sessionId);
   });
 
   it("marks an explicitly stale derived projection for authenticated repair", async () => {
