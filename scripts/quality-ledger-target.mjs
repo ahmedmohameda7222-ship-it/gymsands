@@ -1,17 +1,18 @@
-import { pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
-import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
-import { expectedMigrationVersion } from "./release-identity-contract.mjs";
+import { pathToFileURL } from "node:url";
+
+import { deriveReleaseTarget } from "./release-identity-contract.mjs";
 
 export function deriveQualityLedgerTarget(ledger) {
-  const state = deriveMigrationLedgerState(ledger);
+  const target = deriveReleaseTarget(ledger);
   return Object.freeze({
-    expectedMigration: expectedMigrationVersion(state.latestAppliedMigrationVersion),
-    reconciliationState: state.reconciliationState,
-    pendingCount: state.pendingCount,
-    schemaAppliedUntrackedCount: state.schemaAppliedUntrackedCount,
-    unresolvedCount: state.unresolvedCount,
-    releaseReady: state.releaseReady,
+    expectedMigration: target.expectedMigration,
+    latestAppliedMigrationVersion: target.latestAppliedMigrationVersion,
+    reconciliationState: target.reconciliationState,
+    pendingCount: target.pendingCount,
+    schemaAppliedUntrackedCount: target.schemaAppliedUntrackedCount,
+    unresolvedCount: target.unresolvedCount,
+    releaseReady: target.releaseReady,
   });
 }
 
