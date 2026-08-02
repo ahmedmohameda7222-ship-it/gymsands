@@ -59,8 +59,14 @@ const STYLE_BUILD_PATTERNS = [
   /^(?:postcss|tailwind)\.config\.(?:js|mjs|cjs|ts)$/i,
 ];
 
+const PERFORMANCE_BUILD_PATTERNS = [
+  /^vercel\.json$/i,
+  /^config\/performance-budgets\.json$/i,
+];
+
 const BUILD_AUTHORITY_PATTERNS = [
   ...STYLE_BUILD_PATTERNS,
+  ...PERFORMANCE_BUILD_PATTERNS,
   /^scripts\/(?:validate-production-env|verify-built-release-metadata)\.mjs$/,
 ];
 
@@ -77,6 +83,7 @@ const CI_SELECTION_PATTERNS = [
   /^CHATGPT_CODEX_PROMPT_RULES\.md$/,
   /^\.agents\//,
   /^(?:package|tsconfig|vitest|eslint|next|postcss|tailwind)[^/]*\.(?:json|js|mjs|cjs|ts)$/,
+  ...PERFORMANCE_BUILD_PATTERNS,
   /^\.nvmrc$/,
   /^\.node-version$/,
 ];
@@ -88,6 +95,7 @@ const RECOGNIZED_CI_PATTERNS = [
   /^CHATGPT_CODEX_PROMPT_RULES\.md$/,
   /^\.agents\//,
   /^(?:package|tsconfig|vitest|eslint|next|postcss|tailwind)[^/]*\.(?:json|js|mjs|cjs|ts)$/,
+  ...PERFORMANCE_BUILD_PATTERNS,
   /^\.nvmrc$/,
   /^\.node-version$/,
 ];

@@ -52,6 +52,17 @@ export type OperationalLog = {
   food_log_load_state?: string;
   duration_ms?: number;
   count?: number;
+  metric?: string;
+  metric_value?: number;
+  metric_delta?: number;
+  metric_rating?: string;
+  metric_unit?: string;
+  budget_maximum?: number;
+  within_budget?: boolean;
+  navigation_type?: string;
+  visibility_state?: string;
+  connection_type?: string;
+  compute_region?: string;
 };
 
 export function redactOperationalValue(value: unknown, key = "value", depth = 0): unknown {

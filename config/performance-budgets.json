@@ -1,0 +1,30 @@
+{
+  "contractVersion": 1,
+  "deployment": {
+    "primaryFunctionRegion": "fra1",
+    "databaseRegion": "eu-central-1"
+  },
+  "metrics": {
+    "LCP": {
+      "unit": "ms",
+      "p75Maximum": 2500
+    },
+    "INP": {
+      "unit": "ms",
+      "p75Maximum": 200
+    },
+    "CLS": {
+      "unit": "score",
+      "p75Maximum": 0.1
+    },
+    "APP_BOOT": {
+      "unit": "ms",
+      "p75Maximum": 3000
+    }
+  },
+  "operational": {
+    "warmRouteNavigationMsMaximum": 500,
+    "ordinaryApiP95MsMaximum": 500,
+    "initialPrivateRequestCountMaximum": 3
+  }
+}
