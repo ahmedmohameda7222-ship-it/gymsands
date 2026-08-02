@@ -27,7 +27,7 @@
     "test:muscle-intelligence:phase4b": "vitest run --config vitest.unit.config.mjs lib/train/exercise-display.test.ts lib/train/muscle-intelligence/advanced-mapping-registry.test.ts lib/train/muscle-intelligence/plan-advanced-analysis.test.ts lib/product/muscle-intelligence-phase4b.test.ts",
     "verify:muscle-atlas:geometry": "node scripts/verify-muscle-atlas-geometry.mjs",
     "test:scripts": "node --test scripts/*.test.mjs",
-    "test:telemetry": "vitest run --config vitest.unit.config.mjs lib/observability/client-error.test.ts lib/observability/client-error-route.test.ts",
+    "test:telemetry": "vitest run --config vitest.unit.config.mjs lib/observability/client-error.test.ts lib/observability/client-error-route.test.ts lib/observability/performance-metric.test.ts lib/observability/performance-metric-route.test.ts lib/performance/version-region-route.test.ts",
     "validate:env": "node scripts/validate-production-env.mjs",
     "migration:ledger:check": "node scripts/check-migration-ledger.mjs",
     "release:manifest": "node scripts/create-release-manifest.mjs",
