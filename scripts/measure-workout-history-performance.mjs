@@ -16,6 +16,7 @@ const DEFAULT_OUTPUT = path.join(
   "report.json",
 );
 const FIXTURE_USER_ID = "b9000000-0000-4000-8000-000000000001";
+const DETAIL_FIXTURE_SESSION_NUMBER = 4_999;
 
 export const REQUIRED_WORKOUT_SESSION_COLUMNS = Object.freeze([
   "id",
@@ -84,6 +85,36 @@ export function buildCommittedFixtureSql(source) {
     throw new Error("WH-9 committed setup does not contain 5,000 sessions.");
   }
   return `${setup}\n\ncommit;\n`;
+}
+
+export function buildCurrentDetailProjectionSql() {
+  return `begin;
+select set_config('request.jwt.claim.sub','${FIXTURE_USER_ID}',true);
+select set_config('request.jwt.claim.role','authenticated',true);
+select public.replace_workout_derived_records_atomic(
+  '${FIXTURE_USER_ID}'::uuid,
+  md5('plaivra-wh9-session-${DETAIL_FIXTURE_SESSION_NUMBER}')::uuid,
+  1::smallint,
+  'wh6-v1',
+  '[]'::jsonb
+);
+do $wh9_detail_projection_guard$
+begin
+  if not exists (
+    select 1
+    from public.workout_sessions
+    where id=md5('plaivra-wh9-session-${DETAIL_FIXTURE_SESSION_NUMBER}')::uuid
+      and user_id='${FIXTURE_USER_ID}'::uuid
+      and derived_record_schema_version=1
+      and derived_record_formula_version='wh6-v1'
+      and derived_records_evaluated_at is not null
+  ) then
+    raise exception 'WH-9 detail fixture projection was not evaluated by the atomic record contract.';
+  end if;
+end
+$wh9_detail_projection_guard$;
+commit;
+`;
 }
 
 export function cleanupFixtureSql() {
@@ -205,6 +236,7 @@ async function main() {
   );
   const fixtureSource = await readFile(FIXTURE_PATH, "utf8");
   const setupSql = buildCommittedFixtureSql(fixtureSource);
+  const detailProjectionSql = buildCurrentDetailProjectionSql();
   const cleanupSql = cleanupFixtureSql();
   await mkdir(path.dirname(outputPath), { recursive: true });
 
@@ -219,6 +251,10 @@ async function main() {
   runPsql(databaseUrl, cleanupSql);
   try {
     runPsql(databaseUrl, setupSql);
+    // The service benchmark requires a terminal detail session whose verified-
+    // record projection is genuinely current. Prepare it through the production
+    // atomic contract rather than forging freshness columns in fixture SQL.
+    runPsql(databaseUrl, detailProjectionSql);
     // Probe again after fixture insertion. An empty-table schema probe can pass
     // while a real row still fails PostgREST serialization; this converts that
     // condition into the raw HTTP/database error before service wrappers hide it.
