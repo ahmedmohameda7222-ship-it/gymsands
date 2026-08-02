@@ -1,3 +1,4 @@
+import { env } from "@/lib/env";
 import { getReleaseVersion } from "@/lib/release/version";
 import { coarseBrowser, sanitizeClientRoute } from "@/lib/observability/client-error";
 
@@ -105,6 +106,16 @@ function currentVisibilityState() {
   return normalizedEnum(document.visibilityState, VISIBILITY_STATES, "unknown");
 }
 
+export function performanceReportingEnabled({
+  nodeEnv = process.env.NODE_ENV,
+  productionQaBuild = env.productionQaBuild,
+}: {
+  nodeEnv?: string;
+  productionQaBuild?: boolean;
+} = {}) {
+  return nodeEnv === "production" && !productionQaBuild;
+}
+
 export function validatePerformanceMetricPayload(input: unknown): PerformanceMetricValidation {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     return { ok: false, error: "invalid_payload" };
@@ -205,13 +216,13 @@ function sendPerformanceMetric(envelope: PerformanceMetricEnvelope) {
 }
 
 export function reportWebVitalMetric(metric: WebVitalLike) {
-  if (process.env.NODE_ENV !== "production") return;
+  if (!performanceReportingEnabled()) return;
   const envelope = buildPerformanceMetricEnvelope(metric);
   if (envelope) sendPerformanceMetric(envelope);
 }
 
 export function reportAuthenticatedAppBoot() {
-  if (process.env.NODE_ENV !== "production" || typeof performance === "undefined") return;
+  if (!performanceReportingEnabled() || typeof performance === "undefined") return;
   const value = Math.max(0, performance.now());
   const envelope = buildPerformanceMetricEnvelope({
     id: `app-boot-${Math.round(value)}`,
