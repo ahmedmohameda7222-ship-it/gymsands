@@ -28,8 +28,9 @@ describe("Today dashboard implementation contracts", () => {
   });
 
   it("uses checked for grocery bought and a persistent skipped meal status", () => {
-    expect(source("components/dashboard/today-dashboard.tsx")).toContain("checked: !item.checked");
-    expect(source("services/database/meal-plan.ts")).toContain('status: "skipped"');
+    const mutations = source("services/dashboard/today-mutations.ts");
+    expect(mutations).toContain("checked: !item.checked");
+    expect(mutations).toContain('status: "skipped"');
   });
 
   it("keeps focused Today action copy localized and outside the model", () => {
@@ -41,13 +42,13 @@ describe("Today dashboard implementation contracts", () => {
     expect(source("lib/dashboard/today-model.ts")).not.toContain('title: "Resume active workout"');
   });
 
-  it("keeps unknown food totals and completed workouts out of mutating paths", () => {
+  it("keeps unavailable food totals and completed workouts out of mutating paths", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     const progress = source("components/dashboard/today-progress.tsx");
     expect(progress).toContain('status === "unavailable"');
-    expect(dashboard).toContain('visibleNutritionData.logsState === "failed"');
-    expect(dashboard).toContain("todayWorkoutActionHref");
-    expect(source("lib/dashboard/today-model.ts")).toContain("/workout-history?session=");
+    expect(dashboard).toContain('visibleProjection?.nutrition.logs.state === "loaded"');
+    expect(dashboard).toContain("workout.actionHref");
+    expect(source("services/dashboard/today-projection-server.ts")).toContain("/workout-history?session=");
   });
 
   it("keeps registration, onboarding and OAuth outside this change", () => {
