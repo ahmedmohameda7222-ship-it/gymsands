@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SkeletonLine } from "@/components/ui/state-views";
 import { resolvePrivateRouteGate } from "@/lib/auth/private-route-gate";
+
+const ACCOUNT_CHECK_UNAVAILABLE_MESSAGE =
+  "Plaivra could not verify your account. Retry before opening member features.";
 
 export function ProtectedRoute({
   children,
@@ -56,10 +59,7 @@ export function ProtectedRoute({
   if (decision.kind === "bootstrap-error") {
     return (
       <AccountCheckUnavailable
-        message={
-          bootstrapError?.message ||
-          "Plaivra could not verify your account. Retry before opening member features."
-        }
+        diagnosticError={bootstrapError}
         onRetry={refreshBootstrap}
       />
     );
@@ -101,12 +101,28 @@ export function ProtectedRoute({
 }
 
 function AccountCheckUnavailable({
-  message,
+  diagnosticError,
   onRetry,
 }: {
-  message: string;
+  diagnosticError: Error | null;
   onRetry: () => Promise<void>;
 }) {
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const retry = async () => {
+    setIsRetrying(true);
+    try {
+      await onRetry();
+    } catch (error) {
+      console.error(
+        "Plaivra private bootstrap retry failed.",
+        error ?? diagnosticError,
+      );
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
   return (
     <main className="premium-page-bg flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -115,15 +131,16 @@ function AccountCheckUnavailable({
           <div>
             <h1 className="text-xl font-semibold">Account check unavailable</h1>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {message}
+              {ACCOUNT_CHECK_UNAVAILABLE_MESSAGE}
             </p>
           </div>
           <Button
             type="button"
             className="min-h-12 w-full"
-            onClick={() => void onRetry()}
+            disabled={isRetrying}
+            onClick={() => void retry()}
           >
-            Retry account check
+            {isRetrying ? "Retrying account check" : "Retry account check"}
           </Button>
         </CardContent>
       </Card>
