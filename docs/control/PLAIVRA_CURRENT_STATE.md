@@ -29,7 +29,7 @@ These values describe the verified audit baseline. Any later runtime, migration,
 ## Current program
 
 - PCS-1 Repository Control Plane — complete.
-- PCS-2 Private App Bootstrap — next approved phase.
+- PCS-2 Private App Bootstrap — current implementation candidate; unclosed pending Lead QA/QC, Production migration authorization, squash merge, and Production verification.
 - PCS-3 Request Architecture — planned.
 - PCS-4 CI Operating Model — planned.
 - PCS-5 Production Foundation — planned.
@@ -69,7 +69,7 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 
 ## Confirmed highest-priority technical findings
 
-1. Private application boot performs duplicated authentication, profile, consent, eligibility, onboarding, and settings work.
+1. PCS-2 addresses duplicated private application startup work through one bootstrap authority; the candidate remains unclosed until its required review, migration, merge, and Production verification complete.
 2. Workout History produces repeated request groups.
 3. Today performs a broad client-side request waterfall.
 4. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
