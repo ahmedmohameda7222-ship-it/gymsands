@@ -292,7 +292,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [clearBootstrapAuthority, loadBootstrapForUser, reconcileSession]);
 
   const signOut = useCallback(async () => {
-    const userId = sessionRef.current?.user.id ?? activeUserIdRef.current;
+    const userId = session?.user.id ?? activeUserIdRef.current;
     generationRef.current += 1;
     activeUserIdRef.current = null;
     sessionRef.current = null;
@@ -303,7 +303,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearBootstrapAuthority();
     if (supabase) await supabase.auth.signOut();
     router.replace("/");
-  }, [clearBootstrapAuthority, router]);
+  }, [clearBootstrapAuthority, router, session]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
