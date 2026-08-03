@@ -5,6 +5,7 @@ import { createTodayProjectionFixture } from "@/lib/dashboard/testing/today-proj
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
 const otherId = "22222222-2222-4222-8222-222222222222";
+const requestId = "today-request-safe-1";
 const timings = {
   workout: 1,
   meals: 1,
@@ -23,24 +24,40 @@ const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   rateLimit: vi.fn(),
   read: vi.fn(),
+  resolveRequestId: vi.fn(() => "today-request-safe-1"),
+  log: vi.fn(),
 }));
 
 vi.mock("@/lib/integrations/env", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/integrations/rate-limit", () => ({ rateLimit: mocks.rateLimit }));
+vi.mock("@/lib/observability/correlation-id", () => ({
+  REQUEST_ID_HEADER: "x-request-id",
+  resolveOperationalCorrelationId: mocks.resolveRequestId,
+}));
+vi.mock("@/lib/observability/structured-log", () => ({
+  logOperationalEvent: mocks.log,
+}));
 vi.mock("@/services/dashboard/today-projection-server", () => ({
   readTodayProjectionV1: mocks.read,
 }));
 
 import { GET } from "@/app/api/dashboard/today/route";
 
-function request(query = "date=2026-08-03&timezone=Europe%2FBerlin") {
+function request(
+  query = "date=2026-08-03&timezone=Europe%2FBerlin",
+  correlationId = "incoming-request-id",
+) {
   return new Request(`https://app.plaivra.com/api/dashboard/today?${query}`, {
-    headers: { Authorization: "Bearer route-token" },
+    headers: {
+      Authorization: "Bearer route-token",
+      "x-request-id": correlationId,
+    },
   });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.resolveRequestId.mockReturnValue(requestId);
   mocks.rateLimit.mockReturnValue(null);
   mocks.requireUser.mockResolvedValue({
     supabase: { identity: "rls-client" },
@@ -60,6 +77,8 @@ describe("GET /api/dashboard/today", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(createTodayProjectionFixture());
+    expect(mocks.resolveRequestId).toHaveBeenCalledWith("incoming-request-id");
+    expect(response.headers.get("x-request-id")).toBe(requestId);
     expect(mocks.requireUser).toHaveBeenCalledOnce();
     expect(mocks.read).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -96,6 +115,7 @@ describe("GET /api/dashboard/today", () => {
       error: "A valid date and timezone are required.",
       code: "today_request_invalid",
     });
+    expect(response.headers.get("x-request-id")).toBe(requestId);
     expect(mocks.requireUser).not.toHaveBeenCalled();
     expect(mocks.read).not.toHaveBeenCalled();
   });
@@ -112,14 +132,37 @@ describe("GET /api/dashboard/today", () => {
     expect(await response.json()).toEqual(body);
     expect(mocks.read).not.toHaveBeenCalled();
     expect(response.headers.get("Cache-Control")).toContain("no-store");
+    expect(response.headers.get("x-request-id")).toBe(requestId);
   });
 
-  it("returns 200 when every optional domain is safely failed", async () => {
+  it("logs allowlisted domain outcomes without request or response private data", async () => {
     const fixture = createTodayProjectionFixture();
-    const error = <T,>(code: string) => ({
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    expect(mocks.log).toHaveBeenCalledTimes(11);
+    expect(mocks.log).toHaveBeenCalledWith({
+      event: "today_projection_domain_completed",
+      level: "info",
+      request_id: requestId,
+      operation: "workout",
+      duration_ms: 1,
+      error_code: undefined,
+    });
+    const serialized = JSON.stringify(mocks.log.mock.calls);
+    expect(serialized).not.toContain(ownerId);
+    expect(serialized).not.toContain("route-token");
+    expect(serialized).not.toContain("2026-08-03");
+    expect(serialized).not.toContain("Europe/Berlin");
+    expect(serialized).not.toContain(fixture.generatedAt);
+    expect(serialized).not.toMatch(/private|notes|supabase|payload/i);
+  });
+
+  it("returns 200 and logs only safe codes when optional domains fail", async () => {
+    const fixture = createTodayProjectionFixture();
+    const error = (code: string) => ({
       state: "failed" as const,
       value: null,
-      errorCode: code as T,
+      errorCode: code,
     });
     mocks.read.mockResolvedValue({
       response: {
@@ -146,9 +189,19 @@ describe("GET /api/dashboard/today", () => {
     const response = await GET(request());
     expect(response.status).toBe(200);
     expect((await response.json()).wellness.state).toBe("failed");
+    expect(mocks.log).toHaveBeenCalledWith({
+      event: "today_projection_domain_completed",
+      level: "warn",
+      request_id: requestId,
+      operation: "workout",
+      duration_ms: 1,
+      error_code: "workout_unavailable",
+    });
+    const serialized = JSON.stringify(mocks.log.mock.calls);
+    expect(serialized).not.toMatch(/raw|relation|token=|private_health|user_id/i);
   });
 
-  it("maps a projection-boundary failure to a safe 503 without raw errors", async () => {
+  it("maps a projection-boundary failure to safe response and safe correlated log", async () => {
     mocks.read.mockRejectedValue(
       new Error("relation private_health_notes does not exist token=secret"),
     );
@@ -159,7 +212,19 @@ describe("GET /api/dashboard/today", () => {
       error: "Today could not load.",
       code: "today_projection_unavailable",
     });
-    expect(JSON.stringify(body)).not.toMatch(/private_health|token=secret|relation/i);
+    expect(response.headers.get("x-request-id")).toBe(requestId);
+    expect(response.headers.get("Server-Timing")).toMatch(/^total;dur=\d+\.\d$/);
+    expect(mocks.log).toHaveBeenCalledOnce();
+    expect(mocks.log).toHaveBeenCalledWith({
+      event: "today_projection_request_failed",
+      level: "error",
+      request_id: requestId,
+      operation: "projection",
+      duration_ms: expect.any(Number),
+      error_code: "today_projection_unavailable",
+    });
+    const combined = JSON.stringify({ body, logs: mocks.log.mock.calls });
+    expect(combined).not.toMatch(/private_health|token=secret|relation|ownerId/i);
   });
 
   it("uses the existing rate-limit authority and adds privacy headers", async () => {
@@ -171,11 +236,14 @@ describe("GET /api/dashboard/today", () => {
     expect(mocks.requireUser).not.toHaveBeenCalled();
     expect(mocks.read).not.toHaveBeenCalled();
     expect(response.headers.get("X-Plaivra-Today-Contract")).toBe("1");
+    expect(response.headers.get("x-request-id")).toBe(requestId);
   });
 
   it("contains no service-role or external-provider route path", () => {
     const source = readFileSync("app/api/dashboard/today/route.ts", "utf8");
     expect(source).toContain("requireUser(request)");
+    expect(source).toContain("resolveOperationalCorrelationId");
+    expect(source).toContain("logOperationalEvent");
     expect(source).not.toMatch(/serviceRole|service_role|SUPABASE_SERVICE_ROLE/i);
     expect(source).not.toContain("fetch(");
   });
