@@ -52,7 +52,11 @@ function fixture(calories = 100): TodayProjectionResponseV1 {
       state: "loaded",
       errorCode: null,
       value: {
-        items: [meal(mealA, "Meal A"), meal(mealB, "Meal B"), meal(mealC, "Meal C")],
+        items: [
+          meal(mealA, "Meal A"),
+          meal(mealB, "Meal B"),
+          meal(mealC, "Meal C"),
+        ],
         itemCount: 3,
         plannedCount: 3,
       },
@@ -118,7 +122,7 @@ function deferred<T>() {
 
 const mocks = vi.hoisted(() => ({
   auth: {
-    user: { id: ownerA },
+    user: { id: "11111111-1111-4111-8111-111111111111" },
     profile: { full_name: "Ahmed Mohamed" },
     session: { access_token: "token-a" },
   } as {
@@ -262,7 +266,9 @@ async function expandShopping() {
 }
 
 async function clickFirstCheckbox() {
-  const target = container?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  const target = container?.querySelector<HTMLInputElement>(
+    'input[type="checkbox"]',
+  );
   expect(target).not.toBeNull();
   await act(async () => target!.click());
   await flush();
@@ -278,7 +284,7 @@ function lastPlannedCount() {
 beforeEach(() => {
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
     .IS_REACT_ACT_ENVIRONMENT = true;
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mocks.auth = {
     user: { id: ownerA },
     profile: { full_name: "Ahmed Mohamed" },
@@ -286,7 +292,10 @@ beforeEach(() => {
   };
   mocks.getProjection.mockResolvedValue(fixture());
   mocks.markDone.mockImplementation(async (_userId: string, itemId: string) => ({
-    item: { ...meal(itemId, itemId === mealA ? "Meal A" : "Meal"), status: "done" },
+    item: {
+      ...meal(itemId, itemId === mealA ? "Meal A" : "Meal"),
+      status: "done",
+    },
     log: {
       id: `log-${itemId}`,
       calories: 600,
