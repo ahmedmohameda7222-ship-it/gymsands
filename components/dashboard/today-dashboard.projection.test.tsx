@@ -307,7 +307,7 @@ beforeEach(() => {
   const original = Intl.DateTimeFormat.prototype.resolvedOptions;
   resolvedOptionsSpy = vi
     .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
-    .mockImplementation(function () {
+    .mockImplementation(function (this: Intl.DateTimeFormat) {
       return { ...original.call(this), timeZone: mocks.timezone };
     });
 });
