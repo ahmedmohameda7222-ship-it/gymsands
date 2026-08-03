@@ -102,6 +102,25 @@ describe("Today authenticated browser client", () => {
     });
   });
 
+  it("rejects a valid contract for another date or timezone", async () => {
+    const mismatched = createTodayProjectionFixture({
+      date: "2026-08-04",
+      timezone: "Europe/London",
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(mismatched), { status: 200 }),
+    );
+
+    await expect(
+      getTodayProjection(ownerId, "2026-08-03", "Europe/Berlin", {
+        accessToken: "secret",
+      }),
+    ).rejects.toMatchObject({
+      code: "today_projection_invalid",
+      message: "Today could not load.",
+    });
+  });
+
   it("keeps deterministic mock auth off the network", async () => {
     mocks.env.useMockAuth = true;
     mocks.mockUser = true;
