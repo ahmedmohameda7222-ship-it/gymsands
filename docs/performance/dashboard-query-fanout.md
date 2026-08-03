@@ -1,18 +1,36 @@
 # Today dashboard query fan-out
 
-**Measured:** 2026-07-10 by static call-site inspection  
-**Runtime latency claim:** none; no production tracing was available
+**Historical baseline measured:** 2026-07-10 by static call-site inspection  
+**Runtime latency claim:** none; Production tracing for PCS-3B is deferred to PCS-3C
 
-The current Today dashboard starts 19 independent domain-service reads in one `Promise.all`, then performs one schedule-dependent open-session read and one independent ChatGPT-connection request. Several domain services perform more than one Supabase query, so the browser-level fan-out is greater than 21 requests. The code does not issue a per-list-item database query in the dashboard render path; the primary problem is broad parallel fan-out, duplicated ranges, and client-side aggregation.
+Before PCS-3B, the Today dashboard started independent browser loaders for workout, meal-plan items, nutrition logs and targets, hydration, grocery, habits, supplements, sleep, profile prompt context, and progress prompt context. Several domain services performed more than one Supabase query, so one Today operation produced broad browser-to-Supabase fan-out, duplicated authentication/network overhead, and independently published source state.
 
-This is a launch performance risk on mobile networks even though parallelism reduces the critical path. The milestone does not invent latency numbers.
+Parallelism reduced some critical-path delay, but the architecture remained a launch performance and consistency risk on mobile networks. No latency improvement is claimed from static inspection or implementation tests.
 
-## Bounded remediation
+## PCS-3B implementation candidate
 
-- Canonical owner/date/status indexes are added for the highest-frequency joins and cascades.
-- The dashboard continues to use bounded queries rather than unbounded row reads.
-- A server-side, authenticated `today` projection should replace the fan-out after Workstream 6 projection contracts are in place. It must return only Today/weekly-preview fields, use one user identity, and preserve partial-error semantics.
-- Connection status should be included in that server projection rather than fetched after the main dashboard state.
-- Before launch, browser tracing must record request count, transferred bytes, and p50/p95 server timing against synthetic accounts at low, typical, and high history volumes.
+PCS-3B replaces the historical initial read fan-out with one authenticated browser request:
 
-Regression gate: the consolidated projection must not introduce N+1 reads for meal items, workout exercises, progress photos, or signed URLs.
+```text
+GET /api/dashboard/today?date=YYYY-MM-DD&timezone=<IANA timezone>
+```
+
+The candidate:
+
+- derives the owner from `requireUser(request)` and uses its RLS-bound Supabase client;
+- returns one versioned minimum-data contract with safe partial-domain envelopes;
+- coordinates bounded server-side domain readers concurrently;
+- keeps server query count constant as exercise, meal, grocery, habit, supplement, and sleep fixture cardinality grows;
+- aggregates food logs and hydration on the server;
+- returns only bounded workout and wellness previews;
+- keeps canonical domain mutation authorities and updates the local projection from authoritative mutation results;
+- removes the old browser fan-out rather than retaining dual loading or a feature-flag rollback path;
+- performs no external-provider request, service-role read, migration, or persistent browser projection caching.
+
+The fixed test-fixture operation counts are documented in PR evidence. They are regression evidence for constant query count and no N+1 behavior, not Production latency measurements.
+
+## Remaining Production evidence
+
+PCS-3C must record Production request counts, transferred bytes where available, route duration p50/p95, failures, and browser-visible errors against approved synthetic accounts. No Production performance claim or budget reduction is approved before that evidence exists.
+
+Regression gate: Today must retain one browser projection request per owner/date/timezone operation, zero direct initial Supabase reads from Today, safe partial failures, and constant server query count with collection cardinality.
