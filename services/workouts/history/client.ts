@@ -301,6 +301,17 @@ function oneYearRange(timezone: string) {
   };
 }
 
+export async function getCanonicalWorkoutActivityWithCompatibilitySession(
+  userId: string,
+  limit = 180,
+): Promise<CanonicalWorkoutActivityReadResult> {
+  const accessToken =
+    await resolveWorkoutHistoryCompatibilityAccessToken();
+  return getCanonicalWorkoutActivity(userId, limit, {
+    accessToken,
+  });
+}
+
 export async function getCanonicalWorkoutActivity(
   userId: string,
   limit = 180,
@@ -309,6 +320,12 @@ export async function getCanonicalWorkoutActivity(
     "accessToken"
   >,
 ): Promise<CanonicalWorkoutActivityReadResult> {
+  if (context === undefined) {
+    return getCanonicalWorkoutActivityWithCompatibilitySession(
+      userId,
+      limit,
+    );
+  }
   if (env.useMockAuth && isMockAuthUserId(userId)) {
     return mockHistory(userId, limit);
   }
@@ -333,9 +350,7 @@ export async function getCanonicalWorkoutActivity(
     };
   }
 
-  const accessToken =
-    context?.accessToken ??
-    (await resolveWorkoutHistoryCompatibilityAccessToken());
+  const accessToken = context.accessToken;
   const timezone =
     Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const range =
