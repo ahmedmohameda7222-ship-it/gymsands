@@ -1,6 +1,6 @@
 # Today dashboard query fan-out
 
-**Historical baseline measured:** 2026-07-10 by static call-site inspection  
+**Historical baseline measured:** 2026-07-10 by static call-site inspection
 **Runtime latency claim:** none; Production tracing for PCS-3B is deferred to PCS-3C
 
 Before PCS-3B, the Today dashboard started independent browser loaders for workout, meal-plan items, nutrition logs and targets, hydration, grocery, habits, supplements, sleep, profile prompt context, and progress prompt context. Several domain services performed more than one Supabase query, so one Today operation produced broad browser-to-Supabase fan-out, duplicated authentication/network overhead, and independently published source state.
