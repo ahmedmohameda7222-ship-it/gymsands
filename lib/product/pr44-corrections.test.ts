@@ -11,29 +11,36 @@ describe("PR #44 correction contracts", () => {
     expect(dialog).not.toContain("summary.slice(0, 4)");
   });
 
-  it("never converts a failed food-log source into an empty array", () => {
+  it("never converts a failed food-log projection into a successful empty source", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
-    const nutrition = source("lib/dashboard/today-nutrition.ts");
-    expect(dashboard).toContain("knownFoodLogCount(visibleNutritionData)");
-    expect(dashboard).toContain("getTodayFoodLogs(id, date, { throwOnError: true })");
-    expect(nutrition).toContain('logs: logsResult.status === "fulfilled" ? logsResult.value : null');
+    const contract = source("lib/dashboard/today-projection-contract.ts");
+    expect(dashboard).toContain('visibleProjection?.nutrition.logs.state === "loaded"');
+    expect(dashboard).toContain("visibleProjection.nutrition.logs.value");
+    expect(dashboard).toContain('logsState === "failed"');
+    expect(contract).toContain('state: "failed"; value: null; errorCode: TodayProjectionErrorCode');
+    expect(dashboard).not.toContain("getTodayFoodLogs");
   });
 
-  it("restores a fully loaded food-log state only after a successful retry", () => {
+  it("restores loaded food-log state only after one successful projection retry", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
-    expect(dashboard).toContain("const retryFoodLogs = useCallback");
-    expect(dashboard).toContain('logsState: "loading", logsError: null');
-    expect(dashboard).toContain('logsState: "loaded", logsError: null, totalsIncomplete: false');
-    expect(dashboard).toContain('logsState: "failed"');
-    expect(dashboard).toContain('onClick={() => void retryFoodLogs()}');
+    expect(dashboard).toContain("const retryProjection = useCallback");
+    expect(dashboard).toContain("loadProjection({ force: true, preserveContent: true })");
+    expect(dashboard).toContain('visibleProjection?.nutrition.logs.state === "loaded"');
+    expect(dashboard).toContain('logsState === "failed"');
+    expect(dashboard).toContain('onClick={() => void retryProjection()}');
+    expect(dashboard).not.toContain("retryFoodLogs");
   });
 
   it("keeps Dashboard context activity values execution-only and source-aware", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     const model = source("lib/dashboard/today-model.ts");
-    expect(dashboard).toContain('plannedMealCount: visibleStates.meals === "loaded"');
-    expect(dashboard).toContain('habitCount: visibleStates.wellness === "loaded"');
-    expect(dashboard).toContain('supplementCount: visibleStates.wellness === "loaded"');
+    const projection = source("services/dashboard/today-projection-server.ts");
+    expect(dashboard).toContain("const source = visibleProjection?.promptContext");
+    expect(dashboard).toContain("plannedMealCount: source.nutrition.plannedMealCount");
+    expect(dashboard).toContain("wellness: source?.wellness");
+    expect(projection).toContain("plannedMealCount: meals?.plannedCount ?? null");
+    expect(projection).toContain("habitCount: habits?.plannedCount ?? null");
+    expect(projection).toContain("supplementCount: supplements?.plannedCount ?? null");
     expect(model).not.toContain("buildTodayActions");
     expect(model).not.toContain('input.workoutState !== "none"');
   });
@@ -41,8 +48,10 @@ describe("PR #44 correction contracts", () => {
   it("routes completed workouts to history rather than session execution", () => {
     const model = source("lib/dashboard/today-model.ts");
     const dashboard = source("components/dashboard/today-dashboard.tsx");
+    const projection = source("services/dashboard/today-projection-server.ts");
     expect(model).toContain("/workout-history?session=");
-    expect(dashboard).toContain("workoutCardHref");
+    expect(projection).toContain("/workout-history?session=");
+    expect(dashboard).toContain("workout.actionHref");
     expect(dashboard).not.toContain('href={`/workouts/session/day/${workoutData.day.id}`}');
   });
 
