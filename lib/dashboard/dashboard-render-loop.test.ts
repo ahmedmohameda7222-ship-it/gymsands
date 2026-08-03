@@ -2,184 +2,161 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { act, useEffect, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, createElement, useCallback, useEffect, useMemo, useRef } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useStableDashboardContextState } from "@/lib/ai/dashboard-context";
 import type { QuickPromptContext } from "@/lib/ai/quick-prompts";
-import {
-  useDashboardContextPublication,
-  useDashboardRemainingMacros,
-  useStableDashboardContextState
-} from "@/lib/dashboard/dashboard-context-publication";
+import { useDashboardContextPublication, useDashboardRemainingMacros } from "@/lib/dashboard/dashboard-context-publication";
+import { sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
-import type { MacroTotals } from "@/types";
+import type { FoodLog } from "@/types";
 
-type Scenario = "loaded" | "empty" | "failed";
+const targets = {
+  daily_calories: 2400,
+  protein_g: 180,
+  carbs_g: 260,
+  fat_g: 80,
+  water_ml: 3000
+} as SavedTargets;
+const foodLog = {
+  id: "log-1",
+  calories: 850,
+  protein_g: 72,
+  carbs_g: 94,
+  fat_g: 28,
+  quantity: 1
+} as FoodLog;
 
-type RuntimeCounters = {
+type Scenario = "populated" | "empty" | "failed";
+type Counters = {
   renders: number;
   publications: number;
   providerUpdates: number;
   equivalentAttempts: number;
 };
 
-const targets: SavedTargets = {
-  daily_calories: 2300,
-  protein_g: 170,
-  carbs_g: 260,
-  fat_g: 75,
-  water_ml: 2500
-};
-
-const totals: MacroTotals = {
-  calories: 750,
-  protein_g: 68,
-  carbs_g: 94,
-  fat_g: 23
-};
-
-const emptyContext: QuickPromptContext = {
-  route: "/dashboard",
-  today: "2026-08-03",
-  localHour: 9,
-  nutrition: {
-    hasTargets: false,
-    targetsState: "loaded",
-    foodLogsState: "loaded",
-    remainingCalories: null,
-    remainingProtein: null,
-    remainingCarbs: null,
-    remainingFat: null,
-    foodLogCount: 0,
-    mealPlanCount: 0,
-    plannedMealCount: 0
-  }
-};
-
-function DashboardHarness({
+function DashboardPublisher({
   scenario,
-  counters,
-  exposeContext
+  publish,
+  onRender
 }: {
   scenario: Scenario;
-  counters: RuntimeCounters;
-  exposeContext: (context: QuickPromptContext) => void;
+  publish: (context: QuickPromptContext) => void;
+  onRender: () => void;
 }) {
-  counters.renders += 1;
-  const remaining = useDashboardRemainingMacros(
-    scenario === "empty" ? null : targets,
-    scenario === "loaded" ? totals : null
-  );
-  const nextContext: QuickPromptContext = {
-    ...emptyContext,
-    nutrition:
-      scenario === "loaded"
-        ? {
-            hasTargets: true,
-            targetsState: "loaded",
-            foodLogsState: "loaded",
-            remainingCalories: remaining?.calories ?? null,
-            remainingProtein: remaining?.protein_g ?? null,
-            remainingCarbs: remaining?.carbs_g ?? null,
-            remainingFat: remaining?.fat_g ?? null,
-            foodLogCount: 2,
-            mealPlanCount: 1,
-            plannedMealCount: 1
-          }
-        : scenario === "failed"
-          ? {
-              ...emptyContext.nutrition!,
-              hasTargets: true,
-              foodLogsState: "failed",
-              foodLogCount: null
-            }
-          : emptyContext.nutrition
-  };
-  useDashboardContextPublication(nextContext, (context) => {
-    counters.publications += 1;
-    exposeContext(context);
+  onRender();
+  const logs = useMemo(() => scenario === "populated" ? [foodLog] : [], [scenario]);
+  const totals = useMemo(() => scenario === "failed" ? null : sumFoodLogs(logs), [logs, scenario]);
+  const activeTargets = scenario === "empty" ? null : targets;
+  const remaining = useDashboardRemainingMacros(activeTargets, totals);
+  const foodLogCount = scenario === "failed" ? null : logs.length;
+  const context = useMemo<QuickPromptContext>(() => ({
+    route: "/dashboard",
+    today: "2026-07-13",
+    nutrition: {
+      hasTargets: Boolean(activeTargets),
+      targetsState: "loaded",
+      foodLogsState: scenario === "failed" ? "failed" : "loaded",
+      remainingCalories: remaining?.calories ?? null,
+      remainingProtein: remaining?.protein_g ?? null,
+      remainingCarbs: remaining?.carbs_g ?? null,
+      remainingFat: remaining?.fat_g ?? null,
+      foodLogCount,
+      mealPlanCount: 0
+    }
+  }), [activeTargets, foodLogCount, remaining, scenario]);
+
+  useDashboardContextPublication(context, publish);
+  return createElement("output", {
+    "data-remaining-calories": remaining?.calories ?? "",
+    "data-food-log-count": foodLogCount ?? "unknown",
+    "data-food-log-state": context.nutrition?.foodLogsState
   });
-  return <output data-remaining-calories={remaining?.calories ?? "unavailable"} />;
 }
 
-function ProviderHarness({
-  scenario,
-  counters,
-  exposeContext
-}: {
+function RuntimeProvider({ scenario, onContext, onEquivalentAttempt, onProviderUpdate, onPublication, onRender }: {
   scenario: Scenario;
-  counters: RuntimeCounters;
-  exposeContext: (context: QuickPromptContext) => void;
+  onContext: (context: QuickPromptContext) => void;
+  onEquivalentAttempt: () => void;
+  onProviderUpdate: () => void;
+  onPublication: () => void;
+  onRender: () => void;
 }) {
-  const [dashboardContext, setDashboardContext] = useStableDashboardContextState(emptyContext);
+  const [dashboardContext, setDashboardContext] = useStableDashboardContextState({});
+  const previousContext = useRef(dashboardContext);
+  const repeatedEquivalent = useRef(false);
+  const publish = useCallback((context: QuickPromptContext) => {
+    onPublication();
+    setDashboardContext(context);
+  }, [onPublication, setDashboardContext]);
+
   useEffect(() => {
-    counters.providerUpdates += 1;
-    exposeContext(dashboardContext);
-  }, [dashboardContext, counters, exposeContext]);
-  return (
-    <>
-      <DashboardHarness
-        scenario={scenario}
-        counters={counters}
-        exposeContext={(context) => {
-          setDashboardContext(context);
-          counters.equivalentAttempts += 1;
-          setDashboardContext({
-            ...context,
-            nutrition: context.nutrition ? { ...context.nutrition } : undefined
-          });
-        }}
-      />
-    </>
-  );
+    if (dashboardContext === previousContext.current) return;
+    previousContext.current = dashboardContext;
+    onProviderUpdate();
+    onContext(dashboardContext);
+  }, [dashboardContext, onContext, onProviderUpdate]);
+
+  useEffect(() => {
+    if (!dashboardContext.route || repeatedEquivalent.current) return;
+    repeatedEquivalent.current = true;
+    onEquivalentAttempt();
+    setDashboardContext(JSON.parse(JSON.stringify(dashboardContext)) as QuickPromptContext);
+  }, [dashboardContext, onEquivalentAttempt, setDashboardContext]);
+
+  return createElement(DashboardPublisher, {
+    scenario,
+    publish,
+    onRender
+  });
 }
 
 async function renderScenario(scenario: Scenario) {
   const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root: Root = createRoot(container);
-  const counters: RuntimeCounters = { renders: 0, publications: 0, providerUpdates: 0, equivalentAttempts: 0 };
-  let currentContext = emptyContext;
+  document.body.append(container);
+  const root = createRoot(container);
+  const counters: Counters = { renders: 0, publications: 0, providerUpdates: 0, equivalentAttempts: 0 };
+  let publishedContext: QuickPromptContext = {};
+  const onContext = (context: QuickPromptContext) => { publishedContext = context; };
+  const onEquivalentAttempt = () => { counters.equivalentAttempts += 1; };
+  const onProviderUpdate = () => { counters.providerUpdates += 1; };
+  const onPublication = () => { counters.publications += 1; };
+  const onRender = () => { counters.renders += 1; };
+
   await act(async () => {
-    root.render(
-      <ProviderHarness
-        scenario={scenario}
-        counters={counters}
-        exposeContext={(context) => {
-          currentContext = context;
-        }}
-      />
-    );
+    root.render(createElement(RuntimeProvider, { scenario, onContext, onEquivalentAttempt, onProviderUpdate, onPublication, onRender }));
   });
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+
   return {
-    container,
     counters,
-    context: () => currentContext,
-    unmount: async () => {
-      await act(async () => root.unmount());
-      container.remove();
-    }
+    container,
+    context: () => publishedContext,
+    unmount: async () => act(async () => { root.unmount(); })
   };
 }
 
-let consoleError: ReturnType<typeof vi.spyOn>;
-
-beforeEach(() => {
-  document.body.replaceChildren();
-  consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-});
-
 describe("dashboard React publication lifecycle", () => {
-  it("publishes one loaded context without an update-depth loop", async () => {
-    const runtime = await renderScenario("loaded");
+  let consoleError: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    consoleError.mockRestore();
+    document.body.replaceChildren();
+  });
+
+  it("publishes populated remaining macros once with bounded React/provider updates", async () => {
+    const runtime = await renderScenario("populated");
     expect(runtime.context().nutrition).toMatchObject({
+      hasTargets: true,
       foodLogsState: "loaded",
+      foodLogCount: 1,
       remainingCalories: 1550,
-      remainingProtein: 102,
+      remainingProtein: 108,
       remainingCarbs: 166,
       remainingFat: 52
     });
