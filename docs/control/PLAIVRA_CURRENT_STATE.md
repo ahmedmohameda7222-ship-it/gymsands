@@ -1,12 +1,14 @@
 # Plaivra Current State
 
-## Verified repository and Production baseline
+## Last audited runtime baseline
 
-- Main commit: `525982e33920d2a94a15b875993850a4877aa8a5`
-- Production deployment reports the same commit.
-- `/api/version` returns HTTP 200.
+- Last audited application/runtime baseline before PCS-1:
+  `main@525982e33920d2a94a15b875993850a4877aa8a5`
+- At the time of the audit, Production reported the same commit and `/api/version` returned HTTP 200.
+- PCS-1 changes documentation and project governance only; it does not change application runtime behavior.
+- Exact current Git and Production identities must be verified from GitHub `main` and Production `/api/version`. Do not infer them from this historical audit snapshot.
 
-## Production compatibility
+## Compatibility state verified during the PCS-1 audit
 
 | Field | Value |
 |---|---|
@@ -22,10 +24,12 @@
 | migrationLedgerReconciled | `true` |
 | releaseReady | `true` |
 
+These values describe the verified audit baseline. Any later runtime, migration, or release change must update this document in the same approved change.
+
 ## Current program
 
-- PCS-1 Repository Control Plane — in progress.
-- PCS-2 Private App Bootstrap — planned.
+- PCS-1 Repository Control Plane — complete.
+- PCS-2 Private App Bootstrap — next approved phase.
 - PCS-3 Request Architecture — planned.
 - PCS-4 CI Operating Model — planned.
 - PCS-5 Production Foundation — planned.
