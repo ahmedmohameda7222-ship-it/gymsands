@@ -333,7 +333,9 @@ describe("Eat meal-log redesign contracts", () => {
       "migrateLegacyNutritionTargetOverridesForDates(userId, dates)",
     );
     expect(targets).toContain("resolveEatTargetForDate");
-    expect(week).toContain("targetsByDate");
-    expect(week).toContain("getEatTargetForDate");
+    expect(week).toContain(
+      "applyWeekTargets(week.data ?? [], weekTargets.data ?? [])",
+    );
+    expect(week).toContain("analytics.targetEligibleLoggedDays");
   });
 });
