@@ -1,9 +1,12 @@
 # Plaivra Platform Roadmap
 
 **Version:** 2026.7
-**Authority:** Subordinate to the Product Constitution and Long-Term Plan
+**Status:** Historical implementation context
+**Current sequencing authority:** [`docs/control/PLAIVRA_MASTER_PLAN.md`](../control/PLAIVRA_MASTER_PLAN.md)
 
-## Strategic sequence
+This file preserves useful historical platform and architecture context. It is not an active roadmap and must not be used to choose the next implementation scope.
+
+## Historical strategic sequence
 
 1. stabilize the responsive web product;
 2. complete the public ChatGPT app, OAuth/CIMD, and scoped MCP acceptance;
@@ -12,7 +15,7 @@
 5. build iOS;
 6. build Android.
 
-## Current implementation status
+## Historical implementation status
 
 | Capability | Status |
 |---|---|
@@ -23,22 +26,15 @@
 | Train Phase 2A | Additive multi-week hierarchy active; later writer cutover remains |
 | Exercise catalog | Reviewed 60-exercise cohort active |
 | Muscle Intelligence | Advanced atlas, reviewed V2 mappings, immutable snapshots, V2 runtime cutover, and active-session load surfaces implemented |
-| Active Workout AW-1 | EN/DE/AR language foundation and message contracts implemented |
-| Active Workout AW-2 | Persisted execution state, command authority, receipts, and timeline events implemented |
-| Active Workout AW-3 | Structured metrics, structured set details, and immutable prescription snapshots implemented |
-| Active Workout AW-4 | Shared session engine, serialized dispatcher, official store, and timestamp timer engine merged; Production migration applied and ledger reconciled |
-| CI/Codex workflow | Path-scoped parallel PR validation, concise failure evidence, ready-for-review full Quality, artifact-reusing Exact Release, and bounded autonomous repair implemented |
+| Active Workout AW-1 through AW-10 | Implemented and closed as historical phase context |
+| Workout History | Canonical history program implemented; Production migrations applied and reconciled |
+| CI/Codex workflow | Existing phase-based workflow history remains context; PCS-4 owns future CI sequencing |
 | Entitlements/billing | Provider-neutral foundation exists; checkout disabled |
 | iOS/Android | Planning only; no native binary |
 
-## Next active priorities
+## Current sequencing authority
 
-1. start AW-5 only after independent approval of the merged CI/Codex workflow simplification;
-2. continue the approved AW-6 through AW-10 sequence after their preceding phases are complete and approved;
-3. finish public MCP/CIMD production configuration and acceptance;
-4. stabilize web accessibility, performance, observability, and failure recovery;
-5. approve offerings before enabling billing;
-6. begin iOS, then Android, from stable shared contracts.
+All current sequencing, including PCS-1 through PCS-5 and later product completion, is defined only in [`docs/control/PLAIVRA_MASTER_PLAN.md`](../control/PLAIVRA_MASTER_PLAN.md). Do not restart or extend completed AW phases from this historical document.
 
 ## Shared versus platform-specific
 
