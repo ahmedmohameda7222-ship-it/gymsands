@@ -74,11 +74,17 @@ The PCS-2 migration application did not deploy application code and did not prom
 
 PCS-2 is merged, deployed, Production-verified, and closed. The deployed application commit matches `main`, the migration ledger is reconciled, the compatibility marker remains unchanged, and no post-deployment runtime error cluster was detected during the closure verification window.
 
+## PCS-3A implementation candidate
+
+PCS-3A corrects the Workout History browser request lifecycle without changing server canonical rules or database objects. The candidate makes the URL the committed list-query authority, uses a canonical owner/query key for first-page identity, deduplicates same-key in-flight work, keeps cursor pagination independent, and passes the current AuthProvider access token explicitly to normal list and detail requests.
+
+PCS-3A is not closed. Closure still requires Product & Engineering Lead QA/QC, Ahmed's explicit approval, squash merge, automatic application deployment, and Production request-count verification. PCS-3B Today projection remains planned. PCS-3 as a whole is not complete.
+
 ## Current program
 
 - PCS-1 Repository Control Plane — complete.
 - PCS-2 Private App Bootstrap — complete and Production-verified.
-- PCS-3 Request Architecture — next approved phase.
+- PCS-3 Request Architecture — in progress; PCS-3A Workout History Request Stability is the current implementation candidate and PCS-3B Today projection remains planned.
 - PCS-4 CI Operating Model — planned.
 - PCS-5 Production Foundation — planned.
 
@@ -89,9 +95,9 @@ PCS-2 is merged, deployed, Production-verified, and closed. The deployed applica
 | Authentication / account / onboarding | Functional | Private startup converged through the PCS-2 bootstrap authority |
 | Workouts plans and execution | Strong | — |
 | Active Workout offline and multi-device | Strong | — |
-| Workout History | Strong | Duplicate-request performance debt |
+| Workout History | Strong | PCS-3A request-stability correction is an unclosed implementation candidate |
 | Muscle Intelligence and Heat Maps | Strong | Strong foundation |
-| Today | Functional | Request-waterfall debt |
+| Today | Functional | Request-waterfall debt; PCS-3B remains planned |
 | Nutrition and food logging | Functional | Transactional-convergence debt |
 | Meal planning | Functional | — |
 | Hydration | Functional | — |
@@ -118,7 +124,7 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 ## Confirmed highest-priority technical findings
 
 1. PCS-2 consolidated duplicated private application startup work through one Production-verified bootstrap authority.
-2. Workout History produces repeated request groups.
+2. Workout History repeated-request debt is addressed by the unclosed PCS-3A implementation candidate and still requires Lead QA/QC, merge, deployment, and Production request verification.
 3. Today performs a broad client-side request waterfall.
 4. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
 5. CI and test scripts retain phase-based duplication and are too slow for daily development.

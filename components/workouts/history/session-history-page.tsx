@@ -36,8 +36,11 @@ export function SessionHistoryPage({
   source: "performed" | "scheduled_fallback";
   id: string;
 }) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const userId = user?.id;
+  const accessTokenRef = useRef<string | null>(
+    session?.access_token ?? null,
+  );
   const { dir, locale, tr } = useTrainTranslation();
   const [detail, setDetail] =
     useState<WorkoutHistorySessionDetailResponse | null>(null);
@@ -45,49 +48,98 @@ export function SessionHistoryPage({
   const [notFound, setNotFound] = useState(false);
   const [failed, setFailed] = useState(false);
   const projectionRepairAttemptRef = useRef<string | null>(null);
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const loadGenerationRef = useRef(0);
+  const timezone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+  useEffect(() => {
+    accessTokenRef.current = session?.access_token ?? null;
+  }, [session?.access_token]);
 
   const load = useCallback(
-    async (signal?: AbortSignal, options: DetailLoadOptions = {}) => {
+    async (
+      signal?: AbortSignal,
+      options: DetailLoadOptions = {},
+    ) => {
       if (!userId) return;
+      const generation = loadGenerationRef.current + 1;
+      loadGenerationRef.current = generation;
+      const isCurrent = () =>
+        !signal?.aborted &&
+        loadGenerationRef.current === generation;
+
       if (!options.preserveContent) setLoading(true);
       setFailed(false);
       setNotFound(false);
       try {
-        let next = await getWorkoutHistoryDetail(userId, source, id, {
-          signal,
-        });
+        let next = await getWorkoutHistoryDetail(
+          userId,
+          source,
+          id,
+          {
+            accessToken: accessTokenRef.current,
+            signal,
+          },
+        );
+        if (!isCurrent()) return;
+
         const canonicalSessionId = next.activity.canonicalSessionId;
         const shouldRepairProjection =
-          options.allowProjectionRepair !== false
-          && source === "performed"
-          && Boolean(canonicalSessionId)
-          && next.notices.includes("user-action-required")
-          && projectionRepairAttemptRef.current !== canonicalSessionId;
+          options.allowProjectionRepair !== false &&
+          source === "performed" &&
+          Boolean(canonicalSessionId) &&
+          next.notices.includes("user-action-required") &&
+          projectionRepairAttemptRef.current !== canonicalSessionId;
         if (shouldRepairProjection && canonicalSessionId) {
           projectionRepairAttemptRef.current = canonicalSessionId;
           try {
-            const repaired = await refreshVerifiedRecordsAuthenticated(canonicalSessionId);
-            if (repaired && !signal?.aborted) {
-              next = await getWorkoutHistoryDetail(userId, source, id, { signal });
+            const repaired =
+              await refreshVerifiedRecordsAuthenticated(
+                canonicalSessionId,
+                {
+                  accessToken: accessTokenRef.current,
+                  signal,
+                },
+              );
+            if (!isCurrent()) return;
+            if (repaired) {
+              next = await getWorkoutHistoryDetail(
+                userId,
+                source,
+                id,
+                {
+                  accessToken: accessTokenRef.current,
+                  signal,
+                },
+              );
+              if (!isCurrent()) return;
+            } else {
+              projectionRepairAttemptRef.current = null;
             }
           } catch {
+            if (isCurrent()) {
+              projectionRepairAttemptRef.current = null;
+            }
             // Canonical workout detail remains readable. The explicit notice stays
             // visible and reconnect or a later page visit can retry the projection.
           }
         }
-        if (!signal?.aborted) setDetail(next);
+        if (isCurrent()) setDetail(next);
       } catch (error) {
-        if (signal?.aborted) return;
+        if (!isCurrent()) return;
         setDetail(null);
         setNotFound(
-          error instanceof WorkoutHistoryClientError && error.status === 404,
+          error instanceof WorkoutHistoryClientError &&
+            error.status === 404,
         );
         setFailed(
-          !(error instanceof WorkoutHistoryClientError && error.status === 404),
+          !(
+            error instanceof WorkoutHistoryClientError &&
+            error.status === 404
+          ),
         );
       } finally {
-        if (!signal?.aborted) setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
     },
     [id, source, userId],
@@ -97,7 +149,10 @@ export function SessionHistoryPage({
     projectionRepairAttemptRef.current = null;
     const controller = new AbortController();
     void load(controller.signal);
-    return () => controller.abort();
+    return () => {
+      loadGenerationRef.current += 1;
+      controller.abort();
+    };
   }, [load]);
 
   useEffect(() => {
@@ -143,9 +198,16 @@ export function SessionHistoryPage({
         withGutters
         data-session-history-page
       >
-        <Button asChild variant="ghost" className="min-h-11 w-fit px-2">
+        <Button
+          asChild
+          variant="ghost"
+          className="min-h-11 w-fit px-2"
+        >
           <Link href="/workout-history">
-            <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden="true" />
+            <ArrowLeft
+              className="size-4 rtl:rotate-180"
+              aria-hidden="true"
+            />
             {tr("historyBackToList")}
           </Link>
         </Button>
@@ -187,7 +249,9 @@ export function SessionHistoryPage({
     timeStyle: "short",
     timeZone: timezone,
   }).format(new Date(detail.activity.effectiveAt));
-  const projectionNotice = detail.notices.includes("user-action-required")
+  const projectionNotice = detail.notices.includes(
+    "user-action-required",
+  )
     ? tr("historyActionRequiredNotice")
     : detail.notices.includes("partial-availability")
       ? tr("historyPartialNotice")
@@ -202,9 +266,16 @@ export function SessionHistoryPage({
       data-source-kind={detail.activity.sourceKind}
       data-snapshot-version={detail.snapshot?.schemaVersion}
     >
-      <Button asChild variant="ghost" className="min-h-11 w-fit px-2">
+      <Button
+        asChild
+        variant="ghost"
+        className="min-h-11 w-fit px-2"
+      >
         <Link href="/workout-history">
-          <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden="true" />
+          <ArrowLeft
+            className="size-4 rtl:rotate-180"
+            aria-hidden="true"
+          />
           {tr("historyBackToList")}
         </Link>
       </Button>
@@ -215,8 +286,13 @@ export function SessionHistoryPage({
               {detail.activity.title}
             </h1>
             <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-              <CalendarDays className="size-4" aria-hidden="true" />
-              <time dateTime={detail.activity.effectiveAt}>{date}</time>
+              <CalendarDays
+                className="size-4"
+                aria-hidden="true"
+              />
+              <time dateTime={detail.activity.effectiveAt}>
+                {date}
+              </time>
             </p>
           </div>
           <span
@@ -274,7 +350,8 @@ export function SessionHistoryPage({
                   key={exercise.identity}
                   exercise={exercise}
                   defaultOpen={
-                    index === 0 && detail.activity.sourceKind === "performed"
+                    index === 0 &&
+                    detail.activity.sourceKind === "performed"
                   }
                 />
               ))}

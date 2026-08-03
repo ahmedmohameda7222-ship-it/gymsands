@@ -16,6 +16,9 @@
 - The Active Workout session engine/store and database atomic RPCs own active execution.
 - Immutable snapshots preserve historical prescriptions and muscle mappings.
 - Workout History is a projection over canonical workout authorities, not a separate fact store.
+- The current URL is the committed Workout History list-query authority. Search input and custom dates remain local only while they are uncommitted drafts; selected-item and filter-panel state are presentation state, not data-query authority.
+- One canonical owner/query key, derived from the normalized list request, owns first-page browser request identity. Equivalent committed queries share ready or in-flight work, while cursor requests remain independent.
+- AuthProvider session state is the Workout History browser authentication authority. Normal list and detail requests receive the current access token explicitly and must not independently resolve the Supabase session.
 - Do not create another workout-history or active-session database model.
 
 ### Nutrition

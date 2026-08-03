@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Camera, Edit3, ImageIcon, Trash2, Upload } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { CardGridSkeleton, ErrorState } from "@/components/ui/state-views";
@@ -58,7 +58,7 @@ type GoalSaveStatus = "idle" | "saving" | "synced" | "local" | "failed";
 type EntryActionError = { entryId: string; message: string } | null;
 
 export default function ProgressPage() {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, session } = useAuth();
   const { settings } = useUserSettings();
   const { toast } = useToast();
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
@@ -79,10 +79,15 @@ export default function ProgressPage() {
   const [deletingEntryId, setDeletingEntryId] = useState("");
   const [entryActionError, setEntryActionError] = useState<EntryActionError>(null);
   const [recentlyUpdatedEntryId, setRecentlyUpdatedEntryId] = useState("");
+  const accessTokenRef = useRef<string | null>(session?.access_token ?? null);
   const { dialog, ask } = useConfirm();
   const today = useTodayDate();
   const currentWeekStart = useMemo(() => startOfWeek(today), [today]);
   const userId = user?.id ?? "";
+
+  useEffect(() => {
+    accessTokenRef.current = session?.access_token ?? null;
+  }, [session?.access_token]);
 
   const loadProgress = useCallback(async () => {
     if (!userId) {
@@ -97,7 +102,7 @@ export default function ProgressPage() {
 
     const [progressResult, activityResult, weekResult, photosResult] = await Promise.allSettled([
       getProgressEntries(userId, { throwOnError: true }),
-      getCanonicalWorkoutActivity(userId),
+      getCanonicalWorkoutActivity(userId, 180, { accessToken: accessTokenRef.current }),
       getNutritionWeek(userId, currentWeekStart),
       settings.hideProgressPhotos ? Promise.resolve([] as ProgressPhoto[]) : getProgressPhotos(userId)
     ]);
@@ -226,7 +231,7 @@ export default function ProgressPage() {
       setGoalStatusMessage(messageFromError(error, "Profile sync failed, so this goal is saved on this device only."));
       toast({
         title: "Goal saved on this device",
-        description: error instanceof Error ? `${error.message} The local fallback was kept.` : "Profile sync failed, so the local fallback was kept."
+        description: error instanceof Error ? `${error.message} The local fallback was kept.` : "Profile sync failed, so this goal is saved on this device only."
       });
     }
   }

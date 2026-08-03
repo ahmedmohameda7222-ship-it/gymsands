@@ -83,6 +83,15 @@ This is an append-only decision log. Do not rewrite or delete an approved histor
 - Consequences: Initial private startup facts update atomically, same-user requests share ready or in-flight memory state, user changes invalidate prior authority, and ProtectedRoute remains a deterministic no-fetch gate.
 - Supersedes / Superseded by: None.
 
+## D-010 — Workout History request and navigation authority
+
+- Date: 2026-08-03
+- Status: Approved
+- Decision: Workout History committed list-query state is owned by one canonical URL representation and one canonical owner/query key. One first-page request may be in flight per owner/query; presentation-only navigation does not refetch, cursor pagination remains independent, and normal browser list/detail requests consume the AuthProvider session token without per-request session lookup.
+- Reason: Continuously synchronized React and URL authorities recreated equivalent query objects and repeated first-page requests, while the History client redundantly resolved the Supabase session for each request.
+- Consequences: Draft search and custom dates remain local until committed; selected-item and filter-panel state are excluded from request identity; equivalent queries reuse ready or in-flight work; user changes invalidate prior publication; pagination cannot restart the first page; and normal History UI callers pass the latest AuthProvider access token explicitly.
+- Supersedes / Superseded by: None.
+
 ## Future entry format
 
 Every future entry must include:
