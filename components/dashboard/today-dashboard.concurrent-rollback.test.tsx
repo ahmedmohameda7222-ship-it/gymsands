@@ -397,7 +397,7 @@ describe("Today domain-scoped optimistic rollback", () => {
     await flush();
 
     expect(container?.textContent).toContain("1 bought");
-    expect(container?.textContent).toContain("1 remaining");
+    expect(container?.textContent).toContain("1 Remaining");
   });
 
   it("keeps one concurrent meal skip when the other fails", async () => {
