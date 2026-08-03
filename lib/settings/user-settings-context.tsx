@@ -129,10 +129,7 @@ export function UserSettingsProvider({
     }
 
     if (bootstrapStatus === "ready" && bootstrap?.userId === userId) {
-      const authoritative = {
-        ...withCachedTheme(bootstrap.settings),
-        language: bootstrap.settings.language,
-      };
+      const authoritative = bootstrap.settings;
       cacheThemeId(authoritative.themeId);
       setSettings(authoritative);
       setSaveError(null);
