@@ -48,6 +48,7 @@ export function SessionHistoryPage({
   const [notFound, setNotFound] = useState(false);
   const [failed, setFailed] = useState(false);
   const projectionRepairAttemptRef = useRef<string | null>(null);
+  const loadGenerationRef = useRef(0);
   const timezone =
     Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
@@ -61,6 +62,12 @@ export function SessionHistoryPage({
       options: DetailLoadOptions = {},
     ) => {
       if (!userId) return;
+      const generation = loadGenerationRef.current + 1;
+      loadGenerationRef.current = generation;
+      const isCurrent = () =>
+        !signal?.aborted &&
+        loadGenerationRef.current === generation;
+
       if (!options.preserveContent) setLoading(true);
       setFailed(false);
       setNotFound(false);
@@ -74,6 +81,8 @@ export function SessionHistoryPage({
             signal,
           },
         );
+        if (!isCurrent()) return;
+
         const canonicalSessionId = next.activity.canonicalSessionId;
         const shouldRepairProjection =
           options.allowProjectionRepair !== false &&
@@ -87,8 +96,13 @@ export function SessionHistoryPage({
             const repaired =
               await refreshVerifiedRecordsAuthenticated(
                 canonicalSessionId,
+                {
+                  accessToken: accessTokenRef.current,
+                  signal,
+                },
               );
-            if (repaired && !signal?.aborted) {
+            if (!isCurrent()) return;
+            if (repaired) {
               next = await getWorkoutHistoryDetail(
                 userId,
                 source,
@@ -98,15 +112,21 @@ export function SessionHistoryPage({
                   signal,
                 },
               );
+              if (!isCurrent()) return;
+            } else {
+              projectionRepairAttemptRef.current = null;
             }
           } catch {
+            if (isCurrent()) {
+              projectionRepairAttemptRef.current = null;
+            }
             // Canonical workout detail remains readable. The explicit notice stays
             // visible and reconnect or a later page visit can retry the projection.
           }
         }
-        if (!signal?.aborted) setDetail(next);
+        if (isCurrent()) setDetail(next);
       } catch (error) {
-        if (signal?.aborted) return;
+        if (!isCurrent()) return;
         setDetail(null);
         setNotFound(
           error instanceof WorkoutHistoryClientError &&
@@ -119,7 +139,7 @@ export function SessionHistoryPage({
           ),
         );
       } finally {
-        if (!signal?.aborted) setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
     },
     [id, source, userId],
@@ -129,7 +149,10 @@ export function SessionHistoryPage({
     projectionRepairAttemptRef.current = null;
     const controller = new AbortController();
     void load(controller.signal);
-    return () => controller.abort();
+    return () => {
+      loadGenerationRef.current += 1;
+      controller.abort();
+    };
   }, [load]);
 
   useEffect(() => {
