@@ -41,6 +41,11 @@ type AuthContextValue = {
   signOut: () => Promise<void>;
 };
 
+type PendingUserTransition = {
+  token: number;
+  userId: string | null;
+};
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 const isProduction = process.env.NODE_ENV === "production";
 const mockAuthEnabled =
@@ -115,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const bootstrapRef = useRef<PrivateAppBootstrap | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const generationRef = useRef(0);
+  const pendingTransitionRef = useRef<PendingUserTransition | null>(null);
   const mountedRef = useRef(true);
   const router = useRouter();
 
@@ -198,27 +204,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const nextUserId = nextSession?.user.id ?? null;
       const userChanged = previousUserId !== nextUserId;
 
-      if (userChanged) {
-        generationRef.current += 1;
-        if (previousUserId) {
-          privateAppBootstrapMemoryCache.clear(previousUserId);
-          await clearUserOwnedClientState(previousUserId);
+      if (!userChanged) {
+        activeUserIdRef.current = nextUserId;
+        sessionRef.current = nextSession;
+        if (mountedRef.current) {
+          setSession(nextSession);
+          setIsLoading(false);
         }
-        clearBootstrapAuthority();
+
+        if (!nextSession?.user) {
+          clearBootstrapAuthority();
+          return;
+        }
+
+        const pendingTransition = pendingTransitionRef.current;
+        if (pendingTransition?.userId === nextUserId) return;
+        await loadBootstrapForUser(nextSession.user).catch(() => undefined);
+        return;
       }
+
+      const transitionToken = generationRef.current + 1;
+      generationRef.current = transitionToken;
+      pendingTransitionRef.current = {
+        token: transitionToken,
+        userId: nextUserId,
+      };
 
       activeUserIdRef.current = nextUserId;
       sessionRef.current = nextSession;
       if (mountedRef.current) {
         setSession(nextSession);
         setIsLoading(false);
+        clearBootstrapAuthority();
       }
 
-      if (!nextSession?.user) {
-        clearBootstrapAuthority();
+      if (previousUserId) {
+        privateAppBootstrapMemoryCache.clear(previousUserId);
+      }
+
+      await clearUserOwnedClientState(previousUserId);
+
+      if (
+        !mountedRef.current ||
+        generationRef.current !== transitionToken ||
+        activeUserIdRef.current !== nextUserId
+      ) {
         return;
       }
 
+      if (pendingTransitionRef.current?.token === transitionToken) {
+        pendingTransitionRef.current = null;
+      }
+
+      if (!nextSession?.user) return;
       await loadBootstrapForUser(nextSession.user).catch(() => undefined);
     },
     [clearBootstrapAuthority, loadBootstrapForUser],
@@ -283,6 +321,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mountedRef.current = false;
       generationRef.current += 1;
+      pendingTransitionRef.current = null;
       const authListener = listener as unknown as Record<
         string,
         { unsubscribe: () => void }
@@ -293,16 +332,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     const userId = session?.user.id ?? activeUserIdRef.current;
-    generationRef.current += 1;
+    const transitionToken = generationRef.current + 1;
+    generationRef.current = transitionToken;
+    pendingTransitionRef.current = null;
     activeUserIdRef.current = null;
     sessionRef.current = null;
     if (userId) privateAppBootstrapMemoryCache.clear(userId);
-    await clearUserOwnedClientState(userId);
     setSession(null);
     setIsLoading(false);
     clearBootstrapAuthority();
-    if (supabase) await supabase.auth.signOut();
-    router.replace("/");
+
+    const cleanupPromise = clearUserOwnedClientState(userId);
+    const authSignOutPromise = supabase
+      ? supabase.auth.signOut()
+      : Promise.resolve({ error: null });
+    await Promise.all([cleanupPromise, authSignOutPromise]);
+
+    if (
+      mountedRef.current &&
+      generationRef.current === transitionToken &&
+      activeUserIdRef.current === null
+    ) {
+      router.replace("/");
+    }
   }, [clearBootstrapAuthority, router, session]);
 
   const value = useMemo<AuthContextValue>(
