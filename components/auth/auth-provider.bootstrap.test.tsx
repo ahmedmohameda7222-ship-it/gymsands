@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { Session } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -99,8 +99,11 @@ let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
 function Probe() {
-  latest = useAuth();
-  return <div data-status={latest.bootstrapStatus} />;
+  const auth = useAuth();
+  useEffect(() => {
+    latest = auth;
+  }, [auth]);
+  return <div data-status={auth.bootstrapStatus} />;
 }
 
 async function flush() {
