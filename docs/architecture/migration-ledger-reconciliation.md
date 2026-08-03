@@ -1,33 +1,32 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Evidence captured:** 2026-08-02T11:55:00.000Z
+**Evidence captured:** 2026-08-03T17:42:00.000Z
 **Machine authority:** `supabase/migration-ledger.json`
-**Audit baseline:** `0e9e08ac2a5fda053612035762613ef94128e815`
-**Status:** Workout History Production history reconciled; PCS-2 migration pending authorization
+**Audit baseline:** `9641435cb6c16e3c4e419e7e69ebd9f4e825e231`
+**Status:** Workout History and PCS-2 Production migration history reconciled; PCS-2 application runtime not yet deployed
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
 ## Current state
 
-- Physical Production migration records: **85**
+- Physical Production migration records: **86**
 - Repository classifications: **86**
 - Exact applications (`state = applied`): **63**
-- Generated-version aliases (`state = applied_version_alias`): **22**
-- Repository-only pending migrations: **1**
-- Pending repository migration: `20260803152000_private_app_bootstrap_v1.sql`
-- `pendingCount = 1`
+- Generated-version aliases (`state = applied_version_alias`): **23**
+- Repository-only pending migrations: **0**
+- `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 1`
-- `historyRepair.state = pending`
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
 - `release_ready = false`
 - Released compatibility marker: `20260724232734`
-- Latest physical Production record: `20260802114733_workout_history_filter_options`
+- Latest physical Production record: `20260803173755_private_app_bootstrap_v1`
 - Activity Catalog migration count: **0**
 
-The pending PCS-2 migration has not been applied to Production. It requires explicit Production migration authorization after Lead QA/QC. Do not replay or apply it from repository presence alone.
+The PCS-2 migration was applied exactly once to Plaivra Production as generated version `20260803173755_private_app_bootstrap_v1`. Its immutable repository file remains `20260803152000_private_app_bootstrap_v1.sql` and is represented through the existing `applied_version_alias` convention. Do not rename, edit, or replay it.
 
-Physical schema advancement and compatibility-marker promotion remain separate release operations. The Workout History application did not promote the compatibility marker.
+Physical schema advancement and compatibility-marker promotion remain separate release operations. The PCS-2 migration application did not promote the compatibility marker and did not deploy application code.
 
 ## Workout History applied identities
 
@@ -45,25 +44,31 @@ Physical schema advancement and compatibility-marker promotion remain separate r
 
 All nine migrations were applied exactly once to Plaivra Production on 2026-08-02 through Supabase `apply_migration`. Their immutable repository SQL files must not be edited or replayed.
 
-## PCS-2 pending identity
+## PCS-2 applied identity
 
-| Immutable repository migration | Production identity | State |
+| Immutable repository migration | Generated Production identity | State |
 |---|---|---|
-| `20260803152000_private_app_bootstrap_v1.sql` | Not assigned or applied | `pending` |
+| `20260803152000_private_app_bootstrap_v1.sql` | `20260803173755_private_app_bootstrap_v1` | `applied_version_alias` |
 
-## Production verification
+## PCS-2 Production verification
 
-Independent read-only verification after the Workout History application proved:
+Read-only verification against Plaivra Production proved:
 
-- all required Workout History columns, RPC authorities, views, and the correction muscle-reconciliation trigger exist;
-- authenticated clients cannot execute the server-owned verified-record replacement authority;
-- the service role retains the replacement authority;
-- anonymous users cannot execute Workout History root-page or filter-option reads;
-- authenticated users retain the intended owner-scoped read authorities;
-- the compatibility marker remains `20260724232734`;
+- `public.get_private_app_bootstrap_v1()` exists with zero arguments and returns `jsonb`;
+- the function is `STABLE`, uses `SECURITY DEFINER`, and has fixed `search_path = pg_catalog, public`;
+- anonymous execution is denied;
+- authenticated and service-role execution are allowed;
+- `contractVersion = 1`;
+- payload `userId` matches `auth.uid()`;
+- profile, account-access state, consent facts, onboarding summary, and settings are owner-scoped;
+- verification passed for two different authenticated actors;
+- no cross-user selector exists;
+- the migration was applied exactly once;
+- the Production migration count is **86**;
+- the latest physical Production migration is `20260803173755_private_app_bootstrap_v1`;
+- the released compatibility marker remains `20260724232734`;
+- no application deployment occurred;
 - Plaivra Activity Catalog remains isolated and unmodified.
-
-No Production verification is claimed for `20260803152000_private_app_bootstrap_v1.sql` because it remains unapplied.
 
 ## Prior applied authorities
 
