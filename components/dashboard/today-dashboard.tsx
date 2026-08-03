@@ -21,7 +21,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toaster";
 import type { QuickPromptContext } from "@/lib/ai/quick-prompts";
-import { useDashboardContextPublication, useDashboardRemainingMacros } from "@/lib/dashboard/dashboard-context-publication";
+import {
+  useDashboardContextPublication,
+  useDashboardRemainingMacros,
+} from "@/lib/dashboard/dashboard-context-publication";
 import {
   getFocusedTodayCopy,
   interpolateFocusedTodayCopy,
@@ -119,6 +122,38 @@ function updateMealProjection(
       },
     },
   };
+}
+
+function restoreOptimisticMealItems(
+  projection: TodayProjectionResponseV1,
+  previousById: Map<string, TodayMealPlanItemProjection>,
+) {
+  if (projection.meals.state !== "loaded") return projection;
+  return updateMealProjection(
+    projection,
+    projection.meals.value.items.map((item) => {
+      const previous = previousById.get(item.id);
+      return previous && item.status === "skipped" ? previous : item;
+    }),
+  );
+}
+
+function reconcileSkippedMealItems(
+  projection: TodayProjectionResponseV1,
+  previousById: Map<string, TodayMealPlanItemProjection>,
+  saved: TodayMealPlanItemProjection[],
+) {
+  if (projection.meals.state !== "loaded") return projection;
+  const savedById = new Map(saved.map((item) => [item.id, item]));
+  return updateMealProjection(
+    projection,
+    projection.meals.value.items.map((item) => {
+      const authoritative = savedById.get(item.id);
+      if (authoritative) return authoritative;
+      const previous = previousById.get(item.id);
+      return previous && item.status === "skipped" ? previous : item;
+    }),
+  );
 }
 
 function applyMealCompletion(
@@ -313,6 +348,11 @@ export function TodayDashboard() {
       userId,
     ],
   );
+  const loadProjectionRef = useRef(loadProjection);
+
+  useEffect(() => {
+    loadProjectionRef.current = loadProjection;
+  }, [loadProjection]);
 
   useEffect(() => {
     const authority = authorityRef.current;
@@ -334,8 +374,8 @@ export function TodayDashboard() {
       setPendingGroceryIds(new Set());
       setFeedback("");
     }
-    if (userId) void loadProjection();
-  }, [currentRequestKey, loadProjection, userId]);
+    if (userId) void loadProjectionRef.current();
+  }, [currentRequestKey, userId]);
 
   useEffect(
     () => () => {
@@ -569,8 +609,8 @@ export function TodayDashboard() {
     }
     const operationKey = currentRequestKey;
     const generation = authorityRef.current.generation;
-    const previous = projectionRef.current;
     const ids = new Set(items.map((item) => item.id));
+    const previousById = new Map(items.map((item) => [item.id, item]));
     setPendingMealIds((current) => new Set([...current, ...ids]));
     publishMutation(operationKey, generation, (current) =>
       updateMealProjection(
@@ -590,25 +630,18 @@ export function TodayDashboard() {
               userId,
               items.map((item) => item.id),
             );
-      const byId = new Map(saved.map((item) => [item.id, item]));
       if (
         publishMutation(operationKey, generation, (current) =>
-          updateMealProjection(
-            current,
-            current.meals.state === "loaded"
-              ? current.meals.value.items.map(
-                  (item) => byId.get(item.id) ?? item,
-                )
-              : [],
-          ),
+          reconcileSkippedMealItems(current, previousById, saved)
         )
       ) {
         setFeedback(copy.mealSkipped);
       }
     } catch (error) {
-      if (operationIsCurrent(operationKey, generation) && previous) {
-        projectionRef.current = previous;
-        setProjection(previous);
+      if (operationIsCurrent(operationKey, generation)) {
+        publishMutation(operationKey, generation, (current) =>
+          restoreOptimisticMealItems(current, previousById)
+        );
         toast({
           title: copy.mealSkipFailed,
           description: userSafeError(error),
@@ -628,12 +661,13 @@ export function TodayDashboard() {
     if (!userId || pendingGroceryIds.has(item.id)) return;
     const operationKey = currentRequestKey;
     const generation = authorityRef.current.generation;
-    const previous = projectionRef.current;
+    const previousChecked = item.checked;
+    const optimisticChecked = !item.checked;
     setPendingGroceryIds((current) => new Set(current).add(item.id));
     publishMutation(operationKey, generation, (current) => {
       if (current.shopping.state !== "loaded") return current;
       const items = current.shopping.value.items.map((value) =>
-        value.id === item.id ? { ...value, checked: !value.checked } : value,
+        value.id === item.id ? { ...value, checked: optimisticChecked } : value,
       );
       return {
         ...current,
@@ -661,9 +695,23 @@ export function TodayDashboard() {
         };
       });
     } catch (error) {
-      if (operationIsCurrent(operationKey, generation) && previous) {
-        projectionRef.current = previous;
-        setProjection(previous);
+      if (operationIsCurrent(operationKey, generation)) {
+        publishMutation(operationKey, generation, (current) => {
+          if (current.shopping.state !== "loaded") return current;
+          const items = current.shopping.value.items.map((value) =>
+            value.id === item.id && value.checked === optimisticChecked
+              ? { ...value, checked: previousChecked }
+              : value,
+          );
+          return {
+            ...current,
+            shopping: {
+              state: "loaded",
+              errorCode: null,
+              value: { items, itemCount: items.length },
+            },
+          };
+        });
         toast({
           title: copy.groceryUpdateFailed,
           description: userSafeError(error),
