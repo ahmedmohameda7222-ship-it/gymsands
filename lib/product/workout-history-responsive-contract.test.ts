@@ -36,13 +36,13 @@ describe("Workout History responsive contract", () => {
     expect(preview).not.toContain("performedSets");
   });
 
-  it("exposes selection through a share-safe query parameter and preserves browser history", () => {
+  it("exposes selection through the canonical share-safe URL and preserves browser history", () => {
     const page = readFileSync(
       "components/workouts/history/workout-history-page.tsx",
       "utf8",
     );
 
-    expect(page).toContain('searchParams.get("selected")');
+    expect(page).toContain("const selectedId = navigationState.selected;");
     expect(page).toContain("selected: item.activityId");
     expect(page).toContain("workoutHistoryNavigationSearchParams(next)");
     expect(page).toContain("router.push(");
