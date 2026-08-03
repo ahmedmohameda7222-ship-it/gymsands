@@ -1,463 +1,902 @@
 "use client";
 
 import Link from "next/link";
-import { Check, ChevronDown, ChevronUp, Dumbbell, ShoppingCart, Utensils } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Dumbbell,
+  ShoppingCart,
+  Utensils,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "@/components/auth/auth-provider";
 import { useQuickChatGpt } from "@/components/ai/quick-chatgpt-provider";
+import { useAuth } from "@/components/auth/auth-provider";
 import { OpenAiBlossom } from "@/components/brand/openai-blossom";
-import { PageHeading } from "@/components/layout/page-heading";
 import { TodayProgress } from "@/components/dashboard/today-progress";
 import { WellnessToday } from "@/components/dashboard/wellness-today";
+import { PageHeading } from "@/components/layout/page-heading";
+import { InlineFeedback } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toaster";
-import { InlineFeedback } from "@/components/motion";
+import type { QuickPromptContext } from "@/lib/ai/quick-prompts";
+import { useDashboardContextPublication, useDashboardRemainingMacros } from "@/lib/dashboard/dashboard-context-publication";
+import {
+  getFocusedTodayCopy,
+  interpolateFocusedTodayCopy,
+} from "@/lib/dashboard/focused-today-copy";
+import type {
+  TodayMealPlanItemProjection,
+  TodayProjectionResponseV1,
+  TodayShoppingItemProjection,
+} from "@/lib/dashboard/today-projection-contract";
+import {
+  dashboardRequestKey,
+  isDashboardRequestCurrent,
+  type DashboardSourceState,
+} from "@/lib/dashboard/today-request";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
-import { getFocusedTodayCopy, interpolateFocusedTodayCopy } from "@/lib/dashboard/focused-today-copy";
-import { useDashboardContextPublication, useDashboardRemainingMacros } from "@/lib/dashboard/dashboard-context-publication";
-import { resolveTodayWorkout, selectRelevantMeal, todayWorkoutActionHref } from "@/lib/dashboard/today-model";
+import { userSafeError } from "@/lib/error-formatting";
+import { subscribeToTodayNutritionTargetChanges } from "@/services/database/today-nutrition";
+import { getTodayProjection } from "@/services/dashboard/today-client";
 import {
-  dashboardRequestKey,
-  dashboardSourceStates,
-  dashboardValueForRequest,
-  isDashboardRequestCurrent,
-  type DashboardSourceName,
-  type DashboardSourceState,
-  type DashboardSourceStates
-} from "@/lib/dashboard/today-request";
-import { sumFoodLogs } from "@/services/nutrition/calculations";
-import type { QuickPromptContext } from "@/lib/ai/quick-prompts";
-import { startOfWeek } from "@/services/reports/reporting";
-import { getMealPlanItemsForDate, markDirectMealPlanItemDone, markDirectMealPlanItemSkipped, markDirectMealPlanItemsSkipped } from "@/services/database/meal-plan";
-import { getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
-import { getFitnessHabits, getSupplementLogs } from "@/services/database/wellness";
-import {
-  getDashboardProfileContext,
-  getDashboardProgressContext,
-  getDashboardSleepRecoveryLogs,
-  getDashboardWaterLogs,
-  getDashboardWorkoutData,
-  initialDashboardProfileContext,
-  initialDashboardProgressContext,
-  resolveDashboardWellnessResults,
-  type DashboardProfileContext,
-  type DashboardProgressContext,
-  type DashboardWellnessData,
-  type DashboardWorkoutData
-} from "@/services/database/dashboard-today-sources";
-import {
-  getTodayNutritionData,
-  getTodayNutritionTargetData,
-  subscribeToTodayNutritionTargetChanges
-} from "@/services/database/today-nutrition";
-import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
-import {
-  initialTodayNutritionData,
-  knownFoodLogCount,
-  upsertFoodLogById,
-  type TodayNutritionData,
-  type TodayNutritionTargetData
-} from "@/lib/dashboard/today-nutrition";
-import type { MealPlanItem, UserGroceryItem, WaterLog } from "@/types";
+  markTodayMealDone,
+  markTodayMealSkipped,
+  markTodayMealsSkipped,
+  toggleTodayShoppingItem,
+} from "@/services/dashboard/today-mutations";
+import type { SavedTargets } from "@/services/nutrition/targets";
 
-const initialWorkout: DashboardWorkoutData = { plan: null, day: null, sessions: [], openSessionId: null };
-const initialWellness: DashboardWellnessData = { habits: [], supplements: [], sleepLogs: [], errors: {} };
-const emptyMealItems: MealPlanItem[] = [];
-const emptyWaterLogs: WaterLog[] = [];
-const emptyGroceryItems: UserGroceryItem[] = [];
-const loadingDashboardStates = dashboardSourceStates("loading");
-type SourceErrors = Partial<Record<DashboardSourceName, string>>;
-type TargetLoadCache = { key: string; promise: Promise<TodayNutritionTargetData> } | null;
+const INITIAL_GENERATION = 0;
 
-function mealTypeLabel(value: string | undefined, copy: ReturnType<typeof getFocusedTodayCopy>) {
+type ProjectionLoadState = "idle" | "loading" | "loaded" | "failed";
+type LoadOptions = { force?: boolean; preserveContent?: boolean };
+type RequestAuthority = {
+  key: string | null;
+  generation: number;
+  controller: AbortController | null;
+  promise: Promise<TodayProjectionResponseV1 | null> | null;
+  resolvedKey: string | null;
+};
+
+function mealTypeLabel(
+  value: TodayMealPlanItemProjection["mealType"] | undefined,
+  copy: ReturnType<typeof getFocusedTodayCopy>,
+) {
   if (value === "Breakfast") return copy.breakfast;
   if (value === "Lunch") return copy.lunch;
   if (value === "Dinner") return copy.dinner;
   return copy.snack;
 }
 
-function progressSourceState(state: DashboardSourceState): "loading" | "loaded" | "failed" {
+function selectRelevantMeal(items: TodayMealPlanItemProjection[], hour: number) {
+  const open = items.filter((item) => item.status === "planned");
+  if (!open.length) return null;
+  const preferred =
+    hour < 11 ? "Breakfast" : hour < 15 ? "Lunch" : hour < 18 ? "Snack" : "Dinner";
+  return open.find((item) => item.mealType === preferred) ?? open[0];
+}
+
+function projectionSourceState(
+  projection: TodayProjectionResponseV1 | null,
+  sourceState: "loaded" | "failed" | undefined,
+  loadState: ProjectionLoadState,
+): DashboardSourceState {
+  if (projection && sourceState) return sourceState;
+  if (loadState === "failed") return "failed";
+  if (loadState === "loading") return "loading";
+  return "idle";
+}
+
+function progressSourceState(
+  state: DashboardSourceState,
+): "loading" | "loaded" | "failed" {
   return state === "failed" ? "failed" : state === "loaded" ? "loaded" : "loading";
 }
 
+function updateMealProjection(
+  projection: TodayProjectionResponseV1,
+  items: TodayMealPlanItemProjection[],
+): TodayProjectionResponseV1 {
+  if (projection.meals.state !== "loaded") return projection;
+  const plannedCount = items.filter((item) => item.status === "planned").length;
+  return {
+    ...projection,
+    meals: {
+      state: "loaded",
+      errorCode: null,
+      value: { items, itemCount: items.length, plannedCount },
+    },
+    promptContext: {
+      ...projection.promptContext,
+      nutrition: {
+        ...projection.promptContext.nutrition,
+        mealPlanCount: items.length,
+        plannedMealCount: plannedCount,
+      },
+    },
+  };
+}
+
+function applyMealCompletion(
+  projection: TodayProjectionResponseV1,
+  result: Awaited<ReturnType<typeof markTodayMealDone>>,
+): { projection: TodayProjectionResponseV1; needsRefresh: boolean } {
+  if (projection.meals.state !== "loaded") {
+    return { projection, needsRefresh: true };
+  }
+  const items = projection.meals.value.items.map((item) =>
+    item.id === result.item.id ? result.item : item,
+  );
+  let next = updateMealProjection(projection, items);
+  if (result.alreadyDone) return { projection: next, needsRefresh: false };
+  if (next.nutrition.logs.state !== "loaded") {
+    return { projection: next, needsRefresh: true };
+  }
+  const logs = next.nutrition.logs.value;
+  const totals = {
+    calories: logs.totals.calories + result.log.calories,
+    proteinG: logs.totals.proteinG + result.log.proteinG,
+    carbsG: logs.totals.carbsG + result.log.carbsG,
+    fatG: logs.totals.fatG + result.log.fatG,
+  };
+  const foodLogCount = logs.foodLogCount + 1;
+  const targets =
+    next.nutrition.targets.state === "loaded"
+      ? next.nutrition.targets.value
+      : null;
+  const remaining = (target: number, consumed: number) => Math.max(0, target - consumed);
+  next = {
+    ...next,
+    nutrition: {
+      ...next.nutrition,
+      logs: {
+        state: "loaded",
+        errorCode: null,
+        value: { totals, foodLogCount },
+      },
+    },
+    promptContext: {
+      ...next.promptContext,
+      nutrition: {
+        ...next.promptContext.nutrition,
+        foodLogsState: "loaded",
+        foodLogCount,
+        remainingCalories: targets
+          ? remaining(targets.dailyCalories, totals.calories)
+          : null,
+        remainingProtein: targets
+          ? remaining(targets.proteinG, totals.proteinG)
+          : null,
+        remainingCarbs: targets
+          ? remaining(targets.carbsG, totals.carbsG)
+          : null,
+        remainingFat: targets
+          ? remaining(targets.fatG, totals.fatG)
+          : null,
+      },
+    },
+  };
+  return { projection: next, needsRefresh: false };
+}
+
 export function TodayDashboard() {
-  const { user, profile } = useAuth();
+  const { user, profile, session } = useAuth();
   const { language, dir } = useTranslation();
   const { settings } = useUserSettings();
   const copy = getFocusedTodayCopy(language);
   const { toast } = useToast();
   const { openPrompts, setDashboardContext } = useQuickChatGpt();
   const today = useTodayDate();
-  const currentRequestKey = dashboardRequestKey(user?.id, today);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const userId = user?.id ?? null;
+  const currentRequestKey = dashboardRequestKey(userId, today, timezone);
+  const accessTokenRef = useRef<string | null>(session?.access_token ?? null);
+  const authorityRef = useRef<RequestAuthority>({
+    key: null,
+    generation: INITIAL_GENERATION,
+    controller: null,
+    promise: null,
+    resolvedKey: null,
+  });
+  const projectionRef = useRef<TodayProjectionResponseV1 | null>(null);
 
-  const [activeRequestKey, setActiveRequestKey] = useState(currentRequestKey);
-  const activeRequestKeyRef = useRef(currentRequestKey);
-  const [states, setStates] = useState<DashboardSourceStates>(dashboardSourceStates("idle"));
-  const [errors, setErrors] = useState<SourceErrors>({});
-  const [workoutData, setWorkoutData] = useState<DashboardWorkoutData>(initialWorkout);
-  const [mealItems, setMealItems] = useState<MealPlanItem[]>([]);
-  const [nutritionData, setNutritionData] = useState<TodayNutritionData>(initialTodayNutritionData);
-  const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
-  const [groceryItems, setGroceryItems] = useState<UserGroceryItem[]>([]);
-  const [wellnessData, setWellnessData] = useState<DashboardWellnessData>(initialWellness);
-  const [profileContext, setProfileContext] = useState<DashboardProfileContext>(initialDashboardProfileContext);
-  const [progressContext, setProgressContext] = useState<DashboardProgressContext>(initialDashboardProgressContext);
+  const [projection, setProjection] = useState<TodayProjectionResponseV1 | null>(null);
+  const [resolvedKey, setResolvedKey] = useState<string | null>(null);
+  const [loadState, setLoadState] = useState<ProjectionLoadState>("idle");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [shoppingExpanded, setShoppingExpanded] = useState(false);
   const [boughtExpanded, setBoughtExpanded] = useState(false);
   const [pendingMealIds, setPendingMealIds] = useState<Set<string>>(new Set());
   const [pendingGroceryIds, setPendingGroceryIds] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState("");
-  const [reload, setReload] = useState(0);
-  const requestVersion = useRef(0);
-  const targetLoadRef = useRef<TargetLoadCache>(null);
-
-  const requestIsCurrent = activeRequestKey === currentRequestKey;
-  const visibleStates = requestIsCurrent ? states : loadingDashboardStates;
-  const visibleWorkoutData = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: workoutData, fallback: initialWorkout });
-  const visibleMealItems = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: mealItems, fallback: emptyMealItems });
-  const visibleNutritionData = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: nutritionData, fallback: initialTodayNutritionData });
-  const visibleWaterLogs = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: waterLogs, fallback: emptyWaterLogs });
-  const visibleGroceryItems = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: groceryItems, fallback: emptyGroceryItems });
-  const visibleWellnessData = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: wellnessData, fallback: initialWellness });
-  const visibleProfileContext = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: profileContext, fallback: initialDashboardProfileContext });
-  const visibleProgressContext = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: progressContext, fallback: initialDashboardProgressContext });
-
-  const isCurrentOperation = useCallback((requestKey: string, version: number) => isDashboardRequestCurrent({
-    activeVersion: requestVersion.current,
-    requestVersion: version,
-    activeKey: activeRequestKeyRef.current,
-    requestKey
-  }), []);
-
-  const setSource = useCallback((source: DashboardSourceName, state: DashboardSourceState, error?: string) => {
-    setStates((current) => ({ ...current, [source]: state }));
-    setErrors((current) => ({ ...current, [source]: error }));
-  }, []);
-
-  const loadTodayTargetOnce = useCallback(() => {
-    if (!user?.id) return Promise.reject(new Error("A signed-in user is required."));
-    const key = dashboardRequestKey(user.id, today);
-    if (targetLoadRef.current?.key === key) return targetLoadRef.current.promise;
-    const request = getTodayNutritionTargetData(user.id, today).finally(() => {
-      if (targetLoadRef.current?.key === key && targetLoadRef.current.promise === request) targetLoadRef.current = null;
-    });
-    targetLoadRef.current = { key, promise: request };
-    return request;
-  }, [today, user?.id]);
 
   useEffect(() => {
-    const version = ++requestVersion.current;
-    const requestKey = dashboardRequestKey(user?.id, today);
-    activeRequestKeyRef.current = requestKey;
-    setActiveRequestKey(requestKey);
-    setStates(user?.id ? dashboardSourceStates("loading") : dashboardSourceStates("idle"));
-    setErrors({});
-    setWorkoutData(initialWorkout);
-    setMealItems([]);
-    setNutritionData(initialTodayNutritionData);
-    setWaterLogs([]);
-    setGroceryItems([]);
-    setWellnessData(initialWellness);
-    setProfileContext(initialDashboardProfileContext);
-    setProgressContext(initialDashboardProgressContext);
-    setShoppingExpanded(false);
-    setBoughtExpanded(false);
-    setPendingMealIds(new Set());
-    setPendingGroceryIds(new Set());
-    setFeedback("");
+    accessTokenRef.current = session?.access_token ?? null;
+  }, [session?.access_token]);
 
-    if (!user?.id) return;
-    const userId = user.id;
+  const operationIsCurrent = useCallback(
+    (key: string, generation: number) =>
+      isDashboardRequestCurrent({
+        activeGeneration: authorityRef.current.generation,
+        requestGeneration: generation,
+        activeKey: authorityRef.current.key ?? "",
+        requestKey: key,
+      }),
+    [],
+  );
 
-    const run = async <T,>(source: DashboardSourceName, loader: () => Promise<T>, apply: (value: T) => void) => {
-      try {
-        const value = await loader();
-        if (!isCurrentOperation(requestKey, version)) return;
-        apply(value);
-        setSource(source, "loaded");
-      } catch (error) {
-        if (!isCurrentOperation(requestKey, version)) return;
-        logRecoverableError(`today.${source}`, error);
-        setSource(source, "failed", userSafeError(error, copy.sectionUnavailable));
-      }
-    };
-
-    const runContext = async <T,>(loader: () => Promise<T>, apply: (value: T) => void, fail: () => void) => {
-      try {
-        const value = await loader();
-        if (isCurrentOperation(requestKey, version)) apply(value);
-      } catch (error) {
-        if (!isCurrentOperation(requestKey, version)) return;
-        logRecoverableError("today.prompt-context", error);
-        fail();
-      }
-    };
-
-    void run("workout", () => getDashboardWorkoutData(userId, today), setWorkoutData);
-    void run("meals", () => getMealPlanItemsForDate(userId, today), setMealItems);
-    void run("nutrition", () => getTodayNutritionData(userId, today, {
-      loadLogs: (id, date) => import("@/services/database/nutrition").then(({ getTodayFoodLogs }) => getTodayFoodLogs(id, date, { throwOnError: true })),
-      loadTargetData: () => loadTodayTargetOnce()
-    }), setNutritionData);
-    void run("hydration", () => getDashboardWaterLogs(userId, today), setWaterLogs);
-    void run("shopping", () => getGroceryItems(userId, startOfWeek(today)), setGroceryItems);
-    void run("wellness", async () => {
-      const [habits, supplements, sleep] = await Promise.allSettled([
-        getFitnessHabits(userId, today, { throwOnError: true }),
-        getSupplementLogs(userId, today, { throwOnError: true }),
-        getDashboardSleepRecoveryLogs(userId, 7)
-      ]);
-      if ([habits, supplements, sleep].every((result) => result.status === "rejected")) throw new Error(copy.sectionUnavailable);
-      return resolveDashboardWellnessResults({ habits, supplements, sleep, unavailableMessage: copy.sectionUnavailable });
-    }, setWellnessData);
-
-    void runContext(
-      () => getDashboardProfileContext(userId),
-      setProfileContext,
-      () => setProfileContext({ ...initialDashboardProfileContext, state: "failed" })
-    );
-    void runContext(
-      () => getDashboardProgressContext(userId),
-      setProgressContext,
-      () => setProgressContext({ state: "failed", entryCount: null })
-    );
-
-    return () => {
-      if (isCurrentOperation(requestKey, version)) requestVersion.current += 1;
-    };
-  }, [copy.sectionUnavailable, isCurrentOperation, loadTodayTargetOnce, reload, setSource, today, user?.id]);
-
-  const retryFoodLogs = useCallback(async () => {
-    if (!user?.id) return false;
-    const requestKey = dashboardRequestKey(user.id, today);
-    const version = requestVersion.current;
-    setNutritionData((current) => ({ ...current, logsState: "loading", logsError: null }));
-    try {
-      const { getTodayFoodLogs } = await import("@/services/database/nutrition");
-      const logs = await getTodayFoodLogs(user.id, today, { throwOnError: true });
-      if (!isCurrentOperation(requestKey, version)) return false;
-      setNutritionData((current) => ({ ...current, logs, logsState: "loaded", logsError: null, totalsIncomplete: false }));
+  const publishProjection = useCallback(
+    (next: TodayProjectionResponseV1, key: string, generation: number) => {
+      if (!operationIsCurrent(key, generation)) return false;
+      projectionRef.current = next;
+      authorityRef.current.resolvedKey = key;
+      setProjection(next);
+      setResolvedKey(key);
+      setLoadState("loaded");
+      setIsRefreshing(false);
       return true;
-    } catch (error) {
-      if (!isCurrentOperation(requestKey, version)) return false;
-      setNutritionData((current) => ({ ...current, logs: null, logsState: "failed", logsError: userSafeError(error, copy.unavailable), totalsIncomplete: current.totalsIncomplete }));
-      return false;
+    },
+    [operationIsCurrent],
+  );
+
+  const loadProjection = useCallback(
+    (options: LoadOptions = {}) => {
+      if (!userId) return Promise.resolve(null);
+      const authority = authorityRef.current;
+      if (authority.key !== currentRequestKey) {
+        authority.controller?.abort();
+        authority.key = currentRequestKey;
+        authority.generation += 1;
+        authority.controller = null;
+        authority.promise = null;
+        authority.resolvedKey = null;
+        projectionRef.current = null;
+      }
+      if (authority.promise) return authority.promise;
+      if (!options.force && authority.resolvedKey === currentRequestKey) {
+        return Promise.resolve(projectionRef.current);
+      }
+
+      authority.generation += 1;
+      const generation = authority.generation;
+      const controller = new AbortController();
+      authority.controller = controller;
+      if (options.preserveContent && projectionRef.current) setIsRefreshing(true);
+      else setLoadState("loading");
+
+      const request = getTodayProjection(userId, today, timezone, {
+        accessToken: accessTokenRef.current,
+        signal: controller.signal,
+      })
+        .then((next) => {
+          publishProjection(next, currentRequestKey, generation);
+          return next;
+        })
+        .catch((error) => {
+          if (controller.signal.aborted || !operationIsCurrent(currentRequestKey, generation)) {
+            return null;
+          }
+          setIsRefreshing(false);
+          if (!projectionRef.current) setLoadState("failed");
+          toast({
+            title: copy.sectionUnavailable,
+            description: userSafeError(error, copy.sectionUnavailable),
+            variant: "error",
+          });
+          return null;
+        })
+        .finally(() => {
+          if (
+            authorityRef.current.promise === request &&
+            operationIsCurrent(currentRequestKey, generation)
+          ) {
+            authorityRef.current.promise = null;
+            authorityRef.current.controller = null;
+          }
+        });
+      authority.promise = request;
+      return request;
+    },
+    [
+      copy.sectionUnavailable,
+      currentRequestKey,
+      operationIsCurrent,
+      publishProjection,
+      timezone,
+      toast,
+      today,
+      userId,
+    ],
+  );
+
+  useEffect(() => {
+    const authority = authorityRef.current;
+    if (authority.key !== currentRequestKey) {
+      authority.controller?.abort();
+      authority.key = currentRequestKey;
+      authority.generation += 1;
+      authority.controller = null;
+      authority.promise = null;
+      authority.resolvedKey = null;
+      projectionRef.current = null;
+      setProjection(null);
+      setResolvedKey(null);
+      setLoadState(userId ? "loading" : "idle");
+      setIsRefreshing(false);
+      setShoppingExpanded(false);
+      setBoughtExpanded(false);
+      setPendingMealIds(new Set());
+      setPendingGroceryIds(new Set());
+      setFeedback("");
     }
-  }, [copy.unavailable, isCurrentOperation, today, user?.id]);
+    if (userId) void loadProjection();
+  }, [currentRequestKey, loadProjection, userId]);
 
-  const retryNutritionTarget = useCallback(async () => {
-    if (!user?.id) return false;
-    const requestKey = dashboardRequestKey(user.id, today);
-    const version = requestVersion.current;
-    setNutritionData((current) => ({ ...current, targetsState: "loading", targetsError: null }));
-    try {
-      const result = await loadTodayTargetOnce();
-      if (!isCurrentOperation(requestKey, version)) return false;
-      setNutritionData((current) => ({ ...current, targets: result.targets, activeTarget: result.activeTarget, targetsState: "loaded", targetsError: null }));
-      return true;
-    } catch (error) {
-      if (!isCurrentOperation(requestKey, version)) return false;
-      setNutritionData((current) => ({ ...current, targets: null, activeTarget: null, targetsState: "failed", targetsError: userSafeError(error, copy.targetUnavailable) }));
-      return false;
-    }
-  }, [copy.targetUnavailable, isCurrentOperation, loadTodayTargetOnce, today, user?.id]);
+  useEffect(
+    () => () => {
+      authorityRef.current.generation += 1;
+      authorityRef.current.controller?.abort();
+      authorityRef.current.controller = null;
+      authorityRef.current.promise = null;
+      projectionRef.current = null;
+    },
+    [],
+  );
 
-  useEffect(() => subscribeToTodayNutritionTargetChanges(window, today, () => { void retryNutritionTarget(); }), [retryNutritionTarget, today]);
+  const retryProjection = useCallback(
+    () => loadProjection({ force: true, preserveContent: true }),
+    [loadProjection],
+  );
 
-  const totals = useMemo(() => visibleNutritionData.logs ? sumFoodLogs(visibleNutritionData.logs) : null, [visibleNutritionData.logs]);
-  const targets = visibleNutritionData.targets;
+  useEffect(
+    () =>
+      subscribeToTodayNutritionTargetChanges(window, today, () => {
+        void retryProjection();
+      }),
+    [retryProjection, today],
+  );
+
+  const visibleProjection =
+    resolvedKey === currentRequestKey ? projection : null;
+  const workoutState = projectionSourceState(
+    visibleProjection,
+    visibleProjection?.workout.state,
+    loadState,
+  );
+  const mealsState = projectionSourceState(
+    visibleProjection,
+    visibleProjection?.meals.state,
+    loadState,
+  );
+  const logsState = projectionSourceState(
+    visibleProjection,
+    visibleProjection?.nutrition.logs.state,
+    loadState,
+  );
+  const targetsState = projectionSourceState(
+    visibleProjection,
+    visibleProjection?.nutrition.targets.state,
+    loadState,
+  );
+  const hydrationState = projectionSourceState(
+    visibleProjection,
+    visibleProjection?.hydration.state,
+    loadState,
+  );
+  const shoppingState = projectionSourceState(
+    visibleProjection,
+    visibleProjection?.shopping.state,
+    loadState,
+  );
+  const wellnessState = visibleProjection
+    ? visibleProjection.wellness.state
+    : loadState === "failed"
+      ? "failed"
+      : "loading";
+
+  const workout =
+    visibleProjection?.workout.state === "loaded"
+      ? visibleProjection.workout.value
+      : null;
+  const meals =
+    visibleProjection?.meals.state === "loaded"
+      ? visibleProjection.meals.value.items
+      : [];
+  const nutritionLogs =
+    visibleProjection?.nutrition.logs.state === "loaded"
+      ? visibleProjection.nutrition.logs.value
+      : null;
+  const nutritionTargets =
+    visibleProjection?.nutrition.targets.state === "loaded"
+      ? visibleProjection.nutrition.targets.value
+      : null;
+  const totals = nutritionLogs
+    ? {
+        calories: nutritionLogs.totals.calories,
+        protein_g: nutritionLogs.totals.proteinG,
+        carbs_g: nutritionLogs.totals.carbsG,
+        fat_g: nutritionLogs.totals.fatG,
+      }
+    : null;
+  const targets: SavedTargets | null = nutritionTargets?.hasTarget
+    ? {
+        daily_calories: nutritionTargets.dailyCalories,
+        protein_g: nutritionTargets.proteinG,
+        carbs_g: nutritionTargets.carbsG,
+        fat_g: nutritionTargets.fatG,
+        water_ml: nutritionTargets.waterMl,
+      }
+    : null;
   const remaining = useDashboardRemainingMacros(targets, totals);
-  const foodLogCount = knownFoodLogCount(visibleNutritionData);
-  const waterTotal = useMemo(() => visibleWaterLogs.reduce((sum, item) => sum + Number(item.amount_ml), 0), [visibleWaterLogs]);
-  const workoutResolution = resolveTodayWorkout({ today, planDayId: visibleWorkoutData.day?.id ?? null, openSessionId: visibleWorkoutData.openSessionId, sessions: visibleWorkoutData.sessions });
-  const workoutState = workoutResolution.state;
-  const workoutCardHref = todayWorkoutActionHref(workoutResolution, visibleWorkoutData.day?.id ?? null);
-  const relevantMeal = selectRelevantMeal(visibleMealItems);
-  const todaySleep = visibleWellnessData.sleepLogs.find((item) => item.log_date === today) ?? visibleWellnessData.sleepLogs[0] ?? null;
-  const unbought = visibleGroceryItems.filter((item) => !item.checked && !item.already_have);
-  const bought = visibleGroceryItems.filter((item) => item.checked);
-  const alreadyHave = visibleGroceryItems.filter((item) => item.already_have);
+  const foodLogCount = nutritionLogs?.foodLogCount ?? null;
+  const waterTotal =
+    visibleProjection?.hydration.state === "loaded"
+      ? visibleProjection.hydration.value.totalMl
+      : null;
+  const groceryItems =
+    visibleProjection?.shopping.state === "loaded"
+      ? visibleProjection.shopping.value.items
+      : [];
+  const localHour = new Date().getHours();
+  const relevantMeal = selectRelevantMeal(meals, localHour);
+  const unbought = groceryItems.filter(
+    (item) => !item.checked && !item.alreadyHave,
+  );
+  const bought = groceryItems.filter((item) => item.checked);
+  const alreadyHave = groceryItems.filter((item) => item.alreadyHave);
 
   const publishedDashboardContext = useMemo<QuickPromptContext>(() => {
-    const normalize = (state: DashboardSourceState) => state === "idle" ? "unknown" : state;
-    const workoutLoaded = visibleStates.workout === "loaded";
+    const source = visibleProjection?.promptContext;
     return {
       route: "/dashboard",
       today,
-      localHour: new Date().getHours(),
-      units: { energy: settings.energyUnit, liquid: settings.liquidUnit, weight: settings.weightUnit },
-      profile: visibleProfileContext,
-      progress: visibleProgressContext,
-      workout: {
-        hasPlan: workoutLoaded ? Boolean(visibleWorkoutData.plan) : undefined,
-        scheduled: workoutLoaded ? workoutState === "scheduled" : false,
-        active: workoutLoaded ? workoutState === "active" : false,
-        completed: workoutLoaded ? workoutState === "completed" : false,
-        title: workoutLoaded ? visibleWorkoutData.day?.day_name ?? null : null,
-        exerciseCount: workoutLoaded ? visibleWorkoutData.day?.exercises.length ?? null : null,
-        durationMinutes: workoutLoaded ? visibleWorkoutData.plan?.session_duration_minutes ?? null : null,
-        historyCount: workoutLoaded ? visibleWorkoutData.sessions.filter((session) => session.status === "completed").length : null
+      localHour,
+      units: {
+        energy: settings.energyUnit,
+        liquid: settings.liquidUnit,
+        weight: settings.weightUnit,
       },
-      nutrition: {
-        hasTargets: Boolean(targets),
-        targetsState: visibleNutritionData.targetsState,
-        foodLogsState: visibleNutritionData.logsState,
-        remainingCalories: remaining?.calories ?? null,
-        remainingProtein: remaining?.protein_g ?? null,
-        remainingCarbs: remaining?.carbs_g ?? null,
-        remainingFat: remaining?.fat_g ?? null,
-        foodLogCount,
-        mealPlanCount: visibleStates.meals === "loaded" ? visibleMealItems.length : null,
-        plannedMealCount: visibleStates.meals === "loaded" ? visibleMealItems.filter((item) => item.status === "planned").length : null
-      },
-      grocery: { state: normalize(visibleStates.shopping), itemCount: visibleStates.shopping === "loaded" ? visibleGroceryItems.length : null },
-      hydration: { state: normalize(visibleStates.hydration), hasTarget: Boolean(targets?.water_ml), logCount: visibleStates.hydration === "loaded" ? visibleWaterLogs.length : null, remainingMl: visibleStates.hydration === "loaded" && targets?.water_ml ? Math.max(0, targets.water_ml - waterTotal) : null },
-      recovery: { state: normalize(visibleStates.wellness), hasData: Boolean(todaySleep), sleepHours: todaySleep?.hours_slept ?? null, poorRecovery: Boolean(todaySleep && (todaySleep.recovery_level === "low" || todaySleep.fatigue_level === "high")) },
-      wellness: { state: normalize(visibleStates.wellness), habitCount: visibleStates.wellness === "loaded" ? visibleWellnessData.habits.length : null, supplementCount: visibleStates.wellness === "loaded" ? visibleWellnessData.supplements.length : null },
-      endOfWeek: new Date(`${today}T12:00:00`).getDay() === 0
+      workout: source
+        ? {
+            hasPlan: source.workout.hasPlan ?? undefined,
+            scheduled: source.workout.scheduled,
+            active: source.workout.active,
+            completed: source.workout.completed,
+            skipped: source.workout.skipped,
+            title: source.workout.title,
+            exerciseCount: source.workout.exerciseCount,
+            durationMinutes: source.workout.durationMinutes,
+            historyCount: source.workout.historyCount,
+          }
+        : undefined,
+      nutrition: source
+        ? {
+            hasTargets: source.nutrition.hasTargets,
+            targetsState: source.nutrition.targetsState,
+            foodLogsState: source.nutrition.foodLogsState,
+            remainingCalories: source.nutrition.remainingCalories,
+            remainingProtein: source.nutrition.remainingProtein,
+            remainingCarbs: source.nutrition.remainingCarbs,
+            remainingFat: source.nutrition.remainingFat,
+            foodLogCount: source.nutrition.foodLogCount,
+            mealPlanCount: source.nutrition.mealPlanCount,
+            plannedMealCount: source.nutrition.plannedMealCount,
+          }
+        : undefined,
+      grocery: source?.grocery,
+      hydration: source?.hydration,
+      recovery: source?.recovery,
+      wellness: source?.wellness,
+      progress: source?.progress,
+      profile: source?.profile,
+      endOfWeek: source?.endOfWeek,
     };
-  }, [foodLogCount, remaining, settings.energyUnit, settings.liquidUnit, settings.weightUnit, targets, today, todaySleep, visibleGroceryItems.length, visibleMealItems, visibleNutritionData.logsState, visibleNutritionData.targetsState, visibleProfileContext, visibleProgressContext, visibleStates, visibleWaterLogs.length, visibleWellnessData.habits.length, visibleWellnessData.supplements.length, visibleWorkoutData, waterTotal, workoutState]);
-  useDashboardContextPublication(publishedDashboardContext, setDashboardContext);
+  }, [
+    localHour,
+    settings.energyUnit,
+    settings.liquidUnit,
+    settings.weightUnit,
+    today,
+    visibleProjection?.promptContext,
+  ]);
+  useDashboardContextPublication(
+    publishedDashboardContext,
+    setDashboardContext,
+  );
 
-  async function markMealDone(item: MealPlanItem) {
-    if (pendingMealIds.has(item.id) || item.status !== "planned") return;
+  const publishMutation = useCallback(
+    (
+      operationKey: string,
+      generation: number,
+      transform: (current: TodayProjectionResponseV1) => TodayProjectionResponseV1,
+    ) => {
+      if (!operationIsCurrent(operationKey, generation)) return false;
+      const current = projectionRef.current;
+      if (!current || authorityRef.current.resolvedKey !== operationKey) return false;
+      const next = transform(current);
+      projectionRef.current = next;
+      setProjection(next);
+      return true;
+    },
+    [operationIsCurrent],
+  );
+
+  async function markMealDone(item: TodayMealPlanItemProjection) {
+    if (!userId || pendingMealIds.has(item.id) || item.status !== "planned") return;
     const operationKey = currentRequestKey;
-    const version = requestVersion.current;
+    const generation = authorityRef.current.generation;
     setPendingMealIds((current) => new Set(current).add(item.id));
     try {
-      const result = await markDirectMealPlanItemDone(item);
-      if (!isCurrentOperation(operationKey, version)) return;
-      setMealItems((current) => current.map((value) => value.id === item.id ? result.item : value));
-      if (result.log && visibleNutritionData.logsState === "loaded" && visibleNutritionData.logs) {
-        setNutritionData((current) => ({ ...current, logs: current.logs ? upsertFoodLogById(current.logs, result.log) : null }));
-      } else if (result.log) {
-        setNutritionData((current) => ({ ...current, totalsIncomplete: true }));
-        await retryFoodLogs();
+      const result = await markTodayMealDone(userId, item.id);
+      let needsRefresh = false;
+      publishMutation(operationKey, generation, (current) => {
+        const applied = applyMealCompletion(current, result);
+        needsRefresh = applied.needsRefresh;
+        return applied.projection;
+      });
+      if (operationIsCurrent(operationKey, generation)) {
+        if (needsRefresh) void retryProjection();
+        setFeedback(copy.mealSaved);
       }
-      setFeedback(copy.mealSaved);
     } catch (error) {
-      if (isCurrentOperation(operationKey, version)) toast({ title: copy.mealDoneFailed, description: userSafeError(error), variant: "error" });
+      if (operationIsCurrent(operationKey, generation)) {
+        toast({
+          title: copy.mealDoneFailed,
+          description: userSafeError(error),
+          variant: "error",
+        });
+      }
     } finally {
-      setPendingMealIds((current) => { const next = new Set(current); next.delete(item.id); return next; });
+      setPendingMealIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
     }
   }
 
-  async function skipMealItems(items: MealPlanItem[]) {
-    if (!user?.id || !items.length || items.some((item) => pendingMealIds.has(item.id))) return;
+  async function skipMealItems(items: TodayMealPlanItemProjection[]) {
+    if (
+      !userId ||
+      !items.length ||
+      items.some((item) => pendingMealIds.has(item.id))
+    ) {
+      return;
+    }
     const operationKey = currentRequestKey;
-    const version = requestVersion.current;
-    const previous = mealItems;
+    const generation = authorityRef.current.generation;
+    const previous = projectionRef.current;
     const ids = new Set(items.map((item) => item.id));
     setPendingMealIds((current) => new Set([...current, ...ids]));
-    setMealItems((current) => current.map((item) => ids.has(item.id) ? { ...item, status: "skipped" } : item));
+    publishMutation(operationKey, generation, (current) =>
+      updateMealProjection(
+        current,
+        current.meals.state === "loaded"
+          ? current.meals.value.items.map((item) =>
+              ids.has(item.id) ? { ...item, status: "skipped" } : item,
+            )
+          : [],
+      ),
+    );
     try {
-      const saved = items.length === 1 ? [await markDirectMealPlanItemSkipped(items[0])] : await markDirectMealPlanItemsSkipped(user.id, items.map((item) => item.id));
-      if (!isCurrentOperation(operationKey, version)) return;
+      const saved =
+        items.length === 1
+          ? [await markTodayMealSkipped(userId, items[0].id)]
+          : await markTodayMealsSkipped(
+              userId,
+              items.map((item) => item.id),
+            );
       const byId = new Map(saved.map((item) => [item.id, item]));
-      setMealItems((current) => current.map((item) => byId.get(item.id) ?? item));
-      setFeedback(copy.mealSkipped);
+      if (
+        publishMutation(operationKey, generation, (current) =>
+          updateMealProjection(
+            current,
+            current.meals.state === "loaded"
+              ? current.meals.value.items.map(
+                  (item) => byId.get(item.id) ?? item,
+                )
+              : [],
+          ),
+        )
+      ) {
+        setFeedback(copy.mealSkipped);
+      }
     } catch (error) {
-      if (isCurrentOperation(operationKey, version)) {
-        setMealItems(previous);
-        toast({ title: copy.mealSkipFailed, description: userSafeError(error), variant: "error" });
+      if (operationIsCurrent(operationKey, generation) && previous) {
+        projectionRef.current = previous;
+        setProjection(previous);
+        toast({
+          title: copy.mealSkipFailed,
+          description: userSafeError(error),
+          variant: "error",
+        });
       }
     } finally {
-      setPendingMealIds((current) => { const next = new Set(current); ids.forEach((id) => next.delete(id)); return next; });
+      setPendingMealIds((current) => {
+        const next = new Set(current);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
     }
   }
 
-  async function toggleBought(item: UserGroceryItem) {
-    if (!user?.id || pendingGroceryIds.has(item.id)) return;
+  async function toggleBought(item: TodayShoppingItemProjection) {
+    if (!userId || pendingGroceryIds.has(item.id)) return;
     const operationKey = currentRequestKey;
-    const version = requestVersion.current;
-    const previous = groceryItems;
+    const generation = authorityRef.current.generation;
+    const previous = projectionRef.current;
     setPendingGroceryIds((current) => new Set(current).add(item.id));
-    setGroceryItems((current) => current.map((value) => value.id === item.id ? { ...value, checked: !item.checked } : value));
+    publishMutation(operationKey, generation, (current) => {
+      if (current.shopping.state !== "loaded") return current;
+      const items = current.shopping.value.items.map((value) =>
+        value.id === item.id ? { ...value, checked: !value.checked } : value,
+      );
+      return {
+        ...current,
+        shopping: {
+          state: "loaded",
+          errorCode: null,
+          value: { items, itemCount: items.length },
+        },
+      };
+    });
     try {
-      const saved = await upsertGroceryItem(user.id, { ...item, checked: !item.checked });
-      if (isCurrentOperation(operationKey, version)) setGroceryItems((current) => current.map((value) => value.id === item.id ? saved : value));
+      const saved = await toggleTodayShoppingItem(userId, item);
+      publishMutation(operationKey, generation, (current) => {
+        if (current.shopping.state !== "loaded") return current;
+        const items = current.shopping.value.items.map((value) =>
+          value.id === item.id ? saved : value,
+        );
+        return {
+          ...current,
+          shopping: {
+            state: "loaded",
+            errorCode: null,
+            value: { items, itemCount: items.length },
+          },
+        };
+      });
     } catch (error) {
-      if (isCurrentOperation(operationKey, version)) {
-        setGroceryItems(previous);
-        toast({ title: copy.groceryUpdateFailed, description: userSafeError(error), variant: "error" });
+      if (operationIsCurrent(operationKey, generation) && previous) {
+        projectionRef.current = previous;
+        setProjection(previous);
+        toast({
+          title: copy.groceryUpdateFailed,
+          description: userSafeError(error),
+          variant: "error",
+        });
       }
     } finally {
-      setPendingGroceryIds((current) => { const next = new Set(current); next.delete(item.id); return next; });
+      setPendingGroceryIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
     }
   }
 
-  const localizedDate = new Intl.DateTimeFormat(language === "de" ? "de-DE" : language === "ar" ? "ar-EG" : "en-GB", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${today}T12:00:00`));
-  const headingWorkoutStatus = visibleStates.workout === "loaded"
-    ? visibleWorkoutData.day ? copy.trainingDay : copy.restDay
-    : visibleStates.workout === "failed" ? copy.unavailable : copy.loading;
+  const localizedDate = new Intl.DateTimeFormat(
+    language === "de" ? "de-DE" : language === "ar" ? "ar-EG" : "en-GB",
+    { weekday: "long", day: "numeric", month: "long" },
+  ).format(new Date(`${today}T12:00:00`));
+  const headingWorkoutStatus =
+    workoutState === "loaded"
+      ? workout?.dayId
+        ? copy.trainingDay
+        : copy.restDay
+      : workoutState === "failed"
+        ? copy.unavailable
+        : copy.loading;
 
   return (
-    <div dir={dir}>
+    <div dir={dir} data-today-refreshing={isRefreshing || undefined}>
       <PageHeading
         title={`${copy.today}${profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}`}
         description={`${localizedDate} · ${headingWorkoutStatus}`}
-        action={<Button type="button" className="min-h-12" onClick={() => openPrompts()}><OpenAiBlossom className="h-5 w-5" />{copy.askChatGpt}</Button>}
+        action={
+          <Button
+            type="button"
+            className="min-h-12"
+            onClick={() => openPrompts()}
+          >
+            <OpenAiBlossom className="h-5 w-5" />
+            {copy.askChatGpt}
+          </Button>
+        }
       />
       <div className="space-y-4">
         <TodayProgress
           totals={totals}
           foodLogCount={foodLogCount}
-          logsState={visibleNutritionData.logsState}
+          logsState={progressSourceState(logsState)}
           targets={targets}
-          targetsState={visibleNutritionData.targetsState}
-          waterTotal={visibleStates.hydration === "loaded" ? waterTotal : null}
-          hydrationState={progressSourceState(visibleStates.hydration)}
+          targetsState={progressSourceState(targetsState)}
+          waterTotal={waterTotal}
+          hydrationState={progressSourceState(hydrationState)}
           energyUnit={settings.energyUnit}
           liquidUnit={settings.liquidUnit}
           remainingCalculated={remaining !== null}
           copy={copy}
         />
-        {visibleNutritionData.logsState === "failed" || visibleNutritionData.totalsIncomplete ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-warning/30 bg-warning/5 p-3" role="alert">
-            <p className="text-sm text-muted-foreground">{copy.sectionUnavailable}</p>
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => void retryFoodLogs()}>{copy.retry}</Button>
+        {logsState === "failed" ? (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-warning/30 bg-warning/5 p-3"
+            role="alert"
+          >
+            <p className="text-sm text-muted-foreground">
+              {copy.sectionUnavailable}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              onClick={() => void retryProjection()}
+            >
+              {copy.retry}
+            </Button>
           </div>
         ) : null}
 
         <section aria-labelledby="today-plan">
-          <h2 id="today-plan" className="mb-2 text-base font-semibold">{copy.todayPlan}</h2>
+          <h2 id="today-plan" className="mb-2 text-base font-semibold">
+            {copy.todayPlan}
+          </h2>
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Dumbbell className="h-5 w-5" />{copy.todaysWorkout}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Dumbbell className="h-5 w-5" />
+                  {copy.todaysWorkout}
+                </CardTitle>
+              </CardHeader>
               <CardContent className="space-y-3">
-                {visibleStates.workout === "loading" || visibleStates.workout === "idle" ? <p className="text-sm text-muted-foreground">{copy.loading}</p> : null}
-                {visibleStates.workout === "failed" ? <SectionFailure message={errors.workout ?? copy.sectionUnavailable} copy={copy} onRetry={() => setReload((value) => value + 1)} /> : null}
-                {visibleStates.workout === "loaded" && visibleWorkoutData.day ? (
+                {workoutState === "loading" || workoutState === "idle" ? (
+                  <p className="text-sm text-muted-foreground">{copy.loading}</p>
+                ) : null}
+                {workoutState === "failed" ? (
+                  <SectionFailure
+                    message={copy.sectionUnavailable}
+                    copy={copy}
+                    onRetry={() => void retryProjection()}
+                  />
+                ) : null}
+                {workoutState === "loaded" && workout?.dayId ? (
                   <>
-                    <div><p className="font-semibold">{visibleWorkoutData.day.day_name}</p><p className="text-sm text-muted-foreground">{interpolateFocusedTodayCopy(copy.exercisesCount, { count: visibleWorkoutData.day.exercises.length })}{visibleWorkoutData.plan?.session_duration_minutes ? ` · ${interpolateFocusedTodayCopy(copy.durationMinutes, { minutes: visibleWorkoutData.plan.session_duration_minutes })}` : ""}</p></div>
-                    <div className="space-y-1">{visibleWorkoutData.day.exercises.slice(0, 3).map((exercise) => <p key={exercise.id} className="text-sm text-muted-foreground">{exercise.sets ?? 1} × {exercise.reps ?? "?"} {exercise.exercise_name}</p>)}</div>
-                    {workoutCardHref ? <Button asChild variant="outline" className="min-h-11"><Link href={workoutCardHref}>{workoutState === "active" ? copy.resumeWorkout : workoutState === "completed" ? copy.viewWorkout : copy.startWorkout}</Link></Button> : null}
+                    <div>
+                      <p className="font-semibold">{workout.dayName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {interpolateFocusedTodayCopy(copy.exercisesCount, {
+                          count: workout.exerciseCount ?? 0,
+                        })}
+                        {workout.sessionDurationMinutes
+                          ? ` · ${interpolateFocusedTodayCopy(copy.durationMinutes, {
+                              minutes: workout.sessionDurationMinutes,
+                            })}`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      {workout.previewExercises.map((exercise) => (
+                        <p
+                          key={exercise.id}
+                          className="text-sm text-muted-foreground"
+                        >
+                          {exercise.sets ?? 1} × {exercise.reps ?? "?"}{" "}
+                          {exercise.name}
+                        </p>
+                      ))}
+                    </div>
+                    {workout.actionHref ? (
+                      <Button asChild variant="outline" className="min-h-11">
+                        <Link href={workout.actionHref}>
+                          {workout.state === "active"
+                            ? copy.resumeWorkout
+                            : workout.state === "completed"
+                              ? copy.viewWorkout
+                              : copy.startWorkout}
+                        </Link>
+                      </Button>
+                    ) : null}
                   </>
                 ) : null}
-                {visibleStates.workout === "loaded" && !visibleWorkoutData.day ? <><p className="text-sm text-muted-foreground">{copy.noWorkoutScheduled}</p><Button asChild className="min-h-11"><Link href="/my-workout/plans">{copy.openTrain}</Link></Button></> : null}
+                {workoutState === "loaded" && !workout?.dayId ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      {copy.noWorkoutScheduled}
+                    </p>
+                    <Button asChild className="min-h-11">
+                      <Link href="/my-workout/plans">{copy.openTrain}</Link>
+                    </Button>
+                  </>
+                ) : null}
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Utensils className="h-5 w-5" />{copy.todaysMeals}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Utensils className="h-5 w-5" />
+                  {copy.todaysMeals}
+                </CardTitle>
+              </CardHeader>
               <CardContent className="space-y-3">
-                {visibleStates.meals === "loading" || visibleStates.meals === "idle" ? <p className="text-sm text-muted-foreground">{copy.loading}</p> : null}
-                {visibleStates.meals === "failed" ? <SectionFailure message={errors.meals ?? copy.sectionUnavailable} copy={copy} onRetry={() => setReload((value) => value + 1)} /> : null}
-                {visibleStates.meals === "loaded" && relevantMeal ? (
+                {mealsState === "loading" || mealsState === "idle" ? (
+                  <p className="text-sm text-muted-foreground">{copy.loading}</p>
+                ) : null}
+                {mealsState === "failed" ? (
+                  <SectionFailure
+                    message={copy.sectionUnavailable}
+                    copy={copy}
+                    onRetry={() => void retryProjection()}
+                  />
+                ) : null}
+                {mealsState === "loaded" && relevantMeal ? (
                   <>
-                    <div><p className="font-semibold">{mealTypeLabel(relevantMeal.meal_type, copy)}: {relevantMeal.food_name}</p><p className="text-sm text-muted-foreground">{Math.round(relevantMeal.calories)} kcal · {Math.round(relevantMeal.protein_g)} g {copy.protein}</p></div>
+                    <div>
+                      <p className="font-semibold">
+                        {mealTypeLabel(relevantMeal.mealType, copy)}:{" "}
+                        {relevantMeal.name}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {Math.round(relevantMeal.calories)} kcal ·{" "}
+                        {Math.round(relevantMeal.proteinG)} g {copy.protein}
+                      </p>
+                    </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button type="button" onClick={() => void markMealDone(relevantMeal)} disabled={pendingMealIds.has(relevantMeal.id)} className="min-h-11"><Check className="h-4 w-4" />{pendingMealIds.has(relevantMeal.id) ? copy.saving : copy.markDone}</Button>
-                      <Button type="button" variant="outline" onClick={() => void skipMealItems([relevantMeal])} disabled={pendingMealIds.has(relevantMeal.id)} className="min-h-11">{copy.skip}</Button>
-                      <Button type="button" variant="ghost" onClick={() => void skipMealItems(visibleMealItems.filter((item) => item.status === "planned"))} disabled={!visibleMealItems.some((item) => item.status === "planned")} className="min-h-11">{copy.skipAll}</Button>
+                      <Button
+                        type="button"
+                        onClick={() => void markMealDone(relevantMeal)}
+                        disabled={pendingMealIds.has(relevantMeal.id)}
+                        className="min-h-11"
+                      >
+                        <Check className="h-4 w-4" />
+                        {pendingMealIds.has(relevantMeal.id)
+                          ? copy.saving
+                          : copy.markDone}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void skipMealItems([relevantMeal])}
+                        disabled={pendingMealIds.has(relevantMeal.id)}
+                        className="min-h-11"
+                      >
+                        {copy.skip}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() =>
+                          void skipMealItems(
+                            meals.filter((item) => item.status === "planned"),
+                          )
+                        }
+                        disabled={!meals.some((item) => item.status === "planned")}
+                        className="min-h-11"
+                      >
+                        {copy.skipAll}
+                      </Button>
                     </div>
                   </>
                 ) : null}
-                {visibleStates.meals === "loaded" && !relevantMeal ? <p className="text-sm text-muted-foreground">{visibleMealItems.some((item) => item.status === "skipped") ? copy.skipped : copy.noMealsPlanned}</p> : null}
-                {visibleStates.meals === "loaded" ? <Button asChild variant="outline" className="min-h-11"><Link href={`/my-meal-plan?tab=day&date=${today}`}>{copy.openMealPlan}</Link></Button> : null}
+                {mealsState === "loaded" && !relevantMeal ? (
+                  <p className="text-sm text-muted-foreground">
+                    {meals.some((item) => item.status === "skipped")
+                      ? copy.skipped
+                      : copy.noMealsPlanned}
+                  </p>
+                ) : null}
+                {mealsState === "loaded" ? (
+                  <Button asChild variant="outline" className="min-h-11">
+                    <Link href={`/my-meal-plan?tab=day&date=${today}`}>
+                      {copy.openMealPlan}
+                    </Link>
+                  </Button>
+                ) : null}
               </CardContent>
             </Card>
           </div>
@@ -466,31 +905,140 @@ export function TodayDashboard() {
         <InlineFeedback message={feedback} onClose={() => setFeedback("")} />
 
         <WellnessToday
-          state={visibleStates.wellness === "failed" ? "failed" : visibleStates.wellness === "loaded" ? "loaded" : "loading"}
-          habits={visibleWellnessData.habits}
-          supplements={visibleWellnessData.supplements}
-          sleepLogs={visibleWellnessData.sleepLogs}
-          errors={visibleWellnessData.errors}
+          state={wellnessState}
+          habits={visibleProjection?.wellness.habits ?? null}
+          supplements={visibleProjection?.wellness.supplements ?? null}
+          sleep={visibleProjection?.wellness.sleep ?? null}
           copy={copy}
         />
 
-        {visibleStates.shopping === "failed" ? (
-          <section aria-labelledby="shopping-failed"><Card><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4"><div><h2 id="shopping-failed" className="font-semibold">{copy.shoppingList}</h2><p className="text-sm text-muted-foreground">{errors.shopping ?? copy.sectionUnavailable}</p></div><Button type="button" variant="outline" className="min-h-11" onClick={() => setReload((value) => value + 1)}>{copy.retry}</Button></CardContent></Card></section>
+        {shoppingState === "failed" ? (
+          <section aria-labelledby="shopping-failed">
+            <Card>
+              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <div>
+                  <h2 id="shopping-failed" className="font-semibold">
+                    {copy.shoppingList}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {copy.sectionUnavailable}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => void retryProjection()}
+                >
+                  {copy.retry}
+                </Button>
+              </CardContent>
+            </Card>
+          </section>
         ) : null}
-        {visibleStates.shopping === "loaded" && visibleGroceryItems.length ? (
-          <section aria-labelledby="shopping-list" className="lg:max-w-[calc(50%-0.5rem)]">
+        {shoppingState === "loaded" && groceryItems.length ? (
+          <section
+            aria-labelledby="shopping-list"
+            className="lg:max-w-[calc(50%-0.5rem)]"
+          >
             <Card>
               <CardHeader>
-                <button type="button" className="flex min-h-11 w-full items-center justify-between gap-3 text-start" aria-expanded={shoppingExpanded} onClick={() => setShoppingExpanded((value) => !value)}>
-                  <span><CardTitle id="shopping-list" className="flex items-center gap-2 text-base"><ShoppingCart className="h-5 w-5" />{copy.shoppingList}</CardTitle><span className="mt-1 block text-xs text-muted-foreground">{unbought.length} {copy.remaining} · {bought.length} {copy.bought}{alreadyHave.length ? ` · ${alreadyHave.length} ${copy.alreadyHave}` : ""}</span></span>
-                  {shoppingExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                <button
+                  type="button"
+                  className="flex min-h-11 w-full items-center justify-between gap-3 text-start"
+                  aria-expanded={shoppingExpanded}
+                  onClick={() => setShoppingExpanded((value) => !value)}
+                >
+                  <span>
+                    <CardTitle
+                      id="shopping-list"
+                      className="flex items-center gap-2 text-base"
+                    >
+                      <ShoppingCart className="h-5 w-5" />
+                      {copy.shoppingList}
+                    </CardTitle>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {unbought.length} {copy.remaining} · {bought.length}{" "}
+                      {copy.bought}
+                      {alreadyHave.length
+                        ? ` · ${alreadyHave.length} ${copy.alreadyHave}`
+                        : ""}
+                    </span>
+                  </span>
+                  {shoppingExpanded ? (
+                    <ChevronUp className="h-5 w-5" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5" />
+                  )}
                 </button>
               </CardHeader>
               {shoppingExpanded ? (
                 <CardContent className="space-y-3">
-                  <div className="space-y-2">{unbought.slice(0, 6).map((item) => <label key={item.id} className="flex min-h-12 items-center gap-3 rounded-[12px] border border-border/70 px-3"><input type="checkbox" checked={item.checked} disabled={pendingGroceryIds.has(item.id)} onChange={() => void toggleBought(item)} className="h-5 w-5 accent-primary" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.item_name}</span><span className="block text-xs text-muted-foreground">{item.quantity ?? ""} {item.unit ?? ""}</span></span></label>)}</div>
-                  {bought.length ? <div><button type="button" onClick={() => setBoughtExpanded((value) => !value)} className="flex min-h-11 items-center gap-2 text-sm font-semibold" aria-expanded={boughtExpanded}>{copy.boughtItems}{boughtExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>{boughtExpanded ? <div className="space-y-2">{bought.map((item) => <label key={item.id} className="flex min-h-11 items-center gap-3 rounded-[12px] border border-border/70 px-3 opacity-75"><input type="checkbox" checked disabled={pendingGroceryIds.has(item.id)} onChange={() => void toggleBought(item)} className="h-5 w-5 accent-primary" /><span className="line-through">{item.item_name}</span></label>)}</div> : null}</div> : null}
-                  <Button asChild variant="outline" className="min-h-11"><Link href={`/my-meal-plan?tab=shopping&date=${today}`}>{copy.openFullGrocery}</Link></Button>
+                  <div className="space-y-2">
+                    {unbought.slice(0, 6).map((item) => (
+                      <label
+                        key={item.id}
+                        className="flex min-h-12 items-center gap-3 rounded-[12px] border border-border/70 px-3"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={item.checked}
+                          disabled={pendingGroceryIds.has(item.id)}
+                          onChange={() => void toggleBought(item)}
+                          className="h-5 w-5 accent-primary"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">
+                            {item.itemName}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {item.quantity ?? ""} {item.unit ?? ""}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {bought.length ? (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setBoughtExpanded((value) => !value)}
+                        className="flex min-h-11 items-center gap-2 text-sm font-semibold"
+                        aria-expanded={boughtExpanded}
+                      >
+                        {copy.boughtItems}
+                        {boughtExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </button>
+                      {boughtExpanded ? (
+                        <div className="space-y-2">
+                          {bought.map((item) => (
+                            <label
+                              key={item.id}
+                              className="flex min-h-11 items-center gap-3 rounded-[12px] border border-border/70 px-3 opacity-75"
+                            >
+                              <input
+                                type="checkbox"
+                                checked
+                                disabled={pendingGroceryIds.has(item.id)}
+                                onChange={() => void toggleBought(item)}
+                                className="h-5 w-5 accent-primary"
+                              />
+                              <span className="line-through">{item.itemName}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <Button asChild variant="outline" className="min-h-11">
+                    <Link href={`/my-meal-plan?tab=shopping&date=${today}`}>
+                      {copy.openFullGrocery}
+                    </Link>
+                  </Button>
                 </CardContent>
               ) : null}
             </Card>
@@ -501,6 +1049,26 @@ export function TodayDashboard() {
   );
 }
 
-function SectionFailure({ message, copy, onRetry }: { message: string; copy: ReturnType<typeof getFocusedTodayCopy>; onRetry: () => void }) {
-  return <div role="alert"><p className="text-sm text-muted-foreground">{message}</p><Button type="button" variant="outline" className="mt-3 min-h-11" onClick={onRetry}>{copy.retry}</Button></div>;
+function SectionFailure({
+  message,
+  copy,
+  onRetry,
+}: {
+  message: string;
+  copy: ReturnType<typeof getFocusedTodayCopy>;
+  onRetry: () => void;
+}) {
+  return (
+    <div role="alert">
+      <p className="text-sm text-muted-foreground">{message}</p>
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-3 min-h-11"
+        onClick={onRetry}
+      >
+        {copy.retry}
+      </Button>
+    </div>
+  );
 }
