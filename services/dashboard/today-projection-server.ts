@@ -79,6 +79,7 @@ type WorkoutDayRow = {
 
 type WorkoutExerciseRow = {
   id: string;
+  plan_day_id: string;
   exercise_name: string;
   sets: number | null;
   reps: string | number | null;
@@ -229,16 +230,40 @@ function workoutTimestampDate(
 export async function readTodayWorkoutProjection(
   input: ProjectionInput,
 ): Promise<TodayWorkoutProjection> {
-  const planResult = await input.supabase
-    .from("user_workout_plans")
-    .select("id,session_duration_minutes")
-    .eq("user_id", input.userId)
-    .eq("is_active", true)
-    .is("archived_at", null)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [planResult, legacyResult, scheduledResult] = await Promise.all([
+    input.supabase
+      .from("user_workout_plans")
+      .select("id,session_duration_minutes")
+      .eq("user_id", input.userId)
+      .eq("is_active", true)
+      .is("archived_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    input.supabase
+      .from("workout_sessions")
+      .select("id,plan_day_id,status,started_at,completed_at,skipped_at")
+      .eq("user_id", input.userId)
+      .is("deleted_at", null)
+      .in("status", ["completed", "skipped"])
+      .order("started_at", { ascending: false })
+      .limit(20),
+    input.supabase
+      .from("user_workout_sessions")
+      .select("id,plan_day_id,scheduled_date,status,started_at,completed_at,skipped_at")
+      .eq("user_id", input.userId)
+      .in("status", ["completed", "skipped"])
+      .order("scheduled_date", { ascending: false })
+      .limit(20),
+  ]);
+
   const plan = assertQuery(planResult) as WorkoutPlanRow | null;
+  const legacy = (assertQuery(legacyResult) ?? []) as WorkoutSessionRow[];
+  const scheduled = (assertQuery(scheduledResult) ?? []) as ScheduledSessionRow[];
+  const recentCompletedCount =
+    legacy.filter((row) => row.status === "completed").length +
+    scheduled.filter((row) => row.status === "completed").length;
+
   if (!plan) {
     return {
       hasPlan: false,
@@ -252,7 +277,7 @@ export async function readTodayWorkoutProjection(
       actionHref: null,
       activeSessionId: null,
       completedSessionId: null,
-      recentCompletedCount: null,
+      recentCompletedCount,
     };
   }
 
@@ -262,9 +287,31 @@ export async function readTodayWorkoutProjection(
     .eq("plan_id", plan.id)
     .eq("weekday", weekdayForDate(input.date))
     .order("day_number", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  const day = assertQuery(dayResult) as WorkoutDayRow | null;
+    .limit(14);
+  const candidateDays = (assertQuery(dayResult) ?? []) as WorkoutDayRow[];
+
+  let day: WorkoutDayRow | null = null;
+  let exercises: WorkoutExerciseRow[] = [];
+  if (candidateDays.length) {
+    const exerciseResult = await input.supabase
+      .from("user_workout_plan_exercises")
+      .select("id,plan_day_id,exercise_name,sets,reps,sort_order")
+      .in(
+        "plan_day_id",
+        candidateDays.map((candidate) => candidate.id),
+      )
+      .order("sort_order", { ascending: true })
+      .limit(500);
+    const candidateExercises = (assertQuery(exerciseResult) ?? []) as WorkoutExerciseRow[];
+    day =
+      candidateDays.find((candidate) =>
+        candidateExercises.some((exercise) => exercise.plan_day_id === candidate.id),
+      ) ?? null;
+    exercises = day
+      ? candidateExercises.filter((exercise) => exercise.plan_day_id === day!.id)
+      : [];
+  }
+
   if (!day) {
     return {
       hasPlan: true,
@@ -272,62 +319,36 @@ export async function readTodayWorkoutProjection(
       sessionDurationMinutes: plan.session_duration_minutes,
       dayId: null,
       dayName: null,
-      exerciseCount: null,
+      exerciseCount: 0,
       previewExercises: [],
       state: "none",
       actionHref: null,
       activeSessionId: null,
       completedSessionId: null,
-      recentCompletedCount: 0,
+      recentCompletedCount,
     };
   }
 
-  const [exerciseResult, activeResult, legacyResult, scheduledResult] =
-    await Promise.all([
-      input.supabase
-        .from("user_workout_plan_exercises")
-        .select("id,exercise_name,sets,reps,sort_order")
-        .eq("plan_day_id", day.id)
-        .order("sort_order", { ascending: true })
-        .limit(200),
-      input.supabase
-        .from("workout_sessions")
-        .select("id,plan_day_id,status,started_at,completed_at,skipped_at")
-        .eq("user_id", input.userId)
-        .eq("plan_day_id", day.id)
-        .eq("status", "started")
-        .is("deleted_at", null)
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      input.supabase
-        .from("workout_sessions")
-        .select("id,plan_day_id,status,started_at,completed_at,skipped_at")
-        .eq("user_id", input.userId)
-        .eq("plan_day_id", day.id)
-        .is("deleted_at", null)
-        .in("status", ["completed", "skipped"])
-        .order("started_at", { ascending: false })
-        .limit(20),
-      input.supabase
-        .from("user_workout_sessions")
-        .select("id,plan_day_id,scheduled_date,status,started_at,completed_at,skipped_at")
-        .eq("user_id", input.userId)
-        .eq("plan_day_id", day.id)
-        .eq("scheduled_date", input.date)
-        .in("status", ["completed", "skipped"])
-        .order("scheduled_date", { ascending: false })
-        .limit(20),
-    ]);
-
-  const exercises = (assertQuery(exerciseResult) ?? []) as WorkoutExerciseRow[];
+  const activeResult = await input.supabase
+    .from("workout_sessions")
+    .select("id,plan_day_id,status,started_at,completed_at,skipped_at")
+    .eq("user_id", input.userId)
+    .eq("plan_day_id", day.id)
+    .eq("status", "started")
+    .is("deleted_at", null)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   const active = assertQuery(activeResult) as WorkoutSessionRow | null;
-  const legacy = (assertQuery(legacyResult) ?? []) as WorkoutSessionRow[];
-  const scheduled = (assertQuery(scheduledResult) ?? []) as ScheduledSessionRow[];
   const legacyToday = legacy.filter(
-    (row) => workoutTimestampDate(row, input.timezone) === input.date,
+    (row) =>
+      row.plan_day_id === day!.id &&
+      workoutTimestampDate(row, input.timezone) === input.date,
   );
-  const terminal = [...scheduled, ...legacyToday];
+  const scheduledToday = scheduled.filter(
+    (row) => row.plan_day_id === day!.id && row.scheduled_date === input.date,
+  );
+  const terminal = [...scheduledToday, ...legacyToday];
   const skipped = terminal.find((row) => row.status === "skipped") ?? null;
   const completed = terminal.find((row) => row.status === "completed") ?? null;
   const state: TodayWorkoutProjection["state"] = active
@@ -336,17 +357,15 @@ export async function readTodayWorkoutProjection(
       ? "skipped"
       : completed
         ? "completed"
-        : exercises.length
-          ? "scheduled"
-          : "none";
+        : "scheduled";
   const completedSessionId = completed?.id ?? null;
 
   return {
     hasPlan: true,
     planId: plan.id,
     sessionDurationMinutes: plan.session_duration_minutes,
-    dayId: exercises.length ? day.id : null,
-    dayName: exercises.length ? day.day_name : null,
+    dayId: day.id,
+    dayName: day.day_name,
     exerciseCount: exercises.length,
     previewExercises: exercises.slice(0, 3).map((exercise) => ({
       id: exercise.id,
@@ -355,10 +374,10 @@ export async function readTodayWorkoutProjection(
       reps: exercise.reps,
     })),
     state,
-    actionHref: actionHref(state, exercises.length ? day.id : null, completedSessionId),
+    actionHref: actionHref(state, day.id, completedSessionId),
     activeSessionId: active?.id ?? null,
     completedSessionId,
-    recentCompletedCount: legacy.filter((row) => row.status === "completed").length,
+    recentCompletedCount,
   };
 }
 
