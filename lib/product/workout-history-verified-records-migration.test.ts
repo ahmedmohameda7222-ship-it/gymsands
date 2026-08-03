@@ -26,6 +26,10 @@ const refreshClient = readFileSync(
   "services/workouts/history/verified-records-client.ts",
   "utf8",
 );
+const compatibilityAuth = readFileSync(
+  "services/workouts/history/session-compat.ts",
+  "utf8",
+);
 const route = readFileSync(
   "app/api/workouts/history/[sessionId]/verified-records/route.ts",
   "utf8",
@@ -74,8 +78,10 @@ describe("WH-6 verified record migration authority", () => {
     expect(completionAuthority).toContain("void refreshVerifiedRecordsAfterWorkoutCompletion(sessionId)");
     expect(completionAdapter).toContain('root.status !== "completed"');
     expect(completionAdapter).not.toContain("refreshVerifiedRecordsAuthenticated");
-    expect(refreshClient).toContain("supabase.auth.getSession()");
-    expect(refreshClient).toContain("Authorization: `Bearer ${token}`");
+    expect(refreshClient).not.toContain("supabase.auth.getSession()");
+    expect(refreshClient).toContain("refreshVerifiedRecordsWithCompatibilitySession");
+    expect(refreshClient).toContain("Authorization: `Bearer ${context.accessToken}`");
+    expect(compatibilityAuth).toContain("supabase.auth.getSession()");
     expect(route).toContain("createSupabaseServerClient(null, true)");
     expect(route).toContain("serverEnv.supabaseServiceRoleKey");
     expect(exportSource).toContain('"personal_records"');
