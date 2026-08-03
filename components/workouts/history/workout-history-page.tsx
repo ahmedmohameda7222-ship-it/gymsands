@@ -5,12 +5,18 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { WorkoutHistoryDesktopPreview } from "@/components/workouts/history/workout-history-desktop-preview";
-import { WorkoutHistoryFilters, type WorkoutHistoryFilterValue } from "@/components/workouts/history/workout-history-filters";
+import {
+  WorkoutHistoryFilters,
+  type WorkoutHistoryFilterValue,
+} from "@/components/workouts/history/workout-history-filters";
 import { WorkoutHistoryHeader } from "@/components/workouts/history/workout-history-header";
 import { WorkoutHistoryLoadMore } from "@/components/workouts/history/workout-history-load-more";
 import { WorkoutHistoryPeriodControl } from "@/components/workouts/history/workout-history-period-control";
 import { WorkoutHistorySearch } from "@/components/workouts/history/workout-history-search";
-import { WorkoutHistoryStateView, type WorkoutHistoryPageState } from "@/components/workouts/history/workout-history-state-view";
+import {
+  WorkoutHistoryStateView,
+  type WorkoutHistoryPageState,
+} from "@/components/workouts/history/workout-history-state-view";
 import { WorkoutHistorySummary } from "@/components/workouts/history/workout-history-summary";
 import { WorkoutHistoryTimeline } from "@/components/workouts/history/workout-history-timeline";
 import { TrainPageContainer } from "@/components/workouts/train-ui";
@@ -18,19 +24,24 @@ import { useTrainTranslation } from "@/lib/i18n/train";
 import {
   customWorkoutHistoryPeriodRange,
   shiftWorkoutHistoryPeriodAnchor,
-  workoutHistoryTimeZoneParts,
   workoutHistoryPeriodRange,
-  type WorkoutHistoryDateRange,
-  type WorkoutHistoryPeriodMode,
+  workoutHistoryTimeZoneParts,
 } from "@/lib/workouts/history/date-range";
+import { WorkoutHistoryFirstPageRequestCoordinator } from "@/lib/workouts/history/first-page-request-coordinator";
 import {
   parseWorkoutHistoryNavigationState,
   workoutHistoryNavigationSearchParams,
   type WorkoutHistoryNavigationState,
 } from "@/lib/workouts/history/navigation-state";
-import { WorkoutHistoryRequestGeneration } from "@/lib/workouts/history/request-generation";
+import {
+  workoutHistoryCursorRequestKey,
+  workoutHistoryFirstPageRequestKey,
+} from "@/lib/workouts/history/request-key";
 import { getWorkoutHistoryList } from "@/services/workouts/history/client";
-import type { WorkoutHistoryListResponse } from "@/types/workout-history";
+import type {
+  WorkoutHistoryListRequest,
+  WorkoutHistoryListResponse,
+} from "@/types/workout-history";
 
 const defaultFilters: WorkoutHistoryFilterValue = {
   statuses: ["completed", "partial"],
@@ -42,210 +53,428 @@ const defaultFilters: WorkoutHistoryFilterValue = {
   sort: "newest",
 };
 
+type FirstPageAuthority = {
+  key: string | null;
+  response: WorkoutHistoryListResponse | null;
+  initialLoading: boolean;
+  blockingError: boolean;
+};
+
+type CursorRequest = {
+  key: string;
+  controller: AbortController;
+  promise: Promise<void>;
+};
+
 function inputDate(value: Date, timezone: string): string {
   const parts = workoutHistoryTimeZoneParts(value, timezone);
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
+function listRequestFromNavigation(
+  navigation: WorkoutHistoryNavigationState,
+): WorkoutHistoryListRequest {
+  return {
+    ...navigation.range,
+    limit: 20,
+    search: navigation.search || undefined,
+    workoutTypes: navigation.workoutType
+      ? [navigation.workoutType]
+      : undefined,
+    muscleIds: navigation.muscle ? [navigation.muscle] : undefined,
+    exerciseIds: navigation.exercise ? [navigation.exercise] : undefined,
+    planIds: navigation.plan ? [navigation.plan] : undefined,
+    statuses: navigation.statuses,
+    progressOnly: navigation.progressOnly || undefined,
+    sort: navigation.sort,
+  };
+}
+
+function filtersFromNavigation(
+  navigation: WorkoutHistoryNavigationState,
+): WorkoutHistoryFilterValue {
+  return {
+    statuses: navigation.statuses,
+    progressOnly: navigation.progressOnly,
+    workoutType: navigation.workoutType,
+    muscle: navigation.muscle,
+    exercise: navigation.exercise,
+    plan: navigation.plan,
+    sort: navigation.sort,
+  };
+}
+
 export function WorkoutHistoryPage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const userId = user?.id;
   const { dir } = useTrainTranslation();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const initialNavigation = parseWorkoutHistoryNavigationState(searchParams, new Date(), timezone);
-  const [mode, setMode] = useState<WorkoutHistoryPeriodMode>(initialNavigation.period);
-  const [anchor, setAnchor] = useState(() => new Date(initialNavigation.range.from));
-  const [customFrom, setCustomFrom] = useState(() => inputDate(new Date(initialNavigation.range.from), timezone));
-  const [customTo, setCustomTo] = useState(() => inputDate(new Date(Date.parse(initialNavigation.range.to) - 1), timezone));
-  const [customRange, setCustomRange] = useState<WorkoutHistoryDateRange | null>(initialNavigation.period === "custom" ? initialNavigation.range : null);
-  const [searchInput, setSearchInput] = useState(initialNavigation.search);
-  const [search, setSearch] = useState(initialNavigation.search);
-  const [filters, setFilters] = useState<WorkoutHistoryFilterValue>({
-    statuses: initialNavigation.statuses,
-    progressOnly: initialNavigation.progressOnly,
-    workoutType: initialNavigation.workoutType,
-    muscle: initialNavigation.muscle,
-    exercise: initialNavigation.exercise,
-    plan: initialNavigation.plan,
-    sort: initialNavigation.sort,
-  });
+  const urlString = searchParams.toString();
+
+  const navigationState = useMemo(
+    () =>
+      parseWorkoutHistoryNavigationState(
+        new URLSearchParams(urlString),
+        new Date(),
+        timezone,
+      ),
+    [timezone, urlString],
+  );
+  const navigationRef = useRef(navigationState);
+  navigationRef.current = navigationState;
+
+  const range = navigationState.range;
+  const mode = navigationState.period;
+  const filters = useMemo(
+    () => filtersFromNavigation(navigationState),
+    [navigationState],
+  );
+  const request = useMemo(
+    () => listRequestFromNavigation(navigationState),
+    [navigationState],
+  );
+  const requestRef = useRef(request);
+  requestRef.current = request;
+
+  const accessTokenRef = useRef<string | null>(
+    session?.access_token ?? null,
+  );
+  accessTokenRef.current = session?.access_token ?? null;
+
+  const firstPageKey = useMemo(
+    () =>
+      userId
+        ? workoutHistoryFirstPageRequestKey(userId, request)
+        : null,
+    [request, userId],
+  );
+  const firstPageKeyRef = useRef(firstPageKey);
+  firstPageKeyRef.current = firstPageKey;
+
+  const [searchInput, setSearchInput] = useState(navigationState.search);
+  const [customFrom, setCustomFrom] = useState(() =>
+    inputDate(new Date(range.from), timezone),
+  );
+  const [customTo, setCustomTo] = useState(() =>
+    inputDate(new Date(Date.parse(range.to) - 1), timezone),
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [response, setResponse] = useState<WorkoutHistoryListResponse | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [blockingError, setBlockingError] = useState(false);
+  const [firstPage, setFirstPage] = useState<FirstPageAuthority>({
+    key: null,
+    response: null,
+    initialLoading: true,
+    blockingError: false,
+  });
+  const firstPageRef = useRef(firstPage);
+  firstPageRef.current = firstPage;
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
-  const activeRequestRef = useRef<AbortController | null>(null);
-  const loadMoreRequestRef = useRef<AbortController | null>(null);
-  const [requestGeneration] = useState(() => new WorkoutHistoryRequestGeneration());
-  const queryKeyRef = useRef("");
-  const hasUsableResponseRef = useRef(false);
+  const cursorRequestRef = useRef<CursorRequest | null>(null);
+  const [firstPageCoordinator] = useState(
+    () =>
+      new WorkoutHistoryFirstPageRequestCoordinator<WorkoutHistoryListResponse>(),
+  );
 
-  const range = useMemo(() => {
-    if (mode === "custom" && customRange) return customRange;
-    return workoutHistoryPeriodRange(mode === "custom" ? "month" : mode, anchor, timezone);
-  }, [anchor, customRange, mode, timezone]);
-
-  const request = useMemo(() => ({
-    ...range,
-    limit: 20,
-    search: search || undefined,
-    workoutTypes: filters.workoutType ? [filters.workoutType] : undefined,
-    muscleIds: filters.muscle ? [filters.muscle] : undefined,
-    exerciseIds: filters.exercise ? [filters.exercise] : undefined,
-    planIds: filters.plan ? [filters.plan] : undefined,
-    statuses: filters.statuses,
-    progressOnly: filters.progressOnly || undefined,
-    sort: filters.sort,
-  }), [filters, range, search]);
-  const queryKey = useMemo(() => JSON.stringify(request), [request]);
-  const nextCursor = response?.nextCursor ?? null;
+  const writeNavigation = useCallback(
+    (next: WorkoutHistoryNavigationState) => {
+      const nextParams = workoutHistoryNavigationSearchParams(next);
+      const nextString = nextParams.toString();
+      const currentString = workoutHistoryNavigationSearchParams(
+        navigationRef.current,
+      ).toString();
+      if (nextString === currentString) return;
+      router.push(
+        nextString ? `${pathname}?${nextString}` : pathname,
+        { scroll: false },
+      );
+    },
+    [pathname, router],
+  );
 
   useEffect(() => {
-    hasUsableResponseRef.current = Boolean(response?.items.length);
-  }, [response?.items.length]);
+    setSearchInput(navigationState.search);
+  }, [navigationState.search]);
 
-  const navigationState = useMemo<WorkoutHistoryNavigationState>(() => ({
-    period: mode,
-    range,
-    search,
-    workoutType: filters.workoutType,
-    muscle: filters.muscle,
-    exercise: filters.exercise,
-    plan: filters.plan,
-    statuses: filters.statuses,
-    progressOnly: filters.progressOnly,
-    sort: filters.sort,
-    selected: searchParams.get("selected"),
-  }), [filters, mode, range, search, searchParams]);
-
-  const writeNavigation = useCallback((next: WorkoutHistoryNavigationState) => {
-    const params = workoutHistoryNavigationSearchParams(next);
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [pathname, router]);
+  useEffect(() => {
+    setCustomFrom(inputDate(new Date(range.from), timezone));
+    setCustomTo(
+      inputDate(new Date(Date.parse(range.to) - 1), timezone),
+    );
+  }, [range.from, range.to, timezone]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const normalized = searchInput.normalize("NFKC").replace(/\s+/g, " ").trim();
-      if (normalized === search) return;
-      setSearch(normalized);
-      writeNavigation({ ...navigationState, search: normalized });
+      const normalized = searchInput
+        .normalize("NFKC")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (normalized === navigationState.search) return;
+      writeNavigation({
+        ...navigationRef.current,
+        search: normalized,
+        selected: null,
+      });
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [navigationState, search, searchInput, writeNavigation]);
+  }, [navigationState.search, searchInput, writeNavigation]);
 
-  const urlKey = searchParams.toString();
-  useEffect(() => {
-    const restored = parseWorkoutHistoryNavigationState(new URLSearchParams(urlKey), new Date(), timezone);
-    setMode(restored.period);
-    setAnchor(new Date(restored.range.from));
-    setCustomFrom(inputDate(new Date(restored.range.from), timezone));
-    setCustomTo(inputDate(new Date(Date.parse(restored.range.to) - 1), timezone));
-    setCustomRange(restored.period === "custom" ? restored.range : null);
-    setSearchInput(restored.search);
-    setSearch(restored.search);
-    setFilters({
-      statuses: restored.statuses,
-      progressOnly: restored.progressOnly,
-      workoutType: restored.workoutType,
-      muscle: restored.muscle,
-      exercise: restored.exercise,
-      plan: restored.plan,
-      sort: restored.sort,
-    });
-  }, [timezone, urlKey]);
-
-  const loadFirstPage = useCallback(async () => {
-    if (!userId) return;
-    activeRequestRef.current?.abort();
-    const controller = new AbortController();
-    activeRequestRef.current = controller;
-    loadMoreRequestRef.current?.abort();
-    const generation = requestGeneration.begin();
-    const queryChanged = queryKeyRef.current !== queryKey;
-    queryKeyRef.current = queryKey;
-    if (queryChanged && !hasUsableResponseRef.current) setInitialLoading(true);
-    setBlockingError(false);
+  const cancelCursorRequest = useCallback(() => {
+    cursorRequestRef.current?.controller.abort();
+    cursorRequestRef.current = null;
+    setLoadingMore(false);
     setLoadMoreError(false);
-    try {
-      const next = await getWorkoutHistoryList(userId, request, { signal: controller.signal });
-      if (requestGeneration.accepts(generation, controller.signal)) setResponse(next);
-    } catch {
-      if (requestGeneration.accepts(generation, controller.signal)) setBlockingError(!hasUsableResponseRef.current);
-    } finally {
-      if (requestGeneration.accepts(generation, controller.signal)) setInitialLoading(false);
-    }
-  }, [queryKey, request, requestGeneration, userId]);
+  }, []);
+
+  const loadFirstPage = useCallback(
+    async (force = false) => {
+      const key = firstPageKey;
+      const ownerId = userId;
+      if (!key || !ownerId) return;
+
+      cancelCursorRequest();
+      const existing =
+        firstPageRef.current.key === key
+          ? firstPageRef.current.response
+          : null;
+      const hasUsableResponse = Boolean(existing?.items.length);
+      setFirstPage({
+        key,
+        response: existing,
+        initialLoading: !hasUsableResponse,
+        blockingError: false,
+      });
+
+      try {
+        const coordinated = await firstPageCoordinator.load(
+          key,
+          (signal) =>
+            getWorkoutHistoryList(ownerId, requestRef.current, {
+              accessToken: accessTokenRef.current,
+              signal,
+            }),
+          { force },
+        );
+        if (
+          firstPageKeyRef.current !== key ||
+          !firstPageCoordinator.accepts(coordinated)
+        ) {
+          return;
+        }
+        setFirstPage({
+          key,
+          response: coordinated.value,
+          initialLoading: false,
+          blockingError: false,
+        });
+      } catch {
+        if (
+          firstPageKeyRef.current !== key ||
+          !firstPageCoordinator.isCurrentKey(key)
+        ) {
+          return;
+        }
+        setFirstPage((current) => {
+          const response = current.key === key ? current.response : null;
+          return {
+            key,
+            response,
+            initialLoading: false,
+            blockingError: !response?.items.length,
+          };
+        });
+      }
+    },
+    [
+      cancelCursorRequest,
+      firstPageCoordinator,
+      firstPageKey,
+      userId,
+    ],
+  );
 
   useEffect(() => {
+    cancelCursorRequest();
+    if (!firstPageKey || !userId) {
+      firstPageCoordinator.invalidate();
+      setFirstPage({
+        key: null,
+        response: null,
+        initialLoading: false,
+        blockingError: false,
+      });
+      return;
+    }
     void loadFirstPage();
-    return () => activeRequestRef.current?.abort();
-  }, [loadFirstPage]);
+  }, [
+    cancelCursorRequest,
+    firstPageCoordinator,
+    firstPageKey,
+    loadFirstPage,
+    userId,
+  ]);
+
+  useEffect(
+    () => () => {
+      firstPageCoordinator.dispose();
+      cursorRequestRef.current?.controller.abort();
+      cursorRequestRef.current = null;
+    },
+    [firstPageCoordinator],
+  );
 
   const loadMore = useCallback(async () => {
-    if (!userId || !nextCursor || loadingMore) return;
+    const key = firstPageKeyRef.current;
+    const authority = firstPageRef.current;
+    const ownerId = userId;
+    const nextCursor =
+      authority.key === key ? authority.response?.nextCursor : null;
+    if (!key || !ownerId || !nextCursor) return;
+
+    const cursorRequest: WorkoutHistoryListRequest = {
+      ...requestRef.current,
+      cursor: nextCursor,
+    };
+    const cursorKey = workoutHistoryCursorRequestKey(
+      ownerId,
+      cursorRequest,
+    );
+    if (cursorRequestRef.current?.key === cursorKey) {
+      await cursorRequestRef.current.promise;
+      return;
+    }
+
+    cursorRequestRef.current?.controller.abort();
     const controller = new AbortController();
-    loadMoreRequestRef.current?.abort();
-    loadMoreRequestRef.current = controller;
-    const generation = requestGeneration.current();
     setLoadingMore(true);
     setLoadMoreError(false);
-    try {
-      const next = await getWorkoutHistoryList(userId, {
-        ...request,
-        cursor: nextCursor,
-      }, { signal: controller.signal });
-      if (!requestGeneration.accepts(generation, controller.signal)) return;
-      setResponse((current) => current ? {
-        ...next,
-        summary: current.summary,
-        filterOptions: current.filterOptions,
-        items: [...current.items, ...next.items.filter((candidate) =>
-          !current.items.some((item) => item.activityId === candidate.activityId))],
-      } : next);
-    } catch {
-      if (requestGeneration.accepts(generation, controller.signal)) setLoadMoreError(true);
-    } finally {
-      if (requestGeneration.accepts(generation, controller.signal)) setLoadingMore(false);
-    }
-  }, [loadingMore, nextCursor, request, requestGeneration, userId]);
 
-  const hasFilters = search.length > 0
-    || filters.progressOnly
-    || filters.workoutType.length > 0
-    || filters.muscle.length > 0
-    || filters.exercise.length > 0
-    || filters.plan.length > 0
-    || filters.sort !== defaultFilters.sort
-    || filters.statuses.length !== defaultFilters.statuses.length
-    || filters.statuses.some((status) => !defaultFilters.statuses.includes(status));
+    const promise = (async () => {
+      try {
+        const next = await getWorkoutHistoryList(
+          ownerId,
+          cursorRequest,
+          {
+            accessToken: accessTokenRef.current,
+            signal: controller.signal,
+          },
+        );
+        if (
+          controller.signal.aborted ||
+          firstPageKeyRef.current !== key
+        ) {
+          return;
+        }
+        setFirstPage((current) =>
+          current.key === key && current.response
+            ? {
+                ...current,
+                response: {
+                  ...next,
+                  summary: current.response.summary,
+                  filterOptions: current.response.filterOptions,
+                  items: [
+                    ...current.response.items,
+                    ...next.items.filter(
+                      (candidate) =>
+                        !current.response!.items.some(
+                          (item) =>
+                            item.activityId === candidate.activityId,
+                        ),
+                    ),
+                  ],
+                },
+              }
+            : current,
+        );
+      } catch {
+        if (
+          !controller.signal.aborted &&
+          firstPageKeyRef.current === key
+        ) {
+          setLoadMoreError(true);
+        }
+      } finally {
+        if (cursorRequestRef.current?.key === cursorKey) {
+          cursorRequestRef.current = null;
+          setLoadingMore(false);
+        }
+      }
+    })();
+
+    cursorRequestRef.current = {
+      key: cursorKey,
+      controller,
+      promise,
+    };
+    await promise;
+  }, [userId]);
+
+  const visibleFirstPage =
+    firstPage.key === firstPageKey
+      ? firstPage
+      : {
+          key: firstPageKey,
+          response: null,
+          initialLoading: Boolean(firstPageKey),
+          blockingError: false,
+        };
+  const response = visibleFirstPage.response;
+  const nextCursor = response?.nextCursor ?? null;
+
+  const hasFilters =
+    navigationState.search.length > 0 ||
+    filters.progressOnly ||
+    filters.workoutType.length > 0 ||
+    filters.muscle.length > 0 ||
+    filters.exercise.length > 0 ||
+    filters.plan.length > 0 ||
+    filters.sort !== defaultFilters.sort ||
+    filters.statuses.length !== defaultFilters.statuses.length ||
+    filters.statuses.some(
+      (status) => !defaultFilters.statuses.includes(status),
+    );
+
   let pageState: WorkoutHistoryPageState = "ready";
-  if (initialLoading && !response) pageState = "initial-loading";
-  else if (blockingError && !response?.items.length) pageState = "blocking-error";
-  else if (!response?.items.length) pageState = hasFilters ? "filtered-empty" : "empty";
+  if (visibleFirstPage.initialLoading && !response) {
+    pageState = "initial-loading";
+  } else if (visibleFirstPage.blockingError && !response?.items.length) {
+    pageState = "blocking-error";
+  } else if (!response?.items.length) {
+    pageState = hasFilters ? "filtered-empty" : "empty";
+  }
+
   const visibleNotice = response?.notices.includes("stale-data")
     ? "stale-data"
     : response?.notices.includes("partial-availability")
       ? "partial-availability"
       : null;
-  const selectedId = searchParams.get("selected");
-  const selectedItem = response?.items.find((item) => item.activityId === selectedId) ?? null;
-  const periodDays = Math.max(1, (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
+  const selectedId = navigationState.selected;
+  const selectedItem =
+    response?.items.find((item) => item.activityId === selectedId) ??
+    null;
+  const periodDays = Math.max(
+    1,
+    (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000,
+  );
 
-  const selectDesktopItem = useCallback((item: WorkoutHistoryListResponse["items"][number]) => {
-    writeNavigation({ ...navigationState, selected: item.activityId });
-  }, [navigationState, writeNavigation]);
+  const selectDesktopItem = useCallback(
+    (item: WorkoutHistoryListResponse["items"][number]) => {
+      writeNavigation({
+        ...navigationRef.current,
+        selected: item.activityId,
+      });
+    },
+    [writeNavigation],
+  );
 
   function clearFilters() {
     setSearchInput("");
-    setSearch("");
-    setFilters(defaultFilters);
     setFiltersOpen(false);
     writeNavigation({
-      ...navigationState,
+      ...navigationRef.current,
       search: "",
       workoutType: "",
       muscle: "",
@@ -258,26 +487,66 @@ export function WorkoutHistoryPage() {
     });
   }
 
-  function selectMode(nextMode: WorkoutHistoryPeriodMode) {
-    setMode(nextMode);
-    if (nextMode !== "custom") setCustomRange(null);
-    const nextRange = workoutHistoryPeriodRange(nextMode === "custom" ? "month" : nextMode, new Date(), timezone);
-    setAnchor(new Date());
-    writeNavigation({ ...navigationState, period: nextMode, range: nextRange, selected: null });
+  function selectMode(
+    nextMode: WorkoutHistoryNavigationState["period"],
+  ) {
+    const nextRange = workoutHistoryPeriodRange(
+      nextMode === "custom" ? "month" : nextMode,
+      new Date(),
+      timezone,
+    );
+    writeNavigation({
+      ...navigationRef.current,
+      period: nextMode,
+      range: nextRange,
+      selected: null,
+    });
+  }
+
+  function shiftPeriod(direction: -1 | 1) {
+    const effectiveMode = mode === "custom" ? "month" : mode;
+    const nextAnchor = shiftWorkoutHistoryPeriodAnchor(
+      new Date(range.from),
+      effectiveMode,
+      direction,
+    );
+    const nextRange = workoutHistoryPeriodRange(
+      effectiveMode,
+      nextAnchor,
+      timezone,
+    );
+    writeNavigation({
+      ...navigationRef.current,
+      range: nextRange,
+      selected: null,
+    });
   }
 
   function applyCustomRange() {
     try {
-      const nextRange = customWorkoutHistoryPeriodRange(customFrom, customTo, timezone);
-      setCustomRange(nextRange);
-      writeNavigation({ ...navigationState, period: "custom", range: nextRange, selected: null });
+      const nextRange = customWorkoutHistoryPeriodRange(
+        customFrom,
+        customTo,
+        timezone,
+      );
+      writeNavigation({
+        ...navigationRef.current,
+        period: "custom",
+        range: nextRange,
+        selected: null,
+      });
     } catch {
-      setCustomRange(null);
+      // Draft values remain available for correction.
     }
   }
 
   return (
-    <TrainPageContainer className="space-y-4 pb-8" dir={dir} withGutters data-workout-history-page>
+    <TrainPageContainer
+      className="space-y-4 pb-8"
+      dir={dir}
+      withGutters
+      data-workout-history-page
+    >
       <WorkoutHistoryHeader />
       <WorkoutHistoryPeriodControl
         mode={mode}
@@ -285,18 +554,8 @@ export function WorkoutHistoryPage() {
         customFrom={customFrom}
         customTo={customTo}
         onModeChange={selectMode}
-        onPrevious={() => setAnchor((current) => {
-          const nextAnchor = shiftWorkoutHistoryPeriodAnchor(current, mode === "custom" ? "month" : mode, -1);
-          const nextRange = workoutHistoryPeriodRange(mode === "custom" ? "month" : mode, nextAnchor, timezone);
-          writeNavigation({ ...navigationState, range: nextRange, selected: null });
-          return nextAnchor;
-        })}
-        onNext={() => setAnchor((current) => {
-          const nextAnchor = shiftWorkoutHistoryPeriodAnchor(current, mode === "custom" ? "month" : mode, 1);
-          const nextRange = workoutHistoryPeriodRange(mode === "custom" ? "month" : mode, nextAnchor, timezone);
-          writeNavigation({ ...navigationState, range: nextRange, selected: null });
-          return nextAnchor;
-        })}
+        onPrevious={() => shiftPeriod(-1)}
+        onNext={() => shiftPeriod(1)}
         onCustomFromChange={setCustomFrom}
         onCustomToChange={setCustomTo}
         onApplyCustom={applyCustomRange}
@@ -304,22 +563,29 @@ export function WorkoutHistoryPage() {
 
       {pageState === "ready" && response ? (
         <div className="lg:hidden">
-          <WorkoutHistorySummary summary={response.summary} periodDays={periodDays} />
+          <WorkoutHistorySummary
+            summary={response.summary}
+            periodDays={periodDays}
+          />
         </div>
       ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row">
-        <WorkoutHistorySearch value={searchInput} onChange={setSearchInput} />
+        <WorkoutHistorySearch
+          value={searchInput}
+          onChange={setSearchInput}
+        />
         <WorkoutHistoryFilters
           open={filtersOpen}
           value={filters}
-          resultCount={response?.summary.eligibleWorkoutCount ?? null}
+          resultCount={
+            response?.summary.eligibleWorkoutCount ?? null
+          }
           options={response?.filterOptions}
           onOpenChange={setFiltersOpen}
           onChange={(nextFilters) => {
-            setFilters(nextFilters);
             writeNavigation({
-              ...navigationState,
+              ...navigationRef.current,
               workoutType: nextFilters.workoutType,
               muscle: nextFilters.muscle,
               exercise: nextFilters.exercise,
@@ -337,7 +603,7 @@ export function WorkoutHistoryPage() {
       <WorkoutHistoryStateView
         state={pageState}
         notice={visibleNotice}
-        onRetry={() => void loadFirstPage()}
+        onRetry={() => void loadFirstPage(true)}
         onClearFilters={clearFilters}
       />
 
