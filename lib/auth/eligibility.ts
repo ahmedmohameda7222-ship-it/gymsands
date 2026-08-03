@@ -10,10 +10,11 @@ export const ELIGIBILITY_ERROR_CODES = {
   invalid: "age_invalid",
   ineligible: "age_ineligible",
   reviewRequired: "age_review_required",
-  verificationFailed: "age_verification_failed"
+  verificationFailed: "age_verification_failed",
 } as const;
 
-export type EligibilityErrorCode = (typeof ELIGIBILITY_ERROR_CODES)[keyof typeof ELIGIBILITY_ERROR_CODES];
+export type EligibilityErrorCode =
+  (typeof ELIGIBILITY_ERROR_CODES)[keyof typeof ELIGIBILITY_ERROR_CODES];
 
 export type LaunchAgeResult =
   | { success: true; data: number }
@@ -22,33 +23,91 @@ export type LaunchAgeResult =
 export const launchAgeSchema = {
   safeParse(value: unknown): LaunchAgeResult {
     if (value === null || value === undefined || value === "") {
-      return { success: false, code: ELIGIBILITY_ERROR_CODES.required, message: "Enter your age to continue." };
+      return {
+        success: false,
+        code: ELIGIBILITY_ERROR_CODES.required,
+        message: "Enter your age to continue.",
+      };
     }
-    if (typeof value !== "number" || !Number.isInteger(value) || value > MAXIMUM_PROFILE_AGE || value < 0) {
+    if (
+      typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value > MAXIMUM_PROFILE_AGE ||
+      value < 0
+    ) {
       return {
         success: false,
         code: ELIGIBILITY_ERROR_CODES.invalid,
-        message: `Age must be a whole number between ${MINIMUM_LAUNCH_AGE} and ${MAXIMUM_PROFILE_AGE}.`
+        message: `Age must be a whole number between ${MINIMUM_LAUNCH_AGE} and ${MAXIMUM_PROFILE_AGE}.`,
       };
     }
     if (value < MINIMUM_LAUNCH_AGE) {
       return {
         success: false,
         code: ELIGIBILITY_ERROR_CODES.ineligible,
-        message: `Plaivra is available only to people age ${MINIMUM_LAUNCH_AGE} or older for the initial launch.`
+        message: `Plaivra is available only to people age ${MINIMUM_LAUNCH_AGE} or older for the initial launch.`,
       };
     }
     return { success: true, data: value };
-  }
+  },
 } as const;
 
 export type EligibilityStatus =
   | { eligible: true }
-  | { eligible: false; code: "age_review_required" | "age_verification_failed"; message: string };
+  | {
+      eligible: false;
+      code: "age_review_required" | "age_verification_failed";
+      message: string;
+    };
+
+export type AgeConfirmationConsentFacts = {
+  granted?: boolean;
+  revoked_at?: string | null;
+} | null;
+
+export function evaluateUserLaunchEligibility(input: {
+  ageConfirmationConsent: AgeConfirmationConsentFacts;
+  onboardingAge: number | null | undefined;
+  verificationFailed?: boolean;
+}): EligibilityStatus {
+  if (input.verificationFailed) {
+    return {
+      eligible: false,
+      code: ELIGIBILITY_ERROR_CODES.verificationFailed,
+      message: "Plaivra could not verify age eligibility. Please try again.",
+    };
+  }
+
+  if (
+    !input.ageConfirmationConsent?.granted ||
+    input.ageConfirmationConsent.revoked_at
+  ) {
+    return {
+      eligible: false,
+      code: ELIGIBILITY_ERROR_CODES.reviewRequired,
+      message:
+        "Confirm the current 16+ launch eligibility requirement before using this feature.",
+    };
+  }
+
+  if (
+    typeof input.onboardingAge === "number" &&
+    input.onboardingAge < MINIMUM_LAUNCH_AGE
+  ) {
+    return {
+      eligible: false,
+      code: ELIGIBILITY_ERROR_CODES.reviewRequired,
+      message:
+        "Your saved age needs review before this feature can be used. Your account and privacy controls remain available.",
+    };
+  }
+
+  return { eligible: true };
+}
 
 export async function checkUserLaunchEligibility(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
 ): Promise<EligibilityStatus> {
   const [consentResult, onboardingResult] = await Promise.all([
     supabase
@@ -62,34 +121,21 @@ export async function checkUserLaunchEligibility(
       .from("onboarding_answers")
       .select("age")
       .eq("user_id", userId)
-      .maybeSingle()
+      .maybeSingle(),
   ]);
 
   if (consentResult.error || onboardingResult.error) {
-    return {
-      eligible: false,
-      code: ELIGIBILITY_ERROR_CODES.verificationFailed,
-      message: "Plaivra could not verify age eligibility. Please try again."
-    };
+    return evaluateUserLaunchEligibility({
+      ageConfirmationConsent: null,
+      onboardingAge: null,
+      verificationFailed: true,
+    });
   }
 
-  const consent = consentResult.data as { granted?: boolean; revoked_at?: string | null } | null;
+  const consent = consentResult.data as AgeConfirmationConsentFacts;
   const onboarding = onboardingResult.data as { age?: number | null } | null;
-  if (!consent?.granted || consent.revoked_at) {
-    return {
-      eligible: false,
-      code: ELIGIBILITY_ERROR_CODES.reviewRequired,
-      message: "Confirm the current 16+ launch eligibility requirement before using this feature."
-    };
-  }
-
-  if (typeof onboarding?.age === "number" && onboarding.age < MINIMUM_LAUNCH_AGE) {
-    return {
-      eligible: false,
-      code: ELIGIBILITY_ERROR_CODES.reviewRequired,
-      message: "Your saved age needs review before this feature can be used. Your account and privacy controls remain available."
-    };
-  }
-
-  return { eligible: true };
+  return evaluateUserLaunchEligibility({
+    ageConfirmationConsent: consent,
+    onboardingAge: onboarding?.age,
+  });
 }
