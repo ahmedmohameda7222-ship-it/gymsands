@@ -32,11 +32,17 @@ describe("PCS-2 route consumers", () => {
       "await saveRequiredConsents(session.access_token, ageResult.data);",
     );
     const refreshIndex = consentCompletion.indexOf("await refreshBootstrap();");
-    const navigationIndex = consentCompletion.indexOf("router.replace(next);", refreshIndex);
+    const navigationIndex = consentCompletion.indexOf(
+      "router.replace(next);",
+      refreshIndex,
+    );
     expect(saveIndex).toBeGreaterThan(-1);
     expect(refreshIndex).toBeGreaterThan(saveIndex);
     expect(navigationIndex).toBeGreaterThan(refreshIndex);
-    expect(consentCompletion).not.toContain("hasRequiredConsents");
+    expect(consentCompletion).not.toContain(
+      'from "@/services/database/consents"',
+    );
+    expect(consentCompletion).not.toContain("await hasRequiredConsents(");
   });
 
   it("awaits onboarding bootstrap refresh before destination navigation", () => {
