@@ -7,6 +7,7 @@ import {
 import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";
 import { AGE_CONFIRMATION_VERSION, REQUIRED_CONSENTS } from "@/lib/legal/versions";
 import { isOnboardingComplete } from "@/lib/onboarding/adaptive-profile";
+import { isThemeId, themeCacheKey } from "@/lib/themes";
 import {
   defaultUserAppSettings,
   normalizeUserAppSettings,
@@ -189,6 +190,32 @@ export async function fetchPrivateAppBootstrap(
   return normalizePrivateAppBootstrapPayload(data, userId);
 }
 
+function mockBootstrapSettings(userId: string) {
+  let themeId = defaultUserAppSettings.themeId;
+  let language = defaultUserAppSettings.language;
+  if (typeof window !== "undefined") {
+    try {
+      const cachedTheme = window.localStorage.getItem(themeCacheKey);
+      if (isThemeId(cachedTheme)) themeId = cachedTheme;
+      const cachedLanguage = window.localStorage.getItem("plaivra.language.v1");
+      if (
+        cachedLanguage === "en" ||
+        cachedLanguage === "de" ||
+        cachedLanguage === "ar" ||
+        cachedLanguage === "system"
+      ) {
+        language = cachedLanguage;
+      }
+    } catch {
+      // Mock bootstrap stays in memory; display caches are optional QA inputs.
+    }
+  }
+  return normalizeUserAppSettings(
+    { ...defaultUserAppSettings, themeId, language },
+    userId,
+  );
+}
+
 export function createMockPrivateAppBootstrap(
   userId = MOCK_AUTH_USER_ID,
 ): PrivateAppBootstrap {
@@ -230,7 +257,7 @@ export function createMockPrivateAppBootstrap(
         ) ?? null,
       onboardingAge: onboarding.age,
     }),
-    settings: normalizeUserAppSettings(defaultUserAppSettings, userId),
+    settings: mockBootstrapSettings(userId),
   };
 }
 
