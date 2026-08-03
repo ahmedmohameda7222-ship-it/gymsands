@@ -5,20 +5,22 @@ import { createRoot, type Root } from "react-dom/client";
 import type { Session } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  rpc: vi.fn(),
-  getSession: vi.fn(),
-  onAuthStateChange: vi.fn(),
-  authSignOut: vi.fn(),
-  routerReplace: vi.fn(),
-  clearActiveWorkout: vi.fn().mockResolvedValue(undefined),
-  clearHistory: vi.fn().mockResolvedValue(undefined),
-  releaseStores: vi.fn(),
-  authCallback: null as null | ((event: string, session: Session | null) => void),
-}));
-
-const profileUpsert = vi.fn().mockResolvedValue({ error: null });
-const profileFrom = vi.fn(() => ({ upsert: profileUpsert }));
+const mocks = vi.hoisted(() => {
+  const profileUpsert = vi.fn().mockResolvedValue({ error: null });
+  return {
+    rpc: vi.fn(),
+    getSession: vi.fn(),
+    onAuthStateChange: vi.fn(),
+    authSignOut: vi.fn(),
+    routerReplace: vi.fn(),
+    clearActiveWorkout: vi.fn().mockResolvedValue(undefined),
+    clearHistory: vi.fn().mockResolvedValue(undefined),
+    releaseStores: vi.fn(),
+    profileUpsert,
+    profileFrom: vi.fn(() => ({ upsert: profileUpsert })),
+    authCallback: null as null | ((event: string, session: Session | null) => void),
+  };
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.routerReplace }),
@@ -34,7 +36,7 @@ vi.mock("@/lib/supabase/client", () => ({
       signOut: mocks.authSignOut,
     },
     rpc: mocks.rpc,
-    from: profileFrom,
+    from: mocks.profileFrom,
   },
 }));
 vi.mock("@/lib/workouts/active-session-sync", () => ({
@@ -152,7 +154,8 @@ beforeEach(() => {
   mocks.clearHistory.mockClear();
   mocks.releaseStores.mockClear();
   mocks.authCallback = null;
-  profileUpsert.mockClear();
+  mocks.profileUpsert.mockClear();
+  mocks.profileFrom.mockClear();
   privateAppBootstrapMemoryCache.clear();
 });
 
