@@ -41,7 +41,6 @@ export function SessionHistoryPage({
   const accessTokenRef = useRef<string | null>(
     session?.access_token ?? null,
   );
-  accessTokenRef.current = session?.access_token ?? null;
   const { dir, locale, tr } = useTrainTranslation();
   const [detail, setDetail] =
     useState<WorkoutHistorySessionDetailResponse | null>(null);
@@ -51,6 +50,10 @@ export function SessionHistoryPage({
   const projectionRepairAttemptRef = useRef<string | null>(null);
   const timezone =
     Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+  useEffect(() => {
+    accessTokenRef.current = session?.access_token ?? null;
+  }, [session?.access_token]);
 
   const load = useCallback(
     async (
