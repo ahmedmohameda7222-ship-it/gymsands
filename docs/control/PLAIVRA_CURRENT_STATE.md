@@ -51,7 +51,7 @@ The PCS-2 migration application did not deploy application code and did not prom
 | Field | Verified value |
 |---|---|
 | approved PR head | `99c675692d1411c8296d6817a983e379d8c65a36` |
-| squash merge / current Production commit | `92d936bc513af83fff41913477a8148a9ab5b845` |
+| squash merge / current Production commit at closure | `92d936bc513af83fff41913477a8148a9ab5b845` |
 | Vercel deployment | `dpl_DbSrbwJ98HiuZTJQFW7G3hVtkVZy` |
 | deployment target | `production` |
 | deployment state | `READY` |
@@ -72,19 +72,33 @@ The PCS-2 migration application did not deploy application code and did not prom
 | compute region | `fra1` |
 | runtime-error clusters during closure verification | `0` |
 
-PCS-2 is merged, deployed, Production-verified, and closed. The deployed application commit matches `main`, the migration ledger is reconciled, the compatibility marker remains unchanged, and no post-deployment runtime error cluster was detected during the closure verification window.
+PCS-2 is merged, deployed, Production-verified, and closed. The deployed application commit matched `main` at closure, the migration ledger was reconciled, the compatibility marker remained unchanged, and no post-deployment runtime error cluster was detected during the closure verification window.
 
-## PCS-3A implementation candidate
+## PCS-3 request architecture
 
-PCS-3A corrects the Workout History browser request lifecycle without changing server canonical rules or database objects. The candidate makes the URL the committed list-query authority, uses a canonical owner/query key for first-page identity, deduplicates same-key in-flight work, keeps cursor pagination independent, and passes the current AuthProvider access token explicitly to normal list and detail requests.
+### PCS-3A Workout History request stability
 
-PCS-3A is not closed. Closure still requires Product & Engineering Lead QA/QC, Ahmed's explicit approval, squash merge, automatic application deployment, and Production request-count verification. PCS-3B Today projection remains planned. PCS-3 as a whole is not complete.
+PCS-3A was squash-merged into `main` as:
+
+```text
+cf6e86d9b81c0b1cfb9503bcb46e5b1355d39a72
+```
+
+PCS-3A is merged and deployed. It establishes canonical URL/list-query request identity, same-key first-page coordination, independent cursor authority, and explicit AuthProvider-token consumption for normal Workout History list, detail, repair, and Progress History reads. Production request-count evidence for PCS-3A is intentionally deferred to PCS-3C.
+
+### PCS-3B Today authenticated server projection
+
+PCS-3B is the current implementation candidate. It replaces the historical Today browser-to-Supabase read fan-out with one authenticated versioned server projection keyed by owner/date/timezone. The route derives identity from `requireUser(request)`, uses the authenticated RLS-bound Supabase client, returns minimum-data partial-domain envelopes, and preserves existing domain mutation authorities and Today UI behavior.
+
+PCS-3B is not closed. Closure still requires Product & Engineering Lead QA/QC, Ahmed's explicit approval, squash merge, automatic application deployment, and PCS-3C Production verification. No Production performance claim is recorded for the candidate.
+
+PCS-3 remains open. PCS-3C is planned to measure and verify Production request counts and timing evidence for PCS-3A and PCS-3B.
 
 ## Current program
 
 - PCS-1 Repository Control Plane — complete.
 - PCS-2 Private App Bootstrap — complete and Production-verified.
-- PCS-3 Request Architecture — in progress; PCS-3A Workout History Request Stability is the current implementation candidate and PCS-3B Today projection remains planned.
+- PCS-3 Request Architecture — in progress; PCS-3A is merged/deployed, PCS-3B is the current unclosed implementation candidate, and PCS-3C is planned.
 - PCS-4 CI Operating Model — planned.
 - PCS-5 Production Foundation — planned.
 
@@ -95,9 +109,9 @@ PCS-3A is not closed. Closure still requires Product & Engineering Lead QA/QC, A
 | Authentication / account / onboarding | Functional | Private startup converged through the PCS-2 bootstrap authority |
 | Workouts plans and execution | Strong | — |
 | Active Workout offline and multi-device | Strong | — |
-| Workout History | Strong | PCS-3A request-stability correction is an unclosed implementation candidate |
+| Workout History | Strong | PCS-3A request-stability architecture is merged/deployed; Production request evidence is deferred to PCS-3C |
 | Muscle Intelligence and Heat Maps | Strong | Strong foundation |
-| Today | Functional | Request-waterfall debt; PCS-3B remains planned |
+| Today | Functional | PCS-3B authenticated server projection is an unclosed implementation candidate |
 | Nutrition and food logging | Functional | Transactional-convergence debt |
 | Meal planning | Functional | — |
 | Hydration | Functional | — |
@@ -124,9 +138,9 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 ## Confirmed highest-priority technical findings
 
 1. PCS-2 consolidated duplicated private application startup work through one Production-verified bootstrap authority.
-2. Workout History repeated-request debt is addressed by the unclosed PCS-3A implementation candidate and still requires Lead QA/QC, merge, deployment, and Production request verification.
-3. Today performs a broad client-side request waterfall.
+2. PCS-3A Workout History request stability is merged/deployed; Production request-count verification remains deferred to PCS-3C.
+3. PCS-3B addresses Today's broad client-side request fan-out through an unclosed authenticated server-projection candidate.
 4. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
 5. CI and test scripts retain phase-based duplication and are too slow for daily development.
 6. Current Supabase organization is on the Free plan and is not final-launch infrastructure.
-7. Repository planning documents were stale and were not a reliable current-state authority.
+7. Repository control documents are the current authority; historical PR descriptions and chat memory are not.
