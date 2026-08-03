@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import createNextIntlPlugin from "next-intl/plugin";
 
+import { resolveReleaseCompatibilityContract } from "./lib/release/compatibility-contract.mjs";
+
 /** @type {import('next').NextConfig} */
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -32,19 +34,13 @@ const securityHeaders = [
 const migrationLedger = JSON.parse(
   readFileSync(new URL("./supabase/migration-ledger.json", import.meta.url), "utf8")
 );
-const migrationEntries = migrationLedger.entries ?? [];
-const resolvedMigrationStates = new Set(["applied", "applied_version_alias"]);
-const latestAppliedMigration = [...migrationEntries]
-  .filter((entry) => resolvedMigrationStates.has(entry.state) && typeof entry.productionVersion === "string")
-  .sort((left, right) => left.productionVersion.localeCompare(right.productionVersion))
-  .at(-1)?.productionVersion ?? "";
-const pendingMigrationCount = migrationEntries.filter((entry) => entry.state === "pending").length;
-const schemaAppliedUntrackedCount = migrationEntries.filter(
-  (entry) => entry.state === "applied_schema_untracked"
-).length;
-const unresolvedMigrationCount = migrationEntries.filter(
-  (entry) => !resolvedMigrationStates.has(entry.state)
-).length;
+const releaseCompatibilityContract = JSON.parse(
+  readFileSync(new URL("./config/release-compatibility.json", import.meta.url), "utf8")
+);
+const resolvedReleaseCompatibility = resolveReleaseCompatibilityContract({
+  ledger: migrationLedger,
+  contract: releaseCompatibilityContract
+});
 
 // Values in nextConfig.env are substituted into the built artifact. Runtime code
 // must read these exact names directly rather than dynamically indexing
@@ -61,12 +57,18 @@ const releaseMetadata = {
     process.env.VERCEL_ENV ||
     process.env.NODE_ENV ||
     "",
-  schemaCompatibilityVersion: process.env.PLAIVRA_SCHEMA_COMPATIBILITY_VERSION || "2",
-  expectedDatabaseMigrationVersion: latestAppliedMigration,
-  migrationLedgerReconciliationState: migrationLedger.historyRepair?.state || "unknown",
-  pendingMigrationCount: String(pendingMigrationCount),
-  schemaAppliedUntrackedCount: String(schemaAppliedUntrackedCount),
-  unresolvedMigrationCount: String(unresolvedMigrationCount)
+  schemaCompatibilityVersion:
+    process.env.PLAIVRA_SCHEMA_COMPATIBILITY_VERSION ||
+    resolvedReleaseCompatibility.schemaCompatibilityVersion,
+  expectedDatabaseMigrationVersion:
+    resolvedReleaseCompatibility.expectedDatabaseMigrationVersion,
+  latestAppliedMigrationVersion:
+    resolvedReleaseCompatibility.latestAppliedMigrationVersion,
+  migrationLedgerReconciliationState:
+    resolvedReleaseCompatibility.migrationLedgerReconciliationState,
+  pendingMigrationCount: String(resolvedReleaseCompatibility.pendingMigrationCount),
+  schemaAppliedUntrackedCount: String(resolvedReleaseCompatibility.schemaAppliedUntrackedCount),
+  unresolvedMigrationCount: String(resolvedReleaseCompatibility.unresolvedMigrationCount)
 };
 
 const nextConfig = {
