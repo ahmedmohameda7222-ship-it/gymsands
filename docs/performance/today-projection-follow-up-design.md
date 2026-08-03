@@ -1,6 +1,6 @@
 # Bounded authenticated Today projection
 
-**Status:** PCS-3B implementation candidate; not Production-verified  
+**Status:** PCS-3B implementation candidate; not Production-verified
 **Production measurement:** deferred to PCS-3C
 
 ## Objective
