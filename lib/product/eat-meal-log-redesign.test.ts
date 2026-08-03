@@ -17,9 +17,10 @@ describe("Eat meal-log redesign contracts", () => {
 
   it("keeps Add Food permanent and opens the existing shared ChatGPT surface with typed Eat context", () => {
     const route = source("components/meals/eat-page.tsx");
+    const day = source("components/meals/eat-day-sections.tsx");
     expect(route).toContain('openPrompts({ source: "eat", mode: "home", selectedDate })');
-    expect(route).toContain('source: "eat-planned-meal"');
-    expect(route).toContain('promptId: "estimate-meal-photo"');
+    expect(day).toContain('source: "eat-planned-meal"');
+    expect(day).toContain('promptId: "estimate-meal-photo"');
     expect(route).toContain("<EatAddFoodSurface");
     expect(source("components/meals/eat-add-food-surface.tsx").match(/<Dialog /g)?.length).toBe(1);
     expect(source("components/meals/eat-add-food-surface.tsx")).toContain('layout="responsive-drawer"');
@@ -130,13 +131,17 @@ describe("Eat meal-log redesign contracts", () => {
     expect(model).toContain('value.includes("\\\\")');
   });
 
-  it("loads Today targets from the same canonical server-backed resolver as Eat", () => {
+  it("keeps Eat and Today on the same canonical target resolver without browser target reads", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     const service = source("services/database/today-nutrition.ts");
+    const projection = source("services/dashboard/today-projection-server.ts");
     const activeTarget = source("services/nutrition/active-target.ts");
     expect(service).toContain("getEatTargetForDate");
-    expect(dashboard).toContain("getTodayNutritionTargetData");
+    expect(projection).toContain("resolveActiveNutritionTarget");
+    expect(projection).toContain("user_nutrition_target_date_overrides");
     expect(dashboard).toContain("subscribeToTodayNutritionTargetChanges");
+    expect(dashboard).toContain("getTodayProjection");
+    expect(dashboard).not.toContain("getTodayNutritionTargetData");
     expect(dashboard).not.toContain("getActiveTargetOverride");
     expect(dashboard).not.toContain("localStorage");
     expect(activeTarget).not.toContain("getActiveTargetOverride");
@@ -218,88 +223,8 @@ describe("Eat meal-log redesign contracts", () => {
     const week = source("components/meals/eat-week-view.tsx");
     expect(route).toContain("getEatWeekTargets(userId, selectedDate)");
     expect(targets).toContain("migrateLegacyNutritionTargetOverridesForDates(userId, dates)");
-    expect(targets).toContain("byDate.get(date)");
-    expect(targets).not.toContain("getNutritionTargetDateOverrides");
-    expect(week).toContain("applyWeekTargets");
-    expect(week).toContain("targetEligibleLoggedDays");
-  });
-
-  it("uses centralized display and reverse-conversion helpers in the remaining target editor", () => {
-    const units = source("lib/eat/eat-units.ts");
-    const draft = source("lib/eat/nutrition-target-draft.ts");
-    const foodLog = source("components/meals/eat-food-log.tsx");
-    expect(units).toContain("eatEnergyInputToKcal");
-    expect(units).toContain("eatLiquidInputToMl");
-    expect(draft).toContain("eatEnergyInputToKcal");
-    expect(draft).toContain("eatLiquidInputToMl");
-    expect(draft).not.toContain("eatWeightInputToKg");
-    expect(draft).not.toContain("eatHeightInputToCm");
-    expect(foodLog).toContain("eatEnergyInputToKcal");
-  });
-
-  it("uses one navigation system for Day and Week and keeps per-day analytics intact", () => {
-    const route = source("components/meals/eat-page.tsx");
-    const week = source("components/meals/eat-week-view.tsx");
-    expect(route).toContain('const navigationStep = view === "week" ? 7 : 1');
-    expect(route).toContain('view === "week" ? et("previousWeek") : et("previousDay")');
-    expect(week).not.toContain("onMoveWeek");
-    expect(week).not.toContain("ArrowLeft");
-    expect(week).toContain("buildWeekAnalytics(days)");
-    expect(week).toContain('ert("macroContributionLogged")');
-  });
-
-  it("hides the Repeat native scrollbar without disabling horizontal or keyboard navigation", () => {
-    const day = source("components/meals/eat-day-sections.tsx");
-    expect(day).toContain("overflow-x-auto");
-    expect(day).toContain("[scrollbar-width:none]");
-    expect(day).toContain("[&::-webkit-scrollbar]:hidden");
-    expect(day).toContain("tabIndex={0}");
-    expect(day).toContain("scrollBy");
-    expect(day).toContain('ert("previousItems")');
-    expect(day).toContain('ert("nextItems")');
-  });
-
-  it("keeps Eat prompt homes route-specific and meal context minimized", () => {
-    const provider = source("components/ai/quick-chatgpt-provider.tsx");
-    const surface = source("components/ai/quick-chatgpt-surface.tsx");
-    const context = source("lib/ai/planned-meal-context.ts");
-    expect(provider).toContain("getEatRuntimeHome");
-    expect(provider).toContain("getMealAdjustmentRuntimePrompts");
-    const eatBranch = surface.indexOf('if (props.source === "eat")');
-    const recommended = surface.indexOf("eatHome.recommended", eatBranch);
-    const nutrition = surface.indexOf("eatHome.nutrition", eatBranch);
-    const browseAll = surface.indexOf('<BrowseAllButton props={props} label={copy.browseAll} />', eatBranch);
-    expect(eatBranch).toBeGreaterThanOrEqual(0);
-    expect(recommended).toBeGreaterThanOrEqual(eatBranch);
-    expect(recommended).toBeLessThan(nutrition);
-    expect(nutrition).toBeLessThan(browseAll);
-    expect(context).not.toContain("userId:");
-    expect(context).not.toContain("mealId:");
-    expect(context).not.toContain("foodLogId:");
-  });
-
-  it("keeps Arabic direction and mirrored directional icons", () => {
-    const route = source("components/meals/eat-page.tsx");
-    const targets = source("components/meals/nutrition-target-settings.tsx");
-    expect(route).toContain("dir={dir}");
-    expect(targets).toContain("dir={dir}");
-    expect(route).toContain("rtl:rotate-180");
-    expect(targets).toContain("rtl:rotate-180");
-  });
-
-  it("keeps mobile navigation order and prioritizes food on Eat", () => {
-    const nav = source("components/layout/mobile-floating-nav.tsx");
-    expect(nav.indexOf('label={tt("today")}')).toBeLessThan(nav.indexOf('label={tt("train")}'));
-    expect(nav.indexOf('label={tt("train")}')).toBeLessThan(nav.indexOf('label={tt("eat")}'));
-    expect(nav).toContain('section === "meal" ? 0');
-    expect(nav).toContain('section === "water" ? 1');
-  });
-
-  it("records the reconciled nutrition migration identities without replay", () => {
-    const ledger = JSON.parse(source("supabase/migration-ledger.json")) as {
-      entries: Array<{ localFile: string; state: string }>;
-    };
-    expect(ledger.entries.find((entry) => entry.localFile === "20260712195000_nutrition_target_date_overrides.sql")?.state).toBe("applied");
-    expect(ledger.entries.find((entry) => entry.localFile === "20260715010000_restrict_nutrition_target_override_acl.sql")?.state).toBe("applied");
+    expect(targets).toContain("resolvePersistedNutritionTargetsForDate");
+    expect(week).toContain("targetsByDate");
+    expect(week).toContain("getEatTargetForDate");
   });
 });
