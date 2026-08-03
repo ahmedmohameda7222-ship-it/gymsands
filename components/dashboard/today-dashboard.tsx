@@ -213,6 +213,7 @@ export function TodayDashboard() {
   const [pendingMealIds, setPendingMealIds] = useState<Set<string>>(new Set());
   const [pendingGroceryIds, setPendingGroceryIds] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState("");
+  const [localHour] = useState(() => new Date().getHours());
 
   useEffect(() => {
     accessTokenRef.current = session?.access_token ?? null;
@@ -441,7 +442,6 @@ export function TodayDashboard() {
     visibleProjection?.shopping.state === "loaded"
       ? visibleProjection.shopping.value.items
       : [];
-  const localHour = new Date().getHours();
   const relevantMeal = selectRelevantMeal(meals, localHour);
   const unbought = groceryItems.filter(
     (item) => !item.checked && !item.alreadyHave,
