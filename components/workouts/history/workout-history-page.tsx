@@ -124,7 +124,6 @@ export function WorkoutHistoryPage() {
     [timezone, urlString],
   );
   const navigationRef = useRef(navigationState);
-  navigationRef.current = navigationState;
 
   const range = navigationState.range;
   const mode = navigationState.period;
@@ -137,12 +136,10 @@ export function WorkoutHistoryPage() {
     [navigationState],
   );
   const requestRef = useRef(request);
-  requestRef.current = request;
 
   const accessTokenRef = useRef<string | null>(
     session?.access_token ?? null,
   );
-  accessTokenRef.current = session?.access_token ?? null;
 
   const firstPageKey = useMemo(
     () =>
@@ -152,7 +149,6 @@ export function WorkoutHistoryPage() {
     [request, userId],
   );
   const firstPageKeyRef = useRef(firstPageKey);
-  firstPageKeyRef.current = firstPageKey;
 
   const [searchInput, setSearchInput] = useState(navigationState.search);
   const [customFrom, setCustomFrom] = useState(() =>
@@ -169,7 +165,6 @@ export function WorkoutHistoryPage() {
     blockingError: false,
   });
   const firstPageRef = useRef(firstPage);
-  firstPageRef.current = firstPage;
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
   const cursorRequestRef = useRef<CursorRequest | null>(null);
@@ -177,6 +172,20 @@ export function WorkoutHistoryPage() {
     () =>
       new WorkoutHistoryFirstPageRequestCoordinator<WorkoutHistoryListResponse>(),
   );
+
+  useEffect(() => {
+    navigationRef.current = navigationState;
+    requestRef.current = request;
+    accessTokenRef.current = session?.access_token ?? null;
+    firstPageKeyRef.current = firstPageKey;
+    firstPageRef.current = firstPage;
+  }, [
+    firstPage,
+    firstPageKey,
+    navigationState,
+    request,
+    session?.access_token,
+  ]);
 
   const writeNavigation = useCallback(
     (next: WorkoutHistoryNavigationState) => {
