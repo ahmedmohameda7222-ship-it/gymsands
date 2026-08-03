@@ -50,13 +50,12 @@ vi.mock("@/lib/workouts/history/offline-cache", () => ({
 }));
 
 import { AuthProvider, useAuth } from "@/components/auth/auth-provider";
-import {
-  privateAppBootstrapMemoryCache,
-} from "@/lib/auth/private-app-bootstrap";
+import { privateAppBootstrapMemoryCache } from "@/lib/auth/private-app-bootstrap";
 import { REQUIRED_CONSENTS } from "@/lib/legal/versions";
 
 const userA = "11111111-1111-4111-8111-111111111111";
 const userB = "22222222-2222-4222-8222-222222222222";
+const userC = "33333333-3333-4333-8333-333333333333";
 
 function session(userId: string): Session {
   return {
@@ -95,6 +94,14 @@ function rpcPayload(userId: string) {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 type AuthSnapshot = ReturnType<typeof useAuth>;
 let latest: AuthSnapshot | null = null;
 let root: Root | null = null;
@@ -111,6 +118,14 @@ function Probe() {
 async function flush() {
   await act(async () => {
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function emitAuthEvent(event: string, nextSession: Session | null) {
+  await act(async () => {
+    mocks.authCallback?.(event, nextSession);
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -150,9 +165,9 @@ beforeEach(() => {
   mocks.onAuthStateChange.mockReset();
   mocks.authSignOut.mockReset().mockResolvedValue({ error: null });
   mocks.routerReplace.mockReset();
-  mocks.clearActiveWorkout.mockClear();
-  mocks.clearHistory.mockClear();
-  mocks.releaseStores.mockClear();
+  mocks.clearActiveWorkout.mockReset().mockResolvedValue(undefined);
+  mocks.clearHistory.mockReset().mockResolvedValue(undefined);
+  mocks.releaseStores.mockReset();
   mocks.authCallback = null;
   mocks.profileUpsert.mockClear();
   mocks.profileFrom.mockClear();
@@ -169,7 +184,7 @@ afterEach(async () => {
 });
 
 describe("AuthProvider private bootstrap authority", () => {
-  it("deduplicates getSession plus INITIAL_SESSION and repeated same-session events", async () => {
+  it("deduplicates getSession plus INITIAL_SESSION and repeated same-user events", async () => {
     const initial = session(userA);
     mocks.rpc.mockResolvedValue({ data: rpcPayload(userA), error: null });
     await mount(initial);
@@ -178,83 +193,138 @@ describe("AuthProvider private bootstrap authority", () => {
     expect(mocks.rpc).toHaveBeenCalledWith("get_private_app_bootstrap_v1");
     expect(latest?.bootstrapStatus).toBe("ready");
 
-    await act(async () => {
-      mocks.authCallback?.("TOKEN_REFRESHED", initial);
-    });
+    await emitAuthEvent("TOKEN_REFRESHED", initial);
     await flush();
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(latest?.bootstrap?.userId).toBe(userA);
   });
 
-  it("shares an in-flight request and prevents stale user-A completion from overwriting user B", async () => {
-    let resolveA!: (value: unknown) => void;
-    let resolveB!: (value: unknown) => void;
+  it("clears A authority immediately and waits for current A-to-B cleanup before bootstrapping B", async () => {
+    const cleanupA = deferred<void>();
+    const nextSession = session(userB);
     mocks.rpc
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveA = resolve;
-          }),
-      )
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveB = resolve;
-          }),
-      );
-
-    const initial = session(userA);
-    await mount(initial);
-    expect(mocks.rpc).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      mocks.authCallback?.("SIGNED_IN", initial);
-    });
-    expect(mocks.rpc).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      mocks.authCallback?.("SIGNED_IN", session(userB));
-      await Promise.resolve();
-    });
-    expect(mocks.rpc).toHaveBeenCalledTimes(2);
-
-    await act(async () => {
-      resolveB({ data: rpcPayload(userB), error: null });
-      await Promise.resolve();
-    });
-    await flush();
-    expect(latest?.user?.id).toBe(userB);
-    expect(latest?.bootstrap?.userId).toBe(userB);
-
-    await act(async () => {
-      resolveA({ data: rpcPayload(userA), error: null });
-      await Promise.resolve();
-    });
-    await flush();
-    expect(latest?.user?.id).toBe(userB);
-    expect(latest?.bootstrap?.userId).toBe(userB);
-  });
-
-  it("retries one failed bootstrap and clears user-scoped state on sign-out", async () => {
-    mocks.rpc
-      .mockResolvedValueOnce({ data: null, error: new Error("RPC unavailable") })
-      .mockResolvedValueOnce({ data: rpcPayload(userA), error: null });
+      .mockResolvedValueOnce({ data: rpcPayload(userA), error: null })
+      .mockResolvedValueOnce({ data: rpcPayload(userB), error: null });
     await mount(session(userA));
-    expect(latest?.bootstrapStatus).toBe("error");
+    mocks.clearActiveWorkout.mockImplementationOnce(() => cleanupA.promise);
 
-    await act(async () => {
-      await latest!.refreshBootstrap();
-    });
-    expect(mocks.rpc).toHaveBeenCalledTimes(2);
-    expect(latest?.bootstrapStatus).toBe("ready");
+    await emitAuthEvent("SIGNED_IN", nextSession);
 
-    await act(async () => {
-      await latest!.signOut();
-    });
-    expect(latest?.user).toBeNull();
-    expect(latest?.bootstrap).toBeNull();
+    expect(latest?.user?.id).toBe(userB);
+    expect(latest?.session?.user.id).toBe(userB);
     expect(latest?.profile).toBeNull();
-    expect(mocks.authSignOut).toHaveBeenCalledTimes(1);
+    expect(latest?.bootstrap).toBeNull();
+    expect(latest?.bootstrapStatus).not.toBe("ready");
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
     expect(mocks.clearActiveWorkout).toHaveBeenCalledWith(userA);
     expect(mocks.clearHistory).toHaveBeenCalledWith(userA);
+
+    await emitAuthEvent("TOKEN_REFRESHED", nextSession);
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      cleanupA.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    expect(latest?.user?.id).toBe(userB);
+    expect(latest?.bootstrap?.userId).toBe(userB);
+  });
+
+  it("prevents superseded A-to-B work from starting or publishing after B-to-C wins", async () => {
+    const cleanupA = deferred<void>();
+    const cleanupB = deferred<void>();
+    mocks.rpc
+      .mockResolvedValueOnce({ data: rpcPayload(userA), error: null })
+      .mockResolvedValueOnce({ data: rpcPayload(userC), error: null });
+    await mount(session(userA));
+    mocks.clearActiveWorkout.mockImplementation((userId: string) => {
+      if (userId === userA) return cleanupA.promise;
+      if (userId === userB) return cleanupB.promise;
+      return Promise.resolve();
+    });
+
+    await emitAuthEvent("SIGNED_IN", session(userB));
+    expect(latest?.user?.id).toBe(userB);
+    expect(latest?.bootstrap).toBeNull();
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+
+    await emitAuthEvent("SIGNED_IN", session(userC));
+    expect(latest?.user?.id).toBe(userC);
+    expect(latest?.bootstrap).toBeNull();
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.clearActiveWorkout).toHaveBeenCalledWith(userA);
+    expect(mocks.clearActiveWorkout).toHaveBeenCalledWith(userB);
+
+    await act(async () => {
+      cleanupB.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    expect(latest?.user?.id).toBe(userC);
+    expect(latest?.bootstrap?.userId).toBe(userC);
+
+    await act(async () => {
+      cleanupA.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    expect(latest?.user?.id).toBe(userC);
+    expect(latest?.bootstrap?.userId).toBe(userC);
+  });
+
+  it("clears visible authority before delayed sign-out cleanup resolves", async () => {
+    const cleanupA = deferred<void>();
+    mocks.rpc.mockResolvedValue({ data: rpcPayload(userA), error: null });
+    await mount(session(userA));
+    mocks.clearActiveWorkout.mockImplementationOnce(() => cleanupA.promise);
+
+    let signOutPromise!: Promise<void>;
+    await act(async () => {
+      signOutPromise = latest!.signOut();
+      await Promise.resolve();
+    });
+
+    expect(latest?.user).toBeNull();
+    expect(latest?.session).toBeNull();
+    expect(latest?.profile).toBeNull();
+    expect(latest?.bootstrap).toBeNull();
+    expect(latest?.bootstrapStatus).not.toBe("ready");
+    expect(mocks.clearActiveWorkout).toHaveBeenCalledWith(userA);
+    expect(mocks.clearHistory).toHaveBeenCalledWith(userA);
+    expect(mocks.releaseStores).toHaveBeenCalledWith(userA);
+
+    await act(async () => {
+      cleanupA.resolve();
+      await signOutPromise;
+    });
+
+    expect(mocks.authSignOut).toHaveBeenCalledTimes(1);
+    expect(mocks.routerReplace).toHaveBeenCalledWith("/");
+  });
+
+  it("keeps an explicit error state after a failed refresh so retry remains available", async () => {
+    mocks.rpc
+      .mockResolvedValueOnce({ data: rpcPayload(userA), error: null })
+      .mockResolvedValueOnce({ data: null, error: new Error("RPC unavailable") });
+    await mount(session(userA));
+
+    await act(async () => {
+      await expect(latest!.refreshBootstrap()).rejects.toThrow("RPC unavailable");
+    });
+    await flush();
+
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    expect(latest?.user?.id).toBe(userA);
+    expect(latest?.profile).toBeNull();
+    expect(latest?.bootstrap).toBeNull();
+    expect(latest?.bootstrapStatus).toBe("error");
+    expect(latest?.bootstrapError?.message).toBe("RPC unavailable");
   });
 });
