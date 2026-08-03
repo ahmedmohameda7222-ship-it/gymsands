@@ -8,9 +8,9 @@ import {
 const ownerA = "11111111-1111-4111-8111-111111111111";
 const ownerB = "22222222-2222-4222-8222-222222222222";
 const planA = "11111111-1111-4111-8111-111111111121";
-const planB = "22222222-2222-4222-8222-222222222221";
-const dayA = "11111111-1111-4111-8111-111111111122";
-const dayB = "22222222-2222-4222-8222-222222222222";
+const emptyDay = "11111111-1111-4111-8111-111111111122";
+const populatedDay = "11111111-1111-4111-8111-111111111123";
+const otherDay = "11111111-1111-4111-8111-111111111124";
 
 type Row = Record<string, unknown>;
 type Dataset = Record<string, Row[]>;
@@ -93,7 +93,7 @@ class FakeQuery implements PromiseLike<unknown> {
       return {
         data: null,
         count: null,
-        error: new Error(`raw ${this.table} database failure`),
+        error: new Error(`raw ${this.table} database failure token=private`),
       };
     }
 
@@ -143,7 +143,7 @@ class FakeSupabase {
   }
 }
 
-function populatedDataset(cardinality = 5): Dataset {
+function workoutDataset(cardinality = 4): Dataset {
   return {
     user_workout_plans: [
       {
@@ -155,7 +155,7 @@ function populatedDataset(cardinality = 5): Dataset {
         session_duration_minutes: 50,
       },
       {
-        id: planB,
+        id: "private-plan-b",
         user_id: ownerB,
         is_active: true,
         archived_at: null,
@@ -165,43 +165,43 @@ function populatedDataset(cardinality = 5): Dataset {
     ],
     user_workout_plan_days: [
       {
-        id: dayA,
+        id: emptyDay,
         plan_id: planA,
         weekday: "Monday",
         day_number: 1,
-        day_name: "Owner A strength",
+        day_name: "Empty Monday",
       },
       {
-        id: dayB,
-        plan_id: planB,
+        id: populatedDay,
+        plan_id: planA,
         weekday: "Monday",
-        day_number: 1,
-        day_name: "Owner B private plan",
+        day_number: 2,
+        day_name: "Populated Monday",
+      },
+      {
+        id: otherDay,
+        plan_id: planA,
+        weekday: "Tuesday",
+        day_number: 3,
+        day_name: "Other day",
       },
     ],
-    user_workout_plan_exercises: [
-      ...Array.from({ length: cardinality }, (_, index) => ({
-        id: `exercise-a-${index}`,
-        plan_day_id: dayA,
-        exercise_name: `Owner A exercise ${index}`,
+    user_workout_plan_exercises: Array.from(
+      { length: cardinality },
+      (_, index) => ({
+        id: `exercise-${index}`,
+        plan_day_id: populatedDay,
+        exercise_name: `Exercise ${index}`,
         sets: 3,
         reps: "8-10",
         sort_order: index,
-      })),
-      {
-        id: "exercise-b-private",
-        plan_day_id: dayB,
-        exercise_name: "Owner B private exercise",
-        sets: 9,
-        reps: 99,
-        sort_order: 0,
-      },
-    ],
+      }),
+    ),
     workout_sessions: [
       {
-        id: "active-a",
+        id: "active-today",
         user_id: ownerA,
-        plan_day_id: dayA,
+        plan_day_id: populatedDay,
         status: "started",
         deleted_at: null,
         started_at: "2026-08-03T06:00:00Z",
@@ -209,9 +209,19 @@ function populatedDataset(cardinality = 5): Dataset {
         skipped_at: null,
       },
       {
-        id: "completed-cross-midnight-a",
+        id: "legacy-completed-other-day",
         user_id: ownerA,
-        plan_day_id: dayA,
+        plan_day_id: otherDay,
+        status: "completed",
+        deleted_at: null,
+        started_at: "2026-08-01T06:00:00Z",
+        completed_at: "2026-08-01T07:00:00Z",
+        skipped_at: null,
+      },
+      {
+        id: "legacy-completed-cross-midnight",
+        user_id: ownerA,
+        plan_day_id: populatedDay,
         status: "completed",
         deleted_at: null,
         started_at: "2026-08-02T22:30:00Z",
@@ -219,9 +229,19 @@ function populatedDataset(cardinality = 5): Dataset {
         skipped_at: null,
       },
       {
-        id: "private-b",
+        id: "legacy-deleted",
+        user_id: ownerA,
+        plan_day_id: populatedDay,
+        status: "completed",
+        deleted_at: "2026-08-03T09:00:00Z",
+        started_at: "2026-08-03T07:00:00Z",
+        completed_at: "2026-08-03T08:00:00Z",
+        skipped_at: null,
+      },
+      {
+        id: "legacy-private-b",
         user_id: ownerB,
-        plan_day_id: dayB,
+        plan_day_id: populatedDay,
         status: "completed",
         deleted_at: null,
         started_at: "2026-08-03T07:00:00Z",
@@ -231,9 +251,9 @@ function populatedDataset(cardinality = 5): Dataset {
     ],
     user_workout_sessions: [
       {
-        id: "scheduled-completed-a",
+        id: "scheduled-completed-today",
         user_id: ownerA,
-        plan_day_id: dayA,
+        plan_day_id: populatedDay,
         scheduled_date: "2026-08-03",
         status: "completed",
         started_at: "2026-08-03T08:00:00Z",
@@ -241,40 +261,53 @@ function populatedDataset(cardinality = 5): Dataset {
         skipped_at: null,
       },
       {
-        id: "scheduled-skipped-a",
+        id: "scheduled-completed-other-day",
         user_id: ownerA,
-        plan_day_id: dayA,
+        plan_day_id: otherDay,
+        scheduled_date: "2026-08-01",
+        status: "completed",
+        started_at: "2026-08-01T08:00:00Z",
+        completed_at: "2026-08-01T09:00:00Z",
+        skipped_at: null,
+      },
+      {
+        id: "scheduled-skipped-today",
+        user_id: ownerA,
+        plan_day_id: populatedDay,
         scheduled_date: "2026-08-03",
         status: "skipped",
         started_at: null,
         completed_at: null,
         skipped_at: "2026-08-03T07:00:00Z",
       },
-    ],
-    user_meal_plan_items: [
-      ...Array.from({ length: cardinality }, (_, index) => ({
-        id: `meal-a-${index}`,
-        user_id: ownerA,
-        plan_date: "2026-08-03",
-        meal_type: index % 2 ? "Lunch" : "Breakfast",
-        food_name: `Owner A meal ${index}`,
-        calories: 300,
-        protein_g: 25,
-        status: index === 0 ? "planned" : "done",
-        created_at: `2026-08-03T0${index}:00:00Z`,
-      })),
       {
-        id: "meal-b-private",
+        id: "scheduled-private-b",
         user_id: ownerB,
-        plan_date: "2026-08-03",
-        meal_type: "Dinner",
-        food_name: "Owner B private meal",
-        calories: 999,
-        protein_g: 99,
-        status: "planned",
-        created_at: "2026-08-03T00:00:00Z",
+        plan_day_id: populatedDay,
+        scheduled_date: "2026-08-03",
+        status: "completed",
+        started_at: "2026-08-03T08:00:00Z",
+        completed_at: "2026-08-03T09:00:00Z",
+        skipped_at: null,
       },
     ],
+  };
+}
+
+function populatedDataset(cardinality = 4): Dataset {
+  return {
+    ...workoutDataset(cardinality),
+    user_meal_plan_items: Array.from({ length: cardinality }, (_, index) => ({
+      id: `meal-${index}`,
+      user_id: ownerA,
+      plan_date: "2026-08-03",
+      meal_type: index % 2 ? "Lunch" : "Breakfast",
+      food_name: `Meal ${index}`,
+      calories: 300,
+      protein_g: 25,
+      status: index === 0 ? "planned" : "done",
+      created_at: `2026-08-03T0${index}:00:00Z`,
+    })),
     food_logs: [
       {
         user_id: ownerA,
@@ -310,14 +343,6 @@ function populatedDataset(cardinality = 5): Dataset {
         fat_g: 80,
         water_ml: 3000,
       },
-      {
-        user_id: ownerB,
-        daily_calories: 9999,
-        protein_g: 999,
-        carbs_g: 999,
-        fat_g: 999,
-        water_ml: 9999,
-      },
     ],
     user_nutrition_target_profiles: [
       {
@@ -337,64 +362,32 @@ function populatedDataset(cardinality = 5): Dataset {
     water_logs: [
       { user_id: ownerA, log_date: "2026-08-03", amount_ml: 500 },
       { user_id: ownerA, log_date: "2026-08-03", amount_ml: 750 },
-      { user_id: ownerB, log_date: "2026-08-03", amount_ml: 9999 },
     ],
-    user_grocery_items: [
-      ...Array.from({ length: cardinality }, (_, index) => ({
-        id: `grocery-a-${index}`,
-        user_id: ownerA,
-        week_start: "2026-08-03",
-        item_name: `Owner A grocery ${index}`,
-        quantity: 1,
-        unit: "item",
-        store_section: "Produce",
-        checked: false,
-        already_have: false,
-      })),
-      {
-        id: "grocery-b-private",
-        user_id: ownerB,
-        week_start: "2026-08-03",
-        item_name: "Owner B private grocery",
-        quantity: 1,
-        unit: "item",
-        store_section: "Private",
-        checked: false,
-        already_have: false,
-      },
-    ],
-    fitness_habits: [
-      ...Array.from({ length: cardinality }, (_, index) => ({
-        user_id: ownerA,
-        habit_date: "2026-08-03",
-        name: `Owner A habit ${index}`,
-        completed: index % 2 === 0,
-        created_at: `2026-08-03T0${index}:00:00Z`,
-      })),
-      {
-        user_id: ownerB,
-        habit_date: "2026-08-03",
-        name: "Owner B private habit",
-        completed: false,
-        created_at: "2026-08-03T00:00:00Z",
-      },
-    ],
-    supplement_logs: [
-      ...Array.from({ length: cardinality }, (_, index) => ({
-        user_id: ownerA,
-        supplement_date: "2026-08-03",
-        name: `Owner A supplement ${index}`,
-        taken_today: index % 2 === 0,
-        created_at: `2026-08-03T0${index}:00:00Z`,
-      })),
-      {
-        user_id: ownerB,
-        supplement_date: "2026-08-03",
-        name: "Owner B private supplement",
-        taken_today: false,
-        created_at: "2026-08-03T00:00:00Z",
-      },
-    ],
+    user_grocery_items: Array.from({ length: cardinality }, (_, index) => ({
+      id: `grocery-${index}`,
+      user_id: ownerA,
+      week_start: "2026-08-03",
+      item_name: `Grocery ${index}`,
+      quantity: 1,
+      unit: "item",
+      store_section: "Produce",
+      checked: false,
+      already_have: false,
+    })),
+    fitness_habits: Array.from({ length: cardinality }, (_, index) => ({
+      user_id: ownerA,
+      habit_date: "2026-08-03",
+      name: `Habit ${index}`,
+      completed: index % 2 === 0,
+      created_at: `2026-08-03T0${index}:00:00Z`,
+    })),
+    supplement_logs: Array.from({ length: cardinality }, (_, index) => ({
+      user_id: ownerA,
+      supplement_date: "2026-08-03",
+      name: `Supplement ${index}`,
+      taken_today: index % 2 === 0,
+      created_at: `2026-08-03T0${index}:00:00Z`,
+    })),
     sleep_recovery_logs: [
       {
         user_id: ownerA,
@@ -402,13 +395,6 @@ function populatedDataset(cardinality = 5): Dataset {
         hours_slept: 6,
         recovery_level: "low",
         fatigue_level: "high",
-      },
-      {
-        user_id: ownerB,
-        log_date: "2026-08-03",
-        hours_slept: 12,
-        recovery_level: "high",
-        fatigue_level: "low",
       },
     ],
     onboarding_answers: [
@@ -418,25 +404,16 @@ function populatedDataset(cardinality = 5): Dataset {
         training_level: "intermediate",
         nutrition_preferences: [],
       },
-      {
-        user_id: ownerB,
-        goals: ["private"],
-        training_level: "private",
-        nutrition_preferences: ["private"],
-      },
     ],
     user_nutrition_preference_profiles: [
       { user_id: ownerA, preferred_cuisines: ["Mediterranean"] },
-      { user_id: ownerB, preferred_cuisines: ["Private"] },
     ],
     user_fitness_constraints: [
       { user_id: ownerA, injury_or_limitation_labels: [] },
-      { user_id: ownerB, injury_or_limitation_labels: ["Private injury"] },
     ],
     progress_entries: [
       { id: "progress-a-1", user_id: ownerA },
       { id: "progress-a-2", user_id: ownerA },
-      { id: "progress-b-private", user_id: ownerB },
     ],
   };
 }
@@ -462,7 +439,7 @@ beforeEach(() => {
 });
 
 describe("Today server projection", () => {
-  it("maps populated owner-scoped summaries with bounded previews and aggregates", async () => {
+  it("maps owner-scoped summaries with bounded previews and read-only operations", async () => {
     const client = new FakeSupabase(populatedDataset());
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const result = await readTodayProjectionV1(input(client));
@@ -471,21 +448,16 @@ describe("Today server projection", () => {
       state: "loaded",
       value: {
         state: "active",
-        exerciseCount: 5,
-        activeSessionId: "active-a",
+        dayId: populatedDay,
+        exerciseCount: 4,
+        activeSessionId: "active-today",
+        recentCompletedCount: 4,
       },
     });
     expect(
       result.response.workout.state === "loaded" &&
         result.response.workout.value.previewExercises,
     ).toHaveLength(3);
-    expect(
-      result.response.meals.state === "loaded" &&
-        result.response.meals.value.items,
-    ).toHaveLength(5);
-    expect(JSON.stringify(result.response)).not.toMatch(
-      /Owner B private|9999|Private injury/,
-    );
     expect(result.response.nutrition.logs).toMatchObject({
       state: "loaded",
       value: {
@@ -498,49 +470,19 @@ describe("Today server projection", () => {
         foodLogCount: 2,
       },
     });
-    expect(result.response.hydration).toMatchObject({
-      state: "loaded",
-      value: { totalMl: 1250, logCount: 2 },
-    });
-    expect(
-      result.response.wellness.habits.state === "loaded" &&
-        result.response.wellness.habits.value.openPreviewNames,
-    ).toHaveLength(2);
-    expect(
-      result.response.wellness.supplements.state === "loaded" &&
-        result.response.wellness.supplements.value.remainingPreviewNames,
-    ).toHaveLength(2);
-    expect(result.response.wellness.sleep).toMatchObject({
-      state: "loaded",
-      value: { hasData: true, poorRecovery: true, hoursSlept: 6 },
-    });
-    expect(result.response.profileContext).toMatchObject({
-      state: "loaded",
-      value: {
-        hasGoals: true,
-        hasTrainingPreferences: true,
-        hasNutritionPreferences: true,
-        hasConstraints: false,
-      },
-    });
-    expect(result.response.progressContext).toMatchObject({
-      state: "loaded",
-      value: { entryCount: 2 },
-    });
+    expect(JSON.stringify(result.response)).not.toMatch(/9999|private-b/i);
     expect(client.operations).toBe(23);
     expect(client.writes).toBe(0);
-    expect(
-      client.selects.every(({ columns }) => !columns.includes("*")),
-    ).toBe(true);
+    expect(client.selects.every(({ columns }) => !columns.includes("*"))).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("returns successful empty values with the exact empty operation count", async () => {
+  it("returns successful empty values with the truthful empty operation count", async () => {
     const client = new FakeSupabase(emptyDataset());
     const result = await readTodayProjectionV1(input(client));
     expect(result.response.workout).toMatchObject({
       state: "loaded",
-      value: { state: "none" },
+      value: { state: "none", recentCompletedCount: 0 },
     });
     expect(result.response.meals).toMatchObject({
       state: "loaded",
@@ -550,14 +492,10 @@ describe("Today server projection", () => {
       state: "loaded",
       value: { foodLogCount: 0 },
     });
-    expect(result.response.hydration).toMatchObject({
-      state: "loaded",
-      value: { totalMl: 0, logCount: 0 },
-    });
-    expect(client.operations).toBe(16);
+    expect(client.operations).toBe(18);
   });
 
-  it("preserves a partial-domain failure and its populated operation count", async () => {
+  it("preserves safe partial-domain failure and fixed populated operation count", async () => {
     const client = new FakeSupabase(populatedDataset());
     client.failTables.add("user_meal_plan_items");
     const result = await readTodayProjectionV1(input(client));
@@ -567,15 +505,12 @@ describe("Today server projection", () => {
       errorCode: "meals_unavailable",
     });
     expect(result.response.workout.state).toBe("loaded");
-    expect(result.response.nutrition.logs.state).toBe("loaded");
-    expect(JSON.stringify(result.response)).not.toContain(
-      "raw user_meal_plan_items",
-    );
+    expect(JSON.stringify(result.response)).not.toMatch(/raw|token=private/);
     expect(client.operations).toBe(23);
   });
 
-  it("keeps operation count constant as collection cardinality grows", async () => {
-    const typical = new FakeSupabase(populatedDataset(5));
+  it("keeps full projection operation count constant as cardinality grows", async () => {
+    const typical = new FakeSupabase(populatedDataset(4));
     const high = new FakeSupabase(populatedDataset(80));
     await readTodayProjectionV1(input(typical));
     await readTodayProjectionV1(input(high));
@@ -583,49 +518,121 @@ describe("Today server projection", () => {
     expect(high.operations).toBe(23);
   });
 
+  it("counts legacy and scheduled completions across plan days with owner and deletion bounds", async () => {
+    const client = new FakeSupabase(workoutDataset());
+    const result = await readTodayWorkoutProjection(input(client));
+    expect(result.recentCompletedCount).toBe(4);
+    expect(result.dayId).toBe(populatedDay);
+    expect(result.dayName).toBe("Populated Monday");
+    expect(client.operations).toBe(6);
+  });
+
+  it("returns bounded history count without an active plan", async () => {
+    const dataset = workoutDataset();
+    dataset.user_workout_plans = [];
+    const client = new FakeSupabase(dataset);
+    await expect(readTodayWorkoutProjection(input(client))).resolves.toMatchObject({
+      hasPlan: false,
+      state: "none",
+      recentCompletedCount: 4,
+    });
+    expect(client.operations).toBe(3);
+  });
+
+  it("does not let the first empty weekday day hide a later populated day", async () => {
+    const client = new FakeSupabase(workoutDataset());
+    await expect(readTodayWorkoutProjection(input(client))).resolves.toMatchObject({
+      dayId: populatedDay,
+      dayName: "Populated Monday",
+      exerciseCount: 4,
+    });
+    expect(client.operations).toBe(6);
+  });
+
+  it("keeps workout query count constant as sessions, days, and exercises grow", async () => {
+    const typicalData = workoutDataset(4);
+    const highData = workoutDataset(200);
+    highData.user_workout_plan_days.push(
+      ...Array.from({ length: 10 }, (_, index) => ({
+        id: `extra-day-${index}`,
+        plan_id: planA,
+        weekday: "Monday",
+        day_number: index + 3,
+        day_name: `Extra ${index}`,
+      })),
+    );
+    highData.workout_sessions.push(
+      ...Array.from({ length: 100 }, (_, index) => ({
+        id: `legacy-extra-${index}`,
+        user_id: ownerA,
+        plan_day_id: otherDay,
+        status: "completed",
+        deleted_at: null,
+        started_at: "2026-07-01T00:00:00Z",
+        completed_at: "2026-07-01T01:00:00Z",
+        skipped_at: null,
+      })),
+    );
+    highData.user_workout_sessions.push(
+      ...Array.from({ length: 100 }, (_, index) => ({
+        id: `scheduled-extra-${index}`,
+        user_id: ownerA,
+        plan_day_id: otherDay,
+        scheduled_date: "2026-07-01",
+        status: "completed",
+        started_at: "2026-07-01T00:00:00Z",
+        completed_at: "2026-07-01T01:00:00Z",
+        skipped_at: null,
+      })),
+    );
+    const typical = new FakeSupabase(typicalData);
+    const high = new FakeSupabase(highData);
+    await readTodayWorkoutProjection(input(typical));
+    await readTodayWorkoutProjection(input(high));
+    expect(typical.operations).toBe(6);
+    expect(high.operations).toBe(6);
+  });
+
   it("preserves active, skipped, completed, scheduled and timezone precedence", async () => {
     await expect(
-      readTodayWorkoutProjection(input(new FakeSupabase(populatedDataset()))),
+      readTodayWorkoutProjection(input(new FakeSupabase(workoutDataset()))),
     ).resolves.toMatchObject({ state: "active" });
 
-    const skippedData = populatedDataset();
+    const skippedData = workoutDataset();
     skippedData.workout_sessions = skippedData.workout_sessions.filter(
-      (row) => row.id !== "active-a",
+      (row) => row.id !== "active-today",
     );
     await expect(
       readTodayWorkoutProjection(input(new FakeSupabase(skippedData))),
     ).resolves.toMatchObject({ state: "skipped" });
 
-    const completedData = populatedDataset();
+    const completedData = workoutDataset();
     completedData.workout_sessions = completedData.workout_sessions.filter(
-      (row) => row.id !== "active-a",
+      (row) => row.id !== "active-today",
     );
     completedData.user_workout_sessions =
-      completedData.user_workout_sessions.filter(
-        (row) => row.status !== "skipped",
-      );
+      completedData.user_workout_sessions.filter((row) => row.status !== "skipped");
     await expect(
       readTodayWorkoutProjection(input(new FakeSupabase(completedData))),
     ).resolves.toMatchObject({
       state: "completed",
-      completedSessionId: "scheduled-completed-a",
+      completedSessionId: "scheduled-completed-today",
     });
 
-    const timezoneData = populatedDataset();
+    const timezoneData = workoutDataset();
     timezoneData.workout_sessions = timezoneData.workout_sessions.filter(
-      (row) => row.id !== "active-a",
+      (row) => row.id !== "active-today",
     );
     timezoneData.user_workout_sessions = [];
     await expect(
       readTodayWorkoutProjection(input(new FakeSupabase(timezoneData))),
     ).resolves.toMatchObject({
       state: "completed",
-      completedSessionId: "completed-cross-midnight-a",
+      completedSessionId: "legacy-completed-cross-midnight",
     });
 
-    const scheduledData = populatedDataset();
-    scheduledData.workout_sessions =
-      scheduledData.workout_sessions.filter((row) => row.user_id === ownerB);
+    const scheduledData = workoutDataset();
+    scheduledData.workout_sessions = [];
     scheduledData.user_workout_sessions = [];
     await expect(
       readTodayWorkoutProjection(input(new FakeSupabase(scheduledData))),
