@@ -46,8 +46,14 @@ export class WorkoutHistoryFirstPageRequestCoordinator<T> {
     this.loaded = null;
 
     const controller = new AbortController();
-    const promise = Promise.resolve()
-      .then(() => loader(controller.signal))
+    let loaded: Promise<T>;
+    try {
+      loaded = Promise.resolve(loader(controller.signal));
+    } catch (error) {
+      loaded = Promise.reject(error);
+    }
+
+    const promise = loaded
       .then((value) => {
         const result = { key, generation, value };
         if (this.accepts(result) && !controller.signal.aborted) {
