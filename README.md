@@ -12,9 +12,15 @@ User maintains Plaivra context
 
 Plaivra does not independently invent workout or meal plans, diagnose medical conditions, or create a duplicate AI approval queue after successful authorized tool execution.
 
+## Current project authority
+
+Every implementation session must start with [`docs/control/README.md`](docs/control/README.md). It defines the current precedence order for product direction, project sequencing, implementation state, architecture authority, and delivery rules.
+
+Historical PRs, completed phase reports, chat messages, and GitHub Actions artifacts remain evidence, not current planning authority.
+
 ## Authoritative documentation
 
-Read current authority in this order:
+For deeper product, design, platform, and release references, use:
 
 1. `docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md`
 2. `docs/product/PLAIVRA_LONG_TERM_PRODUCT_AND_PLATFORM_PLAN.md`
@@ -44,12 +50,8 @@ Tests enforce source code, schema, SQL verification, structured manifests, and o
 - Web is the active product surface; native applications remain future work.
 - Train Phase 2A provides the additive multi-week program hierarchy while compatibility writers remain bounded until later cutover.
 - Muscle Intelligence uses the approved 60-exercise registry, V1/V2 mapping authorities, advanced visible atlas, deterministic analysis, immutable session snapshots, and V2 runtime cutover.
-- Active Workout AW-1 establishes EN/DE/AR language contracts.
-- AW-2 provides persisted execution state, command authority, idempotency receipts, and durable timeline events.
-- AW-3A provides structured performed metrics; AW-3B provides structured set details; AW-3C provides immutable normalized prescription snapshots and deterministic frozen hydration.
-- AW-4 provides the shared deterministic session engine, serialized command dispatcher, official Active Workout store, and timestamp-projected timer engine. AW-4 is merged; its Production migration was applied exactly once.
-- AW-8 provides derived metrics; AW-9 provides offline and multi-device controller authority; AW-10 closes the Active Workout QA/QC matrix.
-- Plaivra Production contains 76 physical migration records. The ledger classifies 63 exact applications and 13 generated-version aliases. `20260801140043_workout_history_verified_records.sql`, `20260801160000_workout_history_correction_and_soft_delete.sql`, `20260801180000_workout_history_repeat_session.sql`, `20260801194500_workout_history_verified_record_authority_hardening.sql`, `20260801201500_workout_history_verified_record_rebuild.sql`, `20260801203000_workout_history_set_detail_patch_semantics.sql`, `20260801210000_workout_history_correction_muscle_reconcile.sql`, `20260801220000_workout_history_keyset_read_authority.sql`, `20260801223000_workout_history_filter_options.sql` are repository-only pending and have not been applied to Production.
+- Active Workout AW-1 through AW-10 are implemented, including language contracts, persisted execution authority, structured performance data, immutable prescription snapshots, the shared session engine, the completed Active Workout UI, derived metrics, offline and multi-device control, and final QA/QC closure.
+- Workout History migrations are applied in Production. The latest physical Production migration is `20260802114733`; the migration ledger is reconciled with zero pending, untracked, or unresolved migrations.
 - The released compatibility marker remains `20260724232734`. Physical migration advancement and application-release promotion remain separate operations.
 - Repository state alone does not authorize merge, manual deployment, or compatibility-marker promotion.
 
