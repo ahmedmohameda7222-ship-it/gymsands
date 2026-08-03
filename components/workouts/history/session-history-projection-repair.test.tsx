@@ -53,28 +53,14 @@ vi.mock("@/components/ui/button", () => ({
 vi.mock("@/components/workouts/train-ui", () => ({
   TrainPageContainer: ({ children }: { children?: ReactNode }) => <main>{children}</main>,
 }));
-
-for (const moduleName of [
-  "exercise-history-section",
-  "session-history-actions",
-  "session-correction-dialog",
-  "session-history-insight",
-  "session-history-muscle-summary",
-  "session-history-notes",
-  "session-history-summary",
-  "session-history-timeline",
-]) {
-  vi.mock(`@/components/workouts/history/${moduleName}`, () => ({
-    ExerciseHistorySection: () => <div />,
-    SessionHistoryActions: () => <div />,
-    SessionCorrectionDialog: () => <div />,
-    SessionHistoryInsight: () => <div />,
-    SessionHistoryMuscleSummary: () => <div />,
-    SessionHistoryNotes: () => <div />,
-    SessionHistorySummary: () => <div />,
-    SessionHistoryTimeline: () => <div />,
-  }));
-}
+vi.mock("@/components/workouts/history/exercise-history-section", () => ({ ExerciseHistorySection: () => <div /> }));
+vi.mock("@/components/workouts/history/session-history-actions", () => ({ SessionHistoryActions: () => <div /> }));
+vi.mock("@/components/workouts/history/session-correction-dialog", () => ({ SessionCorrectionDialog: () => <div /> }));
+vi.mock("@/components/workouts/history/session-history-insight", () => ({ SessionHistoryInsight: () => <div /> }));
+vi.mock("@/components/workouts/history/session-history-muscle-summary", () => ({ SessionHistoryMuscleSummary: () => <div /> }));
+vi.mock("@/components/workouts/history/session-history-notes", () => ({ SessionHistoryNotes: () => <div /> }));
+vi.mock("@/components/workouts/history/session-history-summary", () => ({ SessionHistorySummary: () => <div /> }));
+vi.mock("@/components/workouts/history/session-history-timeline", () => ({ SessionHistoryTimeline: () => <div /> }));
 
 import { SessionHistoryPage } from "@/components/workouts/history/session-history-page";
 import type { WorkoutHistorySessionDetailResponse } from "@/types/workout-history";
