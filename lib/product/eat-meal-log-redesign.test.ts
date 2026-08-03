@@ -191,14 +191,21 @@ describe("Eat meal-log redesign contracts", () => {
     expect(model).toContain('value.includes("\\\\")');
   });
 
-  it("keeps Eat and Today on the same canonical target resolver without browser target reads", () => {
+  it("keeps verified Eat overrides and Today on the approved pure target precedence", () => {
+    const eatPage = source("components/meals/eat-page.tsx");
+    const eatTargets = source("services/database/eat-targets.ts");
     const dashboard = source("components/dashboard/today-dashboard.tsx");
-    const service = source("services/database/today-nutrition.ts");
     const projection = source(
       "services/dashboard/today-projection-server.ts",
     );
     const activeTarget = source("services/nutrition/active-target.ts");
-    expect(service).toContain("getEatTargetForDate");
+
+    expect(eatPage).toContain("getEatTargetForDate");
+    expect(eatTargets).toContain(
+      "migrateLegacyNutritionTargetOverridesForDates(userId, dates)",
+    );
+    expect(eatTargets).toContain("resolveEatTargetForDate");
+    expect(activeTarget).toContain("export function resolveEatTargetForDate");
     expect(projection).toContain("resolveActiveNutritionTarget");
     expect(projection).toContain(
       "user_nutrition_target_date_overrides",
@@ -208,8 +215,10 @@ describe("Eat meal-log redesign contracts", () => {
     );
     expect(dashboard).toContain("getTodayProjection");
     expect(dashboard).not.toContain("getTodayNutritionTargetData");
+    expect(dashboard).not.toContain("getEatTargetForDate");
     expect(dashboard).not.toContain("getActiveTargetOverride");
     expect(dashboard).not.toContain("localStorage");
+    expect(projection).not.toMatch(/\.insert\(|\.update\(|\.delete\(|\.rpc\(/);
     expect(activeTarget).not.toContain("getActiveTargetOverride");
   });
 
@@ -323,9 +332,7 @@ describe("Eat meal-log redesign contracts", () => {
     expect(targets).toContain(
       "migrateLegacyNutritionTargetOverridesForDates(userId, dates)",
     );
-    expect(targets).toContain(
-      "resolvePersistedNutritionTargetsForDate",
-    );
+    expect(targets).toContain("resolveEatTargetForDate");
     expect(week).toContain("targetsByDate");
     expect(week).toContain("getEatTargetForDate");
   });
