@@ -26,10 +26,30 @@
 
 These values describe the verified audit baseline. Any later runtime, migration, or release change must update this document in the same approved change.
 
+## PCS-2 Production migration reconciliation
+
+| Field | Verified value |
+|---|---|
+| Production project | `bkwezjxvapaeasfvlhvv` |
+| immutable repository migration | `20260803152000_private_app_bootstrap_v1.sql` |
+| generated Production identity | `20260803173755_private_app_bootstrap_v1` |
+| Production migration count | `86` |
+| applied exactly once | `true` |
+| latest physical Production migration | `20260803173755_private_app_bootstrap_v1` |
+| ledger classification | `applied_version_alias` |
+| pendingMigrationCount | `0` |
+| schemaAppliedUntrackedCount | `0` |
+| unresolvedMigrationCount | `0` |
+| migrationLedgerReconciliationState | `reconciled` |
+| released compatibility marker | `20260724232734` |
+| application deployment performed | `false` |
+
+The PCS-2 implementation and Production migration are complete candidates. The migration application did not deploy application code and did not promote the compatibility marker. Exact current application runtime identity still requires verification after the approved squash merge and Production application deployment.
+
 ## Current program
 
 - PCS-1 Repository Control Plane — complete.
-- PCS-2 Private App Bootstrap — current implementation candidate; unclosed pending Lead QA/QC, Production migration authorization, squash merge, and Production verification.
+- PCS-2 Private App Bootstrap — implementation and Production migration complete candidates; unclosed only pending final Lead exact-head QA/QC, squash merge, and Production application deployment with runtime verification.
 - PCS-3 Request Architecture — planned.
 - PCS-4 CI Operating Model — planned.
 - PCS-5 Production Foundation — planned.
@@ -69,7 +89,7 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 
 ## Confirmed highest-priority technical findings
 
-1. PCS-2 addresses duplicated private application startup work through one bootstrap authority; the candidate remains unclosed until its required review, migration, merge, and Production verification complete.
+1. PCS-2 consolidates duplicated private application startup work through one bootstrap authority; implementation and Production migration are complete candidates, but closure still requires final Lead exact-head QA/QC, squash merge, and Production application deployment with runtime verification.
 2. Workout History produces repeated request groups.
 3. Today performs a broad client-side request waterfall.
 4. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
