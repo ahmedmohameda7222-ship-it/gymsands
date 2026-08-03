@@ -42,15 +42,43 @@ These values describe the verified audit baseline. Any later runtime, migration,
 | unresolvedMigrationCount | `0` |
 | migrationLedgerReconciliationState | `reconciled` |
 | released compatibility marker | `20260724232734` |
-| application deployment performed | `false` |
+| application deployment accompanied migration application | `false` |
 
-The PCS-2 implementation and Production migration are complete candidates. The migration application did not deploy application code and did not promote the compatibility marker. Exact current application runtime identity still requires verification after the approved squash merge and Production application deployment.
+The PCS-2 migration application did not deploy application code and did not promote the compatibility marker. Application deployment occurred later, after the approved squash merge.
+
+## PCS-2 Production runtime closure
+
+| Field | Verified value |
+|---|---|
+| approved PR head | `99c675692d1411c8296d6817a983e379d8c65a36` |
+| squash merge / current Production commit | `92d936bc513af83fff41913477a8148a9ab5b845` |
+| Vercel deployment | `dpl_DbSrbwJ98HiuZTJQFW7G3hVtkVZy` |
+| deployment target | `production` |
+| deployment state | `READY` |
+| build timestamp | `2026-08-03T18:07:46.883Z` |
+| Production `/api/version` status | `200` |
+| schemaCompatibilityVersion | `2` |
+| expectedDatabaseMigrationVersion | `20260724232734` |
+| databaseMigrationVersion | `20260724232734` |
+| migrationLedgerReconciliationState | `reconciled` |
+| pendingMigrationCount | `0` |
+| schemaAppliedUntrackedCount | `0` |
+| unresolvedMigrationCount | `0` |
+| migrationVersionCompatible | `true` |
+| migrationLedgerReconciled | `true` |
+| releaseReady | `true` |
+| schemaCompatible | `true` |
+| Production login route | `200` |
+| compute region | `fra1` |
+| runtime-error clusters during closure verification | `0` |
+
+PCS-2 is merged, deployed, Production-verified, and closed. The deployed application commit matches `main`, the migration ledger is reconciled, the compatibility marker remains unchanged, and no post-deployment runtime error cluster was detected during the closure verification window.
 
 ## Current program
 
 - PCS-1 Repository Control Plane — complete.
-- PCS-2 Private App Bootstrap — implementation and Production migration complete candidates; unclosed only pending final Lead exact-head QA/QC, squash merge, and Production application deployment with runtime verification.
-- PCS-3 Request Architecture — planned.
+- PCS-2 Private App Bootstrap — complete and Production-verified.
+- PCS-3 Request Architecture — next approved phase.
 - PCS-4 CI Operating Model — planned.
 - PCS-5 Production Foundation — planned.
 
@@ -58,7 +86,7 @@ The PCS-2 implementation and Production migration are complete candidates. The m
 
 | Capability | Classification | Confirmed note |
 |---|---|---|
-| Authentication / account / onboarding | Functional | — |
+| Authentication / account / onboarding | Functional | Private startup converged through the PCS-2 bootstrap authority |
 | Workouts plans and execution | Strong | — |
 | Active Workout offline and multi-device | Strong | — |
 | Workout History | Strong | Duplicate-request performance debt |
@@ -89,7 +117,7 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 
 ## Confirmed highest-priority technical findings
 
-1. PCS-2 consolidates duplicated private application startup work through one bootstrap authority; implementation and Production migration are complete candidates, but closure still requires final Lead exact-head QA/QC, squash merge, and Production application deployment with runtime verification.
+1. PCS-2 consolidated duplicated private application startup work through one Production-verified bootstrap authority.
 2. Workout History produces repeated request groups.
 3. Today performs a broad client-side request waterfall.
 4. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
