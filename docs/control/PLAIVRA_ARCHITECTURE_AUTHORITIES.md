@@ -5,8 +5,10 @@
 ### Account
 
 - Supabase Auth is identity authority.
-- Profile, account-access state, consent, eligibility, onboarding, and settings must converge through the future PCS-2 private bootstrap.
-- Do not create parallel client authorities for the same account state.
+- Private application startup converges through `public.get_private_app_bootstrap_v1()` and AuthProvider's user-scoped, memory-only bootstrap authority.
+- The bootstrap atomically owns initial profile, account-access, consent, eligibility, onboarding-completion, and user-settings facts for the authenticated client session.
+- ProtectedRoute is a deterministic consumer of bootstrap authority and must not fetch account startup data.
+- No parallel client boot authority or duplicate startup fact store is allowed.
 
 ### Workouts
 

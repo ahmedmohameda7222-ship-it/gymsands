@@ -11,22 +11,39 @@ import {
   useRef,
   useState,
 } from "react";
+
+import { env } from "@/lib/env";
+import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";
+import {
+  createMockPrivateAppBootstrap,
+  fetchPrivateAppBootstrap,
+  privateAppBootstrapMemoryCache,
+  type PrivateAppBootstrap,
+} from "@/lib/auth/private-app-bootstrap";
+import type { BootstrapStatus } from "@/lib/auth/private-route-gate";
 import { supabase } from "@/lib/supabase/client";
 import { clearActiveWorkoutUserData } from "@/lib/workouts/active-session-sync";
 import { releaseActiveSessionStoresForUser } from "@/lib/workouts/active-session-store/store";
 import { clearWorkoutHistoryOwnerCache } from "@/lib/workouts/history/offline-cache";
-import { env } from "@/lib/env";
-import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";
 import type { Profile } from "@/types";
 
 type AuthContextValue = {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
+  bootstrap: PrivateAppBootstrap | null;
+  bootstrapStatus: BootstrapStatus;
+  bootstrapError: Error | null;
   isLoading: boolean;
   isAdmin: boolean;
+  refreshBootstrap: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
+};
+
+type PendingUserTransition = {
+  token: number;
+  userId: string | null;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -57,6 +74,34 @@ async function clearUserOwnedClientState(userId: string | null) {
   ]);
 }
 
+async function repairMissingProfile(user: User) {
+  if (!supabase) throw new Error("Plaivra database configuration is missing.");
+  const { error } = await supabase.from("profiles").upsert(
+    {
+      id: user.id,
+      email: user.email ?? null,
+      full_name: user.email?.split("@")[0] ?? "Plaivra Member",
+    },
+    { onConflict: "id", ignoreDuplicates: true },
+  );
+  if (error) {
+    throw new Error(`Plaivra could not create the missing profile: ${error.message}`);
+  }
+}
+
+async function loadBootstrapWithProfileRepair(user: User) {
+  if (!supabase) throw new Error("Plaivra database configuration is missing.");
+  const first = await fetchPrivateAppBootstrap(supabase, user.id);
+  if (first.profile) return first;
+
+  await repairMissingProfile(user);
+  const repaired = await fetchPrivateAppBootstrap(supabase, user.id);
+  if (!repaired.profile) {
+    throw new Error("Plaivra could not restore the required account profile.");
+  }
+  return repaired;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (env.useMockAuth && isProduction && !env.productionQaBuild) {
     throw new Error(
@@ -66,172 +111,277 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [bootstrap, setBootstrap] = useState<PrivateAppBootstrap | null>(null);
+  const [bootstrapStatus, setBootstrapStatus] =
+    useState<BootstrapStatus>("idle");
+  const [bootstrapError, setBootstrapError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const activeUserIdRef = useRef<string | null>(null);
+  const bootstrapRef = useRef<PrivateAppBootstrap | null>(null);
+  const sessionRef = useRef<Session | null>(null);
+  const generationRef = useRef(0);
+  const pendingTransitionRef = useRef<PendingUserTransition | null>(null);
+  const mountedRef = useRef(true);
   const router = useRouter();
 
-  const loadProfile = useCallback(
-    async (userId: string, email?: string | null) => {
-      if (mockAuthEnabled) {
-        setProfile({
-          id: MOCK_AUTH_USER_ID,
-          email: "member@plaivra.test",
-          full_name: "Plaivra Member",
-          role: "admin",
-          avatar_url: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+  const clearBootstrapAuthority = useCallback((userId?: string | null) => {
+    if (userId) privateAppBootstrapMemoryCache.clear(userId);
+    bootstrapRef.current = null;
+    setBootstrap(null);
+    setProfile(null);
+    setBootstrapStatus("idle");
+    setBootstrapError(null);
+  }, []);
+
+  const loadBootstrapForUser = useCallback(
+    async (user: User, force = false) => {
+      const generation = generationRef.current;
+      if (!mountedRef.current || activeUserIdRef.current !== user.id) return;
+
+      const ready = mockAuthEnabled
+        ? bootstrapRef.current?.userId === user.id
+          ? bootstrapRef.current
+          : null
+        : privateAppBootstrapMemoryCache.peek(user.id);
+      if (!force && ready) {
+        bootstrapRef.current = ready;
+        setBootstrap(ready);
+        setProfile(ready.profile);
+        setBootstrapStatus("ready");
+        setBootstrapError(null);
         return;
       }
 
-      if (!supabase) {
-        console.warn(
-          "Plaivra Supabase configuration is missing. Mock auth is disabled.",
-        );
+      if (!ready) setBootstrapStatus("loading");
+      setBootstrapError(null);
+      try {
+        const result = mockAuthEnabled
+          ? createMockPrivateAppBootstrap(user.id)
+          : await privateAppBootstrapMemoryCache.load(
+              user.id,
+              () => loadBootstrapWithProfileRepair(user),
+              { force },
+            );
+
+        if (
+          !mountedRef.current ||
+          generationRef.current !== generation ||
+          activeUserIdRef.current !== user.id
+        ) {
+          return;
+        }
+        bootstrapRef.current = result;
+        setBootstrap(result);
+        setProfile(result.profile);
+        setBootstrapStatus("ready");
+        setBootstrapError(null);
+      } catch (error) {
+        if (
+          !mountedRef.current ||
+          generationRef.current !== generation ||
+          activeUserIdRef.current !== user.id
+        ) {
+          return;
+        }
+        const normalizedError =
+          error instanceof Error
+            ? error
+            : new Error("Plaivra could not load private account facts.");
+        bootstrapRef.current = null;
+        setBootstrap(null);
         setProfile(null);
-        return;
+        setBootstrapStatus("error");
+        setBootstrapError(normalizedError);
+        throw normalizedError;
       }
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
-      if (error) {
-        console.warn("Plaivra could not load profile.", error.message);
-        setProfile(null);
-        return;
-      }
-
-      if (data) {
-        setProfile(data as Profile);
-        return;
-      }
-
-      const inserted = await supabase
-        .from("profiles")
-        .insert({
-          id: userId,
-          email: email ?? null,
-          full_name: email?.split("@")[0] ?? "Plaivra Member",
-        })
-        .select("*")
-        .maybeSingle();
-
-      if (inserted.error) {
-        console.warn(
-          "Plaivra could not create the missing profile.",
-          inserted.error.message,
-        );
-        setProfile(null);
-        return;
-      }
-
-      setProfile((inserted.data as Profile | null) ?? null);
     },
     [],
   );
 
-  const refreshProfile = useCallback(async () => {
-    const currentUser = session?.user;
-    if (currentUser) {
-      await loadProfile(currentUser.id, currentUser.email);
-    }
-  }, [loadProfile, session?.user]);
+  const reconcileSession = useCallback(
+    async (nextSession: Session | null) => {
+      const previousUserId = activeUserIdRef.current;
+      const nextUserId = nextSession?.user.id ?? null;
+      const userChanged = previousUserId !== nextUserId;
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function boot() {
-      try {
-        if (mockAuthEnabled) {
-          activeUserIdRef.current = MOCK_AUTH_USER_ID;
-          setSession(mockSession);
-          await loadProfile(MOCK_AUTH_USER_ID);
-          return;
-        }
-
-        if (!supabase) {
-          console.warn(
-            "Plaivra Supabase configuration is missing. Sign in is disabled until it is configured.",
-          );
-          activeUserIdRef.current = null;
-          setSession(null);
-          setProfile(null);
-          return;
-        }
-
-        const { data, error } = await supabase.auth.getSession();
-        if (error)
-          console.warn(
-            "Plaivra could not read the current auth session.",
-            error.message,
-          );
-        if (!mounted) return;
-        activeUserIdRef.current = data.session?.user.id ?? null;
-        setSession(data.session);
-        if (data.session?.user) {
-          await loadProfile(data.session.user.id, data.session.user.email);
-        }
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    }
-
-    boot();
-
-    if (!supabase || mockAuthEnabled) return () => undefined;
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, nextSession) => {
-        const previousUserId = activeUserIdRef.current;
-        const nextUserId = nextSession?.user.id ?? null;
+      if (!userChanged) {
         activeUserIdRef.current = nextUserId;
+        sessionRef.current = nextSession;
+        if (mountedRef.current) {
+          setSession(nextSession);
+          setIsLoading(false);
+        }
+
+        if (!nextSession?.user) {
+          clearBootstrapAuthority();
+          return;
+        }
+
+        const pendingTransition = pendingTransitionRef.current;
+        if (pendingTransition?.userId === nextUserId) return;
+        await loadBootstrapForUser(nextSession.user).catch(() => undefined);
+        return;
+      }
+
+      const transitionToken = generationRef.current + 1;
+      generationRef.current = transitionToken;
+      pendingTransitionRef.current = {
+        token: transitionToken,
+        userId: nextUserId,
+      };
+
+      activeUserIdRef.current = nextUserId;
+      sessionRef.current = nextSession;
+      if (mountedRef.current) {
         setSession(nextSession);
         setIsLoading(false);
-        if (previousUserId && previousUserId !== nextUserId) {
-          await clearUserOwnedClientState(previousUserId);
-        }
-        if (nextSession?.user) {
-          setTimeout(() => {
-            loadProfile(nextSession.user.id, nextSession.user.email);
-          }, 0);
-        } else {
-          setProfile(null);
-        }
+        clearBootstrapAuthority();
+      }
+
+      if (previousUserId) {
+        privateAppBootstrapMemoryCache.clear(previousUserId);
+      }
+
+      await clearUserOwnedClientState(previousUserId);
+
+      if (
+        !mountedRef.current ||
+        generationRef.current !== transitionToken ||
+        activeUserIdRef.current !== nextUserId
+      ) {
+        return;
+      }
+
+      if (pendingTransitionRef.current?.token === transitionToken) {
+        pendingTransitionRef.current = null;
+      }
+
+      if (!nextSession?.user) return;
+      await loadBootstrapForUser(nextSession.user).catch(() => undefined);
+    },
+    [clearBootstrapAuthority, loadBootstrapForUser],
+  );
+
+  const refreshBootstrap = useCallback(async () => {
+    const currentUser = sessionRef.current?.user;
+    if (!currentUser) return;
+    await loadBootstrapForUser(currentUser, true);
+  }, [loadBootstrapForUser]);
+
+  const refreshProfile = useCallback(async () => {
+    await refreshBootstrap();
+  }, [refreshBootstrap]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    if (mockAuthEnabled) {
+      activeUserIdRef.current = MOCK_AUTH_USER_ID;
+      sessionRef.current = mockSession;
+      setSession(mockSession);
+      setIsLoading(false);
+      void loadBootstrapForUser(mockUser);
+      return () => {
+        mountedRef.current = false;
+      };
+    }
+
+    if (!supabase) {
+      console.warn(
+        "Plaivra Supabase configuration is missing. Sign in is disabled until it is configured.",
+      );
+      activeUserIdRef.current = null;
+      sessionRef.current = null;
+      setSession(null);
+      clearBootstrapAuthority();
+      setIsLoading(false);
+      return () => {
+        mountedRef.current = false;
+      };
+    }
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, nextSession) => {
+        queueMicrotask(() => {
+          void reconcileSession(nextSession);
+        });
       },
     );
 
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.warn(
+          "Plaivra could not read the current auth session.",
+          error.message,
+        );
+      }
+      if (mountedRef.current) void reconcileSession(data.session);
+    });
+
     return () => {
-      mounted = false;
+      mountedRef.current = false;
+      generationRef.current += 1;
+      pendingTransitionRef.current = null;
       const authListener = listener as unknown as Record<
         string,
         { unsubscribe: () => void }
       >;
       authListener[`sub${"scription"}`].unsubscribe();
     };
-  }, [loadProfile]);
+  }, [clearBootstrapAuthority, loadBootstrapForUser, reconcileSession]);
+
+  const signOut = useCallback(async () => {
+    const userId = session?.user.id ?? activeUserIdRef.current;
+    const transitionToken = generationRef.current + 1;
+    generationRef.current = transitionToken;
+    pendingTransitionRef.current = null;
+    activeUserIdRef.current = null;
+    sessionRef.current = null;
+    if (userId) privateAppBootstrapMemoryCache.clear(userId);
+    setSession(null);
+    setIsLoading(false);
+    clearBootstrapAuthority();
+
+    const cleanupPromise = clearUserOwnedClientState(userId);
+    const authSignOutPromise = supabase
+      ? supabase.auth.signOut()
+      : Promise.resolve({ error: null });
+    await Promise.all([cleanupPromise, authSignOutPromise]);
+
+    if (
+      mountedRef.current &&
+      generationRef.current === transitionToken &&
+      activeUserIdRef.current === null
+    ) {
+      router.replace("/");
+    }
+  }, [clearBootstrapAuthority, router, session]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user: session?.user ?? null,
       session,
       profile,
+      bootstrap,
+      bootstrapStatus,
+      bootstrapError,
       isLoading,
       isAdmin: profile?.role === "admin",
+      refreshBootstrap,
       refreshProfile,
-      signOut: async () => {
-        const userId = session?.user.id ?? activeUserIdRef.current;
-        activeUserIdRef.current = null;
-        await clearUserOwnedClientState(userId);
-        if (supabase) await supabase.auth.signOut();
-        setSession(null);
-        setProfile(null);
-        router.replace("/");
-      },
+      signOut,
     }),
-    [session, profile, isLoading, refreshProfile, router],
+    [
+      bootstrap,
+      bootstrapError,
+      bootstrapStatus,
+      isLoading,
+      profile,
+      refreshBootstrap,
+      refreshProfile,
+      session,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

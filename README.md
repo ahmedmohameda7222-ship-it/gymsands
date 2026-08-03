@@ -51,9 +51,12 @@ Tests enforce source code, schema, SQL verification, structured manifests, and o
 - Train Phase 2A provides the additive multi-week program hierarchy while compatibility writers remain bounded until later cutover.
 - Muscle Intelligence uses the approved 60-exercise registry, V1/V2 mapping authorities, advanced visible atlas, deterministic analysis, immutable session snapshots, and V2 runtime cutover.
 - Active Workout AW-1 through AW-10 are implemented, including language contracts, persisted execution authority, structured performance data, immutable prescription snapshots, the shared session engine, the completed Active Workout UI, derived metrics, offline and multi-device control, and final QA/QC closure.
-- Workout History migrations are applied in Production. The latest physical Production migration is `20260802114733`; the migration ledger is reconciled with zero pending, untracked, or unresolved migrations.
+- Workout History Production migration history remains reconciled through `20260802114733_workout_history_filter_options`.
+- `20260803152000_private_app_bootstrap_v1.sql` was applied exactly once to Plaivra Production as generated migration `20260803173755_private_app_bootstrap_v1`. The immutable repository SQL remains unchanged and is represented by the migration ledger as `applied_version_alias`.
+- Plaivra Production contains **86** physical migration records; the latest physical migration is `20260803173755_private_app_bootstrap_v1`. The canonical ledger records `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`.
 - The released compatibility marker remains `20260724232734`. Physical migration advancement and application-release promotion remain separate operations.
-- Repository state alone does not authorize merge, manual deployment, or compatibility-marker promotion.
+- No application deployment accompanied the PCS-2 migration application.
+- Repository state alone does not authorize merge, manual deployment, migration application, or compatibility-marker promotion.
 
 ## Repository areas
 

@@ -18,6 +18,7 @@ export type QuickLogSection =
   | "sleep"
   | "supplements"
   | "wellness";
+
 const allQuickLogSections: QuickLogSection[] = [
   "water",
   "meal",
@@ -90,7 +91,7 @@ export type UserAppSettings = {
   updatedAt?: string;
 };
 
-type UserAppSettingsRow = {
+export type UserAppSettingsRow = {
   id: string;
   user_id: string;
   theme_id: string;
@@ -233,7 +234,7 @@ function bool(value: unknown, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function quickLogSections(value: unknown) {
+function normalizeQuickLogSections(value: unknown) {
   if (!Array.isArray(value)) return [...allQuickLogSections];
   const selected = value.filter(
     (item): item is QuickLogSection =>
@@ -243,7 +244,7 @@ function quickLogSections(value: unknown) {
   return [...new Set(selected)];
 }
 
-function normalizeSettings(
+export function normalizeUserAppSettings(
   value: Partial<UserAppSettings>,
   userId: string,
 ): UserAppSettings {
@@ -254,11 +255,7 @@ function normalizeSettings(
     themeId: isThemeId(value.themeId)
       ? value.themeId
       : defaultUserAppSettings.themeId,
-    theme: pick(
-      value.theme,
-      ["light", "dark", "system"],
-      defaultUserAppSettings.theme,
-    ),
+    theme: pick(value.theme, ["light", "dark", "system"], defaultUserAppSettings.theme),
     accentColor: pick(
       value.accentColor,
       ["olive", "champagne", "sage"],
@@ -269,31 +266,11 @@ function normalizeSettings(
       ["en", "de", "ar", "system"],
       defaultUserAppSettings.language,
     ),
-    weightUnit: pick(
-      value.weightUnit,
-      ["kg", "lb"],
-      defaultUserAppSettings.weightUnit,
-    ),
-    heightUnit: pick(
-      value.heightUnit,
-      ["cm", "ft-in"],
-      defaultUserAppSettings.heightUnit,
-    ),
-    distanceUnit: pick(
-      value.distanceUnit,
-      ["km", "miles"],
-      defaultUserAppSettings.distanceUnit,
-    ),
-    liquidUnit: pick(
-      value.liquidUnit,
-      ["ml", "oz"],
-      defaultUserAppSettings.liquidUnit,
-    ),
-    energyUnit: pick(
-      value.energyUnit,
-      ["kcal", "kJ"],
-      defaultUserAppSettings.energyUnit,
-    ),
+    weightUnit: pick(value.weightUnit, ["kg", "lb"], defaultUserAppSettings.weightUnit),
+    heightUnit: pick(value.heightUnit, ["cm", "ft-in"], defaultUserAppSettings.heightUnit),
+    distanceUnit: pick(value.distanceUnit, ["km", "miles"], defaultUserAppSettings.distanceUnit),
+    liquidUnit: pick(value.liquidUnit, ["ml", "oz"], defaultUserAppSettings.liquidUnit),
+    energyUnit: pick(value.energyUnit, ["kcal", "kJ"], defaultUserAppSettings.energyUnit),
     bodyMeasurementUnit: pick(
       value.bodyMeasurementUnit,
       ["cm", "inches"],
@@ -333,12 +310,14 @@ function normalizeSettings(
     hideProgressPhotos: bool(value.hideProgressPhotos),
     hideProfileDetails: bool(value.hideProfileDetails),
     privateProfileMode: bool(value.privateProfileMode),
-    quickLogSections: quickLogSections(value.quickLogSections),
+    quickLogSections: normalizeQuickLogSections(value.quickLogSections),
   };
 }
 
-function rowToSettings(row: UserAppSettingsRow): UserAppSettings {
-  return normalizeSettings(
+export function normalizeUserAppSettingsRow(
+  row: UserAppSettingsRow,
+): UserAppSettings {
+  return normalizeUserAppSettings(
     {
       id: row.id,
       themeId: row.theme_id as UserAppSettings["themeId"],
@@ -396,7 +375,7 @@ function rowToSettings(row: UserAppSettingsRow): UserAppSettings {
       hideProgressPhotos: row.hide_progress_photos,
       hideProfileDetails: row.hide_profile_details,
       privateProfileMode: row.private_profile_mode,
-      quickLogSections: quickLogSections(row.quick_log_sections),
+      quickLogSections: normalizeQuickLogSections(row.quick_log_sections),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     },
@@ -465,7 +444,7 @@ function settingsToDatabase(settings: UserAppSettings) {
 }
 
 function fallbackSettings(userId: string): UserAppSettings {
-  return normalizeSettings(defaultUserAppSettings, userId);
+  return normalizeUserAppSettings(defaultUserAppSettings, userId);
 }
 
 export async function getUserAppSettings(
@@ -480,7 +459,7 @@ export async function getUserAppSettings(
       typeof window === "undefined"
         ? null
         : window.localStorage.getItem("plaivra.language.v1");
-    return normalizeSettings(
+    return normalizeUserAppSettings(
       {
         ...defaultUserAppSettings,
         themeId: isThemeId(cachedTheme)
@@ -504,7 +483,7 @@ export async function getUserAppSettings(
     .maybeSingle();
 
   if (error) throw error;
-  if (data) return rowToSettings(data as UserAppSettingsRow);
+  if (data) return normalizeUserAppSettingsRow(data as UserAppSettingsRow);
 
   const defaults = fallbackSettings(userId);
   const inserted = await supabase!
@@ -514,19 +493,19 @@ export async function getUserAppSettings(
     .single();
 
   if (inserted.error) throw inserted.error;
-  return rowToSettings(inserted.data as UserAppSettingsRow);
+  return normalizeUserAppSettingsRow(inserted.data as UserAppSettingsRow);
 }
 
 export async function upsertUserAppSettings(
   userId: string,
   patch: Partial<UserAppSettings>,
 ): Promise<UserAppSettings> {
-  if (!canUseUserSettings(userId))
-    return normalizeSettings({ ...defaultUserAppSettings, ...patch }, userId);
+  if (!canUseUserSettings(userId)) {
+    return normalizeUserAppSettings({ ...defaultUserAppSettings, ...patch }, userId);
+  }
 
   const current = await getUserAppSettings(userId);
-  const next = normalizeSettings({ ...current, ...patch }, userId);
-
+  const next = normalizeUserAppSettings({ ...current, ...patch }, userId);
   const { data, error } = await supabase!
     .from("user_app_settings")
     .upsert(settingsToDatabase(next), { onConflict: "user_id" })
@@ -534,7 +513,7 @@ export async function upsertUserAppSettings(
     .single();
 
   if (error) throw error;
-  return rowToSettings(data as UserAppSettingsRow);
+  return normalizeUserAppSettingsRow(data as UserAppSettingsRow);
 }
 
 export async function resetUserAppSettings(
@@ -550,7 +529,7 @@ export async function resetUserAppSettings(
     .single();
 
   if (error) throw error;
-  return rowToSettings(data as UserAppSettingsRow);
+  return normalizeUserAppSettingsRow(data as UserAppSettingsRow);
 }
 
 export function defaultStartPageToPath(
