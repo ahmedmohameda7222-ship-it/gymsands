@@ -97,6 +97,7 @@ export function UserSettingsProvider({
     bootstrapStatus,
     bootstrapError,
   } = useAuth();
+  const userId = user?.id ?? null;
   const { toast } = useToast();
   const [settings, setSettings] = useState<UserAppSettings>(() =>
     withCachedTheme({
@@ -115,7 +116,7 @@ export function UserSettingsProvider({
   useEffect(() => {
     if (isLoading) return;
 
-    if (!user?.id) {
+    if (!userId) {
       setSettings(
         withDevicePublicPreferences(
           defaultUserAppSettings,
@@ -127,7 +128,7 @@ export function UserSettingsProvider({
       return;
     }
 
-    if (bootstrapStatus === "ready" && bootstrap?.userId === user.id) {
+    if (bootstrapStatus === "ready" && bootstrap?.userId === userId) {
       const authoritative = {
         ...withCachedTheme(bootstrap.settings),
         language: bootstrap.settings.language,
@@ -139,17 +140,17 @@ export function UserSettingsProvider({
       return;
     }
 
-    if (settings.userId !== user.id) {
-      setSettings(withCachedTheme(authenticatedDefaults(user.id)));
+    if (settings.userId !== userId) {
+      setSettings(withCachedTheme(authenticatedDefaults(userId)));
     }
 
     if (bootstrapStatus === "error") {
       const message =
         bootstrapError?.message ?? "Settings could not be loaded.";
       setSettings((current) =>
-        current.userId === user.id
+        current.userId === userId
           ? current
-          : withCachedTheme(authenticatedDefaults(user.id)),
+          : withCachedTheme(authenticatedDefaults(userId)),
       );
       setSaveError(message);
       setIsLoadingSettings(false);
@@ -170,37 +171,34 @@ export function UserSettingsProvider({
     isLoading,
     settings.userId,
     toast,
-    user?.id,
+    userId,
   ]);
 
   const visibleSettings = useMemo(() => {
-    if (user?.id && settings.userId !== user.id) {
-      return withCachedTheme(authenticatedDefaults(user.id));
+    if (userId && settings.userId !== userId) {
+      return withCachedTheme(authenticatedDefaults(userId));
     }
-    if (!user?.id && settings.userId) {
+    if (!userId && settings.userId) {
       return withDevicePublicPreferences(
         defaultUserAppSettings,
         initialLanguagePreference,
       );
     }
     return settings;
-  }, [initialLanguagePreference, settings, user?.id]);
+  }, [initialLanguagePreference, settings, userId]);
 
   const updateSettings = useCallback(
     async (patch: Partial<UserAppSettings>) => {
       const previous = visibleSettings;
-      const optimistic = withUser(
-        { ...visibleSettings, ...patch },
-        user?.id,
-      );
+      const optimistic = withUser({ ...visibleSettings, ...patch }, userId);
 
       setSettings(optimistic);
       cacheThemeId(optimistic.themeId);
-      if (!user?.id) return optimistic;
+      if (!userId) return optimistic;
       setIsSavingSettings(true);
       setSaveError(null);
       try {
-        const saved = await upsertUserAppSettings(user.id, patch);
+        const saved = await upsertUserAppSettings(userId, patch);
         cacheThemeId(saved.themeId);
         setSettings(saved);
         return saved;
@@ -222,20 +220,20 @@ export function UserSettingsProvider({
         setIsSavingSettings(false);
       }
     },
-    [toast, user?.id, visibleSettings],
+    [toast, userId, visibleSettings],
   );
 
   const resetSettings = useCallback(async () => {
-    if (!user?.id) throw new Error("Sign in required to reset settings.");
+    if (!userId) throw new Error("Sign in required to reset settings.");
     const previous = visibleSettings;
-    const optimistic = authenticatedDefaults(user.id);
+    const optimistic = authenticatedDefaults(userId);
 
     setSettings(optimistic);
     cacheThemeId(optimistic.themeId);
     setIsSavingSettings(true);
     setSaveError(null);
     try {
-      const saved = await resetUserAppSettings(user.id);
+      const saved = await resetUserAppSettings(userId);
       cacheThemeId(saved.themeId);
       setSettings(saved);
       return saved;
@@ -254,7 +252,7 @@ export function UserSettingsProvider({
     } finally {
       setIsSavingSettings(false);
     }
-  }, [toast, user?.id, visibleSettings]);
+  }, [toast, userId, visibleSettings]);
 
   const value = useMemo(
     () => ({
