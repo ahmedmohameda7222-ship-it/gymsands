@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   readTodayProjectionV1,
   readTodayWorkoutProjection,
@@ -14,7 +14,6 @@ const dayB = "22222222-2222-4222-8222-222222222222";
 
 type Row = Record<string, unknown>;
 type Dataset = Record<string, Row[]>;
-
 type Filter =
   | { kind: "eq"; column: string; value: unknown }
   | { kind: "is"; column: string; value: unknown }
@@ -24,6 +23,7 @@ type Filter =
 
 class FakeQuery implements PromiseLike<unknown> {
   private filters: Filter[] = [];
+  private selectedColumns: string[] = [];
   private maximum: number | null = null;
   private single = false;
   private countMode = false;
@@ -35,6 +35,7 @@ class FakeQuery implements PromiseLike<unknown> {
   ) {}
 
   select(columns: string, options?: { count?: string; head?: boolean }) {
+    this.selectedColumns = columns.split(",").map((column) => column.trim());
     this.client.selects.push({ table: this.table, columns });
     this.countMode = options?.count === "exact";
     this.head = options?.head === true;
@@ -95,6 +96,7 @@ class FakeQuery implements PromiseLike<unknown> {
         error: new Error(`raw ${this.table} database failure`),
       };
     }
+
     let rows = [...(this.client.dataset[this.table] ?? [])];
     for (const filter of this.filters) {
       rows = rows.filter((row) => {
@@ -107,12 +109,16 @@ class FakeQuery implements PromiseLike<unknown> {
       });
     }
     if (this.maximum !== null) rows = rows.slice(0, this.maximum);
-    if (this.head) {
-      return { data: null, count: rows.length, error: null };
-    }
+    if (this.head) return { data: null, count: rows.length, error: null };
+
+    const projected = rows.map((row) =>
+      Object.fromEntries(
+        this.selectedColumns.map((column) => [column, row[column]]),
+      ),
+    );
     return {
-      data: this.single ? rows[0] ?? null : rows,
-      count: this.countMode ? rows.length : null,
+      data: this.single ? projected[0] ?? null : projected,
+      count: this.countMode ? projected.length : null,
       error: null,
     };
   }
@@ -138,25 +144,6 @@ class FakeSupabase {
 }
 
 function populatedDataset(cardinality = 5): Dataset {
-  const exerciseRows = Array.from({ length: cardinality }, (_, index) => ({
-    id: `exercise-a-${index}`,
-    plan_day_id: dayA,
-    exercise_name: `Owner A exercise ${index}`,
-    sets: 3,
-    reps: "8-10",
-    sort_order: index,
-  }));
-  const mealRows = Array.from({ length: cardinality }, (_, index) => ({
-    id: `meal-a-${index}`,
-    user_id: ownerA,
-    plan_date: "2026-08-03",
-    meal_type: index % 2 ? "Lunch" : "Breakfast",
-    food_name: `Owner A meal ${index}`,
-    calories: 300,
-    protein_g: 25,
-    status: index === 0 ? "planned" : "done",
-    created_at: `2026-08-03T0${index}:00:00Z`,
-  }));
   return {
     user_workout_plans: [
       {
@@ -177,11 +164,30 @@ function populatedDataset(cardinality = 5): Dataset {
       },
     ],
     user_workout_plan_days: [
-      { id: dayA, plan_id: planA, weekday: "Monday", day_number: 1, day_name: "Owner A strength" },
-      { id: dayB, plan_id: planB, weekday: "Monday", day_number: 1, day_name: "Owner B private plan" },
+      {
+        id: dayA,
+        plan_id: planA,
+        weekday: "Monday",
+        day_number: 1,
+        day_name: "Owner A strength",
+      },
+      {
+        id: dayB,
+        plan_id: planB,
+        weekday: "Monday",
+        day_number: 1,
+        day_name: "Owner B private plan",
+      },
     ],
     user_workout_plan_exercises: [
-      ...exerciseRows,
+      ...Array.from({ length: cardinality }, (_, index) => ({
+        id: `exercise-a-${index}`,
+        plan_day_id: dayA,
+        exercise_name: `Owner A exercise ${index}`,
+        sets: 3,
+        reps: "8-10",
+        sort_order: index,
+      })),
       {
         id: "exercise-b-private",
         plan_day_id: dayB,
@@ -246,7 +252,17 @@ function populatedDataset(cardinality = 5): Dataset {
       },
     ],
     user_meal_plan_items: [
-      ...mealRows,
+      ...Array.from({ length: cardinality }, (_, index) => ({
+        id: `meal-a-${index}`,
+        user_id: ownerA,
+        plan_date: "2026-08-03",
+        meal_type: index % 2 ? "Lunch" : "Breakfast",
+        food_name: `Owner A meal ${index}`,
+        calories: 300,
+        protein_g: 25,
+        status: index === 0 ? "planned" : "done",
+        created_at: `2026-08-03T0${index}:00:00Z`,
+      })),
       {
         id: "meal-b-private",
         user_id: ownerB,
@@ -260,13 +276,48 @@ function populatedDataset(cardinality = 5): Dataset {
       },
     ],
     food_logs: [
-      { user_id: ownerA, log_date: "2026-08-03", calories: 500, protein_g: 40, carbs_g: 50, fat_g: 15 },
-      { user_id: ownerA, log_date: "2026-08-03", calories: 250, protein_g: 20, carbs_g: 25, fat_g: 8 },
-      { user_id: ownerB, log_date: "2026-08-03", calories: 9999, protein_g: 999, carbs_g: 999, fat_g: 999 },
+      {
+        user_id: ownerA,
+        log_date: "2026-08-03",
+        calories: 500,
+        protein_g: 40,
+        carbs_g: 50,
+        fat_g: 15,
+      },
+      {
+        user_id: ownerA,
+        log_date: "2026-08-03",
+        calories: 250,
+        protein_g: 20,
+        carbs_g: 25,
+        fat_g: 8,
+      },
+      {
+        user_id: ownerB,
+        log_date: "2026-08-03",
+        calories: 9999,
+        protein_g: 999,
+        carbs_g: 999,
+        fat_g: 999,
+      },
     ],
     calorie_targets: [
-      { user_id: ownerA, daily_calories: 2400, protein_g: 180, carbs_g: 260, fat_g: 80, water_ml: 3000 },
-      { user_id: ownerB, daily_calories: 9999, protein_g: 999, carbs_g: 999, fat_g: 999, water_ml: 9999 },
+      {
+        user_id: ownerA,
+        daily_calories: 2400,
+        protein_g: 180,
+        carbs_g: 260,
+        fat_g: 80,
+        water_ml: 3000,
+      },
+      {
+        user_id: ownerB,
+        daily_calories: 9999,
+        protein_g: 999,
+        carbs_g: 999,
+        fat_g: 999,
+        water_ml: 9999,
+      },
     ],
     user_nutrition_target_profiles: [
       {
@@ -320,7 +371,13 @@ function populatedDataset(cardinality = 5): Dataset {
         completed: index % 2 === 0,
         created_at: `2026-08-03T0${index}:00:00Z`,
       })),
-      { user_id: ownerB, habit_date: "2026-08-03", name: "Owner B private habit", completed: false, created_at: "2026-08-03T00:00:00Z" },
+      {
+        user_id: ownerB,
+        habit_date: "2026-08-03",
+        name: "Owner B private habit",
+        completed: false,
+        created_at: "2026-08-03T00:00:00Z",
+      },
     ],
     supplement_logs: [
       ...Array.from({ length: cardinality }, (_, index) => ({
@@ -330,15 +387,43 @@ function populatedDataset(cardinality = 5): Dataset {
         taken_today: index % 2 === 0,
         created_at: `2026-08-03T0${index}:00:00Z`,
       })),
-      { user_id: ownerB, supplement_date: "2026-08-03", name: "Owner B private supplement", taken_today: false, created_at: "2026-08-03T00:00:00Z" },
+      {
+        user_id: ownerB,
+        supplement_date: "2026-08-03",
+        name: "Owner B private supplement",
+        taken_today: false,
+        created_at: "2026-08-03T00:00:00Z",
+      },
     ],
     sleep_recovery_logs: [
-      { user_id: ownerA, log_date: "2026-08-03", hours_slept: 6, recovery_level: "low", fatigue_level: "high" },
-      { user_id: ownerB, log_date: "2026-08-03", hours_slept: 12, recovery_level: "high", fatigue_level: "low" },
+      {
+        user_id: ownerA,
+        log_date: "2026-08-03",
+        hours_slept: 6,
+        recovery_level: "low",
+        fatigue_level: "high",
+      },
+      {
+        user_id: ownerB,
+        log_date: "2026-08-03",
+        hours_slept: 12,
+        recovery_level: "high",
+        fatigue_level: "low",
+      },
     ],
     onboarding_answers: [
-      { user_id: ownerA, goals: ["strength"], training_level: "intermediate", nutrition_preferences: [] },
-      { user_id: ownerB, goals: ["private"], training_level: "private", nutrition_preferences: ["private"] },
+      {
+        user_id: ownerA,
+        goals: ["strength"],
+        training_level: "intermediate",
+        nutrition_preferences: [],
+      },
+      {
+        user_id: ownerB,
+        goals: ["private"],
+        training_level: "private",
+        nutrition_preferences: ["private"],
+      },
     ],
     user_nutrition_preference_profiles: [
       { user_id: ownerA, preferred_cuisines: ["Mediterranean"] },
@@ -390,13 +475,26 @@ describe("Today server projection", () => {
         activeSessionId: "active-a",
       },
     });
-    expect(result.response.workout.state === "loaded" && result.response.workout.value.previewExercises).toHaveLength(3);
-    expect(result.response.meals.state === "loaded" && result.response.meals.value.items).toHaveLength(5);
-    expect(JSON.stringify(result.response)).not.toMatch(/Owner B private|9999|Private injury/);
+    expect(
+      result.response.workout.state === "loaded" &&
+        result.response.workout.value.previewExercises,
+    ).toHaveLength(3);
+    expect(
+      result.response.meals.state === "loaded" &&
+        result.response.meals.value.items,
+    ).toHaveLength(5);
+    expect(JSON.stringify(result.response)).not.toMatch(
+      /Owner B private|9999|Private injury/,
+    );
     expect(result.response.nutrition.logs).toMatchObject({
       state: "loaded",
       value: {
-        totals: { calories: 750, proteinG: 60, carbsG: 75, fatG: 23 },
+        totals: {
+          calories: 750,
+          proteinG: 60,
+          carbsG: 75,
+          fatG: 23,
+        },
         foodLogCount: 2,
       },
     });
@@ -404,8 +502,14 @@ describe("Today server projection", () => {
       state: "loaded",
       value: { totalMl: 1250, logCount: 2 },
     });
-    expect(result.response.wellness.habits.state === "loaded" && result.response.wellness.habits.value.openPreviewNames).toHaveLength(2);
-    expect(result.response.wellness.supplements.state === "loaded" && result.response.wellness.supplements.value.remainingPreviewNames).toHaveLength(2);
+    expect(
+      result.response.wellness.habits.state === "loaded" &&
+        result.response.wellness.habits.value.openPreviewNames,
+    ).toHaveLength(2);
+    expect(
+      result.response.wellness.supplements.state === "loaded" &&
+        result.response.wellness.supplements.value.remainingPreviewNames,
+    ).toHaveLength(2);
     expect(result.response.wellness.sleep).toMatchObject({
       state: "loaded",
       value: { hasData: true, poorRecovery: true, hoursSlept: 6 },
@@ -425,21 +529,35 @@ describe("Today server projection", () => {
     });
     expect(client.operations).toBe(23);
     expect(client.writes).toBe(0);
-    expect(client.selects.every(({ columns }) => !columns.includes("*"))).toBe(true);
+    expect(
+      client.selects.every(({ columns }) => !columns.includes("*")),
+    ).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("returns successful empty values with the exact empty operation count", async () => {
     const client = new FakeSupabase(emptyDataset());
     const result = await readTodayProjectionV1(input(client));
-    expect(result.response.workout).toMatchObject({ state: "loaded", value: { state: "none" } });
-    expect(result.response.meals).toMatchObject({ state: "loaded", value: { itemCount: 0 } });
-    expect(result.response.nutrition.logs).toMatchObject({ state: "loaded", value: { foodLogCount: 0 } });
-    expect(result.response.hydration).toMatchObject({ state: "loaded", value: { totalMl: 0, logCount: 0 } });
+    expect(result.response.workout).toMatchObject({
+      state: "loaded",
+      value: { state: "none" },
+    });
+    expect(result.response.meals).toMatchObject({
+      state: "loaded",
+      value: { itemCount: 0 },
+    });
+    expect(result.response.nutrition.logs).toMatchObject({
+      state: "loaded",
+      value: { foodLogCount: 0 },
+    });
+    expect(result.response.hydration).toMatchObject({
+      state: "loaded",
+      value: { totalMl: 0, logCount: 0 },
+    });
     expect(client.operations).toBe(16);
   });
 
-  it("preserves a partial-domain failure and keeps the populated operation count", async () => {
+  it("preserves a partial-domain failure and its populated operation count", async () => {
     const client = new FakeSupabase(populatedDataset());
     client.failTables.add("user_meal_plan_items");
     const result = await readTodayProjectionV1(input(client));
@@ -450,7 +568,9 @@ describe("Today server projection", () => {
     });
     expect(result.response.workout.state).toBe("loaded");
     expect(result.response.nutrition.logs.state).toBe("loaded");
-    expect(JSON.stringify(result.response)).not.toContain("raw user_meal_plan_items");
+    expect(JSON.stringify(result.response)).not.toContain(
+      "raw user_meal_plan_items",
+    );
     expect(client.operations).toBe(23);
   });
 
@@ -461,40 +581,54 @@ describe("Today server projection", () => {
     await readTodayProjectionV1(input(high));
     expect(typical.operations).toBe(23);
     expect(high.operations).toBe(23);
-    expect(high.operations).toBe(typical.operations);
   });
 
-  it("preserves active, skipped, completed, and scheduled precedence using the requested timezone", async () => {
-    const activeClient = new FakeSupabase(populatedDataset());
-    await expect(readTodayWorkoutProjection(input(activeClient))).resolves.toMatchObject({ state: "active" });
+  it("preserves active, skipped, completed, scheduled and timezone precedence", async () => {
+    await expect(
+      readTodayWorkoutProjection(input(new FakeSupabase(populatedDataset()))),
+    ).resolves.toMatchObject({ state: "active" });
 
     const skippedData = populatedDataset();
-    skippedData.workout_sessions = skippedData.workout_sessions.filter((row) => row.id !== "active-a");
-    const skippedClient = new FakeSupabase(skippedData);
-    await expect(readTodayWorkoutProjection(input(skippedClient))).resolves.toMatchObject({ state: "skipped" });
+    skippedData.workout_sessions = skippedData.workout_sessions.filter(
+      (row) => row.id !== "active-a",
+    );
+    await expect(
+      readTodayWorkoutProjection(input(new FakeSupabase(skippedData))),
+    ).resolves.toMatchObject({ state: "skipped" });
 
     const completedData = populatedDataset();
-    completedData.workout_sessions = completedData.workout_sessions.filter((row) => row.id !== "active-a");
-    completedData.user_workout_sessions = completedData.user_workout_sessions.filter((row) => row.status !== "skipped");
-    const completedClient = new FakeSupabase(completedData);
-    await expect(readTodayWorkoutProjection(input(completedClient))).resolves.toMatchObject({
+    completedData.workout_sessions = completedData.workout_sessions.filter(
+      (row) => row.id !== "active-a",
+    );
+    completedData.user_workout_sessions =
+      completedData.user_workout_sessions.filter(
+        (row) => row.status !== "skipped",
+      );
+    await expect(
+      readTodayWorkoutProjection(input(new FakeSupabase(completedData))),
+    ).resolves.toMatchObject({
       state: "completed",
       completedSessionId: "scheduled-completed-a",
     });
 
     const timezoneData = populatedDataset();
-    timezoneData.workout_sessions = timezoneData.workout_sessions.filter((row) => row.id !== "active-a");
+    timezoneData.workout_sessions = timezoneData.workout_sessions.filter(
+      (row) => row.id !== "active-a",
+    );
     timezoneData.user_workout_sessions = [];
-    const timezoneClient = new FakeSupabase(timezoneData);
-    await expect(readTodayWorkoutProjection(input(timezoneClient))).resolves.toMatchObject({
+    await expect(
+      readTodayWorkoutProjection(input(new FakeSupabase(timezoneData))),
+    ).resolves.toMatchObject({
       state: "completed",
       completedSessionId: "completed-cross-midnight-a",
     });
 
     const scheduledData = populatedDataset();
-    scheduledData.workout_sessions = scheduledData.workout_sessions.filter((row) => row.status === "started" ? false : row.user_id === ownerB);
+    scheduledData.workout_sessions =
+      scheduledData.workout_sessions.filter((row) => row.user_id === ownerB);
     scheduledData.user_workout_sessions = [];
-    const scheduledClient = new FakeSupabase(scheduledData);
-    await expect(readTodayWorkoutProjection(input(scheduledClient))).resolves.toMatchObject({ state: "scheduled" });
+    await expect(
+      readTodayWorkoutProjection(input(new FakeSupabase(scheduledData))),
+    ).resolves.toMatchObject({ state: "scheduled" });
   });
 });
