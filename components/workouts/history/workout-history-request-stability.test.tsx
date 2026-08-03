@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => ({
   },
   push: vi.fn(),
   list: vi.fn(),
+  loadMore: null as (() => void) | null,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -210,7 +211,10 @@ vi.mock(
       onLoadMore,
     }: {
       onLoadMore: () => void;
-    }) => <button data-load-more onClick={onLoadMore} />,
+    }) => {
+      mocks.loadMore = onLoadMore;
+      return <button data-load-more onClick={onLoadMore} />;
+    },
   }),
 );
 
@@ -247,11 +251,13 @@ function historyResponse(
   ownerId: string,
   title: string,
   nextCursor: string | null = null,
+  activityIdOverride?: string,
 ): WorkoutHistoryListResponse {
   const activityId =
-    ownerId === ownerA
+    activityIdOverride ??
+    (ownerId === ownerA
       ? "30000000-0000-4000-8000-000000000001"
-      : "40000000-0000-4000-8000-000000000001";
+      : "40000000-0000-4000-8000-000000000001");
   return {
     contractVersion: 1,
     period: {
@@ -324,6 +330,18 @@ function historyResponse(
   };
 }
 
+function emptyHistoryResponse(ownerId = ownerA): WorkoutHistoryListResponse {
+  const response = historyResponse(ownerId, "unused");
+  return {
+    ...response,
+    summary: {
+      ...response.summary,
+      eligibleWorkoutCount: 0,
+    },
+    items: [],
+  };
+}
+
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
@@ -385,6 +403,7 @@ beforeEach(() => {
     user: { id: ownerA },
     session: { access_token: "token-a" },
   };
+  mocks.loadMore = null;
   mocks.push.mockReset().mockImplementation((href: string) => {
     mocks.url = href.split("?")[1] ?? "";
   });
@@ -436,6 +455,19 @@ describe("Workout History request stability", () => {
       .join("&");
     await renderPage();
     expect(mocks.list).toHaveBeenCalledOnce();
+  });
+
+  it("treats a successful empty response as resolved across rerender and selected-only navigation", async () => {
+    mocks.list.mockResolvedValue(emptyHistoryResponse());
+    await renderPage();
+    expect(mocks.list).toHaveBeenCalledOnce();
+
+    await renderPage();
+    mocks.url = `${mocks.url}&selected=performed%3Aempty`;
+    await renderPage();
+
+    expect(mocks.list).toHaveBeenCalledOnce();
+    expect(container?.querySelector("[data-page-state=empty]")).not.toBeNull();
   });
 
   it("does not refetch when the filter panel opens or closes", async () => {
@@ -504,6 +536,37 @@ describe("Workout History request stability", () => {
     });
   });
 
+  it("creates exactly one new request after a failed first-page request and Retry", async () => {
+    mocks.list
+      .mockRejectedValueOnce(new Error("failed"))
+      .mockResolvedValueOnce(historyResponse(ownerA, "Recovered"));
+    await renderPage();
+    expect(mocks.list).toHaveBeenCalledOnce();
+
+    await act(async () => click("[data-retry]"));
+    await flush();
+
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+    expect(container?.querySelector('[data-item-title="Recovered"]')).not.toBeNull();
+  });
+
+  it("keeps repeatedly rejected Retry usable without an unhandled rejection", async () => {
+    mocks.list
+      .mockRejectedValueOnce(new Error("first"))
+      .mockRejectedValueOnce(new Error("second"))
+      .mockResolvedValueOnce(historyResponse(ownerA, "Third attempt"));
+    await renderPage();
+
+    await act(async () => click("[data-retry]"));
+    await flush();
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+
+    await act(async () => click("[data-retry]"));
+    await flush();
+    expect(mocks.list).toHaveBeenCalledTimes(3);
+    expect(container?.querySelector('[data-item-title="Third attempt"]')).not.toBeNull();
+  });
+
   it("keeps one cursor request independent from the first page during a double click", async () => {
     const cursor = deferred<WorkoutHistoryListResponse>();
     mocks.list
@@ -528,8 +591,92 @@ describe("Workout History request stability", () => {
       cursor: "cursor-1",
     });
 
-    cursor.resolve(historyResponse(ownerA, "Second page"));
+    cursor.resolve(historyResponse(ownerA, "Second page", null, "30000000-0000-4000-8000-000000000002"));
     await flush();
+  });
+
+  it("does not submit a successfully completed cursor again, including a repeated server cursor", async () => {
+    mocks.list
+      .mockResolvedValueOnce(historyResponse(ownerA, "First page", "cursor-1"))
+      .mockResolvedValueOnce(historyResponse(ownerA, "Second page", "cursor-1", "30000000-0000-4000-8000-000000000002"));
+    await renderPage();
+
+    await act(async () => mocks.loadMore?.());
+    await flush();
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+
+    await act(async () => mocks.loadMore?.());
+    await flush();
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a failed cursor retryable without restarting the first page", async () => {
+    mocks.list
+      .mockResolvedValueOnce(historyResponse(ownerA, "First page", "cursor-1"))
+      .mockRejectedValueOnce(new Error("cursor failed"))
+      .mockResolvedValueOnce(historyResponse(ownerA, "Second page", null, "30000000-0000-4000-8000-000000000002"));
+    await renderPage();
+
+    await act(async () => mocks.loadMore?.());
+    await flush();
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+
+    await act(async () => mocks.loadMore?.());
+    await flush();
+    expect(mocks.list).toHaveBeenCalledTimes(3);
+    expect(
+      mocks.list.mock.calls.filter((call) => call[1]?.cursor === undefined),
+    ).toHaveLength(1);
+  });
+
+  it("prevents an old pending cursor from publishing after a query change", async () => {
+    const pendingCursor = deferred<WorkoutHistoryListResponse>();
+    mocks.list
+      .mockResolvedValueOnce(historyResponse(ownerA, "First page", "cursor-1"))
+      .mockReturnValueOnce(pendingCursor.promise)
+      .mockResolvedValueOnce(historyResponse(ownerA, "Filtered page"));
+    await renderPage();
+
+    await act(async () => mocks.loadMore?.());
+    await act(async () => click("[data-filter-commit]"));
+    await renderPage();
+    expect(mocks.list).toHaveBeenCalledTimes(3);
+
+    pendingCursor.resolve(historyResponse(ownerA, "Stale cursor", null, "30000000-0000-4000-8000-000000000009"));
+    await flush();
+
+    expect(container?.querySelector('[data-item-title="Filtered page"]')).not.toBeNull();
+    expect(container?.querySelector('[data-item-title="Stale cursor"]')).toBeNull();
+  });
+
+  it("clears completed cursor authority when the user changes", async () => {
+    mocks.list
+      .mockResolvedValueOnce(historyResponse(ownerA, "A first", "cursor-1"))
+      .mockResolvedValueOnce(historyResponse(ownerA, "A second", null, "30000000-0000-4000-8000-000000000002"))
+      .mockResolvedValueOnce(historyResponse(ownerB, "B first"))
+      .mockResolvedValueOnce(historyResponse(ownerA, "A first again", "cursor-1"))
+      .mockResolvedValueOnce(historyResponse(ownerA, "A second again", null, "30000000-0000-4000-8000-000000000003"));
+    await renderPage();
+    await act(async () => mocks.loadMore?.());
+    await flush();
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+
+    mocks.auth = {
+      user: { id: ownerB },
+      session: { access_token: "token-b" },
+    };
+    await renderPage();
+
+    mocks.auth = {
+      user: { id: ownerA },
+      session: { access_token: "token-a-new" },
+    };
+    await renderPage();
+    await act(async () => mocks.loadMore?.());
+    await flush();
+
+    expect(mocks.list).toHaveBeenCalledTimes(5);
+    expect(mocks.list.mock.calls[4]?.[1]).toMatchObject({ cursor: "cursor-1" });
   });
 
   it("blocks old-user publication and starts one request with the new user's latest token", async () => {
@@ -565,6 +712,27 @@ describe("Workout History request stability", () => {
     expect(
       container?.querySelector('[data-item-title="Current owner B"]'),
     ).not.toBeNull();
+  });
+
+  it("freezes the implicit default range for the mounted page across a month boundary", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-31T23:59:00.000Z"));
+    mocks.url = "";
+    await renderPage();
+
+    expect(mocks.list).toHaveBeenCalledOnce();
+    expect(mocks.list.mock.calls[0]?.[1]).toMatchObject({
+      from: expect.stringContaining("2026-08-01"),
+      to: expect.stringContaining("2026-09-01"),
+    });
+
+    vi.setSystemTime(new Date("2026-09-01T00:01:00.000Z"));
+    mocks.url = "selected=performed%3Amonth-boundary";
+    await renderPage();
+    mocks.url = "";
+    await renderPage();
+
+    expect(mocks.list).toHaveBeenCalledOnce();
   });
 });
 
