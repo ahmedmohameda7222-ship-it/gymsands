@@ -92,6 +92,15 @@ This is an append-only decision log. Do not rewrite or delete an approved histor
 - Consequences: Draft search and custom dates remain local until committed; selected-item and filter-panel state are excluded from request identity; equivalent queries reuse ready or in-flight work; user changes invalidate prior publication; pagination cannot restart the first page; and normal History UI callers pass the latest AuthProvider access token explicitly.
 - Supersedes / Superseded by: None.
 
+## D-011 — Today authenticated server projection
+
+- Date: 2026-08-03
+- Status: Approved
+- Decision: Today uses one versioned authenticated browser projection keyed by one owner/date/timezone identity. The browser consumes the AuthProvider session token, the server derives the owner through `requireUser(request)`, bounded domain readers use its RLS-bound Supabase client, and the minimum-data response preserves safe partial-domain envelopes.
+- Reason: Independent Today browser loaders created broad browser-to-Supabase fan-out, repeated authentication/network overhead, multiple competing publication authorities, and excessive client orchestration.
+- Consequences: One Today operation produces one browser data request; direct initial browser reads may not return; server query count remains constant with item cardinality; existing domain mutation authorities remain canonical; no service role, giant cross-domain SQL projection, dual loading path, new fact model, or persistent browser projection cache is permitted; and Production performance measurement remains deferred to PCS-3C.
+- Supersedes / Superseded by: None.
+
 ## Future entry format
 
 Every future entry must include:
