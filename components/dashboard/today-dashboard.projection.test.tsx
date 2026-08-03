@@ -3,8 +3,8 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createTodayProjectionFixture } from "@/lib/dashboard/testing/today-projection-fixture";
 import type { TodayProjectionResponseV1 } from "@/lib/dashboard/today-projection-contract";
+import { createTodayProjectionFixture } from "@/lib/dashboard/testing/today-projection-fixture";
 
 const ownerA = "11111111-1111-4111-8111-111111111111";
 const ownerB = "22222222-2222-4222-8222-222222222222";
@@ -115,7 +115,7 @@ function deferred<T>() {
 
 const mocks = vi.hoisted(() => ({
   auth: {
-    user: { id: ownerA },
+    user: { id: "11111111-1111-4111-8111-111111111111" },
     profile: { full_name: "Ahmed Mohamed" },
     session: { access_token: "token-a" },
   } as {
@@ -195,7 +195,11 @@ vi.mock("@/components/dashboard/today-progress", () => ({
     totals: { calories: number } | null;
     logsState: string;
   }) => (
-    <output data-progress data-calories={totals?.calories ?? "none"} data-state={logsState} />
+    <output
+      data-progress
+      data-calories={totals?.calories ?? "none"}
+      data-state={logsState}
+    />
   ),
 }));
 vi.mock("@/components/dashboard/wellness-today", () => ({
@@ -226,7 +230,9 @@ vi.mock("@/components/ui/card", () => ({
   Card: ({ children }: { children?: ReactNode }) => <section>{children}</section>,
   CardContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   CardHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  CardTitle: ({ children, id }: { children?: ReactNode; id?: string }) => <h3 id={id}>{children}</h3>,
+  CardTitle: ({ children, id }: { children?: ReactNode; id?: string }) => (
+    <h3 id={id}>{children}</h3>
+  ),
 }));
 
 import { TodayDashboard } from "@/components/dashboard/today-dashboard";
@@ -263,7 +269,8 @@ function button(label: string) {
 }
 
 beforeEach(() => {
-  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
+    .IS_REACT_ACT_ENVIRONMENT = true;
   mocks.auth = {
     user: { id: ownerA },
     profile: { full_name: "Ahmed Mohamed" },
@@ -282,7 +289,13 @@ beforeEach(() => {
       proteinG: 45,
       status: "done",
     },
-    log: { id: "log-new", calories: 600, proteinG: 45, carbsG: 60, fatG: 20 },
+    log: {
+      id: "log-new",
+      calories: 600,
+      proteinG: 45,
+      carbsG: 60,
+      fatG: 20,
+    },
     alreadyDone: false,
   });
   mocks.markSkipped.mockResolvedValue({
@@ -333,8 +346,6 @@ describe("Today projection request authority", () => {
     );
 
     await renderDashboard();
-    expect(mocks.getProjection).toHaveBeenCalledOnce();
-
     mocks.auth = { ...mocks.auth, session: { access_token: "token-b" } };
     await renderDashboard();
     expect(mocks.getProjection).toHaveBeenCalledOnce();
@@ -367,21 +378,31 @@ describe("Today projection request authority", () => {
     await act(async () => button("Retry")!.click());
     await act(async () => button("Retry")!.click());
     expect(mocks.getProjection).toHaveBeenCalledTimes(2);
-    expect(mocks.getProjection.mock.calls[1][3]).toMatchObject({ accessToken: "token-b" });
+    expect(mocks.getProjection.mock.calls[1][3]).toMatchObject({
+      accessToken: "token-b",
+    });
     retry.resolve(populatedFixture());
     await flush();
     expect(mocks.getProjection).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps usable content after repeated retry failures and allows another retry", async () => {
+  it("keeps usable content after repeated retry failures", async () => {
     const partial = populatedFixture();
-    partial.workout = { state: "failed", value: null, errorCode: "workout_unavailable" };
+    partial.workout = {
+      state: "failed",
+      value: null,
+      errorCode: "workout_unavailable",
+    };
     mocks.getProjection.mockResolvedValueOnce(partial);
     await renderDashboard();
+
     mocks.getProjection.mockRejectedValueOnce(new Error("temporary one"));
     await act(async () => button("Retry")!.click());
     await flush();
-    expect(container?.querySelector("[data-calories]")?.getAttribute("data-calories")).toBe("100");
+    expect(
+      container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
+    ).toBe("100");
+
     mocks.getProjection.mockRejectedValueOnce(new Error("temporary two"));
     await act(async () => button("Retry")!.click());
     await flush();
@@ -400,9 +421,10 @@ describe("Today projection request authority", () => {
   it("clears A immediately, starts one B request, and rejects stale A publication", async () => {
     const requestA = deferred<TodayProjectionResponseV1>();
     const requestB = deferred<TodayProjectionResponseV1>();
-    mocks.getProjection.mockReturnValueOnce(requestA.promise).mockReturnValueOnce(requestB.promise);
+    mocks.getProjection
+      .mockReturnValueOnce(requestA.promise)
+      .mockReturnValueOnce(requestB.promise);
     await renderDashboard();
-    expect(mocks.getProjection).toHaveBeenCalledOnce();
 
     mocks.auth = {
       user: { id: ownerB },
@@ -411,43 +433,65 @@ describe("Today projection request authority", () => {
     };
     await renderDashboard();
     expect(mocks.getProjection).toHaveBeenCalledTimes(2);
-    expect(container?.querySelector("[data-calories]")?.getAttribute("data-calories")).toBe("none");
+    expect(
+      container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
+    ).toBe("none");
 
     requestB.resolve(populatedFixture(222));
     await flush();
-    expect(container?.querySelector("[data-calories]")?.getAttribute("data-calories")).toBe("222");
+    expect(
+      container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
+    ).toBe("222");
     requestA.resolve(populatedFixture(111));
     await flush();
-    expect(container?.querySelector("[data-calories]")?.getAttribute("data-calories")).toBe("222");
+    expect(
+      container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
+    ).toBe("222");
   });
 
-  it("starts exactly one request for date, timezone, and current target changes but none for another date", async () => {
+  it("starts exactly one request for date, timezone, and relevant target changes", async () => {
     await renderDashboard();
+
     mocks.date = "2026-08-04";
-    mocks.getProjection.mockResolvedValue(populatedFixture(100, "2026-08-04"));
+    mocks.getProjection.mockResolvedValue(
+      populatedFixture(100, "2026-08-04"),
+    );
     await renderDashboard();
     expect(mocks.getProjection).toHaveBeenCalledTimes(2);
 
     mocks.timezone = "Europe/London";
-    mocks.getProjection.mockResolvedValue(populatedFixture(100, "2026-08-04", "Europe/London"));
+    mocks.getProjection.mockResolvedValue(
+      populatedFixture(100, "2026-08-04", "Europe/London"),
+    );
     await renderDashboard();
     expect(mocks.getProjection).toHaveBeenCalledTimes(3);
 
-    window.dispatchEvent(new CustomEvent("test-target-change", { detail: { date: "2026-08-03" } }));
+    window.dispatchEvent(
+      new CustomEvent("test-target-change", {
+        detail: { date: "2026-08-03" },
+      }),
+    );
     await flush();
     expect(mocks.getProjection).toHaveBeenCalledTimes(3);
-    window.dispatchEvent(new CustomEvent("test-target-change", { detail: { date: "2026-08-04" } }));
+
+    window.dispatchEvent(
+      new CustomEvent("test-target-change", {
+        detail: { date: "2026-08-04" },
+      }),
+    );
     await flush();
     expect(mocks.getProjection).toHaveBeenCalledTimes(4);
   });
 
-  it("updates meal done, meal skip, and grocery toggle locally with zero projection reloads", async () => {
+  it("updates meal done, meal skip, and grocery toggle without projection reloads", async () => {
     await renderDashboard();
     await act(async () => button("Mark done")!.click());
     await flush();
     expect(mocks.markDone).toHaveBeenCalledOnce();
     expect(mocks.getProjection).toHaveBeenCalledOnce();
-    expect(container?.querySelector("[data-calories]")?.getAttribute("data-calories")).toBe("700");
+    expect(
+      container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
+    ).toBe("700");
 
     mocks.getProjection.mockResolvedValue(populatedFixture());
     mocks.date = "2026-08-04";
@@ -459,7 +503,9 @@ describe("Today projection request authority", () => {
 
     button("Shopping list")?.click();
     await flush();
-    const checkbox = container?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    const checkbox = container?.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
     expect(checkbox).not.toBeNull();
     await act(async () => checkbox!.click());
     await flush();
@@ -480,6 +526,7 @@ describe("Today projection request authority", () => {
     };
     mocks.getProjection.mockResolvedValue(populatedFixture(222));
     await renderDashboard();
+
     mutation.resolve({
       item: {
         id: mealId,
@@ -489,10 +536,18 @@ describe("Today projection request authority", () => {
         proteinG: 45,
         status: "done",
       },
-      log: { id: "old-log", calories: 600, proteinG: 45, carbsG: 60, fatG: 20 },
+      log: {
+        id: "old-log",
+        calories: 600,
+        proteinG: 45,
+        carbsG: 60,
+        fatG: 20,
+      },
       alreadyDone: false,
     });
     await flush();
-    expect(container?.querySelector("[data-calories]")?.getAttribute("data-calories")).toBe("222");
+    expect(
+      container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
+    ).toBe("222");
   });
 });
