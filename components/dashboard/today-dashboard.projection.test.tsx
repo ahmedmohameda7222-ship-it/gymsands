@@ -268,6 +268,12 @@ function button(label: string) {
   ) as HTMLButtonElement | undefined;
 }
 
+function clickButton(label: string) {
+  const target = button(label);
+  expect(target, `Expected button containing ${label}`).toBeDefined();
+  target!.click();
+}
+
 beforeEach(() => {
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
     .IS_REACT_ACT_ENVIRONMENT = true;
@@ -278,7 +284,7 @@ beforeEach(() => {
   };
   mocks.date = "2026-08-03";
   mocks.timezone = "Europe/Berlin";
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mocks.getProjection.mockResolvedValue(populatedFixture());
   mocks.markDone.mockResolvedValue({
     item: {
@@ -350,7 +356,7 @@ describe("Today projection request authority", () => {
     await renderDashboard();
     expect(mocks.getProjection).toHaveBeenCalledOnce();
 
-    button("Shopping list")?.click();
+    clickButton("Shopping list");
     await flush();
     expect(mocks.getProjection).toHaveBeenCalledOnce();
     expect(mocks.publishContext).toHaveBeenCalled();
@@ -375,8 +381,8 @@ describe("Today projection request authority", () => {
     await renderDashboard();
     const retry = deferred<TodayProjectionResponseV1>();
     mocks.getProjection.mockReturnValueOnce(retry.promise);
-    await act(async () => button("Retry")!.click());
-    await act(async () => button("Retry")!.click());
+    await act(async () => clickButton("Retry"));
+    await act(async () => clickButton("Retry"));
     expect(mocks.getProjection).toHaveBeenCalledTimes(2);
     expect(mocks.getProjection.mock.calls[1][3]).toMatchObject({
       accessToken: "token-b",
@@ -397,14 +403,14 @@ describe("Today projection request authority", () => {
     await renderDashboard();
 
     mocks.getProjection.mockRejectedValueOnce(new Error("temporary one"));
-    await act(async () => button("Retry")!.click());
+    await act(async () => clickButton("Retry"));
     await flush();
     expect(
       container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
     ).toBe("100");
 
     mocks.getProjection.mockRejectedValueOnce(new Error("temporary two"));
-    await act(async () => button("Retry")!.click());
+    await act(async () => clickButton("Retry"));
     await flush();
     expect(mocks.getProjection).toHaveBeenCalledTimes(3);
     expect(button("Retry")).toBeDefined();
@@ -485,7 +491,7 @@ describe("Today projection request authority", () => {
 
   it("updates meal done, meal skip, and grocery toggle without projection reloads", async () => {
     await renderDashboard();
-    await act(async () => button("Mark done")!.click());
+    await act(async () => clickButton("Done"));
     await flush();
     expect(mocks.markDone).toHaveBeenCalledOnce();
     expect(mocks.getProjection).toHaveBeenCalledOnce();
@@ -493,15 +499,17 @@ describe("Today projection request authority", () => {
       container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
     ).toBe("700");
 
-    mocks.getProjection.mockResolvedValue(populatedFixture());
     mocks.date = "2026-08-04";
+    mocks.getProjection.mockResolvedValue(
+      populatedFixture(100, "2026-08-04"),
+    );
     await renderDashboard();
-    await act(async () => button("Skip")!.click());
+    await act(async () => clickButton("Skip"));
     await flush();
     expect(mocks.markSkipped).toHaveBeenCalledOnce();
     expect(mocks.getProjection).toHaveBeenCalledTimes(2);
 
-    button("Shopping list")?.click();
+    clickButton("Shopping list");
     await flush();
     const checkbox = container?.querySelector<HTMLInputElement>(
       'input[type="checkbox"]',
@@ -517,7 +525,7 @@ describe("Today projection request authority", () => {
     const mutation = deferred<Awaited<ReturnType<typeof mocks.markDone>>>();
     mocks.markDone.mockReturnValueOnce(mutation.promise);
     await renderDashboard();
-    await act(async () => button("Mark done")!.click());
+    await act(async () => clickButton("Done"));
 
     mocks.auth = {
       user: { id: ownerB },
