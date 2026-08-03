@@ -330,7 +330,11 @@ export async function getTodayProjection(
   if (!response.ok) throw safeError(response.status, payload?.code);
 
   try {
-    return parseTodayProjectionResponseV1(payload);
+    const projection = parseTodayProjectionResponseV1(payload);
+    if (projection.date !== date || projection.timezone !== timezone) {
+      throw new TodayProjectionContractError();
+    }
+    return projection;
   } catch (error) {
     if (error instanceof TodayProjectionContractError) {
       throw new TodayProjectionClientError(
