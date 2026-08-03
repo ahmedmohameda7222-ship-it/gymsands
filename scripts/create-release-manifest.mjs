@@ -11,7 +11,6 @@ import {
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { arch, platform } from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
 import {
   EXPECTED_REPOSITORY,
   REQUIRED_CANONICAL_FILES,
@@ -23,7 +22,11 @@ import {
   sha256File,
 } from "./quality-evidence-contract.mjs";
 import { installedNextVersion } from "./release-runtime-versions.mjs";
-import { expectedMigrationVersion, validationRequestId } from "./release-identity-contract.mjs";
+import {
+  deriveReleaseTarget,
+  expectedMigrationVersion,
+  validationRequestId,
+} from "./release-identity-contract.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatePath = resolve(root, "release/release-manifest.template.json");
@@ -249,24 +252,41 @@ export function applyQualityEvidence(manifest, reportsDirectory) {
   return { reportsPath, metadata };
 }
 
+export function resolveManifestReleaseTarget(ledger, options = {}) {
+  const releaseTarget = deriveReleaseTarget(ledger);
+  const requestedExpectedMigration = expectedMigrationVersion(
+    options.expectedMigration || releaseTarget.expectedMigration,
+    "Expected database migration version",
+  );
+  if (requestedExpectedMigration !== releaseTarget.expectedMigration) {
+    throw new Error("Requested expected migration does not equal the declared Production compatibility marker.");
+  }
+
+  const requestedSchemaCompatibility = requiredIdentifier(
+    "Schema compatibility version",
+    options.schemaCompatibility || releaseTarget.schemaCompatibilityVersion,
+  );
+  if (requestedSchemaCompatibility !== releaseTarget.schemaCompatibilityVersion) {
+    throw new Error("Requested schema compatibility version does not equal the declared release contract.");
+  }
+
+  return Object.freeze({
+    ...releaseTarget,
+    expectedMigration: requestedExpectedMigration,
+    schemaCompatibilityVersion: requestedSchemaCompatibility,
+  });
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const manifest = JSON.parse(readFileSync(templatePath, "utf8"));
   const packageLockPath = resolve(root, "package-lock.json");
   const packageLock = JSON.parse(readFileSync(packageLockPath, "utf8"));
   const migrationLedger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
-  const migrationState = deriveMigrationLedgerState(migrationLedger);
-  const resolvedMigration = expectedMigrationVersion(
-    migrationState.latestAppliedMigrationVersion,
-    "Latest resolved Production migration",
-  );
-  const requestedExpectedMigration = requiredIdentifier(
-    "Expected database migration version",
-    options["expected-migration"] || resolvedMigration,
-  );
-  if (requestedExpectedMigration !== resolvedMigration) {
-    throw new Error("Requested expected migration does not equal the latest resolved Production migration.");
-  }
+  const releaseTarget = resolveManifestReleaseTarget(migrationLedger, {
+    expectedMigration: options["expected-migration"],
+    schemaCompatibility: options["schema-compatibility"],
+  });
   const commitSha = exactCommit(
     options.commit || process.env.PLAIVRA_COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || currentCommit(),
   );
@@ -282,15 +302,13 @@ async function main() {
       "Environment",
       options.environment || process.env.PLAIVRA_RELEASE_ENVIRONMENT || process.env.VERCEL_ENV || process.env.NODE_ENV,
     ),
-    schemaCompatibilityVersion: requiredIdentifier(
-      "Schema compatibility version",
-      options["schema-compatibility"] || process.env.PLAIVRA_SCHEMA_COMPATIBILITY_VERSION || "2",
-    ),
-    expectedDatabaseMigrationVersion: resolvedMigration,
-    migrationLedgerReconciliationState: migrationState.reconciliationState,
-    pendingMigrationCount: migrationState.pendingCount,
-    schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount,
-    unresolvedMigrationCount: migrationState.unresolvedCount,
+    schemaCompatibilityVersion: releaseTarget.schemaCompatibilityVersion,
+    expectedDatabaseMigrationVersion: releaseTarget.expectedMigration,
+    latestAppliedMigrationVersion: releaseTarget.latestAppliedMigrationVersion,
+    migrationLedgerReconciliationState: releaseTarget.reconciliationState,
+    pendingMigrationCount: releaseTarget.pendingCount,
+    schemaAppliedUntrackedCount: releaseTarget.schemaAppliedUntrackedCount,
+    unresolvedMigrationCount: releaseTarget.unresolvedCount,
   };
 
   manifest.runtime = {
