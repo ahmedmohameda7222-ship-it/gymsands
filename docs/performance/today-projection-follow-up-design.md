@@ -1,122 +1,104 @@
-# Follow-up design: bounded authenticated Today projection
+# Bounded authenticated Today projection
 
-**Status:** Design only; not implemented in the production-incident branch  
-**Reason:** The dashboard incident is closed through state-stability regression coverage. A broad data-architecture rewrite would increase release risk and is not required for that closure.
+**Status:** PCS-3B implementation candidate; not Production-verified  
+**Production measurement:** deferred to PCS-3C
 
 ## Objective
 
-Replace the browser’s broad Today-dashboard query fan-out with one authenticated, minimum-data projection while preserving partial-error semantics and the Quick ChatGPT context contract.
+Replace the browser's broad Today-dashboard query fan-out with one authenticated, minimum-data projection while preserving partial-error semantics, canonical mutation authorities, the existing Today UI, and the Quick ChatGPT context contract.
 
-## Current measured baseline method
-
-The authenticated release smoke records, separately for populated and empty synthetic accounts:
-
-- dashboard request count;
-- total route-suite request count;
-- response `Content-Length` totals where available;
-- route durations;
-- failed requests;
-- HTTP 5xx responses;
-- page and console errors.
-
-The initial fail-safe budgets are deliberately generous:
-
-- dashboard: maximum 80 requests;
-- full authenticated route suite: maximum 350 requests.
-
-These budgets detect a large accidental increase; they are not performance targets. After the first approved non-production and production synthetic runs, retain observed counts and define p50/p95 budgets from evidence rather than estimates.
-
-## Proposed contract
-
-Create a server-side authenticated projection, for example:
+## Candidate contract
 
 ```text
-GET /api/dashboard/today?date=YYYY-MM-DD
+GET /api/dashboard/today?date=YYYY-MM-DD&timezone=<IANA timezone>
 ```
 
-The route must derive the user identity from the authenticated session. It must never accept a caller-supplied user ID.
+The route derives the user identity from the authenticated session. It does not accept a caller-supplied user ID as read authority.
 
-Return only fields used by the Today view and Quick ChatGPT dashboard context:
+The version-1 response contains only fields required by Today rendering, current Today interactions, and the existing Quick ChatGPT dashboard context:
 
-- release/request metadata;
-- requested local date;
-- nutrition totals and target-state summary;
-- hydration total/target summary;
-- current meal-plan item summary;
-- active/default workout-plan day summary;
-- current/open/completed workout state summary;
-- grocery counts and at most the bounded visible item subset;
-- wellness counts and current recovery summary;
-- progress-entry count;
-- boolean profile-context availability flags;
-- per-domain load status and safe error code.
+- requested date, timezone, contract version, and generation time;
+- bounded workout state, action route, counts, and at most three preview exercises;
+- minimum meal-plan item fields for the requested date;
+- aggregated nutrition totals and food-log count;
+- resolved minimum nutrition targets;
+- aggregated hydration total and count;
+- current-week minimum grocery fields;
+- habit and supplement counts with at most two open names;
+- minimum sleep/recovery summary;
+- profile-context booleans and progress-entry count;
+- a dedicated prompt-context summary equivalent to current visible Today semantics.
 
-Do not return unrelated profile text, email, raw notes, full history, full plans, private health context, ChatGPT tokens, or provider credentials.
+It does not return email, owner ID, onboarding answers, injury or restriction text, private notes, full plans, raw history, raw food/water logs, provider metadata, access tokens, credentials, or database errors.
+
+## Authentication and privacy
+
+- `requireUser(request)` is the authentication and account-access authority.
+- Domain reads use the returned authenticated RLS-bound Supabase client.
+- No service role is used.
+- Account-access denial occurs before domain readers.
+- The access token is sent only in the browser Authorization header and is excluded from URLs, request keys, responses, logs, caches, localStorage, and telemetry.
+- Responses use `Cache-Control: private, no-store, max-age=0` and `Vary: Authorization`.
+- Server timing exposes only bounded safe domain metric names and durations.
 
 ## Partial-error semantics
 
-The response must not fail the whole dashboard when one optional domain fails. Use a domain envelope:
+Each optional domain uses a typed envelope:
 
 ```json
 {
-  "nutrition": { "state": "loaded", "value": {} },
-  "workout": { "state": "failed", "errorCode": "workout_unavailable" }
+  "state": "loaded",
+  "value": {},
+  "errorCode": null
 }
 ```
 
-The top-level route may return:
+or:
 
-- `200` when the projection is authenticated and at least the shell can render;
-- `401/403` for session/account-access failure;
-- `503` only when identity or the projection boundary itself cannot be established.
+```json
+{
+  "state": "failed",
+  "value": null,
+  "errorCode": "workout_unavailable"
+}
+```
 
-Never expose raw database error messages to the browser.
+One optional-domain failure does not reject the entire projection. Habits, supplements, and sleep may fail independently; wellness is top-level failed only when all three fail. Even all optional-domain failures may return authenticated HTTP 200. Raw database errors are never returned.
 
-## Query requirements
+## Query architecture
 
-- one authenticated user identity per request;
-- explicit local-date input validated as ISO date;
-- bounded ranges only;
-- no query per meal item, exercise, grocery item, progress photo, or signed asset;
-- batch child rows by parent IDs;
-- select explicit columns rather than `*`;
-- use existing owner/date/status indexes where supported;
-- preserve archived and terminal-history rules;
-- avoid generating or refreshing signed URLs unless the visible projection requires them;
-- do not call external providers in the projection.
+The candidate uses separate, independently testable server readers instead of a giant cross-domain SQL function. Readers:
 
-## Quick ChatGPT compatibility
+- use explicit selected columns;
+- use owner/date/week/status/ID bounds or hard limits;
+- aggregate food and water rows on the server;
+- batch exercises by plan-day identity;
+- perform no per-item follow-up query;
+- call no external provider;
+- perform no write;
+- do not resolve another session;
+- keep operation count constant with collection cardinality.
 
-The projection should return a dedicated `promptContext` summary matching `QuickPromptContext` semantics. The client provider must continue to suppress structurally equivalent updates. The projection must not broaden permissions: it describes state already visible on Today and does not grant ChatGPT access by itself.
+The browser sees one request. Fixed populated, empty, partial-failure, and high-cardinality operation counts are retained in automated tests and PR evidence. Those counts prove bounded no-N+1 behavior; they are not Production latency claims.
 
-## Caching and privacy
+## Browser request authority
 
-- `Cache-Control: private, no-store` initially;
-- no shared CDN caching;
-- no user ID in URL or logs;
-- no response persistence in telemetry;
-- request IDs may be logged with domain status and duration only;
-- verify account deletion/access state before querying domains.
+One canonical key owns the Today projection:
 
-## Rollout
+```text
+userId + date + timezone
+```
 
-1. Add projection contract and service tests behind an internal feature flag.
-2. Compare old/new projection values for synthetic accounts without switching rendering.
-3. Add query-count and no-N+1 tests.
-4. Run empty, typical, and high-history synthetic cases.
-5. Validate partial-domain failures.
-6. Switch Today data loading while retaining the old path as a short-lived rollback path.
-7. Remove the old fan-out only after production synthetic evidence and rollback review.
+The AuthProvider access token is intentionally excluded. Same-key work shares one in-flight request. Token refresh alone does not reload; the next genuine refresh uses the latest token. Date, timezone, or owner changes abort/supersede old work, immediately hide old data, and reject stale publication. Retry is coordinated through the same authority and preserves usable content.
 
-## Acceptance targets to define from evidence
+The old direct browser read fan-out is removed. There is no feature flag, shadow comparison, dual loading, unused rollback reader, persistent Today cache, or localStorage projection persistence.
 
-After baseline collection, set targets for:
+## Mutations and Quick ChatGPT
 
-- dashboard request count;
-- transferred bytes;
-- server duration p50/p95;
-- browser time to primary Today content;
-- query count per projection;
-- zero N+1 growth as meal/exercise/history fixture sizes increase.
+Existing domain mutation semantics remain canonical. Minimum Today adapters operate on authenticated owner context plus item IDs. Normal authoritative meal and grocery results update the local projection without a read reload; uncertain nutrition consistency causes one coordinated projection refresh and never a direct food-log read.
 
-No target should be invented before evidence is retained.
+The projection's prompt summary only reconstructs data already visible on Today. Local route, hour, and display units are added from existing providers. Structural-equivalence suppression remains active. The projection grants no additional ChatGPT permission.
+
+## Production evidence boundary
+
+PCS-3B establishes implementation and regression evidence only. PCS-3C remains responsible for Production request counts, transferred bytes where available, server-duration p50/p95, browser-visible failures, and approved synthetic-account verification. No Production performance improvement is claimed before PCS-3C.
