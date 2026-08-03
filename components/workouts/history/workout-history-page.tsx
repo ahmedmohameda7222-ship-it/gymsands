@@ -113,15 +113,16 @@ export function WorkoutHistoryPage() {
   const searchParams = useSearchParams();
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const urlString = searchParams.toString();
+  const [initialNavigationNow] = useState(() => new Date());
 
   const navigationState = useMemo(
     () =>
       parseWorkoutHistoryNavigationState(
         new URLSearchParams(urlString),
-        new Date(),
+        initialNavigationNow,
         timezone,
       ),
-    [timezone, urlString],
+    [initialNavigationNow, timezone, urlString],
   );
   const navigationRef = useRef(navigationState);
 
@@ -168,9 +169,18 @@ export function WorkoutHistoryPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
   const cursorRequestRef = useRef<CursorRequest | null>(null);
+  const completedCursorKeysRef = useRef<Set<string>>(new Set());
   const [firstPageCoordinator] = useState(
     () =>
       new WorkoutHistoryFirstPageRequestCoordinator<WorkoutHistoryListResponse>(),
+  );
+
+  const publishFirstPage = useCallback(
+    (next: FirstPageAuthority) => {
+      firstPageRef.current = next;
+      setFirstPage(next);
+    },
+    [],
   );
 
   useEffect(() => {
@@ -244,15 +254,15 @@ export function WorkoutHistoryPage() {
       if (!key || !ownerId) return;
 
       cancelCursorRequest();
+      if (force) completedCursorKeysRef.current.clear();
       const existing =
         firstPageRef.current.key === key
           ? firstPageRef.current.response
           : null;
-      const hasUsableResponse = Boolean(existing?.items.length);
-      setFirstPage({
+      publishFirstPage({
         key,
         response: existing,
-        initialLoading: !hasUsableResponse,
+        initialLoading: existing === null,
         blockingError: false,
       });
 
@@ -272,7 +282,8 @@ export function WorkoutHistoryPage() {
         ) {
           return;
         }
-        setFirstPage({
+        completedCursorKeysRef.current.clear();
+        publishFirstPage({
           key,
           response: coordinated.value,
           initialLoading: false,
@@ -285,14 +296,13 @@ export function WorkoutHistoryPage() {
         ) {
           return;
         }
-        setFirstPage((current) => {
-          const response = current.key === key ? current.response : null;
-          return {
-            key,
-            response,
-            initialLoading: false,
-            blockingError: !response?.items.length,
-          };
+        const current = firstPageRef.current;
+        const response = current.key === key ? current.response : null;
+        publishFirstPage({
+          key,
+          response,
+          initialLoading: false,
+          blockingError: response === null,
         });
       }
     },
@@ -300,15 +310,17 @@ export function WorkoutHistoryPage() {
       cancelCursorRequest,
       firstPageCoordinator,
       firstPageKey,
+      publishFirstPage,
       userId,
     ],
   );
 
   useEffect(() => {
     cancelCursorRequest();
+    completedCursorKeysRef.current.clear();
     if (!firstPageKey || !userId) {
       firstPageCoordinator.invalidate();
-      setFirstPage({
+      publishFirstPage({
         key: null,
         response: null,
         initialLoading: false,
@@ -322,6 +334,7 @@ export function WorkoutHistoryPage() {
     firstPageCoordinator,
     firstPageKey,
     loadFirstPage,
+    publishFirstPage,
     userId,
   ]);
 
@@ -330,6 +343,7 @@ export function WorkoutHistoryPage() {
       firstPageCoordinator.dispose();
       cursorRequestRef.current?.controller.abort();
       cursorRequestRef.current = null;
+      completedCursorKeysRef.current.clear();
     },
     [firstPageCoordinator],
   );
@@ -350,8 +364,12 @@ export function WorkoutHistoryPage() {
       ownerId,
       cursorRequest,
     );
+    const completedCursorKey = `${key}\u001f${nextCursor}`;
     if (cursorRequestRef.current?.key === cursorKey) {
       await cursorRequestRef.current.promise;
+      return;
+    }
+    if (completedCursorKeysRef.current.has(completedCursorKey)) {
       return;
     }
 
@@ -376,28 +394,31 @@ export function WorkoutHistoryPage() {
         ) {
           return;
         }
-        setFirstPage((current) =>
-          current.key === key && current.response
-            ? {
-                ...current,
-                response: {
-                  ...next,
-                  summary: current.response.summary,
-                  filterOptions: current.response.filterOptions,
-                  items: [
-                    ...current.response.items,
-                    ...next.items.filter(
-                      (candidate) =>
-                        !current.response!.items.some(
-                          (item) =>
-                            item.activityId === candidate.activityId,
-                        ),
-                    ),
-                  ],
-                },
-              }
-            : current,
-        );
+        const current = firstPageRef.current;
+        if (current.key !== key || !current.response) return;
+
+        const mergedResponse: WorkoutHistoryListResponse = {
+          ...next,
+          nextCursor:
+            next.nextCursor === nextCursor ? null : next.nextCursor,
+          summary: current.response.summary,
+          filterOptions: current.response.filterOptions,
+          items: [
+            ...current.response.items,
+            ...next.items.filter(
+              (candidate) =>
+                !current.response!.items.some(
+                  (item) => item.activityId === candidate.activityId,
+                ),
+            ),
+          ],
+        };
+        const accepted: FirstPageAuthority = {
+          ...current,
+          response: mergedResponse,
+        };
+        publishFirstPage(accepted);
+        completedCursorKeysRef.current.add(completedCursorKey);
       } catch {
         if (
           !controller.signal.aborted &&
@@ -419,7 +440,7 @@ export function WorkoutHistoryPage() {
       promise,
     };
     await promise;
-  }, [userId]);
+  }, [publishFirstPage, userId]);
 
   const visibleFirstPage =
     firstPage.key === firstPageKey
@@ -449,7 +470,7 @@ export function WorkoutHistoryPage() {
   let pageState: WorkoutHistoryPageState = "ready";
   if (visibleFirstPage.initialLoading && !response) {
     pageState = "initial-loading";
-  } else if (visibleFirstPage.blockingError && !response?.items.length) {
+  } else if (visibleFirstPage.blockingError && !response) {
     pageState = "blocking-error";
   } else if (!response?.items.length) {
     pageState = hasFilters ? "filtered-empty" : "empty";
