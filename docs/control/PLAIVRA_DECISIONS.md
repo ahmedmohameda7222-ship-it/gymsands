@@ -74,6 +74,15 @@ This is an append-only decision log. Do not rewrite or delete an approved histor
 - Consequences: Unclassified ideas do not enter implementation automatically.
 - Supersedes / Superseded by: None.
 
+## D-009 — Private application bootstrap authority
+
+- Date: 2026-08-03
+- Status: Approved
+- Decision: Authenticated private startup uses one owner-scoped `get_private_app_bootstrap_v1()` RPC and one AuthProvider-managed, memory-only, user-scoped bootstrap authority. Route guards consume that authority and perform no account-startup data fetches.
+- Reason: Separate profile, consent, eligibility, onboarding, and settings reads duplicated requests and allowed competing client startup authorities.
+- Consequences: Initial private startup facts update atomically, same-user requests share ready or in-flight memory state, user changes invalidate prior authority, and ProtectedRoute remains a deterministic no-fetch gate.
+- Supersedes / Superseded by: None.
+
 ## Future entry format
 
 Every future entry must include:
