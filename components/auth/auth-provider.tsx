@@ -120,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const bootstrapRef = useRef<PrivateAppBootstrap | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const generationRef = useRef(0);
+  const authEventRevisionRef = useRef(0);
   const pendingTransitionRef = useRef<PendingUserTransition | null>(null);
   const mountedRef = useRef(true);
   const router = useRouter();
@@ -302,12 +303,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, nextSession) => {
+        const eventRevision = authEventRevisionRef.current + 1;
+        authEventRevisionRef.current = eventRevision;
         queueMicrotask(() => {
+          if (
+            !mountedRef.current ||
+            authEventRevisionRef.current !== eventRevision
+          ) {
+            return;
+          }
           void reconcileSession(nextSession);
         });
       },
     );
 
+    const initialSessionRevision = authEventRevisionRef.current;
     void supabase.auth.getSession().then(({ data, error }) => {
       if (error) {
         console.warn(
@@ -315,11 +325,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           error.message,
         );
       }
-      if (mountedRef.current) void reconcileSession(data.session);
+      if (
+        mountedRef.current &&
+        authEventRevisionRef.current === initialSessionRevision
+      ) {
+        void reconcileSession(data.session);
+      }
     });
 
     return () => {
       mountedRef.current = false;
+      authEventRevisionRef.current += 1;
       generationRef.current += 1;
       pendingTransitionRef.current = null;
       const authListener = listener as unknown as Record<
@@ -333,6 +349,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     const userId = session?.user.id ?? activeUserIdRef.current;
     const transitionToken = generationRef.current + 1;
+    authEventRevisionRef.current += 1;
     generationRef.current = transitionToken;
     pendingTransitionRef.current = null;
     activeUserIdRef.current = null;
