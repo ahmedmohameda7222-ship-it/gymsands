@@ -43,6 +43,10 @@ const authPageSource = readFileSync(
   resolve(process.cwd(), "components/auth/auth-page.tsx"),
   "utf8",
 );
+const authFormSource = readFileSync(
+  resolve(process.cwd(), "components/auth/auth-form.tsx"),
+  "utf8",
+);
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -123,6 +127,26 @@ describe("authenticated login redirect recovery", () => {
     expect(
       resolveAuthenticatedLoginDestination("https://example.com", "/dashboard"),
     ).toBe("/dashboard");
+  });
+
+  it("keeps email-login navigation under the authenticated recovery authority", () => {
+    const loginStart = authFormSource.indexOf(
+      'if (mode === "login") {\n        const { data, error } = await withAuthTimeout',
+    );
+    const registrationStart = authFormSource.indexOf(
+      '\n      } else {\n        const { data, error } = await withAuthTimeout(supabase.auth.signUp',
+      loginStart,
+    );
+
+    expect(loginStart).toBeGreaterThanOrEqual(0);
+    expect(registrationStart).toBeGreaterThan(loginStart);
+    const loginBranch = authFormSource.slice(loginStart, registrationStart);
+    expect(loginBranch).not.toContain("getUserAppSettings");
+    expect(loginBranch).not.toContain("router.replace");
+    expect(loginBranch).not.toContain("router.refresh");
+    expect(authFormSource).not.toContain(
+      'from "@/services/database/user-settings"',
+    );
   });
 
   it("mounts recovery only for login, not registration", () => {

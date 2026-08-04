@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { InlineFeedback } from "@/components/motion";
 import { supabase, setRememberSession } from "@/lib/supabase/client";
-import { defaultStartPageToPath, getUserAppSettings } from "@/services/database/user-settings";
 import { PENDING_CONSENTS_STORAGE_KEY, REQUIRED_CONSENTS } from "@/lib/legal/versions";
 import { safeInternalRedirectPath } from "@/lib/auth/redirect";
 import { useTranslation } from "@/lib/i18n/use-translation";
@@ -205,12 +204,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           }
         }
         toast({ title: "Welcome back to Plaivra", description: "Your session is ready." });
-        const explicitNext = searchParams.get("next");
-        const settings = explicitNext ? null : await getUserAppSettings(data.session.user.id).catch(() => null);
-        router.replace(explicitNext
-          ? safeInternalRedirectPath(explicitNext)
-          : defaultStartPageToPath(settings?.defaultStartPage ?? "today"));
-        router.refresh();
+        // AuthenticatedLoginRedirect owns post-login destination and navigation.
       } else {
         const { data, error } = await withAuthTimeout(supabase.auth.signUp({
           email,
