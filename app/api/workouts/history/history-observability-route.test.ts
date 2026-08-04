@@ -188,10 +188,30 @@ describe("Workout History list request observability", () => {
     expect(await response.json()).toMatchObject({ code: "invalid_limit" });
     expect(mocks.log).toHaveBeenCalledWith(
       expect.objectContaining({
+        operation: "first_page",
         outcome: "invalid_request",
         error_code: "invalid_limit",
       }),
     );
+  });
+
+  it("classifies a malformed raw cursor request as cursor_page without logging the cursor", async () => {
+    const privateCursor = `private-${"x".repeat(1025)}`;
+    const response = await GET(
+      request(`?cursor=${encodeURIComponent(privateCursor)}`),
+    );
+    expect(response.status).toBe(400);
+    expectSharedHeaders(response, "incoming-valid-id");
+    expect(response.headers.get("server-timing")).toBeNull();
+    expect(await response.json()).toMatchObject({ code: "invalid_cursor" });
+    expect(mocks.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "cursor_page",
+        outcome: "invalid_request",
+        error_code: "invalid_cursor",
+      }),
+    );
+    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain(privateCursor);
   });
 
   it.each([
