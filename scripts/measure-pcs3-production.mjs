@@ -8,7 +8,6 @@ import {
   sanitizeEvidence,
   sanitizeEvidenceArtifactPath,
   sanitizeEvidenceUrl,
-  sanitizedText,
 } from "./authenticated-release-smoke.mjs";
 
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
@@ -50,6 +49,17 @@ const TODAY_DIRECT_TABLES = new Set([
   "user_nutrition_preference_profiles",
   "user_fitness_constraints",
   "progress_entries",
+]);
+const MEASURED_RESPONSE_CATEGORIES = new Set([
+  "today_projection",
+  "history_first_page",
+  "history_cursor",
+  "history_detail",
+]);
+const CRITICAL_REQUEST_CATEGORIES = new Set([
+  ...MEASURED_RESPONSE_CATEGORIES,
+  "today_supabase_read",
+  "pcs2_bootstrap",
 ]);
 const BOUNDARY_TEXT = [
   "Something went wrong",
@@ -146,16 +156,13 @@ export function validateMeasurementOptions(raw) {
   if (!MIGRATION_VERSION.test(expectedMigration)) {
     throw new Error("--expected-migration must contain 12 to 14 digits.");
   }
-  const samples = boundedInteger(raw.samples, "--samples", 10, 40, 20);
-  const warmups = boundedInteger(raw.warmups, "--warmups", 0, 5, 2);
-  const origin = normalizeMeasurementOrigin(raw.url, raw.mode);
   return {
     mode: raw.mode,
-    origin,
+    origin: normalizeMeasurementOrigin(raw.url, raw.mode),
     expectedCommit,
     expectedMigration,
-    samples,
-    warmups,
+    samples: boundedInteger(raw.samples, "--samples", 10, 40, 20),
+    warmups: boundedInteger(raw.warmups, "--warmups", 0, 5, 2),
     account,
     output: resolve(raw.output ?? DEFAULT_OUTPUT),
   };
@@ -172,8 +179,7 @@ export function nearestRankPercentile(values, percentile) {
   if (sorted.length !== values.length) {
     throw new Error("Percentile samples must all be finite numbers.");
   }
-  const rank = Math.max(1, Math.ceil((percentile / 100) * sorted.length));
-  return sorted[rank - 1];
+  return sorted[Math.max(1, Math.ceil((percentile / 100) * sorted.length)) - 1];
 }
 
 export function summarizeMetric(values) {
@@ -192,10 +198,14 @@ export function parseServerTiming(value) {
   if (!value || !String(value).trim()) return null;
   const metrics = {};
   for (const part of String(value).split(",")) {
-    const match = part.trim().match(/^([A-Za-z][A-Za-z0-9_-]*)\s*;\s*dur=([0-9]+(?:\.[0-9]+)?)$/);
+    const match = part
+      .trim()
+      .match(/^([A-Za-z][A-Za-z0-9_-]*)\s*;\s*dur=([0-9]+(?:\.[0-9]+)?)$/);
     if (!match) return null;
     const duration = Number(match[2]);
-    if (!Number.isFinite(duration) || duration < 0 || duration > 60_000) return null;
+    if (!Number.isFinite(duration) || duration < 0 || duration > 60_000) {
+      return null;
+    }
     if (Object.prototype.hasOwnProperty.call(metrics, match[1])) return null;
     metrics[match[1]] = Math.round(duration * 10) / 10;
   }
@@ -219,7 +229,7 @@ export function classifySupabaseTable(value) {
     return null;
   }
   if (!isSupabaseHost(url.hostname)) return null;
-  const match = url.pathname.match(/^\/rest\/v1\/([^/]+)$/);
+  const match = url.pathname.match(/^\/rest\/v1\/([^/]+)\/?$/);
   if (!match) return null;
   return TODAY_DIRECT_TABLES.has(match[1]) ? match[1] : null;
 }
@@ -379,6 +389,7 @@ export function evaluateCapturedOperation(route, capture) {
       passed: true,
     };
   }
+
   if (capture.counts.historyFirstPage !== 1) {
     throw new Error("HISTORY_FIRST_PAGE_REQUEST_COUNT_INVALID");
   }
@@ -446,6 +457,7 @@ function createCapture(page, origin) {
   const capture = emptyCapture();
   const starts = new WeakMap();
   const responseTasks = [];
+
   const onRequest = (request) => {
     starts.set(request, performance.now());
     const classified = classifyRequest(request.url(), origin);
@@ -456,46 +468,55 @@ function createCapture(page, origin) {
     if (classified.category === "history_cursor") capture.counts.historyCursor += 1;
     if (classified.category === "history_detail") capture.counts.historyDetail += 1;
   };
+
   const onResponse = (response) => {
-    if (response.status() >= 500) capture.http5xx += 1;
     const classified = classifyRequest(response.url(), origin);
     if (
-      !new Set([
-        "today_projection",
-        "history_first_page",
-        "history_cursor",
-        "history_detail",
-      ]).has(classified.category)
+      response.status() >= 500 &&
+      (MEASURED_RESPONSE_CATEGORIES.has(classified.category) ||
+        response.request().resourceType() === "document")
     ) {
-      return;
+      capture.http5xx += 1;
     }
-    const task = (async () => {
-      const headers = await response.allHeaders();
-      let decodedBodyBytes = 0;
-      try {
-        decodedBodyBytes = (await response.body()).byteLength;
-      } catch {
-        capture.requestFailures.push("response_body_unavailable");
-      }
-      capture.responses.push(
-        safeResponseRecord({
-          category: classified.category,
-          status: response.status(),
-          durationMs: performance.now() - (starts.get(response.request()) ?? performance.now()),
-          decodedBodyBytes,
-          headers,
-        }),
-      );
-    })();
-    responseTasks.push(task);
+    if (!MEASURED_RESPONSE_CATEGORIES.has(classified.category)) return;
+    responseTasks.push(
+      (async () => {
+        const responseHeaders = await response.allHeaders();
+        let decodedBodyBytes = 0;
+        try {
+          decodedBodyBytes = (await response.body()).byteLength;
+        } catch {
+          capture.requestFailures.push("response_body_unavailable");
+        }
+        capture.responses.push(
+          safeResponseRecord({
+            category: classified.category,
+            status: response.status(),
+            durationMs:
+              performance.now() -
+              (starts.get(response.request()) ?? performance.now()),
+            decodedBodyBytes,
+            headers: responseHeaders,
+          }),
+        );
+      })(),
+    );
   };
+
   const onPageError = () => capture.pageErrors.push("page_error");
   const onConsole = (message) => {
     if (message.type() === "error") capture.consoleErrors.push("console_error");
   };
   const onRequestFailed = (request) => {
-    const error = request.failure()?.errorText ?? "request_failed";
-    if (!/ERR_ABORTED/i.test(error)) capture.requestFailures.push("request_failed");
+    const failure = request.failure()?.errorText ?? "request_failed";
+    if (/ERR_ABORTED/i.test(failure)) return;
+    const category = classifyRequest(request.url(), origin).category;
+    if (
+      CRITICAL_REQUEST_CATEGORIES.has(category) ||
+      request.resourceType() === "document"
+    ) {
+      capture.requestFailures.push("request_failed");
+    }
   };
 
   page.on("request", onRequest);
@@ -517,27 +538,54 @@ function createCapture(page, origin) {
   };
 }
 
+function assertSameOrigin(value, origin) {
+  if (new URL(value).origin !== origin.origin) {
+    throw new Error("MEASUREMENT_REDIRECT_ORIGIN_INVALID");
+  }
+}
+
 async function assertNoBoundary(page, capture) {
   const body = await page.locator("body").innerText().catch(() => "");
   capture.errorBoundary = BOUNDARY_TEXT.some((text) => body.includes(text));
 }
 
-async function settlePage(page) {
+async function settlePage(page, route) {
   await page.locator("main#main-content, main").first().waitFor({
     state: "visible",
     timeout: REQUEST_TIMEOUT_MS,
   });
+  if (route === "today") {
+    await page
+      .waitForFunction(
+        () =>
+          !document.querySelector(
+            '[data-today-loading="true"], [data-today-progress="loading"], [aria-busy="true"]',
+          ),
+        undefined,
+        { timeout: 5_000 },
+      )
+      .catch(() => undefined);
+  } else {
+    await page.locator("[data-workout-history-page]").waitFor({
+      state: "visible",
+      timeout: REQUEST_TIMEOUT_MS,
+    });
+  }
   await page.waitForTimeout(SETTLEMENT_DELAY_MS);
-  await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+  await page
+    .waitForLoadState("networkidle", { timeout: 5_000 })
+    .catch(() => undefined);
 }
 
 async function measurePage(page, origin, route) {
   const tracker = createCapture(page, origin);
   const path = route === "today" ? "/dashboard" : "/workout-history";
   try {
-    const expectedCategory = route === "today" ? "today_projection" : "history_first_page";
+    const expectedCategory =
+      route === "today" ? "today_projection" : "history_first_page";
     const expectedResponse = page.waitForResponse(
-      (response) => classifyRequest(response.url(), origin).category === expectedCategory,
+      (response) =>
+        classifyRequest(response.url(), origin).category === expectedCategory,
       { timeout: REQUEST_TIMEOUT_MS },
     );
     await page.goto(new URL(path, origin).toString(), {
@@ -545,13 +593,10 @@ async function measurePage(page, origin, route) {
       timeout: REQUEST_TIMEOUT_MS,
     });
     await expectedResponse;
-    await settlePage(page);
-    if (page.url().includes("/login")) throw new Error("MEASUREMENT_AUTH_LOST");
-    if (route === "history") {
-      await page.locator("[data-workout-history-page]").waitFor({
-        state: "visible",
-        timeout: REQUEST_TIMEOUT_MS,
-      });
+    assertSameOrigin(page.url(), origin);
+    await settlePage(page, route);
+    if (new URL(page.url()).pathname === "/login") {
+      throw new Error("MEASUREMENT_AUTH_LOST");
     }
     await assertNoBoundary(page, tracker.capture);
   } finally {
@@ -565,40 +610,61 @@ async function login(page, origin, email, password) {
     waitUntil: "domcontentloaded",
     timeout: REQUEST_TIMEOUT_MS,
   });
+  assertSameOrigin(page.url(), origin);
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
   await page.locator('button[type="submit"]').click();
   await page.waitForURL((url) => url.pathname !== "/login", {
     timeout: REQUEST_TIMEOUT_MS,
   });
+  assertSameOrigin(page.url(), origin);
   if (new URL(page.url()).pathname === "/login") {
     throw new Error("SYNTHETIC_AUTHENTICATION_FAILED");
   }
 }
 
 function credentialFor(account) {
-  const prefix = account === "populated" ? "PLAIVRA_SMOKE_POPULATED" : "PLAIVRA_SMOKE_EMPTY";
+  const prefix =
+    account === "populated"
+      ? "PLAIVRA_SMOKE_POPULATED"
+      : "PLAIVRA_SMOKE_EMPTY";
   const email = process.env[`${prefix}_EMAIL`];
   const password = process.env[`${prefix}_PASSWORD`];
-  if (!email || !password) throw new Error(`SYNTHETIC_CREDENTIALS_MISSING_${account.toUpperCase()}`);
+  if (!email || !password) {
+    throw new Error(
+      `SYNTHETIC_CREDENTIALS_MISSING_${account.toUpperCase()}`,
+    );
+  }
   return { email, password };
 }
 
 export function validateVersionIdentity(version, options, status = 200) {
   if (status !== 200) throw new Error("DEPLOYED_IDENTITY_HTTP_INVALID");
-  if (version.commitSha !== options.expectedCommit) throw new Error("DEPLOYED_COMMIT_MISMATCH");
+  if (version.commitSha !== options.expectedCommit) {
+    throw new Error("DEPLOYED_COMMIT_MISMATCH");
+  }
   if (version.expectedDatabaseMigrationVersion !== options.expectedMigration) {
     throw new Error("DEPLOYED_EXPECTED_MIGRATION_MISMATCH");
   }
   if (version.databaseMigrationVersion !== options.expectedMigration) {
     throw new Error("DEPLOYED_DATABASE_MIGRATION_MISMATCH");
   }
-  if (version.artifactIdentityValid !== true) throw new Error("DEPLOYED_ARTIFACT_IDENTITY_INVALID");
+  if (version.artifactIdentityValid !== true) {
+    throw new Error("DEPLOYED_ARTIFACT_IDENTITY_INVALID");
+  }
   if (version.releaseReady !== true) throw new Error("DEPLOYED_RELEASE_NOT_READY");
-  if (version.schemaCompatible !== true) throw new Error("DEPLOYED_SCHEMA_INCOMPATIBLE");
-  if (version.pendingMigrationCount !== 0) throw new Error("DEPLOYED_PENDING_MIGRATIONS");
-  if (version.schemaAppliedUntrackedCount !== 0) throw new Error("DEPLOYED_UNTRACKED_APPLICATIONS");
-  if (version.unresolvedMigrationCount !== 0) throw new Error("DEPLOYED_UNRESOLVED_MIGRATIONS");
+  if (version.schemaCompatible !== true) {
+    throw new Error("DEPLOYED_SCHEMA_INCOMPATIBLE");
+  }
+  if (version.pendingMigrationCount !== 0) {
+    throw new Error("DEPLOYED_PENDING_MIGRATIONS");
+  }
+  if (version.schemaAppliedUntrackedCount !== 0) {
+    throw new Error("DEPLOYED_UNTRACKED_APPLICATIONS");
+  }
+  if (version.unresolvedMigrationCount !== 0) {
+    throw new Error("DEPLOYED_UNRESOLVED_MIGRATIONS");
+  }
   return {
     commitSha: version.commitSha,
     expectedDatabaseMigrationVersion: version.expectedDatabaseMigrationVersion,
@@ -622,11 +688,12 @@ async function identityGate(browser, options) {
       new URL("/api/version", options.origin).toString(),
       { timeout: REQUEST_TIMEOUT_MS, maxRedirects: 0 },
     );
-    if (new URL(response.url()).origin !== options.origin.origin) {
-      throw new Error("DEPLOYED_IDENTITY_REDIRECT_ORIGIN_INVALID");
-    }
-    const version = await response.json();
-    return validateVersionIdentity(version, options, response.status());
+    assertSameOrigin(response.url(), options.origin);
+    return validateVersionIdentity(
+      await response.json(),
+      options,
+      response.status(),
+    );
   } finally {
     await context.close();
   }
@@ -636,8 +703,17 @@ function metricSummary(samples, key) {
   return summarizeMetric(samples.map((sample) => sample[key]));
 }
 
+function optionalMetricSummary(samples, key) {
+  const values = samples
+    .map((sample) => sample[key])
+    .filter((value) => Number.isFinite(value));
+  return values.length ? summarizeMetric(values) : null;
+}
+
 function nullableMetricSummary(samples, key) {
-  const values = samples.map((sample) => sample[key]).filter((value) => value !== null);
+  const values = samples
+    .map((sample) => sample[key])
+    .filter((value) => value !== null && Number.isFinite(value));
   return values.length ? summarizeMetric(values) : null;
 }
 
@@ -647,27 +723,142 @@ export function aggregateSamples(samples) {
   }
   return {
     sampleCount: samples.length,
-    browserObservedDurationMs: metricSummary(samples, "browserObservedDurationMs"),
+    browserObservedDurationMs: metricSummary(
+      samples,
+      "browserObservedDurationMs",
+    ),
     serverTotalDurationMs: metricSummary(samples, "serverTotalDurationMs"),
     decodedBodyBytes: metricSummary(samples, "decodedBodyBytes"),
-    contentLengthHeaderBytes: nullableMetricSummary(samples, "contentLengthHeaderBytes"),
+    contentLengthHeaderBytes: nullableMetricSummary(
+      samples,
+      "contentLengthHeaderBytes",
+    ),
   };
+}
+
+function sumNested(samples, group, key) {
+  return samples.reduce(
+    (sum, sample) => sum + Number(sample[group]?.[key] ?? 0),
+    0,
+  );
+}
+
+function aggregateDomainTimings(samples) {
+  const names = new Set(
+    samples.flatMap((sample) => Object.keys(sample.domainTimingsMs ?? {})),
+  );
+  return Object.fromEntries(
+    [...names].sort().map((name) => [
+      name,
+      summarizeMetric(
+        samples
+          .map((sample) => sample.domainTimingsMs?.[name])
+          .filter(Number.isFinite),
+      ),
+    ]),
+  );
+}
+
+function aggregateRouteSamples(samples) {
+  const base = aggregateSamples(samples);
+  const route = samples[0].route;
+  const requestKeys = new Set(
+    samples.flatMap((sample) => Object.keys(sample.requestCounts ?? {})),
+  );
+  const requestCounts = Object.fromEntries(
+    [...requestKeys].sort().map((key) => [
+      key,
+      {
+        total: sumNested(samples, "requestCounts", key),
+        perOperation: summarizeMetric(
+          samples.map((sample) => Number(sample.requestCounts?.[key] ?? 0)),
+        ),
+      },
+    ]),
+  );
+  return {
+    ...base,
+    route,
+    requestCounts,
+    statusCounts: Object.fromEntries(
+      [...new Set(samples.map((sample) => sample.status))]
+        .sort((a, b) => a - b)
+        .map((status) => [
+          String(status),
+          samples.filter((sample) => sample.status === status).length,
+        ]),
+    ),
+    serverListDurationMs: optionalMetricSummary(samples, "serverListDurationMs"),
+    serverFiltersDurationMs: optionalMetricSummary(
+      samples,
+      "serverFiltersDurationMs",
+    ),
+    domainTimingsMs: aggregateDomainTimings(samples),
+    headerResults: {
+      privateNoStore: samples.every((sample) => sample.headers?.privateNoStore),
+      varyAuthorization: samples.every(
+        (sample) => sample.headers?.varyAuthorization,
+      ),
+      noSniff: samples.every((sample) => sample.headers?.noSniff),
+      requestIdPresent: samples.every(
+        (sample) => sample.headers?.requestIdPresent,
+      ),
+      todayContract:
+        route === "today"
+          ? samples.every((sample) => sample.headers?.todayContract)
+          : null,
+    },
+    failureCounts: {
+      pageErrors: sumNested(samples, "failures", "pageErrors"),
+      consoleErrors: sumNested(samples, "failures", "consoleErrors"),
+      requestFailures: sumNested(samples, "failures", "requestFailures"),
+      http5xx: sumNested(samples, "failures", "http5xx"),
+      errorBoundaries: samples.filter(
+        (sample) => sample.failures?.errorBoundary,
+      ).length,
+    },
+  };
+}
+
+function safeInteractionResponse(record) {
+  return record
+    ? {
+        category: record.category,
+        status: record.status,
+        browserObservedDurationMs: record.browserObservedDurationMs,
+        decodedBodyBytes: record.decodedBodyBytes,
+        contentLengthHeaderBytes: record.contentLengthHeaderBytes,
+        serverTimingMs: record.timing,
+        headers: record.headers,
+      }
+    : null;
+}
+
+async function validateInteractionCapture(capture) {
+  assertNoRuntimeFailures(capture);
+  await Promise.resolve();
 }
 
 async function measureInteractions(page, origin) {
   const evidence = {
-    filterPanel: { status: "not_applicable", additionalFirstPageRequests: null },
+    filterPanel: {
+      status: "not_applicable",
+      additionalFirstPageRequests: null,
+    },
     selectedOnly: {
       status: "not_applicable",
       additionalFirstPageRequests: null,
       detailRequests: null,
+      detailResponse: null,
     },
     loadMore: {
       status: "not_applicable",
       firstPageRequests: null,
       cursorRequests: null,
+      cursorResponse: null,
     },
   };
+
   const filterButton = page.getByRole("button", { name: /filter/i }).first();
   if (await filterButton.isVisible().catch(() => false)) {
     const tracker = createCapture(page, origin);
@@ -677,13 +868,18 @@ async function measureInteractions(page, origin) {
       await page.keyboard.press("Escape");
       await page.getByRole("dialog").waitFor({ state: "hidden" });
       await page.waitForTimeout(SETTLEMENT_DELAY_MS);
+      await assertNoBoundary(page, tracker.capture);
     } finally {
       await tracker.finish();
     }
+    await validateInteractionCapture(tracker.capture);
     if (tracker.capture.counts.historyFirstPage !== 0) {
       throw new Error("HISTORY_FILTER_PANEL_REFETCHED_FIRST_PAGE");
     }
-    evidence.filterPanel = { status: "passed", additionalFirstPageRequests: 0 };
+    evidence.filterPanel = {
+      status: "passed",
+      additionalFirstPageRequests: 0,
+    };
   }
 
   const selectable = page.locator("[data-workout-history-card] a").first();
@@ -692,16 +888,28 @@ async function measureInteractions(page, origin) {
     try {
       await selectable.click();
       await page.waitForTimeout(SETTLEMENT_DELAY_MS);
+      await page
+        .waitForLoadState("networkidle", { timeout: 5_000 })
+        .catch(() => undefined);
+      await assertNoBoundary(page, tracker.capture);
     } finally {
       await tracker.finish();
     }
+    await validateInteractionCapture(tracker.capture);
     if (tracker.capture.counts.historyFirstPage !== 0) {
       throw new Error("HISTORY_SELECTED_ONLY_REFETCHED_FIRST_PAGE");
+    }
+    const detail = tracker.capture.responses.find(
+      (record) => record.category === "history_detail",
+    );
+    if (detail && detail.status !== 200) {
+      throw new Error("HISTORY_DETAIL_STATUS_INVALID");
     }
     evidence.selectedOnly = {
       status: "passed",
       additionalFirstPageRequests: 0,
       detailRequests: tracker.capture.counts.historyDetail,
+      detailResponse: safeInteractionResponse(detail),
     };
   }
 
@@ -711,23 +919,53 @@ async function measureInteractions(page, origin) {
     try {
       await loadMore.click();
       await page.waitForTimeout(SETTLEMENT_DELAY_MS);
-      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await page
+        .waitForLoadState("networkidle", { timeout: 5_000 })
+        .catch(() => undefined);
+      await assertNoBoundary(page, tracker.capture);
     } finally {
       await tracker.finish();
     }
+    await validateInteractionCapture(tracker.capture);
     if (tracker.capture.counts.historyFirstPage !== 0) {
       throw new Error("HISTORY_LOAD_MORE_REFETCHED_FIRST_PAGE");
     }
     if (tracker.capture.counts.historyCursor !== 1) {
       throw new Error("HISTORY_LOAD_MORE_CURSOR_COUNT_INVALID");
     }
+    const cursor = tracker.capture.responses.find(
+      (record) => record.category === "history_cursor",
+    );
+    if (!cursor) throw new Error("HISTORY_CURSOR_RESPONSE_MISSING");
+    assertCommonResponse(cursor, ["total", "list"]);
+    if (cursor.timing.filters !== undefined) {
+      throw new Error("HISTORY_CURSOR_FILTERS_TIMING_FABRICATED");
+    }
     evidence.loadMore = {
       status: "passed",
       firstPageRequests: 0,
       cursorRequests: 1,
+      cursorResponse: safeInteractionResponse(cursor),
     };
   }
   return evidence;
+}
+
+async function writeSanitizedFailureScreenshot(page, output, account) {
+  const relative = sanitizeEvidenceArtifactPath(`${account}/failure.png`);
+  try {
+    await page.addStyleTag({
+      content:
+        "input, textarea, select, img, video, canvas, [contenteditable='true'] { visibility: hidden !important; } body * { text-shadow: none !important; }",
+    });
+    await page.screenshot({
+      path: resolve(output, relative),
+      fullPage: false,
+      mask: [page.locator("input, textarea, [contenteditable='true']")],
+    });
+  } catch {
+    // Failure evidence is best-effort and must never hide the measurement failure.
+  }
 }
 
 async function measureAccount(browser, options, account) {
@@ -743,9 +981,22 @@ async function measureAccount(browser, options, account) {
   page.setDefaultTimeout(REQUEST_TIMEOUT_MS);
   const samples = { today: [], history: [] };
   let interactionEvidence = {
-    filterPanel: { status: "not_applicable", additionalFirstPageRequests: null },
-    selectedOnly: { status: "not_applicable", additionalFirstPageRequests: null, detailRequests: null },
-    loadMore: { status: "not_applicable", firstPageRequests: null, cursorRequests: null },
+    filterPanel: {
+      status: "not_applicable",
+      additionalFirstPageRequests: null,
+    },
+    selectedOnly: {
+      status: "not_applicable",
+      additionalFirstPageRequests: null,
+      detailRequests: null,
+      detailResponse: null,
+    },
+    loadMore: {
+      status: "not_applicable",
+      firstPageRequests: null,
+      cursorRequests: null,
+      cursorResponse: null,
+    },
   };
   try {
     await login(page, options.origin, credential.email, credential.password);
@@ -756,7 +1007,10 @@ async function measureAccount(browser, options, account) {
       const history = await measurePage(page, options.origin, "history");
       if (measured) {
         samples.today.push({ sample: index - options.warmups + 1, ...today });
-        samples.history.push({ sample: index - options.warmups + 1, ...history });
+        samples.history.push({
+          sample: index - options.warmups + 1,
+          ...history,
+        });
       }
       await page.waitForTimeout(SETTLEMENT_DELAY_MS);
     }
@@ -781,8 +1035,7 @@ async function measureAccount(browser, options, account) {
     );
     return evidence;
   } catch (error) {
-    const screenshot = sanitizeEvidenceArtifactPath(`${account}/failure.png`);
-    await page.screenshot({ path: resolve(options.output, screenshot), fullPage: true }).catch(() => undefined);
+    await writeSanitizedFailureScreenshot(page, options.output, account);
     throw error;
   } finally {
     await context.close();
@@ -792,6 +1045,12 @@ async function measureAccount(browser, options, account) {
 export function buildSummary({ options, identity, accounts }) {
   const combinedToday = accounts.flatMap((account) => account.today);
   const combinedHistory = accounts.flatMap((account) => account.history);
+  const accountSummaries = accounts.map((account) => ({
+    account: account.account,
+    today: aggregateRouteSamples(account.today),
+    history: aggregateRouteSamples(account.history),
+    interactionEvidence: account.interactionEvidence,
+  }));
   return {
     checkedAt: new Date().toISOString(),
     mode: options.mode,
@@ -802,21 +1061,33 @@ export function buildSummary({ options, identity, accounts }) {
     identity,
     sampleCountPerAccount: options.samples,
     warmupCountPerAccount: options.warmups,
-    accounts: accounts.map((account) => ({
-      account: account.account,
-      today: aggregateSamples(account.today),
-      history: aggregateSamples(account.history),
-      interactionEvidence: account.interactionEvidence,
-    })),
+    accounts: accountSummaries,
     combined: {
-      today: aggregateSamples(combinedToday),
-      history: aggregateSamples(combinedHistory),
+      today: aggregateRouteSamples(combinedToday),
+      history: aggregateRouteSamples(combinedHistory),
     },
     requestCountHardGates: {
       todayProjectionPerOperation: 1,
       todayDirectSupabaseReadsPerOperation: 0,
       historyFirstPagePerInitialOperation: 1,
       historyCursorPerInitialOperation: 0,
+    },
+    headerResults: {
+      today: accountSummaries.every(
+        (account) =>
+          account.today.headerResults.privateNoStore &&
+          account.today.headerResults.varyAuthorization &&
+          account.today.headerResults.noSniff &&
+          account.today.headerResults.requestIdPresent &&
+          account.today.headerResults.todayContract,
+      ),
+      history: accountSummaries.every(
+        (account) =>
+          account.history.headerResults.privateNoStore &&
+          account.history.headerResults.varyAuthorization &&
+          account.history.headerResults.noSniff &&
+          account.history.headerResults.requestIdPresent,
+      ),
     },
     failures: {
       pageErrors: 0,
@@ -835,10 +1106,17 @@ export function buildSummary({ options, identity, accounts }) {
 export function renderSummaryMarkdown(summary) {
   const accountSections = summary.accounts
     .map(
-      (account) => `## ${account.account}\n\n- Today samples: ${account.today.sampleCount}\n- Today browser p50/p95: ${account.today.browserObservedDurationMs.p50} / ${account.today.browserObservedDurationMs.p95} ms\n- Today server total p50/p95: ${account.today.serverTotalDurationMs.p50} / ${account.today.serverTotalDurationMs.p95} ms\n- History samples: ${account.history.sampleCount}\n- History browser p50/p95: ${account.history.browserObservedDurationMs.p50} / ${account.history.browserObservedDurationMs.p95} ms\n- History server total p50/p95: ${account.history.serverTotalDurationMs.p50} / ${account.history.serverTotalDurationMs.p95} ms\n- Filter panel: ${account.interactionEvidence.filterPanel.status}\n- Selected-only: ${account.interactionEvidence.selectedOnly.status}\n- Load more: ${account.interactionEvidence.loadMore.status}`,
+      (account) => `## ${account.account}\n\n- Today samples: ${account.today.sampleCount}\n- Today projection requests: ${account.today.requestCounts.projection?.total ?? 0}\n- Today direct Supabase reads: ${account.today.requestCounts.directSupabaseReads?.total ?? 0}\n- Today browser p50/p95: ${account.today.browserObservedDurationMs.p50} / ${account.today.browserObservedDurationMs.p95} ms\n- Today server total p50/p95: ${account.today.serverTotalDurationMs.p50} / ${account.today.serverTotalDurationMs.p95} ms\n- Today decoded bytes p50/p95: ${account.today.decodedBodyBytes.p50} / ${account.today.decodedBodyBytes.p95}\n- History samples: ${account.history.sampleCount}\n- History first-page requests: ${account.history.requestCounts.firstPage?.total ?? 0}\n- History initial cursor requests: ${account.history.requestCounts.cursor?.total ?? 0}\n- History browser p50/p95: ${account.history.browserObservedDurationMs.p50} / ${account.history.browserObservedDurationMs.p95} ms\n- History server total p50/p95: ${account.history.serverTotalDurationMs.p50} / ${account.history.serverTotalDurationMs.p95} ms\n- History server list p50/p95: ${account.history.serverListDurationMs?.p50 ?? "unavailable"} / ${account.history.serverListDurationMs?.p95 ?? "unavailable"} ms\n- History server filters p50/p95: ${account.history.serverFiltersDurationMs?.p50 ?? "unavailable"} / ${account.history.serverFiltersDurationMs?.p95 ?? "unavailable"} ms\n- History decoded bytes p50/p95: ${account.history.decodedBodyBytes.p50} / ${account.history.decodedBodyBytes.p95}\n- Filter panel: ${account.interactionEvidence.filterPanel.status}\n- Selected-only: ${account.interactionEvidence.selectedOnly.status}\n- Load more: ${account.interactionEvidence.loadMore.status}`,
     )
     .join("\n\n");
   return `# PCS-3 Production Request Measurement\n\n## Measured deployment facts\n\n- Checked at: ${summary.checkedAt}\n- Mode: ${summary.mode}\n- Origin: ${summary.origin}\n- Expected/observed commit: ${summary.expectedCommit}\n- Expected migration: ${summary.expectedMigration}\n- Synthetic fixtures only: yes\n- Credentials logged: no\n- Overall result: PASS\n\n${accountSections}\n\n## Combined measured samples\n\n- Today browser p50/p95: ${summary.combined.today.browserObservedDurationMs.p50} / ${summary.combined.today.browserObservedDurationMs.p95} ms\n- Today server total p50/p95: ${summary.combined.today.serverTotalDurationMs.p50} / ${summary.combined.today.serverTotalDurationMs.p95} ms\n- History browser p50/p95: ${summary.combined.history.browserObservedDurationMs.p50} / ${summary.combined.history.browserObservedDurationMs.p95} ms\n- History server total p50/p95: ${summary.combined.history.serverTotalDurationMs.p50} / ${summary.combined.history.serverTotalDurationMs.p95} ms\n\n## Test-only architecture facts\n\nAutomated tests protect request classification, exact count invariants, timing parsing, sanitization, and failure handling. Test facts are not substituted for measured Production facts.\n\n## Unavailable or not applicable\n\nContent-Length remains null when the server does not provide it. Fixture-dependent interactions are recorded as not_applicable rather than claimed as proof.\n\n${REQUIRED_DISCLAIMER}\n`;
+}
+
+function safeFailureCode(error) {
+  const value = error instanceof Error ? error.message : String(error ?? "");
+  return /^[A-Z][A-Z0-9_]{2,100}$/.test(value)
+    ? value
+    : "PCS3_PRODUCTION_MEASUREMENT_FAILED";
 }
 
 async function main() {
@@ -848,21 +1126,24 @@ async function main() {
   try {
     const identity = await identityGate(browser, options);
     const accountNames =
-      options.account === "both" ? ["populated", "empty"] : [options.account];
+      options.account === "both"
+        ? ["populated", "empty"]
+        : [options.account];
     const accounts = [];
     for (const account of accountNames) {
       accounts.push(await measureAccount(browser, options, account));
     }
-    const summary = buildSummary({ options, identity, accounts });
-    const safeSummary = sanitizeEvidence(summary);
+    const summary = sanitizeEvidence(
+      buildSummary({ options, identity, accounts }),
+    );
     writeFileSync(
       resolve(options.output, "summary.json"),
-      `${JSON.stringify(safeSummary, null, 2)}\n`,
+      `${JSON.stringify(summary, null, 2)}\n`,
       "utf8",
     );
     writeFileSync(
       resolve(options.output, "summary.md"),
-      renderSummaryMarkdown(safeSummary),
+      renderSummaryMarkdown(summary),
       "utf8",
     );
     process.stdout.write("PCS3_PRODUCTION_MEASUREMENT_PASSED\n");
@@ -882,8 +1163,7 @@ async function run() {
     const failure = sanitizeEvidence({
       checkedAt: new Date().toISOString(),
       passed: false,
-      failureCode: "PCS3_PRODUCTION_MEASUREMENT_FAILED",
-      failure: sanitizedText(error instanceof Error ? error.message : error, 300),
+      failureCode: safeFailureCode(error),
       syntheticDataOnly: true,
       credentialsLogged: false,
     });
