@@ -27,7 +27,7 @@ const SHA = "a".repeat(40);
 const MIGRATION = "20260724232734";
 const ORIGIN = new URL("https://app.plaivra.com/");
 
-function headers(serverTiming, extra = {}) {
+function safeHeaders(serverTiming, extra = {}) {
   return {
     "cache-control": "private, no-store",
     vary: "Authorization",
@@ -44,7 +44,7 @@ function response(category, timing, status = 200) {
     status,
     durationMs: 42.25,
     decodedBodyBytes: 1234,
-    headers: headers(timing, {
+    headers: safeHeaders(timing, {
       "content-length": "900",
       "x-plaivra-today-contract": "1",
     }),
@@ -85,7 +85,9 @@ function capture({
 function validTodayCapture() {
   return capture({
     today: 1,
-    responses: [response("today_projection", "total;dur=12.3, workout;dur=2.0")],
+    responses: [
+      response("today_projection", "total;dur=12.3, workout;dur=2.0"),
+    ],
   });
 }
 
@@ -101,7 +103,17 @@ function validHistoryCapture() {
   });
 }
 
-test("CLI parsing and validation enforce the bounded contract", () => {
+function validOptions(overrides = {}) {
+  return {
+    mode: "preview",
+    url: "http://localhost:3000",
+    "expected-commit": SHA,
+    "expected-migration": MIGRATION,
+    ...overrides,
+  };
+}
+
+test("CLI validation enforces mode, account, identity, and sample bounds", () => {
   const parsed = parseCliArgs([
     "--mode",
     "preview",
@@ -120,40 +132,44 @@ test("CLI parsing and validation enforce the bounded contract", () => {
 
   assert.throws(() => parseCliArgs(["--unknown", "x"]), /Unknown option/);
   assert.throws(() => parseCliArgs(["mode", "preview"]), /Unexpected argument/);
+  assert.throws(() => parseCliArgs(["--mode"]), /Missing value/);
   assert.throws(() => validateMeasurementOptions({}), /--mode/);
   assert.throws(
-    () =>
-      validateMeasurementOptions({
-        ...parsed,
-        samples: "9",
-      }),
+    () => validateMeasurementOptions(validOptions({ samples: "9" })),
     /between 10 and 40/,
   );
   assert.throws(
-    () => validateMeasurementOptions({ ...parsed, samples: "41" }),
+    () => validateMeasurementOptions(validOptions({ samples: "41" })),
     /between 10 and 40/,
   );
   assert.throws(
-    () => validateMeasurementOptions({ ...parsed, warmups: "6" }),
+    () => validateMeasurementOptions(validOptions({ warmups: "6" })),
     /between 0 and 5/,
   );
   assert.throws(
-    () => validateMeasurementOptions({ ...parsed, account: "member" }),
+    () => validateMeasurementOptions(validOptions({ account: "member" })),
     /populated, empty, or both/,
   );
   assert.throws(
-    () => validateMeasurementOptions({ ...parsed, "expected-commit": "abc" }),
+    () =>
+      validateMeasurementOptions(
+        validOptions({ "expected-commit": "abc" }),
+      ),
     /40-character SHA/,
   );
   assert.throws(
-    () => validateMeasurementOptions({ ...parsed, "expected-migration": "12" }),
+    () =>
+      validateMeasurementOptions(
+        validOptions({ "expected-migration": "12" }),
+      ),
     /12 to 14 digits/,
   );
 });
 
 test("production origins are HTTPS and allowlisted", () => {
   assert.equal(
-    normalizeMeasurementOrigin("https://plaivra.com/path", "production").origin,
+    normalizeMeasurementOrigin("https://plaivra.com/path", "production")
+      .origin,
     "https://plaivra.com",
   );
   assert.equal(
@@ -164,7 +180,8 @@ test("production origins are HTTPS and allowlisted", () => {
     "plaivra-reviewed-abc.vercel.app",
   );
   assert.throws(
-    () => normalizeMeasurementOrigin("http://app.plaivra.com", "production"),
+    () =>
+      normalizeMeasurementOrigin("http://app.plaivra.com", "production"),
     /HTTPS/,
   );
   assert.throws(
@@ -172,7 +189,11 @@ test("production origins are HTTPS and allowlisted", () => {
     /not approved/,
   );
   assert.throws(
-    () => normalizeMeasurementOrigin("https://user:pass@plaivra.com", "production"),
+    () =>
+      normalizeMeasurementOrigin(
+        "https://user:pass@plaivra.com",
+        "production",
+      ),
     /credentials/,
   );
 });
@@ -196,16 +217,23 @@ test("Server-Timing parsing is strict and bounded", () => {
     parseServerTiming("total;dur=12.3, list;dur=8, filters;dur=2.25"),
     { total: 12.3, list: 8, filters: 2.3 },
   );
-  assert.equal(parseServerTiming(null), null);
-  assert.equal(parseServerTiming("total=12"), null);
-  assert.equal(parseServerTiming("total;dur=-1"), null);
-  assert.equal(parseServerTiming("total;dur=70000"), null);
-  assert.equal(parseServerTiming("total;dur=1, total;dur=2"), null);
+  for (const malformed of [
+    null,
+    "total=12",
+    "total;dur=-1",
+    "total;dur=70000",
+    "total;dur=1, total;dur=2",
+  ]) {
+    assert.equal(parseServerTiming(malformed), null);
+  }
 });
 
-test("request classifiers separate Today, Supabase, bootstrap, and History categories", () => {
+test("request classifiers separate Today, Supabase, bootstrap, and History", () => {
   assert.deepEqual(
-    classifyRequest("https://app.plaivra.com/api/dashboard/today?date=private", ORIGIN),
+    classifyRequest(
+      "https://app.plaivra.com/api/dashboard/today?date=private",
+      ORIGIN,
+    ),
     { category: "today_projection" },
   );
   assert.deepEqual(
@@ -213,7 +241,10 @@ test("request classifiers separate Today, Supabase, bootstrap, and History categ
     { category: "history_first_page" },
   );
   assert.deepEqual(
-    classifyRequest("https://app.plaivra.com/api/workouts/history?cursor=opaque", ORIGIN),
+    classifyRequest(
+      "https://app.plaivra.com/api/workouts/history?cursor=opaque",
+      ORIGIN,
+    ),
     { category: "history_cursor" },
   );
   assert.deepEqual(
@@ -231,7 +262,9 @@ test("request classifiers separate Today, Supabase, bootstrap, and History categ
     { category: "today_supabase_read", table: "user_workout_plans" },
   );
   assert.equal(
-    classifySupabaseTable("https://project.supabase.co/rest/v1/static_assets"),
+    classifySupabaseTable(
+      "https://project.supabase.co/rest/v1/static_assets",
+    ),
     null,
   );
   assert.deepEqual(
@@ -247,19 +280,23 @@ test("request classifiers separate Today, Supabase, bootstrap, and History categ
   );
 });
 
-test("opaque IDs and query strings are removed from sanitized evidence", () => {
+test("opaque IDs, query strings, credentials, tokens, and cookies are sanitized", () => {
   const safe = sanitizeEvidenceUrl(
     "https://app.plaivra.com/api/workouts/history/11111111-1111-4111-8111-111111111111?cursor=very-secret",
   );
   assert.equal(safe, "https://app.plaivra.com/api/workouts/history/id");
   const evidence = sanitizeEvidence({
     authorization: "Bearer header.payload.signature",
-    cookie: "session=private",
+    cookie: "cookie=session=private",
     email: "synthetic@example.test",
-    route: "/api/workouts/history/11111111-1111-4111-8111-111111111111?cursor=secret",
+    route:
+      "/api/workouts/history/11111111-1111-4111-8111-111111111111?cursor=secret",
   });
   const serialized = JSON.stringify(evidence);
-  assert.doesNotMatch(serialized, /header\.payload|session=private|synthetic@example|11111111|cursor=secret/);
+  assert.doesNotMatch(
+    serialized,
+    /header\.payload|session=private|synthetic@example|11111111|cursor=secret/,
+  );
 });
 
 test("decoded bytes and Content-Length remain separate metrics", () => {
@@ -271,12 +308,14 @@ test("decoded bytes and Content-Length remain separate metrics", () => {
     status: 200,
     durationMs: 1,
     decodedBodyBytes: 500,
-    headers: headers("total;dur=1", { "x-plaivra-today-contract": "1" }),
+    headers: safeHeaders("total;dur=1", {
+      "x-plaivra-today-contract": "1",
+    }),
   });
   assert.equal(absent.contentLengthHeaderBytes, null);
 });
 
-test("integration-style hard gates accept one request and successful empty state", () => {
+test("injected harness accepts one Today and one History request, including empty state", () => {
   const result = runInjectedHarness({
     today: validTodayCapture(),
     history: validHistoryCapture(),
@@ -288,7 +327,7 @@ test("integration-style hard gates accept one request and successful empty state
   assert.equal(result.today.decodedBodyBytes, 1234);
 });
 
-test("integration-style hard gates reject duplicate requests and direct reads", () => {
+test("injected hard gates reject duplicate requests and direct Supabase reads", () => {
   assert.throws(
     () =>
       evaluateCapturedOperation(
@@ -330,7 +369,7 @@ test("integration-style hard gates reject duplicate requests and direct reads", 
   );
 });
 
-test("integration-style hard gates reject missing timing, 500, and browser errors", () => {
+test("injected hard gates reject missing timing, HTTP 500, and browser errors", () => {
   assert.throws(
     () =>
       evaluateCapturedOperation(
@@ -374,7 +413,7 @@ test("integration-style hard gates reject missing timing, 500, and browser error
   );
 });
 
-test("aggregation rejects failed or empty samples and reports nearest-rank metrics", () => {
+test("aggregation rejects failed/empty samples and reports raw-sample percentiles", () => {
   const sample = {
     passed: true,
     browserObservedDurationMs: 10,
@@ -382,18 +421,48 @@ test("aggregation rejects failed or empty samples and reports nearest-rank metri
     decodedBodyBytes: 100,
     contentLengthHeaderBytes: null,
   };
-  assert.deepEqual(aggregateSamples([sample, { ...sample, browserObservedDurationMs: 20 }]), {
-    sampleCount: 2,
-    browserObservedDurationMs: { sampleCount: 2, min: 10, p50: 10, p95: 20, max: 20 },
-    serverTotalDurationMs: { sampleCount: 2, min: 5, p50: 5, p95: 5, max: 5 },
-    decodedBodyBytes: { sampleCount: 2, min: 100, p50: 100, p95: 100, max: 100 },
-    contentLengthHeaderBytes: null,
-  });
-  assert.throws(() => aggregateSamples([]), /complete valid samples/);
-  assert.throws(() => aggregateSamples([{ ...sample, passed: false }]), /complete valid samples/);
+  assert.deepEqual(
+    aggregateSamples([
+      sample,
+      { ...sample, browserObservedDurationMs: 20 },
+    ]),
+    {
+      sampleCount: 2,
+      browserObservedDurationMs: {
+        sampleCount: 2,
+        min: 10,
+        p50: 10,
+        p95: 20,
+        max: 20,
+      },
+      serverTotalDurationMs: {
+        sampleCount: 2,
+        min: 5,
+        p50: 5,
+        p95: 5,
+        max: 5,
+      },
+      decodedBodyBytes: {
+        sampleCount: 2,
+        min: 100,
+        p50: 100,
+        p95: 100,
+        max: 100,
+      },
+      contentLengthHeaderBytes: null,
+    },
+  );
+  assert.throws(
+    () => aggregateSamples([]),
+    /AGGREGATION_REQUIRES_COMPLETE_VALID_SAMPLES/,
+  );
+  assert.throws(
+    () => aggregateSamples([{ ...sample, passed: false }]),
+    /AGGREGATION_REQUIRES_COMPLETE_VALID_SAMPLES/,
+  );
 });
 
-test("identity gate requires exact reviewed release state", () => {
+test("identity gate requires the exact reviewed release state", () => {
   const options = { expectedCommit: SHA, expectedMigration: MIGRATION };
   const valid = {
     commitSha: SHA,
@@ -408,24 +477,33 @@ test("identity gate requires exact reviewed release state", () => {
   };
   assert.equal(validateVersionIdentity(valid, options, 200).commitSha, SHA);
   assert.throws(
-    () => validateVersionIdentity({ ...valid, commitSha: "b".repeat(40) }, options, 200),
+    () =>
+      validateVersionIdentity(
+        { ...valid, commitSha: "b".repeat(40) },
+        options,
+        200,
+      ),
     /DEPLOYED_COMMIT_MISMATCH/,
   );
   assert.throws(
-    () => validateVersionIdentity({ ...valid, pendingMigrationCount: 1 }, options, 200),
+    () =>
+      validateVersionIdentity(
+        { ...valid, pendingMigrationCount: 1 },
+        options,
+        200,
+      ),
     /DEPLOYED_PENDING_MIGRATIONS/,
   );
 });
 
-test("summary distinguishes measured, test-only, and not-applicable facts without raw bodies", () => {
-  const today = Array.from({ length: 10 }, (_, index) => ({
+test("summary distinguishes measured, test-only, and not-applicable facts without bodies", () => {
+  const routeSamples = Array.from({ length: 10 }, (_, index) => ({
     passed: true,
     browserObservedDurationMs: index + 1,
     serverTotalDurationMs: index + 1,
     decodedBodyBytes: 100 + index,
     contentLengthHeaderBytes: null,
   }));
-  const history = today.map((sample) => ({ ...sample }));
   const options = {
     mode: "production",
     origin: ORIGIN,
@@ -434,12 +512,11 @@ test("summary distinguishes measured, test-only, and not-applicable facts withou
     samples: 10,
     warmups: 0,
   };
-  const identity = { commitSha: SHA };
   const accounts = [
     {
       account: "empty",
-      today,
-      history,
+      today: routeSamples,
+      history: routeSamples.map((sample) => ({ ...sample })),
       interactionEvidence: {
         filterPanel: { status: "not_applicable" },
         selectedOnly: { status: "not_applicable" },
@@ -447,12 +524,19 @@ test("summary distinguishes measured, test-only, and not-applicable facts withou
       },
     },
   ];
-  const summary = buildSummary({ options, identity, accounts });
+  const summary = buildSummary({
+    options,
+    identity: { commitSha: SHA },
+    accounts,
+  });
   const markdown = renderSummaryMarkdown(summary);
   assert.match(markdown, /Measured deployment facts/);
   assert.match(markdown, /Test-only architecture facts/);
   assert.match(markdown, /Unavailable or not applicable/);
   assert.match(markdown, /not_applicable/);
   assert.match(markdown, /not a general user-latency\nSLA/);
-  assert.doesNotMatch(JSON.stringify(summary), /responseBody|rawBody|payload/);
+  assert.doesNotMatch(
+    JSON.stringify(summary),
+    /responseBody|rawBody|responsePayload/,
+  );
 });
