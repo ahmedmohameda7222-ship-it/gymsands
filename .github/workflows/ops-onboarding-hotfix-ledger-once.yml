@@ -79,3 +79,5 @@ jobs:
           path: quality-reports/onboarding-ledger-patch/
           if-no-files-found: error
           retention-days: 1
+
+# one-shot trigger 2026-08-04T17:50Z
