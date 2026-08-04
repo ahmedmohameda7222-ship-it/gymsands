@@ -863,18 +863,51 @@ async function measurePage(page, origin, route) {
   return evaluateCapturedOperation(route, tracker.capture);
 }
 
-async function login(page, origin, email, password) {
+export async function login(page, origin, email, password) {
   await page.goto(new URL("/login", origin).toString(), {
     waitUntil: "domcontentloaded",
     timeout: REQUEST_TIMEOUT_MS,
   });
   assertSameOrigin(page.url(), origin);
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((url) => url.pathname !== "/login", {
-    timeout: REQUEST_TIMEOUT_MS,
-  });
+
+  const emailInput = page.locator('input[type="email"]');
+  const passwordInput = page.locator('input[type="password"]');
+  const submitButton = page.locator('button[type="submit"]');
+
+  try {
+    await Promise.all([
+      emailInput.waitFor({ state: "visible", timeout: REQUEST_TIMEOUT_MS }),
+      passwordInput.waitFor({ state: "visible", timeout: REQUEST_TIMEOUT_MS }),
+      submitButton.waitFor({ state: "visible", timeout: REQUEST_TIMEOUT_MS }),
+    ]);
+    const counts = await Promise.all([
+      emailInput.count(),
+      passwordInput.count(),
+      submitButton.count(),
+    ]);
+    if (counts.some((count) => count !== 1)) {
+      throw new Error("login_controls_invalid");
+    }
+    await emailInput.fill(email);
+    await passwordInput.fill(password);
+    await page.waitForFunction(
+      () => {
+        const button = document.querySelector('button[type="submit"]');
+        return button instanceof HTMLButtonElement && !button.disabled;
+      },
+      undefined,
+      { timeout: REQUEST_TIMEOUT_MS },
+    );
+    await Promise.all([
+      page.waitForURL((url) => url.pathname !== "/login", {
+        timeout: REQUEST_TIMEOUT_MS,
+      }),
+      submitButton.click(),
+    ]);
+  } catch {
+    throw new Error("SYNTHETIC_AUTHENTICATION_FAILED");
+  }
+
   assertSameOrigin(page.url(), origin);
   if (new URL(page.url()).pathname === "/login") {
     throw new Error("SYNTHETIC_AUTHENTICATION_FAILED");
