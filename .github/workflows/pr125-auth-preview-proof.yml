@@ -1,0 +1,168 @@
+name: PR125 Auth Preview Proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pr125-auth-preview-proof.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Checkout exact PR 125 head
+        uses: actions/checkout@v4
+        with:
+          ref: b33787288cb755a36016752e234a6c1cc597854f
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run sanitized two-account preview proof
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+        run: |
+          mkdir -p quality-reports/pr125-auth-preview-proof
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import { chromium } from "@playwright/test";
+
+          const origin = "https://deploy-preview-125--ssgym.netlify.app";
+          const fixtures = [
+            { account: "populated", email: process.env.PLAIVRA_SMOKE_POPULATED_EMAIL, password: process.env.PLAIVRA_SMOKE_POPULATED_PASSWORD },
+            { account: "empty", email: process.env.PLAIVRA_SMOKE_EMPTY_EMAIL, password: process.env.PLAIVRA_SMOKE_EMPTY_PASSWORD },
+          ];
+          const classify = (raw) => {
+            try {
+              const url = new URL(raw);
+              if (url.origin !== origin) return "foreign-origin";
+              if (url.pathname === "/login") return "login";
+              if (url.pathname === "/dashboard") return "dashboard";
+              if (url.pathname === "/onboarding") return "onboarding";
+              if (url.pathname === "/welcome") return "welcome";
+              if (url.pathname.startsWith("/auth/")) return "auth-callback";
+              return "private-other";
+            } catch {
+              return "invalid";
+            }
+          };
+
+          const browser = await chromium.launch({ headless: true });
+          const results = [];
+          for (const fixture of fixtures) {
+            const context = await browser.newContext({ locale: "en-GB", timezoneId: "Europe/Berlin" });
+            const page = await context.newPage();
+            let tokenStatus = null;
+            let bootstrapStatus = null;
+            let bootstrapCount = 0;
+            let pageErrorCount = 0;
+            let consoleErrorCount = 0;
+            page.on("pageerror", () => { pageErrorCount += 1; });
+            page.on("console", (message) => { if (message.type() === "error") consoleErrorCount += 1; });
+            page.on("response", (response) => {
+              const url = response.url();
+              if (url.includes("/auth/v1/token") && url.includes("grant_type=password")) tokenStatus = response.status();
+              if (url.includes("/rest/v1/rpc/get_private_app_bootstrap_v1")) {
+                bootstrapCount += 1;
+                bootstrapStatus = response.status();
+              }
+            });
+
+            let navigationStatus = null;
+            let controlsValid = false;
+            let safeException = false;
+            try {
+              const response = await page.goto(`${origin}/login`, { waitUntil: "networkidle", timeout: 30000 });
+              navigationStatus = response?.status() ?? null;
+              const email = page.locator('input[type="email"]');
+              const password = page.locator('input[type="password"]');
+              const submit = page.locator('button[type="submit"]');
+              await Promise.all([
+                email.waitFor({ state: "visible", timeout: 30000 }),
+                password.waitFor({ state: "visible", timeout: 30000 }),
+                submit.waitFor({ state: "visible", timeout: 30000 }),
+              ]);
+              controlsValid =
+                (await email.count()) === 1 &&
+                (await password.count()) === 1 &&
+                (await submit.count()) === 1;
+              await email.fill(fixture.email);
+              await password.fill(fixture.password);
+              await page.waitForFunction(
+                () => {
+                  const button = document.querySelector('button[type="submit"]');
+                  return button instanceof HTMLButtonElement && !button.disabled;
+                },
+                undefined,
+                { timeout: 30000 },
+              );
+              await Promise.all([
+                page.waitForURL((url) => url.origin === origin && url.pathname !== "/login", { timeout: 30000 }),
+                submit.click(),
+              ]);
+              await page.waitForTimeout(3000);
+            } catch {
+              safeException = true;
+            }
+
+            const finalPathCategory = classify(page.url());
+            const passed =
+              navigationStatus === 200 &&
+              controlsValid &&
+              tokenStatus === 200 &&
+              bootstrapStatus === 200 &&
+              bootstrapCount >= 1 &&
+              (finalPathCategory === "dashboard" || finalPathCategory === "private-other") &&
+              pageErrorCount === 0 &&
+              !safeException;
+            results.push({
+              account: fixture.account,
+              navigationStatus,
+              controlsValid,
+              tokenStatus,
+              bootstrapStatus,
+              bootstrapCount,
+              finalPathCategory,
+              pageErrorCount,
+              consoleErrorCount,
+              safeException,
+              passed,
+            });
+            await context.close();
+          }
+          await browser.close();
+          const passed = results.every((result) => result.passed);
+          fs.writeFileSync(
+            "quality-reports/pr125-auth-preview-proof/proof.json",
+            `${JSON.stringify({ checkedAt: new Date().toISOString(), previewCommit: "b33787288cb755a36016752e234a6c1cc597854f", credentialsLogged: false, syntheticDataOnly: true, passed, results }, null, 2)}\n`,
+          );
+          console.log(passed ? "PR125_AUTH_PREVIEW_PROOF_PASSED" : "PR125_AUTH_PREVIEW_PROOF_FAILED");
+          if (!passed) process.exit(1);
+          NODE
+
+      - name: Upload sanitized preview proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr125-auth-preview-proof
+          path: quality-reports/pr125-auth-preview-proof
+          if-no-files-found: error
+          retention-days: 14
