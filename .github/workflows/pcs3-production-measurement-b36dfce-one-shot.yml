@@ -1,0 +1,257 @@
+name: PCS3 Production Measurement b36dfce One-Shot
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pcs3-production-measurement-b36dfce-one-shot.yml"
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  PRODUCTION_SHA: b36dfce7b35034ffc116c4ad93275e8d584ca3cb
+  OUTPUT_DIR: quality-reports/pcs3-production-measurement
+  DIAGNOSTIC_DIR: quality-reports/pcs3-fixture-gate-b36dfce
+
+jobs:
+  measure:
+    name: fixture-gate-and-measure
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    environment: production
+    steps:
+      - name: Checkout exact Production source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PRODUCTION_SHA }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify protected fixture inputs exist
+        env:
+          POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+        run: |
+          node <<'NODE'
+          const names = ["POPULATED_EMAIL", "POPULATED_PASSWORD", "EMPTY_EMAIL", "EMPTY_PASSWORD"];
+          if (names.some((name) => !process.env[name])) {
+            console.error("PCS3_SYNTHETIC_FIXTURE_INPUT_MISSING");
+            process.exit(1);
+          }
+          console.log("PCS3_SYNTHETIC_FIXTURE_INPUTS_PRESENT");
+          NODE
+
+      - name: Run safe two-account fixture gate
+        id: gate
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+        run: |
+          mkdir -p "$DIAGNOSTIC_DIR"
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import { chromium } from "@playwright/test";
+
+          const origin = "https://app.plaivra.com";
+          const fixtures = [
+            { account: "populated", email: process.env.PLAIVRA_SMOKE_POPULATED_EMAIL, password: process.env.PLAIVRA_SMOKE_POPULATED_PASSWORD },
+            { account: "empty", email: process.env.PLAIVRA_SMOKE_EMPTY_EMAIL, password: process.env.PLAIVRA_SMOKE_EMPTY_PASSWORD },
+          ];
+          const authEntry = new Set(["/", "/login", "/register", "/forgot-password", "/welcome"]);
+          const browser = await chromium.launch({ headless: true });
+          const results = [];
+
+          for (const fixture of fixtures) {
+            const context = await browser.newContext({ locale: "en-GB", timezoneId: "Europe/Berlin" });
+            const page = await context.newPage();
+            let tokenStatus = null;
+            let bootstrapStatus = null;
+            let bootstrapCount = 0;
+            let pageErrorCount = 0;
+            let consoleErrorCount = 0;
+            page.on("pageerror", () => { pageErrorCount += 1; });
+            page.on("console", (message) => { if (message.type() === "error") consoleErrorCount += 1; });
+            page.on("response", (response) => {
+              const url = response.url();
+              if (url.includes("/auth/v1/token") && url.includes("grant_type=password")) tokenStatus = response.status();
+              if (url.includes("/rest/v1/rpc/get_private_app_bootstrap_v1")) {
+                bootstrapCount += 1;
+                bootstrapStatus = response.status();
+              }
+            });
+
+            let navigationStatus = null;
+            let finalPathCategory = "unknown";
+            let controlsValid = false;
+            try {
+              const response = await page.goto(`${origin}/login`, { waitUntil: "networkidle", timeout: 30000 });
+              navigationStatus = response?.status() ?? null;
+              const email = page.locator('input[type="email"]');
+              const password = page.locator('input[type="password"]');
+              const submit = page.locator('button[type="submit"]');
+              controlsValid =
+                (await email.count()) === 1 &&
+                (await password.count()) === 1 &&
+                (await submit.count()) === 1 &&
+                (await submit.isVisible()) &&
+                (await submit.isEnabled());
+              if (controlsValid) {
+                await email.fill(fixture.email);
+                await password.fill(fixture.password);
+                await submit.click();
+                await page.waitForURL((url) => url.origin === origin && url.pathname !== "/login", { timeout: 30000 });
+                await page.waitForTimeout(2000);
+              }
+              const current = new URL(page.url());
+              finalPathCategory = current.origin !== origin
+                ? "foreign-origin"
+                : authEntry.has(current.pathname) || current.pathname.startsWith("/auth/")
+                  ? "auth-entry"
+                  : current.pathname === "/onboarding"
+                    ? "onboarding"
+                    : "private";
+            } catch {
+              try {
+                const current = new URL(page.url());
+                finalPathCategory = current.origin === origin && current.pathname === "/login" ? "auth-entry" : "safe-exception";
+              } catch {
+                finalPathCategory = "unknown";
+              }
+            }
+
+            const passed =
+              navigationStatus === 200 &&
+              controlsValid &&
+              tokenStatus === 200 &&
+              bootstrapStatus === 200 &&
+              bootstrapCount >= 1 &&
+              finalPathCategory === "private" &&
+              pageErrorCount === 0;
+
+            results.push({
+              account: fixture.account,
+              navigationStatus,
+              controlsValid,
+              tokenStatus,
+              bootstrapStatus,
+              bootstrapCount,
+              finalPathCategory,
+              pageErrorCount,
+              consoleErrorCount,
+              passed,
+            });
+            await context.close();
+          }
+
+          await browser.close();
+          const passed = results.every((result) => result.passed);
+          fs.writeFileSync(
+            `${process.env.DIAGNOSTIC_DIR}/diagnostic.json`,
+            `${JSON.stringify({ checkedAt: new Date().toISOString(), productionCommit: process.env.PRODUCTION_SHA, credentialsLogged: false, syntheticDataOnly: true, passed, results }, null, 2)}\n`,
+          );
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `passed=${passed}\n`);
+          console.log(passed ? "PCS3_FIXTURE_GATE_PASSED" : "PCS3_FIXTURE_GATE_FAILED");
+          NODE
+
+      - name: Run authenticated Production measurement
+        id: measurement
+        if: steps.gate.outputs.passed == 'true'
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+        run: |
+          set +e
+          npm run measure:pcs3-production -- \
+            --mode production \
+            --url https://app.plaivra.com \
+            --expected-commit "$PRODUCTION_SHA" \
+            --expected-migration 20260724232734 \
+            --samples 20 \
+            --warmups 2 \
+            --account both \
+            --output "$OUTPUT_DIR" \
+            > /tmp/pcs3-command-output.log 2>&1
+          status=$?
+          rm -f /tmp/pcs3-command-output.log
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Verify sanitized evidence boundary
+        if: steps.gate.outputs.passed == 'true' && always()
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const root = path.resolve(process.env.OUTPUT_DIR);
+          if (!fs.existsSync(root)) process.exit(1);
+          const allowed = new Set(["summary.json", "summary.md", "populated/samples.json", "empty/samples.json"]);
+          const files = [];
+          function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const absolute = path.join(dir, entry.name);
+              if (entry.isDirectory()) walk(absolute);
+              else files.push(path.relative(root, absolute).split(path.sep).join("/"));
+            }
+          }
+          walk(root);
+          if (files.some((file) => !allowed.has(file))) process.exit(1);
+          const secrets = [
+            process.env.PLAIVRA_SMOKE_POPULATED_EMAIL,
+            process.env.PLAIVRA_SMOKE_POPULATED_PASSWORD,
+            process.env.PLAIVRA_SMOKE_EMPTY_EMAIL,
+            process.env.PLAIVRA_SMOKE_EMPTY_PASSWORD,
+          ].filter(Boolean);
+          for (const file of files) {
+            const content = fs.readFileSync(path.join(root, file), "utf8");
+            if (secrets.some((secret) => content.includes(secret))) process.exit(1);
+          }
+          console.log("PCS3_SANITIZED_EVIDENCE_VERIFIED");
+          NODE
+
+      - name: Upload safe fixture gate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs3-fixture-gate-b36dfce
+          path: ${{ env.DIAGNOSTIC_DIR }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload sanitized PCS-3 evidence
+        if: steps.gate.outputs.passed == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs3-production-measurement-b36dfce
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce result
+        if: always()
+        run: |
+          test "${{ steps.gate.outputs.passed }}" = "true"
+          test "${{ steps.measurement.outputs.exit_code }}" = "0"
