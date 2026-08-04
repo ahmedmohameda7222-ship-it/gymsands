@@ -6,10 +6,11 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, parse, resolve } from "node:path";
 import test from "node:test";
 
 import {
@@ -27,6 +28,7 @@ import {
   parseCliArgs,
   parseServerTiming,
   renderSummaryMarkdown,
+  runCli,
   runInjectedHarness,
   safeFailureCode,
   safeResponseRecord,
@@ -68,9 +70,9 @@ class FakePage {
 function deferred() {
   let resolvePromise;
   let rejectPromise;
-  const promise = new Promise((resolve, reject) => {
-    resolvePromise = resolve;
-    rejectPromise = reject;
+  const promise = new Promise((resolvePromiseValue, rejectPromiseValue) => {
+    resolvePromise = resolvePromiseValue;
+    rejectPromise = rejectPromiseValue;
   });
   return { promise, resolve: resolvePromise, reject: rejectPromise };
 }
@@ -201,6 +203,13 @@ function validOptions(overrides = {}) {
   };
 }
 
+function temporaryRepository(prefix = "pcs3-repository-") {
+  const parent = mkdtempSync(resolve(tmpdir(), prefix));
+  const repository = resolve(parent, "repository");
+  mkdirSync(resolve(repository, "quality-reports"), { recursive: true });
+  return { parent, repository };
+}
+
 async function capturedTodayDuration(duration) {
   let clock = 0;
   const page = new FakePage();
@@ -222,6 +231,7 @@ async function capturedTodayDuration(duration) {
 }
 
 test("CLI validation enforces mode, account, identity, and sample bounds", () => {
+  const { parent, repository } = temporaryRepository();
   const parsed = parseCliArgs([
     "--mode",
     "preview",
@@ -232,36 +242,41 @@ test("CLI validation enforces mode, account, identity, and sample bounds", () =>
     "--expected-migration",
     MIGRATION,
   ]);
-  const options = validateMeasurementOptions(parsed);
+  const options = validateMeasurementOptions(parsed, repository);
   assert.equal(options.samples, 20);
   assert.equal(options.warmups, 2);
   assert.equal(options.account, "both");
   assert.equal(options.origin.origin, "http://localhost:3000");
+  assert.equal(
+    options.output,
+    resolve(repository, "quality-reports/pcs3-production-measurement"),
+  );
 
   assert.throws(() => parseCliArgs(["--unknown", "x"]), /Unknown option/);
   assert.throws(() => parseCliArgs(["mode", "preview"]), /Unexpected argument/);
   assert.throws(() => parseCliArgs(["--mode"]), /Missing value/);
-  assert.throws(() => validateMeasurementOptions({}), /--mode/);
+  assert.throws(() => validateMeasurementOptions({}, repository), /--mode/);
   assert.throws(
-    () => validateMeasurementOptions(validOptions({ samples: "9" })),
+    () => validateMeasurementOptions(validOptions({ samples: "9" }), repository),
     /between 10 and 40/,
   );
   assert.throws(
-    () => validateMeasurementOptions(validOptions({ samples: "41" })),
+    () => validateMeasurementOptions(validOptions({ samples: "41" }), repository),
     /between 10 and 40/,
   );
   assert.throws(
-    () => validateMeasurementOptions(validOptions({ warmups: "6" })),
+    () => validateMeasurementOptions(validOptions({ warmups: "6" }), repository),
     /between 0 and 5/,
   );
   assert.throws(
-    () => validateMeasurementOptions(validOptions({ account: "member" })),
+    () => validateMeasurementOptions(validOptions({ account: "member" }), repository),
     /populated, empty, or both/,
   );
   assert.throws(
     () =>
       validateMeasurementOptions(
         validOptions({ "expected-commit": "abc" }),
+        repository,
       ),
     /40-character SHA/,
   );
@@ -269,9 +284,11 @@ test("CLI validation enforces mode, account, identity, and sample bounds", () =>
     () =>
       validateMeasurementOptions(
         validOptions({ "expected-migration": "12" }),
+        repository,
       ),
     /12 to 14 digits/,
   );
+  rmSync(parent, { recursive: true, force: true });
 });
 
 test("canonical Production domains pass without reviewed Vercel authority", () => {
@@ -330,11 +347,13 @@ test("reviewed Vercel authority accepts hostname only", () => {
 });
 
 test("preview Vercel mode remains preview evidence and redirects stay same-origin", () => {
+  const { parent, repository } = temporaryRepository();
   const options = validateMeasurementOptions(
     validOptions({
       mode: "preview",
       url: "https://arbitrary-preview.vercel.app",
     }),
+    repository,
   );
   assert.equal(options.mode, "preview");
   assert.equal(options.reviewedVercelHost, null);
@@ -348,6 +367,7 @@ test("preview Vercel mode remains preview evidence and redirects stay same-origi
     () => assertSameOrigin("https://unrelated.example/dashboard", options.origin),
     /MEASUREMENT_REDIRECT_ORIGIN_INVALID/,
   );
+  rmSync(parent, { recursive: true, force: true });
 });
 
 test("nearest-rank p50 and p95 are deterministic and reject empty input", () => {
@@ -466,6 +486,78 @@ test("full browser duration includes delayed body completion", async () => {
   );
 });
 
+test("response without request start fails safely and cannot strand finish", async () => {
+  const page = new FakePage();
+  const request = fakeRequest(
+    "https://app.plaivra.com/api/dashboard/today?date=private",
+  );
+  const tracker = createCapture(page, ORIGIN, { now: () => 10 });
+  page.emit("response", fakeResponse({ request }));
+  assert.equal(tracker.pendingResponseTaskCount(), 1);
+  await tracker.finish();
+  assert.deepEqual(tracker.capture.requestFailures, ["request_failed"]);
+  assert.equal(tracker.capture.responses.length, 0);
+  assert.equal(tracker.pendingResponseTaskCount(), 0);
+  assert.equal(tracker.responseTaskCleanupCount(), 1);
+  assert.throws(
+    () => evaluateCapturedOperation("today", tracker.capture),
+    /MEASUREMENT_REQUEST_FAILURE/,
+  );
+});
+
+test("invalid synchronous start cannot strand an already registered task", async () => {
+  const page = new FakePage();
+  const request = fakeRequest(
+    "https://app.plaivra.com/api/dashboard/today?date=private",
+  );
+  const tracker = createCapture(page, ORIGIN, { now: () => Number.NaN });
+  page.emit("request", request);
+  page.emit("response", fakeResponse({ request }));
+  assert.equal(tracker.pendingResponseTaskCount(), 1);
+  await tracker.finish();
+  assert.equal(tracker.pendingResponseTaskCount(), 0);
+  assert.equal(tracker.responseTaskCleanupCount(), 1);
+  assert.deepEqual(tracker.capture.requestFailures, ["request_failed"]);
+});
+
+test("finish waits for asynchronous work when another task fails before its first await", async () => {
+  let clock = 10;
+  const page = new FakePage();
+  const missingStartRequest = fakeRequest(
+    "https://app.plaivra.com/api/dashboard/today?date=missing",
+  );
+  const asyncRequest = fakeRequest(
+    "https://app.plaivra.com/api/workouts/history",
+  );
+  const body = deferred();
+  const tracker = createCapture(page, ORIGIN, { now: () => clock });
+  page.emit("response", fakeResponse({ request: missingStartRequest }));
+  page.emit("request", asyncRequest);
+  page.emit(
+    "response",
+    fakeResponse({
+      request: asyncRequest,
+      category: "history",
+      body: () => body.promise,
+    }),
+  );
+  assert.equal(tracker.pendingResponseTaskCount(), 2);
+  let resolved = false;
+  const finishing = tracker.finish().then(() => {
+    resolved = true;
+  });
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.equal(resolved, false);
+  clock = 40;
+  body.resolve(Buffer.from("complete"));
+  await finishing;
+  assert.equal(resolved, true);
+  assert.equal(tracker.pendingResponseTaskCount(), 0);
+  assert.equal(tracker.responseTaskCleanupCount(), 2);
+  assert.deepEqual(tracker.capture.requestFailures, ["request_failed"]);
+  assert.equal(tracker.capture.responses.length, 1);
+});
+
 test("response finish or body failure creates one safe failure and invalidates sample", async () => {
   for (const failureMode of ["finish", "body"]) {
     const page = new FakePage();
@@ -493,6 +585,8 @@ test("response finish or body failure creates one safe failure and invalidates s
     await tracker.finish();
     assert.deepEqual(tracker.capture.requestFailures, ["request_failed"]);
     assert.equal(tracker.capture.responses.length, 0);
+    assert.equal(tracker.pendingResponseTaskCount(), 0);
+    assert.equal(tracker.responseTaskCleanupCount(), 1);
     assert.throws(
       () => evaluateCapturedOperation("today", tracker.capture),
       /MEASUREMENT_REQUEST_FAILURE/,
@@ -540,6 +634,7 @@ test("multiple accepted response tasks are all awaited", async () => {
   await finalizing;
   assert.equal(tracker.capture.responses.length, 2);
   assert.equal(tracker.pendingResponseTaskCount(), 0);
+  assert.equal(tracker.responseTaskCleanupCount(), 2);
 });
 
 test("no response task can be accepted after capture finalization", async () => {
@@ -583,6 +678,7 @@ test("one request is not double-counted when duplicate events are injected", asy
   await tracker.finish();
   assert.equal(tracker.capture.counts.todayProjection, 1);
   assert.equal(tracker.capture.responses.length, 1);
+  assert.equal(tracker.responseTaskCleanupCount(), 1);
 });
 
 test("decoded bytes and Content-Length remain separate after full-body capture", async () => {
@@ -716,9 +812,87 @@ test("identity gate requires the exact reviewed release state", () => {
   );
 });
 
-test("failure evidence contains safe code and Markdown only, and clears stale PCS-3 evidence", () => {
-  const root = mkdtempSync(resolve(tmpdir(), "pcs3-failure-"));
-  const output = resolve(root, "evidence");
+test("output authority allows only a dedicated quality-reports descendant", () => {
+  const { parent, repository } = temporaryRepository("pcs3-output-");
+  const qualityRoot = resolve(repository, "quality-reports");
+  const defaultOutput = resolve(
+    qualityRoot,
+    "pcs3-production-measurement",
+  );
+  const dedicated = resolve(qualityRoot, "reviewed-run");
+  assert.equal(validateOutputDirectory(undefined, repository), defaultOutput);
+  assert.equal(validateOutputDirectory(dedicated, repository), dedicated);
+  assert.equal(
+    validateOutputDirectory("quality-reports/reviewed-run", repository),
+    dedicated,
+  );
+
+  const sibling = resolve(parent, "sibling-repository", "quality-reports", "run");
+  const homeLike = resolve(parent, "Documents");
+  for (const [value, pattern] of [
+    [parse(repository).root, /FILESYSTEM_ROOT_FORBIDDEN/],
+    [repository, /REPOSITORY_ROOT_FORBIDDEN/],
+    [qualityRoot, /QUALITY_REPORTS_ROOT_FORBIDDEN/],
+    [homeLike, /OUTSIDE_QUALITY_REPORTS_FORBIDDEN/],
+    [sibling, /OUTSIDE_QUALITY_REPORTS_FORBIDDEN/],
+    [resolve(repository, "quality-reports/../escape"), /OUTSIDE_QUALITY_REPORTS_FORBIDDEN/],
+    [dirname(repository), /OUTSIDE_QUALITY_REPORTS_FORBIDDEN/],
+  ]) {
+    assert.throws(() => validateOutputDirectory(value, repository), pattern);
+  }
+  rmSync(parent, { recursive: true, force: true });
+});
+
+test("existing symlink escape from quality-reports is rejected", () => {
+  const { parent, repository } = temporaryRepository("pcs3-symlink-");
+  const outside = resolve(parent, "outside");
+  const link = resolve(repository, "quality-reports", "escape");
+  mkdirSync(outside, { recursive: true });
+  symlinkSync(outside, link, "dir");
+  assert.throws(
+    () => validateOutputDirectory(resolve(link, "measurement"), repository),
+    /SYMLINK_ESCAPE_FORBIDDEN/,
+  );
+  rmSync(parent, { recursive: true, force: true });
+});
+
+test("unsafe output combined with another CLI error writes and deletes nothing", async () => {
+  const { parent, repository } = temporaryRepository("pcs3-cli-");
+  const unsafe = resolve(parent, "Documents");
+  mkdirSync(resolve(unsafe, "populated"), { recursive: true });
+  writeFileSync(resolve(unsafe, "summary.json"), "real user file");
+  writeFileSync(resolve(unsafe, "populated", "samples.json"), "real samples");
+  const stderr = [];
+  let executeCalls = 0;
+  const result = await runCli(
+    ["--output", unsafe, "--unknown", "value"],
+    {
+      repositoryRoot: repository,
+      execute: async () => {
+        executeCalls += 1;
+      },
+      stderr: { write: (value) => stderr.push(value) },
+    },
+  );
+  assert.equal(result, 1);
+  assert.equal(executeCalls, 0);
+  assert.deepEqual(stderr, ["PCS3_PRODUCTION_MEASUREMENT_FAILED\n"]);
+  assert.equal(readFileSync(resolve(unsafe, "summary.json"), "utf8"), "real user file");
+  assert.equal(
+    readFileSync(resolve(unsafe, "populated", "samples.json"), "utf8"),
+    "real samples",
+  );
+  assert.equal(existsSync(resolve(unsafe, "summary.md")), false);
+  rmSync(parent, { recursive: true, force: true });
+});
+
+test("failure evidence contains safe code and clears only owned PCS-3 entries", () => {
+  const { parent, repository } = temporaryRepository("pcs3-failure-");
+  const output = resolve(
+    repository,
+    "quality-reports",
+    "pcs3-production-measurement",
+  );
   mkdirSync(resolve(output, "populated"), { recursive: true });
   mkdirSync(resolve(output, "empty"), { recursive: true });
   mkdirSync(resolve(output, "traces"), { recursive: true });
@@ -742,7 +916,7 @@ test("failure evidence contains safe code and Markdown only, and clears stale PC
       origin: "https://app.plaivra.com/",
       expectedCommit: SHA,
     },
-    root,
+    repository,
   );
   assert.equal(failure.failureCode, "PCS3_PRODUCTION_MEASUREMENT_FAILED");
   const json = readFileSync(resolve(output, "summary.json"), "utf8");
@@ -761,7 +935,7 @@ test("failure evidence contains safe code and Markdown only, and clears stale PC
   assert.equal(existsSync(resolve(output, "measurement.har")), false);
   assert.equal(existsSync(resolve(output, "storage-state.json")), false);
   assert.deepEqual(readdirSync(output).sort(), ["keep.txt", "summary.json", "summary.md"]);
-  rmSync(root, { recursive: true, force: true });
+  rmSync(parent, { recursive: true, force: true });
 });
 
 test("failure path has no screenshot or recording authority", () => {
@@ -777,26 +951,21 @@ test("failure path has no screenshot or recording authority", () => {
   assert.equal(screenshotCalls, 0);
 });
 
-test("clean output removes only known PCS-3 entries and rejects dangerous roots", () => {
-  const root = mkdtempSync(resolve(tmpdir(), "pcs3-clean-"));
-  const output = resolve(root, "safe-output");
+test("clean output removes known entries and preserves unrelated files", () => {
+  const { parent, repository } = temporaryRepository("pcs3-clean-");
+  const output = resolve(repository, "quality-reports", "safe-output");
   mkdirSync(resolve(output, "populated"), { recursive: true });
+  mkdirSync(resolve(output, "videos"), { recursive: true });
   writeFileSync(resolve(output, "populated", "samples.json"), "stale");
+  writeFileSync(resolve(output, "videos", "recording.webm"), "stale");
   writeFileSync(resolve(output, "summary.md"), "stale");
   writeFileSync(resolve(output, "keep.txt"), "keep");
-  assert.equal(cleanOutputEvidence(output, root), output);
+  assert.equal(cleanOutputEvidence(output, repository), output);
   assert.equal(existsSync(resolve(output, "populated")), false);
+  assert.equal(existsSync(resolve(output, "videos")), false);
   assert.equal(existsSync(resolve(output, "summary.md")), false);
   assert.equal(readFileSync(resolve(output, "keep.txt"), "utf8"), "keep");
-  assert.throws(
-    () => validateOutputDirectory(resolve("/"), root),
-    /FILESYSTEM_ROOT_FORBIDDEN/,
-  );
-  assert.throws(
-    () => validateOutputDirectory(root, root),
-    /REPOSITORY_ROOT_FORBIDDEN/,
-  );
-  rmSync(root, { recursive: true, force: true });
+  rmSync(parent, { recursive: true, force: true });
 });
 
 test("safe failure code never copies raw exception text", () => {
