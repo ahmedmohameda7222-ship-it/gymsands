@@ -24,7 +24,7 @@ test("declared database marker remains distinct from newer compatible physical m
   assert.equal(resolved.migrationLedgerReconciliationState, "reconciled");
   assert.equal(resolved.pendingMigrationCount, 0);
   assert.equal(resolved.schemaAppliedUntrackedCount, 0);
-  assert.equal(resolved.unresolvedCount, 0);
+  assert.equal(resolved.unresolvedMigrationCount, 0);
 });
 
 test("Next build metadata binds the declared compatibility marker", async () => {
