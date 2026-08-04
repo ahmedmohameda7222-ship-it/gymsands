@@ -2,9 +2,12 @@
 
 export * from "./workout-sessions-legacy";
 
-import { readActiveWorkoutSessionCache } from "@/lib/workouts/active-session-sync";
+import { env } from "@/lib/env";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
+import { readActiveWorkoutSessionCache } from "@/lib/workouts/active-session-sync";
+import { readActiveWorkoutSessionAuthenticated } from "@/services/workouts/active-session-client";
 import type { Weekday, Workout, WorkoutSession } from "@/types";
 import {
   getOrStartWorkoutSession as startOrResumeDirectWorkoutSession
@@ -54,18 +57,48 @@ export async function getOpenWorkoutSessionWithStatus(
   candidateSessionId?: string | null,
 ) {
   let result: Awaited<ReturnType<typeof getOpenWorkoutSessionWithStatusLegacy>>;
-  try {
+  if (env.useMockAuth && isMockAuthUserId(userId) && !env.productionQaBuild) {
     result = await getOpenWorkoutSessionWithStatusLegacy(
       userId,
       planDayId,
       candidateSessionId,
     );
-  } catch (error) {
+  } else if (!supabase || !isUuid(userId)) {
     result = {
       session: null,
-      error: error instanceof Error ? error.message : String(error),
+      error:
+        "Active workout could not load because the user session is invalid.",
     };
+  } else {
+    try {
+      const auth = await supabase.auth.getSession();
+      const session = auth.data.session;
+      if (
+        auth.error ||
+        !session?.access_token ||
+        session.user.id !== userId
+      ) {
+        result = {
+          session: null,
+          error:
+            "Active workout could not load because the user session is invalid.",
+        };
+      } else {
+        result = await readActiveWorkoutSessionAuthenticated({
+          userId,
+          accessToken: session.access_token,
+          workoutId: planDayId,
+          candidateSessionId,
+        });
+      }
+    } catch (error) {
+      result = {
+        session: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
+
   if (!result.error || !candidateSessionId || typeof indexedDB === "undefined") {
     return result;
   }
