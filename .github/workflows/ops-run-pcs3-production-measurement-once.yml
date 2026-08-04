@@ -1,0 +1,96 @@
+name: PCS3 Production Measurement One-Shot
+
+on:
+  push:
+    branches:
+      - ops/run-pcs3-production-measurement
+    paths:
+      - .github/workflows/ops-run-pcs3-production-measurement-once.yml
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_COMMIT: 27ded3ba1a8b2e69f1c8aac5bd97124cf6665863
+  EXPECTED_MIGRATION: "20260724232734"
+  OUTPUT_DIR: quality-reports/pcs3-production-measurement
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+      PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+      PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+      PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+    steps:
+      - name: Checkout exact Production source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_COMMIT }}
+          fetch-depth: 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run authenticated Production measurement
+        id: measurement
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +x
+          npm run measure:pcs3-production -- \
+            --mode production \
+            --url https://app.plaivra.com \
+            --expected-commit "$EXPECTED_COMMIT" \
+            --expected-migration "$EXPECTED_MIGRATION" \
+            --samples 20 \
+            --warmups 2 \
+            --account both \
+            --output "$OUTPUT_DIR"
+
+      - name: Verify sanitized evidence boundary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$OUTPUT_DIR/summary.json"
+          test -f "$OUTPUT_DIR/summary.md"
+          if find "$OUTPUT_DIR" -type f \( \
+            -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o \
+            -iname '*.har' -o -iname '*.zip' -o -iname '*.webm' -o \
+            -iname '*trace*' -o -iname '*storage*' \
+          \) | grep -q .; then
+            echo PCS3_UNSAFE_ARTIFACT_DETECTED
+            exit 1
+          fi
+
+      - name: Upload sanitized PCS-3 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs3-production-measurement-27ded3ba
+          path: quality-reports/pcs3-production-measurement
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce measurement result
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.measurement.outcome }}" != "success" ]; then
+            echo PCS3_PRODUCTION_MEASUREMENT_FAILED
+            exit 1
+          fi
+          echo PCS3_PRODUCTION_MEASUREMENT_PASSED
