@@ -33,43 +33,24 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-
           harness = Path("scripts/measure-pcs3-production.mjs")
           source = harness.read_text()
-          anchor = '''  assertSameOrigin(page.url(), origin);
-
-  const emailInput = page.locator('input[type="email"]');'''
-          replacement = '''  assertSameOrigin(page.url(), origin);
-  await page
-    .waitForLoadState("networkidle", { timeout: 10_000 })
-    .catch(() => undefined);
-
-  const emailInput = page.locator('input[type="email"]');'''
+          anchor = "  assertSameOrigin(page.url(), origin);\n\n  const emailInput = page.locator('input[type=\"email\"]');"
+          replacement = "  assertSameOrigin(page.url(), origin);\n  await page\n    .waitForLoadState(\"networkidle\", { timeout: 10_000 })\n    .catch(() => undefined);\n\n  const emailInput = page.locator('input[type=\"email\"]');"
           if source.count(anchor) != 1:
               raise SystemExit("canonical_login_patch_anchor_invalid")
           harness.write_text(source.replace(anchor, replacement, 1))
 
           test_file = Path("scripts/measure-pcs3-production.login.test.mjs")
           test_source = test_file.read_text()
-          fixture_anchor = '''    waitForFunction: asyncSpy(),
-    waitForURL: asyncSpy(async (predicate) => {'''
-          fixture_replacement = '''    waitForFunction: asyncSpy(),
-    waitForLoadState: asyncSpy(),
-    waitForURL: asyncSpy(async (predicate) => {'''
+          fixture_anchor = "    waitForFunction: asyncSpy(),\n    waitForURL: asyncSpy(async (predicate) => {"
+          fixture_replacement = "    waitForFunction: asyncSpy(),\n    waitForLoadState: asyncSpy(),\n    waitForURL: asyncSpy(async (predicate) => {"
           if test_source.count(fixture_anchor) != 1:
               raise SystemExit("login_fixture_patch_anchor_invalid")
           test_source = test_source.replace(fixture_anchor, fixture_replacement, 1)
 
-          assertion_anchor = '''  await login(page, origin, "synthetic@example.test", "secret");
-
-  assert.deepEqual(email.waitFor.calls[0], [{ state: "visible", timeout: 30000 }]);'''
-          assertion_replacement = '''  await login(page, origin, "synthetic@example.test", "secret");
-
-  assert.deepEqual(page.waitForLoadState.calls[0], [
-    "networkidle",
-    { timeout: 10000 },
-  ]);
-  assert.deepEqual(email.waitFor.calls[0], [{ state: "visible", timeout: 30000 }]);'''
+          assertion_anchor = "  await login(page, origin, \"synthetic@example.test\", \"secret\");\n\n  assert.deepEqual(email.waitFor.calls[0], [{ state: \"visible\", timeout: 30000 }]);"
+          assertion_replacement = "  await login(page, origin, \"synthetic@example.test\", \"secret\");\n\n  assert.deepEqual(page.waitForLoadState.calls[0], [\n    \"networkidle\",\n    { timeout: 10000 },\n  ]);\n  assert.deepEqual(email.waitFor.calls[0], [{ state: \"visible\", timeout: 30000 }]);"
           if test_source.count(assertion_anchor) != 1:
               raise SystemExit("login_assertion_patch_anchor_invalid")
           test_file.write_text(test_source.replace(assertion_anchor, assertion_replacement, 1))
