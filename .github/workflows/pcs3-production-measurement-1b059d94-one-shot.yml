@@ -7,18 +7,19 @@ on:
       - ".github/workflows/pcs3-production-measurement-1b059d94-one-shot.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  correct:
+  measure:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    environment: production
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout corrected harness branch head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -29,83 +30,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Apply authenticated landing readiness correction
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run canonical PCS3 Production measurement
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          harness = Path("scripts/measure-pcs3-production.mjs")
-          source = harness.read_text()
-          anchor = "  await page\n    .waitForLoadState(\"networkidle\", { timeout: 10_000 })\n    .catch(() => undefined);\n}"
-          replacement = "  const landingPath = new URL(page.url()).pathname;\n  if (landingPath === \"/dashboard\") {\n    await settlePage(page, \"today\");\n  } else if (landingPath === \"/workout-history\") {\n    await settlePage(page, \"history\");\n  } else {\n    await page.waitForTimeout(SETTLEMENT_DELAY_MS);\n    await page\n      .waitForLoadState(\"networkidle\", { timeout: 10_000 })\n      .catch(() => undefined);\n  }\n}"
-          if source.count(anchor) != 1:
-              raise SystemExit("landing_readiness_anchor_invalid")
-          harness.write_text(source.replace(anchor, replacement, 1))
+          npm run measure:pcs3-production -- \
+            --mode production \
+            --url https://app.plaivra.com \
+            --expected-commit 1b059d944e619ad6919e2da96b204b935fa59596 \
+            --expected-migration 20260724232734 \
+            --samples 20 \
+            --warmups 2 \
+            --account both \
+            --output quality-reports/pcs3-production-measurement
 
-          test_file = Path("scripts/measure-pcs3-production.login.test.mjs")
-          test_source = test_file.read_text()
-          first_anchor = "    click: asyncSpy(),\n  };"
-          first_replacement = "    click: asyncSpy(),\n    first() {\n      return this;\n    },\n  };"
-          if test_source.count(first_anchor) != 1:
-              raise SystemExit("locator_first_anchor_invalid")
-          test_source = test_source.replace(first_anchor, first_replacement, 1)
-
-          fixture_anchor = "  const submit = locator({ count: submitCount, waitError });\n  let currentUrl = \"https://app.plaivra.com/login\";"
-          fixture_replacement = "  const submit = locator({ count: submitCount, waitError });\n  const main = locator();\n  let currentUrl = \"https://app.plaivra.com/login\";"
-          if test_source.count(fixture_anchor) != 1:
-              raise SystemExit("main_fixture_anchor_invalid")
-          test_source = test_source.replace(fixture_anchor, fixture_replacement, 1)
-
-          locator_anchor = "      if (selector === 'input[type=\"password\"]') return password;\n      return submit;"
-          locator_replacement = "      if (selector === 'input[type=\"password\"]') return password;\n      if (selector === \"main#main-content, main\") return main;\n      return submit;"
-          if test_source.count(locator_anchor) != 1:
-              raise SystemExit("main_locator_anchor_invalid")
-          test_source = test_source.replace(locator_anchor, locator_replacement, 1)
-
-          timeout_anchor = "    waitForLoadState: asyncSpy(),\n    waitForURL: asyncSpy(async (predicate) => {"
-          timeout_replacement = "    waitForLoadState: asyncSpy(),\n    waitForTimeout: asyncSpy(),\n    waitForURL: asyncSpy(async (predicate) => {"
-          if test_source.count(timeout_anchor) != 1:
-              raise SystemExit("wait_timeout_fixture_anchor_invalid")
-          test_source = test_source.replace(timeout_anchor, timeout_replacement, 1)
-
-          return_anchor = "  return { page, email, password, submit };"
-          return_replacement = "  return { page, email, password, submit, main };"
-          if test_source.count(return_anchor) != 1:
-              raise SystemExit("fixture_return_anchor_invalid")
-          test_source = test_source.replace(return_anchor, return_replacement, 1)
-
-          test_start = "  const { page, email, password, submit } = pageFixture();"
-          test_start_replacement = "  const { page, email, password, submit, main } = pageFixture();"
-          if test_source.count(test_start) != 1:
-              raise SystemExit("first_test_fixture_anchor_invalid")
-          test_source = test_source.replace(test_start, test_start_replacement, 1)
-
-          second_wait_anchor = "  assert.deepEqual(page.waitForLoadState.calls[1], [\n    \"networkidle\",\n    { timeout: 10000 },\n  ]);"
-          second_wait_replacement = "  assert.deepEqual(page.waitForLoadState.calls[1], [\n    \"networkidle\",\n    { timeout: 5000 },\n  ]);"
-          if test_source.count(second_wait_anchor) != 1:
-              raise SystemExit("second_wait_expectation_anchor_invalid")
-          test_source = test_source.replace(second_wait_anchor, second_wait_replacement, 1)
-
-          assertion_anchor = "  assert.equal(submit.waitFor.calls.length, 1);\n  assert.equal(page.waitForFunction.calls.length, 1);"
-          assertion_replacement = "  assert.equal(submit.waitFor.calls.length, 1);\n  assert.equal(main.waitFor.calls.length, 1);\n  assert.equal(page.waitForFunction.calls.length, 2);\n  assert.deepEqual(page.waitForTimeout.calls[0], [300]);"
-          if test_source.count(assertion_anchor) != 1:
-              raise SystemExit("readiness_assertion_anchor_invalid")
-          test_file.write_text(test_source.replace(assertion_anchor, assertion_replacement, 1))
-          PY
-
-      - name: Run focused PCS3 login tests
-        run: node --test scripts/measure-pcs3-production.login.test.mjs
-
-      - name: Verify bounded diff
-        run: |
-          git diff --check
-          changed="$(git status --short | awk '{print $2}' | sort)"
-          expected="$(printf '%s\n' scripts/measure-pcs3-production.login.test.mjs scripts/measure-pcs3-production.mjs | sort)"
-          test "$changed" = "$expected"
-
-      - name: Commit bounded correction
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/measure-pcs3-production.mjs scripts/measure-pcs3-production.login.test.mjs
-          git commit -m "fix(perf): settle authenticated page before PCS3 capture"
-          git push origin HEAD:ops/pcs3-production-measurement-1b059d94
+      - name: Upload sanitized PCS3 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs3-production-measurement-1b059d94-final-3
+          path: quality-reports/pcs3-production-measurement
+          if-no-files-found: error
+          retention-days: 14
