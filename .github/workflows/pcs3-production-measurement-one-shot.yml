@@ -1,0 +1,151 @@
+name: PCS3 Production Measurement One-Shot
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pcs3-production-measurement-one-shot.yml"
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  OUTPUT_DIR: quality-reports/pcs3-production-measurement
+
+jobs:
+  measure:
+    name: measure
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - name: Checkout exact Production source
+        uses: actions/checkout@v4
+        with:
+          ref: 94b1ba09288c4cda30ee96637c3f73bf2a0e80d5
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify protected fixture inputs exist
+        env:
+          POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+        run: |
+          node <<'NODE'
+          const required = [
+            "POPULATED_EMAIL",
+            "POPULATED_PASSWORD",
+            "EMPTY_EMAIL",
+            "EMPTY_PASSWORD",
+          ];
+          const missing = required.filter((name) => !process.env[name]);
+          if (missing.length) {
+            console.error("PCS3_SYNTHETIC_FIXTURE_INPUT_MISSING");
+            process.exit(1);
+          }
+          console.log("PCS3_SYNTHETIC_FIXTURE_INPUTS_PRESENT");
+          NODE
+
+      - name: Run authenticated Production measurement
+        id: measurement
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+        run: |
+          set +e
+          npm run measure:pcs3-production -- \
+            --mode production \
+            --url https://app.plaivra.com \
+            --expected-commit 94b1ba09288c4cda30ee96637c3f73bf2a0e80d5 \
+            --expected-migration 20260724232734 \
+            --samples 20 \
+            --warmups 2 \
+            --account both \
+            --output "$OUTPUT_DIR" \
+            > /tmp/pcs3-command-output.log 2>&1
+          status=$?
+          rm -f /tmp/pcs3-command-output.log
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Verify sanitized evidence boundary
+        if: always()
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const root = path.resolve(process.env.OUTPUT_DIR);
+          if (!fs.existsSync(root)) {
+            console.error("PCS3_SANITIZED_EVIDENCE_MISSING");
+            process.exit(1);
+          }
+          const allowed = new Set([
+            "summary.json",
+            "summary.md",
+            "populated/samples.json",
+            "empty/samples.json",
+          ]);
+          const files = [];
+          function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const absolute = path.join(dir, entry.name);
+              if (entry.isDirectory()) walk(absolute);
+              else files.push(path.relative(root, absolute).split(path.sep).join("/"));
+            }
+          }
+          walk(root);
+          const unexpected = files.filter((file) => !allowed.has(file));
+          if (unexpected.length) {
+            console.error("PCS3_UNEXPECTED_EVIDENCE_FILE");
+            process.exit(1);
+          }
+          const secrets = [
+            process.env.PLAIVRA_SMOKE_POPULATED_EMAIL,
+            process.env.PLAIVRA_SMOKE_POPULATED_PASSWORD,
+            process.env.PLAIVRA_SMOKE_EMPTY_EMAIL,
+            process.env.PLAIVRA_SMOKE_EMPTY_PASSWORD,
+          ].filter(Boolean);
+          for (const file of files) {
+            const content = fs.readFileSync(path.join(root, file), "utf8");
+            if (secrets.some((secret) => content.includes(secret))) {
+              console.error("PCS3_SECRET_FOUND_IN_EVIDENCE");
+              process.exit(1);
+            }
+          }
+          console.log("PCS3_SANITIZED_EVIDENCE_VERIFIED");
+          NODE
+
+      - name: Upload sanitized PCS-3 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs3-production-measurement-94b1ba0
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce measurement result
+        if: always()
+        run: |
+          test "${{ steps.measurement.outputs.exit_code }}" = "0"
