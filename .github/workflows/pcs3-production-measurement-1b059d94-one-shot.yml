@@ -56,7 +56,7 @@ jobs:
           test_source = test_source.replace(fixture_anchor, fixture_replacement, 1)
 
           locator_anchor = "      if (selector === 'input[type=\"password\"]') return password;\n      return submit;"
-          locator_replacement = "      if (selector === 'input[type=\"password\"]') return password;\n      if (selector === \"main\") return main;\n      return submit;"
+          locator_replacement = "      if (selector === 'input[type=\"password\"]') return password;\n      if (selector === \"main#main-content, main\") return main;\n      return submit;"
           if test_source.count(locator_anchor) != 1:
               raise SystemExit("main_locator_anchor_invalid")
           test_source = test_source.replace(locator_anchor, locator_replacement, 1)
