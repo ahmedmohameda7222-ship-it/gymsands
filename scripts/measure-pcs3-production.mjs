@@ -1,9 +1,18 @@
 import {
+  existsSync,
   mkdirSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { parse, resolve } from "node:path";
+import {
+  dirname,
+  isAbsolute,
+  parse,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
@@ -83,6 +92,9 @@ const SAFE_FAILURE_CODES = new Set([
   "PCS3_PRODUCTION_MEASUREMENT_FAILED",
   "PCS3_OUTPUT_FILESYSTEM_ROOT_FORBIDDEN",
   "PCS3_OUTPUT_REPOSITORY_ROOT_FORBIDDEN",
+  "PCS3_OUTPUT_QUALITY_REPORTS_ROOT_FORBIDDEN",
+  "PCS3_OUTPUT_OUTSIDE_QUALITY_REPORTS_FORBIDDEN",
+  "PCS3_OUTPUT_SYMLINK_ESCAPE_FORBIDDEN",
   "MEASUREMENT_REDIRECT_ORIGIN_INVALID",
   "MEASUREMENT_AUTH_LOST",
   "SYNTHETIC_AUTHENTICATION_FAILED",
@@ -236,17 +248,76 @@ export function normalizeMeasurementOrigin(
   return url;
 }
 
+function isInside(parent, candidate, strict = false) {
+  const path = relative(parent, candidate);
+  if (path === "") return !strict;
+  return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+}
+
+function deepestExistingAncestor(value) {
+  let current = value;
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+  return current;
+}
+
 export function validateOutputDirectory(value, repositoryRoot = process.cwd()) {
-  const output = resolve(value ?? DEFAULT_OUTPUT);
+  const repository = realpathSync(resolve(repositoryRoot));
+  const requested = String(value ?? DEFAULT_OUTPUT);
+  const output = isAbsolute(requested)
+    ? resolve(requested)
+    : resolve(repository, requested);
   const filesystemRoot = parse(output).root;
-  const exactRepositoryRoot = resolve(repositoryRoot);
+  const qualityReportsRoot = resolve(repository, "quality-reports");
+
   if (output === filesystemRoot) {
     throw new Error("PCS3_OUTPUT_FILESYSTEM_ROOT_FORBIDDEN");
   }
-  if (output === exactRepositoryRoot) {
+  if (output === repository) {
     throw new Error("PCS3_OUTPUT_REPOSITORY_ROOT_FORBIDDEN");
   }
+  if (output === qualityReportsRoot) {
+    throw new Error("PCS3_OUTPUT_QUALITY_REPORTS_ROOT_FORBIDDEN");
+  }
+  if (!isInside(qualityReportsRoot, output, true)) {
+    throw new Error("PCS3_OUTPUT_OUTSIDE_QUALITY_REPORTS_FORBIDDEN");
+  }
+
+  if (existsSync(qualityReportsRoot)) {
+    const realQualityReportsRoot = realpathSync(qualityReportsRoot);
+    if (realQualityReportsRoot !== qualityReportsRoot) {
+      throw new Error("PCS3_OUTPUT_SYMLINK_ESCAPE_FORBIDDEN");
+    }
+    const existingAncestor = deepestExistingAncestor(output);
+    if (existingAncestor) {
+      const realExistingAncestor = realpathSync(existingAncestor);
+      if (!isInside(realQualityReportsRoot, realExistingAncestor)) {
+        throw new Error("PCS3_OUTPUT_SYMLINK_ESCAPE_FORBIDDEN");
+      }
+    }
+  }
+
   return output;
+}
+
+export function preflightOutputDirectory(argv, repositoryRoot = process.cwd()) {
+  let outputValue = DEFAULT_OUTPUT;
+  let outputSeen = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] !== "--output") continue;
+    if (outputSeen) throw new Error("Duplicate option --output.");
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) {
+      throw new Error("Missing value for --output.");
+    }
+    outputSeen = true;
+    outputValue = value;
+    index += 1;
+  }
+  return validateOutputDirectory(outputValue, repositoryRoot);
 }
 
 export function cleanOutputEvidence(value, repositoryRoot = process.cwd()) {
@@ -258,7 +329,10 @@ export function cleanOutputEvidence(value, repositoryRoot = process.cwd()) {
   return output;
 }
 
-export function validateMeasurementOptions(raw) {
+export function validateMeasurementOptions(
+  raw,
+  repositoryRoot = process.cwd(),
+) {
   if (!raw.mode || !new Set(["preview", "production"]).has(raw.mode)) {
     throw new Error("--mode must be preview or production.");
   }
@@ -292,7 +366,10 @@ export function validateMeasurementOptions(raw) {
     samples: boundedInteger(raw.samples, "--samples", 10, 40, 20),
     warmups: boundedInteger(raw.warmups, "--warmups", 0, 5, 2),
     account,
-    output: validateOutputDirectory(raw.output ?? DEFAULT_OUTPUT),
+    output: validateOutputDirectory(
+      raw.output ?? DEFAULT_OUTPUT,
+      repositoryRoot,
+    ),
   };
 }
 
@@ -596,6 +673,7 @@ export function createCapture(
   const failedRequests = new WeakSet();
   const pendingResponseTasks = new Set();
   let acceptingResponses = true;
+  let responseTaskCleanupCount = 0;
 
   const recordRequestFailure = (request) => {
     if (failedRequests.has(request)) return;
@@ -642,8 +720,7 @@ export function createCapture(
       return;
     }
 
-    let task;
-    task = (async () => {
+    const task = Promise.resolve().then(async () => {
       try {
         const startedAt = starts.get(request);
         if (!Number.isFinite(startedAt)) {
@@ -665,11 +742,14 @@ export function createCapture(
         );
       } catch {
         recordRequestFailure(request);
-      } finally {
-        pendingResponseTasks.delete(task);
       }
-    })();
+    });
     pendingResponseTasks.add(task);
+    task.finally(() => {
+      if (pendingResponseTasks.delete(task)) {
+        responseTaskCleanupCount += 1;
+      }
+    });
   };
 
   const onPageError = () => capture.pageErrors.push("page_error");
@@ -698,6 +778,7 @@ export function createCapture(
     capture,
     acceptingResponses: () => acceptingResponses,
     pendingResponseTaskCount: () => pendingResponseTasks.size,
+    responseTaskCleanupCount: () => responseTaskCleanupCount,
     async finish() {
       if (acceptingResponses) {
         acceptingResponses = false;
@@ -1384,31 +1465,40 @@ async function executeMeasurement(options) {
   }
 }
 
-async function run() {
+export async function runCli(
+  argv,
+  {
+    repositoryRoot = process.cwd(),
+    execute = executeMeasurement,
+    stderr = process.stderr,
+  } = {},
+) {
   let output;
   let reviewed = null;
   try {
-    output = validateOutputDirectory(DEFAULT_OUTPUT);
-    const raw = parseCliArgs(process.argv.slice(2));
-    if (raw.output) output = validateOutputDirectory(raw.output);
-    const options = validateMeasurementOptions(raw);
+    output = preflightOutputDirectory(argv, repositoryRoot);
+    const raw = parseCliArgs(argv);
+    const options = validateMeasurementOptions(raw, repositoryRoot);
     output = options.output;
     reviewed = reviewedFailureContext(options);
-    await executeMeasurement(options);
+    await execute(options);
+    return 0;
   } catch (error) {
     if (output) {
       try {
-        writeFailureEvidence(output, error, reviewed);
+        writeFailureEvidence(output, error, reviewed, repositoryRoot);
       } catch {
         // Unsafe or unwritable output paths fail closed without secondary detail.
       }
     }
-    process.stderr.write("PCS3_PRODUCTION_MEASUREMENT_FAILED\n");
-    process.exitCode = 1;
+    stderr.write("PCS3_PRODUCTION_MEASUREMENT_FAILED\n");
+    return 1;
   }
 }
 
 const isDirectRun =
   Boolean(process.argv[1]) &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
-if (isDirectRun) await run();
+if (isDirectRun) {
+  process.exitCode = await runCli(process.argv.slice(2));
+}
