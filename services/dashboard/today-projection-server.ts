@@ -37,6 +37,9 @@ const WEEKDAYS = [
   "Saturday",
 ] as const;
 
+const MAX_MATCHING_WORKOUT_DAYS = 14;
+const MAX_MATCHING_WORKOUT_EXERCISES = 500;
+
 const DOMAIN_NAMES = [
   "workout",
   "meals",
@@ -201,6 +204,24 @@ function isMeaningful(value: unknown): boolean {
   return false;
 }
 
+function classifyCandidateWorkoutActivity<
+  TDay extends { id: string },
+  TExercise extends { plan_day_id: string },
+>(candidateDays: TDay[], candidateExercises: TExercise[]) {
+  const candidateDayIds = new Set(candidateDays.map((day) => day.id));
+  const populatedDayIds = new Set(
+    candidateExercises
+      .map((exercise) => exercise.plan_day_id)
+      .filter((dayId) => candidateDayIds.has(dayId)),
+  );
+  const firstPopulatedDay =
+    candidateDays.find((day) => populatedDayIds.has(day.id)) ?? null;
+  return {
+    firstPopulatedDay,
+    trainingDay: firstPopulatedDay !== null,
+  };
+}
+
 function actionHref(
   state: TodayWorkoutProjection["state"],
   dayId: string | null,
@@ -287,7 +308,7 @@ export async function readTodayWorkoutProjection(
     .eq("plan_id", plan.id)
     .eq("weekday", weekdayForDate(input.date))
     .order("day_number", { ascending: true })
-    .limit(14);
+    .limit(MAX_MATCHING_WORKOUT_DAYS);
   const candidateDays = (assertQuery(dayResult) ?? []) as WorkoutDayRow[];
 
   let day: WorkoutDayRow | null = null;
@@ -301,12 +322,12 @@ export async function readTodayWorkoutProjection(
         candidateDays.map((candidate) => candidate.id),
       )
       .order("sort_order", { ascending: true })
-      .limit(500);
+      .limit(MAX_MATCHING_WORKOUT_EXERCISES);
     const candidateExercises = (assertQuery(exerciseResult) ?? []) as WorkoutExerciseRow[];
-    day =
-      candidateDays.find((candidate) =>
-        candidateExercises.some((exercise) => exercise.plan_day_id === candidate.id),
-      ) ?? null;
+    day = classifyCandidateWorkoutActivity(
+      candidateDays,
+      candidateExercises,
+    ).firstPopulatedDay;
     exercises = day
       ? candidateExercises.filter((exercise) => exercise.plan_day_id === day!.id)
       : [];
@@ -475,17 +496,26 @@ export async function readTodayNutritionTargetsProjection(
       .select("id")
       .eq("plan_id", plan.id)
       .eq("weekday", weekdayForDate(input.date))
-      .limit(1)
-      .maybeSingle();
-    const day = assertQuery(dayResult) as { id: string } | null;
-    if (day) {
+      .order("day_number", { ascending: true })
+      .limit(MAX_MATCHING_WORKOUT_DAYS);
+    const candidateDays = (assertQuery(dayResult) ?? []) as Array<{ id: string }>;
+    if (candidateDays.length) {
       const exerciseResult = await input.supabase
         .from("user_workout_plan_exercises")
-        .select("id")
-        .eq("plan_day_id", day.id)
-        .limit(1)
-        .maybeSingle();
-      trainingDay = Boolean(assertQuery(exerciseResult));
+        .select("id,plan_day_id")
+        .in(
+          "plan_day_id",
+          candidateDays.map((candidate) => candidate.id),
+        )
+        .limit(MAX_MATCHING_WORKOUT_EXERCISES);
+      const candidateExercises = (assertQuery(exerciseResult) ?? []) as Array<{
+        id: string;
+        plan_day_id: string;
+      }>;
+      trainingDay = classifyCandidateWorkoutActivity(
+        candidateDays,
+        candidateExercises,
+      ).trainingDay;
     }
   }
 
