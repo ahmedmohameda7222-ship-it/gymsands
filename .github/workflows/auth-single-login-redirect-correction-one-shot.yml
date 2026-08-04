@@ -110,15 +110,14 @@ jobs:
         run: |
           python <<'PY'
           import subprocess
-          allowed = {
+          expected = {
               "components/auth/auth-form.tsx",
               "components/auth/authenticated-login-redirect.test.tsx",
-              ".github/workflows/auth-single-login-redirect-correction-one-shot.yml",
           }
           tracked = set(subprocess.check_output(["git", "diff", "--name-only"]).decode().splitlines())
           untracked = set(subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard"]).decode().splitlines())
           changed = tracked | untracked
-          if changed != {"components/auth/auth-form.tsx", "components/auth/authenticated-login-redirect.test.tsx"}:
+          if changed != expected:
               raise SystemExit(f"unexpected bounded diff: {sorted(changed)}")
           PY
 
