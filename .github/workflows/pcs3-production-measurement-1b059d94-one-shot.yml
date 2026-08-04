@@ -79,6 +79,12 @@ jobs:
               raise SystemExit("first_test_fixture_anchor_invalid")
           test_source = test_source.replace(test_start, test_start_replacement, 1)
 
+          second_wait_anchor = "  assert.deepEqual(page.waitForLoadState.calls[1], [\n    \"networkidle\",\n    { timeout: 10000 },\n  ]);"
+          second_wait_replacement = "  assert.deepEqual(page.waitForLoadState.calls[1], [\n    \"networkidle\",\n    { timeout: 5000 },\n  ]);"
+          if test_source.count(second_wait_anchor) != 1:
+              raise SystemExit("second_wait_expectation_anchor_invalid")
+          test_source = test_source.replace(second_wait_anchor, second_wait_replacement, 1)
+
           assertion_anchor = "  assert.equal(submit.waitFor.calls.length, 1);\n  assert.equal(page.waitForFunction.calls.length, 1);"
           assertion_replacement = "  assert.equal(submit.waitFor.calls.length, 1);\n  assert.equal(main.waitFor.calls.length, 1);\n  assert.equal(page.waitForFunction.calls.length, 2);\n  assert.deepEqual(page.waitForTimeout.calls[0], [300]);"
           if test_source.count(assertion_anchor) != 1:
