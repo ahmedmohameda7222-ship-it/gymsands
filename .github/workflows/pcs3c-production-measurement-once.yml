@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - ops/pcs3c-production-measurement-96254583
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: read
@@ -14,6 +21,7 @@ concurrency:
 
 jobs:
   measure:
+    if: github.event_name == 'push' || github.head_ref == 'ops/pcs3c-production-measurement-96254583'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: production
@@ -50,7 +58,6 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run exact Production measurement
-        id: measurement
         shell: bash
         run: |
           set +e
