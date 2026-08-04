@@ -915,9 +915,17 @@ export async function login(page, origin, email, password) {
   if (new URL(page.url()).pathname === "/login") {
     throw new Error("SYNTHETIC_AUTHENTICATION_FAILED");
   }
-  await page
-    .waitForLoadState("networkidle", { timeout: 10_000 })
-    .catch(() => undefined);
+  const landingPath = new URL(page.url()).pathname;
+  if (landingPath === "/dashboard") {
+    await settlePage(page, "today");
+  } else if (landingPath === "/workout-history") {
+    await settlePage(page, "history");
+  } else {
+    await page.waitForTimeout(SETTLEMENT_DELAY_MS);
+    await page
+      .waitForLoadState("networkidle", { timeout: 10_000 })
+      .catch(() => undefined);
+  }
 }
 
 function credentialFor(account) {

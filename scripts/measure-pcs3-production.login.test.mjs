@@ -20,6 +20,9 @@ function locator({ count = 1, waitError = null } = {}) {
     count: asyncSpy(async () => count),
     fill: asyncSpy(),
     click: asyncSpy(),
+    first() {
+      return this;
+    },
   };
 }
 
@@ -33,6 +36,7 @@ function pageFixture({
   const email = locator({ count: emailCount, waitError });
   const password = locator({ count: passwordCount, waitError });
   const submit = locator({ count: submitCount, waitError });
+  const main = locator();
   let currentUrl = "https://app.plaivra.com/login";
   const page = {
     goto: asyncSpy(),
@@ -40,23 +44,25 @@ function pageFixture({
     locator: (selector) => {
       if (selector === 'input[type="email"]') return email;
       if (selector === 'input[type="password"]') return password;
+      if (selector === "main#main-content, main") return main;
       return submit;
     },
     waitForFunction: asyncSpy(),
     waitForLoadState: asyncSpy(),
+    waitForTimeout: asyncSpy(),
     waitForURL: asyncSpy(async (predicate) => {
       const next = new URL(finalUrl);
       if (!predicate(next)) throw new Error("predicate rejected");
       currentUrl = finalUrl;
     }),
   };
-  return { page, email, password, submit };
+  return { page, email, password, submit, main };
 }
 
 const origin = new URL("https://app.plaivra.com/");
 
 test("waits for exact visible controls and enabled submit before clicking", async () => {
-  const { page, email, password, submit } = pageFixture();
+  const { page, email, password, submit, main } = pageFixture();
   await login(page, origin, "synthetic@example.test", "secret");
 
   assert.equal(page.waitForLoadState.calls.length, 2);
@@ -66,12 +72,14 @@ test("waits for exact visible controls and enabled submit before clicking", asyn
   ]);
   assert.deepEqual(page.waitForLoadState.calls[1], [
     "networkidle",
-    { timeout: 10000 },
+    { timeout: 5000 },
   ]);
   assert.deepEqual(email.waitFor.calls[0], [{ state: "visible", timeout: 30000 }]);
   assert.equal(password.waitFor.calls.length, 1);
   assert.equal(submit.waitFor.calls.length, 1);
-  assert.equal(page.waitForFunction.calls.length, 1);
+  assert.equal(main.waitFor.calls.length, 1);
+  assert.equal(page.waitForFunction.calls.length, 2);
+  assert.deepEqual(page.waitForTimeout.calls[0], [300]);
   assert.equal(email.fill.calls.length, 1);
   assert.equal(password.fill.calls.length, 1);
   assert.equal(submit.click.calls.length, 1);
