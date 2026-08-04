@@ -59,7 +59,12 @@ test("waits for exact visible controls and enabled submit before clicking", asyn
   const { page, email, password, submit } = pageFixture();
   await login(page, origin, "synthetic@example.test", "secret");
 
+  assert.equal(page.waitForLoadState.calls.length, 2);
   assert.deepEqual(page.waitForLoadState.calls[0], [
+    "networkidle",
+    { timeout: 10000 },
+  ]);
+  assert.deepEqual(page.waitForLoadState.calls[1], [
     "networkidle",
     { timeout: 10000 },
   ]);
