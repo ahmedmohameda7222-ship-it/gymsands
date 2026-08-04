@@ -57,7 +57,7 @@ export async function getOpenWorkoutSessionWithStatus(
   candidateSessionId?: string | null,
 ) {
   let result: Awaited<ReturnType<typeof getOpenWorkoutSessionWithStatusLegacy>>;
-  if (env.useMockAuth && isMockAuthUserId(userId) && !env.productionQaBuild) {
+  if (env.useMockAuth && isMockAuthUserId(userId)) {
     result = await getOpenWorkoutSessionWithStatusLegacy(
       userId,
       planDayId,
