@@ -7,18 +7,19 @@ on:
       - ".github/workflows/pcs3-production-measurement-1b059d94-one-shot.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  correct:
+  measure:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    environment: production
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout corrected harness branch head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -29,41 +30,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Apply post-login settlement correction
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run canonical PCS3 Production measurement
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          harness = Path("scripts/measure-pcs3-production.mjs")
-          source = harness.read_text()
-          anchor = "  assertSameOrigin(page.url(), origin);\n  if (new URL(page.url()).pathname === \"/login\") {\n    throw new Error(\"SYNTHETIC_AUTHENTICATION_FAILED\");\n  }\n}"
-          replacement = "  assertSameOrigin(page.url(), origin);\n  if (new URL(page.url()).pathname === \"/login\") {\n    throw new Error(\"SYNTHETIC_AUTHENTICATION_FAILED\");\n  }\n  await page\n    .waitForLoadState(\"networkidle\", { timeout: 10_000 })\n    .catch(() => undefined);\n}"
-          if source.count(anchor) != 1:
-              raise SystemExit("post_login_settlement_anchor_invalid")
-          harness.write_text(source.replace(anchor, replacement, 1))
+          npm run measure:pcs3-production -- \
+            --mode production \
+            --url https://app.plaivra.com \
+            --expected-commit 1b059d944e619ad6919e2da96b204b935fa59596 \
+            --expected-migration 20260724232734 \
+            --samples 20 \
+            --warmups 2 \
+            --account both \
+            --output quality-reports/pcs3-production-measurement
 
-          test_file = Path("scripts/measure-pcs3-production.login.test.mjs")
-          test_source = test_file.read_text()
-          anchor_test = "  assert.deepEqual(page.waitForLoadState.calls[0], [\n    \"networkidle\",\n    { timeout: 10000 },\n  ]);\n  assert.deepEqual(email.waitFor.calls[0], [{ state: \"visible\", timeout: 30000 }]);"
-          replacement_test = "  assert.equal(page.waitForLoadState.calls.length, 2);\n  assert.deepEqual(page.waitForLoadState.calls[0], [\n    \"networkidle\",\n    { timeout: 10000 },\n  ]);\n  assert.deepEqual(page.waitForLoadState.calls[1], [\n    \"networkidle\",\n    { timeout: 10000 },\n  ]);\n  assert.deepEqual(email.waitFor.calls[0], [{ state: \"visible\", timeout: 30000 }]);"
-          if test_source.count(anchor_test) != 1:
-              raise SystemExit("post_login_test_anchor_invalid")
-          test_file.write_text(test_source.replace(anchor_test, replacement_test, 1))
-          PY
-
-      - name: Run focused PCS3 login tests
-        run: node --test scripts/measure-pcs3-production.login.test.mjs
-
-      - name: Verify bounded diff
-        run: |
-          git diff --check
-          changed="$(git status --short | awk '{print $2}' | sort)"
-          expected="$(printf '%s\n' scripts/measure-pcs3-production.login.test.mjs scripts/measure-pcs3-production.mjs | sort)"
-          test "$changed" = "$expected"
-
-      - name: Commit bounded correction
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/measure-pcs3-production.mjs scripts/measure-pcs3-production.login.test.mjs
-          git commit -m "fix(perf): settle authenticated landing before PCS3 capture"
-          git push origin HEAD:ops/pcs3-production-measurement-1b059d94
+      - name: Upload sanitized PCS3 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs3-production-measurement-1b059d94-final-2
+          path: quality-reports/pcs3-production-measurement
+          if-no-files-found: error
+          retention-days: 14
