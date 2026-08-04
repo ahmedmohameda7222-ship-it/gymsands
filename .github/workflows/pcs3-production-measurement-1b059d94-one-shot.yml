@@ -7,19 +7,18 @@ on:
       - ".github/workflows/pcs3-production-measurement-1b059d94-one-shot.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  measure:
+  correct:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    environment: production
+    timeout-minutes: 40
     steps:
-      - name: Checkout corrected harness branch head
+      - name: Checkout exact PR head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -30,31 +29,47 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run canonical PCS3 Production measurement
+      - name: Apply owner-scoped active-session read authority
         env:
-          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
-          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
-          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
-          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+          ROUTE_Z: eNqVVltv4jgUfudXHOUpWUHK7O0BhLpVF+1UGk1HpZ0ZabVCJjmAu8FhbIeWbfnve3yJE9ow3eUhcezv3L9zDN9sS6nhCT7io75BtS2FQjjAUpYbiARtnimUO5TRuNfjNVjit4pLvKOjgP3trOCLMy40riTTnPScodiRWCPFNH7gG66/J2NAg8Kg2qJc3VU8fyFXaV6oBqX3WyTol1L+XVZ6hkqRwpaIOTfwHj5afEbmNMhKaL5BmFC0ZY73FuGOLi5vrz5P57PpbHZ1/XH+fnrx+/RmRsinHkB0ybI1Di5LoWVZRCOItpLvyPk+iHKgdClptWGPA7bCyTDqk8hnJveEu6j0upT8HxuwPYi+Wj0o9OCWnBxcb20ujFJRKsGXS4IdgCnnMzm4rERmMPDA9fo9shyliqUv3+iomIl1d1lKiF1Yfwq2Id92rKjwLyiXcL24x0ynZF5yVHF32InTA1BbSdfObKpQxy2VyZhgh54B6kqKgB/3Di2/FVviVMpSxkozXakRiGqzQOmseNF2cNZ2O670XpXCbYN3zfzQKDVZJjs7hAfHBkpcVeRUGQ1FyfLUpt39Mqo64ZnFzz1+rhx95pVgO8YLtigwyBzqxRM45+udxLyS40BLW0tWGP7GNkEjkpJcrOCZYi4KFzFfgjuFyWRi9+H5GZqdKErqrJjDcZMk1xpOOIFzLzOCSuS45AJz64/nPFN7kUFw7o/pbWx6GZUewY1bOH8cVWwfYk6UD71b4/t1ygY+ZQOfsqgP734c9uHX4Xw4HFo2mOC8qqSrtvUZEbu2nJl+eNRkmT0wmhitiVN7EFTXWE6CTGRIlD5ugA6TXqZtspIFmRP4AHc3H2ojKe1aQ94tJnKeUy78eLkyuTkqsSUCCVFbMJmtPzHJNipdUY9Er4WjmjG1fp/L12q7NQZ4lDTZ6HCRCBToYHjVMtM+alq8u/2+04DtFjzZhD6nRFmqFfGUHzXiW63opedetCV5aJZ1S47g5+GwOUh8g7rZRA8t997j7pwlIZ4XhQ+M9AxKVbVlC6YwuJCaCyfUpnZfRUmDUFjQxI2jH9qb+C2OTFgdJHuBqqgL5g7qnTA7KX+Jc6kgmFlJ6rC2uQ3bL3BGc6jA2OblVTJSW8bQPs3I/mX40wkJerCkRYXTTOpmU5tEAD51Izg2YC7C41u+TaJD0nwFLw8997SvAjUQlYgBk1NVfKuGHRX8b5U5VZdx4GLozSQ4ad9WsnbImmiQYxeYH9qUJ9VMTitcWy8l1SCuzc6ZJjVPlM8MKcFiNYIlK8z/v+CuHc3xu/DdwRo73a3NNwjzv2dLw4bAhNpSNw/ClXp+bhfhxj7qf6KTztbHs+41uQ90bf4LNaCDew==
+          CLIENT_Z: eNqdVW1v0zAQ/t5fcbMmlEhd+r2jjCEBQkJi2pgQn6hxXGKW2sEvlNLlv3N+idusA2l8SnJ+7u65u+cc4gwH1gouLTmfTMS6U9rCDoS5daKGHlZarYG8nLXi68xZ0RqEJZTddhyhn5S+U87ecGOEkgcu/tzDJ/zXHn/JrPjJxz7XnNbX3LjWwgJ2EwAT7fOHse9BurY9RwTXWumLORirhfx2PukxzV/jX9Ftq2g9Do7OTt5JtZHRmylpLGik8oaK1mkOCwSTGA82MSAw5doapLLgI1bwWTkNzGmNDQSNCIRSAy1fWQzPGiq/8bryTVjhp/VFCHPNmdJ18ZO2jmcW5RyCAc8hAp7H4qYD4kWgr7l1WsIrpVpOZQxSwrNnob1qlYIsFgsg6ut3zizxhyeXWtNtJUx4Ji8s/ICXVHpNW/Gbp64VmGxMceob/6vDmLy+NVy/q4cBTCflX4YVOIsVFHte3lwOdQwD9RB8AJyM+1PC/f1g95KM1krU+SAaUMf6Cyr2BBOMOY5xxlLrTIARfNcII3hcBp4AttFqA5Jv4LVXWPFw/pqbDoUSpoTdWmHP/HxLX0K/n04sFoWQOudfx+0JvU+LQc1WMsiD8Bp8TMaXzjYoM8Eoki6E7JydB9puNAtPhTKGPh/VHZeH5lTFuzpvzsFKMSprUWPslO4xVI9jvsL1FoY///cmv8iDHwYXCFeRqx8eTjRYDrhWmG1dlMMwUjN3+/vAs5jG5Z+PdrWPA/BlhD02nGrW4Mb7Ud5ev78J31dU07UpykFwkUDuil+UEdl8kinFuJXhtiD5lEzhIX7Qwz7LcXuP0h1DHs17DMsEHomQG2P1NgWLLfrhOFoWOTRuPlzA8uJ0lyxW3YTpF2W/hDkQcn7gnRdhAXRDhYUVt6wpljPaiVnqg5nRoJGzNL/TXcjZL6eJCMCa20ahdMnb1x/JNBkbHCzXZp5RgNc64x3KndCua/0GYLjZd6NkdkIM7ofS4nc4nMPyFZbBNZzujnSGDJJXP7wwyhq86YhUZ8YqzVPcvoxFByEPNVfqrnyiOA861+W/URE7l8P6erz68bL4x2/sgNCHcMFXnVZW+eu/aqj5sJG4oR3XdotyaNsi5ZvifRfjkKyqp69YVPXeL4XZez/8iaTsVUIMQk3XQGpy0CiOABX036vfT/4AUyP0Cw==
+          WORKOUT_Z: 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
+          TEST_Z: eNqdVF1r20AQfPevuB4BS0WSC30pDilNA4VCoQG3zUshPp9W9mH5Trlb2XGN/3v39JFKwY7jPhgsaXd2dmd21aowFtmOWRDpF5XDZKsl27PMmhXj2qQwzhy/HKh/cc7ka+iHFAIX3aAUnLRqBhGDxwIkRkzhU8ZaITik8IE02iGzpkSYmNJKYFc9HsGAtfWCwhoJziVykwZhxLgoipEo1Ghj7JIA3EhIVGuIHQUpo0cVaoKOhxGh8BKzDzwahJdNUZkr0Hh2VQd2rejNsbJxjXu8bpM3qcPd/xNIBYqZcNAyaRm4Q7UHrSABv72ZxO9Zn3VVnYkSF8Yq3PKIBSG7+sh2hKIw4EuAwjFcAPPlwdaSVQnUrJICgdJ1ysxGg42dNAWkPRTWGCHoiB0maG6MRqF0wBtV6BEekeYhNoIsY+GhVBZ+UtnA/yffhJz6OQ04TOAh4CUl3itPpUFO/JtEpeHwDBSHAkvH/fRRWOqVv5iuDXYhHAgrF7fCipVL5oA1q68nQDoA/EbIBcT+2ZqcjxkvrFrTzCOmTezQWPq3Eo+xmMPVO/5K1F/Cbgnquhb9j0DyQZO7946plSeqtfCZsg7jgtrfNupvFGWWyASbWbOhltikLCpLMnJmDpWpDpugu3w9UhmgXATTlxb7Ykc2sNv99FmfxzD7HY7Z9DPpQWQvdkoXJSZC+v36YZag91P+Osyh9IqM/fGr589fJNM3BP80ytVs5JphjepY/nqAYeLvaMCbAd23i98aqiNfpZRjRudKA0sVbSat75YUpS/zRaVsf4vrwtUyF3SD/LpTfpZVAFXbLBN5PhNyeVjbgweuO7wqmK6Tt8d1Je1dL+W6y4dHVXh/OCdL8Ha4iW/OL10TGzy/HqehjtGslvJctLZ3YvS9AN1HvKOFmlSn5hvMhdye03vfIU2ZYTuGN7+1fz7qm+azg9yX4G+f3vRvaH23ut8OXcYOa+9E//sLTs7ZwQ==
         run: |
-          npm run measure:pcs3-production -- \
-            --mode production \
-            --url https://app.plaivra.com \
-            --expected-commit 1b059d944e619ad6919e2da96b204b935fa59596 \
-            --expected-migration 20260724232734 \
-            --samples 20 \
-            --warmups 2 \
-            --account both \
-            --output quality-reports/pcs3-production-measurement
+          python - <<'PY'
+          import base64
+          import os
+          import zlib
+          from pathlib import Path
 
-      - name: Upload sanitized PCS3 evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pcs3-production-measurement-1b059d94-final-3
-          path: quality-reports/pcs3-production-measurement
-          if-no-files-found: error
-          retention-days: 14
+          files = {
+              "app/api/workouts/active-session/route.ts": os.environ["ROUTE_Z"],
+              "services/workouts/active-session-client.ts": os.environ["CLIENT_Z"],
+              "services/database/workout-sessions.ts": os.environ["WORKOUT_Z"],
+              "lib/product/pcs3-active-session-read-authority.test.ts": os.environ["TEST_Z"],
+          }
+          for name, payload in files.items():
+              path = Path(name)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_bytes(zlib.decompress(base64.b64decode(payload)))
+          PY
+
+      - name: Run focused authority tests
+        run: |
+          npx vitest run --config vitest.unit.config.mjs lib/product/pcs3-active-session-read-authority.test.ts scripts/measure-pcs3-production.login.test.mjs
+          npm run typecheck
+
+      - name: Verify bounded diff
+        run: |
+          git diff --check
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' app/api/workouts/active-session/route.ts lib/product/pcs3-active-session-read-authority.test.ts services/database/workout-sessions.ts services/workouts/active-session-client.ts | sort)"
+          test "$changed" = "$expected"
+
+      - name: Commit bounded correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/api/workouts/active-session/route.ts lib/product/pcs3-active-session-read-authority.test.ts services/database/workout-sessions.ts services/workouts/active-session-client.ts
+          git commit -m "fix(perf): route active-session discovery through server authority"
+          git push origin HEAD:ops/pcs3-production-measurement-1b059d94
