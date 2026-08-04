@@ -104,3 +104,8 @@ Use these current sources:
 - Production `/api/version`
 - Vercel Production deployment identity and runtime logs
 - exact-head Quality and release workflow artifacts
+
+## Pending P0 onboarding database repair
+
+- `20260804174500_fix_profiles_update_policy_recursion.sql` is a repository-only pending migration that repairs the confirmed recursive `profiles_update_own_basic` RLS policy blocking final onboarding completion.
+- It has not been applied to Production. Do not replay or apply it before explicit Product and Engineering Lead authorization.
