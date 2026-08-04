@@ -1,26 +1,24 @@
-name: PCS3 Auth Diagnostic 1b059d94 One-Shot
+name: PCS3 Harness Hydration Correction One-Shot
 
 on:
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/pcs3-production-measurement-1b059d94-one-shot.yml"
-      - "scripts/pcs3-auth-diagnostic-1b059d94-one-shot.mjs"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  correct:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    environment: production
+    timeout-minutes: 30
     steps:
-      - name: Checkout diagnostic branch head
+      - name: Checkout exact PR head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -31,35 +29,71 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Apply bounded hydration-settlement diagnostic
+      - name: Apply bounded canonical harness correction
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path("scripts/pcs3-auth-diagnostic-1b059d94-one-shot.mjs")
-          source = path.read_text()
-          needle = '    pushRoute(result.routeSequence, page.url());\n\n    stage = "wait_controls";'
-          replacement = '    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);\n    pushRoute(result.routeSequence, page.url());\n\n    stage = "wait_controls";'
-          if needle not in source:
-              raise SystemExit("diagnostic_patch_anchor_missing")
-          path.write_text(source.replace(needle, replacement, 1))
+
+          harness = Path("scripts/measure-pcs3-production.mjs")
+          source = harness.read_text()
+          anchor = '''  assertSameOrigin(page.url(), origin);
+
+  const emailInput = page.locator('input[type="email"]');'''
+          replacement = '''  assertSameOrigin(page.url(), origin);
+  await page
+    .waitForLoadState("networkidle", { timeout: 10_000 })
+    .catch(() => undefined);
+
+  const emailInput = page.locator('input[type="email"]');'''
+          if source.count(anchor) != 1:
+              raise SystemExit("canonical_login_patch_anchor_invalid")
+          harness.write_text(source.replace(anchor, replacement, 1))
+
+          test_file = Path("scripts/measure-pcs3-production.login.test.mjs")
+          test_source = test_file.read_text()
+          fixture_anchor = '''    waitForFunction: asyncSpy(),
+    waitForURL: asyncSpy(async (predicate) => {'''
+          fixture_replacement = '''    waitForFunction: asyncSpy(),
+    waitForLoadState: asyncSpy(),
+    waitForURL: asyncSpy(async (predicate) => {'''
+          if test_source.count(fixture_anchor) != 1:
+              raise SystemExit("login_fixture_patch_anchor_invalid")
+          test_source = test_source.replace(fixture_anchor, fixture_replacement, 1)
+
+          assertion_anchor = '''  await login(page, origin, "synthetic@example.test", "secret");
+
+  assert.deepEqual(email.waitFor.calls[0], [{ state: "visible", timeout: 30000 }]);'''
+          assertion_replacement = '''  await login(page, origin, "synthetic@example.test", "secret");
+
+  assert.deepEqual(page.waitForLoadState.calls[0], [
+    "networkidle",
+    { timeout: 10000 },
+  ]);
+  assert.deepEqual(email.waitFor.calls[0], [{ state: "visible", timeout: 30000 }]);'''
+          if test_source.count(assertion_anchor) != 1:
+              raise SystemExit("login_assertion_patch_anchor_invalid")
+          test_file.write_text(test_source.replace(assertion_anchor, assertion_replacement, 1))
+
+          diagnostic = Path("scripts/pcs3-auth-diagnostic-1b059d94-one-shot.mjs")
+          if diagnostic.exists():
+              diagnostic.unlink()
           PY
 
-      - name: Run sanitized two-account auth diagnostic
-        env:
-          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
-          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
-          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
-          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
-        run: node scripts/pcs3-auth-diagnostic-1b059d94-one-shot.mjs
+      - name: Run focused PCS3 login tests
+        run: node --test scripts/measure-pcs3-production.login.test.mjs
 
-      - name: Upload sanitized auth diagnostic
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pcs3-auth-diagnostic-1b059d94-hydrated
-          path: quality-reports/pcs3-auth-diagnostic-1b059d94
-          if-no-files-found: error
-          retention-days: 14
+      - name: Verify bounded diff
+        run: |
+          git diff --check
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' scripts/measure-pcs3-production.login.test.mjs scripts/measure-pcs3-production.mjs scripts/pcs3-auth-diagnostic-1b059d94-one-shot.mjs | sort)"
+          test "$changed" = "$expected"
+
+      - name: Commit bounded correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/measure-pcs3-production.mjs scripts/measure-pcs3-production.login.test.mjs
+          git rm --ignore-unmatch scripts/pcs3-auth-diagnostic-1b059d94-one-shot.mjs
+          git commit -m "fix(perf): wait for hydrated PCS3 login form"
+          git push origin HEAD:ops/pcs3-production-measurement-1b059d94
