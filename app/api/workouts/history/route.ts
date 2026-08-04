@@ -31,6 +31,12 @@ function operationFor(cursor: string | null | undefined): Operation {
   return cursor ? "cursor_page" : "first_page";
 }
 
+function operationForRawRequestUrl(value: string): Operation {
+  return new URL(value).searchParams.has("cursor")
+    ? "cursor_page"
+    : "first_page";
+}
+
 function safeResultCount(value: unknown) {
   if (
     !value ||
@@ -95,13 +101,12 @@ export async function GET(request: Request) {
   const requestId = resolveOperationalCorrelationId(
     request.headers.get(REQUEST_ID_HEADER),
   );
+  const rawOperation = operationForRawRequestUrl(request.url);
   const limited = rateLimit(request, "workout-history-list", 60, 60_000);
   if (limited) {
     logCompletion({
       requestId,
-      operation: new URL(request.url).searchParams.has("cursor")
-        ? "cursor_page"
-        : "first_page",
+      operation: rawOperation,
       outcome: "rejected",
       startedAt,
     });
@@ -115,7 +120,7 @@ export async function GET(request: Request) {
     if (error instanceof WorkoutHistoryRequestError) {
       logCompletion({
         requestId,
-        operation: "first_page",
+        operation: rawOperation,
         outcome: "invalid_request",
         startedAt,
         errorCode: error.code,
@@ -130,7 +135,7 @@ export async function GET(request: Request) {
     }
     logCompletion({
       requestId,
-      operation: "first_page",
+      operation: rawOperation,
       outcome: "failed_closed",
       startedAt,
       errorCode: "history_unavailable",
