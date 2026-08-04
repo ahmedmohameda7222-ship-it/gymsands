@@ -43,6 +43,12 @@ jobs:
 
           test_file = Path("scripts/measure-pcs3-production.login.test.mjs")
           test_source = test_file.read_text()
+          first_anchor = "    click: asyncSpy(),\n  };"
+          first_replacement = "    click: asyncSpy(),\n    first() {\n      return this;\n    },\n  };"
+          if test_source.count(first_anchor) != 1:
+              raise SystemExit("locator_first_anchor_invalid")
+          test_source = test_source.replace(first_anchor, first_replacement, 1)
+
           fixture_anchor = "  const submit = locator({ count: submitCount, waitError });\n  let currentUrl = \"https://app.plaivra.com/login\";"
           fixture_replacement = "  const submit = locator({ count: submitCount, waitError });\n  const main = locator();\n  let currentUrl = \"https://app.plaivra.com/login\";"
           if test_source.count(fixture_anchor) != 1:
