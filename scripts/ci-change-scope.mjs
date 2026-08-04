@@ -120,7 +120,7 @@ const DEPENDENCY_MANIFEST_KEYS = [
   "overrides",
   "resolutions",
   "packageManager",
-] as const;
+];
 
 function parseManifest(value, label) {
   try {
