@@ -27,6 +27,7 @@
 - The current URL is the committed Workout History list-query authority. Search input and custom dates remain local only while they are uncommitted drafts; selected-item and filter-panel state are presentation state, not data-query authority.
 - One canonical owner/query key, derived from the normalized list request, owns first-page browser request identity. Equivalent committed queries share ready or in-flight work, while cursor requests remain independent.
 - AuthProvider session state is the Workout History browser authentication authority. Normal list and detail requests receive the current access token explicitly and must not independently resolve the Supabase session.
+- The Workout History list route owns safe request correlation, private/no-store response headers, bounded `total`/`list`/`filters` timing, and one allowlisted completion log. These observability facts must not alter list, filter, cursor, detail, or ownership semantics.
 - Do not create another workout-history or active-session database model.
 
 ### Nutrition
@@ -63,6 +64,16 @@
 ### Billing
 
 - Billing infrastructure is scaffolded and checkout remains disabled until separately approved.
+
+### Request measurement and observability
+
+- Safe route timing and correlation are request-observability authorities. They may expose only bounded allowlisted metric names, outcomes, error codes, counts, and durations.
+- PCS-3 Production evidence is collected only through the repository-owned read-only Playwright harness and approved populated/empty synthetic accounts.
+- Exact deployed commit and migration identity are mandatory before authentication or measurement.
+- Browser-observed request duration and server `Server-Timing` duration are distinct metrics. Decoded response bytes and `Content-Length` are also distinct metrics.
+- Measurement evidence must exclude payloads, credentials, access tokens, cookies, browser storage, raw request IDs, user IDs, query values, opaque record IDs, private notes, and raw database errors.
+- Measurement artifacts are review evidence, not runtime data authority, user telemetry, or an approved latency budget.
+- The harness must not mutate data, create fixtures, use service role, expose a public measurement endpoint, or persist telemetry.
 
 ## Compatibility policy
 

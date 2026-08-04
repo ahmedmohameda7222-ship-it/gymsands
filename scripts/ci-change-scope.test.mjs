@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { changedPathDiffArgs, classifyChangedPaths } from "./ci-change-scope.mjs";
+import {
+  changedPathDiffArgs,
+  classifyChangedPaths,
+  dependencyManifestChanged,
+} from "./ci-change-scope.mjs";
 
 test("ordinary documentation-only changes run only integrity and summary", () => {
   const scope = classifyChangedPaths(["CHANGELOG.md", "docs/guides/example.md"]);
@@ -191,8 +195,56 @@ test("script test files remain lightweight and do not trigger broad fallback", (
   assert.equal(scope.fallback, false);
 });
 
+test("PCS-3 measurement script and script-only package metadata stay bounded", () => {
+  const scope = classifyChangedPaths(
+    [
+      "scripts/measure-pcs3-production.mjs",
+      "scripts/measure-pcs3-production.test.mjs",
+      "package.json",
+    ],
+    { dependencyManifestChanged: false },
+  );
+  assert.equal(scope.core, true);
+  assert.equal(scope.ci, true);
+  assert.equal(scope.dependencies, false);
+  assert.equal(scope.database, false);
+  assert.equal(scope.ui, false);
+  assert.equal(scope.build, false);
+  assert.equal(scope.fallback, false);
+});
+
+test("package manifest comparison distinguishes scripts from dependencies", () => {
+  const base = JSON.stringify({
+    scripts: { test: "node --test" },
+    dependencies: { next: "16.2.11" },
+    devDependencies: { vitest: "4.1.9" },
+    overrides: { postcss: "8.5.22" },
+  });
+  const scriptOnly = JSON.stringify({
+    scripts: { test: "node --test", measure: "node measure.mjs" },
+    dependencies: { next: "16.2.11" },
+    devDependencies: { vitest: "4.1.9" },
+    overrides: { postcss: "8.5.22" },
+  });
+  const dependencyEdit = JSON.stringify({
+    scripts: { test: "node --test" },
+    dependencies: { next: "16.3.0" },
+    devDependencies: { vitest: "4.1.9" },
+    overrides: { postcss: "8.5.22" },
+  });
+  assert.equal(dependencyManifestChanged(base, scriptOnly), false);
+  assert.equal(dependencyManifestChanged(base, dependencyEdit), true);
+  assert.throws(
+    () => dependencyManifestChanged("not-json", dependencyEdit),
+    /not valid JSON/,
+  );
+});
+
 test("dependency changes select audit, integration and build", () => {
-  const scope = classifyChangedPaths(["package.json", "package-lock.json"]);
+  const scope = classifyChangedPaths(
+    ["package.json", "package-lock.json"],
+    { dependencyManifestChanged: true },
+  );
   assert.equal(scope.dependencies, true);
   assert.equal(scope.database, true);
   assert.equal(scope.build, true);

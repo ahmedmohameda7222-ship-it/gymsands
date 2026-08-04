@@ -18,7 +18,7 @@ test("all release target consumers use the declared compatibility marker", () =>
   const environment = qualityLedgerEnvironment(qualityTarget);
 
   assert.equal(releaseTarget.expectedMigration, "20260724232734");
-  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260802114733");
+  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260803173755");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
   assert.equal(readyTarget.expectedMigration, releaseTarget.expectedMigration);
   assert.equal(qualityTarget.expectedMigration, releaseTarget.expectedMigration);

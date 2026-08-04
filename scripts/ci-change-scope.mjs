@@ -16,15 +16,10 @@ const DOC_PATTERNS = [
   /^\.github\/(ISSUE_TEMPLATE|PULL_REQUEST_TEMPLATE)\//,
 ];
 
-// Documentation is normally lightweight, but machine-readable documentation
-// contracts are executable repository inputs and must run the core suite.
 const MACHINE_DOCUMENT_CONTRACT_PATTERNS = [
   /^docs\/.*\.(?:json|ya?ml)$/i,
 ];
 
-// These two prose authorities are intentionally inspected by the migration
-// ledger validator while unresolved migrations exist, so edits must execute
-// the database gate rather than being treated as validation-free docs.
 const DATABASE_DOCUMENT_CONTRACT_PATTERNS = [
   /^README\.md$/i,
   /^docs\/architecture\/migration-ledger-reconciliation\.md$/i,
@@ -42,7 +37,6 @@ const DATABASE_PATTERNS = [
 const INTEGRATION_AUTHORITY_PATTERNS = [
   /^scripts\/run-integration-tests\.mjs$/,
   /^vitest\.integration\.config\.(?:js|mjs|cjs|ts)$/i,
-  /^package(?:-lock)?\.json$/,
 ];
 
 const UI_PATTERNS = [
@@ -75,6 +69,10 @@ const BROAD_CI_AUTHORITY_PATTERNS = [
   /^scripts\/(?:ci-change-scope|run-ci-check)\.mjs$/,
 ];
 
+const BOUNDED_SCRIPT_AUTHORITY_PATTERNS = [
+  /^scripts\/measure-pcs3-production\.mjs$/,
+];
+
 const CI_SELECTION_PATTERNS = [
   /^\.github\/workflows\//,
   /^\.gitignore$/,
@@ -96,6 +94,7 @@ const RECOGNIZED_CI_PATTERNS = [
   /^\.agents\//,
   /^(?:package|tsconfig|vitest|eslint|next|postcss|tailwind)[^/]*\.(?:json|js|mjs|cjs|ts)$/,
   ...PERFORMANCE_BUILD_PATTERNS,
+  ...BOUNDED_SCRIPT_AUTHORITY_PATTERNS,
   /^\.nvmrc$/,
   /^\.node-version$/,
 ];
@@ -112,9 +111,38 @@ const RUNTIME_PATTERNS = [
   /^next\.config\.(?:js|mjs|ts)$/,
 ];
 
-const DEPENDENCY_PATTERNS = [/^package\.json$/, /^package-lock\.json$/];
+const DEPENDENCY_LOCK_PATTERNS = [/^package-lock\.json$/];
+const DEPENDENCY_MANIFEST_KEYS = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+  "overrides",
+  "resolutions",
+  "packageManager",
+];
 
-export function classifyChangedPaths(inputPaths) {
+function parseManifest(value, label) {
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    throw new Error(`${label} package.json is not valid JSON.`);
+  }
+}
+
+export function dependencyManifestChanged(baseValue, headValue) {
+  const base = parseManifest(baseValue, "Base");
+  const head = parseManifest(headValue, "Head");
+  return DEPENDENCY_MANIFEST_KEYS.some(
+    (key) =>
+      JSON.stringify(base[key] ?? null) !== JSON.stringify(head[key] ?? null),
+  );
+}
+
+export function classifyChangedPaths(
+  inputPaths,
+  { dependencyManifestChanged: manifestDependenciesChanged = false } = {},
+) {
   const paths = [...new Set(inputPaths
     .map((path) => String(path).trim().replaceAll("\\", "/"))
     .filter(Boolean))];
@@ -139,7 +167,8 @@ export function classifyChangedPaths(inputPaths) {
     && !databaseDocumentContract
     && paths.every((path) => matchesAny(path, DOC_PATTERNS));
   const database = databaseDocumentContract || paths.some((path) => matchesAny(path, DATABASE_PATTERNS));
-  const integrationAuthority = paths.some((path) => matchesAny(path, INTEGRATION_AUTHORITY_PATTERNS));
+  const integrationAuthority = manifestDependenciesChanged
+    || paths.some((path) => matchesAny(path, INTEGRATION_AUTHORITY_PATTERNS));
   const integrationTest = paths.some((path) => isIntegrationTestPath(path));
   const styleBuild = paths.some((path) => matchesAny(path, STYLE_BUILD_PATTERNS));
   const buildAuthority = paths.some((path) => matchesAny(path, BUILD_AUTHORITY_PATTERNS));
@@ -147,7 +176,8 @@ export function classifyChangedPaths(inputPaths) {
   const ui = styleBuild || broadCiAuthority || paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
   const ci = paths.some((path) => matchesAny(path, CI_SELECTION_PATTERNS));
   const runtime = buildAuthority || broadCiAuthority || paths.some((path) => !isTestPath(path) && matchesAny(path, RUNTIME_PATTERNS));
-  const dependencies = paths.some((path) => matchesAny(path, DEPENDENCY_PATTERNS));
+  const dependencies = manifestDependenciesChanged
+    || paths.some((path) => matchesAny(path, DEPENDENCY_LOCK_PATTERNS));
   const recognized = paths.every((path) => (
     isTestPath(path)
     || matchesAny(path, DOC_PATTERNS)
@@ -161,7 +191,7 @@ export function classifyChangedPaths(inputPaths) {
     || matchesAny(path, BROAD_CI_AUTHORITY_PATTERNS)
     || matchesAny(path, RECOGNIZED_CI_PATTERNS)
     || matchesAny(path, RUNTIME_PATTERNS)
-    || matchesAny(path, DEPENDENCY_PATTERNS)
+    || matchesAny(path, DEPENDENCY_LOCK_PATTERNS)
   ));
   const fallback = !docsOnly && !recognized;
 
@@ -212,6 +242,13 @@ function emit(result) {
   process.stdout.write(`${lines.join("\n")}\n`);
 }
 
+function packageJsonAt(ref) {
+  return execFileSync("git", ["show", `${ref}:package.json`], {
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
+  });
+}
+
 function main() {
   const base = exactSha(process.env.PLAIVRA_PR_BASE_SHA, "PR base");
   const head = exactSha(process.env.PLAIVRA_PR_HEAD_SHA, "PR head");
@@ -219,7 +256,16 @@ function main() {
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
   });
-  emit(classifyChangedPaths(stdout.split(/\r?\n/)));
+  const paths = stdout.split(/\r?\n/);
+  const packageChanged = paths.some((path) => path.trim() === "package.json");
+  const manifestDependenciesChanged = packageChanged
+    ? dependencyManifestChanged(packageJsonAt(base), packageJsonAt(head))
+    : false;
+  emit(
+    classifyChangedPaths(paths, {
+      dependencyManifestChanged: manifestDependenciesChanged,
+    }),
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
