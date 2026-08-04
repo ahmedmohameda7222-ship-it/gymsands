@@ -1,0 +1,94 @@
+name: PCS-3C Production Measurement One-Shot
+
+on:
+  push:
+    branches:
+      - ops/pcs3c-production-measurement-96254583
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pcs3c-production-measurement-96254583
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    env:
+      PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+      PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+      PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+      PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+
+    steps:
+      - name: Checkout exact deployed main commit
+        uses: actions/checkout@v4
+        with:
+          ref: 96254583952b32318d1b4562a73c61f5e5aeb32f
+          fetch-depth: 0
+
+      - name: Verify exact repository identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "96254583952b32318d1b4562a73c61f5e5aeb32f"
+          test "${GITHUB_REPOSITORY}" = "ahmedmohameda7222-ship-it/gymsands"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run exact Production measurement
+        id: measurement
+        shell: bash
+        run: |
+          set +e
+          npm run measure:pcs3-production -- \
+            --mode production \
+            --url https://app.plaivra.com \
+            --expected-commit 96254583952b32318d1b4562a73c61f5e5aeb32f \
+            --expected-migration 20260724232734 \
+            --samples 20 \
+            --warmups 2 \
+            --account both \
+            --output quality-reports/pcs3-production-measurement
+          code="$?"
+          echo "$code" > quality-reports/pcs3-production-measurement.exit
+          exit 0
+
+      - name: Upload sanitized PCS-3 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs3-production-measurement-96254583952b32318d1b4562a73c61f5e5aeb32f
+          path: |
+            quality-reports/pcs3-production-measurement/
+            quality-reports/pcs3-production-measurement.exit
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce measurement result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f quality-reports/pcs3-production-measurement.exit
+          test "$(cat quality-reports/pcs3-production-measurement.exit)" = "0"
+          test -f quality-reports/pcs3-production-measurement/summary.json
+          node -e '
+            const fs = require("node:fs");
+            const evidence = JSON.parse(fs.readFileSync("quality-reports/pcs3-production-measurement/summary.json", "utf8"));
+            if (evidence.passed !== true) throw new Error("PCS-3 measurement evidence did not pass.");
+            if (evidence.syntheticDataOnly !== true || evidence.credentialsLogged !== false) throw new Error("PCS-3 evidence safety declaration failed.");
+          '
