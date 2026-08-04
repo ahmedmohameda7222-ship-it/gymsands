@@ -869,6 +869,9 @@ export async function login(page, origin, email, password) {
     timeout: REQUEST_TIMEOUT_MS,
   });
   assertSameOrigin(page.url(), origin);
+  await page
+    .waitForLoadState("networkidle", { timeout: 10_000 })
+    .catch(() => undefined);
 
   const emailInput = page.locator('input[type="email"]');
   const passwordInput = page.locator('input[type="password"]');

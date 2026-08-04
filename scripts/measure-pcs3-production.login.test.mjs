@@ -43,6 +43,7 @@ function pageFixture({
       return submit;
     },
     waitForFunction: asyncSpy(),
+    waitForLoadState: asyncSpy(),
     waitForURL: asyncSpy(async (predicate) => {
       const next = new URL(finalUrl);
       if (!predicate(next)) throw new Error("predicate rejected");
@@ -58,6 +59,10 @@ test("waits for exact visible controls and enabled submit before clicking", asyn
   const { page, email, password, submit } = pageFixture();
   await login(page, origin, "synthetic@example.test", "secret");
 
+  assert.deepEqual(page.waitForLoadState.calls[0], [
+    "networkidle",
+    { timeout: 10000 },
+  ]);
   assert.deepEqual(email.waitFor.calls[0], [{ state: "visible", timeout: 30000 }]);
   assert.equal(password.waitFor.calls.length, 1);
   assert.equal(submit.waitFor.calls.length, 1);
