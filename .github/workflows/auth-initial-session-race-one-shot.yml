@@ -313,7 +313,9 @@ jobs:
 
       - name: Verify bounded diff
         run: |
-          test "$(git diff --name-only | sort)" = "$(printf '%s\n' components/auth/auth-provider.initial-session-race.test.tsx components/auth/auth-provider.tsx | sort)"
+          actual="$( { git diff --name-only; git ls-files --others --exclude-standard; } | sort -u )"
+          expected="$(printf '%s\n' components/auth/auth-provider.initial-session-race.test.tsx components/auth/auth-provider.tsx | sort)"
+          test "$actual" = "$expected"
 
       - name: Commit bounded correction
         run: |
