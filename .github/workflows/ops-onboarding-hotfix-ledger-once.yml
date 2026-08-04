@@ -1,0 +1,81 @@
+name: Onboarding Hotfix Ledger One-Shot
+
+on:
+  push:
+    branches:
+      - fix/onboarding-completion-profile-rls
+    paths:
+      - .github/workflows/ops-onboarding-hotfix-ledger-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/onboarding-completion-profile-rls
+          fetch-depth: 0
+
+      - name: Generate bounded pending-ledger files
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const filename = '20260804174500_fix_profiles_update_policy_recursion.sql';
+          const ledgerPath = 'supabase/migration-ledger.json';
+          const readmePath = 'README.md';
+          const reconciliationPath = 'docs/architecture/migration-ledger-reconciliation.md';
+          const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+
+          if (ledger.entries.some((entry) => entry.localFile === filename)) {
+            throw new Error('Pending migration is already classified.');
+          }
+
+          ledger.entries.push({
+            localFile: filename,
+            state: 'pending',
+            note: 'P0 onboarding completion RLS recursion repair. Repository candidate only; do not apply to Production before explicit Product and Engineering Lead authorization.'
+          });
+          ledger.entries.sort((a, b) => a.localFile.localeCompare(b.localFile));
+          ledger.pendingCount = 1;
+          ledger.unresolvedCount = 1;
+          ledger.historyRepair.state = 'pending';
+          ledger.historyRepair.pendingCount = 1;
+          ledger.historyRepair.unresolvedCount = 1;
+          ledger.historyRepair.note = `${ledger.historyRepair.note} Pending repository migration ${filename} repairs the confirmed onboarding completion profiles-policy recursion and has not been applied to Production. Do not replay or apply it before explicit authorization.`;
+          fs.writeFileSync(ledgerPath, `${JSON.stringify(ledger)}\n`);
+
+          const section = `\n## Pending P0 onboarding database repair\n\n- \`${filename}\` is a repository-only pending migration that repairs the confirmed recursive \`profiles_update_own_basic\` RLS policy blocking final onboarding completion.\n- It has not been applied to Production. Do not replay or apply it before explicit Product and Engineering Lead authorization.\n`;
+
+          for (const target of [readmePath, reconciliationPath]) {
+            const current = fs.readFileSync(target, 'utf8');
+            if (!current.includes(filename)) {
+              fs.writeFileSync(target, `${current.trimEnd()}\n${section}`);
+            }
+          }
+
+          const output = 'quality-reports/onboarding-ledger-patch';
+          fs.mkdirSync(path.join(output, 'supabase'), { recursive: true });
+          fs.mkdirSync(path.join(output, 'docs/architecture'), { recursive: true });
+          fs.copyFileSync(ledgerPath, path.join(output, ledgerPath));
+          fs.copyFileSync(readmePath, path.join(output, readmePath));
+          fs.copyFileSync(reconciliationPath, path.join(output, reconciliationPath));
+          NODE
+
+      - name: Verify generated ledger
+        run: npm run migration:ledger:check
+
+      - name: Upload bounded patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: onboarding-hotfix-ledger-patch
+          path: quality-reports/onboarding-ledger-patch/
+          if-no-files-found: error
+          retention-days: 1
