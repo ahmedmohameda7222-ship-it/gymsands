@@ -1,19 +1,22 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { parse, resolve } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
 
 import {
   sanitizeEvidence,
-  sanitizeEvidenceArtifactPath,
   sanitizeEvidenceUrl,
 } from "./authenticated-release-smoke.mjs";
 
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const MIGRATION_VERSION = /^\d{12,14}$/;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-const SAFE_VERCEL_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$/i;
+const SAFE_VERCEL_HOST = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+vercel\.app$/i;
 const APPROVED_PRODUCTION_HOSTS = new Set([
   "plaivra.com",
   "app.plaivra.com",
@@ -24,6 +27,7 @@ const ALLOWED_OPTIONS = new Set([
   "url",
   "expected-commit",
   "expected-migration",
+  "reviewed-vercel-host",
   "samples",
   "warmups",
   "account",
@@ -74,6 +78,69 @@ SLA and do not establish final launch budgets.`;
 const DEFAULT_OUTPUT = "quality-reports/pcs3-production-measurement";
 const SETTLEMENT_DELAY_MS = 300;
 const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_PENDING_RESPONSE_TASKS = 32;
+const SAFE_FAILURE_CODES = new Set([
+  "PCS3_PRODUCTION_MEASUREMENT_FAILED",
+  "PCS3_OUTPUT_FILESYSTEM_ROOT_FORBIDDEN",
+  "PCS3_OUTPUT_REPOSITORY_ROOT_FORBIDDEN",
+  "MEASUREMENT_REDIRECT_ORIGIN_INVALID",
+  "MEASUREMENT_AUTH_LOST",
+  "SYNTHETIC_AUTHENTICATION_FAILED",
+  "SYNTHETIC_CREDENTIALS_MISSING_POPULATED",
+  "SYNTHETIC_CREDENTIALS_MISSING_EMPTY",
+  "DEPLOYED_IDENTITY_HTTP_INVALID",
+  "DEPLOYED_COMMIT_MISMATCH",
+  "DEPLOYED_EXPECTED_MIGRATION_MISMATCH",
+  "DEPLOYED_DATABASE_MIGRATION_MISMATCH",
+  "DEPLOYED_ARTIFACT_IDENTITY_INVALID",
+  "DEPLOYED_RELEASE_NOT_READY",
+  "DEPLOYED_SCHEMA_INCOMPATIBLE",
+  "DEPLOYED_PENDING_MIGRATIONS",
+  "DEPLOYED_UNTRACKED_APPLICATIONS",
+  "DEPLOYED_UNRESOLVED_MIGRATIONS",
+  "MEASUREMENT_PAGE_ERROR",
+  "MEASUREMENT_CONSOLE_ERROR",
+  "MEASUREMENT_REQUEST_FAILURE",
+  "MEASUREMENT_HTTP_5XX",
+  "MEASUREMENT_ERROR_BOUNDARY",
+  "MEASUREMENT_HTTP_STATUS_INVALID",
+  "MEASUREMENT_CACHE_HEADERS_INVALID",
+  "MEASUREMENT_VARY_HEADER_INVALID",
+  "MEASUREMENT_NOSNIFF_HEADER_INVALID",
+  "MEASUREMENT_REQUEST_ID_MISSING",
+  "MEASUREMENT_SERVER_TIMING_INVALID",
+  "MEASUREMENT_SERVER_TIMING_TOTAL_MISSING",
+  "MEASUREMENT_SERVER_TIMING_LIST_MISSING",
+  "MEASUREMENT_SERVER_TIMING_FILTERS_MISSING",
+  "TODAY_PROJECTION_REQUEST_COUNT_INVALID",
+  "TODAY_DIRECT_SUPABASE_READ_DETECTED",
+  "TODAY_PROJECTION_RESPONSE_MISSING",
+  "TODAY_CONTRACT_HEADER_INVALID",
+  "HISTORY_FIRST_PAGE_REQUEST_COUNT_INVALID",
+  "HISTORY_INITIAL_CURSOR_REQUEST_DETECTED",
+  "HISTORY_FIRST_PAGE_RESPONSE_MISSING",
+  "HISTORY_FILTER_PANEL_REFETCHED_FIRST_PAGE",
+  "HISTORY_SELECTED_ONLY_REFETCHED_FIRST_PAGE",
+  "HISTORY_DETAIL_STATUS_INVALID",
+  "HISTORY_LOAD_MORE_REFETCHED_FIRST_PAGE",
+  "HISTORY_LOAD_MORE_CURSOR_COUNT_INVALID",
+  "HISTORY_CURSOR_RESPONSE_MISSING",
+  "HISTORY_CURSOR_FILTERS_TIMING_FABRICATED",
+  "AGGREGATION_REQUIRES_COMPLETE_VALID_SAMPLES",
+]);
+const KNOWN_EVIDENCE_ENTRIES = [
+  "summary.json",
+  "summary.md",
+  "populated",
+  "empty",
+  "screenshots",
+  "traces",
+  "videos",
+  "storage-state.json",
+  "trace.zip",
+  "measurement.har",
+  "recording.webm",
+];
 
 export function parseCliArgs(argv) {
   const raw = {};
@@ -107,7 +174,29 @@ function boundedInteger(value, label, minimum, maximum, fallback) {
   return parsed;
 }
 
-export function normalizeMeasurementOrigin(value, mode) {
+export function normalizeReviewedVercelHost(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return null;
+  }
+  const host = String(value).trim().toLowerCase();
+  if (
+    /[\s*:/?#@]/u.test(host) ||
+    !SAFE_VERCEL_HOST.test(host) ||
+    host.startsWith(".") ||
+    host.endsWith(".")
+  ) {
+    throw new Error(
+      "--reviewed-vercel-host must be one exact .vercel.app hostname.",
+    );
+  }
+  return host;
+}
+
+export function normalizeMeasurementOrigin(
+  value,
+  mode,
+  reviewedVercelHost = null,
+) {
   if (!value) throw new Error("--url is required.");
   let url;
   try {
@@ -119,15 +208,24 @@ export function normalizeMeasurementOrigin(value, mode) {
     throw new Error("Measurement URL must not contain credentials.");
   }
   const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  const hostname = url.hostname.toLowerCase();
+  const reviewedHost = normalizeReviewedVercelHost(reviewedVercelHost);
   if (mode === "production") {
     if (url.protocol !== "https:") {
       throw new Error("Production measurement requires HTTPS.");
     }
-    if (
-      !APPROVED_PRODUCTION_HOSTS.has(url.hostname) &&
-      !SAFE_VERCEL_HOST.test(url.hostname)
-    ) {
-      throw new Error("Production measurement origin is not approved.");
+    if (!APPROVED_PRODUCTION_HOSTS.has(hostname)) {
+      if (!SAFE_VERCEL_HOST.test(hostname)) {
+        throw new Error("Production measurement origin is not approved.");
+      }
+      if (!reviewedHost) {
+        throw new Error(
+          "Production Vercel measurement requires --reviewed-vercel-host.",
+        );
+      }
+      if (hostname !== reviewedHost) {
+        throw new Error("Reviewed Vercel hostname does not match --url.");
+      }
     }
   } else if (url.protocol !== "https:" && !(local && url.protocol === "http:")) {
     throw new Error("Preview measurement requires HTTPS except for localhost.");
@@ -136,6 +234,28 @@ export function normalizeMeasurementOrigin(value, mode) {
   url.search = "";
   url.hash = "";
   return url;
+}
+
+export function validateOutputDirectory(value, repositoryRoot = process.cwd()) {
+  const output = resolve(value ?? DEFAULT_OUTPUT);
+  const filesystemRoot = parse(output).root;
+  const exactRepositoryRoot = resolve(repositoryRoot);
+  if (output === filesystemRoot) {
+    throw new Error("PCS3_OUTPUT_FILESYSTEM_ROOT_FORBIDDEN");
+  }
+  if (output === exactRepositoryRoot) {
+    throw new Error("PCS3_OUTPUT_REPOSITORY_ROOT_FORBIDDEN");
+  }
+  return output;
+}
+
+export function cleanOutputEvidence(value, repositoryRoot = process.cwd()) {
+  const output = validateOutputDirectory(value, repositoryRoot);
+  mkdirSync(output, { recursive: true });
+  for (const entry of KNOWN_EVIDENCE_ENTRIES) {
+    rmSync(resolve(output, entry), { recursive: true, force: true });
+  }
+  return output;
 }
 
 export function validateMeasurementOptions(raw) {
@@ -156,15 +276,23 @@ export function validateMeasurementOptions(raw) {
   if (!MIGRATION_VERSION.test(expectedMigration)) {
     throw new Error("--expected-migration must contain 12 to 14 digits.");
   }
+  const reviewedVercelHost = normalizeReviewedVercelHost(
+    raw["reviewed-vercel-host"],
+  );
   return {
     mode: raw.mode,
-    origin: normalizeMeasurementOrigin(raw.url, raw.mode),
+    origin: normalizeMeasurementOrigin(
+      raw.url,
+      raw.mode,
+      reviewedVercelHost,
+    ),
+    reviewedVercelHost,
     expectedCommit,
     expectedMigration,
     samples: boundedInteger(raw.samples, "--samples", 10, 40, 20),
     warmups: boundedInteger(raw.warmups, "--warmups", 0, 5, 2),
     account,
-    output: resolve(raw.output ?? DEFAULT_OUTPUT),
+    output: validateOutputDirectory(raw.output ?? DEFAULT_OUTPUT),
   };
 }
 
@@ -453,13 +581,32 @@ function emptyCapture() {
   };
 }
 
-function createCapture(page, origin) {
+export function createCapture(
+  page,
+  origin,
+  {
+    now = () => performance.now(),
+    maxPendingResponseTasks = MAX_PENDING_RESPONSE_TASKS,
+  } = {},
+) {
   const capture = emptyCapture();
   const starts = new WeakMap();
-  const responseTasks = [];
+  const countedRequests = new WeakSet();
+  const acceptedResponseRequests = new WeakSet();
+  const failedRequests = new WeakSet();
+  const pendingResponseTasks = new Set();
+  let acceptingResponses = true;
+
+  const recordRequestFailure = (request) => {
+    if (failedRequests.has(request)) return;
+    failedRequests.add(request);
+    capture.requestFailures.push("request_failed");
+  };
 
   const onRequest = (request) => {
-    starts.set(request, performance.now());
+    if (!acceptingResponses || countedRequests.has(request)) return;
+    countedRequests.add(request);
+    starts.set(request, now());
     const classified = classifyRequest(request.url(), origin);
     if (classified.category === "today_projection") capture.counts.todayProjection += 1;
     if (classified.category === "today_supabase_read") capture.counts.todayDirectSupabase += 1;
@@ -470,37 +617,59 @@ function createCapture(page, origin) {
   };
 
   const onResponse = (response) => {
+    if (!acceptingResponses) return;
     const classified = classifyRequest(response.url(), origin);
+    const request = response.request();
+    if (
+      MEASURED_RESPONSE_CATEGORIES.has(classified.category) &&
+      acceptedResponseRequests.has(request)
+    ) {
+      return;
+    }
+    if (MEASURED_RESPONSE_CATEGORIES.has(classified.category)) {
+      acceptedResponseRequests.add(request);
+    }
     if (
       response.status() >= 500 &&
       (MEASURED_RESPONSE_CATEGORIES.has(classified.category) ||
-        response.request().resourceType() === "document")
+        request.resourceType() === "document")
     ) {
       capture.http5xx += 1;
     }
     if (!MEASURED_RESPONSE_CATEGORIES.has(classified.category)) return;
-    responseTasks.push(
-      (async () => {
-        const responseHeaders = await response.allHeaders();
-        let decodedBodyBytes = 0;
-        try {
-          decodedBodyBytes = (await response.body()).byteLength;
-        } catch {
-          capture.requestFailures.push("response_body_unavailable");
+    if (pendingResponseTasks.size >= maxPendingResponseTasks) {
+      recordRequestFailure(request);
+      return;
+    }
+
+    let task;
+    task = (async () => {
+      try {
+        const startedAt = starts.get(request);
+        if (!Number.isFinite(startedAt)) {
+          throw new Error("missing_request_start");
         }
+        const finishError = await response.finished();
+        if (finishError) throw new Error("response_finish_failed");
+        const responseHeaders = await response.allHeaders();
+        const decodedBody = await response.body();
+        const completedAt = now();
         capture.responses.push(
           safeResponseRecord({
             category: classified.category,
             status: response.status(),
-            durationMs:
-              performance.now() -
-              (starts.get(response.request()) ?? performance.now()),
-            decodedBodyBytes,
+            durationMs: completedAt - startedAt,
+            decodedBodyBytes: decodedBody.byteLength,
             headers: responseHeaders,
           }),
         );
-      })(),
-    );
+      } catch {
+        recordRequestFailure(request);
+      } finally {
+        pendingResponseTasks.delete(task);
+      }
+    })();
+    pendingResponseTasks.add(task);
   };
 
   const onPageError = () => capture.pageErrors.push("page_error");
@@ -515,7 +684,7 @@ function createCapture(page, origin) {
       CRITICAL_REQUEST_CATEGORIES.has(category) ||
       request.resourceType() === "document"
     ) {
-      capture.requestFailures.push("request_failed");
+      recordRequestFailure(request);
     }
   };
 
@@ -527,18 +696,26 @@ function createCapture(page, origin) {
 
   return {
     capture,
+    acceptingResponses: () => acceptingResponses,
+    pendingResponseTaskCount: () => pendingResponseTasks.size,
     async finish() {
-      await Promise.all(responseTasks);
-      page.off("request", onRequest);
-      page.off("response", onResponse);
-      page.off("pageerror", onPageError);
-      page.off("console", onConsole);
-      page.off("requestfailed", onRequestFailed);
+      if (acceptingResponses) {
+        acceptingResponses = false;
+        page.off("request", onRequest);
+        page.off("response", onResponse);
+        page.off("pageerror", onPageError);
+        page.off("console", onConsole);
+        page.off("requestfailed", onRequestFailed);
+      }
+      while (pendingResponseTasks.size > 0) {
+        await Promise.allSettled([...pendingResponseTasks]);
+      }
+      return capture;
     },
   };
 }
 
-function assertSameOrigin(value, origin) {
+export function assertSameOrigin(value, origin) {
   if (new URL(value).origin !== origin.origin) {
     throw new Error("MEASUREMENT_REDIRECT_ORIGIN_INVALID");
   }
@@ -834,9 +1011,8 @@ function safeInteractionResponse(record) {
     : null;
 }
 
-async function validateInteractionCapture(capture) {
+function validateInteractionCapture(capture) {
   assertNoRuntimeFailures(capture);
-  await Promise.resolve();
 }
 
 async function measureInteractions(page, origin) {
@@ -872,7 +1048,7 @@ async function measureInteractions(page, origin) {
     } finally {
       await tracker.finish();
     }
-    await validateInteractionCapture(tracker.capture);
+    validateInteractionCapture(tracker.capture);
     if (tracker.capture.counts.historyFirstPage !== 0) {
       throw new Error("HISTORY_FILTER_PANEL_REFETCHED_FIRST_PAGE");
     }
@@ -895,7 +1071,7 @@ async function measureInteractions(page, origin) {
     } finally {
       await tracker.finish();
     }
-    await validateInteractionCapture(tracker.capture);
+    validateInteractionCapture(tracker.capture);
     if (tracker.capture.counts.historyFirstPage !== 0) {
       throw new Error("HISTORY_SELECTED_ONLY_REFETCHED_FIRST_PAGE");
     }
@@ -926,7 +1102,7 @@ async function measureInteractions(page, origin) {
     } finally {
       await tracker.finish();
     }
-    await validateInteractionCapture(tracker.capture);
+    validateInteractionCapture(tracker.capture);
     if (tracker.capture.counts.historyFirstPage !== 0) {
       throw new Error("HISTORY_LOAD_MORE_REFETCHED_FIRST_PAGE");
     }
@@ -949,23 +1125,6 @@ async function measureInteractions(page, origin) {
     };
   }
   return evidence;
-}
-
-async function writeSanitizedFailureScreenshot(page, output, account) {
-  const relative = sanitizeEvidenceArtifactPath(`${account}/failure.png`);
-  try {
-    await page.addStyleTag({
-      content:
-        "input, textarea, select, img, video, canvas, [contenteditable='true'] { visibility: hidden !important; } body * { text-shadow: none !important; }",
-    });
-    await page.screenshot({
-      path: resolve(output, relative),
-      fullPage: false,
-      mask: [page.locator("input, textarea, [contenteditable='true']")],
-    });
-  } catch {
-    // Failure evidence is best-effort and must never hide the measurement failure.
-  }
 }
 
 async function measureAccount(browser, options, account) {
@@ -1034,9 +1193,6 @@ async function measureAccount(browser, options, account) {
       "utf8",
     );
     return evidence;
-  } catch (error) {
-    await writeSanitizedFailureScreenshot(page, options.output, account);
-    throw error;
   } finally {
     await context.close();
   }
@@ -1112,16 +1268,92 @@ export function renderSummaryMarkdown(summary) {
   return `# PCS-3 Production Request Measurement\n\n## Measured deployment facts\n\n- Checked at: ${summary.checkedAt}\n- Mode: ${summary.mode}\n- Origin: ${summary.origin}\n- Expected/observed commit: ${summary.expectedCommit}\n- Expected migration: ${summary.expectedMigration}\n- Synthetic fixtures only: yes\n- Credentials logged: no\n- Overall result: PASS\n\n${accountSections}\n\n## Combined measured samples\n\n- Today browser p50/p95: ${summary.combined.today.browserObservedDurationMs.p50} / ${summary.combined.today.browserObservedDurationMs.p95} ms\n- Today server total p50/p95: ${summary.combined.today.serverTotalDurationMs.p50} / ${summary.combined.today.serverTotalDurationMs.p95} ms\n- History browser p50/p95: ${summary.combined.history.browserObservedDurationMs.p50} / ${summary.combined.history.browserObservedDurationMs.p95} ms\n- History server total p50/p95: ${summary.combined.history.serverTotalDurationMs.p50} / ${summary.combined.history.serverTotalDurationMs.p95} ms\n\n## Test-only architecture facts\n\nAutomated tests protect request classification, exact count invariants, timing parsing, sanitization, and failure handling. Test facts are not substituted for measured Production facts.\n\n## Unavailable or not applicable\n\nContent-Length remains null when the server does not provide it. Fixture-dependent interactions are recorded as not_applicable rather than claimed as proof.\n\n${REQUIRED_DISCLAIMER}\n`;
 }
 
-function safeFailureCode(error) {
+export function safeFailureCode(error) {
   const value = error instanceof Error ? error.message : String(error ?? "");
-  return /^[A-Z][A-Z0-9_]{2,100}$/.test(value)
+  return SAFE_FAILURE_CODES.has(value)
     ? value
     : "PCS3_PRODUCTION_MEASUREMENT_FAILED";
 }
 
-async function main() {
-  const options = validateMeasurementOptions(parseCliArgs(process.argv.slice(2)));
-  mkdirSync(options.output, { recursive: true });
+function safeReviewedFailureContext(reviewed) {
+  if (!reviewed || typeof reviewed !== "object") return {};
+  const result = {};
+  if (reviewed.mode === "preview" || reviewed.mode === "production") {
+    result.mode = reviewed.mode;
+  }
+  if (typeof reviewed.origin === "string") {
+    try {
+      const url = new URL(reviewed.origin);
+      if (
+        !url.username &&
+        !url.password &&
+        url.pathname === "/" &&
+        !url.search &&
+        !url.hash
+      ) {
+        result.origin = sanitizeEvidenceUrl(url.toString());
+      }
+    } catch {
+      // Invalid reviewed fields are omitted rather than copied into evidence.
+    }
+  }
+  if (EXACT_SHA.test(String(reviewed.expectedCommit ?? ""))) {
+    result.expectedCommit = String(reviewed.expectedCommit).toLowerCase();
+  }
+  return result;
+}
+
+export function renderFailureMarkdown(failure) {
+  const reviewedLines = [
+    failure.mode ? `- Mode: ${failure.mode}` : null,
+    failure.origin ? `- Origin: ${failure.origin}` : null,
+    failure.expectedCommit
+      ? `- Reviewed commit: ${failure.expectedCommit}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return `# PCS-3 Production Request Measurement\n\n## Result\n\n- Overall result: FAIL\n- Safe failure code: ${failure.failureCode}\n- Raw error detail: not recorded\n- Synthetic fixtures only: yes\n- Credentials logged: no${reviewedLines ? `\n${reviewedLines}` : ""}\n\n${REQUIRED_DISCLAIMER}\n`;
+}
+
+export function writeFailureEvidence(
+  value,
+  error,
+  reviewed = null,
+  repositoryRoot = process.cwd(),
+) {
+  const output = cleanOutputEvidence(value, repositoryRoot);
+  const failure = {
+    checkedAt: new Date().toISOString(),
+    passed: false,
+    failureCode: safeFailureCode(error),
+    syntheticDataOnly: true,
+    credentialsLogged: false,
+    ...safeReviewedFailureContext(reviewed),
+  };
+  writeFileSync(
+    resolve(output, "summary.json"),
+    `${JSON.stringify(failure, null, 2)}\n`,
+    "utf8",
+  );
+  writeFileSync(
+    resolve(output, "summary.md"),
+    renderFailureMarkdown(failure),
+    "utf8",
+  );
+  return failure;
+}
+
+function reviewedFailureContext(options) {
+  return {
+    mode: options.mode,
+    origin: options.origin.toString(),
+    expectedCommit: options.expectedCommit,
+  };
+}
+
+async function executeMeasurement(options) {
+  cleanOutputEvidence(options.output);
   const browser = await chromium.launch({ headless: true });
   try {
     const identity = await identityGate(browser, options);
@@ -1153,25 +1385,24 @@ async function main() {
 }
 
 async function run() {
-  let output = resolve(DEFAULT_OUTPUT);
+  let output;
+  let reviewed = null;
   try {
+    output = validateOutputDirectory(DEFAULT_OUTPUT);
     const raw = parseCliArgs(process.argv.slice(2));
-    output = resolve(raw.output ?? DEFAULT_OUTPUT);
-    await main();
+    if (raw.output) output = validateOutputDirectory(raw.output);
+    const options = validateMeasurementOptions(raw);
+    output = options.output;
+    reviewed = reviewedFailureContext(options);
+    await executeMeasurement(options);
   } catch (error) {
-    mkdirSync(output, { recursive: true });
-    const failure = sanitizeEvidence({
-      checkedAt: new Date().toISOString(),
-      passed: false,
-      failureCode: safeFailureCode(error),
-      syntheticDataOnly: true,
-      credentialsLogged: false,
-    });
-    writeFileSync(
-      resolve(output, "summary.json"),
-      `${JSON.stringify(failure, null, 2)}\n`,
-      "utf8",
-    );
+    if (output) {
+      try {
+        writeFailureEvidence(output, error, reviewed);
+      } catch {
+        // Unsafe or unwritable output paths fail closed without secondary detail.
+      }
+    }
     process.stderr.write("PCS3_PRODUCTION_MEASUREMENT_FAILED\n");
     process.exitCode = 1;
   }
