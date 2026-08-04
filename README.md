@@ -76,7 +76,8 @@ Applied migrations must never be renamed, rewritten, reordered, deleted, or repl
 
 `20260731090000_active_workout_aw9_offline_multi_device.sql` was applied exactly once to Supabase Production as generated migration `20260801045628_active_workout_aw9_offline_multi_device`. The immutable repository SQL remains unchanged. The Production compatibility marker remains `20260724232734`; do not replay applied migrations.
 
-## Pending P0 onboarding database repair
+## P0 onboarding Production repair
 
-- `20260804174500_fix_profiles_update_policy_recursion.sql` is a repository-only pending migration that repairs the confirmed recursive `profiles_update_own_basic` RLS policy blocking final onboarding completion.
-- It has not been applied to Production. Do not replay or apply it before explicit Product and Engineering Lead authorization.
+- `20260804174500_fix_profiles_update_policy_recursion.sql` was applied exactly once to Plaivra Production as generated version `20260804180932_fix_profiles_update_policy_recursion`.
+- The repository filename and Production version differ, so the migration ledger preserves the immutable mapping as `applied_version_alias`. Do not replay.
+- The compatibility marker remained unchanged and Activity Catalog was not modified.
