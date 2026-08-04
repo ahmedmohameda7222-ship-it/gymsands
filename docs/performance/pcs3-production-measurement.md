@@ -94,7 +94,9 @@ The harness records:
 - page, console, request, HTTP 5xx, and error-boundary counts;
 - filter-panel, selected-only, and load-more interaction evidence when applicable.
 
-The response-capture authority starts timing on Playwright's `request` event, waits for `response.finished()`, reads the decoded response body, and records `browserObservedDurationMs` only after body completion. A finish or body-read failure creates one safe request failure and invalidates the sample. Pending response tasks are bounded, removed after settlement, detached from new events before final aggregation, and fully awaited.
+The response-capture authority starts timing on Playwright's `request` event, waits for `response.finished()`, reads the decoded response body, and records `browserObservedDurationMs` only after body completion. A finish or body-read failure creates one safe request failure and invalidates the sample.
+
+Every accepted response task receives a stable promise identity and is inserted into the bounded pending-task Set before its work can reach a synchronous failure path. Settlement cleanup removes that exact registered promise once. Capture listeners are detached before draining, all already accepted tasks are awaited, and `finish()` terminates after the Set reaches zero. Missing or invalid request-start state cannot strand a settled promise.
 
 Browser-observed duration is not labeled server execution time. Decoded response bytes are not labeled compressed wire bytes. Missing `Content-Length` is recorded as `null`; decoded bytes and Content-Length remain separate metrics.
 
@@ -115,12 +117,12 @@ The harness uses nearest-rank percentiles over valid measured samples only. Ever
 
 Failed samples are excluded from percentile math and cause the overall run to fail. PCS-3C.1 defines no latency magnitude budget.
 
-## Evidence schema
+## Evidence schema and output ownership
 
 Successful output:
 
 ```text
-<output>/
+<repository-root>/quality-reports/<dedicated-measurement-directory>/
   summary.json
   summary.md
   populated/
@@ -129,9 +131,19 @@ Successful output:
     samples.json
 ```
 
-Failed output contains only sanitized `summary.json` and `summary.md`. Failure evidence contains the checked time, `passed=false`, one safe allowlisted failure code, synthetic-only and credentials-not-logged declarations, and already validated mode/origin/commit fields when available. Raw exception detail, page text, URLs with queries, request IDs, response bodies, credentials, tokens, cookies, browser storage, images, HAR, trace, video, and storage-state files are never written.
+The default dedicated directory remains:
 
-Before either success or failure evidence is written, the harness validates the output target and removes only known PCS-3 evidence entries inside it. Filesystem root and repository root are rejected. This prevents a failed rerun from retaining stale success summaries or account sample files without recursively deleting an arbitrary user path.
+```text
+quality-reports/pcs3-production-measurement
+```
+
+Production execution may write only to a strict descendant of the current repository's `quality-reports` directory. Filesystem root, repository root, the `quality-reports` root itself, home/Desktop/Documents-style parent paths, sibling paths, `..` escapes, and existing symlink paths that resolve outside the permitted root are rejected before any deletion or write. An absolute path is accepted only when its resolved ownership remains inside the repository's `quality-reports` directory.
+
+After ownership validation succeeds, cleanup removes only the known PCS-3 entries inside the dedicated measurement directory: `summary.json`, `summary.md`, populated/empty samples, and legacy screenshot/trace/video/storage artifacts. It does not recursively delete the selected directory and preserves unrelated files.
+
+Invalid CLI arguments combined with an unsafe `--output` produce only the generic safe command failure line. Nothing is deleted from or written to the unsafe location.
+
+Failed output contains only sanitized `summary.json` and `summary.md`. Failure evidence contains the checked time, `passed=false`, one safe allowlisted failure code, synthetic-only and credentials-not-logged declarations, and already validated mode/origin/commit fields when available. Raw exception detail, page text, URLs with queries, request IDs, response bodies, credentials, tokens, cookies, browser storage, images, HAR, trace, video, and storage-state files are never written.
 
 `summary.md` distinguishes measured deployment facts, test-only architecture facts, and unavailable or not-applicable facts. Failure Markdown records the safe failure code, states that raw error detail was not recorded, and includes the same disclaimer.
 
