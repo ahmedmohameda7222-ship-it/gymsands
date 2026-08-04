@@ -1,4 +1,4 @@
-name: PCS3 Harness Hydration Correction One-Shot
+name: PCS3 Auth Diagnostic 1b059d94 One-Shot
 
 on:
   pull_request:
