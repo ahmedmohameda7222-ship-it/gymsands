@@ -8,7 +8,7 @@ on:
       - .github/workflows/ops-onboarding-hotfix-ledger-once.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
@@ -26,7 +26,6 @@ jobs:
           set -euo pipefail
           node <<'NODE'
           const fs = require('node:fs');
-          const path = require('node:path');
 
           const filename = '20260804174500_fix_profiles_update_policy_recursion.sql';
           const ledgerPath = 'supabase/migration-ledger.json';
@@ -60,24 +59,23 @@ jobs:
               fs.writeFileSync(target, `${current.trimEnd()}\n${section}`);
             }
           }
-
-          const output = 'quality-reports/onboarding-ledger-patch';
-          fs.mkdirSync(path.join(output, 'supabase'), { recursive: true });
-          fs.mkdirSync(path.join(output, 'docs/architecture'), { recursive: true });
-          fs.copyFileSync(ledgerPath, path.join(output, ledgerPath));
-          fs.copyFileSync(readmePath, path.join(output, readmePath));
-          fs.copyFileSync(reconciliationPath, path.join(output, reconciliationPath));
           NODE
 
       - name: Verify generated ledger
         run: npm run migration:ledger:check
 
-      - name: Upload bounded patch
-        uses: actions/upload-artifact@v4
-        with:
-          name: onboarding-hotfix-ledger-patch
-          path: quality-reports/onboarding-ledger-patch/
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit bounded generated files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            supabase/migration-ledger.json \
+            README.md \
+            docs/architecture/migration-ledger-reconciliation.md
+          test "$(git diff --cached --name-only | wc -l)" = "3"
+          git commit -m "chore(onboarding): classify pending RLS hotfix"
+          git push origin HEAD:fix/onboarding-completion-profile-rls
 
-# one-shot trigger 2026-08-04T17:50Z
+# one-shot trigger 2026-08-04T17:52Z
