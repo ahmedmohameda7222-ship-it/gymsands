@@ -1,0 +1,60 @@
+name: PCS3 Production Measurement 1b059d94 One-Shot
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pcs3-production-measurement-1b059d94-one-shot.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    steps:
+      - name: Checkout exact Production source
+        uses: actions/checkout@v4
+        with:
+          ref: 1b059d944e619ad6919e2da96b204b935fa59596
+          fetch-depth: 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run canonical PCS3 Production measurement
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+          PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+          PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
+        run: |
+          npm run measure:pcs3-production -- \
+            --mode production \
+            --url https://app.plaivra.com \
+            --expected-commit 1b059d944e619ad6919e2da96b204b935fa59596 \
+            --expected-migration 20260724232734 \
+            --samples 20 \
+            --warmups 2 \
+            --account both \
+            --output quality-reports/pcs3-production-measurement
+
+      - name: Upload sanitized PCS3 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs3-production-measurement-1b059d94
+          path: quality-reports/pcs3-production-measurement
+          if-no-files-found: error
+          retention-days: 14
