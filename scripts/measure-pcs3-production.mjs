@@ -869,6 +869,9 @@ export async function login(page, origin, email, password) {
     timeout: REQUEST_TIMEOUT_MS,
   });
   assertSameOrigin(page.url(), origin);
+  await page
+    .waitForLoadState("networkidle", { timeout: 10_000 })
+    .catch(() => undefined);
 
   const emailInput = page.locator('input[type="email"]');
   const passwordInput = page.locator('input[type="password"]');
@@ -911,6 +914,17 @@ export async function login(page, origin, email, password) {
   assertSameOrigin(page.url(), origin);
   if (new URL(page.url()).pathname === "/login") {
     throw new Error("SYNTHETIC_AUTHENTICATION_FAILED");
+  }
+  const landingPath = new URL(page.url()).pathname;
+  if (landingPath === "/dashboard") {
+    await settlePage(page, "today");
+  } else if (landingPath === "/workout-history") {
+    await settlePage(page, "history");
+  } else {
+    await page.waitForTimeout(SETTLEMENT_DELAY_MS);
+    await page
+      .waitForLoadState("networkidle", { timeout: 10_000 })
+      .catch(() => undefined);
   }
 }
 
