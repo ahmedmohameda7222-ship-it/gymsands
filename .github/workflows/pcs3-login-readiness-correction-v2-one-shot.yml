@@ -1,0 +1,130 @@
+name: Auth Single Login Redirect Correction Reused One-Shot
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pcs3-login-readiness-correction-v2-one-shot.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Apply bounded single-authority correction
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          form_path = Path("components/auth/auth-form.tsx")
+          source = form_path.read_text()
+          old_import = 'import { defaultStartPageToPath, getUserAppSettings } from "@/services/database/user-settings";\n'
+          if source.count(old_import) != 1:
+              raise SystemExit("user settings import replacement mismatch")
+          source = source.replace(old_import, "")
+
+          old_block = '''        toast({ title: "Welcome back to Plaivra", description: "Your session is ready." });
+        const explicitNext = searchParams.get("next");
+        const settings = explicitNext ? null : await getUserAppSettings(data.session.user.id).catch(() => null);
+        router.replace(explicitNext
+          ? safeInternalRedirectPath(explicitNext)
+          : defaultStartPageToPath(settings?.defaultStartPage ?? "today"));
+        router.refresh();
+'''
+          new_block = '''        toast({ title: "Welcome back to Plaivra", description: "Your session is ready." });
+        // AuthenticatedLoginRedirect owns post-login destination and navigation.
+'''
+          if source.count(old_block) != 1:
+              raise SystemExit("email login navigation replacement mismatch")
+          form_path.write_text(source.replace(old_block, new_block))
+
+          test_path = Path("components/auth/authenticated-login-redirect.test.tsx")
+          tests = test_path.read_text()
+          source_anchor = '''const authPageSource = readFileSync(
+  resolve(process.cwd(), "components/auth/auth-page.tsx"),
+  "utf8",
+);
+'''
+          source_insert = source_anchor + '''const authFormSource = readFileSync(
+  resolve(process.cwd(), "components/auth/auth-form.tsx"),
+  "utf8",
+);
+'''
+          if tests.count(source_anchor) != 1:
+              raise SystemExit("auth source fixture anchor mismatch")
+          tests = tests.replace(source_anchor, source_insert)
+
+          test_anchor = '''  it("mounts recovery only for login, not registration", () => {
+'''
+          new_test = '''  it("keeps email-login navigation under the authenticated recovery authority", () => {
+    const loginStart = authFormSource.indexOf(
+      'if (mode === "login") {\\n        const { data, error } = await withAuthTimeout',
+    );
+    const registrationStart = authFormSource.indexOf(
+      '\\n      } else {\\n        const { data, error } = await withAuthTimeout(supabase.auth.signUp',
+      loginStart,
+    );
+
+    expect(loginStart).toBeGreaterThanOrEqual(0);
+    expect(registrationStart).toBeGreaterThan(loginStart);
+    const loginBranch = authFormSource.slice(loginStart, registrationStart);
+    expect(loginBranch).not.toContain("getUserAppSettings");
+    expect(loginBranch).not.toContain("router.replace");
+    expect(loginBranch).not.toContain("router.refresh");
+    expect(authFormSource).not.toContain(
+      'from "@/services/database/user-settings"',
+    );
+  });
+
+'''
+          if tests.count(test_anchor) != 1:
+              raise SystemExit("auth authority test insertion mismatch")
+          test_path.write_text(tests.replace(test_anchor, new_test + test_anchor))
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run focused auth authority tests
+        run: |
+          npx vitest run --config vitest.unit.config.mjs \
+            components/auth/authenticated-login-redirect.test.tsx \
+            components/auth/auth-provider.initial-session-race.test.tsx
+
+      - name: Verify bounded diff
+        run: |
+          python <<'PY'
+          import subprocess
+          expected = {
+              "components/auth/auth-form.tsx",
+              "components/auth/authenticated-login-redirect.test.tsx",
+          }
+          tracked = set(subprocess.check_output(["git", "diff", "--name-only"]).decode().splitlines())
+          untracked = set(subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard"]).decode().splitlines())
+          changed = tracked | untracked
+          if changed != expected:
+              raise SystemExit(f"unexpected bounded diff: {sorted(changed)}")
+          PY
+
+      - name: Commit bounded correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/auth/auth-form.tsx components/auth/authenticated-login-redirect.test.tsx
+          git commit -m "fix(auth): centralize successful login navigation"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
