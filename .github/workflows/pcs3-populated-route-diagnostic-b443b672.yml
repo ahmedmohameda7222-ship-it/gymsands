@@ -1,0 +1,166 @@
+name: PCS3 Populated Route Diagnostic b443b672
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pcs3-populated-route-diagnostic-b443b672.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    steps:
+      - name: Checkout exact Production source
+        uses: actions/checkout@v4
+        with:
+          ref: b443b6729bcef2757982ad42c4517417e80bfcc5
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run safe populated route diagnostic
+        env:
+          PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+          PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+        run: |
+          mkdir -p quality-reports/pcs3-populated-route-diagnostic
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import { chromium } from "@playwright/test";
+
+          const origin = "https://app.plaivra.com";
+          const known = new Map([
+            ["/", "root"],
+            ["/login", "login"],
+            ["/register", "register"],
+            ["/forgot-password", "forgot-password"],
+            ["/welcome", "welcome"],
+            ["/onboarding", "onboarding"],
+            ["/dashboard", "dashboard"],
+          ]);
+          const classify = (raw) => {
+            try {
+              const url = new URL(raw);
+              if (url.origin !== origin) return "foreign-origin";
+              if (known.has(url.pathname)) return known.get(url.pathname);
+              if (url.pathname.startsWith("/auth/")) return "auth-callback";
+              return "private-other";
+            } catch {
+              return "invalid";
+            }
+          };
+
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext({ locale: "en-GB", timezoneId: "Europe/Berlin" });
+          const page = await context.newPage();
+          const navigationSequence = [];
+          let tokenStatus = null;
+          let bootstrapStatus = null;
+          let bootstrapCount = 0;
+          let pageErrorCount = 0;
+          let consoleErrorCount = 0;
+
+          page.on("framenavigated", (frame) => {
+            if (frame === page.mainFrame()) navigationSequence.push(classify(frame.url()));
+          });
+          page.on("pageerror", () => { pageErrorCount += 1; });
+          page.on("console", (message) => { if (message.type() === "error") consoleErrorCount += 1; });
+          page.on("response", (response) => {
+            const url = response.url();
+            if (url.includes("/auth/v1/token") && url.includes("grant_type=password")) tokenStatus = response.status();
+            if (url.includes("/rest/v1/rpc/get_private_app_bootstrap_v1")) {
+              bootstrapCount += 1;
+              bootstrapStatus = response.status();
+            }
+          });
+
+          let navigationStatus = null;
+          let controlsValid = false;
+          let safeException = false;
+          try {
+            const response = await page.goto(`${origin}/login`, { waitUntil: "networkidle", timeout: 30000 });
+            navigationStatus = response?.status() ?? null;
+            const email = page.locator('input[type="email"]');
+            const password = page.locator('input[type="password"]');
+            const submit = page.locator('button[type="submit"]');
+            await Promise.all([
+              email.waitFor({ state: "visible", timeout: 30000 }),
+              password.waitFor({ state: "visible", timeout: 30000 }),
+              submit.waitFor({ state: "visible", timeout: 30000 }),
+            ]);
+            controlsValid =
+              (await email.count()) === 1 &&
+              (await password.count()) === 1 &&
+              (await submit.count()) === 1;
+            await email.fill(process.env.PLAIVRA_SMOKE_POPULATED_EMAIL);
+            await password.fill(process.env.PLAIVRA_SMOKE_POPULATED_PASSWORD);
+            await page.waitForFunction(
+              () => {
+                const button = document.querySelector('button[type="submit"]');
+                return button instanceof HTMLButtonElement && !button.disabled;
+              },
+              undefined,
+              { timeout: 30000 },
+            );
+            await Promise.all([
+              page.waitForURL((url) => url.origin === origin && url.pathname !== "/login", { timeout: 30000 }),
+              submit.click(),
+            ]);
+            await page.waitForTimeout(5000);
+          } catch {
+            safeException = true;
+          }
+
+          const storage = await page.evaluate(() => ({
+            localStorageCount: window.localStorage.length,
+            authStoragePresent: Object.keys(window.localStorage).some((key) => key.includes("auth-token")),
+          })).catch(() => ({ localStorageCount: null, authStoragePresent: false }));
+          const cookies = await context.cookies(origin);
+          const result = {
+            checkedAt: new Date().toISOString(),
+            productionCommit: "b443b6729bcef2757982ad42c4517417e80bfcc5",
+            credentialsLogged: false,
+            navigationStatus,
+            controlsValid,
+            tokenStatus,
+            bootstrapStatus,
+            bootstrapCount,
+            finalPathCategory: classify(page.url()),
+            navigationSequence,
+            pageErrorCount,
+            consoleErrorCount,
+            cookieCount: cookies.length,
+            localStorageCount: storage.localStorageCount,
+            authStoragePresent: storage.authStoragePresent,
+            safeException,
+          };
+          fs.writeFileSync(
+            "quality-reports/pcs3-populated-route-diagnostic/diagnostic.json",
+            `${JSON.stringify(result, null, 2)}\n`,
+          );
+          await browser.close();
+          console.log("PCS3_POPULATED_ROUTE_DIAGNOSTIC_COMPLETE");
+          NODE
+
+      - name: Upload sanitized route diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs3-populated-route-diagnostic-b443b672
+          path: quality-reports/pcs3-populated-route-diagnostic
+          if-no-files-found: error
+          retention-days: 14
