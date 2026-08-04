@@ -1,9 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  readTodayNutritionTargetsProjection,
   readTodayProjectionV1,
   readTodayWorkoutProjection,
 } from "@/services/dashboard/today-projection-server";
+import {
+  resolveActiveNutritionTarget,
+  resolveEatTargetForDate,
+  type NutritionTargetOverride,
+} from "@/services/nutrition/active-target";
+import { normalizeSavedTargets } from "@/services/nutrition/targets";
+import type {
+  NutritionTargetProfileType,
+  UserNutritionTargetProfile,
+  UserWorkoutPlan,
+} from "@/types";
 
 const ownerA = "11111111-1111-4111-8111-111111111111";
 const ownerB = "22222222-2222-4222-8222-222222222222";
@@ -418,6 +430,95 @@ function populatedDataset(cardinality = 4): Dataset {
   };
 }
 
+function nutritionProfile(
+  targetType: NutritionTargetProfileType,
+  calories: number,
+): UserNutritionTargetProfile {
+  return {
+    id: `profile-${targetType}`,
+    user_id: ownerA,
+    target_type: targetType,
+    calories,
+    protein_g: Math.round(calories / 12),
+    carbs_g: Math.round(calories / 9),
+    fat_g: Math.round(calories / 30),
+    water_ml: calories + 500,
+    created_at: "2026-08-01T00:00:00Z",
+    updated_at: "2026-08-01T00:00:00Z",
+  };
+}
+
+const allTargetProfiles = () => [
+  nutritionProfile("default_day", 2200),
+  nutritionProfile("training_day", 2600),
+  nutritionProfile("rest_day", 2000),
+  nutritionProfile("high_activity_day", 3000),
+];
+
+function targetDataset({
+  trainingDay = true,
+  override = "auto",
+  profiles = allTargetProfiles(),
+}: {
+  trainingDay?: boolean;
+  override?: NutritionTargetOverride;
+  profiles?: UserNutritionTargetProfile[];
+} = {}): Dataset {
+  const dataset = populatedDataset();
+  dataset.user_nutrition_target_profiles = profiles as unknown as Row[];
+  dataset.user_nutrition_target_date_overrides =
+    override === "auto"
+      ? []
+      : [
+          {
+            user_id: ownerA,
+            target_date: "2026-08-03",
+            target_type: override,
+          },
+        ];
+  if (!trainingDay) dataset.user_workout_plan_exercises = [];
+  return dataset;
+}
+
+function canonicalPlanFromDataset(dataset: Dataset): UserWorkoutPlan {
+  const days = (dataset.user_workout_plan_days ?? [])
+    .filter((row) => row.plan_id === planA)
+    .map((row) => ({
+      id: String(row.id),
+      plan_id: planA,
+      day_number: Number(row.day_number),
+      day_name: String(row.day_name),
+      weekday: row.weekday,
+      notes: null,
+      exercises: (dataset.user_workout_plan_exercises ?? [])
+        .filter((exercise) => exercise.plan_day_id === row.id)
+        .map((exercise) => ({
+          id: String(exercise.id),
+          plan_day_id: String(exercise.plan_day_id),
+          workout_id: null,
+          source_workout_id: null,
+          exercise_name: String(exercise.exercise_name ?? "Exercise"),
+          category: null,
+          target_muscle: null,
+          equipment: null,
+          sets: Number(exercise.sets ?? 1),
+          reps: String(exercise.reps ?? "1"),
+          rest_seconds: null,
+          sort_order: Number(exercise.sort_order ?? 0),
+          notes: null,
+        })),
+    }));
+  return {
+    id: planA,
+    user_id: ownerA,
+    name: "Parity plan",
+    is_active: true,
+    created_at: "2026-08-01T00:00:00Z",
+    updated_at: "2026-08-01T00:00:00Z",
+    days,
+  } as unknown as UserWorkoutPlan;
+}
+
 function emptyDataset(): Dataset {
   return Object.fromEntries(
     Object.keys(populatedDataset()).map((table) => [table, []]),
@@ -468,6 +569,17 @@ describe("Today server projection", () => {
           fatG: 23,
         },
         foodLogCount: 2,
+      },
+    });
+    expect(result.response.nutrition.targets).toMatchObject({
+      state: "loaded",
+      value: {
+        sourceType: "training_day",
+        dailyCalories: 2500,
+        proteinG: 190,
+        carbsG: 275,
+        fatG: 82,
+        waterMl: 3200,
       },
     });
     expect(JSON.stringify(result.response)).not.toMatch(/9999|private-b/i);
@@ -637,5 +749,164 @@ describe("Today server projection", () => {
     await expect(
       readTodayWorkoutProjection(input(new FakeSupabase(scheduledData))),
     ).resolves.toMatchObject({ state: "scheduled" });
+  });
+
+  it("classifies an empty first Monday and later populated Monday as training day", async () => {
+    const client = new FakeSupabase(targetDataset());
+    await expect(
+      readTodayNutritionTargetsProjection(input(client)),
+    ).resolves.toMatchObject({
+      sourceType: "training_day",
+      dailyCalories: 2600,
+      proteinG: Math.round(2600 / 12),
+    });
+    expect(client.operations).toBe(6);
+  });
+
+  it("classifies automatic targets as rest day when no matching day is populated", async () => {
+    const client = new FakeSupabase(targetDataset({ trainingDay: false }));
+    await expect(
+      readTodayNutritionTargetsProjection(input(client)),
+    ).resolves.toMatchObject({
+      sourceType: "rest_day",
+      dailyCalories: 2000,
+      proteinG: Math.round(2000 / 12),
+    });
+    expect(client.operations).toBe(6);
+  });
+
+  it.each([
+    ["rest_day", true, 2000],
+    ["training_day", false, 2600],
+    ["high_activity_day", true, 3000],
+    ["default_day", true, 2200],
+  ] as const)(
+    "lets explicit %s override win regardless of detected workout state",
+    async (override, trainingDay, expectedCalories) => {
+      const client = new FakeSupabase(
+        targetDataset({ override, trainingDay }),
+      );
+      await expect(
+        readTodayNutritionTargetsProjection(input(client)),
+      ).resolves.toMatchObject({
+        sourceType: override,
+        dailyCalories: expectedCalories,
+      });
+      expect(client.operations).toBe(6);
+    },
+  );
+
+  it("preserves default-profile and base-target fallback precedence when the exact profile is missing", async () => {
+    const defaultClient = new FakeSupabase(
+      targetDataset({
+        profiles: [nutritionProfile("default_day", 2250)],
+      }),
+    );
+    await expect(
+      readTodayNutritionTargetsProjection(input(defaultClient)),
+    ).resolves.toMatchObject({
+      sourceType: "default_day",
+      dailyCalories: 2250,
+    });
+
+    const baseClient = new FakeSupabase(
+      targetDataset({ profiles: [] }),
+    );
+    await expect(
+      readTodayNutritionTargetsProjection(input(baseClient)),
+    ).resolves.toMatchObject({
+      sourceType: "base",
+      dailyCalories: 2400,
+      proteinG: 180,
+      carbsG: 260,
+      fatG: 80,
+      waterMl: 3000,
+    });
+    expect(defaultClient.operations).toBe(6);
+    expect(baseClient.operations).toBe(6);
+  });
+
+  it("matches canonical Eat and pure target precedence for equivalent plan, profile, base and override inputs", async () => {
+    for (const override of [
+      "auto",
+      "default_day",
+      "training_day",
+      "rest_day",
+      "high_activity_day",
+    ] as const) {
+      const dataset = targetDataset({ override });
+      const client = new FakeSupabase(dataset);
+      const actual = await readTodayNutritionTargetsProjection(input(client));
+      const profiles = dataset.user_nutrition_target_profiles as unknown as UserNutritionTargetProfile[];
+      const baseTarget = normalizeSavedTargets(dataset.calorie_targets[0] ?? null);
+      const plan = canonicalPlanFromDataset(dataset);
+      const canonical = resolveEatTargetForDate({
+        date: "2026-08-03",
+        profiles,
+        baseTarget,
+        plan,
+        override,
+      });
+      const requestedType =
+        override === "auto" ? "training_day" : override;
+      const pure = resolveActiveNutritionTarget({
+        profiles,
+        baseTarget,
+        requestedType,
+      });
+
+      expect(canonical).toEqual(pure);
+      expect(actual).toEqual({
+        hasTarget: canonical.hasTarget,
+        dailyCalories: canonical.values.daily_calories,
+        proteinG: canonical.values.protein_g,
+        carbsG: canonical.values.carbs_g,
+        fatG: canonical.values.fat_g,
+        waterMl: canonical.values.water_ml,
+        sourceType: canonical.sourceType,
+      });
+      expect(client.operations).toBe(6);
+    }
+  });
+
+  it("keeps target query count fixed as matching weekday days and exercises grow", async () => {
+    const typicalData = targetDataset();
+    const highData = targetDataset();
+    const extraDays = Array.from({ length: 12 }, (_, index) => ({
+      id: `target-extra-day-${index}`,
+      plan_id: planA,
+      weekday: "Monday",
+      day_number: index + 3,
+      day_name: `Target extra ${index}`,
+    }));
+    highData.user_workout_plan_days.push(...extraDays);
+    highData.user_workout_plan_exercises.push(
+      ...extraDays.flatMap((day, dayIndex) =>
+        Array.from({ length: 30 }, (_, exerciseIndex) => ({
+          id: `target-extra-exercise-${dayIndex}-${exerciseIndex}`,
+          plan_day_id: day.id,
+          exercise_name: `Target exercise ${dayIndex}-${exerciseIndex}`,
+          sets: 3,
+          reps: "8-10",
+          sort_order: exerciseIndex,
+        })),
+      ),
+    );
+
+    const typical = new FakeSupabase(typicalData);
+    const high = new FakeSupabase(highData);
+    await readTodayNutritionTargetsProjection(input(typical));
+    await readTodayNutritionTargetsProjection(input(high));
+
+    expect(typical.operations).toBe(6);
+    expect(high.operations).toBe(6);
+    expect(
+      high.selects.filter(({ table }) => table === "user_workout_plan_days"),
+    ).toHaveLength(1);
+    expect(
+      high.selects.filter(
+        ({ table }) => table === "user_workout_plan_exercises",
+      ),
+    ).toHaveLength(1);
   });
 });
