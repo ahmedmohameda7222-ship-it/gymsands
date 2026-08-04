@@ -1,4 +1,4 @@
-name: PCS3 Production Measurement 63ca8ec2 One-Shot
+name: PCS3 Production Measurement 63ca8ec2 Safe Diagnostic
 
 on:
   push:
@@ -35,6 +35,29 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Add ephemeral safe Server-Timing shape diagnostic
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/measure-pcs3-production.mjs")
+          source = path.read_text()
+          needle = "export function parseServerTiming(value) {\n"
+          diagnostic = """export function parseServerTiming(value) {
+            const safeShape = String(value ?? \"\")
+              .split(\",\")
+              .map((part) => part.trim().split(\";\").map((segment, index) =>
+                index === 0
+                  ? segment.replace(/[^A-Za-z0-9_-]/g, \"?\")
+                  : segment.split(\"=\")[0].trim().replace(/[^A-Za-z0-9_-]/g, \"?\")
+              ).join(\";\"))
+              .join(\", \" );
+            console.log(\"PCS3_SAFE_SERVER_TIMING_SHAPE\", safeShape);
+          """
+          if needle not in source:
+              raise SystemExit("parseServerTiming authority not found")
+          path.write_text(source.replace(needle, diagnostic, 1))
+          PY
+
       - name: Run canonical PCS3 Production measurement
         env:
           PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
@@ -56,7 +79,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pcs3-production-measurement-63ca8ec2
+          name: pcs3-production-measurement-63ca8ec2-safe-diagnostic
           path: quality-reports/pcs3-production-measurement
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
