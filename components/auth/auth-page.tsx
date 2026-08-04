@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import { AuthForm } from "@/components/auth/auth-form";
+import { AuthenticatedLoginRedirect } from "@/components/auth/authenticated-login-redirect";
 import { Brand } from "@/components/layout/brand";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { getPublicCopy } from "@/lib/i18n/public-copy";
@@ -28,6 +29,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
         <div className="w-full max-w-md">
           <Brand className="mb-6 lg:hidden" />
           <Suspense fallback={<div className="text-sm text-muted-foreground">Loading...</div>}>
+            {mode === "login" ? <AuthenticatedLoginRedirect /> : null}
             <AuthForm mode={mode} />
           </Suspense>
         </div>
