@@ -1,31 +1,29 @@
-export const DASHBOARD_SOURCE_NAMES = ["workout", "meals", "nutrition", "hydration", "shopping", "wellness"] as const;
-
-export type DashboardSourceName = (typeof DASHBOARD_SOURCE_NAMES)[number];
 export type DashboardSourceState = "idle" | "loading" | "loaded" | "failed";
-export type DashboardSourceStates = Record<DashboardSourceName, DashboardSourceState>;
 
-export function dashboardRequestKey(userId: string | null | undefined, date: string) {
-  return `${userId ?? "signed-out"}:${date}`;
-}
-
-export function dashboardSourceStates(state: DashboardSourceState): DashboardSourceStates {
-  return Object.fromEntries(DASHBOARD_SOURCE_NAMES.map((name) => [name, state])) as DashboardSourceStates;
+export function dashboardRequestKey(
+  userId: string | null | undefined,
+  date: string,
+  timezone: string,
+) {
+  return `${userId ?? "signed-out"}:${date}:${timezone}`;
 }
 
 export function isDashboardRequestCurrent(input: {
-  activeVersion: number;
-  requestVersion: number;
+  activeGeneration: number;
+  requestGeneration: number;
   activeKey: string;
   requestKey: string;
 }) {
-  return input.activeVersion === input.requestVersion && input.activeKey === input.requestKey;
+  return (
+    input.activeGeneration === input.requestGeneration &&
+    input.activeKey === input.requestKey
+  );
 }
 
 export function dashboardValueForRequest<T>(input: {
-  activeKey: string;
+  resolvedKey: string | null;
   currentKey: string;
-  value: T;
-  fallback: T;
+  value: T | null;
 }) {
-  return input.activeKey === input.currentKey ? input.value : input.fallback;
+  return input.resolvedKey === input.currentKey ? input.value : null;
 }

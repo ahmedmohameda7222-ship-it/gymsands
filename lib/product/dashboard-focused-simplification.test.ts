@@ -19,7 +19,9 @@ describe("focused Today dashboard", () => {
 
   it("configures exactly calories, protein, carbs, fat, and water progress metrics", () => {
     const progress = source("components/dashboard/today-progress.tsx");
-    for (const key of ["calories", "protein", "carbs", "fat", "water"]) expect(progress).toContain(`key: "${key}"`);
+    for (const key of ["calories", "protein", "carbs", "fat", "water"]) {
+      expect(progress).toContain(`key: "${key}"`);
+    }
     expect(progress).not.toContain('key: "workout"');
     expect(progress.match(/\{ key: "(calories|protein|carbs|fat|water)"/g)).toHaveLength(5);
     expect(progress).toContain("overTargetValue");
@@ -29,8 +31,8 @@ describe("focused Today dashboard", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     expect(dashboard).toContain('href="/my-workout/plans"');
     expect(dashboard).toContain("`/my-meal-plan?tab=day&date=${today}`");
-    expect(dashboard).toContain("markDirectMealPlanItemDone");
-    expect(dashboard).toContain("markDirectMealPlanItemSkipped");
+    expect(dashboard).toContain("markTodayMealDone");
+    expect(dashboard).toContain("markTodayMealSkipped");
   });
 
   it("removes the Daily Check-in component from active Dashboard and Wellness routes", () => {
@@ -41,15 +43,38 @@ describe("focused Today dashboard", () => {
     expect(existsSync("components/wellness/daily-checkins.tsx")).toBe(false);
   });
 
-  it("uses independent request-scoped source states without connection or setup loaders", () => {
+  it("uses one owner-date-timezone projection authority", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     const requestModel = source("lib/dashboard/today-request.ts");
-    expect(requestModel).toContain('["workout", "meals", "nutrition", "hydration", "shopping", "wellness"]');
-    expect(dashboard).toContain("dashboardRequestKey");
-    expect(dashboard).toContain("dashboardValueForRequest");
-    expect(dashboard).toContain("requestVersion.current");
+    expect(requestModel).toContain("userId");
+    expect(requestModel).toContain("timezone");
+    expect(dashboard).toContain("getTodayProjection");
+    expect(dashboard).toContain("dashboardRequestKey(userId, today, timezone)");
+    expect(dashboard).toContain("accessTokenRef");
+    expect(dashboard).toContain("authorityRef");
     expect(dashboard).not.toContain('"connection"');
     expect(dashboard).not.toContain('"setup"');
+  });
+
+  it("removes every direct Today browser read authority", () => {
+    const dashboard = source("components/dashboard/today-dashboard.tsx");
+    for (const forbidden of [
+      "getDashboardWorkoutData",
+      "getMealPlanItemsForDate",
+      "getTodayNutritionData",
+      "getTodayNutritionTargetData",
+      "getTodayFoodLogs",
+      "getDashboardWaterLogs",
+      "getGroceryItems",
+      "getFitnessHabits",
+      "getSupplementLogs",
+      "getDashboardSleepRecoveryLogs",
+      "getDashboardProfileContext",
+      "getDashboardProgressContext",
+    ]) {
+      expect(dashboard).not.toContain(forbidden);
+    }
+    expect(dashboard).not.toMatch(/from\s+["']@\/services\/database\/(dashboard-today-sources|execution-layer|meal-plan|nutrition|wellness)["']/);
   });
 
   it("keeps localized English, German, and Arabic focused copy", () => {

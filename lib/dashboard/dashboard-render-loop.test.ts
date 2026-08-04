@@ -184,7 +184,7 @@ describe("dashboard React publication lifecycle", () => {
     const dashboard = readFileSync(resolve(process.cwd(), "components/dashboard/today-dashboard.tsx"), "utf8");
     const provider = readFileSync(resolve(process.cwd(), "components/ai/quick-chatgpt-provider.tsx"), "utf8");
     expect(dashboard).toContain("useDashboardRemainingMacros(targets, totals)");
-    expect(dashboard).toContain("useDashboardContextPublication(publishedDashboardContext, setDashboardContext)");
+    expect(dashboard).toMatch(/useDashboardContextPublication\(\s*publishedDashboardContext,\s*setDashboardContext,?\s*\)/);
     expect(provider).toContain("useStableDashboardContextState(emptyContext)");
   });
 });

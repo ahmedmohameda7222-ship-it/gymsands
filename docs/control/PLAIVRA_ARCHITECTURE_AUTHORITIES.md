@@ -10,6 +10,14 @@
 - ProtectedRoute is a deterministic consumer of bootstrap authority and must not fetch account startup data.
 - No parallel client boot authority or duplicate startup fact store is allowed.
 
+### Today
+
+- The versioned authenticated `/api/dashboard/today` projection is the Today browser read authority.
+- One owner/date/timezone key owns one browser request snapshot. The AuthProvider session is the browser authentication authority, while the route derives owner identity from `requireUser(request)` and uses its RLS-bound Supabase client.
+- The projection returns minimum-data domain summaries with safe partial-error envelopes. It is not a new fact model; existing workout, meal, nutrition, hydration, grocery, wellness, profile, and progress authorities remain canonical.
+- Existing domain mutation authorities remain canonical. Authoritative mutation results may update the local Today projection; uncertain consistency may trigger one coordinated projection refresh.
+- Direct Today browser-to-Supabase initial read fan-out, per-domain read authorities, service-role projection reads, giant cross-domain SQL projection functions, dual old/new loading, and persistent browser projection caching may not return.
+
 ### Workouts
 
 - `workout_sessions` and canonical performed logs are workout-performance truth.
