@@ -119,6 +119,15 @@ This is an append-only decision log. Do not rewrite or delete an approved histor
 - Consequences: Today preserves one projection and zero direct initial Supabase reads; Workout History preserves one initial first page and zero initial cursor requests; future regressions use the durable harness; latency budgets require a later decision; PCS-4 becomes next.
 - Supersedes / Superseded by: Completes the reconciliation required by D-012; does not supersede D-012.
 
+## D-014 — PCS-4 closure and provider-control deferral
+
+- Date: 2026-08-05
+- Status: Approved
+- Decision: PCS-4 is closed with the merged PCS-4A path-scoped Draft PR validation authority. Repository-level branch protection and provider-required checks are deferred while Plaivra remains a single-owner repository without a delivery team.
+- Reason: PCS-4A solves the active CI cost and validation-authority problem. Additional provider controls add operational friction without enough current value for a repository operated only by Ahmed.
+- Consequences: PR Quality, canonical Quality, Exact Release, release preflight, Lead QA/QC, Ahmed approval, and squash merge remain the repository delivery authorities; the Phase A compatibility workflow remains unchanged; provider controls must be reconsidered before collaborators, delegated merge authority, or materially higher repository-access risk are introduced; PCS-5 becomes next.
+- Supersedes / Superseded by: Completes the PCS-4 direction anticipated by D-006; does not supersede D-006 or D-007.
+
 ## Future entry format
 
 Every future entry must include:

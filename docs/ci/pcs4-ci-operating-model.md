@@ -4,7 +4,7 @@
 
 PCS-4 establishes a durable CI operating model that gives ordinary Draft pull requests fast, risk-scoped feedback without weakening the exact-head release authorities used for phase closure and Production release.
 
-PCS-4A is the first implementation candidate. It changes only automatic Draft PR validation. It does not close PCS-4 and does not redesign canonical Quality, Exact Release, release preflight, deployment, Production verification, or provider required-check configuration.
+PCS-4A is the approved and merged implementation of this operating model. It was squash-merged through PR #130 as `main@ac65a8b61e051756628992ec151288d6b47bfef2` after Phase A run `30970963453`, PR Quality run `30970963310`, and canonical Quality run `30971418928` passed on exact reviewed head `1bdba5f441a88d722444667acacf591930d94416`.
 
 ## PCS-4A Draft PR validation authority
 
@@ -76,7 +76,11 @@ PCS-4A does not rename these checks.
 
 A passing Draft PR Quality run is not phase closure or release authorization. Canonical phase-close Quality remains mandatory for final phase closure.
 
-`.github/workflows/phase-a-diff-validation.yml` remains unchanged as required-check compatibility. A later PCS-4 provider-control phase must verify actual branch-protection configuration before any compatibility removal is considered.
+`.github/workflows/phase-a-diff-validation.yml` remains unchanged. Repository-level branch protection and required-check provider enforcement were evaluated and deliberately deferred because the repository currently has one active owner and no delivery team. That decision does not weaken the repository-owned PR Quality, canonical Quality, Exact Release, or release-preflight authorities. Provider controls must be reconsidered before adding collaborators, delegating merges, or increasing repository access risk.
+
+## Closure
+
+PCS-4 is complete. The durable scope is the PCS-4A path-scoped Draft PR validation authority plus the existing exact-head phase-close and release authorities. No application runtime, database, migration, dependency, deployment, or Production behavior was changed by PCS-4. PCS-5 Production Foundation is next.
 
 ## Runtime measurements
 
