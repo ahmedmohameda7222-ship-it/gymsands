@@ -1,0 +1,117 @@
+name: PCS4A Dependency Diagnostic One-Shot
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/pcs4a-dependency-diagnostic-one-shot.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pcs4a-dependency-diagnostic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install exact lockfile graph
+        run: npm ci
+
+      - name: Capture sanitized dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostic-reports
+          npm ls hono @hono/mcp --all --json > diagnostic-reports/npm-ls.json || true
+          npm explain hono > diagnostic-reports/npm-explain-hono.txt 2>&1 || true
+          npm explain @hono/mcp > diagnostic-reports/npm-explain-hono-mcp.txt 2>&1 || true
+          npm audit --omit=dev --audit-level=high --json > diagnostic-reports/npm-audit.json || true
+          node <<'NODE'
+          const fs = require('node:fs');
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const root = lock.packages?.[''] ?? {};
+          const names = ['hono', '@hono/mcp'];
+          const result = {
+            lockfileVersion: lock.lockfileVersion,
+            rootDependencies: Object.fromEntries(names.map((name) => [
+              name,
+              root.dependencies?.[name] ?? root.devDependencies?.[name] ?? null,
+            ])),
+            installedEntries: Object.fromEntries(names.map((name) => {
+              const key = `node_modules/${name}`;
+              const entry = lock.packages?.[key];
+              return [name, entry ? {
+                version: entry.version ?? null,
+                dev: entry.dev ?? false,
+                optional: entry.optional ?? false,
+                peer: entry.peer ?? false,
+                dependencies: entry.dependencies ?? {},
+                peerDependencies: entry.peerDependencies ?? {},
+              } : null];
+            })),
+          };
+          fs.writeFileSync('diagnostic-reports/lockfile-hono-summary.json', JSON.stringify(result, null, 2));
+
+          const audit = JSON.parse(fs.readFileSync('diagnostic-reports/npm-audit.json', 'utf8'));
+          const sanitized = {
+            auditReportVersion: audit.auditReportVersion ?? null,
+            vulnerabilities: Object.fromEntries(
+              Object.entries(audit.vulnerabilities ?? {})
+                .filter(([name]) => names.includes(name))
+                .map(([name, value]) => [name, {
+                  severity: value.severity ?? null,
+                  isDirect: value.isDirect ?? null,
+                  via: (value.via ?? []).map((item) => typeof item === 'string' ? item : {
+                    source: item.source ?? null,
+                    name: item.name ?? null,
+                    severity: item.severity ?? null,
+                    range: item.range ?? null,
+                  }),
+                  effects: value.effects ?? [],
+                  range: value.range ?? null,
+                  nodes: value.nodes ?? [],
+                  fixAvailable: value.fixAvailable ?? null,
+                }]),
+            ),
+            metadata: audit.metadata ?? null,
+          };
+          fs.writeFileSync('diagnostic-reports/npm-audit-sanitized.json', JSON.stringify(sanitized, null, 2));
+          NODE
+          rm diagnostic-reports/npm-audit.json
+
+      - name: Verify diagnostic is read-only
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+      - name: Publish concise diagnostic
+        run: |
+          cat diagnostic-reports/lockfile-hono-summary.json >> "$GITHUB_STEP_SUMMARY"
+          printf '\n```text\n' >> "$GITHUB_STEP_SUMMARY"
+          cat diagnostic-reports/npm-explain-hono.txt >> "$GITHUB_STEP_SUMMARY"
+          printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs4a-dependency-diagnostic-${{ github.event.pull_request.head.sha }}
+          path: diagnostic-reports/
+          if-no-files-found: error
+          retention-days: 3
