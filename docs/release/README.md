@@ -6,7 +6,7 @@ A Plaivra release is one compatible package: reviewed code, reconciled database 
 
 Keep these operations separate:
 
-1. **Draft pull-request validation** — automatic path-scoped jobs validate only the affected core, database, UI/i18n, CI-contract, build, and dependency surfaces. Unknown paths fail safe to broad validation.
+1. **Draft pull-request validation** — automatic path-scoped jobs validate only the affected core, database, rendered UI, CI-contract, build, and dependency surfaces. Domain UI changes select only affected rendered suites; shared or unknown UI authority selects all rendered suites. Unknown paths fail safe to broad validation.
 2. **Phase-close Quality** — marking the exact Draft PR head Ready for review runs the complete canonical Quality pipeline once and produces one immutable run-keyed artifact.
 3. **Exact Release** — request-bound validation consumes that existing successful Quality artifact, verifies its identities and digests, and runs the read-only release preflight. It must not dispatch or rerun Quality.
 4. **Production release gate** — reconcile migration history, compatibility markers, and the exact reviewed release candidate, then obtain explicit release-owner approval.
@@ -24,17 +24,23 @@ A passing Draft PR check is not phase closure. A passing review preflight is not
 `.github/workflows/pr-quality.yml` runs on each PR head and uses `scripts/ci-change-scope.mjs` to choose independent parallel jobs:
 
 - repository identity and `git diff --check` always run;
-- lint, typecheck, and unit tests run for non-document changes;
+- lint, typecheck, and the complete unit suite run for non-document changes;
 - migration replay, database lint, permanent SQL verification, ledger checks, and integration tests run only for database-impacting changes;
-- rendered UI and message checks run only for runtime UI/i18n changes;
+- the rendered UI job runs only when at least one rendered suite is selected;
+- Workout History, Active Workout, and Train implementation paths select only their affected rendered suite;
+- shared layouts, shared components, messages, global styling, public assets, central rendered authority, and unknown UI paths select all rendered suites conservatively;
+- the rendered UI job builds the mock-auth QA application once, starts one production server, and runs all selected suites against that server;
+- unit subsets such as i18n and Workout History focused tests are not repeated in the rendered UI job because `test:unit` already owns them;
 - CI/script contracts run only for workflow, script, agent-policy, or toolchain changes;
-- production environment and build checks run only for runtime or dependency changes;
+- production environment and build checks run only for runtime, rendered, or dependency changes;
 - dependency audit runs only when dependency manifests change;
 - documentation-only changes run the integrity and summary jobs without reinstalling the application.
 
 Test-only source changes do not trigger browser QA or a production build unless another changed path requires them. Unrecognized non-document paths use a conservative broad fallback.
 
 Successful checks print concise status. Failed checks print a bounded useful tail and retain the full focused log as a short-lived workflow artifact. Superseded PR runs are cancelled by PR-number concurrency.
+
+The exact PCS-4A candidate lane matrix and rendered selection authority are documented in `docs/ci/pcs4-ci-operating-model.md`.
 
 ### Canonical phase-close Quality
 
@@ -155,6 +161,7 @@ Do not use provider “redeploy previous” as an unverified shortcut. Select a 
 - `.github/workflows/pr-quality.yml`
 - `.github/workflows/quality.yml`
 - `.github/workflows/exact-release-quality-validation.yml`
+- `docs/ci/pcs4-ci-operating-model.md`
 - `docs/operations/launch-runbook.md`
 - `docs/operations/incident-response.md`
 - `docs/operations/submission-checklists.md`

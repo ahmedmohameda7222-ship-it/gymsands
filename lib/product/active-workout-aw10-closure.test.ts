@@ -59,10 +59,12 @@ describe("AW-10 canonical Active Workout closure", () => {
     expect(runner).toContain('takeoverButton instanceof HTMLButtonElement && !takeoverButton.disabled');
   });
 
-  it("runs once in canonical PR Quality and uploads the same evidence artifact", () => {
+  it("runs once in scoped PR Quality and uploads the selected evidence artifact", () => {
     expect(workflow.match(/npm run qa:active-workout:aw10/g)).toHaveLength(1);
     expect(workflow.match(/ci-reports\/active-workout-aw10-evidence/g)).toHaveLength(2);
-    expect(workflow).toContain("QA_AW10_EVIDENCE_DIR=ci-reports/active-workout-aw10-evidence");
+    expect(workflow).toContain(
+      "QA_AW10_EVIDENCE_DIR: ci-reports/active-workout-aw10-evidence",
+    );
     expect(packageJson.scripts["qa:active-workout:aw10"]).toBe(
       "node scripts/run-aw10-active-workout-closure-qa.mjs",
     );

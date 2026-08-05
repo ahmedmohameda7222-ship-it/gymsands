@@ -111,6 +111,59 @@ const RUNTIME_PATTERNS = [
   /^next\.config\.(?:js|mjs|ts)$/,
 ];
 
+const WORKOUT_HISTORY_RENDERED_PATTERNS = [
+  /^components\/workouts\/history\//,
+  /^lib\/workouts\/history\//,
+  /^services\/workouts\/history\//,
+  /^app\/api\/workouts\/history\//,
+  /^app\/.*\/workout-history(?:\/|$)/,
+  /^scripts\/run-workout-history-qa\.mjs$/,
+];
+
+const ACTIVE_WORKOUT_RENDERED_PATTERNS = [
+  /^components\/workouts\/active-workout\//,
+  /^components\/workouts\/active-workout-minimized-bar\.[^/]+$/,
+  /^lib\/workouts\/session-engine\//,
+  /^lib\/workouts\/active-session-store\//,
+  /^lib\/workouts\/active-session-sync\//,
+  /^services\/database\/active-session-[^/]+$/,
+  /^services\/database\/workout-session-execution[^/]*$/,
+  /^app\/.*\/active-workout(?:\/|$)/,
+  /^scripts\/run-aw10-active-workout-closure-qa\.mjs$/,
+];
+
+const TRAIN_RENDERED_PATTERNS = [
+  /^components\/train\//,
+  /^lib\/train\//,
+  /^app\/.*\/train(?:\/|$)/,
+  /^scripts\/run-train-layout-qa\.mjs$/,
+];
+
+const SHARED_RENDERED_PATTERNS = [
+  /^app\/(?:\([^/]+\)\/)*(?:layout|loading|error|global-error|not-found)\.(?:ts|tsx|js|jsx)$/,
+  /^components\/ui\//,
+  /^components\/layout\//,
+  /^messages\//,
+  /^public\//,
+  /(?:^|\/)(?:globals|theme)\.css$/,
+  ...STYLE_BUILD_PATTERNS,
+  /^scripts\/run-rendered-qa\.mjs$/,
+];
+
+const CENTRAL_RENDERED_AUTHORITY_PATTERNS = [
+  /^\.github\/workflows\/pr-quality\.yml$/,
+  /^scripts\/ci-change-scope\.mjs$/,
+  /^scripts\/run-ci-check\.mjs$/,
+];
+
+const EXPLICIT_RENDERED_PATTERNS = [
+  ...WORKOUT_HISTORY_RENDERED_PATTERNS,
+  ...ACTIVE_WORKOUT_RENDERED_PATTERNS,
+  ...TRAIN_RENDERED_PATTERNS,
+  ...SHARED_RENDERED_PATTERNS,
+  ...CENTRAL_RENDERED_AUTHORITY_PATTERNS,
+];
+
 const DEPENDENCY_LOCK_PATTERNS = [/^package-lock\.json$/];
 const DEPENDENCY_MANIFEST_KEYS = [
   "dependencies",
@@ -121,6 +174,7 @@ const DEPENDENCY_MANIFEST_KEYS = [
   "resolutions",
   "packageManager",
 ];
+const QA_VALIDATION_SCRIPT = /^(?:qa:|test(?::|$)|lint$|typecheck$|build$|prebuild$|validate:)/;
 
 function parseManifest(value, label) {
   try {
@@ -139,9 +193,69 @@ export function dependencyManifestChanged(baseValue, headValue) {
   );
 }
 
+export function qaValidationScriptsChanged(baseValue, headValue) {
+  const base = parseManifest(baseValue, "Base");
+  const head = parseManifest(headValue, "Head");
+  const names = new Set([
+    ...Object.keys(base.scripts ?? {}),
+    ...Object.keys(head.scripts ?? {}),
+  ]);
+  return [...names]
+    .filter((name) => QA_VALIDATION_SCRIPT.test(name))
+    .some(
+      (name) =>
+        String(base.scripts?.[name] ?? "") !== String(head.scripts?.[name] ?? ""),
+    );
+}
+
+function renderedScopes(paths, { qaValidationScriptsChanged: packageQaChanged = false } = {}) {
+  const implementationPaths = paths.filter((path) => !isTestPath(path));
+  const central =
+    packageQaChanged
+    || implementationPaths.some((path) =>
+      matchesAny(path, CENTRAL_RENDERED_AUTHORITY_PATTERNS)
+    );
+  const shared = central || implementationPaths.some((path) =>
+    matchesAny(path, SHARED_RENDERED_PATTERNS)
+  );
+  const history = implementationPaths.some((path) =>
+    matchesAny(path, WORKOUT_HISTORY_RENDERED_PATTERNS)
+  );
+  const active = implementationPaths.some((path) =>
+    matchesAny(path, ACTIVE_WORKOUT_RENDERED_PATTERNS)
+  );
+  const train = implementationPaths.some((path) =>
+    matchesAny(path, TRAIN_RENDERED_PATTERNS)
+  );
+  const genericUi = implementationPaths.some(
+    (path) =>
+      matchesAny(path, UI_PATTERNS)
+      && !matchesAny(path, EXPLICIT_RENDERED_PATTERNS),
+  );
+
+  if (shared || genericUi) {
+    return {
+      renderedGeneral: true,
+      renderedTrain: true,
+      renderedActiveWorkout: true,
+      renderedWorkoutHistory: true,
+    };
+  }
+
+  return {
+    renderedGeneral: false,
+    renderedTrain: train,
+    renderedActiveWorkout: active,
+    renderedWorkoutHistory: history,
+  };
+}
+
 export function classifyChangedPaths(
   inputPaths,
-  { dependencyManifestChanged: manifestDependenciesChanged = false } = {},
+  {
+    dependencyManifestChanged: manifestDependenciesChanged = false,
+    qaValidationScriptsChanged: packageQaChanged = false,
+  } = {},
 ) {
   const paths = [...new Set(inputPaths
     .map((path) => String(path).trim().replaceAll("\\", "/"))
@@ -158,6 +272,10 @@ export function classifyChangedPaths(
       build: true,
       dependencies: true,
       fallback: true,
+      renderedGeneral: true,
+      renderedTrain: true,
+      renderedActiveWorkout: true,
+      renderedWorkoutHistory: true,
     };
   }
 
@@ -173,7 +291,19 @@ export function classifyChangedPaths(
   const styleBuild = paths.some((path) => matchesAny(path, STYLE_BUILD_PATTERNS));
   const buildAuthority = paths.some((path) => matchesAny(path, BUILD_AUTHORITY_PATTERNS));
   const broadCiAuthority = paths.some((path) => matchesAny(path, BROAD_CI_AUTHORITY_PATTERNS));
-  const ui = styleBuild || broadCiAuthority || paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
+  const selectedRendered = docsOnly
+    ? {
+        renderedGeneral: false,
+        renderedTrain: false,
+        renderedActiveWorkout: false,
+        renderedWorkoutHistory: false,
+      }
+    : renderedScopes(paths, { qaValidationScriptsChanged: packageQaChanged });
+  const anyRendered = Object.values(selectedRendered).some(Boolean);
+  const ui = anyRendered
+    || styleBuild
+    || broadCiAuthority
+    || paths.some((path) => !isTestPath(path) && matchesAny(path, UI_PATTERNS));
   const ci = paths.some((path) => matchesAny(path, CI_SELECTION_PATTERNS));
   const runtime = buildAuthority || broadCiAuthority || paths.some((path) => !isTestPath(path) && matchesAny(path, RUNTIME_PATTERNS));
   const dependencies = manifestDependenciesChanged
@@ -192,19 +322,38 @@ export function classifyChangedPaths(
     || matchesAny(path, RECOGNIZED_CI_PATTERNS)
     || matchesAny(path, RUNTIME_PATTERNS)
     || matchesAny(path, DEPENDENCY_LOCK_PATTERNS)
+    || matchesAny(path, EXPLICIT_RENDERED_PATTERNS)
   ));
   const fallback = !docsOnly && !recognized;
+  const fallbackRendered = fallback
+    ? {
+        renderedGeneral: true,
+        renderedTrain: true,
+        renderedActiveWorkout: true,
+        renderedWorkoutHistory: true,
+      }
+    : selectedRendered;
+  const rendered = docsOnly
+    ? {
+        renderedGeneral: false,
+        renderedTrain: false,
+        renderedActiveWorkout: false,
+        renderedWorkoutHistory: false,
+      }
+    : fallbackRendered;
+  const renderedSelected = Object.values(rendered).some(Boolean);
 
   return {
     paths,
     docsOnly,
-    core: !docsOnly,
+    core: !docsOnly || renderedSelected,
     database: database || integrationAuthority || integrationTest || broadCiAuthority || fallback,
-    ui: ui || fallback,
+    ui: (ui || fallback || renderedSelected) && !docsOnly,
     ci: ci || fallback,
-    build: runtime || dependencies || fallback,
+    build: (runtime || dependencies || fallback || renderedSelected) && !docsOnly,
     dependencies,
     fallback,
+    ...rendered,
   };
 }
 
@@ -234,6 +383,10 @@ function emit(result) {
     build: result.build,
     dependencies: result.dependencies,
     fallback: result.fallback,
+    rendered_general: result.renderedGeneral,
+    rendered_train: result.renderedTrain,
+    rendered_active_workout: result.renderedActiveWorkout,
+    rendered_workout_history: result.renderedWorkoutHistory,
   };
   const lines = Object.entries(values).map(([key, value]) => `${key}=${value ? "true" : "false"}`);
   lines.push(`changed_count=${result.paths.length}`);
@@ -258,12 +411,18 @@ function main() {
   });
   const paths = stdout.split(/\r?\n/);
   const packageChanged = paths.some((path) => path.trim() === "package.json");
+  const basePackage = packageChanged ? packageJsonAt(base) : null;
+  const headPackage = packageChanged ? packageJsonAt(head) : null;
   const manifestDependenciesChanged = packageChanged
-    ? dependencyManifestChanged(packageJsonAt(base), packageJsonAt(head))
+    ? dependencyManifestChanged(basePackage, headPackage)
+    : false;
+  const packageQaChanged = packageChanged
+    ? qaValidationScriptsChanged(basePackage, headPackage)
     : false;
   emit(
     classifyChangedPaths(paths, {
       dependencyManifestChanged: manifestDependenciesChanged,
+      qaValidationScriptsChanged: packageQaChanged,
     }),
   );
 }

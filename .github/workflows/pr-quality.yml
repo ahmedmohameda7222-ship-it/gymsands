@@ -42,6 +42,10 @@ jobs:
       build: ${{ steps.scope.outputs.build }}
       dependencies: ${{ steps.scope.outputs.dependencies }}
       fallback: ${{ steps.scope.outputs.fallback }}
+      rendered_general: ${{ steps.scope.outputs.rendered_general }}
+      rendered_train: ${{ steps.scope.outputs.rendered_train }}
+      rendered_active_workout: ${{ steps.scope.outputs.rendered_active_workout }}
+      rendered_workout_history: ${{ steps.scope.outputs.rendered_workout_history }}
       changed_count: ${{ steps.scope.outputs.changed_count }}
       scope_summary: ${{ steps.scope.outputs.scope_summary }}
     steps:
@@ -164,9 +168,19 @@ jobs:
   ui:
     name: ui-and-i18n
     needs: classify
-    if: needs.classify.outputs.ui == 'true'
+    if: >-
+      needs.classify.outputs.rendered_general == 'true' ||
+      needs.classify.outputs.rendered_train == 'true' ||
+      needs.classify.outputs.rendered_active_workout == 'true' ||
+      needs.classify.outputs.rendered_workout_history == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      QA_SERVER_MODE: production
+      QA_MOCK_AUTH_BUILD_VALUE: "true"
+      QA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      QA_WORKFLOW_RUN_ID: ${{ github.run_id }}
+      QA_BASE_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
         with:
@@ -177,30 +191,61 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Message contracts
-        run: node scripts/run-ci-check.mjs --name i18n -- npm run test:i18n
-      - name: Workout History focused tests
-        run: node scripts/run-ci-check.mjs --name workout-history -- npm run test:workout-history
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Rendered UI QA
-        run: >-
-          node scripts/run-ci-check.mjs --name rendered-qa -- bash -lc
-          'set -euo pipefail;
-          NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build;
+      - name: Create rendered QA report directory
+        run: mkdir -p ci-reports
+      - name: Build mock-auth QA application
+        run: NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build
+      - name: Start production QA server
+        run: |
           NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start > ci-reports/qa-server.log 2>&1 &
-          server_pid=$!;
-          trap '\''kill "$server_pid" 2>/dev/null || true'\'' EXIT;
+          echo "$!" > /tmp/pr-quality-qa-server.pid
+      - name: Wait for production QA server
+        run: |
+          set -euo pipefail
           for attempt in $(seq 1 60); do
-            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi;
-            sleep 1;
-          done;
-          curl --fail --silent http://localhost:3000/ > /dev/null;
-          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=ci-reports/rendered-qa-evidence npm run qa:rendered;
-          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=ci-reports/train-qa-evidence npm run qa:train;
-          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_AW10_EVIDENCE_DIR=ci-reports/active-workout-aw10-evidence npm run qa:active-workout:aw10;
-          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="${{ github.event.pull_request.head.sha }}" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_WORKOUT_HISTORY_EVIDENCE_DIR=ci-reports/workout-history-qa-evidence npm run qa:workout-history'
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat ci-reports/qa-server.log
+          exit 1
+      - name: General rendered QA
+        if: needs.classify.outputs.rendered_general == 'true'
+        env:
+          QA_EVIDENCE_DIR: ci-reports/rendered-qa-evidence
+        run: node scripts/run-ci-check.mjs --name rendered-qa -- npm run qa:rendered
+      - name: Train rendered QA
+        if: >-
+          needs.classify.outputs.rendered_general == 'true' ||
+          needs.classify.outputs.rendered_train == 'true'
+        env:
+          QA_TRAIN_EVIDENCE_DIR: ci-reports/train-qa-evidence
+        run: node scripts/run-ci-check.mjs --name train-rendered-qa -- npm run qa:train
+      - name: Active Workout rendered QA
+        if: >-
+          needs.classify.outputs.rendered_general == 'true' ||
+          needs.classify.outputs.rendered_active_workout == 'true'
+        env:
+          QA_AW10_EVIDENCE_DIR: ci-reports/active-workout-aw10-evidence
+        run: node scripts/run-ci-check.mjs --name active-workout-rendered-qa -- npm run qa:active-workout:aw10
+      - name: Workout History rendered QA
+        if: >-
+          needs.classify.outputs.rendered_general == 'true' ||
+          needs.classify.outputs.rendered_workout_history == 'true'
+        env:
+          QA_WORKOUT_HISTORY_EVIDENCE_DIR: ci-reports/workout-history-qa-evidence
+        run: node scripts/run-ci-check.mjs --name workout-history-rendered-qa -- npm run qa:workout-history
+      - name: Stop production QA server
+        if: always()
+        run: |
+          if [ -f /tmp/pr-quality-qa-server.pid ]; then
+            kill "$(cat /tmp/pr-quality-qa-server.pid)" 2>/dev/null || true
+          fi
       - name: Upload successful rendered evidence
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pr-quality-rendered-evidence-${{ github.event.pull_request.head.sha }}

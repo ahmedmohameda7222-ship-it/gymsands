@@ -27,13 +27,20 @@ Problem
 - Unknown facts must be reported, not invented.
 - Keep PRs reviewable; do not accumulate unrelated corrections.
 
-## Provisional testing policy
+## Pull-request validation policy
 
-- Run the smallest validation that protects the changed risk.
-- Documentation-only changes do not require application builds, unit suites, browser QA, database replay, or integration tests.
-- Do not run full regression by default.
-- PCS-4 will replace this provisional test policy with the final CI operating model.
-- Tests must protect behavior, security, data integrity, release identity, or a confirmed regression. Do not add tests solely to increase test count.
+- `.github/workflows/pr-quality.yml` is the automatic path-scoped Draft PR validation authority.
+- `scripts/ci-change-scope.mjs` selects the affected core, database, rendered UI, CI-contract, build, and dependency lanes from the exact PR diff.
+- Documentation-only changes remain lightweight.
+- Test-only UI paths do not activate rendered browser QA merely because of their directory.
+- Workout History, Active Workout, and Train implementation changes select their bounded rendered suites.
+- Shared or unknown UI authority fails closed to all rendered suites.
+- Empty diffs and unknown non-document paths remain fail-closed.
+- Stable check names, exact-head identity, and focused failure artifacts must be preserved.
+- A passing Draft PR Quality run is targeted validation only. Canonical phase-close Quality remains required for final phase closure after the exact stable Draft head is explicitly marked Ready for review.
+- Exact Release, release preflight, deployment, and Production verification remain separate authorities.
+
+The complete PCS-4A candidate model is recorded in `docs/ci/pcs4-ci-operating-model.md`. PCS-4A does not close PCS-4.
 
 ## Definition of Done
 
