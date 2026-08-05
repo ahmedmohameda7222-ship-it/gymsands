@@ -14,7 +14,6 @@ jobs:
   implement:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout correction branch
         uses: actions/checkout@v4
@@ -29,113 +28,7 @@ jobs:
           cache: npm
 
       - name: Apply bounded correction
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def replace_once(path: str, old: str, new: str) -> None:
-              file = Path(path)
-              source = file.read_text()
-              count = source.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected one patch anchor, found {count}")
-              file.write_text(source.replace(old, new, 1))
-
-          replace_once(
-              "app/api/dashboard/today/route.ts",
-              '''  if (serverTimingValue) {
-              response.headers.set("Server-Timing", serverTimingValue);
-            }
-''',
-              '''  if (serverTimingValue) {
-              response.headers.set("Server-Timing", serverTimingValue);
-              response.headers.set("X-Plaivra-Server-Timing", serverTimingValue);
-            }
-''',
-          )
-
-          replace_once(
-              "app/api/workouts/history/_shared.ts",
-              '''  if (serverTiming) headers.set("Server-Timing", serverTiming);
-''',
-              '''  if (serverTiming) {
-              headers.set("Server-Timing", serverTiming);
-              headers.set("X-Plaivra-Server-Timing", serverTiming);
-            }
-''',
-          )
-
-          replace_once(
-              "scripts/measure-pcs3-production.mjs",
-              '''  const timing = parseServerTiming(headers["server-timing"]);
-''',
-              '''  const timing = parseServerTiming(
-              headers["x-plaivra-server-timing"] ?? headers["server-timing"],
-            );
-''',
-          )
-
-          replace_once(
-              "scripts/measure-pcs3-production.test.mjs",
-              '''    "server-timing": serverTiming,
-''',
-              '''    "server-timing": serverTiming,
-              "x-plaivra-server-timing": serverTiming,
-''',
-          )
-
-          replace_once(
-              "scripts/measure-pcs3-production.test.mjs",
-              '''test("request classifiers separate Today, Supabase, bootstrap, and History", () => {
-''',
-              '''test("response timing falls back to the standard header", () => {
-              const record = safeResponseRecord({
-                category: "today_projection",
-                status: 200,
-                durationMs: 12,
-                decodedBodyBytes: 100,
-                headers: {
-                  ...safeHeaders("total;dur=7.0"),
-                  "x-plaivra-server-timing": undefined,
-                },
-              });
-              assert.deepEqual(record.timing, { total: 7 });
-            });
-
-            test("request classifiers separate Today, Supabase, bootstrap, and History", () => {
-''',
-          )
-
-          replace_once(
-              "app/api/dashboard/today/route.test.ts",
-              '''    expect(response.headers.get("Server-Timing")).not.toMatch(
-              /11111111|2026-08-03|route-token|profiles/i,
-            );
-''',
-              '''    expect(response.headers.get("X-Plaivra-Server-Timing")).toBe(
-              response.headers.get("Server-Timing"),
-            );
-            expect(response.headers.get("Server-Timing")).not.toMatch(
-              /11111111|2026-08-03|route-token|profiles/i,
-            );
-''',
-          )
-
-          replace_once(
-              "app/api/workouts/history/history-observability-route.test.ts",
-              '''    expect(response.headers.get("server-timing")).toMatch(
-              /^total;dur=\\d+\\.\\d, list;dur=\\d+\\.\\d, filters;dur=\\d+\\.\\d$/,
-            );
-''',
-              '''    expect(response.headers.get("server-timing")).toMatch(
-              /^total;dur=\\d+\\.\\d, list;dur=\\d+\\.\\d, filters;dur=\\d+\\.\\d$/,
-            );
-            expect(response.headers.get("x-plaivra-server-timing")).toBe(
-              response.headers.get("server-timing"),
-            );
-''',
-          )
-          PY
+        run: echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpkZWYgcmVwbGFjZV9vbmNlKHBhdGg6IHN0ciwgb2xkOiBzdHIsIG5ldzogc3RyKSAtPiBOb25lOgogICAgZmlsZSA9IFBhdGgocGF0aCkKICAgIHNvdXJjZSA9IGZpbGUucmVhZF90ZXh0KCkKICAgIGNvdW50ID0gc291cmNlLmNvdW50KG9sZCkKICAgIGlmIGNvdW50ICE9IDE6CiAgICAgICAgcmFpc2UgU3lzdGVtRXhpdChmIntwYXRofTogZXhwZWN0ZWQgb25lIHBhdGNoIGFuY2hvciwgZm91bmQge2NvdW50fSIpCiAgICBmaWxlLndyaXRlX3RleHQoc291cmNlLnJlcGxhY2Uob2xkLCBuZXcsIDEpKQoKcmVwbGFjZV9vbmNlKAogICAgImFwcC9hcGkvZGFzaGJvYXJkL3RvZGF5L3JvdXRlLnRzIiwKICAgICcnJyAgaWYgKHNlcnZlclRpbWluZ1ZhbHVlKSB7CiAgICByZXNwb25zZS5oZWFkZXJzLnNldCgiU2VydmVyLVRpbWluZyIsIHNlcnZlclRpbWluZ1ZhbHVlKTsKICB9CicnJywKICAgICcnJyAgaWYgKHNlcnZlclRpbWluZ1ZhbHVlKSB7CiAgICByZXNwb25zZS5oZWFkZXJzLnNldCgiU2VydmVyLVRpbWluZyIsIHNlcnZlclRpbWluZ1ZhbHVlKTsKICAgIHJlc3BvbnNlLmhlYWRlcnMuc2V0KCJYLVBsYWl2cmEtU2VydmVyLVRpbWluZyIsIHNlcnZlclRpbWluZ1ZhbHVlKTsKICB9CicnJywKKQoKcmVwbGFjZV9vbmNlKAogICAgImFwcC9hcGkvd29ya291dHMvaGlzdG9yeS9fc2hhcmVkLnRzIiwKICAgICcnJyAgaWYgKHNlcnZlclRpbWluZykgaGVhZGVycy5zZXQoIlNlcnZlci1UaW1pbmciLCBzZXJ2ZXJUaW1pbmcpOwonJycsCiAgICAnJycgIGlmIChzZXJ2ZXJUaW1pbmcpIHsKICAgIGhlYWRlcnMuc2V0KCJTZXJ2ZXItVGltaW5nIiwgc2VydmVyVGltaW5nKTsKICAgIGhlYWRlcnMuc2V0KCJYLVBsYWl2cmEtU2VydmVyLVRpbWluZyIsIHNlcnZlclRpbWluZyk7CiAgfQonJycsCikKCnJlcGxhY2Vfb25jZSgKICAgICJzY3JpcHRzL21lYXN1cmUtcGNzMy1wcm9kdWN0aW9uLm1qcyIsCiAgICAnJycgIGNvbnN0IHRpbWluZyA9IHBhcnNlU2VydmVyVGltaW5nKGhlYWRlcnNbInNlcnZlci10aW1pbmciXSk7CicnJywKICAgICcnJyAgY29uc3QgdGltaW5nID0gcGFyc2VTZXJ2ZXJUaW1pbmcoCiAgICBoZWFkZXJzWyJ4LXBsYWl2cmEtc2VydmVyLXRpbWluZyJdID8/IGhlYWRlcnNbInNlcnZlci10aW1pbmciXSwKICApOwonJycsCikKCnJlcGxhY2Vfb25jZSgKICAgICJzY3JpcHRzL21lYXN1cmUtcGNzMy1wcm9kdWN0aW9uLnRlc3QubWpzIiwKICAgICcnJyAgICAic2VydmVyLXRpbWluZyI6IHNlcnZlclRpbWluZywKJycnLAogICAgJycnICAgICJzZXJ2ZXItdGltaW5nIjogc2VydmVyVGltaW5nLAogICAgIngtcGxhaXZyYS1zZXJ2ZXItdGltaW5nIjogc2VydmVyVGltaW5nLAonJycsCikKCnJlcGxhY2Vfb25jZSgKICAgICJzY3JpcHRzL21lYXN1cmUtcGNzMy1wcm9kdWN0aW9uLnRlc3QubWpzIiwKICAgICcnJ3Rlc3QoInJlcXVlc3QgY2xhc3NpZmllcnMgc2VwYXJhdGUgVG9kYXksIFN1cGFiYXNlLCBib290c3RyYXAsIGFuZCBIaXN0b3J5IiwgKCkgPT4gewonJycsCiAgICAnJyd0ZXN0KCJyZXNwb25zZSB0aW1pbmcgZmFsbHMgYmFjayB0byB0aGUgc3RhbmRhcmQgaGVhZGVyIiwgKCkgPT4gewogIGNvbnN0IHJlY29yZCA9IHNhZmVSZXNwb25zZVJlY29yZCh7CiAgICBjYXRlZ29yeTogInRvZGF5X3Byb2plY3Rpb24iLAogICAgc3RhdHVzOiAyMDAsCiAgICBkdXJhdGlvbk1zOiAxMiwKICAgIGRlY29kZWRCb2R5Qnl0ZXM6IDEwMCwKICAgIGhlYWRlcnM6IHsKICAgICAgLi4uc2FmZUhlYWRlcnMoInRvdGFsO2R1cj03LjAiKSwKICAgICAgIngtcGxhaXZyYS1zZXJ2ZXItdGltaW5nIjogdW5kZWZpbmVkLAogICAgfSwKICB9KTsKICBhc3NlcnQuZGVlcEVxdWFsKHJlY29yZC50aW1pbmcsIHsgdG90YWw6IDcgfSk7Cn0pOwoKdGVzdCgicmVxdWVzdCBjbGFzc2lmaWVycyBzZXBhcmF0ZSBUb2RheSwgU3VwYWJhc2UsIGJvb3RzdHJhcCwgYW5kIEhpc3RvcnkiLCAoKSA9PiB7CicnJywKKQoKcmVwbGFjZV9vbmNlKAogICAgImFwcC9hcGkvZGFzaGJvYXJkL3RvZGF5L3JvdXRlLnRlc3QudHMiLAogICAgJycnICAgIGV4cGVjdChyZXNwb25zZS5oZWFkZXJzLmdldCgiU2VydmVyLVRpbWluZyIpKS5ub3QudG9NYXRjaCgKICAgICAgLzExMTExMTExfDIwMjYtMDgtMDN8cm91dGUtdG9rZW58cHJvZmlsZXMvaSwKICAgICk7CicnJywKICAgICcnJyAgICBleHBlY3QocmVzcG9uc2UuaGVhZGVycy5nZXQoIlgtUGxhaXZyYS1TZXJ2ZXItVGltaW5nIikpLnRvQmUoCiAgICAgIHJlc3BvbnNlLmhlYWRlcnMuZ2V0KCJTZXJ2ZXItVGltaW5nIiksCiAgICApOwogICAgZXhwZWN0KHJlc3BvbnNlLmhlYWRlcnMuZ2V0KCJTZXJ2ZXItVGltaW5nIikpLm5vdC50b01hdGNoKAogICAgICAvMTExMTExMTF8MjAyNi0wOC0wM3xyb3V0ZS10b2tlbnxwcm9maWxlcy9pLAogICAgKTsKJycnLAopCgpyZXBsYWNlX29uY2UoCiAgICAiYXBwL2FwaS93b3Jrb3V0cy9oaXN0b3J5L2hpc3Rvcnktb2JzZXJ2YWJpbGl0eS1yb3V0ZS50ZXN0LnRzIiwKICAgICcnJyAgICBleHBlY3QocmVzcG9uc2UuaGVhZGVycy5nZXQoInNlcnZlci10aW1pbmciKSkudG9NYXRjaCgKICAgICAgL150b3RhbDtkdXI9XFxkK1xcLlxcZCwgbGlzdDtkdXI9XFxkK1xcLlxcZCwgZmlsdGVycztkdXI9XFxkK1xcLlxcZCQvLAogICAgKTsKJycnLAogICAgJycnICAgIGV4cGVjdChyZXNwb25zZS5oZWFkZXJzLmdldCgic2VydmVyLXRpbWluZyIpKS50b01hdGNoKAogICAgICAvXnRvdGFsO2R1cj1cXGQrXFwuXFxkLCBsaXN0O2R1cj1cXGQrXFwuXFxkLCBmaWx0ZXJzO2R1cj1cXGQrXFwuXFxkJC8sCiAgICApOwogICAgZXhwZWN0KHJlc3BvbnNlLmhlYWRlcnMuZ2V0KCJ4LXBsYWl2cmEtc2VydmVyLXRpbWluZyIpKS50b0JlKAogICAgICByZXNwb25zZS5oZWFkZXJzLmdldCgic2VydmVyLXRpbWluZyIpLAogICAgKTsKJycnLAopCg==' | base64 -d > /tmp/pcs3_patch.py && python /tmp/pcs3_patch.py
 
       - name: Install dependencies
         run: npm ci
@@ -150,13 +43,7 @@ jobs:
         run: |
           git diff --check
           git rm .github/workflows/pcs3-timing-header-correction-one-shot.yml
-          git add \
-            app/api/dashboard/today/route.ts \
-            app/api/dashboard/today/route.test.ts \
-            app/api/workouts/history/_shared.ts \
-            app/api/workouts/history/history-observability-route.test.ts \
-            scripts/measure-pcs3-production.mjs \
-            scripts/measure-pcs3-production.test.mjs
+          git add app/api/dashboard/today/route.ts app/api/dashboard/today/route.test.ts app/api/workouts/history/_shared.ts app/api/workouts/history/history-observability-route.test.ts scripts/measure-pcs3-production.mjs scripts/measure-pcs3-production.test.mjs
           git config user.name "ahmedmohameda7222-ship-it"
           git config user.email "ahmed.mohameda7222@gmail.com"
           git commit -m "fix(perf): preserve PCS3 timing evidence through hosting"
