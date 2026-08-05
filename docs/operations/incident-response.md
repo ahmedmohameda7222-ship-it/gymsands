@@ -3,7 +3,7 @@
 ## Severity
 
 - SEV-0: suspected cross-user disclosure, credential/payment compromise, unauthorized destructive processing, or broad account lockout. Contain immediately and suspend the affected capability.
-- SEV-1: authentication/OAuth/MCP unavailable, authenticated primary route crashing, migration/code identity drift, deletion lifecycle stuck after access disable, materially incorrect billing state, or sustained production outage.
+- SEV-1: authentication/OAuth/MCP unavailable, authenticated primary route crashing, migration/code identity drift, deletion lifecycle stuck after access disable, materially incorrect billing state, repeated Production synthetic failure, or sustained production outage.
 - SEV-2: degraded feature with safe retry/fallback and no ownership/privacy impact.
 - SEV-3: cosmetic, documentation, or low-impact operational defect.
 
@@ -20,6 +20,14 @@
 9. Recover through exact-SHA rollback only when code/schema compatible, otherwise use an additive forward fix.
 10. Run relevant regression, cross-user, migration preflight, anonymous smoke, authenticated populated/empty smoke, and rendered checks before closure.
 11. Document root cause, production-only trigger, detection gap, corrective action, and evidence-retention/deletion decision.
+
+## Production synthetic incidents
+
+Two consecutive relevant failures from `Production uptime synthetic` create one owner-assigned SEV-1 GitHub incident through PCS-5B. Later relevant failures update the same active incident, and a successful synthetic adds recovery evidence and closes it.
+
+The GitHub issue is an operational routing record. Keep it limited to sanitized workflow identity and operational metadata; do not paste sensitive logs, response bodies, provider payloads, credentials, or user data into the issue or its comments.
+
+Automatic recovery closure confirms that the synthetic recovered. It does not replace root-cause review, corrective action, or evidence preservation when the incident represented a real outage.
 
 ## Client rendering incidents
 
