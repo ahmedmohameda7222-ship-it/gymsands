@@ -98,6 +98,9 @@ describe("GET /api/dashboard/today", () => {
     expect(response.headers.get("Server-Timing")).toMatch(
       /^total;dur=\d+\.\d, workout;dur=1\.0/,
     );
+    expect(response.headers.get("X-Plaivra-Server-Timing")).toBe(
+      response.headers.get("Server-Timing"),
+    );
     expect(response.headers.get("Server-Timing")).not.toMatch(
       /11111111|2026-08-03|route-token|profiles/i,
     );

@@ -92,6 +92,7 @@ function safeHeaders(serverTiming, extra = {}) {
     "x-content-type-options": "nosniff",
     "x-request-id": "safe-request-id",
     "server-timing": serverTiming,
+    "x-plaivra-server-timing": serverTiming,
     ...extra,
   };
 }
@@ -398,6 +399,20 @@ test("Server-Timing parsing is strict and bounded", () => {
   ]) {
     assert.equal(parseServerTiming(malformed), null);
   }
+});
+
+test("response timing falls back to the standard header", () => {
+  const record = safeResponseRecord({
+    category: "today_projection",
+    status: 200,
+    durationMs: 12,
+    decodedBodyBytes: 100,
+    headers: {
+      ...safeHeaders("total;dur=7.0"),
+      "x-plaivra-server-timing": undefined,
+    },
+  });
+  assert.deepEqual(record.timing, { total: 7 });
 });
 
 test("request classifiers separate Today, Supabase, bootstrap, and History", () => {

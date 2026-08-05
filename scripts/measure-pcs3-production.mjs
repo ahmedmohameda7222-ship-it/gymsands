@@ -510,7 +510,9 @@ export function safeResponseRecord({
   decodedBodyBytes,
   headers,
 }) {
-  const timing = parseServerTiming(headers["server-timing"]);
+  const timing = parseServerTiming(
+    headers["x-plaivra-server-timing"] ?? headers["server-timing"],
+  );
   return {
     category,
     status,

@@ -119,6 +119,9 @@ describe("Workout History list request observability", () => {
     expect(response.headers.get("server-timing")).toMatch(
       /^total;dur=\d+\.\d, list;dur=\d+\.\d, filters;dur=\d+\.\d$/,
     );
+    expect(response.headers.get("x-plaivra-server-timing")).toBe(
+      response.headers.get("server-timing"),
+    );
     expect(mocks.list).toHaveBeenCalledOnce();
     expect(mocks.filterOptions).toHaveBeenCalledOnce();
     expect(mocks.log).toHaveBeenCalledOnce();

@@ -56,6 +56,7 @@ function withTodayHeaders(
   response.headers.set(REQUEST_ID_HEADER, requestId);
   if (serverTimingValue) {
     response.headers.set("Server-Timing", serverTimingValue);
+    response.headers.set("X-Plaivra-Server-Timing", serverTimingValue);
   }
   return response;
 }
