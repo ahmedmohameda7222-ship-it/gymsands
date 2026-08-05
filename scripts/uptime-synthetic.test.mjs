@@ -14,6 +14,15 @@ import {
 const EXPECTED_COMMIT = "a".repeat(40);
 const STALE_COMMIT = "b".repeat(40);
 const PRIVATE_CONTENT = "secret@example.com Bearer private-token cookie=session user=11111111-1111-4111-8111-111111111111 /private?token=abc";
+const STREAM_PRIVATE_CONTENT = "stream-secret@example.com Bearer stream-private-token partial-private-content";
+const ENDPOINT_PATHS = [
+  "/api/health",
+  "/api/version",
+  "/",
+  "/login",
+  "/legal/privacy",
+  "/legal/terms",
+];
 const workflowUrl = new URL("../.github/workflows/uptime-synthetic.yml", import.meta.url);
 
 function healthBody(overrides = {}) {
@@ -68,6 +77,7 @@ async function withServer(handler, callback) {
   try {
     return await callback(origin);
   } finally {
+    server.closeAllConnections?.();
     await new Promise((resolve) => server.close(resolve));
   }
 }
@@ -113,12 +123,16 @@ function defaultHandler({
   };
 }
 
-async function runCase(handler, { maxAttempts = 1, retryDelayMs = 0 } = {}) {
+async function runCase(handler, {
+  maxAttempts = 1,
+  retryDelayMs = 0,
+  requestTimeoutMs = null,
+} = {}) {
   return withServer(handler, async (origin) => {
     const directory = await mkdtemp(join(tmpdir(), "pcs5a-"));
     const output = join(directory, "evidence.json");
     try {
-      const options = parseOptions([
+      const parsed = parseOptions([
         "--url", origin,
         "--expected-commit", EXPECTED_COMMIT.toUpperCase(),
         "--expected-environment", "production",
@@ -126,6 +140,9 @@ async function runCase(handler, { maxAttempts = 1, retryDelayMs = 0 } = {}) {
         "--max-attempts", String(maxAttempts),
         "--retry-delay-ms", String(retryDelayMs),
       ], {});
+      const options = requestTimeoutMs === null
+        ? parsed
+        : { ...parsed, requestTimeoutMs };
       const result = await runSynthetic(options);
       const evidenceText = await readFile(output, "utf8");
       return { ...result, evidenceText, output };
@@ -172,7 +189,10 @@ test("passes when health, version, and public surfaces match", async () => {
   assert.equal(result.passed, true);
   assert.equal(result.evidence.expected_commit, EXPECTED_COMMIT);
   assert.equal(result.evidence.attempt_count, 1);
-  assert.equal(result.evidence.attempts[0].endpoints.length, 6);
+  assert.deepEqual(
+    result.evidence.attempts[0].endpoints.map((endpoint) => endpoint.path),
+    ENDPOINT_PATHS,
+  );
 });
 
 test("retries an initially stale commit and passes after convergence", async () => {
@@ -290,6 +310,133 @@ test("durations and attempt counts are bounded numeric values", async () => {
       assert.equal(endpoint.duration_ms >= 0 && endpoint.duration_ms <= 60_000, true);
     }
   }
+});
+
+test("runs all six endpoint timeouts concurrently within one request window", async () => {
+  const attempted = [];
+  const requestTimeoutMs = 80;
+  const handler = (request, response) => {
+    const path = new URL(request.url, "http://localhost").pathname;
+    attempted.push(path);
+    setTimeout(() => {
+      if (response.destroyed) return;
+      if (path === "/api/health") {
+        sendJson(response, 200, healthBody());
+      } else if (path === "/api/version") {
+        sendJson(response, 200, versionBody());
+      } else {
+        response.writeHead(200, { "Content-Type": "text/html" });
+        response.end("<html>late</html>");
+      }
+    }, requestTimeoutMs * 4);
+  };
+
+  const startedAt = Date.now();
+  const result = await runCase(handler, { requestTimeoutMs });
+  const elapsed = Date.now() - startedAt;
+
+  assertFailure(result, FAILURE_CODES.REQUEST_TIMEOUT);
+  assert.deepEqual([...attempted].sort(), [...ENDPOINT_PATHS].sort());
+  assert.deepEqual(
+    result.evidence.attempts[0].endpoints.map((endpoint) => endpoint.path),
+    ENDPOINT_PATHS,
+  );
+  assert.equal(
+    result.evidence.attempts[0].endpoints.every(
+      (endpoint) => endpoint.failure_code === FAILURE_CODES.REQUEST_TIMEOUT,
+    ),
+    true,
+  );
+  assert.equal(result.evidenceText.includes('"outcome": "failed"'), true);
+  assert.ok(
+    result.evidence.attempts[0].duration_ms < requestTimeoutMs * 4,
+    `attempt duration ${result.evidence.attempts[0].duration_ms}ms exceeded concurrent bound`,
+  );
+  assert.ok(elapsed < requestTimeoutMs * 5, `total elapsed ${elapsed}ms exceeded concurrent bound`);
+});
+
+test("catches public response-body termination and writes sanitized failure evidence", async () => {
+  const handler = (request, response) => {
+    const path = new URL(request.url, "http://localhost").pathname;
+    if (path === "/api/health") {
+      sendJson(response, 200, healthBody());
+      return;
+    }
+    if (path === "/api/version") {
+      sendJson(response, 200, versionBody());
+      return;
+    }
+    if (path === "/legal/privacy") {
+      response.writeHead(200, {
+        "Content-Type": "text/html",
+        "Content-Length": "4096",
+      });
+      response.write(`<html><body>${STREAM_PRIVATE_CONTENT}`);
+      response.socket.destroy();
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html" });
+    response.end("<html><body>ok</body></html>");
+  };
+
+  const result = await runCase(handler, { requestTimeoutMs: 500 });
+  assert.equal(result.passed, false);
+  const endpoint = result.evidence.attempts[0].endpoints.find(
+    (candidate) => candidate.path === "/legal/privacy",
+  );
+  assert.ok(endpoint);
+  assert.ok([
+    FAILURE_CODES.NETWORK_ERROR,
+    FAILURE_CODES.REQUEST_TIMEOUT,
+  ].includes(endpoint.failure_code));
+  assert.match(result.evidenceText, /"outcome": "failed"/);
+  for (const forbidden of [
+    STREAM_PRIVATE_CONTENT,
+    "stream-secret@example.com",
+    "stream-private-token",
+    "partial-private-content",
+    "UND_ERR_SOCKET",
+    "other side closed",
+    "terminated",
+  ]) {
+    assert.equal(result.evidenceText.includes(forbidden), false, forbidden);
+  }
+});
+
+test("workflow budget leaves material margin below the job timeout", async () => {
+  const workflow = await readFile(workflowUrl, "utf8");
+  const identity = workflow.match(
+    /if \[\[ "\$\{\{ github\.event_name \}\}" == "push" \]\]; then\s+max_attempts=(\d+)\s+retry_delay_ms=(\d+)\s+else\s+max_attempts=(\d+)\s+retry_delay_ms=(\d+)\s+fi/s,
+  );
+  assert.ok(identity, "workflow retry identity block not found");
+  const timeout = workflow.match(/timeout-minutes:\s*(\d+)/);
+  assert.ok(timeout, "workflow timeout not found");
+
+  const pushAttempts = Number(identity[1]);
+  const pushDelayMs = Number(identity[2]);
+  const continuityAttempts = Number(identity[3]);
+  const continuityDelayMs = Number(identity[4]);
+  const timeoutMinutes = Number(timeout[1]);
+
+  assert.equal(pushAttempts, 16);
+  assert.equal(pushDelayMs, 55_000);
+  assert.equal(continuityAttempts, 3);
+  assert.equal(continuityDelayMs, 10_000);
+  assert.equal(timeoutMinutes, 25);
+
+  const requestTimeoutMs = 15_000;
+  const worstCaseSyntheticMs = (
+    pushAttempts * requestTimeoutMs
+    + (pushAttempts - 1) * pushDelayMs
+  );
+  const jobBudgetMs = timeoutMinutes * 60_000;
+  const evidenceUploadMarginMs = jobBudgetMs - worstCaseSyntheticMs;
+
+  assert.equal(worstCaseSyntheticMs, 1_065_000);
+  assert.ok(
+    evidenceUploadMarginMs >= 5 * 60_000,
+    `expected material job margin, received ${evidenceUploadMarginMs}ms`,
+  );
 });
 
 test("workflow preserves scheduled continuity and adds exact main convergence", async () => {

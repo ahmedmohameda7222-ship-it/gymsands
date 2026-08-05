@@ -48,11 +48,11 @@ Production must report that exact SHA through both `/api/health` and `/api/versi
 
 ## Retry and convergence semantics
 
-One attempt consumes all six required endpoints. Response bodies are consumed to completion for transfer-inclusive duration measurement, but bodies are never retained.
+One attempt starts all six required endpoint requests concurrently and awaits every result. Evidence remains ordered deterministically as `/api/health`, `/api/version`, `/`, `/login`, `/legal/privacy`, and `/legal/terms`, regardless of response completion order. Response bodies are consumed to completion for transfer-inclusive duration measurement, but bodies are never retained.
 
-A push-triggered run allows approximately fifteen minutes for deployment convergence. Scheduled and manual checks use a shorter bounded window. Failed attempts retain only safe classifications and extracted release facts. No sleep occurs after the final attempt.
+A push-triggered run uses `16` attempts with `55,000 ms` between failed attempts. Scheduled and manual checks use `3` attempts with `10,000 ms` between failed attempts. With the `15,000 ms` per-request timeout and concurrent requests, the push synthetic is bounded at approximately `1,065,000 ms` (`17 minutes 45 seconds`). The workflow job timeout is `25` minutes so setup and final evidence upload retain explicit margin. No sleep occurs after the final attempt.
 
-The process passes only when one complete attempt passes. A stale commit is retryable during the window and becomes `DEPLOYMENT_COMMIT_NOT_CONVERGED` if the window expires. Unavailable, inconsistent, non-ready, or malformed responses fail closed with bounded safe failure codes.
+The process passes only when one complete attempt passes. A stale commit is retryable during the window and becomes `DEPLOYMENT_COMMIT_NOT_CONVERGED` if the window expires. Unavailable, inconsistent, non-ready, malformed, timed-out, or body-stream-failed responses fail closed with bounded safe failure codes.
 
 ## Evidence safety
 
@@ -66,7 +66,7 @@ The single JSON evidence format records only:
 - stable failure codes;
 - route path, status, duration, and bounded extracted release/readiness facts.
 
-Evidence never includes response bodies, credentials, cookies, tokens, authorization headers, emails, user IDs, UUID record identifiers, query strings, private routes, user content, provider payloads, or raw stack traces. Evidence is written on both pass and final failure and retained for 30 days by the workflow.
+Evidence never includes response bodies, credentials, cookies, tokens, authorization headers, emails, user IDs, UUID record identifiers, query strings, private routes, user content, provider payloads, raw thrown error text, or raw stack traces. Evidence is written on both pass and final failure and retained for 30 days by the workflow.
 
 ## What a pass proves
 

@@ -134,38 +134,47 @@ function endpointSummary(path) {
   };
 }
 
+function transportFailureCode(error) {
+  return error?.name === "TimeoutError" || error?.name === "AbortError"
+    ? FAILURE_CODES.REQUEST_TIMEOUT
+    : FAILURE_CODES.NETWORK_ERROR;
+}
+
 async function fetchConsumed(url, path, expectJson, requestTimeoutMs) {
   const startedAt = Date.now();
   const summary = endpointSummary(path);
-  let response;
+  let body = null;
   try {
-    response = await fetch(url, {
+    const response = await fetch(url, {
       redirect: "follow",
       signal: AbortSignal.timeout(requestTimeoutMs),
       headers: { "User-Agent": "Plaivra-Production-Convergence/1" },
     });
-  } catch (error) {
-    summary.duration_ms = Date.now() - startedAt;
-    summary.failure_code = error?.name === "TimeoutError" || error?.name === "AbortError"
-      ? FAILURE_CODES.REQUEST_TIMEOUT
-      : FAILURE_CODES.NETWORK_ERROR;
-    return { summary, body: null };
-  }
+    summary.status = response.status;
 
-  summary.status = response.status;
-  let body = null;
-  if (expectJson) {
-    try {
-      body = await response.json();
-    } catch {
-      summary.duration_ms = Date.now() - startedAt;
-      summary.failure_code = FAILURE_CODES.INVALID_JSON;
-      return { summary, body: null };
+    if (expectJson) {
+      let serialized;
+      try {
+        serialized = await response.text();
+      } catch (error) {
+        summary.failure_code = transportFailureCode(error);
+        return { summary, body: null };
+      }
+      try {
+        body = JSON.parse(serialized);
+      } catch {
+        summary.failure_code = FAILURE_CODES.INVALID_JSON;
+        return { summary, body: null };
+      }
+    } else {
+      await response.arrayBuffer();
     }
-  } else {
-    await response.arrayBuffer();
+  } catch (error) {
+    summary.failure_code = transportFailureCode(error);
+    return { summary, body: null };
+  } finally {
+    summary.duration_ms = Date.now() - startedAt;
   }
-  summary.duration_ms = Date.now() - startedAt;
   return { summary, body };
 }
 
@@ -289,50 +298,57 @@ function chooseAttemptFailure(endpointFailures, health, version) {
 export async function checkAttempt(options, attemptNumber) {
   const attemptStarted = Date.now();
   const startedAt = new Date().toISOString();
-  const endpoints = [];
-  const endpointFailures = [];
 
-  const healthResult = await fetchConsumed(
-    new URL("/api/health", options.targetOrigin),
-    "/api/health",
-    true,
-    options.requestTimeoutMs,
-  );
-  const health = extractHealth(healthResult.body);
-  if (health) healthResult.summary.release = health;
-  endpoints.push(healthResult.summary);
-
-  const versionResult = await fetchConsumed(
-    new URL("/api/version", options.targetOrigin),
-    "/api/version",
-    true,
-    options.requestTimeoutMs,
-  );
-  const version = extractVersion(versionResult.body);
-  if (version) versionResult.summary.release = version;
-  endpoints.push(versionResult.summary);
-
-  const healthFailure = validateHealth(
-    healthResult.summary,
-    health,
-    options.expectedCommit,
-    options.expectedEnvironment,
-  );
-  const versionFailure = validateVersion(
-    versionResult.summary,
-    version,
-    options.expectedCommit,
-    options.expectedEnvironment,
-  );
-  endpointFailures.push(healthFailure, versionFailure);
-
-  for (const path of PUBLIC_PATHS) {
-    const result = await fetchConsumed(
+  const requests = [
+    fetchConsumed(
+      new URL("/api/health", options.targetOrigin),
+      "/api/health",
+      true,
+      options.requestTimeoutMs,
+    ),
+    fetchConsumed(
+      new URL("/api/version", options.targetOrigin),
+      "/api/version",
+      true,
+      options.requestTimeoutMs,
+    ),
+    ...PUBLIC_PATHS.map((path) => fetchConsumed(
       new URL(path, options.targetOrigin),
       path,
       false,
       options.requestTimeoutMs,
-    );
+    )),
+  ];
+  const [healthResult, versionResult, ...publicResults] = await Promise.all(requests);
+
+  const endpoints = [
+    healthResult.summary,
+    versionResult.summary,
+    ...publicResults.map((result) => result.summary),
+  ];
+  const endpointFailures = [];
+
+  const health = extractHealth(healthResult.body);
+  if (health) healthResult.summary.release = health;
+  const version = extractVersion(versionResult.body);
+  if (version) versionResult.summary.release = version;
+
+  endpointFailures.push(
+    validateHealth(
+      healthResult.summary,
+      health,
+      options.expectedCommit,
+      options.expectedEnvironment,
+    ),
+    validateVersion(
+      versionResult.summary,
+      version,
+      options.expectedCommit,
+      options.expectedEnvironment,
+    ),
+  );
+
+  for (const result of publicResults) {
     if (result.summary.failure_code) {
       endpointFailures.push(result.summary.failure_code);
     } else if (result.summary.status < 200 || result.summary.status >= 300) {
@@ -340,7 +356,6 @@ export async function checkAttempt(options, attemptNumber) {
     } else {
       result.summary.outcome = "passed";
     }
-    endpoints.push(result.summary);
   }
 
   const failureCode = chooseAttemptFailure(endpointFailures, health, version);
