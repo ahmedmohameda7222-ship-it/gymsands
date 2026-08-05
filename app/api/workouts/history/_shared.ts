@@ -45,7 +45,10 @@ export function withWorkoutHistoryHeaders(
     headers.set(key, value),
   );
   if (requestId) headers.set(REQUEST_ID_HEADER, requestId);
-  if (serverTiming) headers.set("Server-Timing", serverTiming);
+  if (serverTiming) {
+    headers.set("Server-Timing", serverTiming);
+    headers.set("X-Plaivra-Server-Timing", serverTiming);
+  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
