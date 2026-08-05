@@ -131,13 +131,21 @@ PCS-4 is complete. PCS-4A was squash-merged through PR #130 as `ac65a8b61e051756
 
 Repository-level branch protection and provider-required checks were evaluated and deferred by Product Owner decision because the repository currently has one active owner and no team. The existing Phase A compatibility workflow remains unchanged. Provider controls must be reconsidered before collaborators or delegated merge authority are introduced.
 
+## PCS-5 Production foundation
+
+PCS-5 is now active. PCS-5A is the current implementation candidate and establishes a repository-owned, read-only exact `main` → Production convergence authority. The candidate extends the existing public uptime synthetic so every `main` push waits boundedly for `https://app.plaivra.com` to report the exact checked-out commit through `/api/health` and `/api/version`, while preserving hourly public continuity checks.
+
+PCS-5A requires the existing release-readiness, schema identity, migration identity, and migration-ledger reconciliation facts, writes sanitized bounded evidence on pass and failure, and performs no deployment, provider mutation, authenticated smoke, database write, or Production mutation. The authority is documented in [`docs/operations/pcs5a-production-deployment-convergence.md`](../operations/pcs5a-production-deployment-convergence.md).
+
+PCS-5 and PCS-5A remain open. Alert routing, provider procurement, backup/restore closure, authenticated post-deploy smoke, and final launch authorization remain separate later authorities.
+
 ## Current program
 
 - PCS-1 Repository Control Plane — complete.
 - PCS-2 Private App Bootstrap — complete and Production-verified.
 - PCS-3 Request Architecture — complete, Production-measured, and closed.
 - PCS-4 CI Operating Model — complete.
-- PCS-5 Production Foundation — next.
+- PCS-5 Production Foundation — in progress; PCS-5A is the current implementation candidate.
 
 ## Feature maturity
 
@@ -164,7 +172,7 @@ Repository-level branch protection and provider-required checks were evaluated a
 | MCP / OAuth / ChatGPT connection | Strong | Strong foundation |
 | Privacy export and account deletion | Strong | Strong foundation |
 | Product analytics | Partial | — |
-| Operational monitoring and alerts | Partial | — |
+| Operational monitoring and alerts | Partial | PCS-5A exact public deployment convergence is the current candidate; external alert routing remains later work |
 | PWA | Absent | — |
 | Native iOS and Android applications | Absent | — |
 | Final launch landing page | Partial | — |
@@ -179,6 +187,7 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 3. All canonical request-count, browser/server failure, privacy, and runtime-error gates passed across both approved synthetic fixtures.
 4. PCS-3 latency results are an informational timestamped baseline; launch budgets require a later explicit decision.
 5. PCS-4 is closed with the merged PCS-4A path-scoped Draft PR validation authority; repository provider protection is deferred while the repository remains single-owner.
-6. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
-7. Current Supabase organization is on the Free plan and is not final-launch infrastructure.
-8. Repository control documents are the current authority; historical PR descriptions and chat memory are not.
+6. PCS-5A is establishing exact checked-out `main` → canonical Production convergence before later alert routing, provider procurement, and backup/restore closure.
+7. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
+8. Current Supabase organization is on the Free plan and is not final-launch infrastructure.
+9. Repository control documents are the current authority; historical PR descriptions and chat memory are not.
