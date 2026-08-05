@@ -1,0 +1,51 @@
+name: PCS3C2 Docs Review Correction One-Shot
+
+on:
+  push:
+    branches:
+      - docs/pcs3c2-production-closure
+    paths:
+      - ".github/workflows/pcs3c2-docs-review-correction-one-shot.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  correct-docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/pcs3c2-production-closure
+          fetch-depth: 0
+
+      - name: Apply bounded review correction
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("docs/control/PLAIVRA_CURRENT_STATE.md")
+          text = path.read_text()
+          replacements = {
+            "These facts verify deployment identity and immediate runtime health only. PCS-3B request counts, decoded response sizes, browser durations, server-duration p50/p95, and browser-visible failure evidence are not yet recorded and must not be claimed as Production-proven.":
+            "At PCS-3B closure, these facts verified deployment identity and immediate runtime health only; request counts, response sizes, durations, and browser-visible failure evidence remained deferred. PCS-3C.2 has now recorded and reconciled that Production evidence below.",
+            "| Today | Strong | PCS-3B projection and Production measurement are complete; initial direct browser-to-Supabase reads measured zero |":
+            "| Today | Functional | PCS-3B projection and Production measurement are complete; initial direct browser-to-Supabase reads measured zero |",
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected one current-state anchor: {old[:60]}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+      - name: Validate and commit correction
+        run: |
+          git diff --check
+          git rm .github/workflows/pcs3c2-docs-review-correction-one-shot.yml
+          test "$(git diff --name-only)" = "docs/control/PLAIVRA_CURRENT_STATE.md"
+          git add docs/control/PLAIVRA_CURRENT_STATE.md
+          git config user.name "ahmedmohameda7222-ship-it"
+          git config user.email "ahmed.mohameda7222@gmail.com"
+          git commit -m "docs(control): align PCS-3 closure state"
+          git push origin HEAD:docs/pcs3c2-production-closure
