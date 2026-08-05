@@ -71,12 +71,18 @@ test("UI job is selected only by rendered outputs", () => {
   assert.doesNotMatch(ui, /if: needs\.classify\.outputs\.ui == 'true'/);
 });
 
-test("UI job owns no duplicated unit subsets", () => {
+test("automatic PR Quality owns no duplicated unit subsets", () => {
+  const core = jobSection("core", "database");
   const ui = jobSection("ui", "ci-contracts");
+  assert.match(core, /npm run test:unit/);
+  assert.doesNotMatch(workflow, /npm run test:i18n/);
+  assert.doesNotMatch(workflow, /npm run test:workout-history(?:\s|$)/);
+  assert.doesNotMatch(workflow, /Legacy workflow-text contracts/);
   assert.doesNotMatch(ui, /npm run test:i18n/);
   assert.doesNotMatch(ui, /npm run test:workout-history(?:\s|$)/);
   assert.doesNotMatch(ui, /Message contracts/);
   assert.doesNotMatch(ui, /Workout History focused tests/);
+  assert.match(workflow, /npm run test:workout-history:integration/);
 });
 
 test("all rendered commands remain explicit and individually conditional", () => {
@@ -96,6 +102,22 @@ test("all rendered commands remain explicit and individually conditional", () =>
     assert.equal(occurrences(step, command), 1);
   }
   assert.doesNotMatch(ui, /\beval\b/);
+});
+
+test("Active Workout evidence uses declarative YAML environment authority", () => {
+  const ui = jobSection("ui", "ci-contracts");
+  const start = ui.indexOf("- name: Active Workout rendered QA");
+  assert.notEqual(start, -1, "Missing Active Workout rendered QA step.");
+  const next = ui.indexOf("\n      - name:", start + 1);
+  const step = ui.slice(start, next === -1 ? ui.length : next);
+  assert.match(
+    step,
+    /env:\n          QA_AW10_EVIDENCE_DIR: ci-reports\/active-workout-aw10-evidence/,
+  );
+  assert.doesNotMatch(
+    step,
+    /run:\s+QA_AW10_EVIDENCE_DIR=ci-reports\/active-workout-aw10-evidence/,
+  );
 });
 
 test("one build, one server and one wait are shared by selected suites", () => {
