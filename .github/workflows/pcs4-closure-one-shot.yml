@@ -100,16 +100,15 @@ jobs:
           marker = "## Future entry format"
           if marker not in text:
               raise SystemExit("Decision-log insertion marker missing")
-          entry = """## D-014 — PCS-4 closure and provider-control deferral
-
-- Date: 2026-08-05
-- Status: Approved
-- Decision: PCS-4 is closed with the merged PCS-4A path-scoped Draft PR validation authority. Repository-level branch protection and provider-required checks are deferred while Plaivra remains a single-owner repository without a delivery team.
-- Reason: PCS-4A solves the active CI cost and validation-authority problem. Additional provider controls add operational friction without enough current value for a repository operated only by Ahmed.
-- Consequences: PR Quality, canonical Quality, Exact Release, release preflight, Lead QA/QC, Ahmed approval, and squash merge remain the repository delivery authorities; the Phase A compatibility workflow remains unchanged; provider controls must be reconsidered before collaborators, delegated merge authority, or materially higher repository-access risk are introduced; PCS-5 becomes next.
-- Supersedes / Superseded by: Completes the PCS-4 direction anticipated by D-006; does not supersede D-006 or D-007.
-
-"""
+          entry = (
+              "## D-014 — PCS-4 closure and provider-control deferral\n\n"
+              "- Date: 2026-08-05\n"
+              "- Status: Approved\n"
+              "- Decision: PCS-4 is closed with the merged PCS-4A path-scoped Draft PR validation authority. Repository-level branch protection and provider-required checks are deferred while Plaivra remains a single-owner repository without a delivery team.\n"
+              "- Reason: PCS-4A solves the active CI cost and validation-authority problem. Additional provider controls add operational friction without enough current value for a repository operated only by Ahmed.\n"
+              "- Consequences: PR Quality, canonical Quality, Exact Release, release preflight, Lead QA/QC, Ahmed approval, and squash merge remain the repository delivery authorities; the Phase A compatibility workflow remains unchanged; provider controls must be reconsidered before collaborators, delegated merge authority, or materially higher repository-access risk are introduced; PCS-5 becomes next.\n"
+              "- Supersedes / Superseded by: Completes the PCS-4 direction anticipated by D-006; does not supersede D-006 or D-007.\n\n"
+          )
           if "## D-014 — PCS-4 closure and provider-control deferral" in text:
               raise SystemExit("D-014 already exists")
           decisions.write_text(text.replace(marker, entry + marker, 1), encoding="utf-8")
