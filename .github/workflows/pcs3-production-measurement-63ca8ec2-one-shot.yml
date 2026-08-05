@@ -35,14 +35,14 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Add ephemeral safe Server-Timing shape diagnostic
+      - name: Add ephemeral safe response diagnostic
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path("scripts/measure-pcs3-production.mjs")
           source = path.read_text()
-          needle = "export function parseServerTiming(value) {\n"
-          diagnostic = """export function parseServerTiming(value) {
+          parse_needle = "export function parseServerTiming(value) {\n"
+          parse_diagnostic = """export function parseServerTiming(value) {
             const safeShape = String(value ?? \"\")
               .split(\",\")
               .map((part) => part.trim().split(\";\").map((segment, index) =>
@@ -53,9 +53,26 @@ jobs:
               .join(\", \" );
             console.log(\"PCS3_SAFE_SERVER_TIMING_SHAPE\", safeShape);
           """
-          if needle not in source:
+          record_needle = "}) {\n  const timing = parseServerTiming(headers[\"server-timing\"]);\n  return {\n    category,\n    status,\n"
+          record_diagnostic = """}) {
+            console.log(
+              \"PCS3_SAFE_RESPONSE_TIMING\",
+              category,
+              status,
+              Boolean(headers[\"server-timing\"]),
+            );
+            const timing = parseServerTiming(headers[\"server-timing\"]);
+            return {
+              category,
+              status,
+          """
+          if parse_needle not in source:
               raise SystemExit("parseServerTiming authority not found")
-          path.write_text(source.replace(needle, diagnostic, 1))
+          source = source.replace(parse_needle, parse_diagnostic, 1)
+          if record_needle not in source:
+              raise SystemExit("safeResponseRecord authority not found")
+          source = source.replace(record_needle, record_diagnostic, 1)
+          path.write_text(source)
           PY
 
       - name: Run canonical PCS3 Production measurement
