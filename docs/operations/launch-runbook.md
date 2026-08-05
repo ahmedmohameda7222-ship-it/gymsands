@@ -25,13 +25,15 @@ For every candidate branch push, inspect Vercel provider metadata for the exact 
 
 ## Monitoring and alerts
 
-- GitHub `uptime-synthetic.yml` automatically verifies exact `main` → Production convergence after pushes and preserves hourly public continuity checks for health, version, landing, login, Privacy, and Terms.
-- The automatic public check is secret-free and does not replace the explicit authenticated populated/empty post-deploy smoke.
+- PCS-5A's `uptime-synthetic.yml` provides the repository-owned exact `main` → Production signal after pushes and preserves hourly public continuity checks for health, version, landing, login, Privacy, and Terms.
+- PCS-5B's `production-alert-routing.yml` routes two consecutive relevant Production synthetic failures to the repository owner through one active SEV-1 GitHub issue, updates that issue idempotently, and closes it after a successful synthetic run.
+- GitHub-native issue routing is not independent external monitoring. GitHub availability and the owner's account notification preferences can affect notification delivery even when the durable issue record exists.
+- The automatic public check is secret-free and does not replace explicit authenticated populated/empty post-deploy smoke, provider inspection, or root-cause review.
 - Vercel runtime logs receive bounded structured JSON. Client boundaries provide sanitized error type, message, stack/component stack, route, boundary source, fingerprint, artifact identity, coarse browser version, and non-sensitive incident-state flags.
 - Telemetry rejects unsupported fields and oversized bodies, strips tokens, cookies, emails, UUIDs, query strings, and authorization data, and never accepts raw profile, food, workout, prompt, or health content.
-- Before launch, configure an owner-reviewed alert destination for repeated synthetic failure, client boundary clusters, elevated 5xx, OAuth/token failure, MCP error rate, deletion retries, retention failure, and billing webhook retry/terminal errors. PCS-5A does not add alert routing.
+- Later signal expansion remains required for client-boundary clusters, elevated 5xx, OAuth/token failure, MCP error rate, deletion retries, retention failure, and billing webhook retry/terminal errors.
 - Initial thresholds: synthetic failure twice consecutively; 5xx >2% for 5 minutes with at least 20 requests; repeated identical client-error fingerprint; any cross-user/authz signal; deletion job in retry/failed; webhook retry older than 15 minutes. Recalibrate from measured traffic without publishing user counts.
-- A monitoring vendor, retention period, region, and DPA remain owner/privacy decisions. No external telemetry SDK is enabled by this implementation.
+- Any external monitoring vendor, retention period, region, and DPA remain owner/privacy decisions. No external telemetry or alert-routing vendor is enabled by PCS-5B.
 
 ## Backups and data changes
 

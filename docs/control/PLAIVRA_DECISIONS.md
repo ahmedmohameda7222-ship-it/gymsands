@@ -137,6 +137,15 @@ This is an append-only decision log. Do not rewrite or delete an approved histor
 - Consequences: Every `main` push receives a bounded exact-commit convergence window; hourly public continuity checks remain; `/api/health`, `/api/version`, schema identity, migration identity, ledger reconciliation, and public legal/auth surfaces fail closed into sanitized evidence; the authority performs no deployment, provider mutation, authenticated smoke, database write, or Production mutation; alert routing and backup/restore readiness remain later PCS-5 work.
 - Supersedes / Superseded by: Extends the release-identity direction preserved by D-007 and the Production-evidence discipline established by D-012; supersedes neither.
 
+## D-016 — GitHub-native owner incident routing as the first alert destination
+
+- Date: 2026-08-05
+- Status: Approved
+- Decision: PCS-5B adopts GitHub-native owner incident routing as Plaivra's first alert destination. Two consecutive relevant `Production uptime synthetic` failures create or update one active SEV-1 issue for the incident episode, and a later successful synthetic adds recovery evidence and closes that issue.
+- Reason: PCS-5A now provides a trustworthy exact Production signal, but repeated failure has no durable owner-visible routing record. The single-owner repository can close that immediate gap without introducing an external vendor, webhook credential, or paid provider feature.
+- Consequences: The routing workflow accepts only completed repository-owned `main` runs, executes trusted default-branch code, assigns the existing `bug`-labelled incident to the repository owner, preserves run-marker idempotency, ignores expected supersession cancellations, and fails visibly when issue routing cannot complete. PCS-5B does not add independent monitoring, broader runtime/OAuth/MCP/deletion/billing/retention signals, external delivery guarantees, Production backup, database dumps, Supabase plan changes, PITR, or restore rehearsal. Backup/restore remains deferred until provider or encrypted off-site storage, cost, and key-management decisions are approved.
+- Supersedes / Superseded by: Extends D-015's exact Production signal into owner-visible incident routing; supersedes neither D-015 nor later external-monitoring or backup decisions.
+
 ## Future entry format
 
 Every future entry must include:

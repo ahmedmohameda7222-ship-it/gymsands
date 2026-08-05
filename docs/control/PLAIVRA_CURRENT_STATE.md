@@ -133,11 +133,25 @@ Repository-level branch protection and provider-required checks were evaluated a
 
 ## PCS-5 Production foundation
 
-PCS-5 is now active. PCS-5A is the current implementation candidate and establishes a repository-owned, read-only exact `main` → Production convergence authority. The candidate extends the existing public uptime synthetic so every `main` push waits boundedly for `https://app.plaivra.com` to report the exact checked-out commit through `/api/health` and `/api/version`, while preserving hourly public continuity checks.
+### PCS-5A exact Production deployment convergence
 
-PCS-5A requires the existing release-readiness, schema identity, migration identity, and migration-ledger reconciliation facts, writes sanitized bounded evidence on pass and failure, and performs no deployment, provider mutation, authenticated smoke, database write, or Production mutation. The authority is documented in [`docs/operations/pcs5a-production-deployment-convergence.md`](../operations/pcs5a-production-deployment-convergence.md).
+PCS-5A was squash-merged through PR #133 as:
 
-PCS-5 and PCS-5A remain open. Alert routing, provider procurement, backup/restore closure, authenticated post-deploy smoke, and final launch authorization remain separate later authorities.
+```text
+89b42af5cb844b0e8fbe2ca1a6e6bcf83b99488b
+```
+
+The first push-triggered Production convergence run `31025971421` passed. It correctly observed the prior Production commit during early bounded attempts and later proved exact convergence to `89b42af5cb844b0e8fbe2ca1a6e6bcf83b99488b` with the existing public release-readiness, schema identity, migration identity, and migration-ledger reconciliation facts healthy.
+
+PCS-5A is merged, deployed, Production-verified, and complete. Its repository-owned read-only authority runs after every `main` push, hourly, and by manual dispatch; writes sanitized evidence on pass and failure; and performs no deployment, provider mutation, authenticated smoke, database write, or Production mutation. The authority is documented in [`docs/operations/pcs5a-production-deployment-convergence.md`](../operations/pcs5a-production-deployment-convergence.md).
+
+### PCS-5B owner incident alert routing
+
+PCS-5B is the current implementation candidate. It establishes GitHub-native owner-directed routing from completed `Production uptime synthetic` runs, requires two consecutive relevant failures before opening one SEV-1 issue, updates the same active incident idempotently, and closes it after recovery.
+
+PCS-5B adds no external monitoring vendor, webhook, email credential, Supabase credential, backup, database dump, plan upgrade, PITR, restore rehearsal, deployment, or Production mutation. The candidate authority is documented in [`docs/operations/pcs5b-owner-alert-routing.md`](../operations/pcs5b-owner-alert-routing.md).
+
+PCS-5 remains in progress. Independent external monitoring, broader runtime/OAuth/MCP/deletion/billing/retention signal coverage, provider procurement, backup/restore closure, authenticated post-deploy smoke, and final launch authorization remain separate later authorities.
 
 ## Current program
 
@@ -145,7 +159,7 @@ PCS-5 and PCS-5A remain open. Alert routing, provider procurement, backup/restor
 - PCS-2 Private App Bootstrap — complete and Production-verified.
 - PCS-3 Request Architecture — complete, Production-measured, and closed.
 - PCS-4 CI Operating Model — complete.
-- PCS-5 Production Foundation — in progress; PCS-5A is the current implementation candidate.
+- PCS-5 Production Foundation — in progress; PCS-5A is complete and PCS-5B is the current implementation candidate.
 
 ## Feature maturity
 
@@ -172,7 +186,7 @@ PCS-5 and PCS-5A remain open. Alert routing, provider procurement, backup/restor
 | MCP / OAuth / ChatGPT connection | Strong | Strong foundation |
 | Privacy export and account deletion | Strong | Strong foundation |
 | Product analytics | Partial | — |
-| Operational monitoring and alerts | Partial | PCS-5A exact public deployment convergence is the current candidate; external alert routing remains later work |
+| Operational monitoring and alerts | Partial | PCS-5A exact public deployment convergence is complete; PCS-5B GitHub-native owner incident routing is the current candidate; independent monitoring and broader signals remain later work |
 | PWA | Absent | — |
 | Native iOS and Android applications | Absent | — |
 | Final launch landing page | Partial | — |
@@ -187,7 +201,8 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 3. All canonical request-count, browser/server failure, privacy, and runtime-error gates passed across both approved synthetic fixtures.
 4. PCS-3 latency results are an informational timestamped baseline; launch budgets require a later explicit decision.
 5. PCS-4 is closed with the merged PCS-4A path-scoped Draft PR validation authority; repository provider protection is deferred while the repository remains single-owner.
-6. PCS-5A is establishing exact checked-out `main` → canonical Production convergence before later alert routing, provider procurement, and backup/restore closure.
-7. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
-8. Current Supabase organization is on the Free plan and is not final-launch infrastructure.
-9. Repository control documents are the current authority; historical PR descriptions and chat memory are not.
+6. PCS-5A is merged, Production-verified, and complete; PCS-5B is establishing durable owner incident routing for repeated Production synthetic failures.
+7. GitHub-native routing is not independent external monitoring and does not close broader runtime, OAuth/MCP, deletion, billing, retention, or backup alerting.
+8. Current Supabase organization is on the Free plan and is not final-launch infrastructure; backup/restore authority remains unresolved.
+9. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
+10. Repository control documents are the current authority; historical PR descriptions and chat memory are not.
