@@ -110,6 +110,15 @@ This is an append-only decision log. Do not rewrite or delete an approved histor
 - Consequences: Exact commit and migration identity are mandatory before measurement; browser and server durations remain distinct; request-count invariants are hard gates; no latency threshold is approved yet; credentials, payloads, tokens, cookies, browser storage, query values, user IDs, opaque IDs, and raw request IDs are forbidden from evidence; Production measurement occurs only after merge; and PCS-3 requires a later PCS-3C.2 Production run and docs-only reconciliation before closure.
 - Supersedes / Superseded by: None.
 
+## D-013 — PCS-3 Production closure baseline
+
+- Date: 2026-08-05
+- Status: Approved
+- Decision: PCS-3 is closed using canonical run `30963068373` against exact Production deployment `4dfbacdf7cb6d45c1f81bcc442f10d18ba992c0b`; the recorded synthetic-fixture results are the repository baseline, not a general user-latency SLA or final launch budget.
+- Reason: PCS-3A and PCS-3B required exact deployed browser evidence before request architecture could be considered complete.
+- Consequences: Today preserves one projection and zero direct initial Supabase reads; Workout History preserves one initial first page and zero initial cursor requests; future regressions use the durable harness; latency budgets require a later decision; PCS-4 becomes next.
+- Supersedes / Superseded by: Completes the reconciliation required by D-012; does not supersede D-012.
+
 ## Future entry format
 
 Every future entry must include:
