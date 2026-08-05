@@ -113,7 +113,7 @@ Immediate PCS-3B runtime health was verified:
 | Today contract/privacy/correlation headers | present |
 | immediate runtime-error cluster | none observed |
 
-These facts verify deployment identity and immediate runtime health only. PCS-3B request counts, decoded response sizes, browser durations, server-duration p50/p95, and browser-visible failure evidence are not yet recorded and must not be claimed as Production-proven.
+At PCS-3B closure, these facts verified deployment identity and immediate runtime health only; request counts, response sizes, durations, and browser-visible failure evidence remained deferred. PCS-3C.2 has now recorded and reconciled that Production evidence below.
 
 ### PCS-3C Production measurement and closure
 
@@ -142,7 +142,7 @@ PCS-3 is merged, deployed, Production-measured, reconciled, and closed. PCS-4 CI
 | Active Workout offline and multi-device | Strong | — |
 | Workout History | Strong | PCS-3 request stability and canonical Production measurement are complete; the recorded baseline is not a launch SLA |
 | Muscle Intelligence and Heat Maps | Strong | Strong foundation |
-| Today | Strong | PCS-3B projection and Production measurement are complete; initial direct browser-to-Supabase reads measured zero |
+| Today | Functional | PCS-3B projection and Production measurement are complete; initial direct browser-to-Supabase reads measured zero |
 | Nutrition and food logging | Functional | Transactional-convergence debt |
 | Meal planning | Functional | — |
 | Hydration | Functional | — |
