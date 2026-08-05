@@ -20,8 +20,8 @@
 - PCS-1 Repository Control Plane — complete
 - PCS-2 Private App Bootstrap — complete
 - PCS-3 Request Architecture — complete and Production-measured
-- PCS-4 CI Operating Model — next
-- PCS-5 Production Foundation — planned
+- PCS-4 CI Operating Model — complete
+- PCS-5 Production Foundation — next
 
 ### B. Product Completion
 

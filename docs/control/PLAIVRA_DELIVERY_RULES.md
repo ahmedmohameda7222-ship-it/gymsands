@@ -40,7 +40,7 @@ Problem
 - A passing Draft PR Quality run is targeted validation only. Canonical phase-close Quality remains required for final phase closure after the exact stable Draft head is explicitly marked Ready for review.
 - Exact Release, release preflight, deployment, and Production verification remain separate authorities.
 
-The complete PCS-4A candidate model is recorded in `docs/ci/pcs4-ci-operating-model.md`. PCS-4A does not close PCS-4.
+The approved PCS-4 operating model is recorded in `docs/ci/pcs4-ci-operating-model.md`. Repository-level branch protection is not currently required for the single-owner repository, but must be reconsidered before collaborators or delegated merge authority are introduced.
 
 ## Definition of Done
 
