@@ -2,9 +2,9 @@
 
 ## Release ownership and evidence
 
-A launch candidate is one exact reviewed commit, one release manifest, one reconciled migration history, one expected database migration marker, one provider deployment record, one anonymous smoke artifact, and two authenticated synthetic smoke artifacts. `/api/version` is a fail-closed release assertion; `/api/health` is secret-free liveness. Neither replaces physical-schema preflight or browser acceptance.
+A launch candidate is one exact reviewed commit, one release manifest, one reconciled migration history, one expected database migration marker, one provider deployment record, one automatic public exact-commit convergence artifact, one anonymous smoke artifact, and two authenticated synthetic smoke artifacts. `/api/version` is a fail-closed release assertion; `/api/health` is secret-free liveness. Neither replaces physical-schema preflight or browser acceptance.
 
-Required retained evidence is repository integrity, full migration chain, database lint/preflight, migration-ledger validation, dependency audit, lint, typecheck, unit/integration/script/telemetry tests, Node 24 production build, environment validation, rendered QA, deployment identity, anonymous smoke, populated synthetic smoke, empty-state synthetic smoke, Supabase advisors, and final owner verdict. Do not paste tokens, credentials, cookies, user IDs, email addresses, query strings, provider payloads, or user fitness content into incidents or tickets.
+Required retained evidence is repository integrity, full migration chain, database lint/preflight, migration-ledger validation, dependency audit, lint, typecheck, unit/integration/script/telemetry tests, Node 24 production build, environment validation, rendered QA, deployment identity, automatic public exact-commit convergence, anonymous smoke, populated synthetic smoke, empty-state synthetic smoke, Supabase advisors, and final owner verdict. Do not paste tokens, credentials, cookies, user IDs, email addresses, query strings, provider payloads, or user fitness content into incidents or tickets.
 
 For every candidate branch push, inspect Vercel provider metadata for the exact pushed SHA. Repository configuration and green repository tests prove policy intent only; they do not prove actual provider enforcement. If Vercel creates an unexpected branch or pull-request deployment, retain its metadata and keep the release blocked until the main-only deployment behavior is corrected and reverified with a later push.
 
@@ -16,8 +16,8 @@ For every candidate branch push, inspect Vercel provider metadata for the exact 
 - Repository tests verify configuration intent, preserved cron schedules, and removal of obsolete gate dependencies; actual provider behavior requires post-push Vercel verification.
 - Required GitHub review and CI checks, migration reconciliation, strict release preflight (`--mode release`), and explicit release-owner approval must complete before changes enter `main`.
 - Under the current Vercel Git model, a merge to `main` is production-triggering.
-- After merge, confirm that Vercel built the exact resulting 40-character `main` SHA.
-- Verify that provider metadata, `/api/version`, and `/api/health` identify the expected deployed commit.
+- After merge, the repository-owned PCS-5A workflow waits boundedly for `/api/health` and `/api/version` to report the exact resulting 40-character `main` SHA and a ready reconciled release.
+- Verify provider metadata independently; automatic public convergence does not replace provider inspection or authenticated smoke.
 - A provider `READY` state alone is not acceptance.
 - Never redeploy an old provider artifact as a substitute for deploying the reviewed Git commit.
 - Netlify remains a separate secondary provider and retains its exact-SHA production gate through `PLAIVRA_PRODUCTION_RELEASE_SHA`.
@@ -25,10 +25,11 @@ For every candidate branch push, inspect Vercel provider metadata for the exact 
 
 ## Monitoring and alerts
 
-- GitHub `uptime-synthetic.yml` checks health, version, landing, login, Privacy, and Terms after it reaches `main`.
+- GitHub `uptime-synthetic.yml` automatically verifies exact `main` → Production convergence after pushes and preserves hourly public continuity checks for health, version, landing, login, Privacy, and Terms.
+- The automatic public check is secret-free and does not replace the explicit authenticated populated/empty post-deploy smoke.
 - Vercel runtime logs receive bounded structured JSON. Client boundaries provide sanitized error type, message, stack/component stack, route, boundary source, fingerprint, artifact identity, coarse browser version, and non-sensitive incident-state flags.
 - Telemetry rejects unsupported fields and oversized bodies, strips tokens, cookies, emails, UUIDs, query strings, and authorization data, and never accepts raw profile, food, workout, prompt, or health content.
-- Before launch, configure an owner-reviewed alert destination for repeated synthetic failure, client boundary clusters, elevated 5xx, OAuth/token failure, MCP error rate, deletion retries, retention failure, and billing webhook retry/terminal errors.
+- Before launch, configure an owner-reviewed alert destination for repeated synthetic failure, client boundary clusters, elevated 5xx, OAuth/token failure, MCP error rate, deletion retries, retention failure, and billing webhook retry/terminal errors. PCS-5A does not add alert routing.
 - Initial thresholds: synthetic failure twice consecutively; 5xx >2% for 5 minutes with at least 20 requests; repeated identical client-error fingerprint; any cross-user/authz signal; deletion job in retry/failed; webhook retry older than 15 minutes. Recalibrate from measured traffic without publishing user counts.
 - A monitoring vendor, retention period, region, and DPA remain owner/privacy decisions. No external telemetry SDK is enabled by this implementation.
 
@@ -44,7 +45,7 @@ Before any production migration, history repair, compatibility-marker update, or
 6. Apply only approved forward-only operations.
 7. Run verification, advisors, cross-user tests, and release preflight.
 
-Do not replay any migration classified as `applied_schema_untracked`. Do not claim backup readiness from configuration alone. Record restore duration, schema compatibility, synthetic row totals, storage verification, operator, and date.
+Do not replay any migration classified as `applied_schema_untracked`. Do not claim backup readiness from configuration alone. Record restore duration, schema compatibility, synthetic row totals, storage verification, operator, and date. Backup/restore closure remains later PCS-5 work and is not established by a passing deployment-convergence run.
 
 ## Rollback and forward-fix
 
@@ -77,11 +78,12 @@ Pull-request review preflight is CI evidence only and requires explicit `--mode 
 6. Obtain explicit release-owner approval for the exact reviewed change.
 7. Merge the approved exact change to `main`.
 8. Record the exact resulting 40-character `main` SHA.
-9. Confirm Vercel production was built from that exact SHA.
-10. Verify provider metadata, `/api/version`, and `/api/health`.
-11. Run anonymous smoke.
-12. Run populated and empty authenticated synthetic smoke.
+9. Require the automatic PCS-5A public convergence workflow to pass for that exact SHA.
+10. Confirm Vercel provider metadata independently identifies that exact Production build.
+11. Run the explicit anonymous smoke.
+12. Run the explicit populated and empty authenticated synthetic smoke.
 13. Review browser, console, network, screenshots, route timings, and request counts.
-14. Record the final launch verdict.
+14. Confirm later alert-routing and backup/restore requirements applicable to the launch are evidenced.
+15. Record the final launch verdict.
 
-Any failed or blocked strict release preflight is a no-go before merge. The migration ledger must be reconciled before a production-triggering merge to `main`. A provider `READY` state alone is not acceptance. Netlify remains separate and keeps its exact-SHA production gate. A manual, external, missing, blocked, or failed item remains a no-go until resolved and evidenced.
+Any failed or blocked strict release preflight is a no-go before merge. The migration ledger must be reconciled before a production-triggering merge to `main`. A failed or missing exact-commit convergence run blocks any claim that the new `main` release is live. A provider `READY` state alone is not acceptance. Netlify remains separate and keeps its exact-SHA production gate. A manual, external, missing, blocked, or failed item remains a no-go until resolved and evidenced.

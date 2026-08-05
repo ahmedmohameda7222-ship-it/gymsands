@@ -1,6 +1,9 @@
 name: Production uptime synthetic
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: "23 * * * *"
   workflow_dispatch:
@@ -9,25 +12,61 @@ permissions:
   contents: read
 
 concurrency:
-  group: production-uptime-synthetic
-  cancel-in-progress: true
+  group: production-uptime-synthetic-${{ github.event_name == 'push' && 'main' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout event commit
+        uses: actions/checkout@v4
         with:
-          node-version: 22
-      - name: Check public production surfaces
-        run: node scripts/uptime-synthetic.mjs --url https://app.plaivra.com --output quality-reports/uptime.json
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Resolve exact convergence identity
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_commit="$(git rev-parse HEAD)"
+          if [[ ! "$expected_commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "INVALID_EXPECTED_COMMIT"
+            exit 1
+          fi
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            max_attempts=16
+            retry_delay_ms=55000
+          else
+            max_attempts=3
+            retry_delay_ms=10000
+          fi
+          echo "expected_commit=$expected_commit" >> "$GITHUB_OUTPUT"
+          echo "max_attempts=$max_attempts" >> "$GITHUB_OUTPUT"
+          echo "retry_delay_ms=$retry_delay_ms" >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact Production convergence
+        run: >-
+          node scripts/uptime-synthetic.mjs
+          --url https://app.plaivra.com
+          --expected-commit ${{ steps.identity.outputs.expected_commit }}
+          --expected-environment production
+          --output quality-reports/uptime.json
+          --max-attempts ${{ steps.identity.outputs.max_attempts }}
+          --retry-delay-ms ${{ steps.identity.outputs.retry_delay_ms }}
+
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: uptime-${{ github.run_id }}
+          name: production-uptime-${{ github.run_id }}-${{ steps.identity.outputs.expected_commit }}
           path: quality-reports/uptime.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30

@@ -128,6 +128,15 @@ This is an append-only decision log. Do not rewrite or delete an approved histor
 - Consequences: PR Quality, canonical Quality, Exact Release, release preflight, Lead QA/QC, Ahmed approval, and squash merge remain the repository delivery authorities; the Phase A compatibility workflow remains unchanged; provider controls must be reconsidered before collaborators, delegated merge authority, or materially higher repository-access risk are introduced; PCS-5 becomes next.
 - Supersedes / Superseded by: Completes the PCS-4 direction anticipated by D-006; does not supersede D-006 or D-007.
 
+## D-015 — Exact main-to-Production convergence before later Production controls
+
+- Date: 2026-08-05
+- Status: Approved
+- Decision: PCS-5A establishes a repository-owned, read-only authority that automatically proves the exact checked-out `main` commit is live and release-ready on the canonical Production origin before alert routing, provider procurement, or backup/restore closure is implemented.
+- Reason: Later Production controls require a trustworthy release identity. An hourly HTTP-success check can remain green while Production serves a healthy but stale commit, so exact `main` → Production convergence must be established first.
+- Consequences: Every `main` push receives a bounded exact-commit convergence window; hourly public continuity checks remain; `/api/health`, `/api/version`, schema identity, migration identity, ledger reconciliation, and public legal/auth surfaces fail closed into sanitized evidence; the authority performs no deployment, provider mutation, authenticated smoke, database write, or Production mutation; alert routing and backup/restore readiness remain later PCS-5 work.
+- Supersedes / Superseded by: Extends the release-identity direction preserved by D-007 and the Production-evidence discipline established by D-012; supersedes neither.
+
 ## Future entry format
 
 Every future entry must include:
