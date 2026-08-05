@@ -22,7 +22,7 @@
 | warmups per account | `2` |
 | measured samples per account and route | `20` |
 | overall result | `PASS` |
-| observed runtime-error entries | `0` |
+| Vercel runtime-error entries during closure verification | `0` |
 | credentials or private browser state persisted | `false` |
 
 The exact deployed-identity gate confirmed the commit, migration marker `20260724232734`, artifact identity, release readiness, schema compatibility, and zero pending, untracked, or unresolved migrations.
@@ -38,7 +38,7 @@ The exact deployed-identity gate confirmed the commit, migration marker `2026072
 | combined | Today | `314.5 / 388.1 ms` | `111.5 / 147.6 ms` | all `40` measured operations passed |
 | combined | Workout History | `284 / 448.6 ms` | `125.4 / 303.3 ms` | all `40` measured operations passed |
 
-All `80` measured API responses returned HTTP `200`. Page errors, console errors, request failures, HTTP 5xx responses, error boundaries, and observed Vercel runtime errors were zero. Privacy, correlation, no-sniff, cache, authorization-vary, and Today contract header gates passed.
+All `80` measured API responses returned HTTP `200`. Page errors, console errors, request failures, HTTP 5xx responses, and error boundaries were zero. No Vercel runtime-error entries were observed during the closure verification window. Privacy, correlation, no-sniff, cache, authorization-vary, and Today contract header gates passed.
 
 Today produced exactly one projection request and zero direct browser-to-Supabase data reads per measured operation. Workout History produced exactly one initial first-page request and zero initial cursor requests per measured operation.
 
