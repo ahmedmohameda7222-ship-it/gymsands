@@ -1,0 +1,140 @@
+name: PCS4 Closure One-Shot
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/pcs4-closure-one-shot.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pcs4-closure-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  reconcile:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout closure branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Verify binding baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git merge-base HEAD origin/main)" = "ac65a8b61e051756628992ec151288d6b47bfef2"
+
+      - name: Reconcile PCS-4 closure documents
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"Expected authority block not found in {path}")
+              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          operating = "docs/ci/pcs4-ci-operating-model.md"
+          replace_exact(
+              operating,
+              "PCS-4A is the first implementation candidate. It changes only automatic Draft PR validation. It does not close PCS-4 and does not redesign canonical Quality, Exact Release, release preflight, deployment, Production verification, or provider required-check configuration.",
+              "PCS-4A is the approved and merged implementation of this operating model. It was squash-merged through PR #130 as `main@ac65a8b61e051756628992ec151288d6b47bfef2` after Phase A run `30970963453`, PR Quality run `30970963310`, and canonical Quality run `30971418928` passed on exact reviewed head `1bdba5f441a88d722444667acacf591930d94416`."
+          )
+          replace_exact(
+              operating,
+              "`.github/workflows/phase-a-diff-validation.yml` remains unchanged as required-check compatibility. A later PCS-4 provider-control phase must verify actual branch-protection configuration before any compatibility removal is considered.",
+              "`.github/workflows/phase-a-diff-validation.yml` remains unchanged. Repository-level branch protection and required-check provider enforcement were evaluated and deliberately deferred because the repository currently has one active owner and no delivery team. That decision does not weaken the repository-owned PR Quality, canonical Quality, Exact Release, or release-preflight authorities. Provider controls must be reconsidered before adding collaborators, delegating merges, or increasing repository access risk."
+          )
+          replace_exact(
+              operating,
+              "## Runtime measurements",
+              "## Closure\n\nPCS-4 is complete. The durable scope is the PCS-4A path-scoped Draft PR validation authority plus the existing exact-head phase-close and release authorities. No application runtime, database, migration, dependency, deployment, or Production behavior was changed by PCS-4. PCS-5 Production Foundation is next.\n\n## Runtime measurements"
+          )
+
+          current = "docs/control/PLAIVRA_CURRENT_STATE.md"
+          replace_exact(
+              current,
+              "PCS-4 is in progress. PCS-4A is the current implementation candidate and establishes the automatic path-scoped Draft PR validation authority while preserving canonical phase-close Quality, Exact Release, release preflight, deployment, Production verification, and provider-control boundaries. The operating model candidate is documented in [`docs/ci/pcs4-ci-operating-model.md`](../ci/pcs4-ci-operating-model.md).\n\nPCS-4A is not closed by this implementation PR. Provider required-check verification and later PCS-4 closure remain separate Lead-authorized work.",
+              "PCS-4 is complete. PCS-4A was squash-merged through PR #130 as `ac65a8b61e051756628992ec151288d6b47bfef2` and establishes the automatic path-scoped Draft PR validation authority while preserving canonical phase-close Quality, Exact Release, release preflight, deployment, and Production verification. The approved operating model is documented in [`docs/ci/pcs4-ci-operating-model.md`](../ci/pcs4-ci-operating-model.md).\n\nRepository-level branch protection and provider-required checks were evaluated and deferred by Product Owner decision because the repository currently has one active owner and no team. The existing Phase A compatibility workflow remains unchanged. Provider controls must be reconsidered before collaborators or delegated merge authority are introduced."
+          )
+          replace_exact(
+              current,
+              "- PCS-4 CI Operating Model — in progress; PCS-4A is the current implementation candidate.\n- PCS-5 Production Foundation — planned.",
+              "- PCS-4 CI Operating Model — complete.\n- PCS-5 Production Foundation — next."
+          )
+          replace_exact(
+              current,
+              "5. PCS-4A is establishing the first permanent path-scoped Draft PR validation authority without changing release gates.",
+              "5. PCS-4 is closed with the merged PCS-4A path-scoped Draft PR validation authority; repository provider protection is deferred while the repository remains single-owner."
+          )
+
+          delivery = "docs/control/PLAIVRA_DELIVERY_RULES.md"
+          replace_exact(
+              delivery,
+              "The complete PCS-4A candidate model is recorded in `docs/ci/pcs4-ci-operating-model.md`. PCS-4A does not close PCS-4.",
+              "The approved PCS-4 operating model is recorded in `docs/ci/pcs4-ci-operating-model.md`. Repository-level branch protection is not currently required for the single-owner repository, but must be reconsidered before collaborators or delegated merge authority are introduced."
+          )
+
+          master = "docs/control/PLAIVRA_MASTER_PLAN.md"
+          replace_exact(
+              master,
+              "- PCS-4 CI Operating Model — next\n- PCS-5 Production Foundation — planned",
+              "- PCS-4 CI Operating Model — complete\n- PCS-5 Production Foundation — next"
+          )
+
+          decisions = Path("docs/control/PLAIVRA_DECISIONS.md")
+          text = decisions.read_text(encoding="utf-8")
+          marker = "## Future entry format"
+          if marker not in text:
+              raise SystemExit("Decision-log insertion marker missing")
+          entry = """## D-014 — PCS-4 closure and provider-control deferral
+
+- Date: 2026-08-05
+- Status: Approved
+- Decision: PCS-4 is closed with the merged PCS-4A path-scoped Draft PR validation authority. Repository-level branch protection and provider-required checks are deferred while Plaivra remains a single-owner repository without a delivery team.
+- Reason: PCS-4A solves the active CI cost and validation-authority problem. Additional provider controls add operational friction without enough current value for a repository operated only by Ahmed.
+- Consequences: PR Quality, canonical Quality, Exact Release, release preflight, Lead QA/QC, Ahmed approval, and squash merge remain the repository delivery authorities; the Phase A compatibility workflow remains unchanged; provider controls must be reconsidered before collaborators, delegated merge authority, or materially higher repository-access risk are introduced; PCS-5 becomes next.
+- Supersedes / Superseded by: Completes the PCS-4 direction anticipated by D-006; does not supersede D-006 or D-007.
+
+"""
+          if "## D-014 — PCS-4 closure and provider-control deferral" in text:
+              raise SystemExit("D-014 already exists")
+          decisions.write_text(text.replace(marker, entry + marker, 1), encoding="utf-8")
+          PY
+
+      - name: Verify docs-only final scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          expected="docs/ci/pcs4-ci-operating-model.md
+docs/control/PLAIVRA_CURRENT_STATE.md
+docs/control/PLAIVRA_DECISIONS.md
+docs/control/PLAIVRA_DELIVERY_RULES.md
+docs/control/PLAIVRA_MASTER_PLAN.md"
+          actual="$(git diff --name-only | sort)"
+          test "$actual" = "$expected"
+
+      - name: Commit closure and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "ahmedmohameda7222-ship-it"
+          git config user.email "ahmed.mohameda7222@gmail.com"
+          git rm .github/workflows/pcs4-closure-one-shot.yml
+          git add docs/ci/pcs4-ci-operating-model.md docs/control/PLAIVRA_CURRENT_STATE.md docs/control/PLAIVRA_DECISIONS.md docs/control/PLAIVRA_DELIVERY_RULES.md docs/control/PLAIVRA_MASTER_PLAN.md
+          git commit -m "docs(control): close PCS-4 operating model"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
