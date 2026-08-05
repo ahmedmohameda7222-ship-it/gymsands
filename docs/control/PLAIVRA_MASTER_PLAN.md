@@ -17,11 +17,11 @@
 
 ### A. Plaivra Control & Platform Stabilization
 
-- PCS-1 Repository Control Plane
-- PCS-2 Private App Bootstrap
-- PCS-3 Request Architecture
-- PCS-4 CI Operating Model
-- PCS-5 Production Foundation
+- PCS-1 Repository Control Plane — complete
+- PCS-2 Private App Bootstrap — complete
+- PCS-3 Request Architecture — complete and Production-measured
+- PCS-4 CI Operating Model — next
+- PCS-5 Production Foundation — planned
 
 ### B. Product Completion
 

@@ -1,11 +1,11 @@
 # PCS-3 Production request measurement
 
-**Status:** PCS-3C.1 measurement authority candidate; Production measurement pending
+**Status:** PCS-3C.2 Production measurement complete; PCS-3 closed
 **Scope:** PCS-3A Workout History and PCS-3B Today request architecture
 
 ## Purpose
 
-PCS-3C.1 establishes a durable, deterministic, read-only Playwright measurement authority. It does not record Production measurements in this PR and does not close PCS-3.
+PCS-3C.1 established the durable, deterministic, read-only Playwright measurement authority. PCS-3C.2 executed it against the exact reviewed Production deployment and closed PCS-3. The complete measured evidence and hashes are recorded in [`pcs3-production-closure.md`](pcs3-production-closure.md).
 
 The harness measures actual authenticated page behavior against approved populated and empty synthetic accounts. Direct API calls are used only for the exact deployed-identity gate; they are not substituted for page measurements.
 
@@ -188,13 +188,8 @@ npm run measure:pcs3-production -- \
 
 Credentials come only from the protected existing environment variables.
 
-## Pending PCS-3C.2 reconciliation
+## PCS-3C.2 reconciliation
 
-After the future Production run:
+The canonical Production run, evidence review, runtime-error verification, and docs reconciliation are complete. See [`pcs3-production-closure.md`](pcs3-production-closure.md).
 
-1. the Lead reviews evidence for secrets and private data;
-2. the Lead verifies deployment identity and Vercel runtime errors;
-3. a docs-only PCS-3C.2 PR records measured facts;
-4. PCS-3 closes only after independent QA/QC and explicit merge approval.
-
-PCS-3 remains open. No Production request count, payload-size percentile, browser-duration percentile, or server-duration percentile is recorded by PCS-3C.1.
+PCS-3 is closed. PCS-4 CI Operating Model is the next authorized phase.

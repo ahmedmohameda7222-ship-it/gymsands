@@ -113,29 +113,24 @@ Immediate PCS-3B runtime health was verified:
 | Today contract/privacy/correlation headers | present |
 | immediate runtime-error cluster | none observed |
 
-These facts verify deployment identity and immediate runtime health only. PCS-3B request counts, decoded response sizes, browser durations, server-duration p50/p95, and browser-visible failure evidence are not yet recorded and must not be claimed as Production-proven.
+At PCS-3B closure, these facts verified deployment identity and immediate runtime health only; request counts, response sizes, durations, and browser-visible failure evidence remained deferred. PCS-3C.2 has now recorded and reconciled that Production evidence below.
 
-### PCS-3C.1 Production request measurement authority
+### PCS-3C Production measurement and closure
 
-PCS-3C.1 is the current implementation candidate. It adds:
+PCS-3C.1 was merged through PR #127 as `63ca8ec2bf8e430b7e8ca87befccb6ff2a093b5c`. The bounded first-party timing-header correction was validated and squash-merged through PR #128 as `4dfbacdf7cb6d45c1f81bcc442f10d18ba992c0b`.
 
-- bounded safe `total`, `list`, and `filters` timing plus correlation and completion logging to the Workout History list route without changing History semantics;
-- one repository-owned read-only Playwright measurement harness;
-- exact deployed identity gating;
-- approved populated and empty synthetic-account authority;
-- hard Today and Workout History request-count invariants;
-- separate browser duration, server duration, decoded-byte, and Content-Length metrics;
-- nearest-rank account and combined summaries;
-- sanitized JSON and Markdown evidence only.
+Canonical PCS-3C.2 Production measurement run `30963068373` passed against that exact deployment using both approved synthetic fixtures, `2` warmups, and `20` measured samples per account and route. Today preserved one projection and zero direct Supabase reads; Workout History preserved one first page and zero initial cursor requests. All `80` measured API responses were HTTP `200`, and all browser/server failure, privacy, and runtime-error gates passed.
 
-No Production measurement is performed by the PCS-3C.1 Draft PR. Request counts and p50/p95 values remain unrecorded. PCS-3 remains open, and PCS-3C.2 is still required for the post-merge Production run, evidence review, Vercel runtime-error verification, and docs-only reconciliation.
+The complete identity, hashes, per-account and combined p50/p95 results, evidence-safety review, and closure verdict are recorded in [`docs/performance/pcs3-production-closure.md`](../performance/pcs3-production-closure.md). The figures are a timestamped synthetic-fixture baseline, not a general user-latency SLA or final launch budget.
+
+PCS-3 is merged, deployed, Production-measured, reconciled, and closed. PCS-4 CI Operating Model is next.
 
 ## Current program
 
 - PCS-1 Repository Control Plane — complete.
 - PCS-2 Private App Bootstrap — complete and Production-verified.
-- PCS-3 Request Architecture — in progress; PCS-3A and PCS-3B are merged/deployed, PCS-3C.1 is the current candidate, and PCS-3C.2 remains required.
-- PCS-4 CI Operating Model — planned.
+- PCS-3 Request Architecture — complete, Production-measured, and closed.
+- PCS-4 CI Operating Model — next.
 - PCS-5 Production Foundation — planned.
 
 ## Feature maturity
@@ -145,9 +140,9 @@ No Production measurement is performed by the PCS-3C.1 Draft PR. Request counts 
 | Authentication / account / onboarding | Functional | Private startup converged through the PCS-2 bootstrap authority |
 | Workouts plans and execution | Strong | — |
 | Active Workout offline and multi-device | Strong | — |
-| Workout History | Strong | PCS-3A request-stability architecture is merged/deployed; Production request evidence is deferred to PCS-3C.2 |
+| Workout History | Strong | PCS-3 request stability and canonical Production measurement are complete; the recorded baseline is not a launch SLA |
 | Muscle Intelligence and Heat Maps | Strong | Strong foundation |
-| Today | Functional | PCS-3B authenticated server projection is merged/deployed; Production request evidence is deferred to PCS-3C.2 |
+| Today | Functional | PCS-3B projection and Production measurement are complete; initial direct browser-to-Supabase reads measured zero |
 | Nutrition and food logging | Functional | Transactional-convergence debt |
 | Meal planning | Functional | — |
 | Hydration | Functional | — |
@@ -174,9 +169,9 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 ## Confirmed highest-priority technical findings
 
 1. PCS-2 consolidated duplicated private application startup work through one Production-verified bootstrap authority.
-2. PCS-3A Workout History request stability is merged/deployed; Production request-count verification remains deferred to PCS-3C.2.
-3. PCS-3B Today server projection is merged/deployed and immediate runtime health is verified; Production request and latency evidence remains deferred to PCS-3C.2.
-4. PCS-3C.1 is establishing the durable read-only measurement authority; it does not record Production measurements.
+2. PCS-3 is closed with exact-deployment Production request evidence for Today and Workout History.
+3. All canonical request-count, browser/server failure, privacy, and runtime-error gates passed across both approved synthetic fixtures.
+4. PCS-3 latency results are an informational timestamped baseline; launch budgets require a later explicit decision.
 5. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
 6. CI and test scripts retain phase-based duplication and are too slow for daily development.
 7. Current Supabase organization is on the Free plan and is not final-launch infrastructure.
