@@ -1,0 +1,76 @@
+name: PostCSS Security Fix One-Shot
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/postcss-security-fix-one-shot.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: postcss-security-fix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout security branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Apply exact PostCSS patch
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          if (pkg.devDependencies?.postcss !== '8.5.22') {
+            throw new Error(`Unexpected starting PostCSS devDependency: ${pkg.devDependencies?.postcss}`);
+          }
+          if (pkg.overrides?.postcss !== '8.5.22') {
+            throw new Error(`Unexpected starting PostCSS override: ${pkg.overrides?.postcss}`);
+          }
+          pkg.devDependencies.postcss = '8.5.23';
+          pkg.overrides.postcss = '8.5.23';
+          fs.writeFileSync('package.json', `${JSON.stringify(pkg, null, 2)}\n`);
+          NODE
+          npm install --package-lock-only --ignore-scripts
+          npm ci
+          npm audit --omit=dev --audit-level=moderate
+          npm ls postcss --all
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          if (pkg.devDependencies.postcss !== '8.5.23') throw new Error('PostCSS devDependency is not exact 8.5.23');
+          if (pkg.overrides.postcss !== '8.5.23') throw new Error('PostCSS override is not exact 8.5.23');
+          if (lock.packages?.['node_modules/postcss']?.version !== '8.5.23') {
+            throw new Error(`Lockfile resolved PostCSS ${lock.packages?.['node_modules/postcss']?.version}`);
+          }
+          NODE
+
+      - name: Commit durable security correction and remove one-shot workflow
+        run: |
+          set -euo pipefail
+          git config user.name "ahmedmohameda7222-ship-it"
+          git config user.email "ahmed.mohameda7222@gmail.com"
+          git rm .github/workflows/postcss-security-fix-one-shot.yml
+          git add package.json package-lock.json
+          test "$(git diff --cached --name-only | sort | tr '\n' ' ')" = ".github/workflows/postcss-security-fix-one-shot.yml package-lock.json package.json "
+          git commit -m "fix(deps): update PostCSS security patch"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
