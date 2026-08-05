@@ -1,0 +1,163 @@
+name: PCS3 Timing Header Correction One-Shot
+
+on:
+  push:
+    branches:
+      - fix/pcs3-production-timing-header
+    paths:
+      - ".github/workflows/pcs3-timing-header-correction-one-shot.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/pcs3-production-timing-header
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Apply bounded correction
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              source = file.read_text()
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one patch anchor, found {count}")
+              file.write_text(source.replace(old, new, 1))
+
+          replace_once(
+              "app/api/dashboard/today/route.ts",
+              '''  if (serverTimingValue) {
+              response.headers.set("Server-Timing", serverTimingValue);
+            }
+''',
+              '''  if (serverTimingValue) {
+              response.headers.set("Server-Timing", serverTimingValue);
+              response.headers.set("X-Plaivra-Server-Timing", serverTimingValue);
+            }
+''',
+          )
+
+          replace_once(
+              "app/api/workouts/history/_shared.ts",
+              '''  if (serverTiming) headers.set("Server-Timing", serverTiming);
+''',
+              '''  if (serverTiming) {
+              headers.set("Server-Timing", serverTiming);
+              headers.set("X-Plaivra-Server-Timing", serverTiming);
+            }
+''',
+          )
+
+          replace_once(
+              "scripts/measure-pcs3-production.mjs",
+              '''  const timing = parseServerTiming(headers["server-timing"]);
+''',
+              '''  const timing = parseServerTiming(
+              headers["x-plaivra-server-timing"] ?? headers["server-timing"],
+            );
+''',
+          )
+
+          replace_once(
+              "scripts/measure-pcs3-production.test.mjs",
+              '''    "server-timing": serverTiming,
+''',
+              '''    "server-timing": serverTiming,
+              "x-plaivra-server-timing": serverTiming,
+''',
+          )
+
+          replace_once(
+              "scripts/measure-pcs3-production.test.mjs",
+              '''test("request classifiers separate Today, Supabase, bootstrap, and History", () => {
+''',
+              '''test("response timing falls back to the standard header", () => {
+              const record = safeResponseRecord({
+                category: "today_projection",
+                status: 200,
+                durationMs: 12,
+                decodedBodyBytes: 100,
+                headers: {
+                  ...safeHeaders("total;dur=7.0"),
+                  "x-plaivra-server-timing": undefined,
+                },
+              });
+              assert.deepEqual(record.timing, { total: 7 });
+            });
+
+            test("request classifiers separate Today, Supabase, bootstrap, and History", () => {
+''',
+          )
+
+          replace_once(
+              "app/api/dashboard/today/route.test.ts",
+              '''    expect(response.headers.get("Server-Timing")).not.toMatch(
+              /11111111|2026-08-03|route-token|profiles/i,
+            );
+''',
+              '''    expect(response.headers.get("X-Plaivra-Server-Timing")).toBe(
+              response.headers.get("Server-Timing"),
+            );
+            expect(response.headers.get("Server-Timing")).not.toMatch(
+              /11111111|2026-08-03|route-token|profiles/i,
+            );
+''',
+          )
+
+          replace_once(
+              "app/api/workouts/history/history-observability-route.test.ts",
+              '''    expect(response.headers.get("server-timing")).toMatch(
+              /^total;dur=\\d+\\.\\d, list;dur=\\d+\\.\\d, filters;dur=\\d+\\.\\d$/,
+            );
+''',
+              '''    expect(response.headers.get("server-timing")).toMatch(
+              /^total;dur=\\d+\\.\\d, list;dur=\\d+\\.\\d, filters;dur=\\d+\\.\\d$/,
+            );
+            expect(response.headers.get("x-plaivra-server-timing")).toBe(
+              response.headers.get("server-timing"),
+            );
+''',
+          )
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run focused route tests
+        run: npx vitest run app/api/dashboard/today/route.test.ts app/api/workouts/history/history-observability-route.test.ts
+
+      - name: Run focused measurement tests
+        run: node --test scripts/measure-pcs3-production.test.mjs
+
+      - name: Validate and commit correction
+        run: |
+          git diff --check
+          git rm .github/workflows/pcs3-timing-header-correction-one-shot.yml
+          git add \
+            app/api/dashboard/today/route.ts \
+            app/api/dashboard/today/route.test.ts \
+            app/api/workouts/history/_shared.ts \
+            app/api/workouts/history/history-observability-route.test.ts \
+            scripts/measure-pcs3-production.mjs \
+            scripts/measure-pcs3-production.test.mjs
+          git config user.name "ahmedmohameda7222-ship-it"
+          git config user.email "ahmed.mohameda7222@gmail.com"
+          git commit -m "fix(perf): preserve PCS3 timing evidence through hosting"
+          git push origin HEAD:fix/pcs3-production-timing-header
