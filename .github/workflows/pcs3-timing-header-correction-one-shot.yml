@@ -34,7 +34,7 @@ jobs:
         run: npm ci
 
       - name: Run focused route tests
-        run: npx vitest run app/api/dashboard/today/route.test.ts app/api/workouts/history/history-observability-route.test.ts
+        run: npx vitest run --config vitest.unit.config.mjs app/api/dashboard/today/route.test.ts app/api/workouts/history/history-observability-route.test.ts
 
       - name: Run focused measurement tests
         run: node --test scripts/measure-pcs3-production.test.mjs
