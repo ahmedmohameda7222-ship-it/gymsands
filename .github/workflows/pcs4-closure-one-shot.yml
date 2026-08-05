@@ -119,12 +119,13 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          expected="docs/ci/pcs4-ci-operating-model.md
-docs/control/PLAIVRA_CURRENT_STATE.md
-docs/control/PLAIVRA_DECISIONS.md
-docs/control/PLAIVRA_DELIVERY_RULES.md
-docs/control/PLAIVRA_MASTER_PLAN.md"
           actual="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' \
+            'docs/ci/pcs4-ci-operating-model.md' \
+            'docs/control/PLAIVRA_CURRENT_STATE.md' \
+            'docs/control/PLAIVRA_DECISIONS.md' \
+            'docs/control/PLAIVRA_DELIVERY_RULES.md' \
+            'docs/control/PLAIVRA_MASTER_PLAN.md')"
           test "$actual" = "$expected"
 
       - name: Commit closure and remove one-shot workflow
