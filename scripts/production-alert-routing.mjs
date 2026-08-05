@@ -8,6 +8,7 @@ export const SOURCE_WORKFLOW = "Production uptime synthetic";
 export const INCIDENT_TITLE = "[SEV-1] Production synthetic repeatedly failing";
 export const INCIDENT_MARKER = "<!-- plaivra-production-alert:uptime-synthetic -->";
 export const RUN_MARKER_PREFIX = "<!-- plaivra-production-run:";
+export const ATTEMPT_MARKER_PREFIX = "<!-- plaivra-production-attempt:";
 export const ACTIONABLE_CONCLUSIONS = Object.freeze([
   "failure",
   "timed_out",
@@ -25,6 +26,10 @@ export const ALLOWED_ACTIONS = Object.freeze([
   "incident_recovered",
   "no_active_incident",
   "duplicate_event",
+]);
+export const ALLOWED_IGNORED_REASONS = Object.freeze([
+  "non_actionable_conclusion",
+  "newer_relevant_completion_exists",
 ]);
 
 const RECOGNIZED_CONCLUSIONS = new Set([
@@ -134,15 +139,15 @@ function parseEventFile(path) {
   }
 }
 
-function validateRunUrl(value) {
+function validateRunUrl(value, invalidCode = "INVALID_INPUT") {
   let url;
   try {
     url = new URL(value);
   } catch {
-    fail("INVALID_INPUT");
+    fail(invalidCode);
   }
   if (url.protocol !== "https:" || url.hostname !== "github.com" || url.username || url.password || url.search || url.hash) {
-    fail("INVALID_INPUT");
+    fail(invalidCode);
   }
   return url.toString();
 }
@@ -150,6 +155,30 @@ function validateRunUrl(value) {
 function normalizeConclusion(value, invalidCode = "INVALID_INPUT") {
   if (typeof value !== "string" || !RECOGNIZED_CONCLUSIONS.has(value)) fail(invalidCode);
   return value;
+}
+
+function normalizedRun(run, invalidCode) {
+  if (!positiveInteger(run.id)
+    || !positiveInteger(run.workflow_id)
+    || !positiveInteger(run.run_number)
+    || !positiveInteger(run.run_attempt)) {
+    fail(invalidCode);
+  }
+  const conclusion = normalizeConclusion(run.conclusion, invalidCode);
+  const headSha = safeSha(run.head_sha);
+  if (headSha === undefined) fail(invalidCode);
+  return {
+    id: run.id,
+    workflowId: run.workflow_id,
+    runNumber: run.run_number,
+    runAttempt: run.run_attempt,
+    url: validateRunUrl(run.html_url, invalidCode),
+    event: run.event,
+    conclusion,
+    headSha,
+    createdAt: safeTimestamp(run.created_at),
+    updatedAt: safeTimestamp(run.updated_at),
+  };
 }
 
 export function validateSourceEvent(event, repository) {
@@ -161,48 +190,29 @@ export function validateSourceEvent(event, repository) {
   if (run.repository?.full_name !== repository || run.head_repository?.full_name !== repository) fail("INVALID_INPUT");
   if (run.head_branch !== "main") fail("INVALID_INPUT");
   if (!ACCEPTED_EVENT_SET.has(run.event)) fail("INVALID_INPUT");
-  if (!positiveInteger(run.id) || !positiveInteger(run.workflow_id)) fail("INVALID_INPUT");
-  const conclusion = normalizeConclusion(run.conclusion);
-  const headSha = safeSha(run.head_sha);
-  if (headSha === undefined) fail("INVALID_INPUT");
-  return {
-    id: run.id,
-    workflowId: run.workflow_id,
-    url: validateRunUrl(run.html_url),
-    event: run.event,
-    conclusion,
-    headSha,
-    createdAt: safeTimestamp(run.created_at),
-    updatedAt: safeTimestamp(run.updated_at),
-  };
+  return normalizedRun(run, "INVALID_INPUT");
 }
 
 function runMarker(runId) {
   return `${RUN_MARKER_PREFIX}${runId} -->`;
 }
 
-function safeRunFromApi(value, repository) {
+export function attemptMarker(runId, runAttempt) {
+  return `${ATTEMPT_MARKER_PREFIX}${runId}:${runAttempt} -->`;
+}
+
+function safeRunFromApi(value, repository, workflowId) {
   if (!isObject(value) || !positiveInteger(value.id)) fail("API_INVALID_RESPONSE");
   if (value.repository?.full_name !== repository || value.head_repository?.full_name !== repository) return null;
   if (value.head_branch !== "main" || !ACCEPTED_EVENT_SET.has(value.event)) return null;
-  const conclusion = normalizeConclusion(value.conclusion, "API_INVALID_RESPONSE");
-  const headSha = safeSha(value.head_sha);
-  if (headSha === undefined) fail("API_INVALID_RESPONSE");
-  let url;
-  try {
-    url = validateRunUrl(value.html_url);
-  } catch {
-    fail("API_INVALID_RESPONSE");
-  }
-  return {
-    id: value.id,
-    url,
-    event: value.event,
-    conclusion,
-    headSha,
-    createdAt: safeTimestamp(value.created_at),
-    updatedAt: safeTimestamp(value.updated_at),
-  };
+  const run = normalizedRun(value, "API_INVALID_RESPONSE");
+  if (run.workflowId !== workflowId) fail("API_INVALID_RESPONSE");
+  return run;
+}
+
+function compareSequence(left, right) {
+  if (left.runNumber !== right.runNumber) return left.runNumber - right.runNumber;
+  return left.runAttempt - right.runAttempt;
 }
 
 function apiEndpoint(base, path, query = null) {
@@ -265,15 +275,51 @@ async function listRecentRuns(context, workflowId) {
   return runs;
 }
 
-async function previousRelevantRun(context, current) {
-  const candidates = await listRecentRuns(context, current.workflowId);
-  for (const candidate of candidates) {
-    if (candidate?.id === current.id) continue;
-    const normalized = safeRunFromApi(candidate, context.repository);
-    if (!normalized || IGNORED_SET.has(normalized.conclusion)) continue;
-    return normalized;
+function assertSequenceIdentity(runs, current) {
+  const runNumberToId = new Map([[current.runNumber, current.id]]);
+  const runIdToNumber = new Map([[current.id, current.runNumber]]);
+  for (const run of runs) {
+    const knownId = runNumberToId.get(run.runNumber);
+    if (knownId !== undefined && knownId !== run.id) fail("API_INVALID_RESPONSE");
+    const knownNumber = runIdToNumber.get(run.id);
+    if (knownNumber !== undefined && knownNumber !== run.runNumber) fail("API_INVALID_RESPONSE");
+    runNumberToId.set(run.runNumber, run.id);
+    runIdToNumber.set(run.id, run.runNumber);
   }
-  return null;
+}
+
+async function analyzeHistory(context, current) {
+  const candidates = await listRecentRuns(context, current.workflowId);
+  const normalized = [];
+  for (const candidate of candidates) {
+    const run = safeRunFromApi(candidate, context.repository, current.workflowId);
+    if (run) normalized.push(run);
+  }
+  assertSequenceIdentity(normalized, current);
+
+  let newerRelevant = null;
+  let nearestOlderRelevant = null;
+  let predecessor = null;
+
+  for (const run of normalized) {
+    const order = compareSequence(run, current);
+    if (order === 0) {
+      if (run.id !== current.id || run.conclusion !== current.conclusion) fail("API_INVALID_RESPONSE");
+      continue;
+    }
+    if (IGNORED_SET.has(run.conclusion)) continue;
+    if (order > 0 && (!newerRelevant || compareSequence(run, newerRelevant) > 0)) {
+      newerRelevant = run;
+    }
+    if (order < 0 && (!nearestOlderRelevant || compareSequence(run, nearestOlderRelevant) > 0)) {
+      nearestOlderRelevant = run;
+    }
+    if (run.runNumber < current.runNumber && (!predecessor || compareSequence(run, predecessor) > 0)) {
+      predecessor = run;
+    }
+  }
+
+  return { newerRelevant, nearestOlderRelevant, predecessor };
 }
 
 function safeIssue(value) {
@@ -330,6 +376,8 @@ async function issueComments(context, issueNumber) {
 function runLines(prefix, run) {
   const lines = [
     `- ${prefix} run ID: ${run.id}`,
+    `- ${prefix} run number: ${run.runNumber}`,
+    `- ${prefix} run attempt: ${run.runAttempt}`,
     `- ${prefix} run URL: ${run.url}`,
     `- ${prefix} event: ${run.event}`,
     `- ${prefix} conclusion: ${run.conclusion}`,
@@ -344,12 +392,13 @@ function incidentBody(current, previous) {
   return [
     INCIDENT_MARKER,
     runMarker(current.id),
+    attemptMarker(current.id, current.runAttempt),
     "## SEV-1 Production synthetic incident",
     "",
     "- Severity: SEV-1",
     "- State: active",
     `- Source workflow: ${SOURCE_WORKFLOW}`,
-    "- Detection threshold: two consecutive relevant failures",
+    "- Detection threshold: two consecutive relevant workflow runs",
     ...runLines("Current", current),
     ...runLines("Previous relevant", previous),
     "- Incident response: `docs/operations/incident-response.md`",
@@ -360,12 +409,13 @@ function incidentBody(current, previous) {
 function failureComment(current, previous) {
   return [
     runMarker(current.id),
+    attemptMarker(current.id, current.runAttempt),
     "## Production synthetic failure update",
     "",
     "- Severity: SEV-1",
     "- State: active",
     `- Source workflow: ${SOURCE_WORKFLOW}`,
-    "- Detection threshold: two consecutive relevant failures",
+    "- Detection threshold: two consecutive relevant workflow runs",
     ...runLines("Current", current),
     ...runLines("Previous relevant", previous),
     "- Incident response: `docs/operations/incident-response.md`",
@@ -376,6 +426,7 @@ function failureComment(current, previous) {
 function recoveryComment(current) {
   return [
     runMarker(current.id),
+    attemptMarker(current.id, current.runAttempt),
     "## Production synthetic recovery",
     "",
     "- Severity: SEV-1",
@@ -424,8 +475,13 @@ async function closeIssue(context, issueNumber) {
   if (!isObject(payload) || payload.state !== "closed") fail("API_INVALID_RESPONSE");
 }
 
-function decision(action, current, previous = null, issueNumber = null) {
+function decision(action, current, previous = null, issueNumber = null, ignoredReason = null) {
   if (!ALLOWED_ACTIONS.includes(action)) fail("INVALID_RESULT");
+  if (action === "ignored") {
+    if (!ALLOWED_IGNORED_REASONS.includes(ignoredReason)) fail("INVALID_RESULT");
+  } else if (ignoredReason !== null) {
+    fail("INVALID_RESULT");
+  }
   return {
     action,
     source_run_id: current.id,
@@ -433,29 +489,43 @@ function decision(action, current, previous = null, issueNumber = null) {
     previous_relevant_conclusion: previous?.conclusion ?? null,
     previous_relevant_run_id: previous?.id ?? null,
     issue_number: issueNumber,
+    ignored_reason: ignoredReason,
   };
+}
+
+function hasAttemptMarker(issueBody, comments, current) {
+  const marker = attemptMarker(current.id, current.runAttempt);
+  return issueBody.includes(marker) || comments.some((body) => body.includes(marker));
 }
 
 export async function routeProductionAlert({ event, repository, apiUrl, token, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS }) {
   const current = validateSourceEvent(event, repository);
   const context = { repository, apiUrl, token, requestTimeoutMs };
 
-  if (IGNORED_SET.has(current.conclusion)) return decision("ignored", current);
+  if (IGNORED_SET.has(current.conclusion)) {
+    return decision("ignored", current, null, null, "non_actionable_conclusion");
+  }
+
+  const history = await analyzeHistory(context, current);
+  if (history.newerRelevant) {
+    return decision("ignored", current, null, null, "newer_relevant_completion_exists");
+  }
 
   if (current.conclusion === "success") {
     const incident = await openIncident(context);
     if (!incident) return decision("no_active_incident", current);
-    const marker = runMarker(current.id);
     const comments = await issueComments(context, incident.number);
-    if (!incident.body.includes(marker) && !comments.some((body) => body.includes(marker))) {
+    if (!hasAttemptMarker(incident.body, comments, current)) {
       await addComment(context, incident.number, recoveryComment(current));
+      await closeIssue(context, incident.number);
+      return decision("incident_recovered", current, null, incident.number);
     }
     await closeIssue(context, incident.number);
-    return decision("incident_recovered", current, null, incident.number);
+    return decision("duplicate_event", current, null, incident.number);
   }
 
   if (!ACTIONABLE_SET.has(current.conclusion)) fail("INVALID_INPUT");
-  const previous = await previousRelevantRun(context, current);
+  const previous = history.predecessor;
   if (!previous || previous.conclusion === "success") return decision("first_failure", current, previous);
   if (!ACTIONABLE_SET.has(previous.conclusion)) fail("API_INVALID_RESPONSE");
 
@@ -465,9 +535,8 @@ export async function routeProductionAlert({ event, repository, apiUrl, token, r
     return decision("incident_opened", current, previous, created.number);
   }
 
-  const marker = runMarker(current.id);
   const comments = await issueComments(context, incident.number);
-  if (incident.body.includes(marker) || comments.some((body) => body.includes(marker))) {
+  if (hasAttemptMarker(incident.body, comments, current)) {
     return decision("duplicate_event", current, previous, incident.number);
   }
   await addComment(context, incident.number, failureComment(current, previous));
@@ -483,6 +552,7 @@ function writeSummary(path, result) {
     `- Source run ID: \`${result.source_run_id}\``,
     `- Current conclusion: \`${result.current_conclusion}\``,
   ];
+  if (result.ignored_reason) lines.push(`- Ignored reason: \`${result.ignored_reason}\``);
   if (result.previous_relevant_run_id) {
     lines.push(`- Previous relevant run ID: \`${result.previous_relevant_run_id}\``);
     lines.push(`- Previous relevant conclusion: \`${result.previous_relevant_conclusion}\``);

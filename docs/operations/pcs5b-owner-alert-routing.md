@@ -27,7 +27,9 @@ A source run is accepted only when:
 - the source branch is `main`;
 - the source event is `push`, `schedule`, or `workflow_dispatch`;
 - the conclusion is recognized;
-- the run identity and GitHub URL are valid.
+- the workflow ID, run ID, run number, run attempt, and GitHub URL are valid.
+
+Source chronology is established by the explicit tuple `(run_number, run_attempt)`. A higher run number is newer; within one run number, a higher run attempt is newer. GitHub API array order and completion timestamps are not chronology authorities. A conflicting run ID for one run number is treated as an invalid API state.
 
 The workflow checks out only the trusted default-branch implementation. It never checks out or executes the source run's commit and never downloads source artifacts, logs, or response bodies.
 
@@ -41,9 +43,11 @@ Actionable conclusions are:
 - `stale`;
 - `startup_failure`.
 
-The first actionable failure after a success, or without a prior relevant run, records `first_failure` and does not open an issue.
+For every non-ignored completion, the router validates and normalizes recent source history before accessing issues. If a newer relevant completion attempt exists, the current event is stale and is ignored before any issue listing or mutation.
 
-A second consecutive relevant actionable failure reaches the SEV-1 threshold and opens or updates the active incident.
+The first actionable failure after a success, or without a prior relevant run number, records `first_failure` and does not open an issue.
+
+A second consecutive relevant actionable workflow run reaches the SEV-1 threshold and opens or updates the active incident. Rerun attempts of one workflow run are replacement states for that run number; two attempts of the same run do not count as two consecutive failures. The threshold predecessor is the greatest relevant run number lower than the current run number, using its latest available attempt.
 
 Ignored conclusions are:
 
@@ -79,20 +83,22 @@ When no open marker issue exists and a new two-failure episode reaches threshold
 
 ## Idempotency
 
-Every persisted run update contains:
+Every persisted completion attempt contains the attempt-level marker:
 
 ```html
-<!-- plaivra-production-run:<run_id> -->
+<!-- plaivra-production-attempt:<run_id>:<run_attempt> -->
 ```
 
-Before adding a comment, the router inspects the active issue body and existing comments. Reprocessing the same workflow-run event does not create a duplicate issue or duplicate comment.
+The existing run marker may remain for human-readable run identity, but it is not the deduplication authority. Before adding a comment, the router inspects the active issue body and existing comments for the exact attempt marker. Reprocessing the same `(run_id, run_attempt)` does not create a duplicate issue or comment, while a later rerun attempt remains a distinct completion event.
 
 ## Recovery
 
-A successful source run searches for the active marker issue.
+A successful non-stale source completion searches for the active marker issue.
 
 - If no active issue exists, no mutation occurs.
-- If an active issue exists, one idempotent recovery comment is added and the issue is closed.
+- If an active issue exists, one attempt-idempotent recovery comment is added and the issue is closed.
+- A successful later attempt of the same run is distinct from an earlier failed attempt and can recover the incident.
+- An older success is ignored when a newer relevant completion already exists, so it cannot close newer incident state.
 
 Automatic closure records that the Production synthetic recovered. It does not replace root-cause review, evidence preservation, or corrective action for a real outage.
 
@@ -102,11 +108,12 @@ Issue bodies, comments, stdout JSON, and the GitHub step summary contain only bo
 
 - severity and state;
 - source workflow name;
-- source run ID and GitHub URL;
+- source run ID, run number, run attempt, and GitHub URL;
 - source event and recognized conclusion;
 - exact head SHA when reported;
 - safe timestamps;
 - nearest previous relevant run identity;
+- bounded ignored reason for stale or non-actionable completion events;
 - detection threshold;
 - incident-response document path;
 - statement that PCS-5A evidence remains attached to the source workflow run.

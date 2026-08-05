@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  attemptMarker,
   INCIDENT_MARKER,
   INCIDENT_TITLE,
   main,
@@ -21,6 +22,9 @@ const scriptPath = new URL("./production-alert-routing.mjs", import.meta.url);
 
 function runRecord({
   id,
+  runNumber = id,
+  runAttempt = 1,
+  workflowId = 9001,
   conclusion,
   event = "push",
   repository = REPOSITORY,
@@ -30,7 +34,9 @@ function runRecord({
 } = {}) {
   return {
     id,
-    workflow_id: 9001,
+    workflow_id: workflowId,
+    run_number: runNumber,
+    run_attempt: runAttempt,
     name: "Production uptime synthetic",
     html_url: `https://github.com/${REPOSITORY}/actions/runs/${id}`,
     event,
@@ -87,7 +93,11 @@ async function withMockApi(initial, callback) {
     const rawBody = Buffer.concat(chunks).toString("utf8");
     let parsedBody = null;
     if (rawBody) {
-      try { parsedBody = JSON.parse(rawBody); } catch { parsedBody = rawBody; }
+      try {
+        parsedBody = JSON.parse(rawBody);
+      } catch {
+        parsedBody = rawBody;
+      }
     }
     state.requests.push({
       method: request.method,
@@ -188,36 +198,43 @@ async function withMockApi(initial, callback) {
   }
 }
 
+async function executeMain({ eventPath, summaryPath, apiUrl, requestTimeoutMs = 500 }) {
+  const stdout = [];
+  const stderr = [];
+  const exitCode = await main([
+    "--event", eventPath,
+    "--repository", REPOSITORY,
+    "--api-url", apiUrl,
+  ], {
+    GITHUB_TOKEN: TOKEN,
+    GITHUB_STEP_SUMMARY: summaryPath,
+  }, {
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: (value) => stderr.push(value) },
+  }, { requestTimeoutMs });
+  return {
+    exitCode,
+    stdout: stdout.join(""),
+    stderr: stderr.join(""),
+    result: exitCode === 0 ? JSON.parse(stdout.join("")) : null,
+  };
+}
+
 async function runMain({ event, state = {}, requestTimeoutMs = 500 } = {}) {
   return withMockApi(state, async ({ state: mutableState, apiUrl }) => {
     const directory = await mkdtemp(join(tmpdir(), "pcs5b-"));
     const eventPath = join(directory, "event.json");
     const summaryPath = join(directory, "summary.md");
     await writeFile(eventPath, JSON.stringify(event), "utf8");
-    const stdout = [];
-    const stderr = [];
     try {
-      const exitCode = await main([
-        "--event", eventPath,
-        "--repository", REPOSITORY,
-        "--api-url", apiUrl,
-      ], {
-        GITHUB_TOKEN: TOKEN,
-        GITHUB_STEP_SUMMARY: summaryPath,
-      }, {
-        stdout: { write: (value) => stdout.push(value) },
-        stderr: { write: (value) => stderr.push(value) },
-      }, { requestTimeoutMs });
+      const execution = await executeMain({ eventPath, summaryPath, apiUrl, requestTimeoutMs });
       let summary = "";
-      try { summary = await readFile(summaryPath, "utf8"); } catch { summary = ""; }
-      return {
-        exitCode,
-        stdout: stdout.join(""),
-        stderr: stderr.join(""),
-        summary,
-        state: mutableState,
-        result: exitCode === 0 ? JSON.parse(stdout.join("")) : null,
-      };
+      try {
+        summary = await readFile(summaryPath, "utf8");
+      } catch {
+        summary = "";
+      }
+      return { ...execution, summary, state: mutableState };
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -226,6 +243,10 @@ async function runMain({ event, state = {}, requestTimeoutMs = 500 } = {}) {
 
 function mutations(result) {
   return result.state.requests.filter((request) => request.method !== "GET");
+}
+
+function issueApiRequests(result) {
+  return result.state.requests.filter((request) => request.path.includes("/issues"));
 }
 
 function previous(id, conclusion, overrides = {}) {
@@ -261,12 +282,15 @@ test("ignores cancelled run without API mutation", async () => {
   const result = await runMain({ event: eventFor({ conclusion: "cancelled" }) });
   assert.equal(result.exitCode, 0);
   assert.equal(result.result.action, "ignored");
+  assert.equal(result.result.ignored_reason, "non_actionable_conclusion");
   assert.equal(result.state.requests.length, 0);
 });
 
 test("success with no open incident performs no mutation", async () => {
-  const result = await runMain({ event: eventFor({ conclusion: "success" }) });
+  const current = eventFor({ id: 210, conclusion: "success" });
+  const result = await runMain({ event: current, state: { runs: [current.workflow_run] } });
   assert.equal(result.result.action, "no_active_incident");
+  assert.equal(result.result.ignored_reason, null);
   assert.equal(mutations(result).length, 0);
 });
 
@@ -277,6 +301,7 @@ test("first actionable failure after success opens no issue", async () => {
     state: { runs: [current.workflow_run, previous(219, "success")] },
   });
   assert.equal(result.result.action, "first_failure");
+  assert.equal(result.result.ignored_reason, null);
   assert.equal(mutations(result).length, 0);
 });
 
@@ -290,8 +315,8 @@ test("second consecutive actionable failure creates exactly one issue", async ()
   assert.equal(mutations(result).filter((request) => request.method === "POST" && request.path.endsWith("/issues")).length, 1);
 });
 
-test("created issue has exact marker title owner assignee and bug label", async () => {
-  const current = eventFor({ id: 240, conclusion: "failure" });
+test("created issue has exact marker title owner assignee bug label and attempt identity", async () => {
+  const current = eventFor({ id: 240, conclusion: "failure", runAttempt: 2 });
   const result = await runMain({
     event: current,
     state: { runs: [current.workflow_run, previous(239, "action_required")] },
@@ -299,6 +324,9 @@ test("created issue has exact marker title owner assignee and bug label", async 
   const create = mutations(result).find((request) => request.method === "POST" && request.path.endsWith("/issues"));
   assert.equal(create.body.title, INCIDENT_TITLE);
   assert.equal(create.body.body.includes(INCIDENT_MARKER), true);
+  assert.equal(create.body.body.includes(attemptMarker(240, 2)), true);
+  assert.match(create.body.body, /Current run number: 240/);
+  assert.match(create.body.body, /Current run attempt: 2/);
   assert.deepEqual(create.body.assignees, [OWNER]);
   assert.deepEqual(create.body.labels, ["bug"]);
 });
@@ -315,10 +343,10 @@ test("existing open incident receives one update comment", async () => {
   });
   assert.equal(result.result.action, "incident_updated");
   assert.equal(result.state.comments.get(17).length, 1);
-  assert.match(result.state.comments.get(17)[0], /plaivra-production-run:250/);
+  assert.match(result.state.comments.get(17)[0], /plaivra-production-attempt:250:1/);
 });
 
-test("replaying same run creates no duplicate issue or comment", async () => {
+test("replaying same completion attempt creates no duplicate issue or comment", async () => {
   await withMockApi({
     runs: [previous(260, "failure"), previous(259, "failure")],
     issues: [issue({ number: 18 })],
@@ -329,21 +357,9 @@ test("replaying same run creates no duplicate issue or comment", async () => {
     const summaryPath = join(directory, "summary.md");
     const event = eventFor({ id: 260, conclusion: "failure" });
     await writeFile(eventPath, JSON.stringify(event), "utf8");
-    const execute = async () => {
-      const stdout = [];
-      const exitCode = await main([
-        "--event", eventPath,
-        "--repository", REPOSITORY,
-        "--api-url", apiUrl,
-      ], { GITHUB_TOKEN: TOKEN, GITHUB_STEP_SUMMARY: summaryPath }, {
-        stdout: { write: (value) => stdout.push(value) },
-        stderr: { write: () => {} },
-      }, { requestTimeoutMs: 500 });
-      return { exitCode, result: JSON.parse(stdout.join("")) };
-    };
     try {
-      const first = await execute();
-      const second = await execute();
+      const first = await executeMain({ eventPath, summaryPath, apiUrl });
+      const second = await executeMain({ eventPath, summaryPath, apiUrl });
       assert.equal(first.result.action, "incident_updated");
       assert.equal(second.result.action, "duplicate_event");
       assert.equal(state.comments.get(18).length, 1);
@@ -355,9 +371,14 @@ test("replaying same run creates no duplicate issue or comment", async () => {
 });
 
 test("success comments recovery and closes active incident", async () => {
+  const current = eventFor({ id: 270, conclusion: "success" });
   const result = await runMain({
-    event: eventFor({ id: 270, conclusion: "success" }),
-    state: { issues: [issue({ number: 19 })], comments: new Map([[19, []]]) },
+    event: current,
+    state: {
+      runs: [current.workflow_run, previous(269, "failure")],
+      issues: [issue({ number: 19 })],
+      comments: new Map([[19, []]]),
+    },
   });
   assert.equal(result.result.action, "incident_recovered");
   assert.equal(result.state.comments.get(19).length, 1);
@@ -492,4 +513,150 @@ test("workflow and script do not download source artifacts logs or execute sourc
   assert.doesNotMatch(workflow, /download-artifact|workflow_run\.head_sha|actions\/artifacts/);
   assert.doesNotMatch(script, /\/artifacts|\/logs|download|child_process|exec\(|spawn\(/);
   assert.match(workflow, /Checkout trusted default branch implementation/);
+});
+
+test("unordered history selects the greatest lower relevant run number", async () => {
+  const current = eventFor({ id: 400, runNumber: 400, conclusion: "failure" });
+  const result = await runMain({
+    event: current,
+    state: {
+      runs: [
+        previous(397, "failure", { runNumber: 397 }),
+        previous(398, "success", { runNumber: 398 }),
+        current.workflow_run,
+        previous(399, "timed_out", { runNumber: 399 }),
+      ],
+    },
+  });
+  assert.equal(result.result.action, "incident_opened");
+  assert.equal(result.result.previous_relevant_run_id, 399);
+});
+
+test("older failure is ignored when a newer relevant success exists", async () => {
+  const current = eventFor({ id: 410, runNumber: 410, conclusion: "failure" });
+  const result = await runMain({
+    event: current,
+    state: { runs: [current.workflow_run, previous(411, "success", { runNumber: 411 })] },
+  });
+  assert.equal(result.result.action, "ignored");
+  assert.equal(result.result.ignored_reason, "newer_relevant_completion_exists");
+  assert.equal(issueApiRequests(result).length, 0);
+});
+
+test("older success cannot close incident after a newer failure", async () => {
+  const current = eventFor({ id: 420, runNumber: 420, conclusion: "success" });
+  const result = await runMain({
+    event: current,
+    state: {
+      runs: [previous(421, "failure", { runNumber: 421 }), current.workflow_run],
+      issues: [issue({ number: 31 })],
+      comments: new Map([[31, []]]),
+    },
+  });
+  assert.equal(result.result.action, "ignored");
+  assert.equal(result.result.ignored_reason, "newer_relevant_completion_exists");
+  assert.equal(result.state.issues[0].state, "open");
+  assert.equal(issueApiRequests(result).length, 0);
+});
+
+test("same-run older attempt is ignored before issue access", async () => {
+  const current = eventFor({ id: 430, runNumber: 430, runAttempt: 1, conclusion: "failure" });
+  const result = await runMain({
+    event: current,
+    state: {
+      runs: [
+        current.workflow_run,
+        previous(430, "success", { runNumber: 430, runAttempt: 2 }),
+      ],
+      issues: [issue({ number: 32 })],
+    },
+  });
+  assert.equal(result.result.action, "ignored");
+  assert.equal(result.result.ignored_reason, "newer_relevant_completion_exists");
+  assert.equal(issueApiRequests(result).length, 0);
+});
+
+test("rerun success has distinct attempt marker recovers once and closes incident", async () => {
+  await withMockApi({
+    runs: [
+      previous(440, "success", { runNumber: 440, runAttempt: 2 }),
+      previous(439, "failure", { runNumber: 439 }),
+    ],
+    issues: [issue({
+      number: 33,
+      body: `${INCIDENT_MARKER}\n${attemptMarker(440, 1)}`,
+    })],
+    comments: new Map([[33, []]]),
+  }, async ({ state, apiUrl }) => {
+    const directory = await mkdtemp(join(tmpdir(), "pcs5b-rerun-recovery-"));
+    const eventPath = join(directory, "event.json");
+    const summaryPath = join(directory, "summary.md");
+    const event = eventFor({ id: 440, runNumber: 440, runAttempt: 2, conclusion: "success" });
+    await writeFile(eventPath, JSON.stringify(event), "utf8");
+    try {
+      const first = await executeMain({ eventPath, summaryPath, apiUrl });
+      const second = await executeMain({ eventPath, summaryPath, apiUrl });
+      assert.equal(first.result.action, "incident_recovered");
+      assert.equal(second.result.action, "no_active_incident");
+      assert.equal(state.comments.get(33).length, 1);
+      assert.match(state.comments.get(33)[0], /plaivra-production-attempt:440:2/);
+      assert.equal(state.issues[0].state, "closed");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+test("same-run failure attempts do not satisfy the consecutive-run threshold", async () => {
+  const current = eventFor({ id: 450, runNumber: 450, runAttempt: 2, conclusion: "failure" });
+  const result = await runMain({
+    event: current,
+    state: {
+      runs: [
+        current.workflow_run,
+        previous(450, "failure", { runNumber: 450, runAttempt: 1 }),
+        previous(449, "success", { runNumber: 449 }),
+      ],
+    },
+  });
+  assert.equal(result.result.action, "first_failure");
+  assert.equal(result.result.previous_relevant_run_id, 449);
+  assert.equal(mutations(result).length, 0);
+});
+
+test("conflicting run number and run ID fails safely before issue mutation", async () => {
+  const current = eventFor({ id: 460, runNumber: 460, conclusion: "failure" });
+  const result = await runMain({
+    event: current,
+    state: {
+      runs: [
+        current.workflow_run,
+        previous(459, "failure", { runNumber: 459 }),
+        previous(900459, "success", { runNumber: 459 }),
+      ],
+      issues: [issue({ number: 34 })],
+    },
+  });
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr, /^API_INVALID_RESPONSE/);
+  assert.equal(issueApiRequests(result).length, 0);
+  assert.equal(mutations(result).length, 0);
+});
+
+test("exact attempt replay remains idempotent while later attempt is distinct", async () => {
+  const current = eventFor({ id: 470, runNumber: 470, runAttempt: 2, conclusion: "failure" });
+  const result = await runMain({
+    event: current,
+    state: {
+      runs: [current.workflow_run, previous(469, "failure", { runNumber: 469 })],
+      issues: [issue({
+        number: 35,
+        body: `${INCIDENT_MARKER}\n${attemptMarker(470, 1)}\n${attemptMarker(470, 2)}`,
+      })],
+      comments: new Map([[35, []]]),
+    },
+  });
+  assert.equal(result.result.action, "duplicate_event");
+  assert.equal(result.state.comments.get(35).length, 0);
+  assert.equal(mutations(result).length, 0);
 });
