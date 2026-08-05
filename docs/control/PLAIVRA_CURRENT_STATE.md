@@ -123,14 +123,20 @@ Canonical PCS-3C.2 Production measurement run `30963068373` passed against that 
 
 The complete identity, hashes, per-account and combined p50/p95 results, evidence-safety review, and closure verdict are recorded in [`docs/performance/pcs3-production-closure.md`](../performance/pcs3-production-closure.md). The figures are a timestamped synthetic-fixture baseline, not a general user-latency SLA or final launch budget.
 
-PCS-3 is merged, deployed, Production-measured, reconciled, and closed. PCS-4 CI Operating Model is next.
+PCS-3 is merged, deployed, Production-measured, reconciled, and closed.
+
+## PCS-4 CI operating model
+
+PCS-4 is in progress. PCS-4A is the current implementation candidate and establishes the automatic path-scoped Draft PR validation authority while preserving canonical phase-close Quality, Exact Release, release preflight, deployment, Production verification, and provider-control boundaries. The operating model candidate is documented in [`docs/ci/pcs4-ci-operating-model.md`](../ci/pcs4-ci-operating-model.md).
+
+PCS-4A is not closed by this implementation PR. Provider required-check verification and later PCS-4 closure remain separate Lead-authorized work.
 
 ## Current program
 
 - PCS-1 Repository Control Plane — complete.
 - PCS-2 Private App Bootstrap — complete and Production-verified.
 - PCS-3 Request Architecture — complete, Production-measured, and closed.
-- PCS-4 CI Operating Model — next.
+- PCS-4 CI Operating Model — in progress; PCS-4A is the current implementation candidate.
 - PCS-5 Production Foundation — planned.
 
 ## Feature maturity
@@ -172,7 +178,7 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 2. PCS-3 is closed with exact-deployment Production request evidence for Today and Workout History.
 3. All canonical request-count, browser/server failure, privacy, and runtime-error gates passed across both approved synthetic fixtures.
 4. PCS-3 latency results are an informational timestamped baseline; launch budgets require a later explicit decision.
-5. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
-6. CI and test scripts retain phase-based duplication and are too slow for daily development.
+5. PCS-4A is establishing the first permanent path-scoped Draft PR validation authority without changing release gates.
+6. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
 7. Current Supabase organization is on the Free plan and is not final-launch infrastructure.
 8. Repository control documents are the current authority; historical PR descriptions and chat memory are not.
