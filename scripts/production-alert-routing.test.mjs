@@ -15,7 +15,6 @@ const REPOSITORY = "ahmedmohameda7222-ship-it/gymsands";
 const OWNER = "ahmedmohameda7222-ship-it";
 const TOKEN = "test-temporary-github-token";
 const SHA_A = "a".repeat(40);
-const SHA_B = "b".repeat(40);
 const PRIVATE = "secret@example.com Bearer private-token cookie=session user=11111111-1111-4111-8111-111111111111 /private?token=abc";
 const workflowPath = new URL("../.github/workflows/production-alert-routing.yml", import.meta.url);
 const scriptPath = new URL("./production-alert-routing.mjs", import.meta.url);
@@ -210,7 +209,7 @@ async function runMain({ event, state = {}, requestTimeoutMs = 500 } = {}) {
         stderr: { write: (value) => stderr.push(value) },
       }, { requestTimeoutMs });
       let summary = "";
-      try { summary = await readFile(summaryPath, "utf8"); } catch {}
+      try { summary = await readFile(summaryPath, "utf8"); } catch { summary = ""; }
       return {
         exitCode,
         stdout: stdout.join(""),
