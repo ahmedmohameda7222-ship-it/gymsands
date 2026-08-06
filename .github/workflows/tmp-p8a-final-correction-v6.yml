@@ -1,0 +1,116 @@
+name: Temporary P8A Final Correction V6
+
+on:
+  push:
+    branches:
+      - feat/p8a-single-workout-pdf-report
+    paths:
+      - .github/workflows/tmp-p8a-final-correction-v6.yml
+
+permissions:
+  contents: write
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+  SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_USE_MOCK_AUTH: true
+  PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+  PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+  PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+  PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+  PLAIVRA_RELEASE_ENVIRONMENT: ci
+  PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: 2
+  SUPABASE_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+  QA_SERVER_MODE: production
+  QA_MOCK_AUTH_BUILD_VALUE: true
+
+jobs:
+  validate-render-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Execute full corrected authority without early server exit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          source = Path('.github/workflows/tmp-p8a-final-correction-v4.yml').read_text().splitlines()
+          blocks = []
+          i = 0
+          while i < len(source):
+              line = source[i]
+              block_match = re.match(r'^        run: \|$', line)
+              inline_match = re.match(r'^        run: (.+)$', line)
+              if block_match:
+                  i += 1
+                  body = []
+                  while i < len(source):
+                      current = source[i]
+                      if current and len(current) - len(current.lstrip()) <= 8:
+                          break
+                      body.append(current[10:] if current.startswith('          ') else '')
+                      i += 1
+                  blocks.append('\n'.join(body))
+                  continue
+              if inline_match:
+                  blocks.append(inline_match.group(1))
+              i += 1
+
+          script = '\n\n'.join(blocks)
+          script = script.replace(
+              'echo "QA_HEAD_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"',
+              'export QA_HEAD_SHA="$(git rev-parse HEAD)"\necho "QA_HEAD_SHA=$QA_HEAD_SHA" >> "$GITHUB_ENV"',
+          )
+          script = script.replace(
+              'npm run qa:workout-history',
+              'CI=true QA_BASE_URL=http://localhost:3000 QA_WORKOUT_HISTORY_EVIDENCE_DIR=ci-reports/workout-history-qa-evidence npm run qa:workout-history',
+          )
+          old = '''for attempt in $(seq 1 60); do curl -fsS http://localhost:3000/ >/dev/null && exit 0; sleep 1; done
+cat ci-reports/p8a-final-correction/qa-server.log; exit 1'''
+          new = '''server_ready=false
+for attempt in $(seq 1 60); do
+  if curl -fsS http://localhost:3000/ >/dev/null; then
+    server_ready=true
+    break
+  fi
+  sleep 1
+done
+if [ "$server_ready" != true ]; then
+  cat ci-reports/p8a-final-correction/qa-server.log
+  exit 1
+fi'''
+          if old not in script:
+              raise SystemExit('server readiness authority block not found')
+          script = script.replace(old, new)
+          Path('/tmp/p8a-v6-run.sh').write_text(
+              '#!/usr/bin/env bash\nset -euo pipefail\ntrap \'test ! -f /tmp/p8a-server.pid || kill "$(cat /tmp/p8a-server.pid)" 2>/dev/null || true\' EXIT\n' + script + '\n'
+          )
+          PY
+          chmod +x /tmp/p8a-v6-run.sh
+          /tmp/p8a-v6-run.sh
+
+      - name: Upload full correction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p8a-final-correction-v6-${{ github.sha }}
+          path: |
+            ci-reports/p8a-final-correction/
+            ci-reports/workout-history-qa-evidence/
+          if-no-files-found: warn
+          retention-days: 14
