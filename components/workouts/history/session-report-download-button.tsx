@@ -8,19 +8,24 @@ import type { ReportLanguage } from "@/lib/reports/pdf/types";
 import { WORKOUT_REPORT_UI_COPY } from "@/lib/reports/workout/copy";
 import { downloadPerformedWorkoutReport } from "@/lib/reports/workout/download-client";
 
+function normalizeReportLanguage(value: string | undefined): ReportLanguage {
+  return value === "de" || value === "ar" ? value : "en";
+}
+
 export function SessionReportDownloadButton(
   input: Readonly<{
     sessionId: string;
     sessionAt: string;
     accessToken: string;
-    language: ReportLanguage;
+    language?: string;
     timezone: string;
   }>,
 ) {
   const [preparing, setPreparing] = useState(false);
   const [failed, setFailed] = useState(false);
   const activeRequest = useRef(false);
-  const copy = WORKOUT_REPORT_UI_COPY[input.language];
+  const language = normalizeReportLanguage(input.language);
+  const copy = WORKOUT_REPORT_UI_COPY[language];
 
   async function download() {
     if (activeRequest.current) return;
@@ -28,7 +33,7 @@ export function SessionReportDownloadButton(
     setPreparing(true);
     setFailed(false);
     try {
-      await downloadPerformedWorkoutReport(input);
+      await downloadPerformedWorkoutReport({ ...input, language });
     } catch {
       setFailed(true);
     } finally {
