@@ -18,8 +18,13 @@ describe("P8A report action UI contract", () => {
     expect(source).toContain("activeRequest.current");
     expect(source).toContain("disabled={preparing}");
     expect(source).toContain("aria-busy={preparing}");
-    expect(source).toContain("WORKOUT_REPORT_UI_COPY[input.language]");
-    expect(source).toContain("downloadPerformedWorkoutReport(input)");
+    expect(source).toContain("normalizeReportLanguage(input.language)");
+    expect(source).toContain('value === "de" || value === "ar"');
+    expect(source).toContain('? value : "en"');
+    expect(source).toContain("WORKOUT_REPORT_UI_COPY[language]");
+    expect(source).toContain(
+      "downloadPerformedWorkoutReport({ ...input, language })",
+    );
     expect(source).toContain("setFailed(false)");
     expect(source).toContain("setFailed(true)");
     expect(source).toContain('role="alert"');
