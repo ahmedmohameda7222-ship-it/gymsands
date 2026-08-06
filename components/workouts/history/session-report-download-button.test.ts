@@ -20,6 +20,12 @@ describe("P8A report action UI contract", () => {
     expect(source).toContain("aria-busy={preparing}");
     expect(source).toContain("WORKOUT_REPORT_UI_COPY[input.language]");
     expect(source).toContain("downloadPerformedWorkoutReport(input)");
+    expect(source).toContain("setFailed(false)");
+    expect(source).toContain("setFailed(true)");
+    expect(source).toContain('role="alert"');
+    expect(source).toContain("copy.failedTitle");
+    expect(source).toContain("copy.failedDescription");
+    expect(source).not.toContain("useToast");
     expect(detailSource).toContain(
       'detail.activity.sourceKind === "performed"',
     );
