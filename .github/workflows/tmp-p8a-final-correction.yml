@@ -44,6 +44,40 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           test "$(git merge-base HEAD origin/main)" = "d8a6d757425163683b98f3f546749aeffe003bb8"
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+
+          expected = {
+              "00": "b9f819e0f68d1c2edc05494c930e040b8ce9ca5a48b947298fd7f332f158676f",
+              "01": "c568c39978de43601373655e87f4e5b7c5f8732066f6e0048d90295cdcbcc64e",
+              "02": "a491f2c3bdf17781476d86c79abe44dfe296928c9f4b9242596c757155f8c481",
+              "03": "67d4f7f4b8451cd76d841c198492dcb4c1a23b4c38e9eb9363b579ef93766488",
+              "04": "1155ab2cb92d6f927db94c55fcdfd094a1585e83a7637c991eaf3ca10abc0e3f",
+              "05": "7af7a0f6f62f017cc29c1fbb3fa7555c1f7ca24939face0050e5aec0237aca4f",
+          }
+
+          part01 = Path(".p8a-final-correction-payload.part01")
+          data01 = part01.read_text(encoding="utf-8")
+          if sha256(data01.encode()).hexdigest() != expected["01"]:
+              if len(data01) != 8999 or data01[8153:8163] != "x3p6FzweMJ":
+                  raise SystemExit("Unexpected staged payload part01 shape")
+              data01 = data01[:8158] + "i" + data01[8158:]
+              part01.write_text(data01, encoding="utf-8")
+
+          part05 = Path(".p8a-final-correction-payload.part05")
+          data05 = part05.read_text(encoding="utf-8")
+          if sha256(data05.encode()).hexdigest() != expected["05"]:
+              if len(data05) != 7592 or not data05.endswith("A+AIA"):
+                  raise SystemExit("Unexpected staged payload part05 shape")
+              part05.write_text(data05 + "\n", encoding="utf-8")
+
+          for suffix, digest in expected.items():
+              path = Path(f".p8a-final-correction-payload.part{suffix}")
+              actual = sha256(path.read_bytes()).hexdigest()
+              if actual != digest:
+                  raise SystemExit(f"Payload part{suffix} digest mismatch: {actual}")
+          PY
           cat .p8a-final-correction-payload.part0* | base64 --decode > /tmp/p8a-correction-files.tar.gz
           echo "8fb1d51df837549a5b4d4d746d2c075e9f98d448253696d430ce50b930639e67  /tmp/p8a-correction-files.tar.gz" | sha256sum --check
           tar -xzf /tmp/p8a-correction-files.tar.gz
