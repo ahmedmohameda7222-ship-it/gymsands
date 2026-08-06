@@ -153,6 +153,12 @@ PCS-5B adds no external monitoring vendor, webhook, email credential, Supabase c
 
 PCS-5 remains in progress. Independent external monitoring, broader runtime/OAuth/MCP/deletion/billing/retention signal coverage, provider procurement, backup/restore closure, authenticated post-deploy smoke, and final launch authorization remain separate later authorities.
 
+## P8 product reporting
+
+P8A is active as the current Product Completion implementation candidate. It establishes one server-generated PDF report for a single performed workout and the reusable repository-owned PDF foundation required by later bounded report work.
+
+By Product Owner decision, P6B live acceptance and P7 notifications remain deferred. P8B remains later work. PCS-5 backup and restore authority remains deferred and open; P8A does not change or close PCS-5.
+
 ## Current program
 
 - PCS-1 Repository Control Plane — complete.
