@@ -187,6 +187,18 @@ jobs:
                   raise SystemExit("Corrected fontkit test typing is incomplete")
               return joined.splitlines()
 
+          def correct_evidence_timeout(lines):
+              joined = "\n".join(lines)
+              ending = "  });\n});"
+              corrected = "  }, 30_000);\n});"
+              if ending in joined:
+                  if joined.count(ending) != 1:
+                      raise SystemExit("Unexpected evidence timeout anchors")
+                  joined = joined.replace(ending, corrected, 1)
+              if joined.count(corrected) != 1:
+                  raise SystemExit("Corrected evidence timeout is incomplete")
+              return joined.splitlines()
+
           def correct_fonts(lines):
               shaping = next(
                   (index for index, line in enumerate(lines) if 'expect(shaped).toHaveLength(isolated.length);' in line),
@@ -204,6 +216,7 @@ jobs:
               return lines
 
           replace_lines("lib/reports/pdf/document.ts", correct_document_types)
+          replace_lines("lib/reports/workout/render-evidence.test.ts", correct_evidence_timeout)
           replace_lines("lib/reports/pdf/text-direction.test.ts", correct_direction)
           replace_lines("lib/reports/pdf/fonts.test.ts", correct_fonts)
           replace_lines("lib/reports/pdf/fonts.test.ts", correct_font_test_types)
