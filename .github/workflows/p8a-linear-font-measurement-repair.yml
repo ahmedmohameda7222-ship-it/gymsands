@@ -1,0 +1,119 @@
+name: P8A Linear Font Measurement Repair
+
+on:
+  push:
+    branches:
+      - feat/p8a-single-workout-pdf-report
+    paths:
+      - .github/workflows/p8a-linear-font-measurement-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact P8A branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: feat/p8a-single-workout-pdf-report
+
+      - name: Replace quadratic font measurement authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object .github/workflows/p8a-materialize-report-authority.yml)" = "54b1d0acc579ea2f80d822035ddcda4a3405bb3c"
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/workflows/p8a-materialize-report-authority.yml")
+          text = path.read_text(encoding="utf-8")
+
+          old_type = '''                  "  const runs: Array<{",
+                            "    text: string;",
+                            "    font: PDFFont;",
+                            "    family: ReportFontFamily;",
+                            "    width: number;",
+                            "  }> = [];",
+          '''
+          new_type = '''                  "  const runs: Array<{",
+                            "    text: string;",
+                            "    font: PDFFont;",
+                            "    family: ReportFontFamily;",
+                            "  }> = [];",
+          '''
+          if text.count(old_type) != 1:
+              raise SystemExit("Unexpected P8A font-run type authority")
+          text = text.replace(old_type, new_type)
+
+          old_body = '''                  "      if (current && current.font === selected.font) {",
+                            "        current.text += character;",
+                            "        current.width = current.font.widthOfTextAtSize(current.text, size);",
+                            "      } else {",
+                            "        runs.push({",
+                            "          text: character,",
+                            "          font: selected.font,",
+                            "          family: selected.family,",
+                            "          width: selected.font.widthOfTextAtSize(character, size),",
+                            "        });",
+                            "      }",
+                            "    }",
+                            "  }",
+                            "  return runs;",
+          '''
+          new_body = '''                  "      if (current && current.font === selected.font) {",
+                            "        current.text += character;",
+                            "      } else {",
+                            "        runs.push({",
+                            "          text: character,",
+                            "          font: selected.font,",
+                            "          family: selected.family,",
+                            "        });",
+                            "      }",
+                            "    }",
+                            "  }",
+                            "  return runs.map((run) => ({",
+                            "    ...run,",
+                            "    width: run.font.widthOfTextAtSize(run.text, size),",
+                            "  }));",
+          '''
+          if text.count(old_body) != 1:
+              raise SystemExit("Unexpected P8A font-run measurement authority")
+          text = text.replace(old_body, new_body)
+
+          old_guard = '''              if joined.count(typed) != 1 or "let current:" in function_body:
+                            raise SystemExit("Corrected PDF document typings are incomplete")
+          '''
+          new_guard = '''              if (
+                            joined.count(typed) != 1
+                            or "let current:" in function_body
+                            or "widthOfTextAtSize(current.text" in function_body
+                            or "return runs.map((run) => ({" not in function_body
+                        ):
+                            raise SystemExit("Corrected PDF document typings or linear font measurement are incomplete")
+          '''
+          if text.count(old_guard) != 1:
+              raise SystemExit("Unexpected P8A font-run verification authority")
+          text = text.replace(old_guard, new_guard)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          test "$(grep -c 'widthOfTextAtSize(current.text' .github/workflows/p8a-materialize-report-authority.yml)" -eq 1
+          test "$(grep -c 'return runs.map((run) => ({' .github/workflows/p8a-materialize-report-authority.yml)" -eq 2
+          rm .github/workflows/p8a-linear-font-measurement-repair.yml
+          git diff --check
+
+      - name: Commit optimized materializer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Plaivra Implementation Authority"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(perf): linearize P8A font measurement"
+          git push origin HEAD:feat/p8a-single-workout-pdf-report
