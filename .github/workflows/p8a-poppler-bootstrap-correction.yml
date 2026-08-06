@@ -1,0 +1,141 @@
+name: P8A Poppler Bootstrap Correction
+
+on:
+  push:
+    branches:
+      - feat/p8a-single-workout-pdf-report
+    paths:
+      - .github/workflows/p8a-poppler-bootstrap-correction.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: feat/p8a-single-workout-pdf-report
+
+      - name: Add bounded CI-only Poppler bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/run-workout-report-qa.mjs)" = "29554607df8645f5fa5682801412c52eeeb73b82"
+          test "$(git hash-object scripts/workout-report-qa-contract.test.mjs)" = "9f11c5b55f19fb1bf2b4171596652faf24cf3b87"
+          python - <<'PY'
+          from pathlib import Path
+
+          qa_path = Path("scripts/run-workout-report-qa.mjs")
+          qa = qa_path.read_text(encoding="utf-8")
+          authority = '''if (!/^[a-f0-9]{40}$/iu.test(headSha)) {
+            throw new Error("QA_HEAD_SHA must be the exact 40-character head under inspection.");
+          }
+
+          '''
+          helper = '''if (!/^[a-f0-9]{40}$/iu.test(headSha)) {
+            throw new Error("QA_HEAD_SHA must be the exact 40-character head under inspection.");
+          }
+
+          function commandSucceeded(command, args) {
+            const result = spawnSync(command, args, {
+              cwd: process.cwd(),
+              encoding: "utf8",
+            });
+            return !result.error && result.status === 0;
+          }
+
+          function ensurePdfPageRenderer() {
+            if (commandSucceeded("pdftoppm", ["-v"])) return;
+            if (!(process.env.CI === "true" && process.platform === "linux")) {
+              throw new Error(
+                "P8A PDF page rendering requires pdftoppm from Poppler.",
+              );
+            }
+
+            const useSudo =
+              typeof process.getuid !== "function" || process.getuid() !== 0;
+            const command = useSudo ? "sudo" : "apt-get";
+            const commands = useSudo
+              ? [
+                  ["apt-get", "update"],
+                  ["apt-get", "install", "-y", "poppler-utils"],
+                ]
+              : [
+                  ["update"],
+                  ["install", "-y", "poppler-utils"],
+                ];
+
+            for (const args of commands) {
+              const result = spawnSync(command, args, {
+                cwd: process.cwd(),
+                encoding: "utf8",
+                stdio: "inherit",
+              });
+              if (result.error) throw result.error;
+              if (result.status !== 0) {
+                throw new Error(
+                  `P8A PDF renderer bootstrap failed: ${command} ${args.join(" ")}`,
+                );
+              }
+            }
+
+            if (!commandSucceeded("pdftoppm", ["-v"])) {
+              throw new Error("P8A PDF renderer bootstrap did not provide pdftoppm.");
+            }
+          }
+
+          '''
+          if qa.count(authority) != 1:
+              raise SystemExit("Unexpected exact-head authority anchor")
+          qa = qa.replace(authority, helper, 1)
+          render_anchor = '''  const renderedPages = [];
+            for (const pdfFile of pdfFiles) {'''
+          render_replacement = '''  ensurePdfPageRenderer();
+            const renderedPages = [];
+            for (const pdfFile of pdfFiles) {'''
+          render_anchor = "\n".join(line[2:] if line.startswith("  ") else line for line in render_anchor.splitlines())
+          render_replacement = "\n".join(line[2:] if line.startswith("  ") else line for line in render_replacement.splitlines())
+          if qa.count(render_anchor) != 1:
+              raise SystemExit("Unexpected rendered-page authority anchor")
+          qa_path.write_text(qa.replace(render_anchor, render_replacement, 1), encoding="utf-8")
+
+          contract_path = Path("scripts/workout-report-qa-contract.test.mjs")
+          contract = contract_path.read_text(encoding="utf-8")
+          anchor = '  assert.match(reportQa, /pdftoppm/u);\n'
+          addition = '''  assert.match(reportQa, /pdftoppm/u);
+            assert.match(reportQa, /process\\.env\\.CI === "true"/u);
+            assert.match(reportQa, /process\\.platform === "linux"/u);
+            assert.match(reportQa, /"poppler-utils"/u);
+            assert.match(reportQa, /ensurePdfPageRenderer\\(\\)/u);
+            assert.doesNotMatch(reportQa, /shell:\\s*true/u);
+          '''
+          addition = "\n".join(line[2:] if line.startswith("  ") else line for line in addition.splitlines()) + "\n"
+          if contract.count(anchor) != 1:
+              raise SystemExit("Unexpected report QA contract anchor")
+          contract_path.write_text(contract.replace(anchor, addition, 1), encoding="utf-8")
+          PY
+          git diff --check -- \
+            scripts/run-workout-report-qa.mjs \
+            scripts/workout-report-qa-contract.test.mjs
+
+      - name: Run focused source contracts
+        run: node --test scripts/workout-report-qa-contract.test.mjs
+
+      - name: Commit only report QA correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Plaivra Implementation Authority"
+          git config user.email "actions@users.noreply.github.com"
+          git add -- \
+            scripts/run-workout-report-qa.mjs \
+            scripts/workout-report-qa-contract.test.mjs
+          test -z "$(git diff --cached --name-only -- '.github/workflows/**')"
+          git diff --cached --check
+          git commit -m "fix(qa): bootstrap PDF page renderer in CI"
+          git push origin HEAD:feat/p8a-single-workout-pdf-report
