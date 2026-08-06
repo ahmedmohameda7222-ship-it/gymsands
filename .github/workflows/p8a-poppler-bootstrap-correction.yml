@@ -93,11 +93,8 @@ jobs:
           if qa.count(authority) != 1:
               raise SystemExit("Unexpected exact-head authority anchor")
           qa = qa.replace(authority, helper, 1)
-          render_anchor = '''  const renderedPages = [];
-          for (const pdfFile of pdfFiles) {'''
-          render_replacement = '''  ensurePdfPageRenderer();
-          const renderedPages = [];
-          for (const pdfFile of pdfFiles) {'''
+          render_anchor = "  const renderedPages = [];"
+          render_replacement = "  ensurePdfPageRenderer();\n  const renderedPages = [];"
           if qa.count(render_anchor) != 1:
               raise SystemExit("Unexpected rendered-page authority anchor")
           qa_path.write_text(qa.replace(render_anchor, render_replacement, 1), encoding="utf-8")
