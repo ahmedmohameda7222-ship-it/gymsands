@@ -1,0 +1,103 @@
+name: Temporary P8A Trace Diagnostic
+
+on:
+  push:
+    branches:
+      - feat/p8a-single-workout-pdf-report
+    paths:
+      - .github/workflows/tmp-p8a-trace-diagnostic.yml
+
+permissions:
+  contents: read
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+  SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_USE_MOCK_AUTH: true
+  PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+  PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+  PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+  PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+  PLAIVRA_RELEASE_ENVIRONMENT: ci
+  PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: 2
+  SUPABASE_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Materialize exact correction snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          expected = {
+              "00": "b9f819e0f68d1c2edc05494c930e040b8ce9ca5a48b947298fd7f332f158676f",
+              "01": "c568c39978de43601373655e87f4e5b7c5f8732066f6e0048d90295cdcbcc64e",
+              "02": "a491f2c3bdf17781476d86c79abe44dfe296928c9f4b9242596c757155f8c481",
+              "03": "67d4f7f4b8451cd76d841c198492dcb4c1a23b4c38e9eb9363b579ef93766488",
+              "04": "1155ab2cb92d6f927db94c55fcdfd094a1585e83a7637c991eaf3ca10abc0e3f",
+              "05": "7af7a0f6f62f017cc29c1fbb3fa7555c1f7ca24939face0050e5aec0237aca4f",
+          }
+          p = Path('.p8a-final-correction-payload.part01')
+          s = p.read_text()
+          if sha256(s.encode()).hexdigest() != expected['01']:
+              if len(s) != 8999 or s[8153:8163] != 'x3p6FzweMJ':
+                  raise SystemExit('unexpected part01')
+              p.write_text(s[:8158] + 'i' + s[8158:])
+          p = Path('.p8a-final-correction-payload.part05')
+          s = p.read_text()
+          if sha256(s.encode()).hexdigest() != expected['05']:
+              if len(s) != 7592 or not s.endswith('A+AIA'):
+                  raise SystemExit('unexpected part05')
+              p.write_text(s + '\n')
+          for suffix, digest in expected.items():
+              actual = sha256(Path(f'.p8a-final-correction-payload.part{suffix}').read_bytes()).hexdigest()
+              if actual != digest:
+                  raise SystemExit(f'part{suffix} mismatch: {actual}')
+          PY
+          cat .p8a-final-correction-payload.part0* | base64 --decode > /tmp/p8a-correction-files.tar.gz
+          echo "8fb1d51df837549a5b4d4d746d2c075e9f98d448253696d430ce50b930639e67  /tmp/p8a-correction-files.tar.gz" | sha256sum --check
+          tar -xzf /tmp/p8a-correction-files.tar.gz
+          rm -rf lib/reports/pdf/vendor
+          npm install --save-exact @pdf-lib/fontkit@1.1.1 bidi-js@1.0.3
+      - name: Build without postbuild and capture exact trace layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-reports/p8a-trace-diagnostic
+          NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npx next build
+          find .next -type f -name '*.nft.json' -print | sort > ci-reports/p8a-trace-diagnostic/nft-files.txt
+          find .next -type f \( -path '*performed*' -o -path '*report*' \) -print | sort > ci-reports/p8a-trace-diagnostic/report-related-files.txt
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          out = []
+          for path in sorted(Path('.next').rglob('*.nft.json')):
+              normalized = path.as_posix()
+              if 'performed' in normalized or 'report' in normalized:
+                  payload = json.loads(path.read_text())
+                  out.append({'trace': normalized, 'files': payload.get('files', [])})
+          Path('ci-reports/p8a-trace-diagnostic/candidate-traces.json').write_text(json.dumps(out, indent=2))
+          PY
+      - name: Upload diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: p8a-trace-diagnostic-${{ github.sha }}
+          path: ci-reports/p8a-trace-diagnostic/
+          if-no-files-found: error
+          retention-days: 1
