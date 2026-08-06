@@ -112,6 +112,81 @@ jobs:
                   raise SystemExit("Corrected bidi contracts are incomplete")
               return lines
 
+          def correct_document_types(lines):
+              joined = "\n".join(lines)
+              start_marker = "function fontRuns("
+              end_marker = "function lineWidth("
+              if joined.count(start_marker) != 1 or joined.count(end_marker) != 1:
+                  raise SystemExit("Unexpected PDF font-run function markers")
+              start = joined.index(start_marker)
+              end = joined.index(end_marker, start)
+              replacement = "\n".join([
+                  "function fontRuns(",
+                  "  text: string,",
+                  "  fonts: Readonly<Record<ReportFontFamily, PDFFont>>,",
+                  "  size: number,",
+                  "  direction: ReportDirection,",
+                  "): readonly FontRun[] {",
+                  "  const runs: Array<{",
+                  "    text: string;",
+                  "    font: PDFFont;",
+                  "    family: ReportFontFamily;",
+                  "    width: number;",
+                  "  }> = [];",
+                  "  for (const directionalRun of directionalTextRuns(text || \" \", direction)) {",
+                  "    const directionalRunStart = runs.length;",
+                  "    for (const character of directionalRun.text) {",
+                  "      const codePoint = character.codePointAt(0);",
+                  "      if (codePoint === undefined) continue;",
+                  "      const current =",
+                  "        runs.length > directionalRunStart ? runs[runs.length - 1] : undefined;",
+                  "      const selected = reportFontForCodePoint(",
+                  "        fonts,",
+                  "        codePoint,",
+                  "        current?.family ?? directionalRun.preferredFont,",
+                  "      );",
+                  "      if (current && current.font === selected.font) {",
+                  "        current.text += character;",
+                  "        current.width = current.font.widthOfTextAtSize(current.text, size);",
+                  "      } else {",
+                  "        runs.push({",
+                  "          text: character,",
+                  "          font: selected.font,",
+                  "          family: selected.family,",
+                  "          width: selected.font.widthOfTextAtSize(character, size),",
+                  "        });",
+                  "      }",
+                  "    }",
+                  "  }",
+                  "  return runs;",
+                  "}",
+                  "",
+              ])
+              joined = joined[:start] + replacement + joined[end:]
+              literal = "  private cursorY = PDF_LAYOUT.contentTop;"
+              typed = "  private cursorY: number = PDF_LAYOUT.contentTop;"
+              if literal in joined:
+                  joined = joined.replace(literal, typed, 1)
+              function_body = joined[start:joined.index(end_marker, start)]
+              if joined.count(typed) != 1 or "let current:" in function_body:
+                  raise SystemExit("Corrected PDF document typings are incomplete")
+              return joined.splitlines()
+
+          def correct_font_test_types(lines):
+              joined = "\n".join(lines)
+              create_line = "    const font = fontkit.create(bytes) as ShapingFont;"
+              replacement = "\n".join([
+                  "    const shapingFontkit = fontkit as Readonly<{",
+                  "      create: (input: Uint8Array) => ShapingFont;",
+                  "    }>;",
+                  "    const font = shapingFontkit.create(bytes);",
+              ])
+              if create_line in joined:
+                  joined = joined.replace(create_line, replacement, 1)
+              if joined.count("const shapingFontkit = fontkit as Readonly<{") != 1:
+                  raise SystemExit("Corrected fontkit test typing is incomplete")
+              return joined.splitlines()
+
           def correct_fonts(lines):
               shaping = next(
                   (index for index, line in enumerate(lines) if 'expect(shaped).toHaveLength(isolated.length);' in line),
@@ -128,8 +203,10 @@ jobs:
                   raise SystemExit("Corrected shaping contract is incomplete")
               return lines
 
+          replace_lines("lib/reports/pdf/document.ts", correct_document_types)
           replace_lines("lib/reports/pdf/text-direction.test.ts", correct_direction)
           replace_lines("lib/reports/pdf/fonts.test.ts", correct_fonts)
+          replace_lines("lib/reports/pdf/fonts.test.ts", correct_font_test_types)
 
           state = Path("docs/control/PLAIVRA_CURRENT_STATE.md")
           state_text = state.read_text(encoding="utf-8")
