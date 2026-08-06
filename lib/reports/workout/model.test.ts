@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { PdfReportError } from "@/lib/reports/pdf/errors";
 import { PDF_REPORT_BOUNDS } from "@/lib/reports/pdf/types";
 import { buildWorkoutReportModel } from "@/lib/reports/workout/model";
-import { workoutReportFixture } from "@/lib/reports/workout/test-fixture";
+import {
+  semanticWorkoutReportFixture,
+  workoutReportFixture,
+} from "@/lib/reports/workout/test-fixture";
 
 const generatedAt = new Date("2026-08-06T00:00:00.000Z");
 
@@ -18,7 +21,7 @@ describe("P8A workout report model", () => {
 
     expect(model.direction).toBe("rtl");
     expect(model.generatedAt).toBe(generatedAt.toISOString());
-    expect(model.category).toBe("strength");
+    expect(model.category).toBe("القوة");
     expect(model.summary).toMatchObject({
       performedSetCount: 3,
       plannedSetCount: 4,
@@ -174,4 +177,103 @@ describe("P8A workout report model", () => {
     ).toThrowError(/set bound/u);
   });
 
+
+  it.each([
+    ["en", ["Cardio", "Warm-up", "Drop set", "To failure", "Duration", "Distance", "Bodyweight", "Assistance", "Bilateral", "Left", "Right", "Rest-pause", "Rounds"]],
+    ["de", ["Cardio", "Aufwärmsatz", "Dropsatz", "Bis zum Muskelversagen", "Dauer", "Distanz", "Körpergewicht", "Unterstützung", "Beidseitig", "Links", "Rechts", "Rest-Pause", "Runden"]],
+    ["ar", ["تمارين القلب", "مجموعة إحماء", "مجموعة إسقاط", "حتى الفشل", "المدة", "المسافة", "وزن الجسم", "حمل المساعدة", "ثنائي الجانب", "يسار", "يمين", "راحة وتوقف", "الجولات"]],
+  ] as const)(
+    "localizes every canonical semantic surface for %s without changing authored text",
+    (language, expectedLabels) => {
+      const model = buildWorkoutReportModel({
+        detail: semanticWorkoutReportFixture(),
+        language,
+        timezone: "Europe/Berlin",
+        generatedAt,
+      });
+      const visible = JSON.stringify(model);
+      for (const label of expectedLabels) expect(visible).toContain(label);
+      for (const raw of [
+        "duration_seconds",
+        "distance_meters",
+        "bodyweight_kg",
+        "assistance_load_kg",
+        "rest_pause",
+      ]) {
+        expect(visible).not.toContain(raw);
+      }
+      expect(visible).toContain("Assisted Sprint X1");
+      expect(visible).toContain("Assisted Sprint Plan");
+      expect(visible).toContain("User note Latin 45 — ملاحظة");
+      expect(model.exercises[0]?.sets[0]?.actualResult).toMatch(/[0-9٠-٩]/u);
+    },
+  );
+
+  it.each(["de", "ar"] as const)(
+    "does not expose raw English canonical enums in %s",
+    (language) => {
+      const visible = JSON.stringify(
+        buildWorkoutReportModel({
+          detail: semanticWorkoutReportFixture(),
+          language,
+          timezone: "UTC",
+          generatedAt,
+        }),
+      );
+      for (const raw of [
+        "strength",
+        "working",
+        "warmup",
+        "failure",
+        "bilateral",
+        "left",
+        "right",
+        "primary",
+        "rest_pause",
+        "seconds",
+        "meters",
+      ]) {
+        expect(visible).not.toMatch(new RegExp(`(?:^|[\" :,(])${raw}(?:$|[\" :,.\)])`, "u"));
+      }
+    },
+  );
+
+  it("preserves explicitly authored free-text categories", () => {
+    const detail = semanticWorkoutReportFixture();
+    detail.activity.category = "Coach-defined Hybrid";
+    const model = buildWorkoutReportModel({
+      detail,
+      language: "de",
+      timezone: "UTC",
+      generatedAt,
+    });
+    expect(model.category).toBe("Coach-defined Hybrid");
+  });
+
+  it("fails closed with one stable error for an unsupported internal semantic", () => {
+    const detail = semanticWorkoutReportFixture();
+    detail.exercises[0]!.performedSets[0]!.metrics[0]!.metricKey =
+      "future_internal_metric";
+    expect(() =>
+      buildWorkoutReportModel({
+        detail,
+        language: "ar",
+        timezone: "UTC",
+        generatedAt,
+      }),
+    ).toThrowError(PdfReportError);
+    try {
+      buildWorkoutReportModel({
+        detail,
+        language: "ar",
+        timezone: "UTC",
+        generatedAt,
+      });
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "REPORT_GENERATION_FAILED",
+        status: 422,
+      });
+    }
+  });
 });

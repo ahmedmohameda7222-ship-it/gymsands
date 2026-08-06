@@ -48,6 +48,8 @@ describe("P8A bidirectional text runs", () => {
 
   it("contains no manual reversal implementation", () => {
     const source = readFileSync("lib/reports/pdf/text-direction.ts", "utf8");
+    expect(source).toContain('from "bidi-js"');
+    expect(source).not.toContain("/vendor/");
     expect(source).toContain("getEmbeddingLevels");
     expect(source).toContain("getReorderedIndices");
     expect(source).not.toMatch(/\.reverse\s*\(|split\([^)]*\)\s*\.reverse/iu);

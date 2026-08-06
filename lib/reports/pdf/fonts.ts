@@ -1,12 +1,11 @@
 import "server-only";
 
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 
+import fontkit from "@pdf-lib/fontkit";
 import type { PDFDocument, PDFFont } from "pdf-lib";
 
 import { PdfReportError } from "@/lib/reports/pdf/errors";
-import fontkit from "@/lib/reports/pdf/vendor/fontkit.cjs";
 
 export type ReportFontFamily = "latin" | "arabic";
 export type ReportFontWeight = "regular" | "bold";
@@ -16,36 +15,26 @@ export type ReportFontSet = Readonly<{
   bold: Readonly<Record<ReportFontFamily, PDFFont>>;
 }>;
 
-const FONT_FILES: Readonly<
-  Record<ReportFontWeight, Readonly<Record<ReportFontFamily, string>>>
-> = Object.freeze({
+export const REPORT_FONT_URLS = Object.freeze({
   regular: Object.freeze({
-    latin: "NotoSans-Regular.ttf",
-    arabic: "NotoSansArabic-Regular.ttf",
+    latin: new URL("./assets/NotoSans-Regular.ttf", import.meta.url),
+    arabic: new URL("./assets/NotoSansArabic-Regular.ttf", import.meta.url),
   }),
   bold: Object.freeze({
-    latin: "NotoSans-Bold.ttf",
-    arabic: "NotoSansArabic-Bold.ttf",
+    latin: new URL("./assets/NotoSans-Bold.ttf", import.meta.url),
+    arabic: new URL("./assets/NotoSansArabic-Bold.ttf", import.meta.url),
   }),
-});
-
-function fontPath(filename: string) {
-  return path.join(
-    process.cwd(),
-    "lib",
-    "reports",
-    "pdf",
-    "assets",
-    filename,
-  );
-}
+} satisfies Record<
+  ReportFontWeight,
+  Readonly<Record<ReportFontFamily, URL>>
+>);
 
 async function embed(
   document: PDFDocument,
   family: ReportFontFamily,
   weight: ReportFontWeight,
 ) {
-  const bytes = await readFile(fontPath(FONT_FILES[weight][family]));
+  const bytes = await readFile(REPORT_FONT_URLS[weight][family]);
   return document.embedFont(bytes, {
     subset: true,
     customName: `PlaivraNoto-${family}-${weight}`,

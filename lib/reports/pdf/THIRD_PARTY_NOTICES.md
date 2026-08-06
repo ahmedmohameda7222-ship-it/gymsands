@@ -1,6 +1,8 @@
 # P8A PDF third-party notices
 
-P8A vendors exact, reviewable runtime artifacts and font files inside `lib/reports/pdf/`. The report route reads only these repository-local files; it performs no request-time font, CDN, operating-system-font, or package-registry lookup. `package.json` and `package-lock.json` are unchanged.
+P8A keeps executable JavaScript runtime dependencies under the repository's normal npm package authority. Exact production dependency versions are declared in `package.json`, resolved with integrity metadata in `package-lock.json`, installed through `npm ci`, and covered by the exact-head dependency audit. No executable third-party bundle is stored under `lib/reports/pdf/vendor/`.
+
+The report route performs no request-time font, CDN, operating-system-font, self-HTTP, or package-registry lookup. Its repository-owned font files are statically resolved and included in the built route trace.
 
 ## Noto Sans and Noto Sans Arabic
 
@@ -17,16 +19,16 @@ P8A vendors exact, reviewable runtime artifacts and font files inside `lib/repor
 
 ## @pdf-lib/fontkit
 
-- Vendored runtime: `@pdf-lib/fontkit@1.1.1` UMD distribution (`vendor/fontkit.cjs`)
+- Package-managed runtime dependency: `@pdf-lib/fontkit@1.1.1`
 - License: MIT
 - P8A usage: registered with the existing `pdf-lib` authority for custom-font embedding and OpenType shaping.
+- Integrity authority: exact version and resolved package integrity are recorded in `package-lock.json`.
 
 ## bidi-js
 
-- Vendored runtime: `bidi-js@1.0.3` CommonJS distribution (`vendor/bidi.cjs`)
+- Package-managed runtime dependency: `bidi-js@1.0.3`
 - Upstream: `lojjic/bidi-js`
 - License: MIT
-- Repository copy of notice: `assets/BIDI-LICENSE.txt`
+- Repository copy of the license notice: `assets/BIDI-LICENSE.txt`
 - P8A usage: Unicode bidirectional embedding levels, visual run order, and mirrored punctuation. Arabic characters are not manually reversed.
-
-Vendored JavaScript artifact checksums are recorded in `vendor/ARTIFACTS.md` when the exact pinned npm distributions are materialized. Compatibility is verified by exact-head install, typecheck, focused font/bidi/PDF tests, rendered PDF inspection, and the repository validation authorities.
+- Integrity authority: exact version and resolved package integrity are recorded in `package-lock.json`.

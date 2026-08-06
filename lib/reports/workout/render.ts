@@ -1,8 +1,5 @@
 import "server-only";
 
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import { PDFDocument, ReadingDirection } from "pdf-lib";
 
 import {
@@ -352,17 +349,12 @@ export async function renderWorkoutReport(
   try {
     const document = await PDFDocument.create();
     const fonts = await embedReportFonts(document);
-    const logoBytes = await readFile(
-      path.join(process.cwd(), "public", "plaivra-logo.png"),
-    );
-    const logo = await document.embedPng(logoBytes);
     const copy = workoutReportCopy(model.language);
     const composer = new PdfReportComposer({
       document,
       language: model.language,
       direction: model.direction,
       fonts,
-      logo,
       reportLabel: copy.reportLabel,
     });
 

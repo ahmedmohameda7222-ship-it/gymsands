@@ -180,3 +180,135 @@ export function workoutReportFixture(
     ...overrides,
   };
 }
+
+
+export function semanticWorkoutReportFixture(): WorkoutHistorySessionDetailResponse {
+  const detail = workoutReportFixture();
+  detail.activity.category = "cardio";
+  detail.activity.title = "Tempo Session — جلسة Tempo";
+  detail.exercises = [
+    {
+      identity: "semantic-fixture",
+      exerciseId: null,
+      snapshotItemId: null,
+      name: "Assisted Sprint X1",
+      plannedName: "Assisted Sprint Plan",
+      state: "adjusted",
+      category: "cardio",
+      plannedSetCount: 3,
+      performedSets: [
+        {
+          id: "semantic-set-1",
+          setNumber: 1,
+          reps: null,
+          weightKg: null,
+          completedAt: "2026-08-05T18:10:00.000Z",
+          notes: "User note Latin 45 — ملاحظة",
+          setType: "warmup",
+          rpe: 5,
+          rir: 4,
+          matchState: "matched",
+          plannedSet: {
+            id: "semantic-planned-1",
+            setOrder: 1,
+            setType: "warmup",
+            targetMode: "mixed",
+            sideMode: "alternating",
+            restSeconds: 30,
+            tempoTarget: null,
+            targets: [
+              {
+                metricKey: "duration_seconds",
+                side: "none",
+                targetMode: "range",
+                targetValue: null,
+                minimumValue: 30,
+                maximumValue: 45,
+              },
+              {
+                metricKey: "distance_meters",
+                side: "right",
+                targetMode: "exact",
+                targetValue: 250,
+                minimumValue: null,
+                maximumValue: null,
+              },
+            ],
+          },
+          metrics: [
+            { metricKey: "duration_seconds", side: "none", value: 42, unit: "seconds" },
+            { metricKey: "distance_meters", side: "right", value: 240, unit: "meters" },
+            { metricKey: "bodyweight_kg", side: "bilateral", value: 82, unit: "kg" },
+            { metricKey: "assistance_load_kg", side: "left", value: 15, unit: "kg" },
+          ],
+          segments: [
+            {
+              id: "semantic-segment-1",
+              segmentOrder: 1,
+              segmentKind: "rest_pause",
+              side: "right",
+              metrics: [
+                { metricKey: "rounds", side: "right", value: 2, unit: "count" },
+              ],
+            },
+          ],
+          verifiedRecords: [],
+        },
+        {
+          id: "semantic-set-2",
+          setNumber: 2,
+          reps: 8,
+          weightKg: 20,
+          completedAt: "2026-08-05T18:20:00.000Z",
+          notes: null,
+          setType: "drop",
+          rpe: 8,
+          rir: 1,
+          matchState: "matched",
+          plannedSet: null,
+          metrics: [],
+          segments: [
+            {
+              id: "semantic-segment-2",
+              segmentOrder: 1,
+              segmentKind: "drop",
+              side: "left",
+              metrics: [
+                { metricKey: "external_load_kg", side: "left", value: 12, unit: "kg" },
+              ],
+            },
+          ],
+          verifiedRecords: [],
+        },
+      ],
+      missingPlannedSets: [
+        {
+          id: "semantic-missing-3",
+          setOrder: 3,
+          setType: "failure",
+          targetMode: "amrap",
+          sideMode: "bilateral",
+          restSeconds: null,
+          tempoTarget: null,
+          targets: [
+            {
+              metricKey: "repetitions",
+              side: "bilateral",
+              targetMode: "amrap",
+              targetValue: null,
+              minimumValue: null,
+              maximumValue: null,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  detail.summary = {
+    exerciseCount: 1,
+    completedSetCount: 2,
+    reliableVolume: null,
+    verifiedRecordCount: 0,
+  };
+  return detail;
+}

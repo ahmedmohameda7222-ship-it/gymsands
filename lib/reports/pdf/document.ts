@@ -3,7 +3,6 @@ import {
   PDFDocument,
   PDFName,
   PDFString,
-  type PDFImage,
   type PDFPage,
   type PDFFont,
   type RGB,
@@ -116,7 +115,6 @@ export class PdfReportComposer {
   readonly language: ReportLanguage;
   readonly direction: ReportDirection;
   readonly fonts: ReportFontSet;
-  readonly logo: PDFImage;
   private readonly pages: PDFPage[] = [];
   private page!: PDFPage;
   private cursorY: number = PDF_LAYOUT.contentTop;
@@ -127,14 +125,12 @@ export class PdfReportComposer {
     language: ReportLanguage;
     direction: ReportDirection;
     fonts: ReportFontSet;
-    logo: PDFImage;
     reportLabel: string;
   }>) {
     this.document = input.document;
     this.language = input.language;
     this.direction = input.direction;
     this.fonts = input.fonts;
-    this.logo = input.logo;
     this.reportLabel = input.reportLabel;
     this.page = this.addPage();
   }
@@ -172,11 +168,25 @@ export class PdfReportComposer {
     const logoX = rtl
       ? PDF_LAYOUT.pageWidth - PDF_LAYOUT.marginX - logoSize
       : PDF_LAYOUT.marginX;
-    page.drawImage(this.logo, {
+    page.drawRectangle({
       x: logoX,
       y: PDF_LAYOUT.headerY - logoSize + 2,
       width: logoSize,
       height: logoSize,
+      color: PDF_COLORS.green,
+      borderColor: PDF_COLORS.green,
+      borderWidth: 0.8,
+    });
+    this.drawTextOnPage(page, "P", {
+      x: logoX,
+      y: PDF_LAYOUT.headerY - 15,
+      maxWidth: logoSize,
+      style: {
+        size: 13,
+        bold: true,
+        color: PDF_COLORS.white,
+        align: "center",
+      },
     });
     this.drawTextOnPage(page, "Plaivra", {
       x: rtl ? logoX - 96 : logoX + 32,

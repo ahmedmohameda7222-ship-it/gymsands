@@ -3,16 +3,31 @@ import {
   PDF_REPORT_BOUNDS,
   type ReportLanguage,
 } from "@/lib/reports/pdf/types";
-import { workoutReportCopy } from "@/lib/reports/workout/copy";
+import {
+  assertWorkoutReportMetricSide,
+  formatWorkoutReportCategory,
+  formatWorkoutReportMetricLabel,
+  formatWorkoutReportSegmentKind,
+  formatWorkoutReportSetType,
+  formatWorkoutReportSide,
+  formatWorkoutReportTargetMode,
+  formatWorkoutReportUnit,
+  workoutReportCopy,
+} from "@/lib/reports/workout/copy";
 import type {
   WorkoutReportExercise,
   WorkoutReportModel,
   WorkoutReportSet,
 } from "@/lib/reports/workout/types";
 import type {
+  WorkoutHistoryMetricValue,
   WorkoutHistoryPlannedSet,
   WorkoutHistorySessionDetailResponse,
 } from "@/types/workout-history";
+import type {
+  WorkoutPerformanceCanonicalUnit,
+  WorkoutPerformanceMetricKey,
+} from "@/types/workout-performance";
 
 function tooLarge(reason: string): never {
   throw new PdfReportError("REPORT_TOO_LARGE", reason);
@@ -31,8 +46,63 @@ function numberText(value: number, language: ReportLanguage) {
   ).format(value);
 }
 
-function humanizeMetric(value: string) {
-  return value.replaceAll("_", " ");
+const METRIC_UNITS = Object.freeze({
+  repetitions: "count",
+  external_load_kg: "kg",
+  bodyweight_kg: "kg",
+  assistance_load_kg: "kg",
+  duration_seconds: "seconds",
+  distance_meters: "meters",
+  rounds: "count",
+} satisfies Record<
+  WorkoutPerformanceMetricKey,
+  WorkoutPerformanceCanonicalUnit
+>);
+
+function unsupportedSemantic(): never {
+  throw new PdfReportError(
+    "REPORT_GENERATION_FAILED",
+    "The report contains an unsupported canonical semantic value.",
+    422,
+  );
+}
+
+function canonicalMetric(
+  metricKey: string,
+  unit: string | null,
+  language: ReportLanguage,
+) {
+  const label = formatWorkoutReportMetricLabel(metricKey, language);
+  const typedKey = metricKey as WorkoutPerformanceMetricKey;
+  const canonicalUnit = METRIC_UNITS[typedKey];
+  if (!canonicalUnit) unsupportedSemantic();
+  if (unit !== null && unit !== canonicalUnit) unsupportedSemantic();
+  return {
+    label,
+    unit: formatWorkoutReportUnit(canonicalUnit, language),
+  } as const;
+}
+
+function measurement(
+  value: number,
+  unit: string,
+  language: ReportLanguage,
+): string {
+  const formatted = numberText(value, language);
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function metricText(metric: WorkoutHistoryMetricValue, language: ReportLanguage) {
+  const canonical = canonicalMetric(metric.metricKey, metric.unit, language);
+  const side = formatWorkoutReportSide(
+    assertWorkoutReportMetricSide(metric.side),
+    language,
+  );
+  return `${canonical.label}${side ? ` (${side})` : ""}: ${measurement(
+    metric.value,
+    canonical.unit,
+    language,
+  )}`;
 }
 
 function plannedTarget(
@@ -42,31 +112,44 @@ function plannedTarget(
   if (!set) return null;
   const copy = workoutReportCopy(language);
   const targets = set.targets.map((target) => {
-    const label =
-      target.side === "none"
-        ? humanizeMetric(target.metricKey)
-        : `${humanizeMetric(target.metricKey)} (${target.side})`;
+    const canonical = canonicalMetric(target.metricKey, null, language);
+    const side = formatWorkoutReportSide(
+      assertWorkoutReportMetricSide(target.side),
+      language,
+    );
+    const label = `${canonical.label}${side ? ` (${side})` : ""}`;
     if (target.targetValue !== null) {
-      return `${label}: ${numberText(target.targetValue, language)}`;
+      return `${label}: ${measurement(
+        target.targetValue,
+        canonical.unit,
+        language,
+      )}`;
     }
     if (target.minimumValue !== null || target.maximumValue !== null) {
-      return `${label}: ${
+      const minimum =
         target.minimumValue === null
           ? "–"
-          : numberText(target.minimumValue, language)
-      }–${
+          : numberText(target.minimumValue, language);
+      const maximum =
         target.maximumValue === null
           ? "–"
-          : numberText(target.maximumValue, language)
+          : numberText(target.maximumValue, language);
+      return `${label}: ${minimum}–${maximum}${
+        canonical.unit ? ` ${canonical.unit}` : ""
       }`;
     }
-    return label;
+    return `${label}: ${formatWorkoutReportTargetMode(
+      target.targetMode,
+      language,
+    )}`;
   });
   if (set.tempoTarget) targets.push(`${copy.tempo}: ${set.tempoTarget}`);
   if (set.restSeconds !== null) {
     targets.push(`${copy.rest}: ${set.restSeconds} ${copy.seconds}`);
   }
-  return targets.length ? targets.join(" · ") : set.targetMode || null;
+  return targets.length
+    ? targets.join(" · ")
+    : formatWorkoutReportTargetMode(set.targetMode, language);
 }
 
 function actualResult(
@@ -75,36 +158,26 @@ function actualResult(
 ): string | null {
   const copy = workoutReportCopy(language);
   const values: string[] = [];
+  const kilogram = formatWorkoutReportUnit("kg", language);
   if (set.weightKg !== null && set.reps !== null) {
     values.push(
-      `${numberText(set.weightKg, language)} kg × ${numberText(set.reps, language)}`,
+      `${numberText(set.weightKg, language)} ${kilogram} × ${numberText(set.reps, language)}`,
     );
   } else if (set.weightKg !== null) {
-    values.push(`${numberText(set.weightKg, language)} kg`);
+    values.push(`${numberText(set.weightKg, language)} ${kilogram}`);
   } else if (set.reps !== null) {
     values.push(`${numberText(set.reps, language)} ${copy.repetitions}`);
   }
   for (const metric of set.metrics) {
     if (["external_load_kg", "repetitions"].includes(metric.metricKey)) continue;
-    values.push(
-      `${humanizeMetric(metric.metricKey)}: ${numberText(metric.value, language)}${
-        metric.unit ? ` ${metric.unit}` : ""
-      }`,
-    );
+    values.push(metricText(metric, language));
   }
   for (const segment of set.segments) {
-    const metrics = segment.metrics.map(
-      (metric) =>
-        `${humanizeMetric(metric.metricKey)}: ${numberText(metric.value, language)}${
-          metric.unit ? ` ${metric.unit}` : ""
-        }`,
-    );
+    const kind = formatWorkoutReportSegmentKind(segment.segmentKind, language);
+    const side = formatWorkoutReportSide(segment.side, language);
+    const metrics = segment.metrics.map((metric) => metricText(metric, language));
     if (metrics.length) {
-      values.push(
-        `${humanizeMetric(segment.segmentKind)}${
-          segment.side ? ` (${segment.side})` : ""
-        }: ${metrics.join(", ")}`,
-      );
+      values.push(`${kind}${side ? ` (${side})` : ""}: ${metrics.join(", ")}`);
     }
   }
   return values.length ? values.join(" · ") : null;
@@ -184,7 +257,10 @@ export function buildWorkoutReportModel(
       return Object.freeze({
         number: set.setNumber,
         state: set.matchState === "unplanned" ? "unplanned" : "performed",
-        setType: set.setType,
+        setType:
+          set.setType === null
+            ? null
+            : formatWorkoutReportSetType(set.setType, language),
         plannedTarget: plannedTarget(set.plannedSet, language),
         actualResult: actualResult(set, language),
         rpe: set.rpe,
@@ -199,7 +275,7 @@ export function buildWorkoutReportModel(
         Object.freeze({
           number: missing.setOrder,
           state: "missing",
-          setType: missing.setType,
+          setType: formatWorkoutReportSetType(missing.setType, language),
           plannedTarget: plannedTarget(missing, language),
           actualResult: null,
           rpe: null,
@@ -265,7 +341,10 @@ export function buildWorkoutReportModel(
     generatedAt: (input.generatedAt ?? new Date()).toISOString(),
     sessionAt: detail.activity.effectiveAt,
     title: detail.activity.title,
-    category: detail.activity.category,
+    category:
+      detail.activity.category === null
+        ? null
+        : formatWorkoutReportCategory(detail.activity.category, language),
     lifecycle: detail.activity.lifecycle,
     notes: detail.activity.notes,
     summary: Object.freeze({

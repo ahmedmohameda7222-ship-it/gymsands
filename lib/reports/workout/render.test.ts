@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { PageSizes, PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 
@@ -29,6 +31,7 @@ describe("P8A workout PDF renderer", () => {
       expect(result.pageCount).toBeLessThanOrEqual(40);
       expect(result.byteCount).toBe(result.bytes.byteLength);
       expect(result.byteCount).toBeGreaterThan(1_000);
+      expect(result.byteCount).toBeLessThan(2_276_482);
 
       const loaded = await PDFDocument.load(result.bytes);
       expect(loaded.getPageCount()).toBe(result.pageCount);
@@ -56,6 +59,17 @@ describe("P8A workout PDF renderer", () => {
       }
     },
   );
+
+
+  it("uses a compact vector/text wordmark and never embeds the public application logo", async () => {
+    const [documentSource, renderSource] = await Promise.all([
+      readFile("lib/reports/pdf/document.ts", "utf8"),
+      readFile("lib/reports/workout/render.ts", "utf8"),
+    ]);
+    expect(documentSource).toContain("page.drawRectangle");
+    expect(documentSource).toContain('this.drawTextOnPage(page, "P"');
+    expect(renderSource).not.toMatch(/plaivra-logo\.png|embedPng|process\.cwd/u);
+  });
 
   it("fails closed for explicit page, byte, and generation-time bounds", () => {
     for (const input of [

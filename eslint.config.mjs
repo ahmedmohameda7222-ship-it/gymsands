@@ -6,7 +6,6 @@ const eslintConfig = [
       ".next/**",
       "node_modules/**",
       "out/**",
-      "lib/reports/pdf/vendor/*.cjs",
     ],
   },
   ...nextVitals,

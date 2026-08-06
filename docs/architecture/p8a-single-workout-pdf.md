@@ -2,7 +2,7 @@
 
 ## Status
 
-P8A is active and bounded to one server-generated PDF for one owner-accessible performed Workout History session. P6B live acceptance and P7 notifications remain deferred by the owner. P8B remains later. PCS-5 backup/restore remains deferred and is not closed.
+P8A is the active Product Completion implementation candidate and remains unmerged. It is bounded to one server-generated PDF for one owner-accessible performed Workout History session. P6B live acceptance and P7 notifications remain deferred by the owner. P8B remains later. PCS-5 backup/restore remains deferred and is not closed.
 
 ## User contract
 
@@ -50,9 +50,13 @@ Muscle heat-map screenshots and other rasterized application UI are intentionall
 
 ## Localization and font authority
 
-Localized and user-entered text uses repository-vendored open-license Noto Sans and Noto Sans Arabic Regular/Bold TTF assets. The PDF renderer registers the vendored `@pdf-lib/fontkit@1.1.1` runtime. Unicode bidi run ordering is handled by vendored `bidi-js@1.0.3`; Arabic text remains in logical order inside each run so fontkit owns contextual shaping. German umlauts and `ß`, Arabic letters and digits, and mixed Arabic/Latin/numeric strings are covered by automated tests. `package.json` and `package-lock.json` are unchanged.
+Localized and user-entered text uses repository-owned, open-license Noto Sans and Noto Sans Arabic Regular/Bold TTF assets. Executable runtime code is package-managed: `@pdf-lib/fontkit@1.1.1` and `bidi-js@1.0.3` are exact production dependencies protected by `package-lock.json`, `npm ci`, and dependency audit authority. No executable PDF runtime bundle is vendored in the repository.
 
-Third-party notices and source identities are recorded in [`lib/reports/pdf/THIRD_PARTY_NOTICES.md`](../../lib/reports/pdf/THIRD_PARTY_NOTICES.md). No font or shaping asset is downloaded at request time.
+All four font files are loaded through static `import.meta.url` authorities and are explicitly included in the report route output trace. The compact Plaivra header mark is drawn as vector/text content with the embedded report fonts; the public application logo is not loaded or embedded by the report route. A post-build verifier inspects the exact generated NFT route trace, proves all required fonts are included and readable from an isolated traced-asset copy, and fails closed if the route trace or any required asset is absent.
+
+Canonical report-system semantics—activity categories, set types, metric labels, sides, segment kinds, target modes, and units—use exhaustive typed English, German, and Arabic formatters. Unknown internal machine-token values fail with one safe report error. Workout titles, exercise names, planned exercise names, session notes, set notes, and explicitly permitted authored free-text categories remain unchanged.
+
+Unicode bidi run ordering is handled by `bidi-js`; Arabic text remains in logical order inside each run so fontkit owns contextual shaping. German umlauts and `ß`, Arabic letters and digits, and mixed Arabic/Latin/numeric strings are covered by automated and raster evidence. Third-party notices and source identities are recorded in [`lib/reports/pdf/THIRD_PARTY_NOTICES.md`](../../lib/reports/pdf/THIRD_PARTY_NOTICES.md). No font, JavaScript runtime, or shaping asset is downloaded at request time.
 
 ## Explicit bounds and failure behavior
 
@@ -62,7 +66,7 @@ Invalid language/timezone input returns safe `400` JSON. Missing or owner-inacce
 
 ## Verification authority
 
-P8A adds focused model, font coverage, bidi, PDF loadability, route, download-client, and UI contract tests. The Workout History rendered-QA command preserves the existing full Workout History suite, then runs P8A-specific EN/DE/AR evidence across desktop, tablet, and mobile viewports, including successful download, slow-request busy state, failure recovery, safe filename, single request, no navigation/scroll movement, no horizontal overflow, and performed-only visibility.
+P8A adds focused model, semantic-localization, package-integrity, static-font, route-trace, PDF loadability, route, download-client, and UI contract tests. `npm run build` automatically executes the bounded runtime-asset verifier after Next produces the exact build output. The Workout History rendered-QA command preserves the existing full Workout History suite, then runs P8A-specific EN/DE/AR evidence across desktop, tablet, and mobile viewports, including successful download, slow-request busy state, failure recovery, safe filename, single request, no navigation/scroll movement, no horizontal overflow, and performed-only visibility.
 
 ## Non-goals
 

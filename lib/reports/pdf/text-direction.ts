@@ -1,4 +1,4 @@
-import bidiFactory from "@/lib/reports/pdf/vendor/bidi.cjs";
+import bidiFactory from "bidi-js";
 
 import type { ReportDirection } from "@/lib/reports/pdf/types";
 import type { ReportFontFamily } from "@/lib/reports/pdf/fonts";

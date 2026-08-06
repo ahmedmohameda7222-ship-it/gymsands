@@ -11,6 +11,7 @@
     "dev": "next dev",
     "prebuild": "node scripts/validate-production-env.mjs",
     "build": "next build",
+    "postbuild": "node scripts/verify-p8a-runtime-assets.mjs",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -53,6 +54,7 @@
     "test:active-workout:aw8-aw10": "vitest run --config vitest.unit.config.mjs lib/workouts/derived-metrics/session.test.ts lib/workouts/session-engine/aw9-controller.test.ts lib/workouts/session-engine/contracts.test.ts lib/workouts/session-engine/commands.test.ts lib/workouts/session-engine/reducer.test.ts lib/workouts/active-session-store/store.test.ts lib/workouts/active-session-sync/fallback-lease.test.ts lib/workouts/active-session-sync/leadership.test.ts lib/product/active-workout-aw9-migration.test.ts lib/product/active-workout-aw9-offline-contract.test.ts components/workouts/active-workout/active-workout-runtime-model.test.ts components/workouts/active-workout/active-workout-core-session.identity.test.tsx components/workouts/active-workout-minimized-bar.test.tsx lib/product/active-workout-aw7-minimize-review-completion.test.ts lib/i18n/active-workout-message-contract.test.ts lib/i18n/active-workout-surface-contract.test.ts lib/product/active-workout-aw10-closure.test.ts"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "1.1.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-select": "^2.2.6",
@@ -63,6 +65,7 @@
     "@supabase/supabase-js": "^2.84.0",
     "@zxing/browser": "0.1.5",
     "@zxing/library": "0.21.3",
+    "bidi-js": "1.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.24",
