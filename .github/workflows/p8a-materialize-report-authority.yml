@@ -64,55 +64,94 @@ jobs:
             > scripts/run-workout-history-core-qa.mjs
           test -s scripts/run-workout-history-core-qa.mjs
 
-      - name: Correct verified P8A test contracts
+      - name: Correct verified P8A contracts and control state
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
+          python - <<'P8A_TESTS'
           from pathlib import Path
 
-          path = Path("lib/reports/pdf/text-direction.test.ts")
-          text = path.read_text(encoding="utf-8")
-          old = """    expect(runs.some((run) => run.text.includes("تم تنفيذ"))).toBe(true);
-              expect(runs.some((run) => run.text.includes("ذيفنت"))).toBe(false);
-              expect(runs.some((run) => run.text.includes("80 kg"))).toBe(true);
-          """
-          new = """    for (const token of ["تم", "تنفيذ", "80", "kg", "8"]) {
-                expect(runs.some((run) => run.text.includes(token))).toBe(true);
-              }
-              expect(runs.some((run) => run.text.includes("ذيفنت"))).toBe(false);
-          """
-          if text.count(old) != 1:
-              raise SystemExit("text-direction focused assertion anchor mismatch")
-          text = text.replace(old, new)
-          old = """    const logicalArabic = value.match(/[\u0600-\u06ff ]+/u)?.[0]?.trim();
-              if (logicalArabic) {
-                expect(runs.some((run) => run.text.includes(logicalArabic))).toBe(true);
-              }
-          """
-          new = """    const logicalArabicTokens = value.match(/[\u0600-\u06ff]+/gu) ?? [];
-              expect(logicalArabicTokens.length).toBeGreaterThan(0);
-              for (const token of logicalArabicTokens) {
-                expect(runs.some((run) => run.text.includes(token))).toBe(true);
-              }
-          """
-          if text.count(old) != 1:
-              raise SystemExit("text-direction parameterized assertion anchor mismatch")
-          path.write_text(text.replace(old, new), encoding="utf-8")
+          def replace_lines(path_value, mutate):
+              path = Path(path_value)
+              lines = path.read_text(encoding="utf-8").splitlines()
+              updated = mutate(lines)
+              path.write_text("\n".join(updated) + "\n", encoding="utf-8")
 
-          path = Path("lib/reports/pdf/fonts.test.ts")
-          text = path.read_text(encoding="utf-8")
-          old = """    expect(shaped).toHaveLength(isolated.length);
-              expect(shaped).not.toEqual(isolated);
-          """
-          new = """    expect(shaped.length).toBeGreaterThan(0);
-              expect(shaped.length).toBeLessThan(isolated.length);
-              expect(shaped).not.toEqual(isolated);
-          """
-          if text.count(old) != 1:
-              raise SystemExit("font shaping assertion anchor mismatch")
-          path.write_text(text.replace(old, new), encoding="utf-8")
-          PY
+          def correct_direction(lines):
+              focused = next(
+                  (index for index, line in enumerate(lines) if 'includes("تم تنفيذ")' in line),
+                  None,
+              )
+              if focused is not None:
+                  if focused + 2 >= len(lines) or 'includes("ذيفنت")' not in lines[focused + 1] or 'includes("80 kg")' not in lines[focused + 2]:
+                      raise SystemExit("Unexpected focused bidi assertions")
+                  indent = lines[focused][: len(lines[focused]) - len(lines[focused].lstrip())]
+                  lines[focused:focused + 3] = [
+                      indent + 'for (const token of ["تم", "تنفيذ", "80", "kg", "8"]) {',
+                      indent + '  expect(runs.some((run) => run.text.includes(token))).toBe(true);',
+                      indent + '}',
+                      indent + 'expect(runs.some((run) => run.text.includes("ذيفنت"))).toBe(false);',
+                  ]
+              logical = next(
+                  (index for index, line in enumerate(lines) if 'const logicalArabic = value.match' in line),
+                  None,
+              )
+              if logical is not None:
+                  if logical + 3 >= len(lines) or 'if (logicalArabic)' not in lines[logical + 1] or 'includes(logicalArabic)' not in lines[logical + 2] or lines[logical + 3].strip() != '}':
+                      raise SystemExit("Unexpected parameterized bidi assertions")
+                  indent = lines[logical][: len(lines[logical]) - len(lines[logical].lstrip())]
+                  lines[logical:logical + 4] = [
+                      indent + r'const logicalArabicTokens = value.match(/[\u0600-\u06ff]+/gu) ?? [];',
+                      indent + 'expect(logicalArabicTokens.length).toBeGreaterThan(0);',
+                      indent + 'for (const token of logicalArabicTokens) {',
+                      indent + '  expect(runs.some((run) => run.text.includes(token))).toBe(true);',
+                      indent + '}',
+                  ]
+              joined = "\n".join(lines)
+              if 'const logicalArabicTokens' not in joined or 'for (const token of ["تم", "تنفيذ", "80", "kg", "8"])' not in joined:
+                  raise SystemExit("Corrected bidi contracts are incomplete")
+              return lines
+
+          def correct_fonts(lines):
+              shaping = next(
+                  (index for index, line in enumerate(lines) if 'expect(shaped).toHaveLength(isolated.length);' in line),
+                  None,
+              )
+              if shaping is not None:
+                  indent = lines[shaping][: len(lines[shaping]) - len(lines[shaping].lstrip())]
+                  lines[shaping:shaping + 1] = [
+                      indent + 'expect(shaped.length).toBeGreaterThan(0);',
+                      indent + 'expect(shaped.length).toBeLessThan(isolated.length);',
+                  ]
+              joined = "\n".join(lines)
+              if 'toBeLessThan(isolated.length)' not in joined:
+                  raise SystemExit("Corrected shaping contract is incomplete")
+              return lines
+
+          replace_lines("lib/reports/pdf/text-direction.test.ts", correct_direction)
+          replace_lines("lib/reports/pdf/fonts.test.ts", correct_fonts)
+
+          state = Path("docs/control/PLAIVRA_CURRENT_STATE.md")
+          state_text = state.read_text(encoding="utf-8")
+          heading = "## P8 product reporting"
+          anchor = "## Current program\n"
+          section = (
+              "## P8 product reporting\n\n"
+              "P8A is active as the current Product Completion implementation candidate. "
+              "It establishes one server-generated PDF report for a single performed workout "
+              "and the reusable repository-owned PDF foundation required by later bounded report work.\n\n"
+              "By Product Owner decision, P6B live acceptance and P7 notifications remain deferred. "
+              "P8B remains later work. PCS-5 backup and restore authority remains deferred and open; "
+              "P8A does not change or close PCS-5.\n\n"
+          )
+          if heading in state_text:
+              if section.strip() not in state_text:
+                  raise SystemExit("Existing P8 control state does not match P8A authority")
+          else:
+              if state_text.count(anchor) != 1:
+                  raise SystemExit("P8A control-state anchor is not exact")
+              state.write_text(state_text.replace(anchor, section + anchor), encoding="utf-8")
+          P8A_TESTS
 
       - name: Materialize exact vendored runtime and font artifacts
         shell: bash
@@ -234,11 +273,11 @@ jobs:
           test -z "$(git diff --name-only "$P8A_BASE_SHA" -- 'supabase/**' '.github/workflows/**')"
           git diff --name-only "$P8A_BASE_SHA" > /tmp/p8a-changed-files.txt
           if grep -Ev \
-            '^(app/api/workouts/history/performed/\[id\]/report/|components/workouts/history/session-history-page\.tsx$|components/workouts/history/session-report-download-button\.(tsx|test\.ts)$|docs/reports/p8a-single-workout-pdf\.md$|lib/reports/pdf/|lib/reports/workout/|scripts/run-workout-history-(core-)?qa\.mjs$|scripts/run-workout-report-qa\.mjs$|scripts/workout-report-qa-contract\.test\.mjs$)' \
+            '^(app/api/workouts/history/performed/\[id\]/report/|components/workouts/history/session-history-page\.tsx$|components/workouts/history/session-report-download-button\.(tsx|test\.ts)$|docs/control/PLAIVRA_CURRENT_STATE\.md$|docs/reports/p8a-single-workout-pdf\.md$|lib/reports/pdf/|lib/reports/workout/|scripts/run-workout-history-(core-)?qa\.mjs$|scripts/run-workout-report-qa\.mjs$|scripts/workout-report-qa-contract\.test\.mjs$)' \
             /tmp/p8a-changed-files.txt | grep -q .; then
             echo "Out-of-scope P8A path:" >&2
             grep -Ev \
-              '^(app/api/workouts/history/performed/\[id\]/report/|components/workouts/history/session-history-page\.tsx$|components/workouts/history/session-report-download-button\.(tsx|test\.ts)$|docs/reports/p8a-single-workout-pdf\.md$|lib/reports/pdf/|lib/reports/workout/|scripts/run-workout-history-(core-)?qa\.mjs$|scripts/run-workout-report-qa\.mjs$|scripts/workout-report-qa-contract\.test\.mjs$)' \
+              '^(app/api/workouts/history/performed/\[id\]/report/|components/workouts/history/session-history-page\.tsx$|components/workouts/history/session-report-download-button\.(tsx|test\.ts)$|docs/control/PLAIVRA_CURRENT_STATE\.md$|docs/reports/p8a-single-workout-pdf\.md$|lib/reports/pdf/|lib/reports/workout/|scripts/run-workout-history-(core-)?qa\.mjs$|scripts/run-workout-report-qa\.mjs$|scripts/workout-report-qa-contract\.test\.mjs$)' \
               /tmp/p8a-changed-files.txt >&2
             exit 1
           fi
