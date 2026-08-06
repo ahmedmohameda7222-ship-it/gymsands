@@ -1,0 +1,220 @@
+name: P8A Materialize Report Authority
+
+on:
+  push:
+    branches:
+      - feat/p8a-single-workout-pdf-report
+    paths:
+      - .github/workflows/p8a-materialize-report-authority.yml
+
+permissions:
+  contents: write
+
+env:
+  P8A_BASE_SHA: d8a6d757425163683b98f3f546749aeffe003bb8
+  P8A_BRANCH: feat/p8a-single-workout-pdf-report
+  P8A_SOURCE_SHA256: ae8a34c9bc7aed624de5ec51fca9205777f9df3440be13e15d0a1e017a254487
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.P8A_BRANCH }}
+
+      - name: Verify bounded starting authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse --abbrev-ref HEAD)" = "$P8A_BRANCH"
+          git cat-file -e "$P8A_BASE_SHA^{commit}"
+          git merge-base --is-ancestor "$P8A_BASE_SHA" HEAD
+          test "$(git rev-parse "$P8A_BASE_SHA^{tree}")" = "b7884f3ab40eb1572f385db56988a90b9e22b486"
+          git diff --exit-code "$P8A_BASE_SHA" -- package.json package-lock.json
+
+      - name: Set up repository Node authority
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Decode bounded implementation payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .p8a-payload/source.b64.part-* > /tmp/p8a-source.b64
+          base64 --decode /tmp/p8a-source.b64 > /tmp/p8a-source.tar.gz
+          echo "$P8A_SOURCE_SHA256  /tmp/p8a-source.tar.gz" | sha256sum --check --strict
+          tar -tzf /tmp/p8a-source.tar.gz > /tmp/p8a-source-manifest.txt
+          if grep -E '(^/|(^|/)\.\.(/|$))' /tmp/p8a-source-manifest.txt; then
+            echo "Unsafe archive path detected" >&2
+            exit 1
+          fi
+          tar -xzf /tmp/p8a-source.tar.gz -C "$GITHUB_WORKSPACE"
+
+      - name: Preserve canonical Workout History QA authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show "$P8A_BASE_SHA:scripts/run-workout-history-qa.mjs" \
+            > scripts/run-workout-history-core-qa.mjs
+          test -s scripts/run-workout-history-core-qa.mjs
+
+      - name: Materialize exact vendored runtime and font artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          vendor_tmp="$(mktemp -d)"
+          mkdir -p lib/reports/pdf/vendor lib/reports/pdf/assets
+
+          (
+            cd "$vendor_tmp"
+            npm pack @pdf-lib/fontkit@1.1.1 --silent
+            mkdir fontkit
+            tar -xzf pdf-lib-fontkit-1.1.1.tgz -C fontkit
+            test -s fontkit/package/dist/fontkit.umd.js
+            cp fontkit/package/dist/fontkit.umd.js \
+              "$GITHUB_WORKSPACE/lib/reports/pdf/vendor/fontkit.cjs"
+
+            npm pack bidi-js@1.0.3 --silent
+            mkdir bidi
+            tar -xzf bidi-js-1.0.3.tgz -C bidi
+            test -s bidi/package/dist/bidi.js
+            cp bidi/package/dist/bidi.js \
+              "$GITHUB_WORKSPACE/lib/reports/pdf/vendor/bidi.cjs"
+          )
+
+          fetch_noto_blob() {
+            local blob_sha="$1"
+            local output="$2"
+            curl --fail --silent --show-error --location \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/notofonts/noto-fonts/git/blobs/$blob_sha" \
+              | jq -r '.content' | tr -d '\n' | base64 --decode > "$output"
+            test "$(git hash-object "$output")" = "$blob_sha"
+          }
+
+          fetch_noto_blob 7e9c1696ae43d387278f5fae47a2590dd6f1b0f8 \
+            lib/reports/pdf/assets/NotoSans-Regular.ttf
+          fetch_noto_blob 4d923cbfff4d25827689282c7bd8189b4fce825a \
+            lib/reports/pdf/assets/NotoSans-Bold.ttf
+          fetch_noto_blob a3c66dce265dbe08ff0bc89e919284ba871b4c27 \
+            lib/reports/pdf/assets/NotoSansArabic-Regular.ttf
+          fetch_noto_blob 98d9cdb1a709b50cf8d9e3b51765dde5dcc19637 \
+            lib/reports/pdf/assets/NotoSansArabic-Bold.ttf
+
+          cat <<'EOF' | sha256sum --check --strict
+          89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d  lib/reports/pdf/assets/NotoSans-Regular.ttf
+          e83493c945848ecd4a9ad0f6d19164541a0d3e23a9c952304a00a46e00272ac5  lib/reports/pdf/assets/NotoSans-Bold.ttf
+          504d7407d86875acf7d04dfaa0fd7524d0b8797723bc4aa18022f29db25b0b6e  lib/reports/pdf/assets/NotoSansArabic-Regular.ttf
+          ded6fc7359ca36d15d7aab9ef0c066e21ce48b26a069994d6602fa2cb9a1b952  lib/reports/pdf/assets/NotoSansArabic-Bold.ttf
+          EOF
+
+          fontkit_sha="$(sha256sum lib/reports/pdf/vendor/fontkit.cjs | awk '{print $1}')"
+          bidi_sha="$(sha256sum lib/reports/pdf/vendor/bidi.cjs | awk '{print $1}')"
+          cat > lib/reports/pdf/vendor/ARTIFACTS.md <<EOF
+          # Vendored P8A runtime artifacts
+
+          - \`fontkit.cjs\`: \`@pdf-lib/fontkit@1.1.1\` \`dist/fontkit.umd.js\`
+            - SHA-256: \`${fontkit_sha}\`
+          - \`bidi.cjs\`: \`bidi-js@1.0.3\` \`dist/bidi.js\`
+            - SHA-256: \`${bidi_sha}\`
+
+          These exact repository-local files are used at report-generation time. No request-time registry or CDN fetch occurs.
+          EOF
+
+          test "$(wc -c < lib/reports/pdf/vendor/fontkit.cjs)" -gt 100000
+          test "$(wc -c < lib/reports/pdf/vendor/bidi.cjs)" -gt 10000
+
+      - name: Install unchanged repository lock
+        run: npm ci
+
+      - name: Run focused P8A tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx vitest run --config vitest.unit.config.mjs \
+            'app/api/workouts/history/performed/[id]/report/route.test.ts' \
+            components/workouts/history/session-report-download-button.test.ts \
+            lib/reports/pdf/fonts.test.ts \
+            lib/reports/pdf/text-direction.test.ts \
+            lib/reports/workout/download-client.test.ts \
+            lib/reports/workout/model.test.ts \
+            lib/reports/workout/render.test.ts
+          node --test scripts/workout-report-qa-contract.test.mjs
+
+      - name: Typecheck exact implementation tree
+        run: npm run typecheck
+
+      - name: Generate preliminary multilingual PDF evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence=/tmp/p8a-pdf-evidence
+          mkdir -p "$evidence"
+          P8A_PDF_EVIDENCE_DIR="$evidence" \
+            npx vitest run --config vitest.unit.config.mjs \
+              lib/reports/workout/render-evidence.test.ts
+          command -v pdftoppm >/dev/null || {
+            sudo apt-get update
+            sudo apt-get install -y poppler-utils
+          }
+          for pdf in "$evidence"/*.pdf; do
+            pdftoppm -png -r 150 "$pdf" "${pdf%.pdf}"
+          done
+          test "$(find "$evidence" -maxdepth 1 -name '*.pdf' | wc -l)" -eq 3
+          test "$(find "$evidence" -maxdepth 1 -name '*.png' | wc -l)" -ge 3
+
+      - name: Remove temporary authority and verify bounded final scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/p8a-materialize-report-authority.yml
+          rm -rf .p8a-payload
+          git diff --check
+          git diff --exit-code "$P8A_BASE_SHA" -- package.json package-lock.json
+          test -z "$(git diff --name-only "$P8A_BASE_SHA" -- 'supabase/**' '.github/workflows/**')"
+          git diff --name-only "$P8A_BASE_SHA" > /tmp/p8a-changed-files.txt
+          if grep -Ev \
+            '^(app/api/workouts/history/performed/\[id\]/report/|components/workouts/history/session-history-page\.tsx$|components/workouts/history/session-report-download-button\.(tsx|test\.ts)$|docs/reports/p8a-single-workout-pdf\.md$|lib/reports/pdf/|lib/reports/workout/|scripts/run-workout-history-(core-)?qa\.mjs$|scripts/run-workout-report-qa\.mjs$|scripts/workout-report-qa-contract\.test\.mjs$)' \
+            /tmp/p8a-changed-files.txt | grep -q .; then
+            echo "Out-of-scope P8A path:" >&2
+            grep -Ev \
+              '^(app/api/workouts/history/performed/\[id\]/report/|components/workouts/history/session-history-page\.tsx$|components/workouts/history/session-report-download-button\.(tsx|test\.ts)$|docs/reports/p8a-single-workout-pdf\.md$|lib/reports/pdf/|lib/reports/workout/|scripts/run-workout-history-(core-)?qa\.mjs$|scripts/run-workout-report-qa\.mjs$|scripts/workout-report-qa-contract\.test\.mjs$)' \
+              /tmp/p8a-changed-files.txt >&2
+            exit 1
+          fi
+
+      - name: Commit and push bounded P8A implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Plaivra Implementation Authority"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && {
+            echo "No implementation changes to commit" >&2
+            exit 1
+          }
+          git commit -m "feat(reports): add P8A single workout PDF authority"
+          final_head="$(git rev-parse HEAD)"
+          git push origin "HEAD:$P8A_BRANCH"
+          echo "P8A_FINAL_HEAD=$final_head" >> "$GITHUB_ENV"
+          echo "Final implementation head: $final_head"
+
+      - name: Upload preliminary PDF render evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p8a-preliminary-pdf-evidence-${{ github.run_id }}
+          path: /tmp/p8a-pdf-evidence
+          if-no-files-found: error
+          retention-days: 14
