@@ -1,4 +1,4 @@
-name: P8A Linear Font Measurement Repair
+name: P8A Final Materialization Authority
 
 on:
   push:
@@ -10,110 +10,375 @@ on:
 permissions:
   contents: write
 
+env:
+  P8A_BASE_SHA: d8a6d757425163683b98f3f546749aeffe003bb8
+  P8A_BRANCH: feat/p8a-single-workout-pdf-report
+  P8A_SOURCE_SHA256: ae8a34c9bc7aed624de5ec51fca9205777f9df3440be13e15d0a1e017a254487
+
 jobs:
-  repair:
+  materialize:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
     steps:
       - name: Checkout exact P8A branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: feat/p8a-single-workout-pdf-report
+          ref: ${{ env.P8A_BRANCH }}
 
-      - name: Replace quadratic font measurement authority
+      - name: Verify bounded starting authority
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git hash-object .github/workflows/p8a-materialize-report-authority.yml)" = "54b1d0acc579ea2f80d822035ddcda4a3405bb3c"
+          test "$(git rev-parse --abbrev-ref HEAD)" = "$P8A_BRANCH"
+          git cat-file -e "$P8A_BASE_SHA^{commit}"
+          git merge-base --is-ancestor "$P8A_BASE_SHA" HEAD
+          test "$(git rev-parse "$P8A_BASE_SHA^{tree}")" = "b7884f3ab40eb1572f385db56988a90b9e22b486"
+          git diff --exit-code "$P8A_BASE_SHA" -- package.json package-lock.json
+          test -s .github/workflows/p8a-materialize-report-authority.yml
+          test -d .p8a-payload
+
+      - name: Set up repository Node authority
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Decode bounded implementation payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .p8a-payload/source.b64.part-* > /tmp/p8a-source.b64
+          base64 --decode /tmp/p8a-source.b64 > /tmp/p8a-source.tar.gz
+          echo "$P8A_SOURCE_SHA256  /tmp/p8a-source.tar.gz" | sha256sum --check --strict
+          tar -tzf /tmp/p8a-source.tar.gz > /tmp/p8a-source-manifest.txt
+          if grep -E '(^/|(^|/)\.\.(/|$))' /tmp/p8a-source-manifest.txt; then
+            echo "Unsafe archive path detected" >&2
+            exit 1
+          fi
+          tar -xzf /tmp/p8a-source.tar.gz -C "$GITHUB_WORKSPACE"
+          git show "$P8A_BASE_SHA:scripts/run-workout-history-qa.mjs" \
+            > scripts/run-workout-history-core-qa.mjs
+          test -s scripts/run-workout-history-core-qa.mjs
+
+      - name: Apply verified P8A contracts and linear measurement
+        shell: bash
+        run: |
+          set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
-          path = Path(".github/workflows/p8a-materialize-report-authority.yml")
-          text = path.read_text(encoding="utf-8")
+          def write_lines(path_value, lines):
+              Path(path_value).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-          old_type = '''                  "  const runs: Array<{",
-                            "    text: string;",
-                            "    font: PDFFont;",
-                            "    family: ReportFontFamily;",
-                            "    width: number;",
-                            "  }> = [];",
-          '''
-          new_type = '''                  "  const runs: Array<{",
-                            "    text: string;",
-                            "    font: PDFFont;",
-                            "    family: ReportFontFamily;",
-                            "  }> = [];",
-          '''
-          if text.count(old_type) != 1:
-              raise SystemExit("Unexpected P8A font-run type authority")
-          text = text.replace(old_type, new_type)
+          document_path = Path("lib/reports/pdf/document.ts")
+          document = document_path.read_text(encoding="utf-8")
+          start_marker = "function fontRuns("
+          end_marker = "function lineWidth("
+          if document.count(start_marker) != 1 or document.count(end_marker) != 1:
+              raise SystemExit("Unexpected PDF font-run function markers")
+          start = document.index(start_marker)
+          end = document.index(end_marker, start)
+          linear_font_runs = """function fontRuns(
+            text: string,
+            fonts: Readonly<Record<ReportFontFamily, PDFFont>>,
+            size: number,
+            direction: ReportDirection,
+          ): readonly FontRun[] {
+            const runs: Array<{
+              text: string;
+              font: PDFFont;
+              family: ReportFontFamily;
+            }> = [];
+            for (const directionalRun of directionalTextRuns(text || " ", direction)) {
+              const directionalRunStart = runs.length;
+              for (const character of directionalRun.text) {
+                const codePoint = character.codePointAt(0);
+                if (codePoint === undefined) continue;
+                const current =
+                  runs.length > directionalRunStart ? runs[runs.length - 1] : undefined;
+                const selected = reportFontForCodePoint(
+                  fonts,
+                  codePoint,
+                  current?.family ?? directionalRun.preferredFont,
+                );
+                if (current && current.font === selected.font) {
+                  current.text += character;
+                } else {
+                  runs.push({
+                    text: character,
+                    font: selected.font,
+                    family: selected.family,
+                  });
+                }
+              }
+            }
+            return runs.map((run) => ({
+              ...run,
+              width: run.font.widthOfTextAtSize(run.text, size),
+            }));
+          }
 
-          old_body = '''                  "      if (current && current.font === selected.font) {",
-                            "        current.text += character;",
-                            "        current.width = current.font.widthOfTextAtSize(current.text, size);",
-                            "      } else {",
-                            "        runs.push({",
-                            "          text: character,",
-                            "          font: selected.font,",
-                            "          family: selected.family,",
-                            "          width: selected.font.widthOfTextAtSize(character, size),",
-                            "        });",
-                            "      }",
-                            "    }",
-                            "  }",
-                            "  return runs;",
-          '''
-          new_body = '''                  "      if (current && current.font === selected.font) {",
-                            "        current.text += character;",
-                            "      } else {",
-                            "        runs.push({",
-                            "          text: character,",
-                            "          font: selected.font,",
-                            "          family: selected.family,",
-                            "        });",
-                            "      }",
-                            "    }",
-                            "  }",
-                            "  return runs.map((run) => ({",
-                            "    ...run,",
-                            "    width: run.font.widthOfTextAtSize(run.text, size),",
-                            "  }));",
-          '''
-          if text.count(old_body) != 1:
-              raise SystemExit("Unexpected P8A font-run measurement authority")
-          text = text.replace(old_body, new_body)
+          """
+          document = document[:start] + linear_font_runs + document[end:]
+          literal = "  private cursorY = PDF_LAYOUT.contentTop;"
+          typed = "  private cursorY: number = PDF_LAYOUT.contentTop;"
+          if literal in document:
+              document = document.replace(literal, typed, 1)
+          body = document[start:document.index(end_marker, start)]
+          if (
+              document.count(typed) != 1
+              or "widthOfTextAtSize(current.text" in body
+              or "return runs.map((run) => ({" not in body
+          ):
+              raise SystemExit("Linear PDF font measurement authority is incomplete")
+          document_path.write_text(document, encoding="utf-8")
 
-          old_guard = '''              if joined.count(typed) != 1 or "let current:" in function_body:
-                            raise SystemExit("Corrected PDF document typings are incomplete")
-          '''
-          new_guard = '''              if (
-                            joined.count(typed) != 1
-                            or "let current:" in function_body
-                            or "widthOfTextAtSize(current.text" in function_body
-                            or "return runs.map((run) => ({" not in function_body
-                        ):
-                            raise SystemExit("Corrected PDF document typings or linear font measurement are incomplete")
-          '''
-          if text.count(old_guard) != 1:
-              raise SystemExit("Unexpected P8A font-run verification authority")
-          text = text.replace(old_guard, new_guard)
+          direction_path = Path("lib/reports/pdf/text-direction.test.ts")
+          direction = direction_path.read_text(encoding="utf-8").splitlines()
+          focused = next(
+              (i for i, line in enumerate(direction) if 'includes("تم تنفيذ")' in line),
+              None,
+          )
+          if focused is not None:
+              if focused + 2 >= len(direction) or 'includes("ذيفنت")' not in direction[focused + 1]:
+                  raise SystemExit("Unexpected focused bidi assertions")
+              indent = direction[focused][: len(direction[focused]) - len(direction[focused].lstrip())]
+              direction[focused:focused + 3] = [
+                  indent + 'for (const token of ["تم", "تنفيذ", "80", "kg", "8"]) {',
+                  indent + '  expect(runs.some((run) => run.text.includes(token))).toBe(true);',
+                  indent + '}',
+                  indent + 'expect(runs.some((run) => run.text.includes("ذيفنت"))).toBe(false);',
+              ]
+          logical = next(
+              (i for i, line in enumerate(direction) if 'const logicalArabic = value.match' in line),
+              None,
+          )
+          if logical is not None:
+              indent = direction[logical][: len(direction[logical]) - len(direction[logical].lstrip())]
+              direction[logical:logical + 4] = [
+                  indent + r'const logicalArabicTokens = value.match(/[\u0600-\u06ff]+/gu) ?? [];',
+                  indent + 'expect(logicalArabicTokens.length).toBeGreaterThan(0);',
+                  indent + 'for (const token of logicalArabicTokens) {',
+                  indent + '  expect(runs.some((run) => run.text.includes(token))).toBe(true);',
+                  indent + '}',
+              ]
+          direction_joined = "\n".join(direction)
+          if 'const logicalArabicTokens' not in direction_joined:
+              raise SystemExit("Corrected bidi contracts are incomplete")
+          write_lines(direction_path, direction)
 
-          path.write_text(text, encoding="utf-8")
+          fonts_path = Path("lib/reports/pdf/fonts.test.ts")
+          fonts = fonts_path.read_text(encoding="utf-8")
+          fonts = fonts.replace(
+              "    const font = fontkit.create(bytes) as ShapingFont;",
+              """    const shapingFontkit = fontkit as Readonly<{
+                create: (input: Uint8Array) => ShapingFont;
+              }>;
+              const font = shapingFontkit.create(bytes);""",
+              1,
+          )
+          fonts = fonts.replace(
+              "    expect(shaped).toHaveLength(isolated.length);",
+              """    expect(shaped.length).toBeGreaterThan(0);
+              expect(shaped.length).toBeLessThan(isolated.length);""",
+              1,
+          )
+          if (
+              fonts.count("const shapingFontkit = fontkit as Readonly<{") != 1
+              or "toBeLessThan(isolated.length)" not in fonts
+          ):
+              raise SystemExit("Corrected fontkit contracts are incomplete")
+          fonts_path.write_text(fonts, encoding="utf-8")
+
+          evidence_path = Path("lib/reports/workout/render-evidence.test.ts")
+          evidence = evidence_path.read_text(encoding="utf-8")
+          ending = "  });\n});"
+          corrected = "  }, 30_000);\n});"
+          if ending in evidence:
+              if evidence.count(ending) != 1:
+                  raise SystemExit("Unexpected evidence timeout anchors")
+              evidence = evidence.replace(ending, corrected, 1)
+          if evidence.count(corrected) != 1:
+              raise SystemExit("Corrected evidence timeout is incomplete")
+          evidence_path.write_text(evidence, encoding="utf-8")
+
+          state = Path("docs/control/PLAIVRA_CURRENT_STATE.md")
+          state_text = state.read_text(encoding="utf-8")
+          heading = "## P8 product reporting"
+          anchor = "## Current program\n"
+          section = (
+              "## P8 product reporting\n\n"
+              "P8A is active as the current Product Completion implementation candidate. "
+              "It establishes one server-generated PDF report for a single performed workout "
+              "and the reusable repository-owned PDF foundation required by later bounded report work.\n\n"
+              "By Product Owner decision, P6B live acceptance and P7 notifications remain deferred. "
+              "P8B remains later work. PCS-5 backup and restore authority remains deferred and open; "
+              "P8A does not change or close PCS-5.\n\n"
+          )
+          if heading in state_text:
+              if section.strip() not in state_text:
+                  raise SystemExit("Existing P8 control state does not match P8A authority")
+          else:
+              if state_text.count(anchor) != 1:
+                  raise SystemExit("P8A control-state anchor is not exact")
+              state.write_text(state_text.replace(anchor, section + anchor), encoding="utf-8")
           PY
-
-          test "$(grep -c 'widthOfTextAtSize(current.text' .github/workflows/p8a-materialize-report-authority.yml)" -eq 1
-          test "$(grep -c 'return runs.map((run) => ({' .github/workflows/p8a-materialize-report-authority.yml)" -eq 2
-          rm .github/workflows/p8a-linear-font-measurement-repair.yml
           git diff --check
 
-      - name: Commit optimized materializer
+      - name: Materialize exact vendored runtime and fonts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          vendor_tmp="$(mktemp -d)"
+          mkdir -p lib/reports/pdf/vendor lib/reports/pdf/assets
+          (
+            cd "$vendor_tmp"
+            npm pack @pdf-lib/fontkit@1.1.1 --silent
+            mkdir fontkit
+            tar -xzf pdf-lib-fontkit-1.1.1.tgz -C fontkit
+            cp fontkit/package/dist/fontkit.umd.js \
+              "$GITHUB_WORKSPACE/lib/reports/pdf/vendor/fontkit.cjs"
+            npm pack bidi-js@1.0.3 --silent
+            mkdir bidi
+            tar -xzf bidi-js-1.0.3.tgz -C bidi
+            cp bidi/package/dist/bidi.js \
+              "$GITHUB_WORKSPACE/lib/reports/pdf/vendor/bidi.cjs"
+          )
+
+          fetch_noto_blob() {
+            local blob_sha="$1"
+            local output="$2"
+            curl --fail --silent --show-error --location \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/notofonts/noto-fonts/git/blobs/$blob_sha" \
+              | jq -r '.content' | tr -d '\n' | base64 --decode > "$output"
+            test "$(git hash-object "$output")" = "$blob_sha"
+          }
+          fetch_noto_blob 7e9c1696ae43d387278f5fae47a2590dd6f1b0f8 lib/reports/pdf/assets/NotoSans-Regular.ttf
+          fetch_noto_blob 4d923cbfff4d25827689282c7bd8189b4fce825a lib/reports/pdf/assets/NotoSans-Bold.ttf
+          fetch_noto_blob a3c66dce265dbe08ff0bc89e919284ba871b4c27 lib/reports/pdf/assets/NotoSansArabic-Regular.ttf
+          fetch_noto_blob 98d9cdb1a709b50cf8d9e3b51765dde5dcc19637 lib/reports/pdf/assets/NotoSansArabic-Bold.ttf
+
+          cat <<'EOF' | sha256sum --check --strict
+          89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d  lib/reports/pdf/assets/NotoSans-Regular.ttf
+          e83493c945848ecd4a9ad0f6d19164541a0d3e23a9c952304a00a46e00272ac5  lib/reports/pdf/assets/NotoSans-Bold.ttf
+          504d7407d86875acf7d04dfaa0fd7524d0b8797723bc4aa18022f29db25b0b6e  lib/reports/pdf/assets/NotoSansArabic-Regular.ttf
+          ded6fc7359ca36d15d7aab9ef0c066e21ce48b26a069994d6602fa2cb9a1b952  lib/reports/pdf/assets/NotoSansArabic-Bold.ttf
+          EOF
+
+          fontkit_sha="$(sha256sum lib/reports/pdf/vendor/fontkit.cjs | awk '{print $1}')"
+          bidi_sha="$(sha256sum lib/reports/pdf/vendor/bidi.cjs | awk '{print $1}')"
+          cat > lib/reports/pdf/vendor/ARTIFACTS.md <<EOF
+          # Vendored P8A runtime artifacts
+
+          - \`fontkit.cjs\`: \`@pdf-lib/fontkit@1.1.1\` \`dist/fontkit.umd.js\`
+            - SHA-256: \`${fontkit_sha}\`
+          - \`bidi.cjs\`: \`bidi-js@1.0.3\` \`dist/bidi.js\`
+            - SHA-256: \`${bidi_sha}\`
+
+          These exact repository-local files are used at report-generation time. No request-time registry or CDN fetch occurs.
+          EOF
+          test "$(wc -c < lib/reports/pdf/vendor/fontkit.cjs)" -gt 100000
+          test "$(wc -c < lib/reports/pdf/vendor/bidi.cjs)" -gt 10000
+
+      - name: Install unchanged repository lock
+        run: npm ci
+
+      - name: Run focused tests and exact typecheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx vitest run --config vitest.unit.config.mjs \
+            'app/api/workouts/history/performed/[id]/report/route.test.ts' \
+            components/workouts/history/session-report-download-button.test.ts \
+            lib/reports/pdf/fonts.test.ts \
+            lib/reports/pdf/text-direction.test.ts \
+            lib/reports/workout/download-client.test.ts \
+            lib/reports/workout/model.test.ts \
+            lib/reports/workout/render.test.ts
+          node --test scripts/workout-report-qa-contract.test.mjs
+          npm run typecheck
+
+      - name: Generate and rasterize multilingual evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence=/tmp/p8a-pdf-evidence
+          mkdir -p "$evidence"
+          P8A_PDF_EVIDENCE_DIR="$evidence" \
+            npx vitest run --config vitest.unit.config.mjs \
+              lib/reports/workout/render-evidence.test.ts
+          command -v pdftoppm >/dev/null || {
+            sudo apt-get update
+            sudo apt-get install -y poppler-utils
+          }
+          for pdf in "$evidence"/*.pdf; do
+            pdftoppm -png -r 150 "$pdf" "${pdf%.pdf}"
+          done
+          test "$(find "$evidence" -maxdepth 1 -name '*.pdf' | wc -l)" -eq 3
+          test "$(find "$evidence" -maxdepth 1 -name '*.png' | wc -l)" -ge 3
+
+      - name: Verify bounded implementation scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .p8a-payload
+          git diff --check
+          git diff --exit-code "$P8A_BASE_SHA" -- package.json package-lock.json
+          test -z "$(git diff --name-only "$P8A_BASE_SHA" -- 'supabase/**')"
+          git diff --name-only "$P8A_BASE_SHA" \
+            | grep -Ev '^\.github/workflows/p8a-(materialize-report-authority|linear-font-measurement-repair)\.yml$' \
+            > /tmp/p8a-implementation-files.txt
+          if grep -Ev \
+            '^(app/api/workouts/history/performed/\[id\]/report/|components/workouts/history/session-history-page\.tsx$|components/workouts/history/session-report-download-button\.(tsx|test\.ts)$|docs/control/PLAIVRA_CURRENT_STATE\.md$|docs/reports/p8a-single-workout-pdf\.md$|lib/reports/pdf/|lib/reports/workout/|scripts/run-workout-history-(core-)?qa\.mjs$|scripts/run-workout-report-qa\.mjs$|scripts/workout-report-qa-contract\.test\.mjs$)' \
+            /tmp/p8a-implementation-files.txt | grep -q .; then
+            echo "Out-of-scope P8A implementation path:" >&2
+            grep -Ev \
+              '^(app/api/workouts/history/performed/\[id\]/report/|components/workouts/history/session-history-page\.tsx$|components/workouts/history/session-report-download-button\.(tsx|test\.ts)$|docs/control/PLAIVRA_CURRENT_STATE\.md$|docs/reports/p8a-single-workout-pdf\.md$|lib/reports/pdf/|lib/reports/workout/|scripts/run-workout-history-(core-)?qa\.mjs$|scripts/run-workout-report-qa\.mjs$|scripts/workout-report-qa-contract\.test\.mjs$)' \
+              /tmp/p8a-implementation-files.txt >&2
+            exit 1
+          fi
+
+      - name: Commit and push implementation without workflow mutation
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "Plaivra Implementation Authority"
           git config user.email "actions@users.noreply.github.com"
-          git add -A
+          git add -A -- \
+            .p8a-payload \
+            'app/api/workouts/history/performed/[id]/report' \
+            components/workouts/history/session-history-page.tsx \
+            components/workouts/history/session-report-download-button.tsx \
+            components/workouts/history/session-report-download-button.test.ts \
+            docs/control/PLAIVRA_CURRENT_STATE.md \
+            docs/reports/p8a-single-workout-pdf.md \
+            lib/reports/pdf \
+            lib/reports/workout \
+            scripts/run-workout-history-core-qa.mjs \
+            scripts/run-workout-history-qa.mjs \
+            scripts/run-workout-report-qa.mjs \
+            scripts/workout-report-qa-contract.test.mjs
+          test -z "$(git diff --cached --name-only -- '.github/workflows/**')"
           git diff --cached --check
-          git commit -m "fix(perf): linearize P8A font measurement"
-          git push origin HEAD:feat/p8a-single-workout-pdf-report
+          git diff --cached --quiet && {
+            echo "No P8A implementation changes to commit" >&2
+            exit 1
+          }
+          git commit -m "feat(reports): add P8A single workout PDF authority"
+          final_head="$(git rev-parse HEAD)"
+          git push origin "HEAD:$P8A_BRANCH"
+          echo "Final implementation head: $final_head"
+
+      - name: Upload preliminary PDF render evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p8a-preliminary-pdf-evidence-${{ github.run_id }}
+          path: /tmp/p8a-pdf-evidence
+          if-no-files-found: error
+          retention-days: 14
