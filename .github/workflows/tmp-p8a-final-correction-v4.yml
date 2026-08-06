@@ -1,0 +1,206 @@
+name: Temporary P8A Final Correction V4
+
+on:
+  push:
+    branches:
+      - feat/p8a-single-workout-pdf-report
+    paths:
+      - .github/workflows/tmp-p8a-final-correction-v4.yml
+
+permissions:
+  contents: write
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+  SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_USE_MOCK_AUTH: true
+  PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+  PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+  PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+  PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+  PLAIVRA_RELEASE_ENVIRONMENT: ci
+  PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: 2
+  SUPABASE_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+  QA_SERVER_MODE: production
+  QA_MOCK_AUTH_BUILD_VALUE: true
+
+jobs:
+  validate-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Materialize exact bounded correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git merge-base HEAD origin/main)" = "d8a6d757425163683b98f3f546749aeffe003bb8"
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          expected = {
+            '00':'b9f819e0f68d1c2edc05494c930e040b8ce9ca5a48b947298fd7f332f158676f',
+            '01':'c568c39978de43601373655e87f4e5b7c5f8732066f6e0048d90295cdcbcc64e',
+            '02':'a491f2c3bdf17781476d86c79abe44dfe296928c9f4b9242596c757155f8c481',
+            '03':'67d4f7f4b8451cd76d841c198492dcb4c1a23b4c38e9eb9363b579ef93766488',
+            '04':'1155ab2cb92d6f927db94c55fcdfd094a1585e83a7637c991eaf3ca10abc0e3f',
+            '05':'7af7a0f6f62f017cc29c1fbb3fa7555c1f7ca24939face0050e5aec0237aca4f',
+          }
+          p=Path('.p8a-final-correction-payload.part01'); s=p.read_text()
+          if sha256(s.encode()).hexdigest()!=expected['01']:
+            if len(s)!=8999 or s[8153:8163]!='x3p6FzweMJ': raise SystemExit('unexpected part01')
+            p.write_text(s[:8158]+'i'+s[8158:])
+          p=Path('.p8a-final-correction-payload.part05'); s=p.read_text()
+          if sha256(s.encode()).hexdigest()!=expected['05']:
+            if len(s)!=7592 or not s.endswith('A+AIA'): raise SystemExit('unexpected part05')
+            p.write_text(s+'\n')
+          for suffix,digest in expected.items():
+            actual=sha256(Path(f'.p8a-final-correction-payload.part{suffix}').read_bytes()).hexdigest()
+            if actual!=digest: raise SystemExit(f'part{suffix} mismatch: {actual}')
+          overlay={
+            '00':'1825af154a7942c1ac6337a054964a76742109404bd50e49c903b75fa0ee0f92',
+            '01':'81e6a2c55aa0d47d4bddb0e1d63f8e641977a9e1595b1004c73364f4c6d4b969',
+          }
+          for suffix,digest in overlay.items():
+            actual=sha256(Path(f'.p8a-verifier-overlay-v2.part{suffix}').read_bytes()).hexdigest()
+            if actual!=digest: raise SystemExit(f'overlay part{suffix} mismatch: {actual}')
+          PY
+          cat .p8a-final-correction-payload.part0* | base64 --decode > /tmp/p8a-correction.tar.gz
+          echo "8fb1d51df837549a5b4d4d746d2c075e9f98d448253696d430ce50b930639e67  /tmp/p8a-correction.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/p8a-correction.tar.gz
+          cat .p8a-verifier-overlay-v2.part0* | base64 --decode > /tmp/p8a-verifier-overlay-v2.tar.gz
+          echo "487bb63189bb0bb299ed01d37e815d45c3153aa4dd04f75a57c3ba9eb30a5a2c  /tmp/p8a-verifier-overlay-v2.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/p8a-verifier-overlay-v2.tar.gz
+          rm -rf lib/reports/pdf/vendor
+          npm install --save-exact @pdf-lib/fontkit@1.1.1 bidi-js@1.0.3
+
+      - name: Enforce planner correction boundary and commit locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git restore -- .p8a-final-correction-payload.part01 .p8a-final-correction-payload.part05
+          git add -A -- package.json package-lock.json next.config.mjs eslint.config.mjs app/api/workouts/history/performed/'[id]'/report lib/reports/pdf lib/reports/workout scripts/verify-p8a-runtime-assets.mjs scripts/verify-p8a-runtime-assets.test.mjs scripts/run-workout-report-qa.mjs scripts/workout-report-qa-contract.test.mjs docs/architecture/p8a-single-workout-pdf.md docs/control/PLAIVRA_CURRENT_STATE.md
+          git diff --cached --check
+          git diff --cached --name-only > /tmp/p8a-cached-paths.txt
+          test -s /tmp/p8a-cached-paths.txt
+          ! grep -E '^(\.github/|\.p8a-)' /tmp/p8a-cached-paths.txt
+          python - <<'PY'
+          from pathlib import Path
+          allowed_exact={
+            'package.json','package-lock.json','next.config.mjs','eslint.config.mjs',
+            'app/api/workouts/history/performed/[id]/report/route.test.ts',
+            'app/api/workouts/history/performed/[id]/report/route.ts',
+            'lib/reports/pdf/THIRD_PARTY_NOTICES.md','lib/reports/pdf/document.ts',
+            'lib/reports/pdf/fonts.test.ts','lib/reports/pdf/fonts.ts',
+            'lib/reports/pdf/text-direction.test.ts','lib/reports/pdf/text-direction.ts',
+            'lib/reports/pdf/types.ts','lib/reports/pdf/vendor-modules.d.ts',
+            'lib/reports/workout/copy.ts','lib/reports/workout/model.test.ts',
+            'lib/reports/workout/model.ts','lib/reports/workout/render-evidence.test.ts',
+            'lib/reports/workout/render.test.ts','lib/reports/workout/render.ts',
+            'lib/reports/workout/test-fixture.ts','lib/reports/workout/types.ts',
+            'scripts/verify-p8a-runtime-assets.mjs','scripts/verify-p8a-runtime-assets.test.mjs',
+            'scripts/run-workout-report-qa.mjs','scripts/workout-report-qa-contract.test.mjs',
+            'docs/architecture/p8a-single-workout-pdf.md','docs/control/PLAIVRA_CURRENT_STATE.md',
+          }
+          allowed_prefixes=('lib/reports/pdf/assets/','lib/reports/pdf/vendor/')
+          paths=Path('/tmp/p8a-cached-paths.txt').read_text().splitlines()
+          bad=[p for p in paths if p not in allowed_exact and not p.startswith(allowed_prefixes)]
+          if bad: raise SystemExit('unauthorized cached paths: '+', '.join(bad))
+          PY
+          git config user.name "Plaivra Implementation Authority"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "fix(p8a): restore runtime and localization authority"
+          echo "QA_HEAD_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Dependency authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-reports/p8a-final-correction
+          npm ci
+          npm audit --omit=dev --audit-level=moderate | tee ci-reports/p8a-final-correction/npm-audit.txt
+          npm ls @pdf-lib/fontkit bidi-js | tee ci-reports/p8a-final-correction/npm-ls.txt
+          node - <<'NODE'
+          const pkg=require('./package.json'); const lock=require('./package-lock.json');
+          if(pkg.dependencies['@pdf-lib/fontkit']!=='1.1.1'||pkg.dependencies['bidi-js']!=='1.0.3') throw new Error('manifest mismatch');
+          if(lock.packages['node_modules/@pdf-lib/fontkit']?.version!=='1.1.1'||lock.packages['node_modules/bidi-js']?.version!=='1.0.3') throw new Error('lock mismatch');
+          NODE
+          test ! -d lib/reports/pdf/vendor
+          ! git grep -nE 'lib/reports/pdf/vendor/(fontkit|bidi)|@/lib/reports/pdf/vendor' -- app lib ':!**/*.test.ts' ':!**/*.test.tsx' ':!**/*.md'
+
+      - name: Focused and repository validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx vitest run --config vitest.unit.config.mjs 'app/api/workouts/history/performed/[id]/report/route.test.ts' components/workouts/history/session-report-download-button.test.ts lib/reports/pdf/fonts.test.ts lib/reports/pdf/text-direction.test.ts lib/reports/workout/download-client.test.ts lib/reports/workout/model.test.ts lib/reports/workout/render.test.ts lib/reports/workout/render-evidence.test.ts
+          node --test scripts/verify-p8a-runtime-assets.test.mjs scripts/workout-report-qa-contract.test.mjs
+          npm run lint
+          npm run typecheck
+          npm run test:unit
+          npm run test:workout-history
+          npm run test:scripts
+          npm run test:telemetry
+
+      - name: Production build and exact trace proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build
+          node scripts/verify-p8a-runtime-assets.mjs | tee ci-reports/p8a-final-correction/runtime-assets.json
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start exact built server
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start > ci-reports/p8a-final-correction/qa-server.log 2>&1 &
+          echo "$!" > /tmp/p8a-server.pid
+          for attempt in $(seq 1 60); do curl -fsS http://localhost:3000/ >/dev/null && exit 0; sleep 1; done
+          cat ci-reports/p8a-final-correction/qa-server.log; exit 1
+
+      - name: Corrected Workout History rendered QA
+        env:
+          CI: true
+          QA_BASE_URL: http://localhost:3000
+          QA_WORKOUT_HISTORY_EVIDENCE_DIR: ci-reports/workout-history-qa-evidence
+        run: npm run qa:workout-history
+
+      - name: Stop server
+        if: always()
+        shell: bash
+        run: |
+          test ! -f /tmp/p8a-server.pid || kill "$(cat /tmp/p8a-server.pid)" 2>/dev/null || true
+
+      - name: Exact commit integrity and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$QA_HEAD_SHA"
+          git diff --check HEAD^ HEAD
+          test -z "$(git status --porcelain --untracked-files=no)"
+          git diff-tree --no-commit-id --name-only -r HEAD | tee ci-reports/p8a-final-correction/correction-paths.txt
+          git push origin HEAD:feat/p8a-single-workout-pdf-report
+
+      - name: Upload correction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p8a-final-correction-${{ env.QA_HEAD_SHA }}
+          path: |
+            ci-reports/p8a-final-correction/
+            ci-reports/workout-history-qa-evidence/
+          if-no-files-found: warn
+          retention-days: 14
