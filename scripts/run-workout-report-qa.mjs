@@ -19,6 +19,54 @@ if (!/^[a-f0-9]{40}$/iu.test(headSha)) {
   throw new Error("QA_HEAD_SHA must be the exact 40-character head under inspection.");
 }
 
+function commandSucceeded(command, args) {
+  const result = spawnSync(command, args, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  return !result.error && result.status === 0;
+}
+
+function ensurePdfPageRenderer() {
+  if (commandSucceeded("pdftoppm", ["-v"])) return;
+  if (!(process.env.CI === "true" && process.platform === "linux")) {
+    throw new Error(
+      "P8A PDF page rendering requires pdftoppm from Poppler.",
+    );
+  }
+
+  const useSudo =
+    typeof process.getuid !== "function" || process.getuid() !== 0;
+  const command = useSudo ? "sudo" : "apt-get";
+  const commands = useSudo
+    ? [
+        ["apt-get", "update"],
+        ["apt-get", "install", "-y", "poppler-utils"],
+      ]
+    : [
+        ["update"],
+        ["install", "-y", "poppler-utils"],
+      ];
+
+  for (const args of commands) {
+    const result = spawnSync(command, args, {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: "inherit",
+    });
+    if (result.error) throw result.error;
+    if (result.status !== 0) {
+      throw new Error(
+        `P8A PDF renderer bootstrap failed: ${command} ${args.join(" ")}`,
+      );
+    }
+  }
+
+  if (!commandSucceeded("pdftoppm", ["-v"])) {
+    throw new Error("P8A PDF renderer bootstrap did not provide pdftoppm.");
+  }
+}
+
 
 async function generatePdfEvidence() {
   const pdfDirectory = path.join(outputDir, "pdf-evidence");
@@ -50,6 +98,7 @@ async function generatePdfEvidence() {
   if (pdfFiles.length !== 3) {
     throw new Error(`Expected three P8A PDF evidence files, found ${pdfFiles.length}.`);
   }
+  ensurePdfPageRenderer();
   const renderedPages = [];
   for (const pdfFile of pdfFiles) {
     const source = path.join(pdfDirectory, pdfFile);

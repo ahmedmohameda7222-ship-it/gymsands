@@ -23,7 +23,12 @@ test("P8A report QA requires exact-head multilingual and multi-viewport evidence
   assert.match(reportQa, /mobile-de-slow/u);
   assert.match(reportQa, /scheduled-no-action/u);
   assert.match(reportQa, /P8A_PDF_EVIDENCE_DIR/u);
-  assert.match(reportQa, /pdftoppm/u);
+assert.match(reportQa, /pdftoppm/u);
+assert.match(reportQa, /process\.env\.CI === "true"/u);
+assert.match(reportQa, /process\.platform === "linux"/u);
+assert.match(reportQa, /"poppler-utils"/u);
+assert.match(reportQa, /ensurePdfPageRenderer\(\)/u);
+assert.doesNotMatch(reportQa, /shell:\s*true/u);
   assert.match(reportQa, /reportRequests\.length === \(performed \? 1 : 0\)/u);
   assert.match(reportQa, /Number\.parseFloat\(after\.buttonMinHeight/u);
   assert.match(reportQa, /actionRestored/u);
