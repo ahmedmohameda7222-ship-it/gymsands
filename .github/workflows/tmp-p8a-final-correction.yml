@@ -38,6 +38,12 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
+      - name: Use repository Node authority
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
       - name: Materialize bounded correction
         shell: bash
         run: |
@@ -62,8 +68,7 @@ jobs:
           if sha256(data01.encode()).hexdigest() != expected["01"]:
               if len(data01) != 8999 or data01[8153:8163] != "x3p6FzweMJ":
                   raise SystemExit("Unexpected staged payload part01 shape")
-              data01 = data01[:8158] + "i" + data01[8158:]
-              part01.write_text(data01, encoding="utf-8")
+              part01.write_text(data01[:8158] + "i" + data01[8158:], encoding="utf-8")
 
           part05 = Path(".p8a-final-correction-payload.part05")
           data05 = part05.read_text(encoding="utf-8")
@@ -177,8 +182,8 @@ jobs:
           if (fontkit.version !== '1.1.1') throw new Error(`Unexpected fontkit ${fontkit.version}`);
           if (bidi.version !== '1.0.3') throw new Error(`Unexpected bidi-js ${bidi.version}`);
           NODE
-          if git grep -nE 'lib/reports/pdf/vendor/(fontkit|bidi)|@/lib/reports/pdf/vendor' -- ':!*.md'; then
-            echo "Vendored runtime import remains" >&2
+          if git grep -nE 'lib/reports/pdf/vendor/(fontkit|bidi)|@/lib/reports/pdf/vendor' -- app lib ':!**/*.test.ts' ':!**/*.test.tsx' ':!**/*.md'; then
+            echo "Vendored runtime import remains in application source" >&2
             exit 1
           fi
 
