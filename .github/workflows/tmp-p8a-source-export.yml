@@ -28,6 +28,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: temporary-p8a-source-${{ github.sha }}
-          path: /tmp/p8a-source-${GITHUB_SHA}.tar.gz
+          path: /tmp/p8a-source-${{ github.sha }}.tar.gz
           if-no-files-found: error
           retention-days: 1
