@@ -1,0 +1,68 @@
+{
+  "data": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "slug": "p10_v2_contract_fixture",
+    "revisionId": "22222222-2222-4222-8222-222222222222",
+    "revisionNumber": 3,
+    "name": "P10 V2 Contract Fixture",
+    "shortDescription": "Dormant Main compatibility fixture for immutable Catalog V2 authority.",
+    "instructions": ["Prepare position", "Perform controlled movement"],
+    "difficulty": "intermediate",
+    "movementPattern": "fixture_press",
+    "activityType": { "slug": "strength_exercise", "name": "Strength Exercise" },
+    "sports": [{ "slug": "gym_strength", "name": "Gym & Strength", "primary": true }],
+    "sessionTypes": [],
+    "sessionPhases": [],
+    "equipment": [],
+    "trainingGoals": [],
+    "prescriptionSchema": {
+      "key": "strength_sets_reps",
+      "version": "v1",
+      "fields": [
+        { "key": "sets", "type": "integer", "unit": "count", "required": true },
+        { "key": "reps", "type": "integer_range", "unit": "count", "required": true, "minimum": 8, "maximum": 12 }
+      ]
+    },
+    "performedMetricSchema": {
+      "key": "strength_sets_reps_load",
+      "version": "v1",
+      "fields": [
+        { "key": "completed_sets", "type": "integer", "unit": "count", "required": true },
+        { "key": "actual_reps", "type": "integer", "unit": "count", "required": true },
+        { "key": "load_kg", "type": "number", "unit": "kg", "required": false }
+      ],
+      "contextDimensions": []
+    },
+    "recordDefinitions": [],
+    "heatMap": {
+      "policy": "required",
+      "mappingProfileId": "33333333-3333-4333-8333-333333333333",
+      "mappingSchemaVersion": "exercise_muscle_mapping_v2",
+      "mappingProfileVersion": 1,
+      "mappingChecksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "taxonomy": { "key": "main_muscle_intelligence", "version": "advanced_visible_v1" },
+      "workloadModel": { "key": "resistance_sets", "version": "v1" },
+      "mapping": [
+        { "muscleId": "pectoralis.middle", "role": "primary", "contribution": 1, "sideScope": "bilateral", "sortOrder": 1 },
+        { "muscleId": "triceps.lateral_head", "role": "secondary", "contribution": 0.5, "sideScope": "bilateral", "sortOrder": 2 }
+      ]
+    },
+    "publicationPolicyVersion": "p10b-publication-policy-v1",
+    "capabilityContractVersion": "main-activity-catalog-v2-capability-v1",
+    "releaseId": "44444444-4444-4444-8444-444444444444",
+    "releaseVersion": "contract-fixture-release-v1",
+    "releaseChecksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "meta": {
+    "apiVersion": "v2",
+    "locale": "en",
+    "release": {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "version": "contract-fixture-release-v1",
+      "checksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "taxonomy": { "key": "main_muscle_intelligence", "version": "advanced_visible_v1" },
+      "capabilityContractVersion": "main-activity-catalog-v2-capability-v1",
+      "publicationPolicy": { "key": "activity_publication", "version": "p10b-publication-policy-v1" }
+    }
+  }
+}
