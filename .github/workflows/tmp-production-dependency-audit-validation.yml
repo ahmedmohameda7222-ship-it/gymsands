@@ -1,0 +1,64 @@
+name: Temporary Production Dependency Audit Validation
+
+on:
+  push:
+    branches:
+      - ci/production-dependency-audit-isolation
+    paths:
+      - .github/workflows/tmp-production-dependency-audit-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ci/production-dependency-audit-isolation
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify bounded identity and package authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git merge-base HEAD origin/main)" = "d8a6d757425163683b98f3f546749aeffe003bb8"
+          test "$(git rev-parse origin/main)" = "d8a6d757425163683b98f3f546749aeffe003bb8"
+          git diff --exit-code d8a6d757425163683b98f3f546749aeffe003bb8 -- package.json package-lock.json
+          if grep -Fq '@modelcontextprotocol/sdk' package.json package-lock.json; then
+            echo '@modelcontextprotocol/sdk unexpectedly entered Plaivra package authority' >&2
+            exit 1
+          fi
+          git diff --check d8a6d757425163683b98f3f546749aeffe003bb8...HEAD
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Production lockfile audit
+        run: npm audit --package-lock-only --omit=dev --audit-level=moderate
+
+      - name: Script contracts
+        run: npm run test:scripts
+
+      - name: Telemetry contracts
+        run: npm run test:telemetry
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Verify clean tracked working tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test -z "$(git status --porcelain --untracked-files=no)"
