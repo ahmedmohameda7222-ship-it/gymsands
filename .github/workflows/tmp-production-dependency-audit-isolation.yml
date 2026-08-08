@@ -1,0 +1,57 @@
+name: Temporary Production Dependency Audit Isolation
+
+on:
+  push:
+    branches:
+      - ci/production-dependency-audit-isolation
+    paths:
+      - .github/workflows/tmp-production-dependency-audit-isolation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ci/production-dependency-audit-isolation
+          fetch-depth: 0
+
+      - name: Apply exact bounded workflow correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git merge-base HEAD origin/main)" = "d8a6d757425163683b98f3f546749aeffe003bb8"
+          python - <<'PY'
+          from pathlib import Path
+
+          old = "npm audit --omit=dev --audit-level=moderate"
+          new = "npm audit --package-lock-only --omit=dev --audit-level=moderate"
+          for filename in [
+              ".github/workflows/pr-quality.yml",
+              ".github/workflows/quality.yml",
+          ]:
+              path = Path(filename)
+              text = path.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f"{filename}: expected exactly one old audit command")
+              if new in text:
+                  raise SystemExit(f"{filename}: corrected command already present unexpectedly")
+              path.write_text(text.replace(old, new, 1))
+          PY
+          git diff --exit-code d8a6d757425163683b98f3f546749aeffe003bb8 -- package.json package-lock.json
+          rm .github/workflows/tmp-production-dependency-audit-isolation.yml
+          git add .github/workflows/pr-quality.yml .github/workflows/quality.yml .github/workflows/tmp-production-dependency-audit-isolation.yml
+          git diff --cached --check
+
+      - name: Commit and push bounded correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Plaivra Implementation Authority"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "ci: isolate production dependency audit authority"
+          git push origin HEAD:ci/production-dependency-audit-isolation
