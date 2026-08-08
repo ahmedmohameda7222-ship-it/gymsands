@@ -35,12 +35,29 @@ jobs:
           test "$(git diff --name-only 991d4fec7958bc25520c00ea3716ca2932a45f55...HEAD)" = ".github/workflows/tmp-nanoid-lockfile-patch.yml"
           git diff --exit-code d8a6d757425163683b98f3f546749aeffe003bb8 -- package.json
 
-      - name: Generate exact NanoID lockfile patch with npm
+      - name: Generate exact NanoID 3.3.17 lockfile patch from npm registry metadata
         shell: bash
         run: |
           set -euo pipefail
           cp package-lock.json /tmp/package-lock.before.json
-          npm update nanoid@3.3.17 --package-lock-only --ignore-scripts
+          NANOID_VERSION="$(npm view nanoid@3.3.17 version)"
+          NANOID_TARBALL="$(npm view nanoid@3.3.17 dist.tarball)"
+          NANOID_INTEGRITY="$(npm view nanoid@3.3.17 dist.integrity)"
+          export NANOID_VERSION NANOID_TARBALL NANOID_INTEGRITY
+          test "$NANOID_VERSION" = "3.3.17"
+          test "$NANOID_TARBALL" = "https://registry.npmjs.org/nanoid/-/nanoid-3.3.17.tgz"
+          test -n "$NANOID_INTEGRITY"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const node = lock.packages?.['node_modules/nanoid'];
+          if (!node) throw new Error('node_modules/nanoid lock node missing');
+          if (node.version !== '3.3.16') throw new Error(`Expected prior nanoid 3.3.16, got ${node.version}`);
+          node.version = process.env.NANOID_VERSION;
+          node.resolved = process.env.NANOID_TARBALL;
+          node.integrity = process.env.NANOID_INTEGRITY;
+          fs.writeFileSync('package-lock.json', `${JSON.stringify(lock, null, 2)}\n`);
+          NODE
 
       - name: Reject unrelated lockfile drift
         shell: bash
@@ -78,9 +95,10 @@ jobs:
           const newNode = after.packages?.['node_modules/nanoid'];
           if (oldNode?.version !== '3.3.16') throw new Error(`Expected prior nanoid 3.3.16, got ${oldNode?.version}`);
           if (newNode?.version !== '3.3.17') throw new Error(`Expected final nanoid 3.3.17, got ${newNode?.version}`);
-          if (!String(newNode?.resolved || '').startsWith('https://registry.npmjs.org/nanoid/-/nanoid-3.3.17.tgz')) throw new Error('NanoID resolved URL is not official npm registry 3.3.17 tarball');
+          if (newNode?.resolved !== 'https://registry.npmjs.org/nanoid/-/nanoid-3.3.17.tgz') throw new Error('NanoID resolved URL is not official npm registry 3.3.17 tarball');
           if (!newNode?.integrity) throw new Error('NanoID 3.3.17 registry integrity is missing');
           if (after.packages?.['']?.dependencies?.nanoid || after.packages?.['']?.devDependencies?.nanoid) throw new Error('Root NanoID dependency was added');
+          if (after.packages?.['']?.overrides?.nanoid) throw new Error('NanoID override was added');
           if (after.packages?.['node_modules/next']?.version !== '16.2.11') throw new Error('Next version changed');
           if (after.packages?.['node_modules/postcss']?.version !== '8.5.23') throw new Error('PostCSS version changed');
           console.log(JSON.stringify({oldNanoid: oldNode.version, newNanoid: newNode.version, next: after.packages['node_modules/next'].version, postcss: after.packages['node_modules/postcss'].version, unrelatedSemanticDrift: diffs.length}));
