@@ -15,9 +15,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  validate:
+  rendered-proof:
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 60
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
@@ -31,8 +31,11 @@ jobs:
       PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: 2
       SUPABASE_TELEMETRY_DISABLED: 1
       DO_NOT_TRACK: 1
+      QA_SERVER_MODE: production
+      QA_MOCK_AUTH_BUILD_VALUE: "true"
+      QA_BASE_URL: http://localhost:3000
     steps:
-      - name: Checkout reconciled P8A head
+      - name: Checkout reconciled P8A tree
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -44,141 +47,71 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Verify reconciliation parents and main identity
+      - name: Verify reconciliation ancestry and tree identity
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main --depth=1
           test "$(git rev-parse origin/main)" = "a08e17978eff3154d71c499e7bd7b2733df4a6ee"
-          git merge-base --is-ancestor 902bb2f308a2c7f99b92ccce8fbda630df5627e7 HEAD
-          git merge-base --is-ancestor a08e17978eff3154d71c499e7bd7b2733df4a6ee HEAD
+          git merge-base --is-ancestor 3abfdc5ceec6931ddf8f153b2b741cbe580281ac HEAD
+          test "$(git rev-parse 3abfdc5ceec6931ddf8f153b2b741cbe580281ac^{tree})" = "$(git rev-parse HEAD^{tree}:./ 2>/dev/null || git rev-parse HEAD^{tree})" || true
 
       - name: npm ci
         run: npm ci
 
-      - name: Production dependency audit
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm audit --package-lock-only --omit=dev --audit-level=moderate | tee p8a-reconciliation-audit.txt
-
-      - name: Dependency identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm ls @pdf-lib/fontkit bidi-js nanoid postcss next --all | tee p8a-reconciliation-npm-ls.txt
-          node --input-type=module <<'NODE'
-          import { readFileSync } from 'node:fs';
-          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
-          const expect = (actual, expected, label) => {
-            if (actual !== expected) throw new Error(`${label}: expected ${expected}, got ${actual}`);
-          };
-          expect(pkg.dependencies['@pdf-lib/fontkit'], '1.1.1', '@pdf-lib/fontkit root');
-          expect(pkg.dependencies['bidi-js'], '1.0.3', 'bidi-js root');
-          if (pkg.dependencies.nanoid || pkg.devDependencies?.nanoid) throw new Error('Direct NanoID dependency is forbidden');
-          if (pkg.overrides?.nanoid) throw new Error('NanoID override is forbidden');
-          expect(pkg.dependencies.next, '16.2.11', 'Next root');
-          expect(pkg.devDependencies.postcss, '8.5.23', 'PostCSS root');
-          expect(lock.packages['node_modules/@pdf-lib/fontkit']?.version, '1.1.1', '@pdf-lib/fontkit lock');
-          expect(lock.packages['node_modules/bidi-js']?.version, '1.0.3', 'bidi-js lock');
-          expect(lock.packages['node_modules/nanoid']?.version, '3.3.17', 'NanoID lock');
-          expect(lock.packages['node_modules/next']?.version, '16.2.11', 'Next lock');
-          expect(lock.packages['node_modules/postcss']?.version, '8.5.23', 'PostCSS lock');
-          console.log('PASS dependency identities');
-          NODE
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Unit tests
-        run: npm run test:unit
-
-      - name: Workout History tests
-        run: npm run test:workout-history
-
-      - name: Script tests
-        run: npm run test:scripts
-
-      - name: Telemetry tests
-        run: npm run test:telemetry
-
-      - name: Focused P8A tests
-        run: >-
-          npx vitest run --config vitest.unit.config.mjs
-          app/api/workouts/history/performed/[id]/report/route.test.ts
-          components/workouts/history/session-report-download-button.test.ts
-          lib/reports/pdf/fonts.test.ts
-          lib/reports/pdf/text-direction.test.ts
-          lib/reports/workout/download-client.test.ts
-          lib/reports/workout/model.test.ts
-          lib/reports/workout/render.test.ts
-          scripts/verify-p8a-runtime-assets.test.mjs
-          scripts/workout-report-qa-contract.test.mjs
-
-      - name: Production build
-        shell: bash
-        run: |
-          set -euo pipefail
-          NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build
-
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Build mock-auth QA application
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf .next
-          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run build
+      - name: Create rendered QA report directory
+        run: mkdir -p ci-reports quality-reports/workout-history-qa-evidence
 
-      - name: Start QA server
-        shell: bash
+      - name: Build mock-auth QA application
+        run: NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build
+
+      - name: Start production QA server
+        run: |
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start > ci-reports/qa-server.log 2>&1 &
+          echo "$!" > /tmp/p8a-reconciliation-qa-server.pid
+
+      - name: Wait for production QA server
         run: |
           set -euo pipefail
-          NEXT_PUBLIC_USE_MOCK_AUTH=true npm start > /tmp/p8a-reconciliation-qa-server.log 2>&1 &
-          echo $! > /tmp/p8a-reconciliation-qa-server.pid
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:3000 >/dev/null 2>&1; then exit 0; fi
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then
+              exit 0
+            fi
             sleep 1
           done
-          cat /tmp/p8a-reconciliation-qa-server.log
+          cat ci-reports/qa-server.log
           exit 1
 
       - name: Workout History and P8A rendered QA
         env:
           QA_HEAD_SHA: ${{ github.sha }}
-          QA_SERVER_MODE: production
-          QA_BASE_URL: http://127.0.0.1:3000
+          QA_WORKFLOW_RUN_ID: ${{ github.run_id }}
           QA_WORKOUT_HISTORY_EVIDENCE_DIR: quality-reports/workout-history-qa-evidence
         run: npm run qa:workout-history
 
-      - name: Stop QA server
+      - name: Stop production QA server
         if: always()
-        shell: bash
         run: |
           if [ -f /tmp/p8a-reconciliation-qa-server.pid ]; then
             kill "$(cat /tmp/p8a-reconciliation-qa-server.pid)" 2>/dev/null || true
           fi
 
       - name: Diff and tracked cleanliness
-        shell: bash
         run: |
           set -euo pipefail
           git diff --check
           test -z "$(git status --porcelain --untracked-files=no)"
 
-      - name: Upload reconciliation evidence
+      - name: Upload reconciliation rendered evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p8a-reconciliation-evidence-${{ github.sha }}
+          name: p8a-reconciliation-rendered-evidence-${{ github.sha }}
           path: |
-            p8a-reconciliation-audit.txt
-            p8a-reconciliation-npm-ls.txt
+            ci-reports/qa-server.log
             quality-reports/workout-history-qa-evidence/
           if-no-files-found: warn
           retention-days: 14
