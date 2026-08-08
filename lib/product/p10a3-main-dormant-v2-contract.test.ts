@@ -26,7 +26,7 @@ describe("P10A-A3 Main dormant V2 boundary", () => {
     const selector = fs.readFileSync(path.join(root, "services/activity-catalog/server/selector.ts"), "utf8");
     expect(selector).toContain('if (!value || value === "legacy") return "legacy";');
     expect(selector).toContain('if (mode === "legacy")');
-    expect(selector).not.toMatch(/parseCatalogProviderMode\([^)]*\).*v2/s);
+    expect(new RegExp("parseCatalogProviderMode\\([^)]*\\)[\\s\\S]*v2").test(selector)).toBe(false);
   });
 
   it("introduces no environment/provider-mode assignment or database migration", () => {
