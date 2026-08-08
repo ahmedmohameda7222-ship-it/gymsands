@@ -13,6 +13,7 @@ import { SessionHistoryInsight } from "@/components/workouts/history/session-his
 import { SessionHistoryMuscleSummary } from "@/components/workouts/history/session-history-muscle-summary";
 import { SessionHistoryNotes } from "@/components/workouts/history/session-history-notes";
 import { SessionHistorySummary } from "@/components/workouts/history/session-history-summary";
+import { SessionReportDownloadButton } from "@/components/workouts/history/session-report-download-button";
 import { SessionHistoryTimeline } from "@/components/workouts/history/session-history-timeline";
 import { TrainPageContainer } from "@/components/workouts/train-ui";
 import { useTrainTranslation } from "@/lib/i18n/train";
@@ -41,7 +42,7 @@ export function SessionHistoryPage({
   const accessTokenRef = useRef<string | null>(
     session?.access_token ?? null,
   );
-  const { dir, locale, tr } = useTrainTranslation();
+  const { dir, language, locale, tr } = useTrainTranslation();
   const [detail, setDetail] =
     useState<WorkoutHistorySessionDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,6 +145,7 @@ export function SessionHistoryPage({
     },
     [id, source, userId],
   );
+
 
   useEffect(() => {
     projectionRepairAttemptRef.current = null;
@@ -256,6 +258,9 @@ export function SessionHistoryPage({
     : detail.notices.includes("partial-availability")
       ? tr("historyPartialNotice")
       : null;
+  const showReportAction =
+    detail.activity.sourceKind === "performed" &&
+    Boolean(userId && session?.access_token && detail.activity.canonicalSessionId);
 
   return (
     <TrainPageContainer
@@ -280,14 +285,14 @@ export function SessionHistoryPage({
         </Link>
       </Button>
       <header className="rounded-[20px] border border-border/70 bg-card p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {detail.activity.title}
             </h1>
             <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays
-                className="size-4"
+                className="size-4 shrink-0"
                 aria-hidden="true"
               />
               <time dateTime={detail.activity.effectiveAt}>
@@ -295,16 +300,27 @@ export function SessionHistoryPage({
               </time>
             </p>
           </div>
-          <span
-            className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-medium",
-              detail.activity.lifecycle === "completed"
-                ? "bg-primary/10 text-primary"
-                : "bg-muted text-muted-foreground",
-            )}
-          >
-            {tr(lifecycleKey)}
-          </span>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+            <span
+              className={cn(
+                "w-fit rounded-full px-3 py-1.5 text-xs font-medium",
+                detail.activity.lifecycle === "completed"
+                  ? "bg-primary/10 text-primary"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {tr(lifecycleKey)}
+            </span>
+            {showReportAction && session?.access_token && detail.activity.canonicalSessionId ? (
+              <SessionReportDownloadButton
+                sessionId={detail.activity.canonicalSessionId}
+                sessionAt={detail.activity.effectiveAt}
+                accessToken={session.access_token}
+                language={language}
+                timezone={timezone}
+              />
+            ) : null}
+          </div>
         </div>
       </header>
 

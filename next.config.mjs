@@ -84,6 +84,14 @@ const nextConfig = {
     PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: releaseMetadata.schemaAppliedUntrackedCount,
     PLAIVRA_UNRESOLVED_MIGRATION_COUNT: releaseMetadata.unresolvedMigrationCount
   },
+  outputFileTracingIncludes: {
+    "/api/workouts/history/performed/[id]/report": [
+      "./lib/reports/pdf/assets/NotoSans-Regular.ttf",
+      "./lib/reports/pdf/assets/NotoSans-Bold.ttf",
+      "./lib/reports/pdf/assets/NotoSansArabic-Regular.ttf",
+      "./lib/reports/pdf/assets/NotoSansArabic-Bold.ttf",
+    ],
+  },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "*.supabase.co" }]
   },

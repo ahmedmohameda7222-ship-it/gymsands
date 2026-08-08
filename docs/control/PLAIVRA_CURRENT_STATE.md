@@ -147,11 +147,17 @@ PCS-5A is merged, deployed, Production-verified, and complete. Its repository-ow
 
 ### PCS-5B owner incident alert routing
 
-PCS-5B is the current implementation candidate. It establishes GitHub-native owner-directed routing from completed `Production uptime synthetic` runs, requires two consecutive relevant failures before opening one SEV-1 issue, updates the same active incident idempotently, and closes it after recovery.
+PCS-5B was squash-merged through PR #134 as `d8a6d757425163683b98f3f546749aeffe003bb8`. Canonical Quality run `31036267653` passed on the approved PR head. Post-merge Production convergence run `31037578376` passed against the merge SHA. The first live owner-routing run `31037748484` passed with `no_active_incident`.
 
-PCS-5B adds no external monitoring vendor, webhook, email credential, Supabase credential, backup, database dump, plan upgrade, PITR, restore rehearsal, deployment, or Production mutation. The candidate authority is documented in [`docs/operations/pcs5b-owner-alert-routing.md`](../operations/pcs5b-owner-alert-routing.md).
+PCS-5B establishes GitHub-native owner-directed routing from completed `Production uptime synthetic` runs, requires two consecutive relevant failures before opening one SEV-1 issue, updates the same active incident idempotently, and closes it after recovery. PCS-5B is merged, live-verified, and complete. Its authority is documented in [`docs/operations/pcs5b-owner-alert-routing.md`](../operations/pcs5b-owner-alert-routing.md).
 
 PCS-5 remains in progress. Independent external monitoring, broader runtime/OAuth/MCP/deletion/billing/retention signal coverage, provider procurement, backup/restore closure, authenticated post-deploy smoke, and final launch authorization remain separate later authorities.
+
+## P8 product reporting
+
+P8A is active as the current Product Completion implementation candidate. It establishes one server-generated PDF report for a single performed workout and the reusable repository-owned PDF foundation required by later bounded report work.
+
+By Product Owner decision, P6B live acceptance and P7 notifications remain deferred. P8B remains later work. PCS-5 backup and restore authority remains deferred and open; P8A does not change or close PCS-5.
 
 ## Current program
 
@@ -159,7 +165,7 @@ PCS-5 remains in progress. Independent external monitoring, broader runtime/OAut
 - PCS-2 Private App Bootstrap — complete and Production-verified.
 - PCS-3 Request Architecture — complete, Production-measured, and closed.
 - PCS-4 CI Operating Model — complete.
-- PCS-5 Production Foundation — in progress; PCS-5A is complete and PCS-5B is the current implementation candidate.
+- PCS-5 Production Foundation — in progress; PCS-5A and PCS-5B are complete, while broader monitoring and backup/restore work remain open.
 
 ## Feature maturity
 
@@ -186,7 +192,7 @@ PCS-5 remains in progress. Independent external monitoring, broader runtime/OAut
 | MCP / OAuth / ChatGPT connection | Strong | Strong foundation |
 | Privacy export and account deletion | Strong | Strong foundation |
 | Product analytics | Partial | — |
-| Operational monitoring and alerts | Partial | PCS-5A exact public deployment convergence is complete; PCS-5B GitHub-native owner incident routing is the current candidate; independent monitoring and broader signals remain later work |
+| Operational monitoring and alerts | Partial | PCS-5A exact public deployment convergence and PCS-5B GitHub-native owner incident routing are complete; independent monitoring and broader signals remain later work |
 | PWA | Absent | — |
 | Native iOS and Android applications | Absent | — |
 | Final launch landing page | Partial | — |
@@ -201,7 +207,7 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 3. All canonical request-count, browser/server failure, privacy, and runtime-error gates passed across both approved synthetic fixtures.
 4. PCS-3 latency results are an informational timestamped baseline; launch budgets require a later explicit decision.
 5. PCS-4 is closed with the merged PCS-4A path-scoped Draft PR validation authority; repository provider protection is deferred while the repository remains single-owner.
-6. PCS-5A is merged, Production-verified, and complete; PCS-5B is establishing durable owner incident routing for repeated Production synthetic failures.
+6. PCS-5A and PCS-5B are merged, Production/live-routing verified, and complete; PCS-5 remains open for broader monitoring and backup/restore authority.
 7. GitHub-native routing is not independent external monitoring and does not close broader runtime, OAuth/MCP, deletion, billing, retention, or backup alerting.
 8. Current Supabase organization is on the Free plan and is not final-launch infrastructure; backup/restore authority remains unresolved.
 9. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
