@@ -29,9 +29,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "991d4fec7958bc25520c00ea3716ca2932a45f55"
           test "$(git rev-parse origin/main)" = "d8a6d757425163683b98f3f546749aeffe003bb8"
           test "$(git merge-base HEAD origin/main)" = "d8a6d757425163683b98f3f546749aeffe003bb8"
+          git merge-base --is-ancestor 991d4fec7958bc25520c00ea3716ca2932a45f55 HEAD
+          test "$(git diff --name-only 991d4fec7958bc25520c00ea3716ca2932a45f55...HEAD)" = ".github/workflows/tmp-nanoid-lockfile-patch.yml"
           git diff --exit-code d8a6d757425163683b98f3f546749aeffe003bb8 -- package.json
 
       - name: Generate exact NanoID lockfile patch with npm
@@ -39,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           cp package-lock.json /tmp/package-lock.before.json
-          npm update nanoid --package-lock-only --ignore-scripts
+          npm update nanoid@3.3.17 --package-lock-only --ignore-scripts
 
       - name: Reject unrelated lockfile drift
         shell: bash
