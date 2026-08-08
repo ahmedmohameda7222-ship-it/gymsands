@@ -163,7 +163,7 @@ jobs:
           --reports-dir quality-reports
           --commit "$PLAIVRA_COMMIT_SHA"
           --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
-          -- npm audit --omit=dev --audit-level=moderate
+          -- npm audit --package-lock-only --omit=dev --audit-level=moderate
 
       - name: Gate — lint
         run: >-
