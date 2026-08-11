@@ -1,0 +1,93 @@
+name: P10F Main Pre-Merge
+run-name: P10F Main Pre-Merge / pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p10f-main-premerge-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+  SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+  PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+  PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+  PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+  PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+  PLAIVRA_RELEASE_ENVIRONMENT: ci
+  PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+  SUPABASE_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+
+jobs:
+  p10f-main-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact P10F head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Deterministic dependency install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: P10F focused contracts
+        run: >-
+          npx vitest run --config vitest.unit.config.mjs
+          services/activity-catalog/server/library-v2-boundaries.test.ts
+          lib/product/p10f-catalog-authority-snapshot.test.ts
+      - name: Production environment mode contract
+        run: node --test scripts/validate-production-env.test.mjs
+      - name: Build with the cutover code present but not Production-activated
+        run: npm run build
+      - name: Exact-head and forbidden-boundary evidence
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_HEAD"
+          git diff --check
+          test -z "$(git status --porcelain --untracked-files=no)"
+          test "$(grep -R --exclude='validate-production-env.mjs' --exclude='.env.example' --exclude='*.test.*' -l 'https://catalog-api.plaivra.com' app components services lib 2>/dev/null | wc -l)" = "0"
+          test "$(grep -R -l 'offset' services/activity-catalog/server/library-http-provider.ts app/api/activity-catalog/library-domains 2>/dev/null | wc -l)" = "0"
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = process.env.RUNNER_TEMP + '/p10f-main-premerge.json';
+          fs.writeFileSync(path, JSON.stringify({
+            status: 'pass',
+            gate: 'P10F-MAIN-PREMERGE',
+            head: process.env.EXPECTED_HEAD,
+            providerModes: ['library_v2','library_v2_with_legacy_fallback'],
+            nativeDomain: 'strength',
+            upstreamPagination: 'opaque_cursor',
+            maxPageSize: 50,
+            cursorRestart: 'one_bounded_restart_no_legacy_fallback',
+            semanticSnapshotMigration: '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql',
+            historicalRewrite: false,
+            browserDirectCatalogCalls: 0
+          }, null, 2) + '\n');
+          NODE
+      - name: Upload P10F Main evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p10f-main-premerge-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/p10f-main-premerge.json
+          if-no-files-found: error
+          retention-days: 30
