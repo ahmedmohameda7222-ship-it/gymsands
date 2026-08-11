@@ -5,14 +5,23 @@ import { createClient, type SupabaseClient, type User } from "@supabase/supabase
 import { env as publicEnv } from "@/lib/env";
 import { checkUserLaunchEligibility } from "@/lib/auth/eligibility";
 
+const P10F_MAIN_PREVIEW_BRANCH = "feat/p10f-activity-catalog-v2-cutover";
+const P10F_CATALOG_PREVIEW_ORIGIN = "https://plaivra-activity-catalog-api-git-fe-211ae7-ahmed-s-projectssasa.vercel.app";
+const isP10fMainPreview = process.env.VERCEL_ENV === "preview"
+  && process.env.VERCEL_GIT_COMMIT_REF === P10F_MAIN_PREVIEW_BRANCH;
+
 export const serverEnv = {
   supabaseUrl: publicEnv.supabaseUrl,
   supabaseAnonKey: publicEnv.supabaseAnonKey,
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   appUrl: publicEnv.appUrl,
   wgerApiKey: process.env.WGER_API_KEY || "",
-  plaivraActivityCatalogMode: process.env.PLAIVRA_ACTIVITY_CATALOG_MODE || "legacy",
-  plaivraActivityCatalogBaseUrl: process.env.PLAIVRA_ACTIVITY_CATALOG_BASE_URL || "https://catalog-api.plaivra.com",
+  plaivraActivityCatalogMode: isP10fMainPreview
+    ? "library_v2_with_legacy_fallback"
+    : process.env.PLAIVRA_ACTIVITY_CATALOG_MODE || "legacy",
+  plaivraActivityCatalogBaseUrl: isP10fMainPreview
+    ? P10F_CATALOG_PREVIEW_ORIGIN
+    : process.env.PLAIVRA_ACTIVITY_CATALOG_BASE_URL || "https://catalog-api.plaivra.com",
   plaivraActivityCatalogApiKey: process.env.PLAIVRA_ACTIVITY_CATALOG_API_KEY || "",
   plaivraMcpBaseUrl: process.env.PLAIVRA_MCP_BASE_URL || process.env.FITLIFE_MCP_BASE_URL || `${publicEnv.appUrl}/api/mcp`,
   plaivraOAuthIssuer: process.env.PLAIVRA_OAUTH_ISSUER || publicEnv.appUrl,
