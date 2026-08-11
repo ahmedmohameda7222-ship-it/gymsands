@@ -1,0 +1,157 @@
+from pathlib import Path
+
+path = Path("scripts/run-train-layout-qa-base.mjs")
+text = path.read_text()
+anchor = "function catalogPayload(url, scenario) {\n"
+if text.count(anchor) != 1:
+    raise SystemExit(f"catalogPayload anchor drifted: {text.count(anchor)}")
+
+native = r'''function catalogPayload(url, scenario) {
+  const libraryMeta = {
+    apiVersion: "v2",
+    locale: url.searchParams.get("locale") || "en",
+    libraryRelease: {
+      id: "d985375c-a97e-592b-832c-ccf6226e1ae9",
+      version: "p10e-library-v1",
+      checksum: "6524498fd6a888ee3f4495516c38e7ad27332a5d04dcbbb3bc86b8469165e31e",
+      publishedAt: "2026-08-11T20:46:59.000Z",
+      strengthSemanticFingerprint: "73092422c4ef3bb6f386b7081fdeaaacb65778a29d449ba42fa2dda8fd9d142a",
+    },
+    catalogRelease: {
+      id: "fc92eca8-c2ab-5366-ba83-5c64c904aaca",
+      version: "p10e-library-v1",
+      checksum: "a3f4707871d41efa50de8e56d7760dc06c45765aa35ac4c42f179186176c5271",
+    },
+    source: scenario === "fallback" ? "legacy" : "library_v2",
+    degraded: scenario === "fallback",
+  };
+  const toLibraryActivity = (item, index = 0) => ({
+    id: item.id,
+    revisionId: `66666666-6666-4666-8666-${String(index + 1).padStart(12, "0")}`,
+    revisionNumber: item.version,
+    revisionLifecycle: "published",
+    revisionChecksum: null,
+    slug: item.slug,
+    name: item.name,
+    shortDescription: item.shortDescription,
+    instructions: item.instructions,
+    difficulty: item.difficulty,
+    movementPattern: item.movementPattern,
+    activityType: { slug: "strength", name: "Strength" },
+    membership: {
+      kind: "owned",
+      visibility: "default",
+      domainPriority: index + 1,
+      primaryDomain: true,
+    },
+    aliases: [],
+    equipment: item.equipment.map((equipment) => ({
+      slug: equipment.slug,
+      name: equipment.name,
+      requirement: equipment.isRequired ? "required" : "optional",
+    })),
+    coverage: item.muscles.map((muscle) => ({
+      name: muscle.name,
+      muscleName: muscle.name,
+      role: muscle.role,
+      bodyRegion: "Upper Body",
+      broadGroup: "Upper Body",
+    })),
+    executionProfiles: [{
+      filterProfile: {
+        difficulty: item.difficulty,
+        movementFamily: item.movementPattern,
+      },
+    }],
+    bodyEffects: [],
+  });
+  const toLibraryDetail = (item, index = 0) => ({
+    ...toLibraryActivity(item, index),
+    prescriptionSchema: {
+      id: "77777777-7777-4777-8777-777777777777",
+      key: "resistance_sets",
+      version: 1,
+      checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fields: [],
+    },
+    performedMetricSchema: null,
+    recordDefinitions: [],
+    heatMap: {
+      mapping: item.muscles.map((muscle) => ({
+        muscleName: muscle.name,
+        role: muscle.role,
+        broadGroup: "Upper Body",
+      })),
+    },
+    publicationPolicy: {
+      id: "88888888-8888-4888-8888-888888888888",
+      key: "published_library",
+      version: 1,
+      checksum: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    },
+    capabilityContract: {
+      id: "99999999-9999-4999-8999-999999999999",
+      version: "main-activity-catalog-v2-capability-v2",
+      compatibleCatalogApiVersion: "v2",
+      checksum: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    },
+    authority: {
+      libraryRelease: {
+        id: libraryMeta.libraryRelease.id,
+        version: libraryMeta.libraryRelease.version,
+        checksum: libraryMeta.libraryRelease.checksum,
+      },
+      catalogRelease: {
+        id: libraryMeta.catalogRelease.id,
+        version: libraryMeta.catalogRelease.version,
+        checksum: libraryMeta.catalogRelease.checksum,
+      },
+      activityId: item.id,
+      revisionId: `66666666-6666-4666-8666-${String(index + 1).padStart(12, "0")}`,
+      revisionNumber: item.version,
+    },
+  });
+  const libraryDomainPath = "/api/activity-catalog/library-domains/strength";
+  if (url.pathname === `${libraryDomainPath}/filters`) {
+    return { data: [], meta: libraryMeta };
+  }
+  if (url.pathname === `${libraryDomainPath}/archetypes`) {
+    return { data: [], meta: libraryMeta };
+  }
+  if (url.pathname === `${libraryDomainPath}/activities`) {
+    const data = scenario === "empty" ? [] : catalogActivities.map(toLibraryActivity);
+    return {
+      data,
+      pagination: {
+        limit: Math.min(Number(url.searchParams.get("limit") || 50), 50),
+        returned: data.length,
+        nextCursor: null,
+      },
+      meta: libraryMeta,
+    };
+  }
+  if (url.pathname.startsWith(`${libraryDomainPath}/activities/`)) {
+    const parts = url.pathname.split("/");
+    const identifier = parts.at(-1) === "alternatives" ? parts.at(-2) : parts.at(-1);
+    const foundIndex = catalogActivities.findIndex(
+      (item) => item.id === identifier || item.slug === identifier,
+    );
+    const index = foundIndex >= 0 ? foundIndex : 0;
+    const selected = catalogActivities[index];
+    if (url.pathname.endsWith("/alternatives")) {
+      return {
+        data: scenario === "empty" ? [] : [{
+          relationshipType: "progression",
+          rationale: "Deterministic rendered QA progression fixture.",
+          prescriptionTransfer: { mode: "partial" },
+          activity: toLibraryDetail(catalogActivities[1], 1),
+        }],
+        meta: libraryMeta,
+      };
+    }
+    return { data: toLibraryDetail(selected, index), meta: libraryMeta };
+  }
+'''
+
+text = text.replace(anchor, native, 1)
+path.write_text(text)
