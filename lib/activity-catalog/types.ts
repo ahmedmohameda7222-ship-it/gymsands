@@ -1,4 +1,4 @@
-export type CatalogProviderMode = "legacy" | "external" | "external_with_legacy_fallback";
+export type CatalogProviderMode = "legacy" | "external" | "external_with_legacy_fallback" | "library_v2" | "library_v2_with_legacy_fallback";
 
 export type InstructionStep = {
   order: number;
