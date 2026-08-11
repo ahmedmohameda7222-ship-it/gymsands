@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["fra1"],
+  "buildCommand": "npm run build && node scripts/verify-p10f-preview-link.mjs",
   "git": {
     "deploymentEnabled": {
       "**": false,
