@@ -30,7 +30,8 @@ export type SavedActivitySnapshots = {
   metricSchema: MetricSchema | null;
   equipment: Array<ActivityEquipment | string> | Record<string, unknown> | null;
   taxonomy: Record<string, unknown> | null;
-  catalogAuthority: CatalogAuthoritySnapshot | null;
+  /** Present on newly materialized native V2 selections; absent on historical rows. */
+  catalogAuthority?: CatalogAuthoritySnapshot | null;
 };
 
 export type PlannedTrainingActivity = {
