@@ -43,6 +43,7 @@ export type { CanonicalWorkoutFilterOptions, WorkoutFilterOption, WorkoutFilterO
 export const WORKOUT_LIBRARY_PAGE_SIZE = 50;
 const STRENGTH_DOMAIN = "strength";
 type WorkoutLibraryRequestContext = string | CatalogClientRequestOptions | undefined;
+let activeNativeSearchController: AbortController | null = null;
 
 type ExistingBrowserPagination = {
   hasMore: boolean;
@@ -107,6 +108,17 @@ function runtimeCursor(value: unknown) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+function nativeSearchContext(context?: WorkoutLibraryRequestContext): CatalogClientRequestOptions {
+  activeNativeSearchController?.abort();
+  activeNativeSearchController = new AbortController();
+  if (typeof context === "string") return { requestGroupId: context, signal: activeNativeSearchController.signal };
+  return {
+    ...(context ?? {}),
+    requestGroupId: context?.requestGroupId ?? createCatalogRequestGroupId(),
+    signal: activeNativeSearchController.signal
+  };
+}
+
 export async function getWorkoutsWithStatus(
   query = "",
   _filters: WorkoutFilters = {},
@@ -114,7 +126,6 @@ export async function getWorkoutsWithStatus(
   locale?: string,
   context?: WorkoutLibraryRequestContext
 ): Promise<NativeWorkoutLibraryResult<Workout[]>> {
-  const requestContext = context ?? createCatalogRequestGroupId();
   const cursor = runtimeCursor(browserCursorCompatibilityValue);
   const result = await searchLibraryDomainActivities({
     domain: STRENGTH_DOMAIN,
@@ -122,10 +133,9 @@ export async function getWorkoutsWithStatus(
     ...(locale ? { locale } : {}),
     limit: WORKOUT_LIBRARY_PAGE_SIZE,
     ...(cursor ? { cursor } : {})
-  }, requestContext);
+  }, nativeSearchContext(context));
 
   if (cursor && result.restarted) {
-    // Existing Browser state still has an old numeric-named pagination slot.
     // A release-bound cursor mismatch must never append a fresh release page to
     // stale rows. Reload once: URL/localStorage preserve the active query and
     // the next mount starts from a clean, cursorless current-release page.
