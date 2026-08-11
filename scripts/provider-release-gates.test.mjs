@@ -70,10 +70,14 @@ function trackedRuntimeFilesContaining(needle) {
     .sort();
 }
 
-test("repository config declares Vercel main-only policy intent without a repository-side gate", () => {
+test("repository config keeps main deployment policy with only the bounded P10F Preview branch", () => {
   const config = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8"));
 
-  assert.deepEqual(config.git?.deploymentEnabled, { "**": false, main: true });
+  assert.deepEqual(config.git?.deploymentEnabled, {
+    "**": false,
+    main: true,
+    "feat/p10f-activity-catalog-v2-cutover": true,
+  });
   assert.equal(config.ignoreCommand, undefined);
   assert.deepEqual(config.crons, [
     { path: "/api/internal/maintenance/oauth-cleanup", schedule: "17 3 * * *" },
