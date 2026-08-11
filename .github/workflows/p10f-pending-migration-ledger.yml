@@ -1,0 +1,74 @@
+name: P10F Pending Migration Ledger
+
+on:
+  push:
+    branches:
+      - feat/p10f-activity-catalog-v2-cutover
+    paths:
+      - .github/workflows/p10f-pending-migration-ledger.yml
+
+permissions:
+  contents: write
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/p10f-activity-catalog-v2-cutover
+          fetch-depth: 0
+      - name: Classify the P10F migration as repository-only pending
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('supabase/migration-ledger.json')
+          ledger = json.loads(path.read_text())
+          filename = '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql'
+
+          if any(entry.get('localFile') == filename for entry in ledger.get('entries', [])):
+              raise SystemExit(f'{filename} is already classified')
+
+          if ledger.get('productionMigrationCount') != 63:
+              raise SystemExit('unexpected productionMigrationCount drift')
+          if ledger.get('schemaVerifiedUntrackedCount') != 0:
+              raise SystemExit('unexpected schemaVerifiedUntrackedCount drift')
+          if ledger.get('productionRecordCount') != 87:
+              raise SystemExit('unexpected Production record-count drift')
+          if ledger.get('pendingCount') != 0 or ledger.get('unresolvedCount') != 0:
+              raise SystemExit('unexpected pre-P10F pending/unresolved ledger state')
+          if ledger.get('historyRepair', {}).get('state') != 'reconciled':
+              raise SystemExit('unexpected pre-P10F history-repair state')
+
+          ledger['entries'].append({
+              'localFile': filename,
+              'state': 'pending',
+              'note': 'P10F Stage A repository-only migration; not applied to Plaivra Production and has no Production identity. Do not replay or apply before explicit Planner approval.'
+          })
+          ledger['pendingCount'] = 1
+          ledger['unresolvedCount'] = 1
+          ledger['historyRepair']['state'] = 'pending'
+          ledger['historyRepair']['pendingCount'] = 1
+          ledger['historyRepair']['unresolvedCount'] = 1
+          ledger['historyRepair']['note'] = (
+              ledger['historyRepair']['note'].rstrip()
+              + ' P10F repository migration 20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql is intentionally pending pre-merge, is absent from Production, and claims no Production identity. Do not replay or apply it before explicit Planner approval.'
+          )
+
+          # Production capture/evidence remains unchanged because Stage A made no
+          # Production database write. Only repository classification advances.
+          path.write_text(json.dumps(ledger, separators=(',', ':')) + '\n')
+          PY
+      - name: Validate canonical migration-ledger contract
+        run: node scripts/check-migration-ledger.mjs
+      - name: Remove one-shot workflow and commit bounded authority update
+        run: |
+          rm .github/workflows/p10f-pending-migration-ledger.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add supabase/migration-ledger.json .github/workflows/p10f-pending-migration-ledger.yml
+          git diff --cached --check
+          git commit -m 'P10F — classify semantic snapshot migration as pending'
+          git push origin HEAD:feat/p10f-activity-catalog-v2-cutover
