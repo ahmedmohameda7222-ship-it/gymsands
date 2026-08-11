@@ -12,7 +12,7 @@ function degraded<T extends { meta: Record<string, unknown> }>(result: T): T {
   return { ...result, meta: { ...result.meta, degraded: true } };
 }
 
-class FallbackLibraryActivityProvider implements LibraryActivityProvider {
+export class FallbackLibraryActivityProvider implements LibraryActivityProvider {
   constructor(private readonly external: LibraryActivityProvider, private readonly legacy: LibraryActivityProvider) {}
 
   listDomains: LibraryActivityProvider["listDomains"] = (options) => this.withFallback(() => this.external.listDomains(options), () => this.legacy.listDomains(options));
