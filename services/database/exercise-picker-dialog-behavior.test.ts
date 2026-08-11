@@ -170,8 +170,8 @@ describe("ExercisePickerDialog request generations", () => {
     const duplicate = workout("one-new", "One localized", "one");
     const second = workout("two", "Two");
     mocks.getWorkouts
-      .mockResolvedValueOnce({ data: [first], pagination: { hasMore: true, nextOffset: 1 } })
-      .mockResolvedValueOnce({ data: [duplicate, second], pagination: { hasMore: false, nextOffset: null } });
+      .mockResolvedValueOnce({ data: [first], pagination: { hasMore: true, nextCursor: "cursor-page-2" } })
+      .mockResolvedValueOnce({ data: [duplicate, second], pagination: { hasMore: false, nextCursor: null } });
     const onAdd = vi.fn();
 
     await act(async () => {
@@ -187,7 +187,7 @@ describe("ExercisePickerDialog request generations", () => {
     await flush();
 
     expect(mocks.getFilters).toHaveBeenCalledWith("en", expect.objectContaining({ requestGroupId: "group-initial" }));
-    expect(mocks.getWorkouts).toHaveBeenCalledWith("", expect.any(Object), 0, "en", expect.objectContaining({ requestGroupId: "group-initial" }));
+    expect(mocks.getWorkouts).toHaveBeenCalledWith("", expect.any(Object), null, "en", expect.objectContaining({ requestGroupId: "group-initial" }));
 
     const buttons = Array.from(container.querySelectorAll("button"));
     const selectButton = buttons.find((button) => button.textContent?.includes("select"));
@@ -199,7 +199,7 @@ describe("ExercisePickerDialog request generations", () => {
     await act(async () => loadMore!.click());
     await flush();
 
-    expect(mocks.getWorkouts).toHaveBeenLastCalledWith("", expect.any(Object), 1, "en", expect.objectContaining({ requestGroupId: "group-initial" }));
+    expect(mocks.getWorkouts).toHaveBeenLastCalledWith("", expect.any(Object), "cursor-page-2", "en", expect.objectContaining({ requestGroupId: "group-initial" }));
     expect(container.textContent).toContain("One");
     expect(container.textContent).toContain("Two");
     expect(container.textContent?.match(/One localized/g)).toBeNull();
@@ -216,7 +216,7 @@ describe("ExercisePickerDialog request generations", () => {
     const fast = workout("fast", "Fast");
     let resolveSlow!: (value: unknown) => void;
     const slowPromise = new Promise((resolve) => { resolveSlow = resolve; });
-    mocks.getWorkouts.mockReturnValueOnce(slowPromise).mockResolvedValueOnce({ data: [fast], pagination: { hasMore: false, nextOffset: null } });
+    mocks.getWorkouts.mockReturnValueOnce(slowPromise).mockResolvedValueOnce({ data: [fast], pagination: { hasMore: false, nextCursor: null } });
 
     await act(async () => {
       root.render(React.createElement(ExercisePickerDialog, {
@@ -237,7 +237,7 @@ describe("ExercisePickerDialog request generations", () => {
     });
     await act(async () => { vi.advanceTimersByTime(180); });
     await flush();
-    resolveSlow({ data: [slow], pagination: { hasMore: false, nextOffset: null } });
+    resolveSlow({ data: [slow], pagination: { hasMore: false, nextCursor: null } });
     await flush();
 
     expect(container.textContent).toContain("Fast");
