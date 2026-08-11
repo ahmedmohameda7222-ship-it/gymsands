@@ -63,24 +63,28 @@ export class LegacyLibraryActivityProvider implements LibraryActivityProvider {
   async listDomains(options: LibraryRequestOptions = {}) {
     return { data: [{ key: "strength", displayName: "Strength", coverageCount: 0, ownedMovementCanonicalCount: 0, archetypeCount: 0, membershipCount: 0, authorityKind: "legacy_compatibility", checksum: "legacy", tabs: [] }], meta: meta(options.locale) };
   }
+
   async getDomain(domain: string, options: LibraryRequestOptions = {}) {
     if (domain !== "strength") throw new LibraryProviderError("catalog_not_found");
     return { data: (await this.listDomains(options)).data[0], meta: meta(options.locale) };
   }
+
   async getFilters(domain: string, options: LibraryRequestOptions = {}) {
     if (domain !== "strength") throw new LibraryProviderError("catalog_not_found");
-    const result = await this.legacy.getFilters({ locale: options.locale });
+    const result = await this.legacy.getFilters();
     return { data: [result.data], meta: meta(options.locale) };
   }
+
   async getArchetypes(domain: string, options: LibraryRequestOptions = {}) {
     if (domain !== "strength") throw new LibraryProviderError("catalog_not_found");
     return { data: [], meta: meta(options.locale) };
   }
+
   async searchActivities(params: LibrarySearchParams) {
     if (params.domain !== "strength") throw new LibraryProviderError("catalog_not_found");
     const limit = Math.min(Math.max(params.limit ?? 30, 1), 50);
     const offset = decodeCursor(params.cursor, params);
-    const result = await this.legacy.searchActivities({ query: params.query, locale: params.locale, limit, offset });
+    const result = await this.legacy.searchActivities({ query: params.query, limit, offset });
     const activities = result.data.activities.map(mapActivity);
     const nextOffset = result.data.pagination.nextOffset ?? null;
     return {
@@ -89,43 +93,25 @@ export class LegacyLibraryActivityProvider implements LibraryActivityProvider {
       meta: meta(params.locale)
     };
   }
+
   async getActivity(domain: string, identifier: string, options: LibraryRequestOptions = {}) {
     if (domain !== "strength") throw new LibraryProviderError("catalog_not_found");
     try {
-      const result = await this.legacy.getActivity(identifier, options);
+      const result = await this.legacy.getActivity(identifier);
       return { data: mapActivity(result.data), meta: meta(options.locale) };
     } catch (error) {
       throw new LibraryProviderError("catalog_not_found", { cause: error });
     }
   }
+
   async getActivityAlternatives(domain: string, identifier: string, options: LibraryRequestOptions & { limit?: number } = {}) {
     if (domain !== "strength") throw new LibraryProviderError("catalog_not_found");
     try {
-      await this.legacy.getActivity(identifier, options);
-      const result = await this.legacy.getActivityAlternatives(identifier, { locale: options.locale, limit: options.limit });
-      return {
-        data: result.data.map((item) => ({
-          relationshipType: item.reasonCode,
-          rationale: item.differenceSummary ?? null,
-          prescriptionTransfer: item.prescriptionTransfer,
-          activity: {
-            id: item.alternativeActivityId,
-            revisionId: item.alternativeActivityId,
-            revisionNumber: 0,
-            revisionLifecycle: "legacy_compatibility",
-            slug: item.alternativeSlug,
-            name: item.alternativeName,
-            shortDescription: null,
-            instructions: [],
-            difficulty: item.alternativeDifficulty ?? null,
-            movementPattern: null,
-            activityType: item.alternativeActivityTypeSlug ? { slug: item.alternativeActivityTypeSlug, name: item.alternativeActivityTypeSlug } : null,
-            membership: { kind: "legacy_compatibility", visibility: "default", domainPriority: item.priority, primaryDomain: true },
-            aliases: [], equipment: [], coverage: [], executionProfiles: [], bodyEffects: []
-          }
-        })),
-        meta: meta(options.locale)
-      };
+      // The historical provider has no authoritative alternatives. Prove the
+      // identifier is genuinely old, then preserve that valid empty result.
+      await this.legacy.getActivity(identifier);
+      await this.legacy.getActivityAlternatives();
+      return { data: [], meta: meta(options.locale) };
     } catch (error) {
       throw new LibraryProviderError("catalog_not_found", { cause: error });
     }
