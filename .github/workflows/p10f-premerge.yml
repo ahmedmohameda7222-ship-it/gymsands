@@ -82,6 +82,11 @@ jobs:
           test "$(grep -R -l 'offset' services/activity-catalog/server/library-http-provider.ts app/api/activity-catalog/library-domains 2>/dev/null | wc -l)" = "0"
           grep -q 'AbortController' services/database/workout-library-v2.ts
           grep -q 'buildCatalogAuthoritySnapshot' lib/activity-catalog/snapshot.ts
+          # Vercel remains fail-closed for every branch except main and the one
+          # Planner-authorized P10F Preview branch; repository tests must lock the
+          # same bounded allowlist.
+          grep -q '"feat/p10f-activity-catalog-v2-cutover": true' vercel.json
+          grep -q '"feat/p10f-activity-catalog-v2-cutover": true' scripts/provider-release-gates.test.mjs
           node - <<'NODE'
           const fs = require('node:fs');
           const path = process.env.RUNNER_TEMP + '/p10f-main-premerge.json';
@@ -100,7 +105,8 @@ jobs:
             semanticSnapshotMigration: '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql',
             semanticSnapshotMaterializer: 'lib/activity-catalog/snapshot.ts',
             historicalRewrite: false,
-            browserDirectCatalogCalls: 0
+            browserDirectCatalogCalls: 0,
+            previewBranchAllowlist: 'feat/p10f-activity-catalog-v2-cutover'
           }, null, 2) + '\n');
           NODE
       - name: Upload P10F Main evidence
