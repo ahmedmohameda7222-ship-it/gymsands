@@ -11,16 +11,14 @@ const ledger = JSON.parse(
   readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"),
 );
 
-test("all release target consumers use the declared compatibility marker", () => {
+test("all release target consumers preserve the declared compatibility marker while pending P10F blocks release-ready authority", () => {
   const releaseTarget = deriveReleaseTarget(ledger);
-  const readyTarget = deriveReleaseReadyTarget(ledger);
   const qualityTarget = deriveQualityLedgerTarget(ledger);
   const environment = qualityLedgerEnvironment(qualityTarget);
 
   assert.equal(releaseTarget.expectedMigration, "20260724232734");
   assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260804180932");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
-  assert.equal(readyTarget.expectedMigration, releaseTarget.expectedMigration);
   assert.equal(qualityTarget.expectedMigration, releaseTarget.expectedMigration);
   assert.equal(
     qualityTarget.latestAppliedMigrationVersion,
@@ -31,6 +29,27 @@ test("all release target consumers use the declared compatibility marker", () =>
     releaseTarget.expectedMigration,
   );
   assert.notEqual(releaseTarget.expectedMigration, releaseTarget.latestAppliedMigrationVersion);
+  assert.throws(
+    () => deriveReleaseReadyTarget(ledger),
+    /Migration ledger is not release-ready/,
+    "a repository-only pending P10F migration must block release-ready authority before Planner approval",
+  );
+
+  const p10fMigration = "20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql";
+  const reconciledFixture = {
+    ...ledger,
+    entries: ledger.entries.filter((entry) => entry.localFile !== p10fMigration),
+    pendingCount: 0,
+    unresolvedCount: 0,
+    historyRepair: {
+      ...ledger.historyRepair,
+      state: "reconciled",
+      pendingCount: 0,
+      unresolvedCount: 0,
+    },
+  };
+  const readyTarget = deriveReleaseReadyTarget(reconciledFixture);
+  assert.equal(readyTarget.expectedMigration, releaseTarget.expectedMigration);
 });
 
 test("preflight validates the declared marker rather than the physical migration head", () => {
