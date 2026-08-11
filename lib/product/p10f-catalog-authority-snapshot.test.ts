@@ -31,12 +31,15 @@ describe("P10F V2 plan Catalog authority snapshot", () => {
     expect(migration).toContain("Catalog authority snapshot activity identity mismatch.");
   });
 
-  it("makes a materialized snapshot immutable without weakening existing RLS", () => {
+  it("makes a materialized snapshot immutable without weakening existing RLS or exposing mutation authority", () => {
     expect(migration).toContain("old.catalog_authority_snapshot is not null");
     expect(migration).toContain("new.catalog_authority_snapshot is distinct from old.catalog_authority_snapshot");
     expect(migration).toContain("Catalog authority snapshot is immutable after materialization.");
     expect(migration).not.toMatch(/disable row level security/i);
     expect(migration).not.toMatch(/create policy/i);
-    expect(migration).toContain("revoke all on function private.validate_p10f_catalog_authority_snapshot(jsonb) from public, anon, authenticated");
+    expect(migration).toContain("revoke all on function private.validate_p10f_catalog_authority_snapshot(jsonb) from public, anon, authenticated, service_role");
+    expect(migration).toContain("grant execute on function private.validate_p10f_catalog_authority_snapshot(jsonb) to anon, authenticated, service_role");
+    expect(migration).toContain("revoke all on function private.enforce_p10f_catalog_authority_snapshot() from public, anon, authenticated, service_role");
+    expect(migration).not.toMatch(/grant\s+execute\s+on\s+function\s+private\.enforce_p10f_catalog_authority_snapshot/i);
   });
 });
