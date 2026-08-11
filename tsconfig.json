@@ -23,6 +23,9 @@
       }
     ],
     "paths": {
+      "@/services/database/workout-library": [
+        "./services/database/workout-library-v2.ts"
+      ],
       "@/*": [
         "./*"
       ]
