@@ -1,0 +1,51 @@
+name: P10F Cursor Null Sentinel
+
+on:
+  push:
+    branches:
+      - feat/p10f-activity-catalog-v2-cutover
+    paths:
+      - .github/workflows/p10f-cursor-null-sentinel.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/p10f-activity-catalog-v2-cutover
+          fetch-depth: 0
+      - name: Replace numeric initial cursor sentinels
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          replacements = {
+            'components/workouts/workout-browser.tsx': (
+              'getWorkoutsWithStatus(query.trim(), requestFilters, 0, locale)',
+              'getWorkoutsWithStatus(query.trim(), requestFilters, null, locale)'
+            ),
+            'components/workouts/exercise-picker-dialog.tsx': (
+              'getWorkoutsWithStatus(query.trim(), activeFilters, 0, locale, {',
+              'getWorkoutsWithStatus(query.trim(), activeFilters, null, locale, {'
+            )
+          }
+          for path, (old, new) in replacements.items():
+            p = Path(path)
+            text = p.read_text()
+            count = text.count(old)
+            if count != 1:
+              raise SystemExit(f'{path}: expected one initial numeric cursor sentinel, found {count}')
+            p.write_text(text.replace(old, new, 1))
+          PY
+      - name: Remove one-shot workflow and commit correction
+        run: |
+          rm .github/workflows/p10f-cursor-null-sentinel.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add components/workouts/workout-browser.tsx components/workouts/exercise-picker-dialog.tsx .github/workflows/p10f-cursor-null-sentinel.yml
+          git diff --cached --check
+          git commit -m 'P10F — use null as initial Library cursor'
+          git push origin HEAD:feat/p10f-activity-catalog-v2-cutover
