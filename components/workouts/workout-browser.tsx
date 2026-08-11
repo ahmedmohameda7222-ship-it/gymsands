@@ -147,7 +147,7 @@ export function WorkoutBrowser() {
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customDraft, setCustomDraft] = useState<CustomExerciseInput>(emptyCustomExercise);
-  const [nextProviderOffset, setNextProviderOffset] = useState<number | null>(null);
+  const [nextProviderCursor, setNextProviderCursor] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -231,7 +231,7 @@ export function WorkoutBrowser() {
     if (!isHydrated) return;
     if (!hasActiveLibraryRequest) {
       setWorkouts([]);
-      setNextProviderOffset(null);
+      setNextProviderCursor(null);
       setHasMore(false);
       setIsLoading(false);
       setResultError("");
@@ -241,7 +241,7 @@ export function WorkoutBrowser() {
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
-      setNextProviderOffset(null);
+      setNextProviderCursor(null);
       setResultError("");
       getWorkoutsWithStatus(query.trim(), requestFilters, 0, locale)
         .then((result) => {
@@ -249,7 +249,7 @@ export function WorkoutBrowser() {
           setWorkouts(result.data);
           if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
           setResultStatus(result.status);
-          setNextProviderOffset(result.pagination?.nextOffset ?? null);
+          setNextProviderCursor(result.pagination?.nextCursor ?? null);
           setHasMore(Boolean(result.pagination?.hasMore));
         })
         .catch((error) => {
@@ -278,15 +278,15 @@ export function WorkoutBrowser() {
 
   async function loadMore() {
     if (!hasActiveLibraryRequest) return;
-    if (nextProviderOffset === null) return;
+    if (nextProviderCursor === null) return;
     setIsLoading(true);
     setResultError("");
     try {
-      const result = await getWorkoutsWithStatus(query.trim(), requestFilters, nextProviderOffset, locale);
+      const result = await getWorkoutsWithStatus(query.trim(), requestFilters, nextProviderCursor, locale);
       setWorkouts((current) => [...current, ...result.data]);
       if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
       setResultStatus(result.status);
-      setNextProviderOffset(result.pagination?.nextOffset ?? null);
+      setNextProviderCursor(result.pagination?.nextCursor ?? null);
       setHasMore(Boolean(result.pagination?.hasMore));
     } catch (error) {
       const message = userSafeError(error, tr("moreExercisesLoadFallback"));

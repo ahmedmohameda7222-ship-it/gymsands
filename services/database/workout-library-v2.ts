@@ -45,10 +45,8 @@ const STRENGTH_DOMAIN = "strength";
 type WorkoutLibraryRequestContext = string | CatalogClientRequestOptions | undefined;
 let activeNativeSearchController: AbortController | null = null;
 
-type ExistingBrowserPagination = {
+type NativeBrowserPagination = {
   hasMore: boolean;
-  /** Compatibility field name only. The runtime value is an opaque Catalog cursor, never a numeric upstream offset. */
-  nextOffset: number | null;
   nextCursor: string | null;
   restarted: boolean;
 };
@@ -56,7 +54,7 @@ type ExistingBrowserPagination = {
 export type NativeWorkoutLibraryResult<T> = {
   data: T;
   status: WorkoutLibraryStatus;
-  pagination?: ExistingBrowserPagination;
+  pagination?: NativeBrowserPagination;
   filterOptions?: CanonicalWorkoutFilterOptions;
   libraryRelease?: { id: string; version: string; checksum: string } | null;
 };
@@ -104,10 +102,6 @@ export async function getWorkoutCategories(locale?: string, context?: WorkoutLib
   return [] as string[];
 }
 
-function runtimeCursor(value: unknown) {
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
 function nativeSearchContext(context?: WorkoutLibraryRequestContext): CatalogClientRequestOptions {
   activeNativeSearchController?.abort();
   activeNativeSearchController = new AbortController();
@@ -122,11 +116,10 @@ function nativeSearchContext(context?: WorkoutLibraryRequestContext): CatalogCli
 export async function getWorkoutsWithStatus(
   query = "",
   _filters: WorkoutFilters = {},
-  browserCursorCompatibilityValue: number | string | null = 0,
+  cursor: string | null = null,
   locale?: string,
   context?: WorkoutLibraryRequestContext
 ): Promise<NativeWorkoutLibraryResult<Workout[]>> {
-  const cursor = runtimeCursor(browserCursorCompatibilityValue);
   const result = await searchLibraryDomainActivities({
     domain: STRENGTH_DOMAIN,
     ...(query.trim() ? { query: query.trim() } : {}),
@@ -143,7 +136,7 @@ export async function getWorkoutsWithStatus(
     return {
       data: [],
       status: statusFromMeta(result.meta),
-      pagination: { hasMore: false, nextOffset: null, nextCursor: null, restarted: true },
+      pagination: { hasMore: false, nextCursor: null, restarted: true },
       filterOptions: emptyCanonicalWorkoutFilterOptions(),
       libraryRelease: result.meta.libraryRelease ? { id: result.meta.libraryRelease.id, version: result.meta.libraryRelease.version, checksum: result.meta.libraryRelease.checksum } : null
     };
@@ -156,7 +149,6 @@ export async function getWorkoutsWithStatus(
     pagination: {
       hasMore: nextCursor !== null,
       nextCursor,
-      nextOffset: nextCursor as unknown as number | null,
       restarted: Boolean(result.restarted)
     },
     filterOptions: emptyCanonicalWorkoutFilterOptions(),
@@ -166,7 +158,7 @@ export async function getWorkoutsWithStatus(
 
 export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page = 0, locale?: string, context?: WorkoutLibraryRequestContext) {
   if (page !== 0) throw new Error("Random-access Workout Library pages are not supported by the native cursor contract.");
-  return (await getWorkoutsWithStatus(query, filters, 0, locale, context)).data;
+  return (await getWorkoutsWithStatus(query, filters, null, locale, context)).data;
 }
 
 export async function getWorkout(id: string, locale?: string, context?: WorkoutLibraryRequestContext) {
