@@ -72,11 +72,11 @@ end
 $function$;
 
 -- The CHECK constraint executes the immutable validator under the caller's
--- table-write role. Keep PUBLIC denied, but grant only the pure boolean
--- validator to the application roles that may legitimately exercise the
--- table constraint. The trigger function itself remains non-callable.
+-- table-write role. PUBLIC/anon remain denied; only the two application roles
+-- that already hold INSERT/UPDATE on this table may execute this pure boolean
+-- validator. The trigger function itself remains non-callable.
 revoke all on function private.validate_p10f_catalog_authority_snapshot(jsonb) from public, anon, authenticated, service_role;
-grant execute on function private.validate_p10f_catalog_authority_snapshot(jsonb) to anon, authenticated, service_role;
+grant execute on function private.validate_p10f_catalog_authority_snapshot(jsonb) to authenticated, service_role;
 revoke all on function private.enforce_p10f_catalog_authority_snapshot() from public, anon, authenticated, service_role;
 
 drop trigger if exists user_workout_plan_activities_p10f_catalog_authority_snapshot on public.user_workout_plan_activities;
