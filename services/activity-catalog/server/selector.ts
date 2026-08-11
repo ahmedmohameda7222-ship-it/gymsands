@@ -11,7 +11,10 @@ import type { ActivityCatalogProvider } from "./provider";
 
 export function parseCatalogProviderMode(value: string | undefined): CatalogProviderMode {
   if (!value || value === "legacy") return "legacy";
-  if (value === "external" || value === "external_with_legacy_fallback") return value;
+  if (
+    value === "external" || value === "external_with_legacy_fallback" ||
+    value === "library_v2" || value === "library_v2_with_legacy_fallback"
+  ) return value;
   throw new CatalogError("catalog_not_configured", { failureStage: "provider_request" });
 }
 
@@ -51,9 +54,6 @@ export class FallbackActivityCatalogProvider implements ActivityCatalogProvider 
   getActivityAlternatives: ActivityCatalogProvider["getActivityAlternatives"] = async (identifier, options) => this.withFallback(
     () => this.external.getActivityAlternatives(identifier, options),
     async () => {
-      // An upstream 404 is only a compatibility signal when the identifier is
-      // demonstrably present in the legacy catalog. Unknown identifiers remain
-      // not-found instead of degrading into a misleading successful empty list.
       await this.legacy.getActivity(identifier, options);
       return this.legacy.getActivityAlternatives(identifier, options);
     },
@@ -75,8 +75,6 @@ export class FallbackActivityCatalogProvider implements ActivityCatalogProvider 
         this.observer?.fallbackSucceeded(catalogError);
         return { ...fallback, meta: { ...fallback.meta, degraded: true } };
       } catch {
-        // A failed compatibility attempt must not rewrite an upstream outage as
-        // a misleading local not-found (or expose a legacy implementation error).
         throw catalogError;
       }
     }
@@ -124,7 +122,9 @@ export function createActivityCatalogProvider(
     options.observer?.providerRequested(mode);
     const legacy = options.legacy ?? new LegacyActivityCatalogProvider(supabase);
     let selected: ActivityCatalogProvider;
-    if (mode === "legacy") {
+    if (mode === "legacy" || mode === "library_v2" || mode === "library_v2_with_legacy_fallback") {
+      // P10F keeps the old /v1-shaped Plaivra boundary as an explicit legacy
+      // compatibility surface. Native Library V2 traffic uses library-selector.ts.
       selected = legacy;
     } else {
       const external = options.external ?? new HttpActivityCatalogProvider({
