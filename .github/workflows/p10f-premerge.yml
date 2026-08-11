@@ -70,11 +70,15 @@ jobs:
           # origin is allowed only in server-side configuration/provider code.
           test "$(grep -R --exclude='*.test.*' -l 'https://catalog-api.plaivra.com' components services/activity-catalog/client.ts services/database/workout-library-v2.ts 2>/dev/null | wc -l)" = "0"
           # Native Library pagination must stay opaque/cursor-native through the
-          # live browser and picker consumers; no numeric offset alias is allowed.
+          # live browser and picker consumers; no numeric offset alias or numeric
+          # initial sentinel is allowed.
           test "$(grep -E -l 'nextProviderOffset|nextOffset|as unknown as number' services/database/workout-library-v2.ts components/workouts/workout-browser.tsx components/workouts/exercise-picker-dialog.tsx 2>/dev/null | wc -l)" = "0"
+          test "$(grep -E -l 'getWorkoutsWithStatus\([^;]*, 0, locale' components/workouts/workout-browser.tsx components/workouts/exercise-picker-dialog.tsx 2>/dev/null | wc -l)" = "0"
           grep -q 'nextCursor: string | null' services/database/workout-library-v2.ts
           grep -q 'nextProviderCursor' components/workouts/workout-browser.tsx
           grep -q 'nextCursor' components/workouts/exercise-picker-dialog.tsx
+          grep -q 'requestFilters, null, locale' components/workouts/workout-browser.tsx
+          grep -q 'activeFilters, null, locale' components/workouts/exercise-picker-dialog.tsx
           test "$(grep -R -l 'offset' services/activity-catalog/server/library-http-provider.ts app/api/activity-catalog/library-domains 2>/dev/null | wc -l)" = "0"
           grep -q 'AbortController' services/database/workout-library-v2.ts
           grep -q 'buildCatalogAuthoritySnapshot' lib/activity-catalog/snapshot.ts
@@ -89,6 +93,7 @@ jobs:
             nativeDomain: 'strength',
             upstreamPagination: 'opaque_cursor',
             consumerCursorState: 'string_or_null',
+            initialCursor: null,
             maxPageSize: 50,
             staleSearchCancellation: true,
             cursorRestart: 'one_bounded_restart_no_legacy_fallback',
