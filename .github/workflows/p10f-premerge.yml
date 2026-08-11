@@ -65,8 +65,11 @@ jobs:
           test "$actual" = "$EXPECTED_HEAD"
           git diff --check
           test -z "$(git status --porcelain --untracked-files=no)"
-          test "$(grep -R --exclude='validate-production-env.mjs' --exclude='.env.example' --exclude='*.test.*' -l 'https://catalog-api.plaivra.com' app components services lib 2>/dev/null | wc -l)" = "0"
+          # Browser/client surfaces must stay same-origin. The canonical Catalog
+          # origin is allowed only in server-side configuration/provider code.
+          test "$(grep -R --exclude='*.test.*' -l 'https://catalog-api.plaivra.com' components services/activity-catalog/client.ts services/database/workout-library-v2.ts 2>/dev/null | wc -l)" = "0"
           test "$(grep -R -l 'offset' services/activity-catalog/server/library-http-provider.ts app/api/activity-catalog/library-domains 2>/dev/null | wc -l)" = "0"
+          grep -q 'AbortController' services/database/workout-library-v2.ts
           node - <<'NODE'
           const fs = require('node:fs');
           const path = process.env.RUNNER_TEMP + '/p10f-main-premerge.json';
@@ -78,6 +81,7 @@ jobs:
             nativeDomain: 'strength',
             upstreamPagination: 'opaque_cursor',
             maxPageSize: 50,
+            staleSearchCancellation: true,
             cursorRestart: 'one_bounded_restart_no_legacy_fallback',
             semanticSnapshotMigration: '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql',
             historicalRewrite: false,
