@@ -51,6 +51,7 @@ jobs:
         run: >-
           npx vitest run --config vitest.unit.config.mjs
           services/activity-catalog/server/library-v2-boundaries.test.ts
+          lib/activity-catalog/snapshot.test.ts
           lib/product/p10f-catalog-authority-snapshot.test.ts
       - name: Production environment mode contract
         run: node --test scripts/validate-production-env.test.mjs
@@ -70,6 +71,7 @@ jobs:
           test "$(grep -R --exclude='*.test.*' -l 'https://catalog-api.plaivra.com' components services/activity-catalog/client.ts services/database/workout-library-v2.ts 2>/dev/null | wc -l)" = "0"
           test "$(grep -R -l 'offset' services/activity-catalog/server/library-http-provider.ts app/api/activity-catalog/library-domains 2>/dev/null | wc -l)" = "0"
           grep -q 'AbortController' services/database/workout-library-v2.ts
+          grep -q 'buildCatalogAuthoritySnapshot' lib/activity-catalog/snapshot.ts
           node - <<'NODE'
           const fs = require('node:fs');
           const path = process.env.RUNNER_TEMP + '/p10f-main-premerge.json';
@@ -84,6 +86,7 @@ jobs:
             staleSearchCancellation: true,
             cursorRestart: 'one_bounded_restart_no_legacy_fallback',
             semanticSnapshotMigration: '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql',
+            semanticSnapshotMaterializer: 'lib/activity-catalog/snapshot.ts',
             historicalRewrite: false,
             browserDirectCatalogCalls: 0
           }, null, 2) + '\n');
