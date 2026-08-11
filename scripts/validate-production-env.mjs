@@ -7,10 +7,9 @@ const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const SAFE_IDENTIFIER = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const BASE64_32_BYTES = /^[A-Za-z0-9+/]{43}=$/;
 const ACTIVITY_CATALOG_PRODUCTION_ORIGIN = "https://catalog-api.plaivra.com";
+const ACTIVITY_CATALOG_LEGACY_MODES = ["legacy", "external", "external_with_legacy_fallback"];
 const ACTIVITY_CATALOG_MODES = new Set([
-  "legacy",
-  "external",
-  "external_with_legacy_fallback",
+  ...ACTIVITY_CATALOG_LEGACY_MODES,
   "library_v2",
   "library_v2_with_legacy_fallback"
 ]);
