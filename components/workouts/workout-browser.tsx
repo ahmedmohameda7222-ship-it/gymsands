@@ -243,7 +243,7 @@ export function WorkoutBrowser() {
       setIsLoading(true);
       setNextProviderCursor(null);
       setResultError("");
-      getWorkoutsWithStatus(query.trim(), requestFilters, 0, locale)
+      getWorkoutsWithStatus(query.trim(), requestFilters, null, locale)
         .then((result) => {
           if (!active) return;
           setWorkouts(result.data);

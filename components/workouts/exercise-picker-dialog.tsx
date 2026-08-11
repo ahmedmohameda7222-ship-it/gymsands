@@ -156,7 +156,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       setError("");
       setLoadMoreError("");
       setPagination(emptyPagination);
-      getWorkoutsWithStatus(query.trim(), activeFilters, 0, locale, {
+      getWorkoutsWithStatus(query.trim(), activeFilters, null, locale, {
         requestGroupId,
         signal: controller.signal
       })
