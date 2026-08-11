@@ -55,6 +55,8 @@ jobs:
           lib/product/p10f-catalog-authority-snapshot.test.ts
       - name: Production environment mode contract
         run: node --test scripts/validate-production-env.test.mjs
+      - name: Pending migration ledger authority
+        run: node scripts/check-migration-ledger.mjs
       - name: Build with the cutover code present but not Production-activated
         run: npm run build
       - name: Exact-head and forbidden-boundary evidence
@@ -87,6 +89,14 @@ jobs:
           # same bounded allowlist.
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' vercel.json
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' scripts/provider-release-gates.test.mjs
+          # The single P10F Main migration must be repository-only during Stage A.
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const ledger = JSON.parse(fs.readFileSync('supabase/migration-ledger.json', 'utf8'));
+          const migration = ledger.entries.find((entry) => entry.localFile === '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql');
+          if (!migration || migration.state !== 'pending' || migration.productionVersion || migration.productionName) process.exit(1);
+          if (ledger.pendingCount !== 1 || ledger.unresolvedCount !== 1 || ledger.historyRepair?.state !== 'pending') process.exit(1);
+          NODE
           node - <<'NODE'
           const fs = require('node:fs');
           const path = process.env.RUNNER_TEMP + '/p10f-main-premerge.json';
@@ -103,6 +113,7 @@ jobs:
             staleSearchCancellation: true,
             cursorRestart: 'one_bounded_restart_no_legacy_fallback',
             semanticSnapshotMigration: '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql',
+            semanticSnapshotMigrationState: 'pending_premerge_no_production_identity',
             semanticSnapshotMaterializer: 'lib/activity-catalog/snapshot.ts',
             historicalRewrite: false,
             browserDirectCatalogCalls: 0,
