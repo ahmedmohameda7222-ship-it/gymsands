@@ -4,7 +4,8 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "main": true
+      "main": true,
+      "feat/p10f-activity-catalog-v2-cutover": true
     }
   },
   "crons": [
