@@ -61,13 +61,20 @@ export type LibraryActivity = {
   bodyEffects: Array<Record<string, unknown>>;
 };
 
+export type CatalogSchemaAuthority = {
+  id?: string | null;
+  key: string;
+  version: number;
+  checksum?: string | null;
+};
+
 export type LibrarySemanticAuthority = {
-  prescriptionSchema?: { key: string; version: number; fields?: unknown[]; checksum?: string | null } | null;
-  performedMetricSchema?: { key: string; version: number; fields?: unknown[]; contextDimensions?: unknown[]; checksum?: string | null } | null;
+  prescriptionSchema?: CatalogSchemaAuthority & { fields?: unknown[] } | null;
+  performedMetricSchema?: CatalogSchemaAuthority & { fields?: unknown[]; contextDimensions?: unknown[] } | null;
   recordDefinitions?: Array<Record<string, unknown>>;
   heatMap?: Record<string, unknown> | null;
-  publicationPolicy?: { key: string; version: number; checksum: string } | null;
-  capabilityContract?: { version: string; compatibleCatalogApiVersion: string; checksum: string } | null;
+  publicationPolicy?: { id?: string | null; key: string; version: number; checksum: string } | null;
+  capabilityContract?: { id?: string | null; version: string; compatibleCatalogApiVersion: string; checksum: string } | null;
   authority?: {
     libraryRelease: Pick<LibraryReleaseMetadata, "id" | "version" | "checksum">;
     catalogRelease: Pick<LibraryCatalogReleaseMetadata, "id" | "version" | "checksum">;
@@ -102,8 +109,8 @@ export type CatalogAuthoritySnapshot = {
   activityId: string;
   revisionId: string;
   revisionNumber: number;
-  prescriptionSchema: { key: string; version: number; checksum?: string | null } | null;
-  performedMetricSchema: { key: string; version: number; checksum?: string | null } | null;
+  prescriptionSchema: CatalogSchemaAuthority | null;
+  performedMetricSchema: CatalogSchemaAuthority | null;
   recordDefinitions: Array<Record<string, unknown>>;
   mappingAuthority: Record<string, unknown> | null;
   publicationPolicy: Record<string, unknown> | null;
