@@ -38,7 +38,8 @@ describe("P10F V2 plan Catalog authority snapshot", () => {
     expect(migration).not.toMatch(/disable row level security/i);
     expect(migration).not.toMatch(/create policy/i);
     expect(migration).toContain("revoke all on function private.validate_p10f_catalog_authority_snapshot(jsonb) from public, anon, authenticated, service_role");
-    expect(migration).toContain("grant execute on function private.validate_p10f_catalog_authority_snapshot(jsonb) to anon, authenticated, service_role");
+    expect(migration).toContain("grant execute on function private.validate_p10f_catalog_authority_snapshot(jsonb) to authenticated, service_role");
+    expect(migration).not.toMatch(/grant\s+execute\s+on\s+function\s+private\.validate_p10f_catalog_authority_snapshot\(jsonb\)\s+to\s+anon/i);
     expect(migration).toContain("revoke all on function private.enforce_p10f_catalog_authority_snapshot() from public, anon, authenticated, service_role");
     expect(migration).not.toMatch(/grant\s+execute\s+on\s+function\s+private\.enforce_p10f_catalog_authority_snapshot/i);
   });
