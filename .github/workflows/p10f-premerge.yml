@@ -68,12 +68,7 @@ jobs:
           test "$actual" = "$EXPECTED_HEAD"
           git diff --check
           test -z "$(git status --porcelain --untracked-files=no)"
-          # Browser/client surfaces must stay same-origin. The canonical Catalog
-          # origin is allowed only in server-side configuration/provider code.
           test "$(grep -R --exclude='*.test.*' -l 'https://catalog-api.plaivra.com' components services/activity-catalog/client.ts services/database/workout-library-v2.ts 2>/dev/null | wc -l)" = "0"
-          # Native Library pagination must stay opaque/cursor-native through the
-          # live browser and picker consumers; no numeric offset alias or numeric
-          # initial sentinel is allowed.
           test "$(grep -E -l 'nextProviderOffset|nextOffset|as unknown as number' services/database/workout-library-v2.ts components/workouts/workout-browser.tsx components/workouts/exercise-picker-dialog.tsx 2>/dev/null | wc -l)" = "0"
           test "$(grep -E -l 'getWorkoutsWithStatus\([^;]*, 0, locale' components/workouts/workout-browser.tsx components/workouts/exercise-picker-dialog.tsx 2>/dev/null | wc -l)" = "0"
           grep -q 'nextCursor: string | null' services/database/workout-library-v2.ts
@@ -84,12 +79,12 @@ jobs:
           test "$(grep -R -l 'offset' services/activity-catalog/server/library-http-provider.ts app/api/activity-catalog/library-domains 2>/dev/null | wc -l)" = "0"
           grep -q 'AbortController' services/database/workout-library-v2.ts
           grep -q 'buildCatalogAuthoritySnapshot' lib/activity-catalog/snapshot.ts
-          # Vercel remains fail-closed for every branch except main and the one
-          # Planner-authorized P10F Preview branch; repository tests must lock the
-          # same bounded allowlist.
+          grep -q 'const libraryDomainPath = "/api/activity-catalog/library-domains/strength"' scripts/run-train-layout-qa-base.mjs
+          grep -q 'source: scenario === "fallback" ? "legacy" : "library_v2"' scripts/run-train-layout-qa-base.mjs
+          test ! -e scripts/p10f_patch_train_native_library_fixture.py
+          test ! -e .github/workflows/p10f-train-native-library-fixture.yml
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' vercel.json
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' scripts/provider-release-gates.test.mjs
-          # The single P10F Main migration must be repository-only during Stage A.
           node - <<'NODE'
           const fs = require('node:fs');
           const ledger = JSON.parse(fs.readFileSync('supabase/migration-ledger.json', 'utf8'));
@@ -112,6 +107,7 @@ jobs:
             maxPageSize: 50,
             staleSearchCancellation: true,
             cursorRestart: 'one_bounded_restart_no_legacy_fallback',
+            renderedQaCatalogFixture: 'native_library_v2',
             semanticSnapshotMigration: '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql',
             semanticSnapshotMigrationState: 'pending_premerge_no_production_identity',
             semanticSnapshotMaterializer: 'lib/activity-catalog/snapshot.ts',
