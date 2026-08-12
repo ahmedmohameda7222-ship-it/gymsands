@@ -2,7 +2,7 @@ import process from "node:process";
 
 const MAIN_PREVIEW_BRANCH = "feat/p10f-activity-catalog-v2-cutover";
 const CATALOG_PREVIEW_ORIGIN = "https://plaivra-activity-catalog-api-git-fe-211ae7-ahmed-s-projectssasa.vercel.app";
-const EXPECTED_LIBRARY_RELEASE_ID = "e6dc6eaf-aba2-5be5-b089-331aeee4f023";
+const EXPECTED_LIBRARY_RELEASE_ID = "5fd86e29-4681-5710-a1da-216c1bd4d48f";
 const EXPECTED_LIBRARY_RELEASE_VERSION = "p10e-library-v1-c1";
 const EXPECTED_LIBRARY_RELEASE_CHECKSUM = "180943553462183496d86d0a88c6e2187d4653204e14bb20cc3d11a6a0378681";
 const EXPECTED_CATALOG_RELEASE_ID = "fc92eca8-c2ab-5366-ba83-5c64c904aaca";
