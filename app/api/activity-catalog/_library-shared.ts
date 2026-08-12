@@ -10,7 +10,7 @@ import { parseCatalogProviderMode } from "@/services/activity-catalog/server/sel
 import type { LibraryActivityProvider } from "@/services/activity-catalog/server/library-provider";
 
 export const PRIVATE_LIBRARY_HEADERS = { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache", Vary: "Authorization" };
-export const LIBRARY_LOCALES = new Set(["en", "de", "ar", "tr"]);
+export const LIBRARY_LOCALES = new Set(["en", "de", "ar"]);
 export const LIBRARY_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
