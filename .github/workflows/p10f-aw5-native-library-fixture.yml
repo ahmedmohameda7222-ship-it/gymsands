@@ -1,0 +1,32 @@
+name: P10F AW5 Native Library Fixture
+
+on:
+  push:
+    branches:
+      - feat/p10f-activity-catalog-v2-cutover
+    paths:
+      - .github/workflows/p10f-aw5-native-library-fixture.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/p10f-activity-catalog-v2-cutover
+          fetch-depth: 0
+      - name: Apply bounded AW5 native Library fixture patch
+        run: python scripts/p10f_patch_aw5_native_library_fixture.py
+      - name: Remove patch scaffolding and commit fixture correction
+        run: |
+          rm .github/workflows/p10f-aw5-native-library-fixture.yml
+          rm scripts/p10f_patch_aw5_native_library_fixture.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/train-layout-qa-fixture.mjs .github/workflows/p10f-aw5-native-library-fixture.yml scripts/p10f_patch_aw5_native_library_fixture.py
+          git diff --cached --check
+          git commit -m 'P10F — render AW5 direct QA with native Library fixture'
+          git push origin HEAD:feat/p10f-activity-catalog-v2-cutover
