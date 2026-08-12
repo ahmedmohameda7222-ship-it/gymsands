@@ -81,8 +81,12 @@ jobs:
           grep -q 'buildCatalogAuthoritySnapshot' lib/activity-catalog/snapshot.ts
           grep -q 'const libraryDomainPath = "/api/activity-catalog/library-domains/strength"' scripts/run-train-layout-qa-base.mjs
           grep -q 'source: scenario === "fallback" ? "legacy" : "library_v2"' scripts/run-train-layout-qa-base.mjs
+          grep -q 'const libraryDomainPath = "/api/activity-catalog/library-domains/strength"' scripts/train-layout-qa-fixture.mjs
+          grep -q 'source: "library_v2"' scripts/train-layout-qa-fixture.mjs
           test ! -e scripts/p10f_patch_train_native_library_fixture.py
           test ! -e .github/workflows/p10f-train-native-library-fixture.yml
+          test ! -e scripts/p10f_patch_aw5_native_library_fixture.py
+          test ! -e .github/workflows/p10f-aw5-native-library-fixture.yml
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' vercel.json
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' scripts/provider-release-gates.test.mjs
           node - <<'NODE'
@@ -108,6 +112,7 @@ jobs:
             staleSearchCancellation: true,
             cursorRestart: 'one_bounded_restart_no_legacy_fallback',
             renderedQaCatalogFixture: 'native_library_v2',
+            aw5DirectRenderedQaCatalogFixture: 'native_library_v2',
             semanticSnapshotMigration: '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql',
             semanticSnapshotMigrationState: 'pending_premerge_no_production_identity',
             semanticSnapshotMaterializer: 'lib/activity-catalog/snapshot.ts',
