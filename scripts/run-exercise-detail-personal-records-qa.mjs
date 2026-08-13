@@ -75,7 +75,7 @@ function catalogFixture(language) {
   return { detail, meta };
 }
 
-async function createContext(browser, viewport, language, theme) {
+async function createContext(browser, viewport, language, theme, options = {}) {
   const context = await browser.newContext({ viewport: { width: viewport[0], height: viewport[1] }, locale: language.locale, colorScheme: theme.key === "dark" ? "dark" : "light", reducedMotion: "reduce" });
   await context.addInitScript(({ languageKey, themeId, userId }) => {
     localStorage.setItem("plaivra.language.v1", languageKey);
@@ -91,14 +91,31 @@ async function createContext(browser, viewport, language, theme) {
     await route.fulfill({ status: method === "POST" ? 201 : 200, contentType: "application/json", headers: { "content-range": "0-0/0" }, body: method === "HEAD" ? "" : "[]" });
   });
   const pr = personalRecordsFixture();
-  await context.route("**/api/personal-records/exercise?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ performed: true, lastPerformedAt: "2026-08-11T18:20:00Z", highestLoad: pr.latestAchievement, estimatedOneRepMax: { ...pr.latestAchievement, eventId: "pr-estimated", definition: { ...pr.latestAchievement.definition, id: "estimated-1rm-v1", key: "estimated_one_rep_max", label: "Estimated 1RM" }, value: 160 }, recentWorkoutId: "session-squat" }) }));
-  await context.route("**/api/personal-records/lineage-squat?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(pr.detail) }));
-  await context.route("**/api/personal-records?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ latestAchievement: pr.latestAchievement, representedSports: pr.representedSports, groups: pr.groups, nextCursor: null, notices: [] }) }));
+  const performance = options.performance ?? { performed: true, lastPerformedAt: "2026-08-11T18:20:00Z", highestLoad: pr.latestAchievement, estimatedOneRepMax: { ...pr.latestAchievement, eventId: "pr-estimated", definition: { ...pr.latestAchievement.definition, id: "estimated-1rm-v1", key: "estimated_one_rep_max", label: "Estimated 1RM" }, value: 160 }, recentWorkoutId: "session-squat" };
+  const main = options.personalRecordsMain ?? { latestAchievement: pr.latestAchievement, representedSports: pr.representedSports, groups: pr.groups, nextCursor: null, notices: [] };
+  const detail = options.personalRecordDetail ?? pr.detail;
+  await context.route("**/api/personal-records/exercise?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(performance) }));
+  await context.route("**/api/personal-records/events/**", (route) => route.fulfill({ status: options.mutationStatus ?? 200, contentType: "application/json", body: JSON.stringify(options.mutationBody ?? { eventId: "pr-squat-1", deleted: true }) }));
+  await context.route("**/api/personal-records/lineage-squat?**", (route) => {
+    const isPage = new URL(route.request().url()).searchParams.has("cursor");
+    return route.fulfill(isPage && options.failDetailPagination ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "More records could not load." }) } : { status: 200, contentType: "application/json", body: JSON.stringify(detail) });
+  });
+  await context.route("**/api/personal-records?**", (route) => {
+    const isPage = new URL(route.request().url()).searchParams.has("cursor");
+    return route.fulfill(isPage && options.failMainPagination ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "More records could not load." }) } : { status: 200, contentType: "application/json", body: JSON.stringify(main) });
+  });
   const catalog = catalogFixture(language.key);
+  if (options.catalogDetail) Object.assign(catalog.detail, options.catalogDetail);
   await context.route("**/api/activity-catalog/activities?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: [], pagination: { limit: 100, offset: 0, total: 0 }, meta: catalog.meta }) }));
   await context.route("**/api/activity-catalog/library-domains?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: [{ key: "strength", displayName: "Strength", coverageCount: 1, ownedMovementCanonicalCount: 1, archetypeCount: 1, membershipCount: 1, authorityKind: "canonical", checksum: "domain-checksum", tabs: [] }], meta: catalog.meta }) }));
-  await context.route(`**/api/activity-catalog/library-domains/strength/activities/${activityId}/alternatives?**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: [], meta: catalog.meta }) }));
+  await context.route(`**/api/activity-catalog/library-domains/strength/activities/${activityId}/alternatives?**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: options.alternatives ?? [], meta: catalog.meta }) }));
   await context.route(`**/api/activity-catalog/library-domains/strength/activities/${activityId}?**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: catalog.detail, meta: catalog.meta }) }));
+  if (options.planDetail) {
+    const { exercise, day, plan } = options.planDetail;
+    await context.route("**/rest/v1/user_workout_plan_exercises?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(exercise) }));
+    await context.route("**/rest/v1/user_workout_plan_days?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(day) }));
+    await context.route("**/rest/v1/user_workout_plans?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(plan) }));
+  }
   return context;
 }
 
@@ -183,7 +200,144 @@ await keyboardPage.keyboard.press("Escape");
 await keyboardPage.getByRole("dialog").waitFor({ state: "hidden" });
 await keyboardContext.close();
 
+const stateResults = [];
+async function stateScenario({ name, path: scenarioPath, viewport = [390, 844], options = {}, inspect, screenshot = false }) {
+  const context = await createContext(browser, viewport, locales[0], themes[0], options);
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const response = await page.goto(`${baseUrl}${scenarioPath}`, { waitUntil: "networkidle", timeout: 45_000 });
+  if (!response?.ok()) throw new Error(`${name}: HTTP ${response?.status()}`);
+  await inspect(page);
+  const horizontalOverflowPx = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
+  if (horizontalOverflowPx > 0) throw new Error(`${name}: ${horizontalOverflowPx}px horizontal overflow`);
+  if (pageErrors.length) throw new Error(`${name}: ${pageErrors.join(" | ")}`);
+  if (screenshot) await page.screenshot({ path: path.join(evidenceDir, `${name}.png`), fullPage: true });
+  stateResults.push({ name, viewport: `${viewport[0]}x${viewport[1]}`, horizontalOverflowPx, runtimeErrors: 0 });
+  await context.close();
+}
+async function visible(locator, name) {
+  await locator.waitFor({ state: "visible", timeout: 20_000 }).catch(() => { throw new Error(`${name}: required rendered state not visible`); });
+}
+async function absent(locator, name) {
+  if (await locator.count()) throw new Error(`${name}: forbidden rendered state was present`);
+}
+
+const prStates = personalRecordsFixture();
+const manualBest = prStates.detail.history[1];
+const runBest = prStates.groups[1].records[0].currentBest;
+const uncategorized = prStates.groups[2];
+const strengthOnly = {
+  latestAchievement: manualBest,
+  representedSports: [{ domain: "strength", name: "Strength" }],
+  groups: [{ sportDomain: "strength", sportName: "Strength", records: [{ ...prStates.groups[0].records[0], currentBest: manualBest, previousBest: null }] }],
+  nextCursor: null,
+  notices: [{ kind: "stale", message: "Records may be out of date" }],
+};
+
+await stateScenario({ name: "pr-one-sport-manual-stale", path: "/personal-records", options: { personalRecordsMain: strengthOnly }, screenshot: true, inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 2, name: "Latest Achievement" }), "manual latest achievement");
+  await visible(page.getByText(/Manual/).first(), "manual source");
+  await visible(page.getByText("Records may be out of date", { exact: true }), "stale notice");
+  await absent(page.getByRole("radiogroup"), "one-sport selector hidden");
+} });
+await stateScenario({ name: "pr-uncategorized-only", path: "/personal-records", options: { personalRecordsMain: { latestAchievement: uncategorized.records[0].currentBest, representedSports: [], groups: [uncategorized], nextCursor: null, notices: [] } }, inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 3, name: "Uncategorized" }), "Uncategorized group");
+} });
+await stateScenario({ name: "pr-global-empty", path: "/personal-records", options: { personalRecordsMain: { latestAchievement: null, representedSports: [], groups: [], nextCursor: null, notices: [] } }, screenshot: true, inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 3, name: "Your record book starts here" }), "global empty state");
+} });
+await stateScenario({ name: "pr-lower-better", path: "/personal-records", options: { personalRecordsMain: { latestAchievement: runBest, representedSports: [{ domain: "running", name: "Running" }], groups: [prStates.groups[1]], nextCursor: null, notices: [] } }, inspect: async (page) => {
+  await visible(page.getByText("19m 52s", { exact: true }).first(), "lower-better time rendering");
+} });
+await stateScenario({ name: "pr-detail-mixed-history", path: "/personal-records/lineage-squat", screenshot: true, inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 1, name: "Barbell back squat" }), "record detail");
+  await visible(page.getByText("Previous Best", { exact: true }), "previous best");
+  await visible(page.getByRole("link", { name: "View source workout" }), "source workout");
+  await visible(page.getByText(/Verified/).first(), "verified history");
+  await visible(page.getByText(/Manual/).first(), "manual history");
+} });
+await stateScenario({ name: "pr-detail-first-record", path: "/personal-records/lineage-squat", options: { personalRecordDetail: { lineage: { ...prStates.detail.lineage, currentBest: manualBest, previousBest: null }, history: [manualBest], selectedEventId: manualBest.eventId, nextCursor: null } }, inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 1, name: "Barbell back squat" }), "first record detail");
+  await absent(page.getByText("Previous Best", { exact: true }), "detail without previous best");
+} });
+await stateScenario({ name: "pr-edit-semantic-rejection", path: "/personal-records/lineage-squat", options: { mutationStatus: 409, mutationBody: { error: "This wasn't a personal record — you already had a better record at this time." } }, screenshot: true, inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 1, name: "Barbell back squat" }), "record detail before edit");
+  await page.getByRole("button", { name: "Edit Barbell back squat" }).click();
+  await visible(page.getByRole("dialog"), "Edit Manual dialog");
+  const valueInput = page.getByLabel(/^Value/);
+  if (await valueInput.inputValue() !== "137.5") throw new Error("semantic rejection: edit value did not hydrate");
+  await page.getByRole("button", { name: "Save record" }).click();
+  await visible(page.getByText("This wasn't a personal record — you already had a better record at this time.", { exact: true }), "semantic rejection");
+  if (await valueInput.inputValue() !== "137.5") throw new Error("semantic rejection: input was not preserved");
+} });
+await stateScenario({ name: "pr-delete-confirmation", path: "/personal-records/lineage-squat", inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 1, name: "Barbell back squat" }), "record detail before delete");
+  await page.getByRole("button", { name: "Delete Barbell back squat" }).click();
+  await visible(page.getByRole("heading", { name: "Delete this manual record?" }), "delete confirmation");
+} });
+await stateScenario({ name: "pr-pagination-local-failure", path: "/personal-records/lineage-squat", options: { personalRecordDetail: { ...prStates.detail, nextCursor: "older-page" }, failDetailPagination: true }, inspect: async (page) => {
+  await page.getByRole("button", { name: "Load earlier records" }).click();
+  await visible(page.getByRole("alert"), "pagination local failure");
+} });
+for (const viewport of [[390, 844], [1440, 900]]) {
+  await stateScenario({ name: `pr-add-dialog-${viewport[0]}`, path: "/personal-records", viewport, screenshot: true, inspect: async (page) => {
+    await page.getByRole("button", { name: viewport[0] === 390 ? "Add" : "Add record" }).click();
+    await visible(page.getByRole("heading", { name: "Add personal record" }), `Add Record ${viewport[0] === 390 ? "mobile sheet" : "desktop dialog"}`);
+  } });
+}
+
+const alternativeCatalog = catalogFixture("en").detail;
+const alternative = { relationshipType: "substitute", rationale: "Same primary pattern", prescriptionTransfer: null, activity: { ...alternativeCatalog, id: "876dc4b7-df2f-45f4-8b52-24b90d2249ce", revisionId: "revision-front-squat-v2", slug: "front-squat", name: "Front squat" } };
+await stateScenario({ name: "exercise-canonical-target-empty-alternatives", path: `/workouts/${activityId}`, screenshot: true, inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 2, name: "Target" }), "canonical Strength Target");
+  await visible(page.getByRole("button", { name: "View muscle details" }), "authoritative anatomy");
+  await visible(page.getByRole("heading", { level: 2, name: "Your Performance" }), "loaded performance");
+  await absent(page.getByRole("link", { name: "Start exercise" }), "unsupported Start capability");
+  await absent(page.getByRole("heading", { name: "Media" }), "canonical no-media state");
+  await absent(page.getByRole("heading", { name: "Alternatives" }), "empty alternatives state");
+} });
+await stateScenario({ name: "exercise-non-muscle-focus", path: `/workouts/${activityId}`, options: { catalogDetail: { coverage: [{ role: "focus", name: "Cadence" }], heatMap: null, activityType: { slug: "running_drill", name: "Running drill" } } }, inspect: async (page) => {
+  await visible(page.getByText("Focus", { exact: true }), "non-muscle Focus label");
+  await visible(page.getByText("Cadence", { exact: true }), "non-muscle Focus value");
+  await absent(page.getByRole("button", { name: "View muscle details" }), "non-muscle anatomy hidden");
+} });
+await stateScenario({ name: "exercise-performance-empty-alternatives-loaded", path: `/workouts/${activityId}`, options: { performance: { performed: false, lastPerformedAt: null, highestLoad: null, estimatedOneRepMax: null, recentWorkoutId: null }, alternatives: [alternative] }, screenshot: true, inspect: async (page) => {
+  await visible(page.getByText("No performance yet", { exact: true }), "performance empty state");
+  await visible(page.getByRole("heading", { level: 2, name: "Alternatives" }), "alternatives loaded state");
+  await visible(page.getByRole("link", { name: /Front squat/ }), "Catalog-authoritative alternative");
+} });
+for (const viewport of [[390, 844], [1440, 900]]) {
+  await stateScenario({ name: `exercise-add-to-plan-${viewport[0]}`, path: `/workouts/${activityId}`, viewport, screenshot: true, inspect: async (page) => {
+    await page.getByRole("button", { name: "Add to plan" }).click();
+    await visible(page.getByRole("heading", { name: "Add to workout plan" }), `Add to Plan ${viewport[0] === 390 ? "mobile sheet" : "desktop dialog"}`);
+    await visible(page.getByText("Create a workout plan before adding this exercise.", { exact: true }), "Add to Plan no-plans state");
+  } });
+}
+
+const planExerciseId = "20000000-0000-4000-8000-000000000001";
+const planDayId = "20000000-0000-4000-8000-000000000002";
+const planId = "20000000-0000-4000-8000-000000000003";
+function planDetailFixture(withPrescription) {
+  return {
+    exercise: { id: planExerciseId, plan_day_id: planDayId, workout_id: activityId, source_workout_id: activityId, exercise_name: "Barbell back squat", category: "strength", target_muscle: "quadriceps", equipment: "barbell", sets: withPrescription ? 4 : null, reps: withPrescription ? "6" : null, rest_seconds: withPrescription ? 120 : null, instructions: "Brace and squat with control.", exercise_url: null, video_url: null, custom_video_url: null, sort_order: 0, notes: withPrescription ? "Work at RPE 8" : null, archived_at: null },
+    day: { id: planDayId, plan_id: planId, day_name: "Lower body", archived_at: null },
+    plan: { id: planId, user_id: mockUserId, name: "Strength foundation", archived_at: null },
+  };
+}
+await stateScenario({ name: "exercise-plan-saved-prescription", path: `/my-workout/exercises/${planExerciseId}`, options: { planDetail: planDetailFixture(true) }, screenshot: true, inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 2, name: "In Your Plan" }), "plan-specific detail");
+  await visible(page.getByText("4", { exact: true }), "saved sets");
+  await visible(page.getByText("6", { exact: true }), "saved repetitions");
+  await visible(page.getByText("Work at RPE 8", { exact: true }), "saved plan note");
+} });
+await stateScenario({ name: "exercise-plan-null-prescription", path: `/my-workout/exercises/${planExerciseId}`, options: { planDetail: planDetailFixture(false) }, inspect: async (page) => {
+  await visible(page.getByRole("heading", { level: 2, name: "In Your Plan" }), "plan-specific null prescription");
+  await absent(page.getByText("Sets", { exact: true }), "no fabricated sets");
+  await absent(page.getByText("Repetitions", { exact: true }), "no fabricated repetitions");
+} });
+
 await browser.close();
-await writeFile(path.join(evidenceDir, "results.json"), JSON.stringify({ generatedAt: new Date().toISOString(), baseUrl, results, zoomOverflow, keyboardDialog: "passed" }, null, 2));
-console.log(`Exercise Detail + Personal Records rendered QA passed (${results.length} matrix scenarios).`);
+await writeFile(path.join(evidenceDir, "results.json"), JSON.stringify({ generatedAt: new Date().toISOString(), baseUrl, results, stateResults, zoomOverflow, keyboardDialog: "passed" }, null, 2));
+console.log(`Exercise Detail + Personal Records rendered QA passed (${results.length} matrix scenarios, ${stateResults.length} required state scenarios).`);
 console.log(`Evidence: ${evidenceDir}`);
