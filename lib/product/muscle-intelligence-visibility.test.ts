@@ -31,22 +31,30 @@ describe("Muscle Intelligence visibility correction", () => {
     expect(overview).toContain("generation !== requestGenerationRef.current");
     expect(overview).toContain("PlanMuscleLoadPanel");
     expect(panel).toContain('view="both"');
-    expect(panel).toContain('mode={variant === "details" ? "compact" : "interactive"}');
+    expect(panel).toContain(
+      'mode={variant === "details" ? "compact" : "interactive"}',
+    );
     expect(panel).toContain("titleOverride");
     expect(panel).toContain("descriptionOverride");
   });
 
   it("adds one focused mapped preview to Exercise Details without blocking the page", () => {
     const layout = text("app/(private)/workouts/[id]/layout.tsx");
-    const preview = text("components/workouts/exercise-detail-muscle-preview.tsx");
+    const detail = text("app/(private)/workouts/[id]/page.tsx");
+    const preview = text("components/exercise-detail/exercise-anatomy.tsx");
 
-    expect(layout).toContain("ExerciseDetailMusclePreview");
-    expect(preview).toContain("ExerciseMusclePreview");
-    expect(preview).toContain("getWorkout(params.id, locale)");
-    expect(preview).toContain("getCustomExercisesWithStatus");
-    expect(preview).toContain("catch");
+    expect(layout).not.toMatch(
+      /ExerciseDetailMusclePreview|getWorkout|useParams/,
+    );
+    expect(detail).toContain(
+      "exercise.target.anatomyAvailable ? exerciseAnatomyAnalysis(exercise) : null",
+    );
+    expect(detail).toContain("<ExerciseAnatomy");
+    expect(preview).toContain("MuscleHeatMap");
     expect(preview).toContain("return null");
-    expect(preview).not.toMatch(/insert|update|publish|snapshot|compatibility/i);
+    expect(preview).not.toMatch(
+      /insert|update|publish|snapshot|compatibility/i,
+    );
   });
 
   it("keeps the correction presentation-only", () => {
@@ -58,9 +66,13 @@ describe("Muscle Intelligence visibility correction", () => {
       "components/workouts/train-muscle-load-overview.tsx",
       "components/workouts/exercise-detail-muscle-preview.tsx",
       "components/workouts/plan-muscle-load-panel.tsx",
-      "lib/train/muscle-intelligence/muscle-load-visibility-copy.ts"
-    ].map(text).join("\n");
+      "lib/train/muscle-intelligence/muscle-load-visibility-copy.ts",
+    ]
+      .map(text)
+      .join("\n");
 
-    expect(files).not.toMatch(/supabase\/migrations|release_schema_compatibility|publish_exercise_muscle_mapping|workout_session_muscle_snapshots/i);
+    expect(files).not.toMatch(
+      /supabase\/migrations|release_schema_compatibility|publish_exercise_muscle_mapping|workout_session_muscle_snapshots/i,
+    );
   });
 });

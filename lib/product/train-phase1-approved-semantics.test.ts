@@ -144,22 +144,18 @@ describe("approved Train Phase 1 semantic contracts", () => {
       source("services/database/workout-sessions-legacy.ts"),
       source("services/database/workout-sessions-legacy-implementation.ts"),
     ].join("\n");
-    const detail = source("app/(private)/workouts/[id]/page.tsx");
+    const detail = source("services/personal-records/server.ts");
+    const model = source("lib/exercise-detail/model.ts");
     expect(sessions).toContain('.in("status", ["completed", "skipped"])');
     expect(sessions).toContain(
       'session.status === "completed" || session.status === "skipped"',
     );
     expect(sessions).toContain('from("user_workout_plan_exercises")');
     expect(sessions).toContain("source_workout_id: log.plan_exercise_id");
-    expect(detail).toContain(
-      "if (log.source_workout_id) return log.source_workout_id === workout.id",
-    );
-    expect(detail).toContain(
-      "if (session.workout_id) return session.workout_id === workout.id",
-    );
-    expect(detail).toContain(
-      "normalizeExerciseName(log.exercise_name) === target",
-    );
+    expect(detail).toContain('.eq("source_workout_id", globalId)');
+    expect(detail).toContain('.eq("workout_sessions.status", "completed")');
+    expect(model).toContain("stablePerformanceIdentity: `global:${detail.id}`");
+    expect(model).not.toMatch(/normalizeExerciseName|150/);
   });
 
   it("routes every reachable performed-session start through reviewed atomic authorities", () => {

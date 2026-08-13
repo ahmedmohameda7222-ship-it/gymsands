@@ -86,9 +86,9 @@ describe("approved Train Phase 1 UI contracts", () => {
       "finishActiveWorkoutQuestion", "cancelActiveWorkoutQuestion"
     ];
     for (const key of keys) expect(translations.match(new RegExp(`${key}:`, "g"))?.length).toBe(3);
-    expect(detail).toContain('warnings.push(tr("exerciseVideoLoadWarning"))');
-    expect(detail).toContain('const metadata = metadataLine(formatExerciseDisplayList(item.target_muscle, language, "muscle"), formatExerciseDisplayList(item.equipment, language, "equipment"))');
-    expect(detail).toContain("{metadata ? <p");
+    expect(detail).toContain("useExerciseDetailTranslation");
+    expect(detail).toContain("mediaUrl ? <ExerciseMedia");
+    expect(detail).toContain("exercise.equipment.join");
     expect(history).toContain('week: tr("historyPeriodWeek")');
     expect(history).toContain('month: tr("historyPeriodMonth")');
     expect(history).toContain('aria-label={tr("historyPreviousPeriod")}');

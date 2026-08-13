@@ -191,6 +191,35 @@ describe("AW-8 derived metrics", () => {
     ).toBe(true);
   });
 
+  it("establishes Session Volume at the latest contributing set", () => {
+    const metrics = deriveSessionMetrics([
+      {
+        id: "volume-first",
+        workout_session_id: "session-volume",
+        plan_exercise_id: "bench-press",
+        exercise_name: "Bench Press",
+        reps: 10,
+        weight_kg: 50,
+        completed_at: "2026-07-31T10:00:00.000Z",
+      },
+      {
+        id: "volume-final",
+        workout_session_id: "session-volume",
+        plan_exercise_id: "bench-press",
+        exercise_name: "Bench Press",
+        reps: 8,
+        weight_kg: 50,
+        completed_at: "2026-07-31T10:05:00.000Z",
+      },
+    ]);
+    const volume = metrics.personalRecords.find((record) => record.recordType === "exercise_session_volume");
+    expect(volume).toMatchObject({
+      exerciseLogId: "volume-final",
+      achievedAt: "2026-07-31T10:05:00.000Z",
+      eventSemanticsVersion: "wh6-session-volume-latest-set-v2",
+    });
+  });
+
   it("uses only eligible working sets for performance change", () => {
     const metrics = deriveSessionMetrics([
       {

@@ -270,6 +270,31 @@ export async function getCustomExercise(userId: string | null | undefined, exerc
   return exercises.find((exercise) => exercise.id === exerciseId) ?? null;
 }
 
+export async function updateCustomExerciseVideo(userId: string | null | undefined, exerciseId: string, videoUrl: string | null): Promise<string | null> {
+  const cleanUrl = videoUrl?.trim() || null;
+  if (cleanUrl && !/^https?:\/\/[^\s]+$/i.test(cleanUrl)) throw new Error("Enter a valid http or https video URL.");
+  if (!canSyncUserData(userId)) {
+    const key = storageKey(customPrefix, userId);
+    const current = readJson<StoredCustomExercise[]>(key, []);
+    if (!current.some((exercise) => exercise.id === exerciseId)) throw new Error("Custom exercise not found.");
+    if (canUseBrowserStorage()) {
+      window.localStorage.setItem(key, JSON.stringify(current.map((exercise) => exercise.id === exerciseId
+        ? { ...exercise, video_url: cleanUrl, custom_video_url: cleanUrl, updated_at: new Date().toISOString() }
+        : exercise)));
+    }
+    return cleanUrl;
+  }
+  const { data, error } = await supabase!
+    .from("user_custom_exercises")
+    .update({ video_url: cleanUrl, custom_video_url: cleanUrl })
+    .eq("id", exerciseId)
+    .eq("user_id", userId)
+    .select("custom_video_url")
+    .single();
+  if (error) throw new Error(error.message);
+  return typeof data?.custom_video_url === "string" ? data.custom_video_url : null;
+}
+
 export async function saveCustomExercise(userId: string | null | undefined, input: CustomExerciseInput): Promise<Workout> {
   const name = input.name.trim();
   if (!name) throw new Error("Exercise name is required.");

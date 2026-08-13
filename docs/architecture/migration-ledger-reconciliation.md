@@ -4,7 +4,7 @@
 **Evidence captured:** 2026-08-03T18:10:27.000Z
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `92d936bc513af83fff41913477a8148a9ab5b845`
-**Status:** Applied Production history reconciled; one P10F repository migration intentionally pending pre-merge
+**Status:** Applied Production history reconciled; two repository migrations intentionally pending
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
@@ -12,17 +12,17 @@ This document records migration identity and verification. It does not independe
 
 - Physical Production migration records: **87**
 - Exact applications (`state = applied`): **63**
-- Repository-only pending migrations: **1**
-- `pendingCount = 1`
+- Repository-only pending migrations: **2**
+- `pendingCount = 2`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 1`
+- `unresolvedCount = 2`
 - `historyRepair.state = pending`
-- `release_ready = false` while the P10F repository migration remains intentionally pending
+- `release_ready = false` while the repository migrations remain intentionally pending
 - Released compatibility marker: `20260724232734`
 - Latest physical Production record: `20260804180932_fix_profiles_update_policy_recursion`
 - Activity Catalog Production remains isolated from the Main migration ledger
 
-The previously applied Plaivra Production migration history remains reconciled through `20260804180932_fix_profiles_update_policy_recursion`. P10F adds one new repository-only migration, `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql`, which is intentionally classified `pending` for Stage A. It has not been applied to Production, claims no Production identity, and must not be replayed or applied before explicit Planner approval.
+The previously applied Plaivra Production migration history remains reconciled through `20260804180932_fix_profiles_update_policy_recursion`. P10F migration `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql` and Exercise Detail + Personal Records migration `20260813042754_exercise_detail_personal_records_authority.sql` are intentionally classified `pending`. Neither has been applied to Production, neither claims a Production identity, and neither may be replayed or applied before explicit Planner approval.
 
 Physical schema advancement and compatibility-marker promotion remain separate release operations. The pending P10F repository state does not authorize Production migration application, application deployment, or compatibility-marker promotion.
 
@@ -99,6 +99,13 @@ AW-9 remains represented by repository migration `20260731090000_active_workout_
 - Ledger state: `pending`; Production version/name: intentionally absent.
 - No historical rows are rewritten; the migration remains repository-only until the Planner explicitly approves the merge/cutover sequence.
 - Do not replay or apply the P10F migration before that approval.
+
+## Exercise Detail + Personal Records pending migration authority
+
+- `20260813042754_exercise_detail_personal_records_authority.sql` is the additive Main schema authority for Exercise Detail + Personal Records.
+- Ledger state: `pending`; Production version/name: intentionally absent.
+- It preserves historical Verified events while adding versioned semantics, owner-scoped Manual records, and guarded atomic Add-to-plan authority.
+- Do not replay or apply this migration before explicit Planner approval of the phase merge/release sequence.
 
 ## Authority and verification
 

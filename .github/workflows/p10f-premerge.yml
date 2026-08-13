@@ -94,7 +94,7 @@ jobs:
           const ledger = JSON.parse(fs.readFileSync('supabase/migration-ledger.json', 'utf8'));
           const migration = ledger.entries.find((entry) => entry.localFile === '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql');
           if (!migration || migration.state !== 'pending' || migration.productionVersion || migration.productionName) process.exit(1);
-          if (ledger.pendingCount !== 1 || ledger.unresolvedCount !== 1 || ledger.historyRepair?.state !== 'pending') process.exit(1);
+          if (ledger.pendingCount < 1 || ledger.unresolvedCount !== ledger.pendingCount || ledger.historyRepair?.state !== 'pending') process.exit(1);
           NODE
           node - <<'NODE'
           const fs = require('node:fs');

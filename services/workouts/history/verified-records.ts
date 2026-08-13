@@ -432,6 +432,7 @@ function recordPayload(record: DerivedPersonalRecord) {
     comparison_context_key: record.comparisonContextKey,
     set_type: record.setType,
     achieved_at: record.achievedAt,
+    event_semantics_version: record.eventSemanticsVersion,
   };
 }
 

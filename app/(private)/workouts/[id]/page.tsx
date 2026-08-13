@@ -1,458 +1,142 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, ExternalLink, Heart, Play, RotateCcw, Save, TrendingUp, ChevronDown } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { CardSkeleton, ErrorState } from "@/components/ui/state-views";
-import { PageHeading } from "@/components/layout/page-heading";
-import { TrainPageContainer } from "@/components/workouts/train-ui";
-import { ExerciseVideoPlayer } from "@/components/workouts/video-player";
+import { ArrowLeft, ArrowRight, ExternalLink, Heart, MoreHorizontal, Play, Plus } from "lucide-react";
+
 import { useAuth } from "@/components/auth/auth-provider";
+import { AddToPlanDialog } from "@/components/exercise-detail/add-to-plan-dialog";
+import { ExerciseAnatomy, exerciseAnatomyAnalysis } from "@/components/exercise-detail/exercise-anatomy";
+import { ExerciseMedia } from "@/components/exercise-detail/exercise-media";
+import { ExerciseMoreDialog } from "@/components/exercise-detail/exercise-more-dialog";
+import { ExercisePerformance } from "@/components/exercise-detail/exercise-performance";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
-import Link from "next/link";
-import { getExerciseVideos, getUserExerciseVideo, getWorkout, getWorkoutAlternatives, resetUserExerciseVideo, upsertUserExerciseVideo } from "@/services/database/workout-library";
-import { getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
-import { getCustomExercisesWithStatus, getFavoriteExerciseIdsWithStatus, setFavoriteExercise } from "@/services/workouts/exercise-library-store";
-import { findExerciseVideo } from "@/services/workouts/video-matching";
-import { userSafeError } from "@/lib/error-formatting";
+import { TrainPageContainer } from "@/components/workouts/train-ui";
+import { addToPlanActivityPayload } from "@/lib/exercise-detail/model";
+import { useExerciseDetailTranslation } from "@/lib/i18n/exercise-detail";
 import { cn } from "@/lib/utils";
-import { useTrainTranslation } from "@/lib/i18n/train";
-import { formatExerciseDisplayList, formatExerciseDisplayValue } from "@/lib/train/exercise-display";
-import type { ExerciseLog, ExerciseVideo, Workout, WorkoutSessionSummary } from "@/types";
+import { CatalogClientError } from "@/services/activity-catalog/client";
+import { getExerciseVideos, getUserExerciseVideo } from "@/services/database/workout-library";
+import { loadExerciseAlternatives, resolveExerciseDetail, type ResolvedExerciseDetail } from "@/services/exercise-detail/client";
+import { getFavoriteExerciseIdsWithStatus, setFavoriteExercise } from "@/services/workouts/exercise-library-store";
+import type { ExerciseVideo } from "@/types";
 
-function normalizeExerciseName(value: string) {
-  return value.toLowerCase().replace(/^[a-z]\d\s*[:.)-]\s*/i, "").replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function estimateOneRepMax(weightKg: number, reps: number) {
-  if (weightKg <= 0 || reps <= 0) return 0;
-  return Math.round(weightKg * (1 + reps / 30) * 10) / 10;
-}
-
-function round(value: number) {
-  return Math.round(value * 10) / 10;
-}
-
-function exerciseLogsFor(history: WorkoutSessionSummary[], workout: Pick<Workout, "id" | "name">) {
-  const target = normalizeExerciseName(workout.name);
-  return history.flatMap((session) =>
-    (session.exercise_logs ?? [])
-      .filter((log) => {
-        if (log.source_workout_id) return log.source_workout_id === workout.id;
-        if (session.workout_id) return session.workout_id === workout.id;
-        return normalizeExerciseName(log.exercise_name) === target;
-      })
-      .map((log) => ({ ...log, sessionDate: session.completed_at || session.started_at }))
-  );
-}
-
-function buildExerciseHistory(logs: Array<ExerciseLog & { sessionDate: string }>) {
-  const valid = logs.filter((log) => Number(log.reps ?? 0) > 0 || Number(log.weight_kg ?? 0) > 0);
-  const bestWeight = Math.max(0, ...valid.map((log) => Number(log.weight_kg ?? 0)));
-  const bestReps = Math.max(0, ...valid.map((log) => Number(log.reps ?? 0)));
-  const bestOneRepMax = Math.max(0, ...valid.map((log) => estimateOneRepMax(Number(log.weight_kg ?? 0), Number(log.reps ?? 0))));
-  const bestSet = [...valid].sort((a, b) => (Number(b.weight_kg ?? 0) * Number(b.reps ?? 0)) - (Number(a.weight_kg ?? 0) * Number(a.reps ?? 0)))[0] ?? null;
-  const volumeByDate = new Map<string, number>();
-  const bestSetByDate = new Map<string, number>();
-  const oneRmByDate = new Map<string, number>();
-
-  valid.forEach((log) => {
-    const date = log.sessionDate.slice(0, 10);
-    const volume = Number(log.weight_kg ?? 0) * Number(log.reps ?? 0);
-    const oneRm = estimateOneRepMax(Number(log.weight_kg ?? 0), Number(log.reps ?? 0));
-    volumeByDate.set(date, (volumeByDate.get(date) ?? 0) + volume);
-    bestSetByDate.set(date, Math.max(bestSetByDate.get(date) ?? 0, volume));
-    oneRmByDate.set(date, Math.max(oneRmByDate.get(date) ?? 0, oneRm));
-  });
-
-  const trends = Array.from(volumeByDate.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([date, volume]) => ({
-    date,
-    volume: round(volume),
-    bestSetVolume: round(bestSetByDate.get(date) ?? 0),
-    estimatedOneRepMax: round(oneRmByDate.get(date) ?? 0)
-  }));
-
-  return { count: valid.length, bestWeight, bestReps, bestOneRepMax: round(bestOneRepMax), bestSet, trends };
-}
-
-function sameText(a: string | null | undefined, b: string | null | undefined) {
-  const left = normalizeExerciseName(a ?? "");
-  const right = normalizeExerciseName(b ?? "");
-  return Boolean(left && right && left === right);
-}
-
-function hasInvalidUrl(value: string | null | undefined) {
-  const clean = value?.trim();
-  return Boolean(clean && !/^https?:\/\/[^\s]+$/i.test(clean));
-}
-
-function metadataLine(...values: Array<string | null | undefined>) {
-  return values.map((value) => value?.trim()).filter(Boolean).join(" · ");
-}
+type Secondary<T> = { kind: "loading" | "ready" | "failed"; data: T };
 
 export default function WorkoutDetailsPage() {
   const params = useParams<{ id: string }>();
   const { user } = useAuth();
-  const userId = user?.id;
   const { toast } = useToast();
-  const { language, dir, locale, tr } = useTrainTranslation();
-  const [workout, setWorkout] = useState<Workout | null>(null);
-  const [video, setVideo] = useState<ExerciseVideo | null>(null);
-  const [customVideoUrl, setCustomVideoUrl] = useState("");
-  const [customVideoDraft, setCustomVideoDraft] = useState("");
-  const [isSavingVideo, setIsSavingVideo] = useState(false);
-  const [loadError, setLoadError] = useState("");
-  const [loadWarning, setLoadWarning] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
-  const [alternatives, setAlternatives] = useState<Workout[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
-  const [isFavoritePending, setIsFavoritePending] = useState(false);
-  const [favoriteError, setFavoriteError] = useState("");
-  const [videoStatus, setVideoStatus] = useState<"idle" | "saving" | "saved" | "failed" | "reset">("idle");
-  const [videoMessage, setVideoMessage] = useState("");
+  const { dir, locale, ed } = useExerciseDetailTranslation();
+  const [core, setCore] = useState<ResolvedExerciseDetail | null>(null);
+  const [coreState, setCoreState] = useState<"loading" | "failed" | "not_found">("loading");
+  const [favorites, setFavorites] = useState<Secondary<string[]>>({ kind: "loading", data: [] });
+  const [favoritePending, setFavoritePending] = useState(false);
+  const [alternatives, setAlternatives] = useState<Secondary<Awaited<ReturnType<typeof loadExerciseAlternatives>>>>({ kind: "loading", data: [] });
+  const [videos, setVideos] = useState<Secondary<ExerciseVideo[]>>({ kind: "loading", data: [] });
+  const [customVideoUrl, setCustomVideoUrl] = useState<string | null>(null);
+  const [showAllAlternatives, setShowAllAlternatives] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError("");
-    setLoadWarning("");
-    try {
-      const warnings: string[] = [];
-      const customResult = await getCustomExercisesWithStatus(userId);
-      if (customResult.status.source === "degraded" && customResult.status.message) warnings.push(customResult.status.message);
-      const customExercise = customResult.data.find((exercise) => exercise.id === params.id) ?? null;
-      const nextWorkout = customExercise ?? await getWorkout(params.id, locale);
-      const [videosResult, customVideoResult, historyResult, alternativesResult, favoritesResult] = await Promise.allSettled([
-        getExerciseVideos(nextWorkout.name, locale),
-        userId && !customExercise ? getUserExerciseVideo(userId, nextWorkout.id) : Promise.resolve(null),
-        userId ? getWorkoutHistoryDetailed(userId, 150) : Promise.resolve([]),
-        getWorkoutAlternatives(nextWorkout.id, 6, locale),
-        getFavoriteExerciseIdsWithStatus(userId)
-      ]);
-      const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
-      if (videosResult.status === "rejected") warnings.push(tr("exerciseVideoLoadWarning"));
-      const customVideo = customVideoResult.status === "fulfilled" ? customVideoResult.value : null;
-      if (customVideoResult.status === "rejected") warnings.push(tr("customVideoLoadWarning"));
-      const workoutHistory = historyResult.status === "fulfilled" ? historyResult.value : [];
-      if (historyResult.status === "rejected") warnings.push(tr("exerciseHistoryLoadWarning"));
-      const libraryAlternatives = alternativesResult.status === "fulfilled" ? alternativesResult.value.data : [];
-      if (alternativesResult.status === "fulfilled" && alternativesResult.value.status.message) warnings.push(alternativesResult.value.status.message);
-      if (alternativesResult.status === "rejected") warnings.push(tr("alternativesLoadWarning"));
-      if (favoritesResult.status === "fulfilled") {
-        setFavoriteIds(favoritesResult.value.data);
-        if (favoritesResult.value.status.source === "degraded" && favoritesResult.value.status.message) warnings.push(favoritesResult.value.status.message);
-      } else {
-        warnings.push(tr("favoriteLoadWarning"));
-        setFavoriteIds([]);
-      }
-      const localCustomAlternatives = customResult.data
-        .filter((item) => item.id !== nextWorkout.id)
-        .filter((item) => sameText(item.target_muscle, nextWorkout.target_muscle) || sameText(item.equipment, nextWorkout.equipment) || sameText(item.mechanics, nextWorkout.mechanics));
-      const combinedAlternatives = [...localCustomAlternatives, ...libraryAlternatives]
-        .filter((item) => item.id !== nextWorkout.id)
-        .filter((item, index, all) => all.findIndex((match) => match.id === item.id) === index)
-        .slice(0, 6);
-      setWorkout(nextWorkout);
-      setVideo(findExerciseVideo(nextWorkout, videos));
-      setCustomVideoUrl(customExercise?.custom_video_url ?? customVideo?.custom_video_url ?? "");
-      setCustomVideoDraft(customExercise?.custom_video_url ?? customVideo?.custom_video_url ?? "");
-      setHistory(workoutHistory);
-      setAlternatives(combinedAlternatives);
-      setLoadWarning(Array.from(new Set(warnings)).join(" "));
-    } catch (error) {
-      const message = userSafeError(error, tr("workoutDetailsLoadFailed"));
-      setLoadError(message);
-      toast({ title: tr("couldNotLoadWorkout"), description: message });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [locale, params.id, toast, tr, userId]);
+  const loadCore = useCallback(() => {
+    setCoreState("loading");
+    setCore(null);
+    void resolveExerciseDetail(params.id, user?.id, locale).then((resolved) => {
+      setCore(resolved);
+      setCustomVideoUrl(resolved.initialCustomVideoUrl);
+    }).catch((error) => setCoreState(error instanceof CatalogClientError && error.status === 404 ? "not_found" : "failed"));
+  }, [locale, params.id, user?.id]);
+  useEffect(loadCore, [loadCore]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!user?.id) { setFavorites({ kind: "ready", data: [] }); return; }
+    let active = true;
+    setFavorites({ kind: "loading", data: [] });
+    void getFavoriteExerciseIdsWithStatus(user.id).then((result) => active && setFavorites({ kind: "ready", data: result.data })).catch(() => active && setFavorites({ kind: "failed", data: [] }));
+    return () => { active = false; };
+  }, [user?.id]);
 
-  const exerciseHistory = useMemo(() => workout ? buildExerciseHistory(exerciseLogsFor(history, workout)) : null, [history, workout]);
+  useEffect(() => {
+    if (!core) return;
+    let active = true;
+    setAlternatives({ kind: "loading", data: [] });
+    void loadExerciseAlternatives(core, locale).then((data) => active && setAlternatives({ kind: "ready", data })).catch(() => active && setAlternatives({ kind: "failed", data: [] }));
+    return () => { active = false; };
+  }, [core, locale]);
 
-  if (isLoading) return <CardSkeleton rows={7} />;
-
-  if (loadError) {
-    return (
-      <ErrorState
-        title={tr("planUnavailable")}
-        description={loadError}
-        onRetry={load}
-        fallbackLabel={tr("exerciseLibrary")}
-        fallbackHref="/workouts"
-      />
-    );
-  }
-
-  if (!workout) {
-    return (
-      <ErrorState
-        title={tr("workoutNotFound")}
-        description={tr("exerciseNotFoundDescription")}
-        fallbackLabel={tr("exerciseLibrary")}
-        fallbackHref="/workouts"
-      />
-    );
-  }
-
-  const guideUrl = workout.exercise_url || (workout.notes?.startsWith("http") ? workout.notes : video?.exercise_url);
-  const videoUrl = customVideoUrl || null;
-  const displayVideo = video
-    ? { ...video, exercise_url: guideUrl ?? video.exercise_url, video_url: customVideoUrl || video.video_url }
-    : videoUrl
-      ? { id: workout.id, exercise_name: workout.name, category_type: workout.category, category: workout.target_muscle, exercise_url: guideUrl ?? "", video_url: customVideoUrl, instructions: workout.instructions, source: "user_custom", is_global: true }
-      : null;
-  const secondaryMuscles = workout.secondary_muscles ?? video?.secondary_muscles ?? [];
-  const displayTarget = formatExerciseDisplayList(workout.target_muscle || workout.muscle_category, language, "muscle");
-  const displayEquipment = formatExerciseDisplayList(workout.equipment_required || workout.equipment, language, "equipment");
-  const displayDifficulty = formatExerciseDisplayValue(workout.experience_level || workout.difficulty, language, "difficulty");
-  const displayMovement = formatExerciseDisplayValue(workout.movement_pattern || workout.mechanics || workout.category, language, "movement");
-  const displayForce = formatExerciseDisplayValue(workout.force_type, language, "force");
-  const displaySecondary = formatExerciseDisplayList(secondaryMuscles, language, "muscle");
-  const favorite = favoriteIds.includes(workout.id);
-  const mistakes = workout.notes && !workout.notes.startsWith("http") && /mistake|avoid|form/i.test(workout.notes) ? workout.notes : tr("noneSaved");
-  const customVideoInvalid = hasInvalidUrl(customVideoDraft);
-
-  async function saveCustomVideo() {
-    if (!workout) return;
-    if (!userId) {
-      const message = tr("customVideoSignIn");
-      setVideoStatus("failed");
-      setVideoMessage(message);
-      toast({ title: tr("signInRequired"), description: message });
-      return;
+  useEffect(() => {
+    if (!core) return;
+    let active = true;
+    if (core.core.identity.source === "custom") {
+      setVideos({ kind: "ready", data: [] });
+      return () => { active = false; };
     }
-    if (customVideoInvalid) {
-      setVideoStatus("failed");
-      setVideoMessage(tr("invalidCustomVideoUrl"));
-      return;
+    setVideos({ kind: "loading", data: [] });
+    void getExerciseVideos(core.core.name, locale).then((data) => active && setVideos({ kind: "ready", data })).catch(() => active && setVideos({ kind: "failed", data: [] }));
+    if (user?.id) {
+      void getUserExerciseVideo(user.id, core.core.identity.activityId).then((video) => active && setCustomVideoUrl(video?.custom_video_url ?? null)).catch(() => undefined);
     }
-    try {
-      setIsSavingVideo(true);
-      setVideoStatus("saving");
-      setVideoMessage("");
-      const saved = await upsertUserExerciseVideo(userId, workout.id, customVideoDraft);
-      setCustomVideoUrl(saved.custom_video_url);
-      setCustomVideoDraft(saved.custom_video_url);
-      setVideoStatus("saved");
-      setVideoMessage(tr("customVideoSavedMessage"));
-      toast({ title: tr("customVideoSavedTitle"), description: tr("customVideoSavedDescription") });
-    } catch (error) {
-      const message = userSafeError(error, tr("checkVideoLink"));
-      setVideoStatus("failed");
-      setVideoMessage(message);
-      toast({ title: tr("customVideoSaveFailed"), description: message });
-    } finally {
-      setIsSavingVideo(false);
-    }
-  }
+    return () => { active = false; };
+  }, [core, locale, user?.id]);
 
-  async function resetCustomVideo() {
-    if (!workout || !userId) return;
-    try {
-      setIsSavingVideo(true);
-      setVideoStatus("saving");
-      setVideoMessage("");
-      await resetUserExerciseVideo(userId, workout.id);
-      setCustomVideoUrl("");
-      setCustomVideoDraft("");
-      setVideoStatus("reset");
-      setVideoMessage(tr("customVideoClearedMessage"));
-      toast({ title: tr("customVideoClearedTitle"), description: tr("customVideoClearedDescription") });
-    } catch (error) {
-      const message = userSafeError(error, tr("customVideoResetFailedMessage"));
-      setVideoStatus("failed");
-      setVideoMessage(message);
-      toast({ title: tr("customVideoResetFailedTitle"), description: message });
-    } finally {
-      setIsSavingVideo(false);
-    }
-  }
-
+  const favorite = core ? favorites.data.includes(core.core.identity.activityId) : false;
   async function toggleFavorite() {
-    const currentWorkout = workout;
-    if (!currentWorkout || isFavoritePending) return;
-    const previousIds = favoriteIds;
-    const nextFavorite = !favorite;
-    const optimistic = nextFavorite
-      ? Array.from(new Set([...favoriteIds, currentWorkout.id]))
-      : favoriteIds.filter((id) => id !== currentWorkout.id);
-    setIsFavoritePending(true);
-    setFavoriteError("");
-    setFavoriteIds(optimistic);
-    try {
-      const next = await setFavoriteExercise(userId, currentWorkout.id, nextFavorite);
-      setFavoriteIds(next);
-      toast({ title: nextFavorite ? tr("exerciseFavorited") : tr("exerciseUnfavorited"), description: currentWorkout.name });
-    } catch (error) {
-      const message = userSafeError(error, tr("favoriteRestoreMessage"));
-      setFavoriteIds(previousIds);
-      setFavoriteError(message);
-      toast({ title: tr("favoriteNotSaved"), description: message });
-    } finally {
-      setIsFavoritePending(false);
-    }
+    if (!core || !user?.id || favoritePending) return;
+    const previous = favorites.data;
+    const next = favorite ? previous.filter((id) => id !== core.core.identity.activityId) : [...previous, core.core.identity.activityId];
+    setFavoritePending(true); setFavorites({ kind: "ready", data: next });
+    try { setFavorites({ kind: "ready", data: await setFavoriteExercise(user.id, core.core.identity.activityId, !favorite) }); }
+    catch { setFavorites({ kind: "failed", data: previous }); toast({ title: ed("favoriteFailed") }); }
+    finally { setFavoritePending(false); }
   }
 
-  return (
-    <TrainPageContainer className="space-y-6" dir={dir}>
-      <PageHeading
-        title={workout.name}
-        description={metadataLine(displayTarget, displayEquipment, displayDifficulty)}
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Button className="min-h-12" variant={favorite ? "default" : "outline"} onClick={toggleFavorite} disabled={isFavoritePending} aria-busy={isFavoritePending}>
-              <Heart className={cn("h-4 w-4", favorite && "fill-current")} />
-              {isFavoritePending ? tr("saving") : favorite ? tr("savedLabel") : tr("favorite")}
-            </Button>
-            <Button asChild className="min-h-12">
-              <Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> {tr("startSession")}</Link>
-            </Button>
-          </div>
-        }
-      />
-      {loadWarning ? <InlineStatus tone="warning" title={tr("degradedExerciseData")} description={loadWarning} /> : null}
-      {favoriteError ? <InlineStatus tone="error" title={tr("favoriteNotSaved")} description={favoriteError} /> : null}
-      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4">
-          <Card>
-            <CardHeader><CardTitle>{tr("details")}</CardTitle></CardHeader>
-            <CardContent className="space-y-5">
-              {!workout.is_global ? <div><Badge variant="success">{tr("custom")}</Badge></div> : null}
+  if (!core) {
+    if (coreState === "loading") return <ExerciseProfileSkeleton label={ed("loading")} />;
+    return <TrainPageContainer className="max-w-[1040px] py-4" dir={dir}><div className="mx-auto max-w-xl py-20 text-center"><h1 className="text-2xl font-semibold">{coreState === "not_found" ? ed("notFound") : ed("coreFailed")}</h1><p className="mt-3 text-muted-foreground">{coreState === "not_found" ? ed("notFoundDescription") : ed("coreFailed")}</p><div className="mt-6 flex justify-center gap-3">{coreState === "failed" ? <Button onClick={loadCore}>{ed("retry")}</Button> : null}<Button asChild variant="outline"><Link href="/workouts">{ed("back")}</Link></Button></div></div></TrainPageContainer>;
+  }
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Detail label={tr("primaryMuscle")} value={displayTarget || tr("noneSaved")} />
-                <Detail label={tr("secondaryMuscle")} value={displaySecondary || tr("noneSaved")} />
-                <Detail label={tr("equipment")} value={displayEquipment || tr("noneSaved")} />
-                <Detail label={tr("mechanics")} value={displayMovement || tr("noneSaved")} />
-                <Detail label={tr("forceType")} value={displayForce || tr("noneSaved")} />
-                <Detail label={tr("difficulty")} value={displayDifficulty || tr("noneSaved")} />
-              </div>
+  const exercise = core.core;
+  const displayVideo = videos.data[0] ?? null;
+  const mediaUrl = customVideoUrl ?? displayVideo?.video_url ?? exercise.sourceVideoUrl;
+  const guideUrl = exercise.guideUrl ?? displayVideo?.exercise_url ?? null;
+  const visibleAlternatives = showAllAlternatives ? alternatives.data : alternatives.data.slice(0, 3);
+  const metadata = [exercise.activityType ?? exercise.identity.domain, exercise.equipment.join(", "), exercise.difficulty].filter(Boolean);
+  const addPayload = addToPlanActivityPayload(core);
+  const anatomyAnalysis = exercise.target.anatomyAvailable ? exerciseAnatomyAnalysis(exercise) : null;
 
-              <TextPanel title={tr("instructions")} text={video?.instructions || workout.instructions} fallback={tr("noneSaved")} />
-              <TextPanel title={tr("mistakesToAvoid")} text={mistakes} fallback={tr("noneSaved")} />
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                {guideUrl ? <Button asChild variant="outline" className="min-h-12"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> {tr("openExerciseGuide")}</a></Button> : <Button type="button" variant="outline" className="min-h-12" disabled>{tr("noGuide")}</Button>}
-                {customVideoUrl ? <Button asChild variant="outline" className="min-h-12"><a href={customVideoUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> {tr("openCustomVideo")}</a></Button> : <Button type="button" variant="outline" className="min-h-12" disabled>{tr("noCustomVideo")}</Button>}
-              </div>
-
-              <div className="rounded-md border p-3">
-                <Label htmlFor="custom-video-url">{tr("customVideoUrl")}</Label>
-                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                  <Input
-                    id="custom-video-url"
-                    value={customVideoDraft}
-                    onChange={(event) => {
-                      setCustomVideoDraft(event.target.value);
-                      setVideoStatus("idle");
-                      setVideoMessage("");
-                    }}
-                    placeholder="https://youtube.com/watch?v=..."
-                    className="h-12"
-                    aria-invalid={customVideoInvalid}
-                  />
-                  <Button type="button" className="min-h-12" onClick={saveCustomVideo} disabled={isSavingVideo || !customVideoDraft.trim() || customVideoInvalid}><Save className="h-4 w-4" /> {isSavingVideo && videoStatus === "saving" ? tr("saving") : tr("save")}</Button>
-                  <Button type="button" variant="outline" className="min-h-12" onClick={resetCustomVideo} disabled={isSavingVideo || !customVideoUrl}><RotateCcw className="h-4 w-4" /> {tr("reset")}</Button>
-                </div>
-                {customVideoInvalid ? <p className="mt-2 text-sm leading-6 text-destructive">{tr("invalidCustomVideoUrl")}</p> : null}
-                {videoMessage ? <InlineStatus className="mt-3" tone={videoStatus === "failed" ? "error" : "success"} title={videoStatus === "failed" ? tr("customVideoSaveFailed") : videoStatus === "reset" ? tr("customVideoClearedTitle") : tr("customVideoSavedTitle")} description={videoMessage} /> : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" /> {tr("realWorkoutHistory")}</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              {!exerciseHistory?.count ? <p className="text-sm text-muted-foreground">{tr("noWorkoutHistory")}</p> : null}
-              {exerciseHistory?.count ? (
-                <>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Detail label={tr("bestWeight")} value={`${exerciseHistory.bestWeight} kg`} />
-                    <Detail label={tr("bestReps")} value={`${exerciseHistory.bestReps}`} />
-                    <Detail label={tr("estimatedOneRepMax")} value={`${exerciseHistory.bestOneRepMax} kg`} />
-                  </div>
-                  <Detail label={tr("bestSet")} value={exerciseHistory.bestSet ? `${exerciseHistory.bestSet.weight_kg ?? 0} kg × ${exerciseHistory.bestSet.reps ?? 0}` : tr("noSetData")} />
-                  {exerciseHistory.trends.length < 2 ? <p className="text-sm text-muted-foreground">{tr("notEnoughHistory")}</p> : <div className="space-y-2">{exerciseHistory.trends.slice(-6).map((point) => <div key={point.date} className="rounded-md border p-3 text-sm"><p className="font-semibold">{point.date}</p><p className="text-muted-foreground">{point.volume} kg · {point.bestSetVolume} kg · 1RM {point.estimatedOneRepMax} kg</p></div>)}</div>}
-                </>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle>{tr("alternativeExercises")}</CardTitle></CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              {!alternatives.length ? <p className="text-sm text-muted-foreground">{tr("noAlternatives")}</p> : null}
-              {alternatives.map((item) => {
-                const metadata = metadataLine(formatExerciseDisplayList(item.target_muscle, language, "muscle"), formatExerciseDisplayList(item.equipment, language, "equipment"));
-                return <Link key={item.id} href={`/workouts/${item.id}`} className="min-h-12 rounded-md border p-3 transition hover:border-primary"><p className="font-semibold">{item.name}</p>{metadata ? <p className="text-sm text-muted-foreground">{metadata}</p> : null}</Link>;
-              })}
-            </CardContent>
-          </Card>
-        </div>
-        <ExerciseVideoPlayer video={displayVideo} />
+  return <TrainPageContainer className="max-w-[1040px] py-2 sm:py-4" dir={dir}>
+    <Button asChild variant="ghost" className="min-h-11 px-0 hover:bg-transparent"><Link href="/workouts"><ArrowLeft className="h-4 w-4 rtl:rotate-180" />{ed("back")}</Link></Button>
+    <header className="mt-5 border-b pb-7 sm:flex sm:items-start sm:justify-between sm:gap-8">
+      <div className="min-w-0"><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{exercise.name}</h1>{exercise.shortDescription ? <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">{exercise.shortDescription}</p> : null}{metadata.length ? <p className="mt-3 text-sm text-muted-foreground">{metadata.map((item, index) => <span key={String(item)}>{index ? " · " : ""}<bdi>{item}</bdi></span>)}</p> : null}</div>
+      <div className="mt-5 flex flex-wrap gap-2 sm:mt-0 sm:justify-end">
+        {exercise.startHref ? <Button asChild className="min-h-12"><Link href={exercise.startHref}><Play className="h-4 w-4" />{ed("start")}</Link></Button> : null}
+        {user?.id ? <Button type="button" variant="outline" className="min-h-12" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" />{ed("addPlan")}</Button> : null}
+        {user?.id ? <Button type="button" variant="outline" size="icon" className="min-h-12 min-w-12" aria-label={favorite ? ed("saved") : ed("favorite")} aria-pressed={favorite} aria-busy={favoritePending} onClick={toggleFavorite} disabled={favoritePending}><Heart className={cn("h-5 w-5", favorite && "fill-current")} /></Button> : null}
+        {user?.id ? <Button type="button" variant="outline" size="icon" className="min-h-12 min-w-12" aria-label={ed("more")} onClick={() => setMoreOpen(true)}><MoreHorizontal className="h-5 w-5" /></Button> : null}
       </div>
-    </TrainPageContainer>
-  );
+    </header>
+
+    {exercise.target.kind !== "none" ? <section className="py-8" aria-labelledby="exercise-target-heading"><h2 id="exercise-target-heading" className="text-xl font-semibold tracking-tight">{ed("target")}</h2><div className={cn("mt-5", anatomyAnalysis && "grid gap-8 md:grid-cols-[3fr_2fr]")}><dl className="space-y-5">{exercise.target.primary.length ? <Term label={ed("primary")} values={exercise.target.primary} /> : null}{exercise.target.secondary.length ? <Term label={ed("secondary")} values={exercise.target.secondary} /> : null}{exercise.target.focus.length ? <Term label={ed("focus")} values={exercise.target.focus} /> : null}</dl>{anatomyAnalysis ? <ExerciseAnatomy exercise={exercise} analysis={anatomyAnalysis} /> : null}</div></section> : null}
+
+    {(exercise.instructions.length || exercise.instructionProse || guideUrl) ? <section className="border-t py-8" aria-labelledby="exercise-instructions-heading"><h2 id="exercise-instructions-heading" className="text-xl font-semibold tracking-tight">{ed("how")}</h2>{exercise.instructions.length ? <ol className="mt-5 space-y-4">{exercise.instructions.map((step, index) => <li key={`${step.order}-${index}`} className="grid grid-cols-[2rem_1fr] gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary" aria-hidden="true">{index + 1}</span><p className="pt-1 leading-7">{step.text}</p></li>)}</ol> : exercise.instructionProse ? <p className="mt-5 max-w-3xl whitespace-pre-line leading-7 text-muted-foreground">{exercise.instructionProse}</p> : null}{guideUrl ? <Button asChild variant="ghost" className="mt-5 min-h-11 px-0 hover:bg-transparent"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" />{ed("guide")}</a></Button> : null}</section> : null}
+
+    {exercise.stablePerformanceIdentity ? <ExercisePerformance identity={exercise.stablePerformanceIdentity} /> : null}
+
+    {(exercise.movementPattern || exercise.forceType) ? <section className="border-t py-8" aria-labelledby="exercise-details-heading"><h2 id="exercise-details-heading" className="text-xl font-semibold tracking-tight">{ed("details")}</h2><dl className="mt-5 grid gap-x-10 gap-y-5 sm:grid-cols-2">{exercise.movementPattern ? <Metric label={ed("movement")} value={exercise.movementPattern} /> : null}{exercise.forceType ? <Metric label={ed("force")} value={exercise.forceType} /> : null}</dl></section> : null}
+
+    {alternatives.kind === "failed" ? <section className="border-t py-8"><h2 className="text-xl font-semibold">{ed("alternatives")}</h2><div className="mt-4 flex flex-wrap items-center gap-3"><p className="text-sm text-muted-foreground">{ed("alternativesUnavailable")}</p><Button variant="outline" className="min-h-11" onClick={() => { setAlternatives({ kind: "loading", data: [] }); void loadExerciseAlternatives(core, locale).then((data) => setAlternatives({ kind: "ready", data })).catch(() => setAlternatives({ kind: "failed", data: [] })); }}>{ed("retry")}</Button></div></section> : alternatives.kind === "ready" && alternatives.data.length ? <section className="border-t py-8" aria-labelledby="exercise-alternatives-heading"><h2 id="exercise-alternatives-heading" className="text-xl font-semibold tracking-tight">{ed("alternatives")}</h2><div className="mt-4 divide-y">{visibleAlternatives.map((item) => { const target = item.activity.coverage.find((entry) => entry.role === "primary")?.name; const equipment = item.activity.equipment.map((entry) => entry.name ?? entry.slug).filter(Boolean).join(", "); return <Link key={item.activity.id} href={`/workouts/${item.activity.id}`} className="flex min-h-16 items-center justify-between gap-4 py-3 hover:text-primary"><span><span className="font-medium">{item.activity.name}</span>{target || equipment ? <span className="mt-1 block text-sm text-muted-foreground">{[target, equipment].filter(Boolean).join(" · ")}</span> : null}</span><ArrowRight className="h-4 w-4 shrink-0 rtl:rotate-180" /></Link>; })}</div>{alternatives.data.length > 3 && !showAllAlternatives ? <Button type="button" variant="ghost" className="mt-3 min-h-11 px-0 hover:bg-transparent" onClick={() => setShowAllAlternatives(true)}>{ed("allAlternatives")}</Button> : null}</section> : null}
+
+    {mediaUrl ? <ExerciseMedia name={exercise.name} url={mediaUrl} /> : null}
+    {user?.id ? <><AddToPlanDialog open={addOpen} onOpenChange={setAddOpen} userId={user.id} activity={addPayload} fields={exercise.prescription?.fields ?? []} /><ExerciseMoreDialog open={moreOpen} onOpenChange={setMoreOpen} userId={user.id} exerciseId={exercise.identity.activityId} exerciseName={exercise.name} customExercise={exercise.identity.source === "custom"} currentUrl={customVideoUrl} onSaved={setCustomVideoUrl} /></> : null}
+  </TrainPageContainer>;
 }
 
-function TextPanel({ title, text, fallback }: { title: string; text: string | null | undefined; fallback: string }) {
-  return (
-    <details className="group rounded-md bg-muted/40">
-      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 p-3 text-sm font-semibold text-foreground">
-        {title}
-        <ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" />
-      </summary>
-      <p className="px-3 pb-3 leading-7 text-muted-foreground">{text || fallback}</p>
-    </details>
-  );
+function ExerciseProfileSkeleton({ label }: { label: string }) {
+  return <TrainPageContainer className="max-w-[1040px] py-4"><div className="sr-only" role="status">{label}</div><div className="h-11 w-48 animate-pulse rounded-xl bg-muted" /><div className="mt-7 border-b pb-8"><div className="h-10 w-2/3 animate-pulse rounded-xl bg-muted" /><div className="mt-4 h-5 w-1/2 animate-pulse rounded-lg bg-muted" /><div className="mt-6 flex gap-3"><div className="h-12 w-32 animate-pulse rounded-xl bg-muted" /><div className="h-12 w-32 animate-pulse rounded-xl bg-muted" /></div></div>{[1, 2, 3].map((item) => <div key={item} className="border-b py-8"><div className="h-6 w-40 animate-pulse rounded-lg bg-muted" /><div className="mt-5 h-20 w-full animate-pulse rounded-2xl bg-muted/70" /></div>)}</TrainPageContainer>;
 }
 
-function Detail({ label, value }: { label: string | null | undefined; value: string | null | undefined }) {
-  return <div className="rounded-md bg-muted/40 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-sm font-medium text-foreground">{value || "N/A"}</p></div>;
-}
-
-function InlineStatus({
-  tone,
-  title,
-  description,
-  className
-}: {
-  tone: "success" | "warning" | "error";
-  title: string;
-  description: string;
-  className?: string;
-}) {
-  const Icon = tone === "success" ? CheckCircle2 : AlertTriangle;
-  const toneClass = tone === "error"
-    ? "border-destructive/30 bg-destructive/5"
-    : tone === "warning"
-      ? "border-warning/30 bg-warning/10"
-      : "border-success/30 bg-success/5";
-  const iconClass = tone === "error"
-    ? "text-destructive"
-    : tone === "warning"
-      ? "text-warning"
-      : "text-success";
-
-  return (
-    <Card className={cn(toneClass, className)}>
-      <CardContent className="flex items-start gap-3 p-4">
-        <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", iconClass)} />
-        <div>
-          <p className="font-semibold text-foreground">{title}</p>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+function Term({ label, values }: { label: string; values: string[] }) { return <div><dt className="text-sm text-muted-foreground">{label}</dt><dd className="mt-1 text-base font-medium">{values.join(", ")}</dd></div>; }
+function Metric({ label, value }: { label: string; value: string }) { return <div><dt className="text-sm text-muted-foreground">{label}</dt><dd className="mt-1 font-medium">{value}</dd></div>; }
