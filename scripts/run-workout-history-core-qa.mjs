@@ -233,10 +233,32 @@ async function prepareScenario(page, scenario, observation) {
     }
   } else if (scenario.action === "zoom-list") {
     await page.waitForSelector("[data-workout-history-row]");
-    observation.zoomControlsReachable = await page.locator("button:visible, input:visible, a:visible").count() > 2;
+    observation.zoomControlsReachable = await page.evaluate(() => {
+      const elements = [
+        document.querySelector('input[type="search"]'),
+        document.querySelector('[data-workout-history-page] button'),
+        document.querySelector('[data-workout-history-row] a'),
+      ];
+      return elements.every((element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.right <= innerWidth;
+      });
+    });
   } else if (scenario.action === "zoom-detail") {
     await page.waitForSelector("[data-set-history-row]");
-    observation.zoomControlsReachable = await page.locator("button:visible, input:visible, a:visible").count() > 2;
+    observation.zoomControlsReachable = await page.evaluate(() => {
+      const elements = [
+        document.querySelector('[data-session-history-page] a[href="/workout-history"]'),
+        document.querySelector('[data-session-history-page] button'),
+        document.querySelector('[data-set-history-row]'),
+      ];
+      return elements.every((element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.right <= innerWidth;
+      });
+    });
   } else if (scenario.action === "keyboard") {
     for (let count = 0; count < 5; count += 1) await page.keyboard.press("Tab");
   }
