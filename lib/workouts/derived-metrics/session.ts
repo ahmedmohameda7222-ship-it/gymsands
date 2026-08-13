@@ -7,6 +7,7 @@ import type {
   DerivedSessionMetrics,
 } from "./contracts";
 import {
+  DERIVED_RECORD_EVENT_SEMANTICS_VERSION,
   DERIVED_METRICS_FORMULA_VERSION,
   DERIVED_METRICS_SCHEMA_VERSION,
 } from "./contracts";
@@ -362,6 +363,7 @@ function record(
     comparisonContextKey,
     schemaVersion: DERIVED_METRICS_SCHEMA_VERSION,
     formulaVersion: DERIVED_METRICS_FORMULA_VERSION,
+    eventSemanticsVersion: DERIVED_RECORD_EVENT_SEMANTICS_VERSION,
     achievedAt: set.achievedAt,
   };
 }
@@ -419,7 +421,9 @@ export function buildPersonalRecordCandidates(
 
     const volume = sets.reduce((sum, set) => sum + set.volume, 0);
     if (volume > 0 && volume > (previousSessionVolume.get(comparisonBaseKey(first)) ?? 0)) {
-      candidates.push(record(first, "exercise_session_volume", volume, comparisonBaseKey(first)));
+      const establishedBy = [...sets].sort((left, right) =>
+        right.achievedAt.localeCompare(left.achievedAt) || right.exerciseLogId.localeCompare(left.exerciseLogId))[0];
+      candidates.push(record(establishedBy, "exercise_session_volume", volume, comparisonBaseKey(first)));
     }
   }
 

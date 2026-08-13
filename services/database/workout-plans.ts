@@ -748,7 +748,26 @@ export async function getUserWorkoutPlanExerciseDetail(
   if (!plan || plan.archived_at) return null;
 
   return {
-    exercise: mapPlanExerciseToWorkout(rawExercise),
+    exercise: hydrateWorkoutMetadata({
+      id: rawExercise.source_workout_id || rawExercise.workout_id || rawExercise.id,
+      plan_exercise_id: rawExercise.id,
+      name: rawExercise.exercise_name,
+      category: rawExercise.category || "",
+      target_muscle: rawExercise.target_muscle || "",
+      equipment: rawExercise.equipment || "",
+      difficulty: "",
+      sets: rawExercise.sets,
+      reps: rawExercise.reps,
+      rest_seconds: rawExercise.rest_seconds,
+      instructions: rawExercise.instructions || "",
+      exercise_url: rawExercise.exercise_url ?? null,
+      video_url: rawExercise.custom_video_url ?? rawExercise.video_url ?? null,
+      custom_video_url: rawExercise.custom_video_url ?? rawExercise.video_url ?? null,
+      notes: rawExercise.notes,
+      is_global: Boolean(rawExercise.source_workout_id || rawExercise.workout_id),
+    }),
+    planId: plan.id,
+    dayId: day.id,
     dayName: day.day_name,
     planName: plan.name,
   };

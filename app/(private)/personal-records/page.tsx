@@ -1,15 +1,5 @@
-import { PageHeading } from "@/components/layout/page-heading";
-import { PersonalRecordsInsights } from "@/components/lifestyle/personal-records-insights";
-import { PersonalRecordsTracker } from "@/components/lifestyle/wellness-trackers";
+import { PersonalRecordsPage as PersonalRecordsScreen } from "@/components/personal-records/personal-records-page";
 
 export default function PersonalRecordsPage() {
-  return (
-    <>
-      <PageHeading title="Personal Records" description="Track exercise performance records with real estimated 1RM insights." />
-      <div className="space-y-4">
-        <PersonalRecordsInsights />
-        <PersonalRecordsTracker />
-      </div>
-    </>
-  );
+  return <PersonalRecordsScreen />;
 }

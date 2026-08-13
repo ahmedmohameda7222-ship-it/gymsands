@@ -5,6 +5,7 @@ import type {
 
 export const DERIVED_METRICS_SCHEMA_VERSION = 1 as const;
 export const DERIVED_METRICS_FORMULA_VERSION = "wh6-v1" as const;
+export const DERIVED_RECORD_EVENT_SEMANTICS_VERSION = "wh6-session-volume-latest-set-v2" as const;
 
 export type DerivedMetricValue = {
   metricKey?: WorkoutPerformanceMetricKey | string;
@@ -99,6 +100,7 @@ export type DerivedPersonalRecord = {
   comparisonContextKey: string;
   schemaVersion: typeof DERIVED_METRICS_SCHEMA_VERSION;
   formulaVersion: typeof DERIVED_METRICS_FORMULA_VERSION;
+  eventSemanticsVersion: typeof DERIVED_RECORD_EVENT_SEMANTICS_VERSION;
   achievedAt: string;
 };
 
