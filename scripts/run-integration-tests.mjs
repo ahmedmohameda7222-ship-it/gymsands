@@ -9,6 +9,7 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 export const DEFAULT_INTEGRATION_DATABASE = "plaivra_ci_test";
 export const DEFAULT_INTEGRATION_POSTGRES_IMAGE = "postgres:15-alpine";
 const MAX_DOCKER_ATTEMPTS = 2;
+const POSTGRES_INIT_COMPLETE_MARKER = "PostgreSQL init process complete; ready for start up.";
 
 export function requireLocalPostgresUrl(value, label, { requireTestName = false } = {}) {
   if (typeof value !== "string" || !value.trim()) {
@@ -108,6 +109,10 @@ export function isRetryableContainerState(state) {
   return state.Running === false || state.Health?.Status === "unhealthy";
 }
 
+export function hasCompletedDisposablePostgresInitialization(logs) {
+  return String(logs ?? "").includes(POSTGRES_INIT_COMPLETE_MARKER);
+}
+
 function docker(args, options = {}) {
   return execFileSync("docker", args, {
     cwd: process.cwd(),
@@ -128,6 +133,7 @@ function dockerBestEffort(args) {
 
 async function waitForDisposablePostgres(containerName) {
   for (let attempt = 1; attempt <= 60; attempt += 1) {
+    const logs = dockerBestEffort(["logs", containerName]);
     const readiness = dockerBestEffort([
       "exec",
       containerName,
@@ -137,7 +143,10 @@ async function waitForDisposablePostgres(containerName) {
       "-d",
       DEFAULT_INTEGRATION_DATABASE,
     ]);
-    if (readiness.status === 0) return;
+    const initialized =
+      logs.status === 0 &&
+      hasCompletedDisposablePostgresInitialization(`${logs.stdout}\n${logs.stderr}`);
+    if (initialized && readiness.status === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   throw new Error("Disposable PostgreSQL did not become ready within 60 seconds.");
