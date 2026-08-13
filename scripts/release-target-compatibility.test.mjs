@@ -11,7 +11,7 @@ const ledger = JSON.parse(
   readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"),
 );
 
-test("all release target consumers preserve the declared compatibility marker while pending P10F blocks release-ready authority", () => {
+test("all release target consumers preserve the declared compatibility marker while pending repository migrations block release-ready authority", () => {
   const releaseTarget = deriveReleaseTarget(ledger);
   const qualityTarget = deriveQualityLedgerTarget(ledger);
   const environment = qualityLedgerEnvironment(qualityTarget);
@@ -32,13 +32,12 @@ test("all release target consumers preserve the declared compatibility marker wh
   assert.throws(
     () => deriveReleaseReadyTarget(ledger),
     /Migration ledger is not release-ready/,
-    "a repository-only pending P10F migration must block release-ready authority before Planner approval",
+    "repository-only pending migrations must block release-ready authority before Planner approval",
   );
 
-  const p10fMigration = "20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql";
   const reconciledFixture = {
     ...ledger,
-    entries: ledger.entries.filter((entry) => entry.localFile !== p10fMigration),
+    entries: ledger.entries.filter((entry) => entry.state !== "pending"),
     pendingCount: 0,
     unresolvedCount: 0,
     historyRepair: {
