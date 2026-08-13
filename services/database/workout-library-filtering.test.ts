@@ -240,6 +240,7 @@ describe("workout library bounded pagination", () => {
     expect(picker).not.toContain("slice(0, 60)");
     expect(picker).toContain("AbortController");
     expect(picker).toContain("data-picker-load-more");
-    expect(picker).toContain("pagination.nextOffset");
+    expect(picker).toContain("pagination.nextCursor");
+    expect(picker).not.toContain("pagination.nextOffset");
   });
 });

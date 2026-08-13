@@ -7,6 +7,7 @@ import type {
   Sport,
   TrainingActivity
 } from "@/lib/activity-catalog/types";
+import type { CatalogAuthoritySnapshot } from "@/lib/activity-catalog/library-types";
 
 export type { PlannedActivityPrescription, PlannedPrescriptionValue } from "./workout-prescription";
 import type { PlannedActivityPrescription } from "./workout-prescription";
@@ -29,6 +30,8 @@ export type SavedActivitySnapshots = {
   metricSchema: MetricSchema | null;
   equipment: Array<ActivityEquipment | string> | Record<string, unknown> | null;
   taxonomy: Record<string, unknown> | null;
+  /** Present on newly materialized native V2 selections; absent on historical rows. */
+  catalogAuthority?: CatalogAuthoritySnapshot | null;
 };
 
 export type PlannedTrainingActivity = {
@@ -105,8 +108,9 @@ export type TrainingProgram = {
 
 /**
  * Phase 2A stores catalog identity, immutable saved snapshots, and planned
- * prescription separately. Performed results intentionally remain outside this
- * model until a later approved execution phase.
+ * prescription separately. P10F extends saved authority with a frozen
+ * Catalog/Library semantic snapshot for newly materialized V2 selections.
+ * Performed results intentionally remain outside this model.
  */
 export type TrainingProgramCatalogContracts = {
   activity: TrainingActivity;
@@ -119,6 +123,7 @@ export type TrainingProgramCatalogContracts = {
 export type {
   ActivitySessionPhase,
   ActivitySessionType,
+  CatalogAuthoritySnapshot,
   MetricSchema,
   Sport,
   TrainingActivity

@@ -9,6 +9,8 @@ import { MAIN_ACTIVITY_CATALOG_V2_CAPABILITY_V2 } from "./v2-capability-manifest
 
 const ENGINE_AUTHORITY_SHA = "0a4c902a560542812de72cbc08dc90fe3fb7d147";
 const BATCH2_BASE_SHA = "1dc4081a485a6871de04552192bc5eb2121a3270";
+const BATCH2_AUTHORITY_SHA = "ede8d8c4eb89246ba237c714f9f262efa7c23007";
+const BATCH2_CAPABILITY_PATH = "lib/activity-catalog/v2-capability-manifest.ts";
 
 describe("P10 Batch 2 Main capability manifest v2", () => {
   it("preserves capability v1 unchanged", () => {
@@ -47,13 +49,16 @@ describe("P10 Batch 2 Main capability manifest v2", () => {
     });
   });
 
-  it("proves engine authority is an ancestor of the exact checked-out head", () => {
+  it("preserves the closed Batch 2 capability bytes and ancestry without reopening engine history", () => {
     const head = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-    expect(() => execFileSync("git", ["merge-base", "--is-ancestor", ENGINE_AUTHORITY_SHA, head])).not.toThrow();
+    expect(() => execFileSync("git", ["merge-base", "--is-ancestor", BATCH2_AUTHORITY_SHA, head])).not.toThrow();
+    const closedCapability = execFileSync("git", ["show", `${BATCH2_AUTHORITY_SHA}:${BATCH2_CAPABILITY_PATH}`], { encoding: "utf8" });
+    const currentCapability = fs.readFileSync(BATCH2_CAPABILITY_PATH, "utf8");
+    expect(currentCapability).toBe(closedCapability);
   });
 
-  it("keeps the Batch 2 diff free of Main database migrations and provider/environment edits", () => {
-    const changed = execFileSync("git", ["diff", "--name-only", `${BATCH2_BASE_SHA}...HEAD`], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+  it("keeps the closed Batch 2 diff free of Main database migrations and provider/environment edits", () => {
+    const changed = execFileSync("git", ["diff", "--name-only", `${BATCH2_BASE_SHA}...${BATCH2_AUTHORITY_SHA}`], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
     expect(changed.some((file) => file.startsWith("supabase/migrations/"))).toBe(false);
     expect(changed.some((file) => /activity-catalog\/server\/.*provider|\.env|environment/i.test(file))).toBe(false);
   });

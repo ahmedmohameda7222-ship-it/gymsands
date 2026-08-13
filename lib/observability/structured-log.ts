@@ -17,8 +17,8 @@ export type OperationalLog = {
   endpoint?: string;
   operation?: string;
   outcome?: "success" | "success_with_fallback" | "failed_closed" | "invalid_request" | "rejected" | "error" | "ignored";
-  provider_requested?: "legacy" | "external" | "external_with_legacy_fallback";
-  provider_used?: "legacy" | "external" | "none";
+  provider_requested?: "legacy" | "external" | "external_with_legacy_fallback" | "library_v2" | "library_v2_with_legacy_fallback";
+  provider_used?: "legacy" | "external" | "library_v2" | "none";
   fallback_occurred?: boolean;
   fallback_reason?: "none" | "external_timeout" | "external_network_error" | "external_rate_limited" | "external_upstream_5xx" | "external_not_found";
   fallback_stage?: "none" | "provider_request" | "response_status" | "response_parse" | "response_validation";
@@ -63,6 +63,9 @@ export type OperationalLog = {
   visibility_state?: string;
   connection_type?: string;
   compute_region?: string;
+  library_release_version?: string;
+  catalog_release_version?: string;
+  cursor_restarted?: boolean;
 };
 
 export function redactOperationalValue(value: unknown, key = "value", depth = 0): unknown {

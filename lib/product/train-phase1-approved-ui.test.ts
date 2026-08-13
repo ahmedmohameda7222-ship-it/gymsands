@@ -53,7 +53,8 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(picker).toContain('optionLabel(muscleOptions, muscle, language, "muscle")');
     expect(picker).toContain("signal: controller.signal");
     expect(picker).toContain("data-picker-load-more");
-    expect(picker).toContain("pagination.nextOffset");
+    expect(picker).toContain("pagination.nextCursor");
+    expect(picker).not.toContain("pagination.nextOffset");
     expect(picker).not.toContain("slice(0, 60)");
   });
 

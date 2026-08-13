@@ -50,7 +50,7 @@ function isAbortError(error: unknown) {
   return Boolean(error && typeof error === "object" && "name" in error && (error as { name?: unknown }).name === "AbortError");
 }
 
-const emptyPagination = { hasMore: false, nextOffset: null as number | null };
+const emptyPagination = { hasMore: false, nextCursor: null as string | null };
 
 export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys, onAdd, maxSelection }: {
   open: boolean;
@@ -156,7 +156,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       setError("");
       setLoadMoreError("");
       setPagination(emptyPagination);
-      getWorkoutsWithStatus(query.trim(), activeFilters, 0, locale, {
+      getWorkoutsWithStatus(query.trim(), activeFilters, null, locale, {
         requestGroupId,
         signal: controller.signal
       })
@@ -293,8 +293,8 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   }
 
   async function loadMore() {
-    const nextOffset = pagination.nextOffset;
-    if (!pagination.hasMore || nextOffset === null || loadingMore) return;
+    const nextCursor = pagination.nextCursor;
+    if (!pagination.hasMore || nextCursor === null || loadingMore) return;
     loadMoreControllerRef.current?.abort();
     const controller = new AbortController();
     loadMoreControllerRef.current = controller;
@@ -304,7 +304,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     setLoadingMore(true);
     setLoadMoreError("");
     try {
-      const result = await getWorkoutsWithStatus(query.trim(), activeFilters, nextOffset, locale, {
+      const result = await getWorkoutsWithStatus(query.trim(), activeFilters, nextCursor, locale, {
         requestGroupId,
         signal: controller.signal
       });

@@ -4,29 +4,27 @@
 **Evidence captured:** 2026-08-03T18:10:27.000Z
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `92d936bc513af83fff41913477a8148a9ab5b845`
-**Status:** Workout History and PCS-2 Production migration history reconciled; PCS-2 application runtime deployed and verified
+**Status:** Applied Production history reconciled; one P10F repository migration intentionally pending pre-merge
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
 ## Current state
 
-- Physical Production migration records: **86**
-- Repository classifications: **86**
+- Physical Production migration records: **87**
 - Exact applications (`state = applied`): **63**
-- Generated-version aliases (`state = applied_version_alias`): **23**
-- Repository-only pending migrations: **0**
-- `pendingCount = 0`
+- Repository-only pending migrations: **1**
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- `release_ready = true`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- `release_ready = false` while the P10F repository migration remains intentionally pending
 - Released compatibility marker: `20260724232734`
-- Latest physical Production record: `20260803173755_private_app_bootstrap_v1`
-- Activity Catalog migration count: **0**
+- Latest physical Production record: `20260804180932_fix_profiles_update_policy_recursion`
+- Activity Catalog Production remains isolated from the Main migration ledger
 
-The PCS-2 migration was applied exactly once to Plaivra Production as generated version `20260803173755_private_app_bootstrap_v1`. Its immutable repository file remains `20260803152000_private_app_bootstrap_v1.sql` and is represented through the existing `applied_version_alias` convention. Do not rename, edit, or replay it.
+The previously applied Plaivra Production migration history remains reconciled through `20260804180932_fix_profiles_update_policy_recursion`. P10F adds one new repository-only migration, `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql`, which is intentionally classified `pending` for Stage A. It has not been applied to Production, claims no Production identity, and must not be replayed or applied before explicit Planner approval.
 
-Physical schema advancement and compatibility-marker promotion remain separate release operations. The migration application itself did not promote the compatibility marker or deploy application code. The approved application code was subsequently squash-merged as `92d936bc513af83fff41913477a8148a9ab5b845`, deployed to Vercel Production, and verified against the reconciled database contract.
+Physical schema advancement and compatibility-marker promotion remain separate release operations. The pending P10F repository state does not authorize Production migration application, application deployment, or compatibility-marker promotion.
 
 ## Workout History applied identities
 
@@ -64,11 +62,8 @@ Read-only verification against Plaivra Production proved:
 - verification passed for two different authenticated actors;
 - no cross-user selector exists;
 - the migration was applied exactly once;
-- the Production migration count is **86**;
-- the latest physical Production migration is `20260803173755_private_app_bootstrap_v1`;
-- the released compatibility marker remains `20260724232734`;
-- the migration application itself did not deploy application code;
-- Plaivra Activity Catalog remains isolated and unmodified.
+- the PCS-2 application itself did not deploy application code;
+- Plaivra Activity Catalog remained isolated and unmodified.
 
 ## PCS-2 application runtime verification
 
@@ -81,10 +76,8 @@ Read-only verification against Plaivra Production proved:
 - `schemaCompatibilityVersion = 2`
 - `databaseMigrationVersion = 20260724232734`
 - `migrationLedgerReconciliationState = reconciled`
-- pending, schema-applied-untracked, and unresolved migration counts were all zero.
 - `migrationVersionCompatible = true`
 - `migrationLedgerReconciled = true`
-- `releaseReady = true`
 - `schemaCompatible = true`
 - `https://app.plaivra.com/login`: HTTP 200
 - Vercel reported no runtime-error cluster during the post-deployment verification window.
@@ -92,6 +85,20 @@ Read-only verification against Plaivra Production proved:
 ## Prior applied authorities
 
 AW-9 remains represented by repository migration `20260731090000_active_workout_aw9_offline_multi_device.sql` and generated Production identity `20260801045628_active_workout_aw9_offline_multi_device`. AW-4 and earlier generated aliases remain preserved in the machine ledger.
+
+## P0 onboarding Production repair
+
+- `20260804174500_fix_profiles_update_policy_recursion.sql` was applied exactly once to Plaivra Production as generated version `20260804180932_fix_profiles_update_policy_recursion`.
+- The repository filename and Production version differ, so the migration ledger preserves the immutable mapping as `applied_version_alias`. Do not replay.
+- Plaivra Production now has **87** physical migration records and the latest physical record is `20260804180932_fix_profiles_update_policy_recursion`.
+- The compatibility marker remained unchanged and Activity Catalog was not modified.
+
+## P10F pending migration authority
+
+- `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql` is the single Planner-authorized narrow Main schema addition for P10F Stage A.
+- Ledger state: `pending`; Production version/name: intentionally absent.
+- No historical rows are rewritten; the migration remains repository-only until the Planner explicitly approves the merge/cutover sequence.
+- Do not replay or apply the P10F migration before that approval.
 
 ## Authority and verification
 
@@ -104,9 +111,3 @@ Use these current sources:
 - Production `/api/version`
 - Vercel Production deployment identity and runtime logs
 - exact-head Quality and release workflow artifacts
-
-## P0 onboarding Production repair
-
-- `20260804174500_fix_profiles_update_policy_recursion.sql` was applied exactly once to Plaivra Production as generated version `20260804180932_fix_profiles_update_policy_recursion`.
-- The repository filename and Production version differ, so the migration ledger preserves the immutable mapping as `applied_version_alias`. Do not replay.
-- The compatibility marker remained unchanged and Activity Catalog was not modified.

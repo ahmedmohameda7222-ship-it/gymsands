@@ -15,6 +15,14 @@ import type {
   OffsetPagination,
   TrainingActivity
 } from "@/lib/activity-catalog/types";
+import type {
+  LibraryActivityDetail,
+  LibraryAlternative,
+  LibraryDomain,
+  LibraryProviderMeta,
+  LibrarySearchParams,
+  LibrarySearchResult
+} from "@/lib/activity-catalog/library-types";
 
 type SearchResponse = {
   data: TrainingActivity[];
@@ -22,16 +30,20 @@ type SearchResponse = {
   meta: CatalogResult<unknown>["meta"];
 };
 
-export type CatalogClientRequestOptions = {
-  requestGroupId?: string;
-  signal?: AbortSignal;
-};
+type LibraryEnvelope<T> = { data: T; meta: LibraryProviderMeta };
+type LibrarySearchEnvelope = LibrarySearchResult;
 
+export type CatalogClientRequestOptions = { requestGroupId?: string; signal?: AbortSignal };
 type CatalogClientRequestContext = string | CatalogClientRequestOptions | undefined;
 
-export function createCatalogRequestGroupId() {
-  return createOperationalCorrelationId();
+export class CatalogClientError extends Error {
+  constructor(readonly status: number, readonly code: string, message: string) {
+    super(message);
+    this.name = "CatalogClientError";
+  }
 }
+
+export function createCatalogRequestGroupId() { return createOperationalCorrelationId(); }
 
 function normalizeRequestOptions(context?: CatalogClientRequestContext): CatalogClientRequestOptions {
   return typeof context === "string" ? { requestGroupId: context } : (context ?? {});
@@ -44,11 +56,8 @@ function resolveCatalogRequestGroupId(value?: string) {
 async function catalogRequest<T>(path: string, context?: CatalogClientRequestContext): Promise<T> {
   const options = normalizeRequestOptions(context);
   const session = supabase ? await supabase.auth.getSession() : null;
-  // The non-production mock-auth fixture uses an inert marker so rendered QA
-  // can intercept the internal request without creating a real Supabase token.
-  // The server never accepts this marker; production rejects mock auth entirely.
   const accessToken = session?.data.session?.access_token || (env.useMockAuth ? "plaivra-local-qa" : "");
-  if (!accessToken) throw new Error("Your session expired. Please sign in again.");
+  if (!accessToken) throw new CatalogClientError(401, "session_expired", "Your session expired. Please sign in again.");
   const response = await fetch(path, {
     method: "GET",
     cache: "no-store",
@@ -60,8 +69,14 @@ async function catalogRequest<T>(path: string, context?: CatalogClientRequestCon
       [CATALOG_REQUEST_GROUP_ID_HEADER]: resolveCatalogRequestGroupId(options.requestGroupId)
     }
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "The exercise catalog could not load.");
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new CatalogClientError(
+      response.status,
+      typeof payload.code === "string" ? payload.code : "catalog_request_failed",
+      typeof payload.error === "string" ? payload.error : "The exercise catalog could not load."
+    );
+  }
   return payload as T;
 }
 
@@ -89,4 +104,33 @@ export function getCatalogActivity(identifier: string, locale?: string, context?
 
 export function getCatalogActivityAlternatives(identifier: string, options: { limit?: number; locale?: string } = {}, context?: CatalogClientRequestContext) {
   return catalogRequest<CatalogResult<ActivityAlternative[]>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}/alternatives${queryString(options)}`, context);
+}
+
+export function listLibraryDomains(locale?: string, context?: CatalogClientRequestContext) {
+  return catalogRequest<LibraryEnvelope<LibraryDomain[]>>(`/api/activity-catalog/library-domains${queryString({ locale })}`, context);
+}
+
+export function getLibraryDomain(domain: string, locale?: string, context?: CatalogClientRequestContext) {
+  return catalogRequest<LibraryEnvelope<LibraryDomain>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}${queryString({ locale })}`, context);
+}
+
+export function getLibraryDomainFilters(domain: string, locale?: string, context?: CatalogClientRequestContext) {
+  return catalogRequest<LibraryEnvelope<unknown[]>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/filters${queryString({ locale })}`, context);
+}
+
+export function getLibraryDomainArchetypes(domain: string, locale?: string, context?: CatalogClientRequestContext) {
+  return catalogRequest<LibraryEnvelope<unknown[]>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/archetypes${queryString({ locale })}`, context);
+}
+
+export function searchLibraryDomainActivities(params: LibrarySearchParams, context?: CatalogClientRequestContext) {
+  const { domain, ...query } = params;
+  return catalogRequest<LibrarySearchEnvelope>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/activities${queryString(query)}`, context);
+}
+
+export function getLibraryDomainActivity(domain: string, identifier: string, locale?: string, context?: CatalogClientRequestContext) {
+  return catalogRequest<LibraryEnvelope<LibraryActivityDetail>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/activities/${encodeURIComponent(identifier)}${queryString({ locale })}`, context);
+}
+
+export function getLibraryDomainActivityAlternatives(domain: string, identifier: string, options: { limit?: number; locale?: string } = {}, context?: CatalogClientRequestContext) {
+  return catalogRequest<LibraryEnvelope<LibraryAlternative[]>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/activities/${encodeURIComponent(identifier)}/alternatives${queryString(options)}`, context);
 }

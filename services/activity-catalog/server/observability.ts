@@ -36,7 +36,10 @@ export function configuredActivityCatalogProviderMode(
   value: string | undefined = process.env.PLAIVRA_ACTIVITY_CATALOG_MODE
 ): CatalogProviderMode | undefined {
   if (!value || value === "legacy") return "legacy";
-  if (value === "external" || value === "external_with_legacy_fallback") return value;
+  if (
+    value === "external" || value === "external_with_legacy_fallback" ||
+    value === "library_v2" || value === "library_v2_with_legacy_fallback"
+  ) return value;
   return undefined;
 }
 

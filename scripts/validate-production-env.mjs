@@ -7,6 +7,12 @@ const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const SAFE_IDENTIFIER = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const BASE64_32_BYTES = /^[A-Za-z0-9+/]{43}=$/;
 const ACTIVITY_CATALOG_PRODUCTION_ORIGIN = "https://catalog-api.plaivra.com";
+const ACTIVITY_CATALOG_LEGACY_MODES = ["legacy", "external", "external_with_legacy_fallback"];
+const ACTIVITY_CATALOG_MODES = new Set([
+  ...ACTIVITY_CATALOG_LEGACY_MODES,
+  "library_v2",
+  "library_v2_with_legacy_fallback"
+]);
 
 function enabled(value) {
   return value === "true";
@@ -95,10 +101,10 @@ export function validateProductionEnvironment(environment = process.env) {
   const catalogMode = environment.PLAIVRA_ACTIVITY_CATALOG_MODE || "legacy";
   requireValue(
     "PLAIVRA_ACTIVITY_CATALOG_MODE",
-    ["legacy", "external", "external_with_legacy_fallback"].includes(catalogMode),
-    "must be legacy, external, or external_with_legacy_fallback"
+    ACTIVITY_CATALOG_MODES.has(catalogMode),
+    "must be legacy, external, external_with_legacy_fallback, library_v2, or library_v2_with_legacy_fallback"
   );
-  if (catalogMode === "external" || catalogMode === "external_with_legacy_fallback") {
+  if (catalogMode !== "legacy") {
     requireValue(
       "PLAIVRA_ACTIVITY_CATALOG_BASE_URL",
       validHttpsUrl(environment.PLAIVRA_ACTIVITY_CATALOG_BASE_URL)
@@ -108,7 +114,7 @@ export function validateProductionEnvironment(environment = process.env) {
     requireValue(
       "PLAIVRA_ACTIVITY_CATALOG_API_KEY",
       nonEmpty(environment.PLAIVRA_ACTIVITY_CATALOG_API_KEY, 20),
-      "must be configured as a server-only secret when the external catalog is enabled"
+      "must be configured as a server-only secret when the Catalog provider is enabled"
     );
   }
 
