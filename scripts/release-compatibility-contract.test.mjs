@@ -11,7 +11,7 @@ const contract = JSON.parse(
   readFileSync(new URL("../config/release-compatibility.json", import.meta.url), "utf8"),
 );
 
-test("declared database marker remains distinct from newer compatible physical migrations while P10F stays pending", () => {
+test("declared database marker remains distinct from newer compatible physical migrations while repository migrations stay pending", () => {
   const resolved = resolveReleaseCompatibilityContract({ ledger, contract });
 
   assert.equal(resolved.schemaCompatibilityVersion, "2");
@@ -22,12 +22,12 @@ test("declared database marker remains distinct from newer compatible physical m
     "fixture must prove that compatible physical migrations may be newer than the release marker",
   );
   assert.equal(resolved.migrationLedgerReconciliationState, "pending");
-  assert.equal(resolved.pendingMigrationCount, 1);
+  assert.equal(resolved.pendingMigrationCount, ledger.pendingCount);
   assert.equal(resolved.schemaAppliedUntrackedCount, 0);
-  assert.equal(resolved.unresolvedMigrationCount, 1);
+  assert.equal(resolved.unresolvedMigrationCount, ledger.unresolvedCount);
 });
 
-test("Next build metadata binds the declared compatibility marker and exposes the pending P10F ledger state", async () => {
+test("Next build metadata binds the declared compatibility marker and exposes the pending repository ledger state", async () => {
   const { releaseMetadata } = await import("../next.config.mjs");
 
   assert.equal(releaseMetadata.schemaCompatibilityVersion, "2");
