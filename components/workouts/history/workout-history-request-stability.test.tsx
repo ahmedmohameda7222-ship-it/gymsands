@@ -708,24 +708,33 @@ describe("Workout History request stability", () => {
   });
 
   it("freezes the implicit default range for the mounted page across a month boundary", async () => {
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const timezone = vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+      .mockImplementation(function resolvedOptionsInBerlin(this: Intl.DateTimeFormat) {
+        return { ...resolvedOptions.call(this), timeZone: "Europe/Berlin" };
+      });
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-31T23:59:00.000Z"));
-    mocks.url = "";
-    await renderPage();
+    try {
+      vi.setSystemTime(new Date("2026-08-31T23:59:00.000Z"));
+      mocks.url = "";
+      await renderPage();
 
-    expect(mocks.list).toHaveBeenCalledOnce();
-    expect(mocks.list.mock.calls[0]?.[1]).toMatchObject({
-      from: "2026-08-31T22:00:00.000Z",
-      to: "2026-09-30T22:00:00.000Z",
-    });
+      expect(mocks.list).toHaveBeenCalledOnce();
+      expect(mocks.list.mock.calls[0]?.[1]).toMatchObject({
+        from: "2026-08-31T22:00:00.000Z",
+        to: "2026-09-30T22:00:00.000Z",
+      });
 
-    vi.setSystemTime(new Date("2026-09-01T00:01:00.000Z"));
-    mocks.url = "selected=performed%3Amonth-boundary";
-    await renderPage();
-    mocks.url = "";
-    await renderPage();
+      vi.setSystemTime(new Date("2026-09-01T00:01:00.000Z"));
+      mocks.url = "selected=performed%3Amonth-boundary";
+      await renderPage();
+      mocks.url = "";
+      await renderPage();
 
-    expect(mocks.list).toHaveBeenCalledOnce();
+      expect(mocks.list).toHaveBeenCalledOnce();
+    } finally {
+      timezone.mockRestore();
+    }
   });
 });
 
