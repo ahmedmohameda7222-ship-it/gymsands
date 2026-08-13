@@ -6,7 +6,7 @@ import { env as publicEnv } from "@/lib/env";
 import { checkUserLaunchEligibility } from "@/lib/auth/eligibility";
 
 const P10F_MAIN_PREVIEW_BRANCH = "feat/p10f-activity-catalog-v2-cutover";
-const P10F_CATALOG_PREVIEW_ORIGIN = "https://plaivra-activity-catalog-api-git-fe-211ae7-ahmed-s-projectssasa.vercel.app";
+const P10F_CATALOG_PREVIEW_ORIGIN = "https://plaivra-activity-catalog-293ri9r9k-ahmed-s-projectssasa.vercel.app";
 const isP10fMainPreview = process.env.VERCEL_ENV === "preview"
   && process.env.VERCEL_GIT_COMMIT_REF === P10F_MAIN_PREVIEW_BRANCH;
 
@@ -117,7 +117,6 @@ export async function requireEligibleUser(request: Request): Promise<RouteContex
       { status: eligibility.code === "age_verification_failed" ? 503 : 403 }
     );
   }
-
   return context;
 }
 
@@ -125,7 +124,7 @@ export async function requireAdmin(request: Request): Promise<RouteContext | Nex
   const context = await requireUser(request);
   if (context instanceof NextResponse) return context;
 
-  const { data, error } = await context.supabase.from("profiles").select("role").eq("id", context.user.id).maybeSingle();
+  const { data, error } = await context.supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
   if (error) {
     console.error("Plaivra admin authorization check failed:", error.message);
     return jsonError("Admin access could not be verified.", 500);
