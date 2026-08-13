@@ -223,9 +223,14 @@ async function prepareScenario(page, scenario, observation) {
     await page.keyboard.press("Escape");
   } else if (scenario.action === "semantic-detail") {
     observation.repeatActionAvailable = await page.getByRole("button", { name: /repeat workout|wiederholen|ØªÙƒØ±Ø§Ø±/iu }).count() > 0;
-    await page.getByRole("button", { name: /more actions|weitere aktionen|Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©/iu }).click();
-    observation.correctActionAvailable = await page.getByRole("menuitem", { name: /correct session|training korrigieren|ØªØµØ­ÙŠØ­ Ø§Ù„Ø¬Ù„Ø³Ø©/iu }).count() > 0;
-    await page.keyboard.press("Escape");
+    const moreActions = page.getByRole("button", { name: /more actions|weitere aktionen|Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©/iu });
+    if (await moreActions.count() > 0) {
+      await moreActions.click();
+      observation.correctActionAvailable = await page.getByRole("menuitem", { name: /correct session|training korrigieren|ØªØµØ­ÙŠØ­ Ø§Ù„Ø¬Ù„Ø³Ø©/iu }).count() > 0;
+      await page.keyboard.press("Escape");
+    } else {
+      observation.correctActionAvailable = false;
+    }
   } else if (scenario.action === "zoom-list") {
     await page.waitForSelector("[data-workout-history-row]");
     observation.zoomControlsReachable = await page.locator("button:visible, input:visible, a:visible").count() > 2;
