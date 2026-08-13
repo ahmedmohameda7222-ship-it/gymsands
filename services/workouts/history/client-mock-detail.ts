@@ -203,6 +203,54 @@ export function mockHistoryDetailForRenderedQa(
 ): WorkoutHistorySessionDetailResponse {
   const detail = mockHistoryDetail(userId, source, id);
   const scenario = renderedQaScenario();
+  if (scenario === "stale-session-detail") {
+    return { ...detail, notices: ["stale-data"] };
+  }
+  if (scenario === "semantic-non-strength-detail") {
+    return {
+      ...detail,
+      resultKind: "semantic_metrics",
+      activity: {
+        ...detail.activity,
+        title: "City endurance run",
+        category: "running",
+        capabilities: {
+          ...detail.activity.capabilities,
+          showPerformedSets: false,
+          showPlannedVsActual: false,
+          showMuscleAnalysis: false,
+          repeatWorkout: false,
+          correctSession: false,
+        },
+      },
+      summary: {
+        exerciseCount: 1,
+        completedSetCount: null,
+        reliableVolume: null,
+        verifiedRecordCount: null,
+      },
+      exercises: [{
+        ...detail.exercises[0]!,
+        name: "Outdoor run",
+        category: "running",
+        resultKind: "semantic_metrics",
+        plannedSetCount: null,
+        performedSets: [{
+          ...detail.exercises[0]!.performedSets[0]!,
+          reps: 12,
+          weightKg: 45,
+          plannedSet: null,
+          metrics: [
+            { metricKey: "distance_meters", side: "none", value: 5_000, unit: "m" },
+            { metricKey: "duration_seconds", side: "none", value: 2_100, unit: "s" },
+            { metricKey: "future_unknown_metric", side: "none", value: 17, unit: null },
+          ],
+          verifiedRecords: [],
+        }],
+        missingPlannedSets: [],
+      }],
+    };
+  }
   if (scenario === "long-notes") {
     return {
       ...detail,

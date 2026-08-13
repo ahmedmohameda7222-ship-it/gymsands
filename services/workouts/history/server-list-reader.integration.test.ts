@@ -11,7 +11,10 @@ const snapshotId = "44444444-4444-4444-8444-444444444444";
 const mappingId = "55555555-5555-4555-8555-555555555555";
 const secret = "workout-history-keyset-test-secret-at-least-32-characters";
 
-function clientFor(rootPages: Array<Record<string, unknown>[]>) {
+function clientFor(
+  rootPages: Array<Record<string, unknown>[]>,
+  customizeRows?: (rows: Record<string, Record<string, unknown>[]>) => void,
+) {
   const calls: Array<{ kind: "rpc" | "table"; name: string; values?: unknown }> = [];
   let pageIndex = 0;
   const rows: Record<string, Record<string, unknown>[]> = {
@@ -79,7 +82,7 @@ function clientFor(rootPages: Array<Record<string, unknown>[]>) {
       set_details: { set_type: "working", rpe: 8, rir: 2 },
       segments: [],
     }],
-    workout_session_muscle_snapshots: [{ id: snapshotId, workout_session_id: firstId }],
+    workout_session_muscle_snapshots: [{ id: snapshotId, workout_session_id: firstId, workload_model_version: "resistance_sets_v1" }],
     workout_session_muscle_snapshot_items: [{
       snapshot_id: snapshotId,
       source_plan_exercise_id: "77777777-7777-4777-8777-777777777777",
@@ -125,6 +128,7 @@ function clientFor(rootPages: Array<Record<string, unknown>[]>) {
     user_workout_sessions: [],
     user_workout_plans: [],
   };
+  customizeRows?.(rows);
 
   const client = {
     rpc: vi.fn(async (name: string, parameters: Record<string, unknown>) => {
@@ -263,5 +267,37 @@ describe("Workout History keyset list reader", () => {
     });
     expect(cursorPage.summary).toBeUndefined();
     expect(next.calls.some((call) => call.kind === "rpc" && call.name === "get_workout_history_period_context_v2")).toBe(false);
+  });
+
+  it("uses authoritative non-strength semantics for list summaries despite populated legacy strength columns", async () => {
+    const first = root(firstId, "2026-08-10T09:00:00.000Z", 60);
+    const { client } = clientFor([[first]], (rows) => {
+      rows.workout_session_muscle_snapshots![0]!.workload_model_version = "endurance_distance_v1";
+      rows.exercise_logs![0]!.performance_metrics = [
+        { metric_key: "distance_meters", value: 5000, side: "none" },
+        { metric_key: "future_unknown_metric", value: 17, side: "none" },
+      ];
+    });
+    const response = await listWorkoutHistoryKeyset(client, userId, {
+      from: "2026-08-01T00:00:00.000Z",
+      to: "2026-09-01T00:00:00.000Z",
+      timezone: "UTC",
+      limit: 1,
+      statuses: ["completed"],
+      sort: "newest",
+    }, secret);
+
+    expect(response.items[0]).toMatchObject({
+      resultKind: "semantic_metrics",
+      capabilities: {
+        showPerformedSets: false,
+        showMuscleAnalysis: false,
+        repeatWorkout: false,
+        correctSession: false,
+      },
+    });
+    expect(response.items[0]?.resultFacts).toEqual([
+      expect.objectContaining({ metricKey: "distance_meters", value: 5000 }),
+    ]);
   });
 });

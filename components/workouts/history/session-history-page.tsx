@@ -32,6 +32,7 @@ export function SessionHistoryPage({ source, id }: { source: "performed" | "sche
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [freshAuthority, setFreshAuthority] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const projectionRepairAttemptRef = useRef<string | null>(null);
   const loadGenerationRef = useRef(0);
@@ -44,6 +45,7 @@ export function SessionHistoryPage({ source, id }: { source: "performed" | "sche
     if (!userId) return;
     const generation = ++loadGenerationRef.current;
     const current = () => !signal?.aborted && loadGenerationRef.current === generation;
+    setFreshAuthority(false);
     if (!options.preserveContent) setLoading(true);
     setFailed(false);
     setNotFound(false);
@@ -61,13 +63,18 @@ export function SessionHistoryPage({ source, id }: { source: "performed" | "sche
           else projectionRepairAttemptRef.current = null;
         } catch { if (current()) projectionRepairAttemptRef.current = null; }
       }
-      if (current()) { detailRef.current = next; setDetail(next); }
+      if (current()) {
+        detailRef.current = next;
+        setDetail(next);
+        setFreshAuthority(!next.notices.includes("stale-data"));
+      }
     } catch (error) {
       if (!current()) return;
       const missing = error instanceof WorkoutHistoryClientError && error.status === 404;
       if (!options.preserveContent || !detailRef.current) { detailRef.current = null; setDetail(null); }
       setNotFound(missing);
       setFailed(!missing);
+      setFreshAuthority(false);
     } finally { if (current()) setLoading(false); }
   }, [id, source, userId]);
 
@@ -112,7 +119,7 @@ export function SessionHistoryPage({ source, id }: { source: "performed" | "sche
     <TrainPageContainer className="mx-auto max-w-4xl space-y-5 pb-8" dir={dir} withGutters data-session-history-page data-source-kind={detail.activity.sourceKind} data-snapshot-version={detail.snapshot?.schemaVersion}>
       <div className="flex items-center justify-between gap-3">
         <Button asChild variant="ghost" className="min-h-11 px-2"><Link href="/workout-history"><ArrowLeft className="size-4 rtl:rotate-180" aria-hidden="true" />{tr("historyBackToList")}</Link></Button>
-        <SessionHistoryMoreActions detail={detail} accessToken={session?.access_token} language={language} timezone={timezone} formattedDate={date} onCorrect={() => setCorrectionOpen(true)} />
+        <SessionHistoryMoreActions detail={detail} accessToken={session?.access_token} language={language} timezone={timezone} formattedDate={date} onCorrect={() => setCorrectionOpen(true)} freshAuthority={freshAuthority} />
       </div>
 
       <header className="border-b border-border/70 pb-5">
@@ -122,6 +129,7 @@ export function SessionHistoryPage({ source, id }: { source: "performed" | "sche
       </header>
 
       {trustNotice ? <p className="border-y border-border/70 py-3 text-sm leading-6 text-muted-foreground" role={failed ? "alert" : "status"}>{trustNotice}</p> : null}
+      {!freshAuthority ? <p className="border-b border-border/70 pb-3 text-sm leading-6 text-muted-foreground" role="status" data-stale-history-action-notice>{tr("historyStaleActionsUnavailable")}</p> : null}
       {detail.activity.sourceKind === "scheduled_fallback" ? <p className="border-y border-border/70 py-3 text-sm leading-6 text-muted-foreground" role="status">{tr("historyScheduledFallbackNotice")}</p> : null}
 
       <section aria-labelledby="session-history-results-title">
@@ -134,8 +142,8 @@ export function SessionHistoryPage({ source, id }: { source: "performed" | "sche
       {detail.activity.canonicalSessionId && detail.activity.capabilities.showMuscleAnalysis ? <SessionHistoryMuscleSummary sessionId={detail.activity.canonicalSessionId} accessToken={session?.access_token} /> : null}
       <SessionHistoryNotes notes={detail.activity.notes} />
       <SessionHistoryTimeline entries={detail.timeline} timezone={timezone} />
-      <SessionHistoryActions capabilities={detail.activity.capabilities} sessionId={detail.activity.canonicalSessionId ?? id} title={detail.activity.title} />
-      {detail.activity.canonicalSessionId && detail.activity.capabilities.correctSession ? <SessionCorrectionDialog open={correctionOpen} onOpenChange={setCorrectionOpen} sessionId={detail.activity.canonicalSessionId} historyRevision={detail.historyRevision ?? 0} notes={detail.activity.notes} durationMinutes={detail.activity.durationMinutes} exercises={detail.exercises} onChanged={() => { projectionRepairAttemptRef.current = null; void load(); }} /> : null}
+      <SessionHistoryActions capabilities={detail.activity.capabilities} sessionId={detail.activity.canonicalSessionId ?? id} title={detail.activity.title} freshAuthority={freshAuthority} />
+      {freshAuthority && detail.activity.canonicalSessionId && detail.activity.capabilities.correctSession ? <SessionCorrectionDialog open={correctionOpen} onOpenChange={setCorrectionOpen} sessionId={detail.activity.canonicalSessionId} historyRevision={detail.historyRevision ?? 0} notes={detail.activity.notes} durationMinutes={detail.activity.durationMinutes} exercises={detail.exercises} onChanged={() => { projectionRepairAttemptRef.current = null; void load(); }} /> : null}
     </TrainPageContainer>
   );
 }

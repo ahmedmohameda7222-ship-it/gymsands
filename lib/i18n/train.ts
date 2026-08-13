@@ -72,6 +72,7 @@ const en = {
   historyLoadMoreFailed: "More workouts could not load.",
   historyStaleNotice: "Showing the most recent history saved on this device.",
   historyStaleDetailNotice: "Showing the saved version. The latest update could not be loaded.",
+  historyStaleActionsUnavailable: "This saved copy is readable. Reconnect or refresh before correcting, deleting, or repeating this workout.",
   historyPartialNotice: "Some workout history is temporarily unavailable.",
   historyActionRequiredNotice:
     "One workout needs your attention before it can continue.",
@@ -196,6 +197,7 @@ const en = {
     "The completed session summary was corrected.",
   historyCorrectionFailed: "Correction failed",
   historyWorkoutDeleted: "Workout deleted",
+  historyWorkoutDeleteFailed: "Workout could not be deleted",
   historyWorkoutDeletedDescription: "You can restore it for 30 days.",
   historyUndo: "Undo",
   historyWorkoutRestored: "Workout restored",
@@ -900,6 +902,7 @@ const de: Dict = {
   historyPartialNotice:
     "Ein Teil des Trainingsverlaufs ist vorübergehend nicht verfügbar.",
   historyStaleDetailNotice: "Die gespeicherte Version wird angezeigt. Die neueste Aktualisierung konnte nicht geladen werden.",
+  historyStaleActionsUnavailable: "Diese gespeicherte Kopie ist lesbar. Stellen Sie die Verbindung wieder her oder aktualisieren Sie, bevor Sie dieses Training korrigieren, löschen oder wiederholen.",
   historyActionRequiredNotice:
     "Ein Training benötigt deine Aufmerksamkeit, bevor es fortgesetzt werden kann.",
   historyFilterTitle: "Trainingsverlauf filtern",
@@ -1030,6 +1033,7 @@ const de: Dict = {
     "Die Zusammenfassung der abgeschlossenen Einheit wurde korrigiert.",
   historyCorrectionFailed: "Korrektur fehlgeschlagen",
   historyWorkoutDeleted: "Training gelöscht",
+  historyWorkoutDeleteFailed: "Training konnte nicht gelöscht werden",
   historyWorkoutDeletedDescription:
     "Du kannst es 30 Tage lang wiederherstellen.",
   historyUndo: "Rückgängig",
@@ -1742,6 +1746,7 @@ const ar: Dict = {
   historyStaleNotice: "يتم عرض أحدث سجل محفوظ على هذا الجهاز.",
   historyPartialNotice: "جزء من سجل التمارين غير متاح مؤقتًا.",
   historyStaleDetailNotice: "يتم عرض النسخة المحفوظة. تعذر تحميل آخر تحديث.",
+  historyStaleActionsUnavailable: "يمكن قراءة هذه النسخة المحفوظة. أعد الاتصال أو حدّث الصفحة قبل تصحيح هذا التمرين أو حذفه أو تكراره.",
   historyActionRequiredNotice: "يحتاج أحد التمارين إلى انتباهك قبل المتابعة.",
   historyFilterTitle: "تصفية سجل التمارين",
   historyFilterDescription: "اختر ما تريد ظهوره في هذه الفترة.",
@@ -1861,6 +1866,7 @@ const ar: Dict = {
   historyWorkoutUpdatedDescription: "تم تصحيح ملخص الجلسة المكتملة.",
   historyCorrectionFailed: "تعذر التصحيح",
   historyWorkoutDeleted: "تم حذف التمرين",
+  historyWorkoutDeleteFailed: "تعذر حذف التمرين",
   historyWorkoutDeletedDescription: "يمكنك استعادته خلال 30 يومًا.",
   historyUndo: "تراجع",
   historyWorkoutRestored: "تمت استعادة التمرين",

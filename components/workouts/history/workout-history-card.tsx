@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
+import { HistoryFactList, type HistoryFact } from "@/components/workouts/history/history-fact-list";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { presentWorkoutMetric } from "@/lib/workouts/metric-presentation";
 import type { WorkoutHistorySessionSummary } from "@/types/workout-history";
 
 export function WorkoutHistoryCard({ item }: { item: WorkoutHistorySessionSummary; onSelect?: (item: WorkoutHistorySessionSummary) => void }) {
   const { locale, tr } = useTrainTranslation();
+  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const time = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(new Date(item.effectiveAt));
   const detailId = item.canonicalSessionId ?? item.scheduledSessionId;
@@ -16,17 +18,17 @@ export function WorkoutHistoryCard({ item }: { item: WorkoutHistorySessionSummar
     ? item.sourceKind === "scheduled_fallback" ? `/workout-history/scheduled/${encodeURIComponent(detailId)}` : `/workout-history/${encodeURIComponent(detailId)}`
     : "/workout-history";
   const lifecycle = item.lifecycle === "partial" ? tr("historyPartial") : item.lifecycle === "skipped" ? tr("historySkipped") : item.lifecycle === "cancelled" ? tr("historyCancelled") : null;
-  const semanticFacts = item.resultKind === "semantic_metrics"
-    ? (item.resultFacts ?? []).map((metric) => presentWorkoutMetric(metric, locale)).filter((fact): fact is { label: string; value: string } => Boolean(fact)).map((fact) => fact.value)
+  const semanticFacts: HistoryFact[] = item.resultKind === "semantic_metrics"
+    ? (item.resultFacts ?? []).map((metric) => presentWorkoutMetric(metric, locale)).filter((fact): fact is { label: string; value: string } => Boolean(fact))
     : [];
-  const facts = [
-    item.durationMinutes === null ? null : tr("historyMinutesShort", { count: item.durationMinutes }),
+  const facts: HistoryFact[] = [
+    item.durationMinutes === null ? null : { label: tr("historyDurationMetric"), value: tr("historyMinutesShort", { count: item.durationMinutes }) },
     ...(item.resultKind === "strength_sets" ? [
-      item.completedSetCount === null ? null : tr("historyCompletedSetsCount", { count: item.completedSetCount }),
-      item.exerciseCount === null ? null : tr("historyExercisesCount", { count: item.exerciseCount }),
+      item.completedSetCount === null ? null : { label: tr("historyCompletedSetsMetric"), value: number.format(item.completedSetCount) },
+      item.exerciseCount === null ? null : { label: tr("historyExercisesMetric"), value: number.format(item.exerciseCount) },
     ] : semanticFacts),
-    (item.verifiedRecordCount ?? 0) > 0 ? (item.verifiedRecordCount === 1 ? tr("historyPrCountOne") : tr("historyPrCount", { count: item.verifiedRecordCount ?? 0 })) : null,
-  ].filter((fact): fact is string => Boolean(fact));
+    (item.verifiedRecordCount ?? 0) > 0 ? { label: tr("historyVerifiedRecord"), value: number.format(item.verifiedRecordCount ?? 0) } : null,
+  ].filter((fact): fact is HistoryFact => Boolean(fact));
 
   return (
     <article className="group border-b border-border/70" data-workout-history-row>
@@ -37,7 +39,7 @@ export function WorkoutHistoryCard({ item }: { item: WorkoutHistorySessionSummar
             <span className="text-xs text-muted-foreground">{time}</span>
             {lifecycle ? <span className="text-xs font-semibold text-warning">{lifecycle}</span> : null}
           </div>
-          {facts.length ? <p className="mt-1.5 text-sm text-muted-foreground"><bdi dir="ltr">{facts.join(" / ")}</bdi></p> : <p className="mt-1.5 text-sm text-muted-foreground">{tr("historyLimitedResults")}</p>}
+          {facts.length ? <p className="mt-1.5 text-sm text-muted-foreground"><HistoryFactList facts={facts} /></p> : <p className="mt-1.5 text-sm text-muted-foreground">{tr("historyLimitedResults")}</p>}
         </div>
         <ChevronRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none" aria-hidden="true" />
       </Link>

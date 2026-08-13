@@ -265,5 +265,26 @@ export async function mockHistoryListForRenderedQa(
     ];
     return { ...base, items, summary: qaSummary(items) };
   }
+  if (scenario === "semantic-non-strength-list" && base.items[0]) {
+    const items = [{
+      ...base.items[0],
+      title: "City endurance run",
+      category: "running",
+      resultKind: "semantic_metrics" as const,
+      resultFacts: [
+        { metricKey: "distance_meters", side: "none" as const, value: 5_000, unit: "m" },
+        { metricKey: "duration_seconds", side: "none" as const, value: 2_100, unit: "s" },
+      ],
+      capabilities: {
+        ...base.items[0].capabilities,
+        showPerformedSets: false,
+        showPlannedVsActual: false,
+        showMuscleAnalysis: false,
+        repeatWorkout: false,
+        correctSession: false,
+      },
+    }];
+    return { ...base, items, summary: qaSummary(items) };
+  }
   return base;
 }

@@ -214,6 +214,24 @@ async function prepareScenario(page, scenario, observation) {
       .click();
     await page.waitForSelector('[role="dialog"]');
     await page.waitForTimeout(100);
+  } else if (scenario.action === "stale-detail") {
+    await page.waitForSelector("[data-stale-history-action-notice]");
+    observation.repeatActionAvailable = await page.getByRole("button", { name: /repeat workout|wiederholen|ØªÙƒØ±Ø§Ø±/iu }).count() > 0;
+    await page.getByRole("button", { name: /more actions|weitere aktionen|Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©/iu }).click();
+    observation.correctActionAvailable = await page.getByRole("menuitem", { name: /correct session|training korrigieren|ØªØµØ­ÙŠØ­ Ø§Ù„Ø¬Ù„Ø³Ø©/iu }).count() > 0;
+    observation.deleteActionAvailable = await page.getByRole("menuitem", { name: /delete workout|training lÃ¶schen|Ø­Ø°Ù Ø§Ù„ØªÙ…Ø±ÙŠÙ†/iu }).count() > 0;
+    await page.keyboard.press("Escape");
+  } else if (scenario.action === "semantic-detail") {
+    observation.repeatActionAvailable = await page.getByRole("button", { name: /repeat workout|wiederholen|ØªÙƒØ±Ø§Ø±/iu }).count() > 0;
+    await page.getByRole("button", { name: /more actions|weitere aktionen|Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©/iu }).click();
+    observation.correctActionAvailable = await page.getByRole("menuitem", { name: /correct session|training korrigieren|ØªØµØ­ÙŠØ­ Ø§Ù„Ø¬Ù„Ø³Ø©/iu }).count() > 0;
+    await page.keyboard.press("Escape");
+  } else if (scenario.action === "zoom-list") {
+    await page.waitForSelector("[data-workout-history-row]");
+    observation.zoomControlsReachable = await page.locator("button:visible, input:visible, a:visible").count() > 2;
+  } else if (scenario.action === "zoom-detail") {
+    await page.waitForSelector("[data-set-history-row]");
+    observation.zoomControlsReachable = await page.locator("button:visible, input:visible, a:visible").count() > 2;
   } else if (scenario.action === "keyboard") {
     for (let count = 0; count < 5; count += 1) await page.keyboard.press("Tab");
   }
@@ -297,6 +315,11 @@ try {
       waitUntil: "domcontentloaded",
       timeout: 45_000,
     });
+    if (scenario.zoom !== 1) {
+      await page.evaluate((zoom) => {
+        document.documentElement.style.zoom = String(zoom);
+      }, scenario.zoom);
+    }
     await prepareScenario(page, scenario, observation);
     const fileName = `${String(observations.length + 1).padStart(2, "0")}-${scenario.name}-${scenario.viewport.name}-${scenario.language}-${scenario.theme}.png`;
     const screenshotPath = path.join(outputDir, fileName);
@@ -325,6 +348,10 @@ try {
         ),
         cards: document.querySelectorAll("[data-workout-history-row]").length,
         detail: Boolean(document.querySelector("[data-session-history-page]")),
+        zoom: document.documentElement.style.zoom || "1",
+        staleActionNotice: Boolean(document.querySelector("[data-stale-history-action-notice]")),
+        setRows: document.querySelectorAll("[data-set-history-row]").length,
+        rawMetricKeysVisible: /future_unknown_metric|distance_meters|duration_seconds/u.test(document.querySelector("main")?.textContent ?? ""),
         snapshotVersion:
           document
             .querySelector("[data-session-history-page]")
@@ -427,6 +454,14 @@ try {
           !dom.muscleSummary ||
           dom.muscleSvgCount < 2
         )) ||
+      (scenario.action === "stale-detail" &&
+        (!dom.staleActionNotice || observation.repeatActionAvailable || observation.correctActionAvailable || observation.deleteActionAvailable)) ||
+      (scenario.action === "semantic-list" &&
+        (dom.cards !== 1 || dom.rawMetricKeysVisible)) ||
+      (scenario.action === "semantic-detail" &&
+        (dom.setRows !== 0 || dom.muscleSummary || dom.rawMetricKeysVisible || observation.repeatActionAvailable || observation.correctActionAvailable)) ||
+      ((scenario.action === "zoom-list" || scenario.action === "zoom-detail") &&
+        (dom.zoom !== "2" || !observation.zoomControlsReachable)) ||
       (scenario.action === "correction-edit" && !editPayloadValid) ||
       (scenario.action === "correction-add" && !addPayloadValid) ||
       (scenario.action === "correction-remove" && !removePayloadValid) ||

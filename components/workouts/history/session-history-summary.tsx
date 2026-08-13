@@ -1,6 +1,7 @@
 "use client";
 
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { HistoryFactList, type HistoryFact } from "@/components/workouts/history/history-fact-list";
 import type { WorkoutHistorySessionDetailResponse } from "@/types/workout-history";
 
 export function SessionHistorySummary({ detail }: { detail: WorkoutHistorySessionDetailResponse }) {
@@ -8,11 +9,11 @@ export function SessionHistorySummary({ detail }: { detail: WorkoutHistorySessio
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
   const strength = detail.resultKind === "strength_sets";
   const facts = [
-    detail.activity.durationMinutes === null ? null : tr("historyMinutesShort", { count: detail.activity.durationMinutes }),
-    strength && detail.summary.completedSetCount !== null ? tr("historyCompletedSetsCount", { count: number.format(detail.summary.completedSetCount) }) : null,
-    strength && detail.summary.exerciseCount !== null ? tr("historyExercisesCount", { count: number.format(detail.summary.exerciseCount) }) : null,
-    (detail.summary.verifiedRecordCount ?? 0) > 0 ? (detail.summary.verifiedRecordCount === 1 ? tr("historyPrCountOne") : tr("historyPrCount", { count: detail.summary.verifiedRecordCount ?? 0 })) : null,
-  ].filter((fact): fact is string => Boolean(fact));
+    detail.activity.durationMinutes === null ? null : { label: tr("historyDurationMetric"), value: tr("historyMinutesShort", { count: detail.activity.durationMinutes }) },
+    strength && detail.summary.completedSetCount !== null ? { label: tr("historyCompletedSetsMetric"), value: number.format(detail.summary.completedSetCount) } : null,
+    strength && detail.summary.exerciseCount !== null ? { label: tr("historyExercisesMetric"), value: number.format(detail.summary.exerciseCount) } : null,
+    (detail.summary.verifiedRecordCount ?? 0) > 0 ? { label: tr("historyVerifiedRecord"), value: number.format(detail.summary.verifiedRecordCount ?? 0) } : null,
+  ].flatMap((fact): HistoryFact[] => fact ? [fact] : []);
   if (!facts.length) return null;
-  return <p className="mt-2 text-sm text-muted-foreground" aria-label={tr("historyPrimaryHighlight")} data-session-history-summary><bdi dir="ltr">{facts.join(" / ")}</bdi></p>;
+  return <p className="mt-2 text-sm text-muted-foreground" aria-label={tr("historyPrimaryHighlight")} data-session-history-summary><HistoryFactList facts={facts} /></p>;
 }

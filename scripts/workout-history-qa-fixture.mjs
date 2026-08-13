@@ -167,6 +167,11 @@ export const WORKOUT_HISTORY_QA_SCENARIOS = Object.freeze(
       "repeat",
     ],
     ["long-translations", 5, "ar", "dark", "/workout-history", "list"],
+    ["stale-session-detail", 0, "en", "light", `/workout-history/${DETAIL_ID}`, "stale-detail"],
+    ["semantic-non-strength-list", 1, "de", "light", "/workout-history", "semantic-list"],
+    ["semantic-non-strength-detail", 2, "ar", "dark", `/workout-history/${DETAIL_ID}`, "semantic-detail"],
+    ["list-200-percent", 0, "en", "light", "/workout-history", "zoom-list", false, 2],
+    ["detail-200-percent", 2, "de", "light", `/workout-history/${DETAIL_ID}`, "zoom-detail", false, 2],
     ["keyboard-focus", 6, "en", "light", "/workout-history", "keyboard"],
     ["reduced-motion", 7, "de", "dark", "/workout-history", "reduced-motion"],
   ].map(
@@ -178,6 +183,7 @@ export const WORKOUT_HISTORY_QA_SCENARIOS = Object.freeze(
       route,
       action,
       offline = false,
+      zoom = 1,
     ]) => ({
       name,
       viewport: WORKOUT_HISTORY_QA_VIEWPORTS[viewportIndex],
@@ -186,6 +192,7 @@ export const WORKOUT_HISTORY_QA_SCENARIOS = Object.freeze(
       route,
       action,
       offline,
+      zoom,
     }),
   ),
 );

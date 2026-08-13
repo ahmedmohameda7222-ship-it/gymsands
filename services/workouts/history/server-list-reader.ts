@@ -14,7 +14,9 @@ import {
 } from "@/lib/workouts/history/cursor";
 import { deriveSessionMetrics, type DerivedMetricLog } from "@/lib/workouts/derived-metrics";
 import { presentWorkoutHistorySession } from "@/lib/workouts/history/presentation";
+import { resolveWorkoutHistoryResultKind } from "@/lib/workouts/history/result-kind";
 import { resolveCanonicalWorkoutActivity } from "@/lib/workouts/history/resolve-activity";
+import { isSupportedWorkoutMetricKey } from "@/lib/workouts/metric-presentation";
 import { WorkoutHistoryReaderError } from "@/services/workouts/history/server-reader";
 import { readWorkoutHistoryPersonalRecordSessions } from "@/services/personal-records/server";
 import {
@@ -341,10 +343,19 @@ async function readPageMetadata(
   for (const sessionId of sessionIds) {
     verifiedCountBySession.set(sessionId, personalRecords.eventsBySessionId[sessionId]?.length ?? 0);
     const sessionLogs = logsBySession.get(sessionId) ?? [];
-    const strengthSnapshot = snapshots.some((snapshot) => snapshot.workout_session_id === sessionId && snapshot.workload_model_version === "resistance_sets_v1");
+    const authoritativeWorkloadModelVersion = snapshots.find((snapshot) => snapshot.workout_session_id === sessionId)?.workload_model_version;
     const strengthValues = sessionLogs.some((log) => log.reps !== null || log.weight_kg !== null);
-    const semanticValues = sessionLogs.some((log) => (log.performance_metrics?.length ?? 0) > 0 || (log.segments?.length ?? 0) > 0);
-    resultKindBySession.set(sessionId, strengthSnapshot || strengthValues ? "strength_sets" : semanticValues ? "semantic_metrics" : "limited");
+    const semanticValues = sessionLogs.some((log) => [
+      ...(log.performance_metrics ?? []),
+      ...(log.segments ?? []).flatMap((segment) => "metric_values" in segment
+        ? (segment.metric_values ?? [])
+        : "metricValues" in segment ? (segment.metricValues ?? []) : []),
+    ].some((metric) => isSupportedWorkoutMetricKey(String(metric.metric_key ?? metric.metricKey ?? ""))));
+    resultKindBySession.set(sessionId, resolveWorkoutHistoryResultKind({
+      authoritativeWorkloadModelVersion,
+      hasSupportedStructuredMetrics: semanticValues,
+      hasLegacyStrengthValues: strengthValues,
+    }));
   }
   return { logsBySession, itemsBySession, muscleIdsBySession, verifiedCountBySession, resultKindBySession };
 }

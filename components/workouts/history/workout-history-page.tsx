@@ -65,6 +65,8 @@ type CursorRequest = {
   promise: Promise<void>;
 };
 
+type NavigationMode = "push" | "replace";
+
 function inputDate(value: Date, timezone: string): string {
   const parts = workoutHistoryTimeZoneParts(value, timezone);
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
@@ -197,14 +199,14 @@ export function WorkoutHistoryPage() {
   ]);
 
   const writeNavigation = useCallback(
-    (next: WorkoutHistoryNavigationState) => {
+    (next: WorkoutHistoryNavigationState, mode: NavigationMode = "push") => {
       const nextParams = workoutHistoryNavigationSearchParams(next);
       const nextString = nextParams.toString();
       const currentString = workoutHistoryNavigationSearchParams(
         navigationRef.current,
       ).toString();
       if (nextString === currentString) return;
-      router.push(
+      router[mode](
         nextString ? `${pathname}?${nextString}` : pathname,
         { scroll: false },
       );
@@ -233,7 +235,7 @@ export function WorkoutHistoryPage() {
       writeNavigation({
         ...navigationRef.current,
         search: normalized,
-      });
+      }, "replace");
     }, 300);
     return () => window.clearTimeout(timer);
   }, [navigationState.search, searchInput, writeNavigation]);

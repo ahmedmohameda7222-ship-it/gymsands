@@ -41,6 +41,8 @@ function performedRows(options: {
   direct?: boolean;
   replaced?: boolean;
   noVolume?: boolean;
+  workloadModelVersion?: string;
+  metricKey?: string;
 } = {}) {
   const plannedSets = options.plannedSets ?? 1;
   return {
@@ -82,6 +84,7 @@ function performedRows(options: {
       id: snapshotId,
       workout_session_id: sessionId,
       snapshot_schema_version: options.snapshotVersion ?? "workout_session_muscle_snapshot_v1",
+      workload_model_version: options.workloadModelVersion ?? "resistance_sets_v1",
       frozen_at: "2026-08-01T08:00:00.000Z",
     }],
     workout_session_muscle_snapshot_items: [{
@@ -115,7 +118,7 @@ function performedRows(options: {
       minimum_value: 8,
       maximum_value: 10,
     }],
-    exercise_log_metric_values: options.noVolume ? [{ exercise_log_id: logId, metric_key: "duration_seconds", side: "none", value: 60 }] : [],
+    exercise_log_metric_values: options.noVolume || options.metricKey ? [{ exercise_log_id: logId, metric_key: options.metricKey ?? "duration_seconds", side: "none", value: 60 }] : [],
     exercise_log_set_details: [{ exercise_log_id: logId, set_type: "working", rpe: 8, rir: 2, notes: "Controlled" }],
     exercise_log_set_segments: [],
     exercise_log_set_segment_metric_values: [],
@@ -158,6 +161,36 @@ describe("Workout History canonical detail reader", () => {
     expect(cancelled.exercises[0]?.performedSets).toHaveLength(1);
     expect(noVolume.summary.reliableVolume).toBeNull();
     expect(noVolume.exercises[0]?.performedSets[0]?.metrics).toMatchObject([{ metricKey: "duration_seconds", value: 60 }]);
+  });
+
+  it("lets authoritative non-strength workload semantics outrank legacy reps and weight", async () => {
+    const semantic = await getWorkoutHistorySessionDetail(detailClient(performedRows({
+      workloadModelVersion: "endurance_distance_v1",
+      metricKey: "distance_meters",
+    })).client, owner, sessionId);
+    expect(semantic.resultKind).toBe("semantic_metrics");
+    expect(semantic.exercises[0]?.resultKind).toBe("semantic_metrics");
+    expect(semantic.activity.capabilities).toMatchObject({
+      showPerformedSets: false,
+      showMuscleAnalysis: false,
+      repeatWorkout: false,
+      correctSession: false,
+    });
+  });
+
+  it("fails closed for unknown authoritative workload semantics even when legacy strength columns exist", async () => {
+    const limited = await getWorkoutHistorySessionDetail(detailClient(performedRows({
+      workloadModelVersion: "future_unknown_v9",
+      metricKey: "future_unknown_metric",
+    })).client, owner, sessionId);
+    expect(limited.resultKind).toBe("limited");
+    expect(limited.exercises[0]?.resultKind).toBe("limited");
+    expect(limited.activity.capabilities).toMatchObject({
+      showPerformedSets: false,
+      showMuscleAnalysis: false,
+      repeatWorkout: false,
+      correctSession: false,
+    });
   });
 
   it("supports V1 and V2 snapshot headers without reading mutable plan tables", async () => {

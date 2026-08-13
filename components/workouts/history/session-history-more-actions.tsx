@@ -28,6 +28,7 @@ export function SessionHistoryMoreActions({
   timezone,
   formattedDate,
   onCorrect,
+  freshAuthority,
 }: {
   detail: WorkoutHistorySessionDetailResponse;
   accessToken: string | null | undefined;
@@ -35,6 +36,7 @@ export function SessionHistoryMoreActions({
   timezone: string;
   formattedDate: string;
   onCorrect: () => void;
+  freshAuthority: boolean;
 }) {
   const { tr } = useTrainTranslation();
   const { toast } = useToast();
@@ -43,8 +45,8 @@ export function SessionHistoryMoreActions({
   const [busy, setBusy] = useState(false);
   const sessionId = detail.activity.canonicalSessionId;
   const canReport = Boolean(sessionId && accessToken && detail.activity.capabilities.downloadReport);
-  const canCorrect = Boolean(sessionId && detail.activity.capabilities.correctSession);
-  const canDelete = Boolean(sessionId && accessToken && detail.activity.capabilities.softDeleteSession);
+  const canCorrect = Boolean(freshAuthority && sessionId && detail.activity.capabilities.correctSession);
+  const canDelete = Boolean(freshAuthority && sessionId && accessToken && detail.activity.capabilities.softDeleteSession);
   if (!canReport && !canCorrect && !canDelete) return null;
 
   async function download() {
@@ -81,7 +83,7 @@ export function SessionHistoryMoreActions({
         void mutation(sessionId, "delete", accessToken, `history-delete:${deleteKey}`).then(() => {
           toast({ title: tr("historyWorkoutDeleted"), description: tr("historyWorkoutDeletedDescription"), actionLabel: tr("historyUndo"), onAction: () => void restore(deleteKey) });
           router.push("/workout-history");
-        }).catch((error) => toast({ title: tr("historyWorkoutDeleted"), description: error instanceof Error ? error.message : tr("historyRetry"), variant: "error" })).finally(() => setBusy(false));
+        }).catch((error) => toast({ title: tr("historyWorkoutDeleteFailed"), description: error instanceof Error ? error.message : tr("historyRetry"), variant: "error" })).finally(() => setBusy(false));
       },
     });
   }

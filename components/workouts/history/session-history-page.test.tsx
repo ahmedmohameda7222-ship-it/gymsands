@@ -89,8 +89,8 @@ describe("Workout History session detail surface", () => {
     const summary = renderToStaticMarkup(<SessionHistorySummary detail={value} />);
     const exercise = renderToStaticMarkup(<ExerciseHistorySection exercise={value.exercises[0]!} defaultOpen />);
 
-    expect(summary).toContain("historyCompletedSetsCount");
-    expect(summary).toContain("historyExercisesCount");
+    expect(summary).toContain("historyCompletedSetsMetric");
+    expect(summary).toContain("historyExercisesMetric");
     expect(exercise).toContain("historyActualResult");
     expect(exercise).toContain("historyMissingPlannedSet");
     expect(exercise).toContain("Controlled");

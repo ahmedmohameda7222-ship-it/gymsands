@@ -1,6 +1,7 @@
 "use client";
 
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { HistoryFactList, type HistoryFact } from "@/components/workouts/history/history-fact-list";
 import {
   formatWorkoutMetricValue,
   presentWorkoutMetric,
@@ -14,17 +15,17 @@ import type { WorkoutHistoryExerciseSetDetail } from "@/types/workout-history";
 export function SetHistoryRow({ set }: { set: WorkoutHistoryExerciseSetDetail }) {
   const { locale, tr } = useTrainTranslation();
   const actual = [
-    set.weightKg === null ? null : formatWorkoutMetricValue("external_load_kg", set.weightKg, locale),
-    set.reps === null ? null : formatWorkoutMetricValue("repetitions", set.reps, locale),
-    ...set.metrics.filter((metric) => !["external_load_kg", "repetitions"].includes(metric.metricKey)).map((metric) => presentWorkoutMetric(metric, locale)?.value ?? null),
+    set.weightKg === null ? null : { value: formatWorkoutMetricValue("external_load_kg", set.weightKg, locale) },
+    set.reps === null ? null : { value: formatWorkoutMetricValue("repetitions", set.reps, locale) },
+    ...set.metrics.filter((metric) => !["external_load_kg", "repetitions"].includes(metric.metricKey)).map((metric) => presentWorkoutMetric(metric, locale)),
     ...set.segments.flatMap((segment) => {
       const segmentLabel = workoutSegmentLabel(segment.segmentKind, locale);
       return segment.metrics.map((metric) => {
         const presented = presentWorkoutMetric(metric, locale);
-        return segmentLabel && presented ? `${segmentLabel}: ${presented.value}` : null;
+        return segmentLabel && presented ? { label: `${segmentLabel} · ${presented.label}`, value: presented.value } : null;
       });
     }),
-  ].filter((value): value is string => Boolean(value));
+  ].flatMap((value): HistoryFact[] => value?.value ? [value as HistoryFact] : []);
   const planned = set.plannedSet?.targets.map((target) => presentWorkoutTarget(target, locale)).filter((target): target is { label: string; value: string } => Boolean(target)) ?? [];
   const setType = workoutSetTypeLabel(set.setType, locale);
 
@@ -37,14 +38,14 @@ export function SetHistoryRow({ set }: { set: WorkoutHistoryExerciseSetDetail })
       <dl className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div>
           <dt className="text-xs font-medium text-muted-foreground">{tr("historyActualResult")}</dt>
-          <dd className="mt-0.5 text-base font-semibold text-foreground"><bdi dir="ltr">{actual.join(" · ") || tr("historyNoMetric")}</bdi></dd>
+          <dd className="mt-0.5 text-base font-semibold text-foreground">{actual.length ? <HistoryFactList facts={actual} separator=" · " /> : tr("historyNoMetric")}</dd>
         </div>
         <div>
           <dt className="text-xs font-medium text-muted-foreground">{tr("historyPlannedTarget")}</dt>
-          <dd className="mt-0.5 text-sm text-muted-foreground"><bdi dir="ltr">{planned.length ? planned.map((target) => `${target.label}: ${target.value}`).join(" · ") : tr("historyUnplannedSet")}</bdi></dd>
+          <dd className="mt-0.5 text-sm text-muted-foreground">{planned.length ? <HistoryFactList facts={planned} separator=" · " /> : tr("historyUnplannedSet")}</dd>
         </div>
       </dl>
-      {set.rpe !== null || set.rir !== null ? <p className="mt-2 text-xs text-muted-foreground"><bdi dir="ltr">{[set.rpe === null ? null : `${tr("historyRpeLabel")} ${set.rpe}`, set.rir === null ? null : `${tr("historyRirLabel")} ${set.rir}`].filter(Boolean).join(" · ")}</bdi></p> : null}
+      {set.rpe !== null || set.rir !== null ? <p className="mt-2 text-xs text-muted-foreground"><HistoryFactList separator=" · " facts={[set.rpe === null ? null : { label: tr("historyRpeLabel"), value: set.rpe }, set.rir === null ? null : { label: tr("historyRirLabel"), value: set.rir }].flatMap((fact): HistoryFact[] => fact ? [fact] : [])} /></p> : null}
       {set.verifiedRecords.length ? (
         <div className="mt-3 space-y-2 border-s-2 border-primary/40 ps-3" aria-label={tr("historyVerifiedRecord")}>
           {set.verifiedRecords.map((record) => {

@@ -15,7 +15,9 @@ import {
 } from "@/lib/workouts/history/cursor";
 import { summarizeWorkoutHistory } from "@/lib/workouts/history/metrics";
 import { presentWorkoutHistorySession } from "@/lib/workouts/history/presentation";
+import { resolveWorkoutHistoryResultKind } from "@/lib/workouts/history/result-kind";
 import { resolveCanonicalWorkoutActivity } from "@/lib/workouts/history/resolve-activity";
+import { isSupportedWorkoutMetricKey } from "@/lib/workouts/metric-presentation";
 import {
   presentWorkoutHistoryTimeline,
   type WorkoutHistoryTimelineSourceRow,
@@ -936,12 +938,12 @@ export async function getWorkoutHistorySessionDetail(
     eligibility: { statuses: ["completed", "partial", "cancelled", "skipped"], includeMeaningfulCancelled: true },
   });
   if (!activity) throw new WorkoutHistoryReaderError("history_not_found", "Workout history item was not found.", 404);
-  const resultKind = snapshot?.workload_model_version === "resistance_sets_v1"
-    || logs.some((log) => log.reps !== null || log.weight_kg !== null)
-    ? "strength_sets" as const
-    : metrics.length > 0 || segments.length > 0
-      ? "semantic_metrics" as const
-      : "limited" as const;
+  const resultKind = resolveWorkoutHistoryResultKind({
+    authoritativeWorkloadModelVersion: snapshot?.workload_model_version,
+    hasSupportedStructuredMetrics: [...metrics, ...segmentMetrics]
+      .some((metric) => isSupportedWorkoutMetricKey(metric.metric_key)),
+    hasLegacyStrengthValues: logs.some((log) => log.reps !== null || log.weight_kg !== null),
+  });
   const presentedActivity = {
     ...activity,
     capabilities: presentWorkoutHistorySession(activity, {

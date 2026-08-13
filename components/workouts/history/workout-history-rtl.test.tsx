@@ -14,10 +14,12 @@ const item: WorkoutHistorySessionSummary = {
 };
 
 describe("Workout History RTL behavior", () => {
-  it("keeps fact strings LTR and mirrors the detail chevron", () => {
+  it("isolates only technical fact values while labels remain in the RTL sentence flow", () => {
     const markup = renderToStaticMarkup(<div dir="rtl"><WorkoutHistoryCard item={item} /></div>);
     expect(markup).toContain('dir="rtl"');
-    expect(markup).toContain('<bdi dir="ltr"');
+    expect(markup).toContain('<span>historyDurationMetric: </span><bdi dir="ltr">historyMinutesShort:45</bdi>');
+    expect(markup).toContain('<span>historyCompletedSetsMetric: </span><bdi dir="ltr">9</bdi>');
+    expect(markup).not.toContain('<bdi dir="ltr">historyDurationMetric');
     expect(markup).toContain("rtl:rotate-180");
   });
 

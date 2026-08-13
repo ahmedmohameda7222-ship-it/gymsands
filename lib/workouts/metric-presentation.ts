@@ -65,6 +65,10 @@ function number(value: number, locale: string, maximumFractionDigits = 1): strin
   return new Intl.NumberFormat(locale, { maximumFractionDigits }).format(value);
 }
 
+export function isSupportedWorkoutMetricKey(metricKey: string): boolean {
+  return Object.prototype.hasOwnProperty.call(COPY.en.metrics, metricKey);
+}
+
 export function workoutMetricLabel(metricKey: string, locale: string, surface: "ui" | "report" = "ui"): string | null {
   const lang = language(locale);
   const copy = COPY[language(locale)].metrics;

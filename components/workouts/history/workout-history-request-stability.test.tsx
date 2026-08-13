@@ -40,13 +40,14 @@ const mocks = vi.hoisted(() => ({
     session: { access_token: string } | null;
   },
   push: vi.fn(),
+  replace: vi.fn(),
   list: vi.fn(),
   loadMore: null as (() => void) | null,
 }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/workout-history",
-  useRouter: () => ({ push: mocks.push }),
+  useRouter: () => ({ push: mocks.push, replace: mocks.replace }),
   useSearchParams: () => new URLSearchParams(mocks.url),
 }));
 
@@ -401,6 +402,9 @@ beforeEach(() => {
   mocks.push.mockReset().mockImplementation((href: string) => {
     mocks.url = href.split("?")[1] ?? "";
   });
+  mocks.replace.mockReset().mockImplementation((href: string) => {
+    mocks.url = href.split("?")[1] ?? "";
+  });
   mocks.list
     .mockReset()
     .mockResolvedValue(historyResponse(ownerA, "Owner A"));
@@ -482,6 +486,8 @@ describe("Workout History request stability", () => {
     expect(mocks.list.mock.calls[1]?.[1]).toMatchObject({
       workoutTypes: ["strength"],
     });
+    expect(mocks.push).toHaveBeenCalledOnce();
+    expect(mocks.replace).not.toHaveBeenCalled();
   });
 
   it("debounces normalized search into one committed request and ignores the same normalized value", async () => {
@@ -502,6 +508,8 @@ describe("Workout History request stability", () => {
     expect(mocks.list.mock.calls[1]?.[1]).toMatchObject({
       search: "bench press",
     });
+    expect(mocks.replace).toHaveBeenCalledOnce();
+    expect(mocks.push).not.toHaveBeenCalled();
 
     await changeSearch("bench    press");
     await act(async () => {
@@ -509,6 +517,7 @@ describe("Workout History request stability", () => {
     });
     await renderPage();
     expect(mocks.list).toHaveBeenCalledTimes(2);
+    expect(mocks.replace).toHaveBeenCalledOnce();
   });
 
   it("does not refetch for a token refresh and uses the latest token on the next genuine query", async () => {
