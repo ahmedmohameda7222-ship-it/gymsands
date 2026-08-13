@@ -17,10 +17,14 @@ const logId = "50000000-0000-4000-8000-000000000001";
 function detailClient(rows: Record<string, unknown[]>) {
   const calls: string[] = [];
   const client = {
+    rpc: vi.fn(async (name: string) => name === "get_workout_history_pr_projection_inputs_v1"
+      ? { data: rows.personal_records ?? [], error: null }
+      : { data: null, error: { message: `Unexpected RPC: ${name}` } }),
     from: vi.fn((table: string) => {
       calls.push(table);
       const builder: Record<string, unknown> = {};
       for (const method of ["select", "eq", "is", "in", "order"] as const) builder[method] = vi.fn(() => builder);
+      builder.range = vi.fn(async () => ({ data: rows[table] ?? [], error: null }));
       builder.maybeSingle = vi.fn(async () => ({ data: rows[table]?.[0] ?? null, error: null }));
       builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
         Promise.resolve({ data: rows[table] ?? [], error: null }).then(resolve, reject);

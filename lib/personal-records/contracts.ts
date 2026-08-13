@@ -35,6 +35,7 @@ export type CanonicalPersonalRecordEvent = {
   rawAchievedAt: string;
   source: PersonalRecordSource;
   sourceWorkoutId: string | null;
+  sourceExerciseLogId: string | null;
   notes: string | null;
   editable: boolean;
   eventSemanticsVersion: string;
@@ -42,6 +43,15 @@ export type CanonicalPersonalRecordEvent = {
     catalogRevisionId: string | null;
     authoritySnapshot: Record<string, unknown>;
   } | null;
+};
+
+export type PersonalRecordSessionEvent = {
+  event: CanonicalPersonalRecordEvent;
+  previousComparable: CanonicalPersonalRecordEvent | null;
+};
+
+export type PersonalRecordSessionProjection = {
+  eventsBySessionId: Record<string, PersonalRecordSessionEvent[]>;
 };
 
 export type PersonalRecordLineageSummary = {

@@ -56,7 +56,7 @@ vi.mock("@/components/workouts/train-ui", () => ({
 vi.mock("@/components/workouts/history/exercise-history-section", () => ({ ExerciseHistorySection: () => <div /> }));
 vi.mock("@/components/workouts/history/session-history-actions", () => ({ SessionHistoryActions: () => <div /> }));
 vi.mock("@/components/workouts/history/session-correction-dialog", () => ({ SessionCorrectionDialog: () => <div /> }));
-vi.mock("@/components/workouts/history/session-history-insight", () => ({ SessionHistoryInsight: () => <div /> }));
+vi.mock("@/components/workouts/history/session-history-more-actions", () => ({ SessionHistoryMoreActions: () => <div /> }));
 vi.mock("@/components/workouts/history/session-history-muscle-summary", () => ({ SessionHistoryMuscleSummary: () => <div /> }));
 vi.mock("@/components/workouts/history/session-history-notes", () => ({ SessionHistoryNotes: () => <div /> }));
 vi.mock("@/components/workouts/history/session-history-summary", () => ({ SessionHistorySummary: () => <div /> }));

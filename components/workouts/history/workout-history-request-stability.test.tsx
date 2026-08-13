@@ -218,13 +218,6 @@ vi.mock(
   }),
 );
 
-vi.mock(
-  "@/components/workouts/history/workout-history-desktop-preview",
-  () => ({
-    WorkoutHistoryDesktopPreview: () => <aside data-preview />,
-  }),
-);
-
 vi.mock("@/components/workouts/train-ui", () => ({
   TrainPageContainer: ({
     children,
@@ -335,10 +328,11 @@ function emptyHistoryResponse(ownerId = ownerA): WorkoutHistoryListResponse {
   return {
     ...response,
     summary: {
-      ...response.summary,
+      ...response.summary!,
       eligibleWorkoutCount: 0,
     },
     items: [],
+    hasAnyHistory: false,
   };
 }
 
@@ -434,12 +428,11 @@ describe("Workout History request stability", () => {
     });
   });
 
-  it("does not refetch for selected-only navigation or equivalent parameter ordering", async () => {
+  it("ignores legacy selected navigation and equivalent parameter ordering", async () => {
     await renderPage();
-    click("[data-select-item]");
+    mocks.url = `${mocks.url}&selected=performed%3Alegacy`;
     await renderPage();
 
-    expect(mocks.url).toContain("selected=");
     expect(mocks.list).toHaveBeenCalledOnce();
 
     mocks.url = mocks.url
@@ -457,7 +450,7 @@ describe("Workout History request stability", () => {
     expect(mocks.list).toHaveBeenCalledOnce();
   });
 
-  it("treats a successful empty response as resolved across rerender and selected-only navigation", async () => {
+  it("treats a successful empty response as resolved across rerender and ignored legacy navigation", async () => {
     mocks.list.mockResolvedValue(emptyHistoryResponse());
     await renderPage();
     expect(mocks.list).toHaveBeenCalledOnce();
@@ -722,8 +715,8 @@ describe("Workout History request stability", () => {
 
     expect(mocks.list).toHaveBeenCalledOnce();
     expect(mocks.list.mock.calls[0]?.[1]).toMatchObject({
-      from: expect.stringContaining("2026-08-01"),
-      to: expect.stringContaining("2026-09-01"),
+      from: "2026-08-31T22:00:00.000Z",
+      to: "2026-09-30T22:00:00.000Z",
     });
 
     vi.setSystemTime(new Date("2026-09-01T00:01:00.000Z"));

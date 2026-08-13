@@ -21,7 +21,7 @@ export function WorkoutHistorySearch({ value, onChange }: { value: string; onCha
         className="h-12 rounded-2xl pl-10 pr-10 rtl:pl-10 rtl:pr-10"
       />
       {value ? (
-        <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 size-10 -translate-y-1/2 rtl:left-1 rtl:right-auto" onClick={() => onChange("")} aria-label={tr("historyClearFilters")}>
+        <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 size-10 -translate-y-1/2 rtl:left-1 rtl:right-auto" onClick={() => onChange("")} aria-label={tr("historyClearSearch")}>
           <X className="size-4" aria-hidden="true" />
         </Button>
       ) : null}

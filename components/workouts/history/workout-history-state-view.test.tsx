@@ -17,7 +17,8 @@ describe("Workout History page states", () => {
   it("renders geometry-matching loading cards without a blank spinner screen", () => {
     const markup = render("initial-loading");
     expect(markup).toContain('aria-busy="true"');
-    expect(markup).toContain("min-h-[158px]");
+    expect(markup).toContain("border-b");
+    expect((markup.match(/animate-pulse/g) ?? [])).toHaveLength(12);
     expect(markup).not.toContain("animate-spin");
   });
 

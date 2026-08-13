@@ -34,14 +34,7 @@ export const WORKOUT_HISTORY_QA_SCENARIOS = Object.freeze(
     ["blocking-error", 2, "ar", "light", "/workout-history", "list"],
     ["stale-cached-data", 3, "en", "dark", "/workout-history", "list"],
     ["offline-cached-read", 4, "de", "light", "/workout-history", "list", true],
-    [
-      "desktop-selection",
-      5,
-      "en",
-      "light",
-      "/workout-history",
-      "desktop-select",
-    ],
+    ["desktop-layout", 5, "en", "light", "/workout-history", "list"],
     [
       "session-details",
       6,
@@ -51,12 +44,12 @@ export const WORKOUT_HISTORY_QA_SCENARIOS = Object.freeze(
       "detail",
     ],
     [
-      "expanded-exercises",
+      "flat-activity-results",
       7,
       "en",
       "light",
       `/workout-history/${DETAIL_ID}`,
-      "expand-exercise",
+      "detail",
     ],
     ["long-notes", 0, "de", "light", `/workout-history/${DETAIL_ID}`, "detail"],
     [
@@ -244,6 +237,59 @@ function repeatPreview(scenario) {
   };
 }
 
+function trainingFocusPayload(scenario) {
+  const advanced = scenario === "v2-muscle-snapshot";
+  return {
+    sessionId: DETAIL_ID,
+    snapshotId: "24000000-0000-4000-8000-000000000001",
+    snapshotSchemaVersion: advanced
+      ? "workout_session_muscle_snapshot_v2"
+      : "workout_session_muscle_snapshot_v1",
+    frozenAt: "2026-08-08T09:52:00.000Z",
+    source: "session_start",
+    snapshotCompleteness: "complete",
+    reasonCodes: [],
+    effectiveCompleteness: "complete",
+    effectiveWarnings: [],
+    analysis: advanced
+      ? {
+          kind: "advanced",
+          schemaVersion: "advanced_muscle_analysis_result_v1",
+          atlasVersion: "advanced_muscle_atlas_v1",
+          mappingSchemaVersion: "advanced_muscle_mapping_v1",
+          engineVersion: "advanced_muscle_exposure_v1",
+          heatScaleVersion: "advanced_muscle_heat_scale_v1",
+          workloadModelVersion: "resistance_sets_v1",
+          scope: "single_session",
+          completeness: "complete",
+          targets: [
+            { targetId: "pectoralis.middle", rawExposure: 6, heatLevel: "high" },
+            { targetId: "triceps.lateral_head", rawExposure: 3, heatLevel: "moderate" },
+          ],
+          mappingVersionsUsed: [],
+          coverage: { totalItemCount: 2, includedItemCount: 2, unmappedItemCount: 0 },
+          warnings: [],
+        }
+      : {
+          schemaVersion: "muscle_analysis_result_v1",
+          taxonomyVersion: "muscle_taxonomy_v1",
+          engineVersion: "muscle_load_resistance_sets_v1",
+          thresholdVersion: "muscle_load_thresholds_v1",
+          mode: "completed",
+          period: { kind: "session" },
+          completeness: "complete",
+          muscles: [
+            { muscleId: "pectoralis_major", rawScore: 6, levelInputScore: 6, level: "high" },
+            { muscleId: "triceps_brachii", rawScore: 3, levelInputScore: 3, level: "medium" },
+          ],
+          contributionBreakdown: [],
+          mappingVersionsUsed: [],
+          coverage: { totalItemCount: 2, includedItemCount: 2, unmappedItemCount: 0, unsupportedItemCount: 0 },
+          warnings: [],
+        },
+  };
+}
+
 export async function installWorkoutHistoryQaFixture(
   context,
   scenario,
@@ -306,6 +352,16 @@ export async function installWorkoutHistoryQaFixture(
       body: method === "HEAD" ? "" : JSON.stringify(responseBody),
     });
   });
+  await context.route(
+    /\/api\/workouts\/sessions\/[^/]+\/muscle-analysis(?:\?.*)?$/u,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(trainingFocusPayload(scenario.name)),
+      });
+    },
+  );
   await context.route(`${origin}/api/workouts/history/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());

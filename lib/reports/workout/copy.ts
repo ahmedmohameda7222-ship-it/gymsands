@@ -1,5 +1,12 @@
 import { PdfReportError } from "@/lib/reports/pdf/errors";
 import type { ReportLanguage } from "@/lib/reports/pdf/types";
+import {
+  workoutMetricLabel,
+  workoutMetricSideLabel,
+  workoutMetricUnitLabel,
+  workoutSegmentLabel,
+  workoutSetTypeLabel,
+} from "@/lib/workouts/metric-presentation";
 import type {
   WorkoutPerformanceCanonicalUnit,
   WorkoutPerformanceMetricKey,
@@ -483,7 +490,7 @@ export function formatWorkoutReportSetType(
   language: ReportLanguage,
 ): string {
   if (!isOneOf(value, SET_TYPES)) unsupportedSemantic();
-  return SET_TYPE_COPY[language][value];
+  return workoutSetTypeLabel(value, language, "report") ?? unsupportedSemantic();
 }
 
 export function formatWorkoutReportMetricLabel(
@@ -491,7 +498,7 @@ export function formatWorkoutReportMetricLabel(
   language: ReportLanguage,
 ): string {
   if (!isOneOf(value, METRIC_KEYS)) unsupportedSemantic();
-  return METRIC_COPY[language][value];
+  return workoutMetricLabel(value, language, "report") ?? unsupportedSemantic();
 }
 
 export function formatWorkoutReportSide(
@@ -499,7 +506,7 @@ export function formatWorkoutReportSide(
   language: ReportLanguage,
 ): string | null {
   if (!isOneOf(value, SIDES)) unsupportedSemantic();
-  return SIDE_COPY[language][value] || null;
+  return workoutMetricSideLabel(value, language, "report");
 }
 
 export function formatWorkoutReportSegmentKind(
@@ -507,7 +514,7 @@ export function formatWorkoutReportSegmentKind(
   language: ReportLanguage,
 ): string {
   if (!isOneOf(value, SEGMENT_KINDS)) unsupportedSemantic();
-  return SEGMENT_KIND_COPY[language][value];
+  return workoutSegmentLabel(value, language, "report") ?? unsupportedSemantic();
 }
 
 export function formatWorkoutReportTargetMode(
@@ -523,7 +530,7 @@ export function formatWorkoutReportUnit(
   language: ReportLanguage,
 ): string {
   if (!isOneOf(value, UNITS)) unsupportedSemantic();
-  return UNIT_COPY[language][value];
+  return workoutMetricUnitLabel(value, language);
 }
 
 export function assertWorkoutReportMetricSide(

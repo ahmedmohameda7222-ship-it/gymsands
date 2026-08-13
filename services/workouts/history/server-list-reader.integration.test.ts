@@ -101,7 +101,27 @@ function clientFor(rootPages: Array<Record<string, unknown>[]>) {
       performed_total_sets: 1,
     }],
     exercise_muscle_mapping_entries: [{ mapping_set_id: mappingId, muscle_id: "pectoralis_major" }],
-    current_personal_records: [{ workout_session_id: firstId }],
+    personal_records: [{
+      id: "99999999-9999-4999-8999-999999999999",
+      exercise_name: "Bench press",
+      record_type: "Max weight",
+      weight_kg: 50,
+      reps: null,
+      record_date: "2026-08-10",
+      notes: null,
+      source_kind: "workout_derived",
+      exercise_identity_kind: "global",
+      exercise_identity: "global:bench",
+      workout_session_id: firstId,
+      exercise_log_id: "66666666-6666-4666-8666-666666666666",
+      derived_record_type: "highest_load",
+      record_value: 50,
+      record_unit: "kg",
+      comparison_context_key: "resistance:external|side:none|set:working|unit:kg|formula:wh6-v1",
+      schema_version: 1,
+      formula_version: "wh6-v1",
+      achieved_at: "2026-08-10T08:30:00.000Z",
+    }],
     user_workout_sessions: [],
     user_workout_plans: [],
   };
@@ -109,17 +129,20 @@ function clientFor(rootPages: Array<Record<string, unknown>[]>) {
   const client = {
     rpc: vi.fn(async (name: string, parameters: Record<string, unknown>) => {
       calls.push({ kind: "rpc", name, values: parameters });
-      if (name === "get_workout_history_period_summary_v1") {
+      if (name === "get_workout_history_period_context_v2") {
         return {
           data: [{
             eligible_workout_count: 2,
             trusted_duration_minutes: 115,
             completed_set_count: 2,
             reliable_volume: null,
-            verified_record_count: 1,
+            verified_record_count: null,
           }],
           error: null,
         };
+      }
+      if (name === "get_workout_history_pr_projection_inputs_v1") {
+        return { data: rows.personal_records, error: null };
       }
       const data = rootPages[Math.min(pageIndex, rootPages.length - 1)] ?? [];
       pageIndex += 1;
@@ -139,6 +162,8 @@ function clientFor(rootPages: Array<Record<string, unknown>[]>) {
         calls.push({ kind: "table", name: table, values: { field, values } });
         return builder;
       });
+      builder.order = vi.fn(() => builder);
+      builder.range = vi.fn(async () => ({ data: rows[table] ?? [], error: null }));
       builder.then = (
         resolve: (value: unknown) => unknown,
         reject: (reason: unknown) => unknown,
@@ -196,7 +221,7 @@ describe("Workout History keyset list reader", () => {
       trustedDurationMinutes: 115,
       completedSetCount: 2,
       reliableVolume: null,
-      verifiedRecordCount: 1,
+      verifiedRecordCount: null,
     });
     expect(response.nextCursor).not.toBeNull();
     const childCalls = calls.filter((call) => call.kind === "table");
@@ -219,7 +244,7 @@ describe("Workout History keyset list reader", () => {
     const cursor = decodeWorkoutHistoryCursor(pageOne.nextCursor!, secret);
 
     const next = clientFor([[second]]);
-    await listWorkoutHistoryKeyset(next.client, userId, {
+    const cursorPage = await listWorkoutHistoryKeyset(next.client, userId, {
       from: "2026-08-01T00:00:00.000Z",
       to: "2026-09-01T00:00:00.000Z",
       timezone: "UTC",
@@ -236,5 +261,7 @@ describe("Workout History keyset list reader", () => {
       p_cursor_duration_minutes: cursor.durationMinutes,
       p_limit: 2,
     });
+    expect(cursorPage.summary).toBeUndefined();
+    expect(next.calls.some((call) => call.kind === "rpc" && call.name === "get_workout_history_period_context_v2")).toBe(false);
   });
 });

@@ -107,6 +107,13 @@ AW-9 remains represented by repository migration `20260731090000_active_workout_
 - It preserves historical Verified events while adding versioned semantics, owner-scoped Manual records, and guarded atomic Add-to-plan authority.
 - Do not replay or apply this migration before explicit Planner approval of the phase merge/release sequence.
 
+## Workout History redesign pending migration authority
+
+- `20260813071926_workout_history_redesign_read_contract.sql` is the additive owner-scoped read authority for first-page period context and global-history existence.
+- Ledger state: `pending`; Production version/name: intentionally absent.
+- It does not rewrite historical data and was not applied to Plaivra Production.
+- Do not replay or apply it before explicit Planner approval of the Workout History redesign merge/release sequence.
+
 ## Authority and verification
 
 Use these current sources:

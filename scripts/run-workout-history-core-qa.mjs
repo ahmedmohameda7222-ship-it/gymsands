@@ -56,10 +56,15 @@ function expectedConsoleError(scenario, message) {
 async function openCorrection(page) {
   await page
     .getByRole("button", {
+      name: /more actions|weitere aktionen|إجراءات إضافية/iu,
+    })
+    .click();
+  await page
+    .getByRole("menuitem", {
       name: /correct session|training korrigieren|تصحيح الجلسة/iu,
     })
     .click();
-  await page.waitForSelector('[role="dialog"]');
+  await page.waitForSelector("[data-workout-history-correction-dialog]");
 }
 
 async function saveCorrection(page) {
@@ -106,23 +111,13 @@ async function prepareScenario(page, scenario, observation) {
       .click();
     await page.waitForFunction(
       () =>
-        document.querySelectorAll("[data-workout-history-card]").length > 20,
+        document.querySelectorAll("[data-workout-history-row]").length > 20,
     );
   } else if (scenario.action === "filters") {
     await page
       .getByRole("button", { name: /filters|filter/iu })
       .first()
       .click();
-  } else if (scenario.action === "desktop-select") {
-    await page.locator("[data-workout-history-card] a").first().click();
-    await page.waitForSelector(
-      '[data-workout-history-card][data-selected="true"]',
-    );
-  } else if (scenario.action === "expand-exercise") {
-    const toggles = page.locator(
-      'section[aria-labelledby="session-history-exercises-title"] button',
-    );
-    if ((await toggles.count()) > 1) await toggles.nth(1).click();
   } else if (scenario.action === "correction") {
     await openCorrection(page);
   } else if (scenario.action === "correction-edit") {
@@ -133,7 +128,7 @@ async function prepareScenario(page, scenario, observation) {
     await page.getByLabel(/^RIR$/iu).first().fill("1.5");
     await page.getByLabel(/set note|satznotiz|ملاحظة المجموعة/iu).first().fill("Controlled corrected set");
     await saveCorrection(page);
-    await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+    await page.locator("[data-workout-history-correction-dialog]").waitFor({ state: "hidden" });
   } else if (scenario.action === "correction-add") {
     await openCorrection(page);
     const addButton = page
@@ -147,7 +142,7 @@ async function prepareScenario(page, scenario, observation) {
     await addedSet.getByLabel(/^RPE$/iu).fill("8");
     await addedSet.getByLabel(/^RIR$/iu).fill("2");
     await saveCorrection(page);
-    await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+    await page.locator("[data-workout-history-correction-dialog]").waitFor({ state: "hidden" });
   } else if (scenario.action === "correction-remove") {
     await openCorrection(page);
     await page
@@ -155,7 +150,7 @@ async function prepareScenario(page, scenario, observation) {
       .first()
       .click();
     await saveCorrection(page);
-    await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+    await page.locator("[data-workout-history-correction-dialog]").waitFor({ state: "hidden" });
   } else if (scenario.action === "correction-conflict") {
     await openCorrection(page);
     await page
@@ -168,16 +163,21 @@ async function prepareScenario(page, scenario, observation) {
       })
       .waitFor();
   } else if (scenario.action === "delete-confirmation") {
-    page.once("dialog", async (dialog) => {
-      observation.nativeDialog = safeText(dialog.message());
-      await dialog.dismiss();
-    });
     await page
       .getByRole("button", {
+        name: /more actions|weitere aktionen|إجراءات إضافية/iu,
+      })
+      .click();
+    await page
+      .getByRole("menuitem", {
         name: /delete workout|training löschen|حذف التمرين/iu,
       })
       .click();
-    await page.waitForTimeout(100);
+    await page
+      .getByRole("dialog", {
+        name: /delete workout|training löschen|حذف التمرين/iu,
+      })
+      .waitFor();
   } else if (scenario.action === "recently-deleted") {
     const item = page.getByText("Strength B", { exact: true });
     await item.waitFor();
@@ -198,8 +198,11 @@ async function prepareScenario(page, scenario, observation) {
     const item = page.getByText("Strength B", { exact: true });
     await item.waitFor();
     await item.scrollIntoViewIfNeeded();
-    page.once("dialog", (dialog) => dialog.accept());
     await page
+      .getByRole("button", { name: "Delete permanently", exact: true })
+      .click();
+    await page
+      .getByRole("dialog", { name: "Delete permanently" })
       .getByRole("button", { name: "Delete permanently", exact: true })
       .click();
     await page
@@ -320,7 +323,7 @@ try {
           document.documentElement.scrollWidth -
             document.documentElement.clientWidth,
         ),
-        cards: document.querySelectorAll("[data-workout-history-card]").length,
+        cards: document.querySelectorAll("[data-workout-history-row]").length,
         detail: Boolean(document.querySelector("[data-session-history-page]")),
         snapshotVersion:
           document

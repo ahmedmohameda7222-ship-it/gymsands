@@ -63,14 +63,13 @@ describe("Workout History mobile card", () => {
   it("renders a compact full-card detail link with no expanded data graph", () => {
     const markup = renderToStaticMarkup(<WorkoutHistoryCard item={item()} />);
 
-    expect(markup).toContain("data-workout-history-card");
-    expect(markup).toContain("min-h-[158px]");
+    expect(markup).toContain("data-workout-history-row");
+    expect(markup).toContain("min-h-20");
     expect(markup).toContain('/workout-history/11111111-1111-4111-8111-111111111111');
     expect(markup).toContain("Push day");
     expect(markup).not.toContain("5200");
     expect(markup).not.toContain("notes");
-    expect((markup.match(/<dl/g) ?? [])).toHaveLength(1);
-    expect((markup.match(/<dd/g) ?? [])).toHaveLength(3);
+    expect(markup).not.toContain("<dl");
   });
 
   it("shows a lifecycle indicator only for an exceptional state", () => {

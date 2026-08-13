@@ -34,6 +34,7 @@ const listResponse = {
 
 const mocks = vi.hoisted(() => ({
   filterOptions: vi.fn(),
+  hasAny: vi.fn(),
   list: vi.fn(),
   log: vi.fn(),
   rateLimit: vi.fn(),
@@ -62,6 +63,7 @@ vi.mock("@/services/workouts/history/filter-options", () => ({
   readWorkoutHistoryFilterOptions: mocks.filterOptions,
 }));
 vi.mock("@/services/workouts/history/server-list-reader", () => ({
+  hasAnyWorkoutHistory: mocks.hasAny,
   listWorkoutHistoryKeyset: mocks.list,
 }));
 
@@ -109,6 +111,7 @@ beforeEach(() => {
   });
   mocks.list.mockResolvedValue(listResponse);
   mocks.filterOptions.mockResolvedValue(filterOptions);
+  mocks.hasAny.mockResolvedValue(true);
 });
 
 describe("Workout History list request observability", () => {

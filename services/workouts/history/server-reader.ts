@@ -14,7 +14,6 @@ import {
   type WorkoutHistoryCursorPayload,
 } from "@/lib/workouts/history/cursor";
 import { summarizeWorkoutHistory } from "@/lib/workouts/history/metrics";
-import { DERIVED_METRICS_FORMULA_VERSION, DERIVED_METRICS_SCHEMA_VERSION } from "@/lib/workouts/derived-metrics";
 import { presentWorkoutHistorySession } from "@/lib/workouts/history/presentation";
 import { resolveCanonicalWorkoutActivity } from "@/lib/workouts/history/resolve-activity";
 import {
@@ -22,6 +21,7 @@ import {
   type WorkoutHistoryTimelineSourceRow,
 } from "@/lib/workouts/history/timeline-presentation";
 import { readCanonicalWorkoutActivityWithClient } from "@/services/workouts/history/reader";
+import { readWorkoutHistoryPersonalRecordSessions } from "@/services/personal-records/server";
 import {
   WORKOUT_HISTORY_CONTRACT_VERSION,
   type CanonicalWorkoutActivity,
@@ -84,26 +84,12 @@ type SnapshotMappingEntryRow = { mapping_set_id: string; muscle_id: string };
 type PlanNameRow = { id: string; name: string };
 type ScheduledSearchRow = { user_workout_session_id: string; exercise_name: string; notes: string | null };
 type SetNoteRow = { workout_session_id: string; notes: string | null };
-type VerifiedRecordRow = {
-  id: string;
-  workout_session_id: string;
-  exercise_log_id: string;
-  exercise_identity: string;
-  derived_record_type: WorkoutHistoryVerifiedRecord["recordType"];
-  record_value: number | string;
-  record_unit: WorkoutHistoryVerifiedRecord["unit"];
-  comparison_context_key: string;
-  achieved_at: string;
-  schema_version: number;
-  formula_version: string;
-  source_kind: string;
-};
-
 type DetailSnapshotRow = {
   id: string;
   workout_session_id: string;
   snapshot_schema_version: string;
   frozen_at: string;
+  workload_model_version: string;
 };
 type DetailSnapshotItemRow = {
   id: string;
@@ -224,29 +210,6 @@ async function readPlanNames(
   const failure = results.find((result) => result.error)?.error;
   if (failure) throw new WorkoutHistoryReaderError("history_read_failed", "Workout history could not load.", 503);
   return new Map(results.flatMap((result) => (result.data ?? []) as unknown as PlanNameRow[]).map((plan) => [plan.id, plan.name]));
-}
-
-async function readVerifiedRecords(
-  supabase: SupabaseClient,
-  userId: string,
-  field: "workout_session_id" | "exercise_identity",
-  values: string[],
-): Promise<VerifiedRecordRow[]> {
-  if (!values.length) return [];
-  const results = await Promise.all(Array.from(
-    { length: Math.ceil(values.length / IN_FILTER_CHUNK) },
-    (_, index) => supabase
-      .from("current_personal_records")
-      .select("id,workout_session_id,exercise_log_id,exercise_identity,derived_record_type,record_value,record_unit,comparison_context_key,achieved_at,schema_version,formula_version,source_kind")
-      .eq("user_id", userId)
-      .eq("source_kind", "workout_derived")
-      .eq("schema_version", DERIVED_METRICS_SCHEMA_VERSION)
-      .eq("formula_version", DERIVED_METRICS_FORMULA_VERSION)
-      .in(field, values.slice(index * IN_FILTER_CHUNK, (index + 1) * IN_FILTER_CHUNK)),
-  ));
-  const failure = results.find((result) => result.error)?.error;
-  if (failure) throw new WorkoutHistoryReaderError("history_read_failed", "Workout history could not load.", 503);
-  return results.flatMap((result) => (result.data ?? []) as unknown as VerifiedRecordRow[]);
 }
 
 async function readRowsInChunks<T>(
@@ -381,7 +344,7 @@ async function buildPerformedCandidates(
   sessions: PerformedWorkoutHistoryRow[],
 ) {
   const sessionIds = sessions.map((session) => session.id);
-  const [logs, metrics, prescriptions, snapshots, verifiedRecords] = await Promise.all([
+  const [logs, metrics, prescriptions, snapshots, personalRecords] = await Promise.all([
     readRowsInChunks<PerformedLogRow>(
       supabase,
       "exercise_logs",
@@ -392,7 +355,7 @@ async function buildPerformedCandidates(
     readRowsInChunks<StructuredMetricRow>(supabase, "exercise_log_metric_values", "workout_session_id", "workout_session_id", sessionIds),
     readRowsInChunks<PrescriptionSetRow>(supabase, "workout_session_prescription_sets", "workout_session_id", "workout_session_id", sessionIds),
     readRowsInChunks<SnapshotRow>(supabase, "workout_session_muscle_snapshots", "id,workout_session_id", "workout_session_id", sessionIds),
-    readVerifiedRecords(supabase, userId, "workout_session_id", sessionIds),
+    readWorkoutHistoryPersonalRecordSessions(supabase, userId, sessionIds),
   ]);
   const snapshotItems = await readRowsInChunks<SnapshotItemRow>(
     supabase,
@@ -422,13 +385,8 @@ async function buildPerformedCandidates(
   const muscleIdsBySession = new Map<string, Set<string>>();
   const muscleIdsByMappingSet = new Map<string, string[]>();
   const verifiedRecordCountBySession = new Map<string, number>();
-  const sessionById = new Map(sessions.map((session) => [session.id, session]));
-  for (const record of verifiedRecords) {
-    const session = sessionById.get(record.workout_session_id);
-    if (!session?.derived_records_evaluated_at
-      || session.derived_record_schema_version !== DERIVED_METRICS_SCHEMA_VERSION
-      || session.derived_record_formula_version !== DERIVED_METRICS_FORMULA_VERSION) continue;
-    increment(verifiedRecordCountBySession, record.workout_session_id);
+  for (const sessionId of sessionIds) {
+    verifiedRecordCountBySession.set(sessionId, personalRecords.eventsBySessionId[sessionId]?.length ?? 0);
   }
   for (const entry of mappingEntries) {
     muscleIdsByMappingSet.set(entry.mapping_set_id, [
@@ -739,7 +697,7 @@ export async function listWorkoutHistory(
   return {
     contractVersion: WORKOUT_HISTORY_CONTRACT_VERSION,
     period: { from: request.from, to: request.to, timezone: request.timezone },
-    summary: summarizeWorkoutHistory(allItems),
+    ...(request.cursor ? {} : { summary: summarizeWorkoutHistory(allItems) }),
     items,
     nextCursor: hasMore && items.length
       ? encodeWorkoutHistoryCursor(cursorForItem(items.at(-1)!, sort), cursorSecret)
@@ -810,32 +768,6 @@ function presentPlannedSet(
   };
 }
 
-function presentVerifiedRecord(
-  row: VerifiedRecordRow,
-  comparable: readonly VerifiedRecordRow[],
-): WorkoutHistoryVerifiedRecord | null {
-  const currentValue = numberOrNull(row.record_value);
-  if (currentValue === null) return null;
-  const previousValues = comparable
-    .filter((candidate) =>
-      candidate.id !== row.id
-      && candidate.exercise_identity === row.exercise_identity
-      && candidate.derived_record_type === row.derived_record_type
-      && candidate.record_unit === row.record_unit
-      && candidate.comparison_context_key === row.comparison_context_key
-      && Date.parse(candidate.achieved_at) < Date.parse(row.achieved_at))
-    .map((candidate) => numberOrNull(candidate.record_value))
-    .filter((value): value is number => value !== null);
-  return {
-    id: row.id,
-    recordType: row.derived_record_type,
-    currentValue,
-    previousValue: previousValues.length ? Math.max(...previousValues) : null,
-    unit: row.record_unit,
-    estimated: row.derived_record_type === "estimated_one_rep_max",
-  };
-}
-
 function groupExerciseDetail(input: {
   logs: PerformedLogRow[];
   snapshotItems: DetailSnapshotItemRow[];
@@ -846,6 +778,7 @@ function groupExerciseDetail(input: {
   segments: DetailSegmentRow[];
   segmentMetrics: DetailSegmentMetricRow[];
   verifiedRecordsByLog: Map<string, WorkoutHistoryVerifiedRecord[]>;
+  resultKind: "strength_sets" | "semantic_metrics" | "limited";
 }): WorkoutHistoryExerciseDetail[] {
   type Group = { identity: string; item: DetailSnapshotItemRow | null; logs: PerformedLogRow[] };
   const groups = new Map<string, Group>();
@@ -935,6 +868,7 @@ function groupExerciseDetail(input: {
       plannedSetCount: group.item ? plannedRows.length : null,
       performedSets,
       missingPlannedSets: plannedRows.filter((set) => unmatched.has(set.id)).map((set) => presentPlannedSet(set, targetsBySet)),
+      resultKind: input.resultKind,
     };
   });
 }
@@ -954,12 +888,7 @@ export async function getWorkoutHistorySessionDetail(
   if (root.error) throw new WorkoutHistoryReaderError("history_detail_unavailable", "Workout details could not load.", 503);
   if (!root.data) throw new WorkoutHistoryReaderError("history_not_found", "Workout history item was not found.", 404);
   const rootSession = root.data as unknown as PerformedWorkoutHistoryRow;
-  const recordsAreCurrent = Boolean(
-    rootSession.derived_records_evaluated_at
-    && rootSession.derived_record_schema_version === DERIVED_METRICS_SCHEMA_VERSION
-    && rootSession.derived_record_formula_version === DERIVED_METRICS_FORMULA_VERSION,
-  );
-  const [logs, prescriptions, prescriptionTargets, metrics, setDetails, segments, segmentMetrics, snapshots, timelineRows, currentVerifiedRecords] = await Promise.all([
+  const [logs, prescriptions, prescriptionTargets, metrics, setDetails, segments, segmentMetrics, snapshots, timelineRows, personalRecords] = await Promise.all([
     readRowsInChunks<PerformedLogRow>(supabase, "exercise_logs", "id,workout_session_id,plan_exercise_id,plan_activity_id,exercise_order,exercise_name,exercise_category,set_number,reps,weight_kg,notes,completed_at,set_type", "workout_session_id", [sessionId]),
     readRowsInChunks<DetailPrescriptionSetRow>(supabase, "workout_session_prescription_sets", "id,snapshot_item_id,set_order,performed_order_hint,set_type,target_mode,side_mode,rest_seconds,tempo_target", "workout_session_id", [sessionId]),
     readRowsInChunks<DetailPrescriptionTargetRow>(supabase, "workout_session_prescription_metric_targets", "prescription_set_id,metric_key,side,target_mode,target_value,minimum_value,maximum_value", "workout_session_id", [sessionId]),
@@ -967,9 +896,9 @@ export async function getWorkoutHistorySessionDetail(
     readRowsInChunks<DetailSetRow>(supabase, "exercise_log_set_details", "exercise_log_id,set_type,rpe,rir,notes", "workout_session_id", [sessionId]),
     readRowsInChunks<DetailSegmentRow>(supabase, "exercise_log_set_segments", "id,exercise_log_id,segment_order,segment_kind,side", "workout_session_id", [sessionId]),
     readRowsInChunks<DetailSegmentMetricRow>(supabase, "exercise_log_set_segment_metric_values", "segment_id,exercise_log_id,metric_key,side,value", "workout_session_id", [sessionId]),
-    readRowsInChunks<DetailSnapshotRow>(supabase, "workout_session_muscle_snapshots", "id,workout_session_id,snapshot_schema_version,frozen_at", "workout_session_id", [sessionId]),
+    readRowsInChunks<DetailSnapshotRow>(supabase, "workout_session_muscle_snapshots", "id,workout_session_id,snapshot_schema_version,frozen_at,workload_model_version", "workout_session_id", [sessionId]),
     readRowsInChunks<WorkoutHistoryTimelineSourceRow & { sequence_number: number }>(supabase, "workout_session_timeline_events", "id,event_type,occurred_at,exercise_log_id,snapshot_item_id,sequence_number", "workout_session_id", [sessionId]),
-    recordsAreCurrent ? readVerifiedRecords(supabase, userId, "workout_session_id", [sessionId]) : Promise.resolve([]),
+    readWorkoutHistoryPersonalRecordSessions(supabase, userId, [sessionId]),
   ]);
   const snapshot = snapshots.length === 1 ? snapshots[0] : null;
   const snapshotItems = snapshot
@@ -981,21 +910,14 @@ export async function getWorkoutHistorySessionDetail(
       [snapshot.id],
     )
     : [];
-  const comparableRecords = currentVerifiedRecords.length
-    ? await readVerifiedRecords(
-        supabase,
-        userId,
-        "exercise_identity",
-        unique(currentVerifiedRecords.map((record) => record.exercise_identity)),
-      )
-    : [];
+  const currentVerifiedRecords = personalRecords.eventsBySessionId[sessionId] ?? [];
   const verifiedRecordsByLog = new Map<string, WorkoutHistoryVerifiedRecord[]>();
   for (const record of currentVerifiedRecords) {
-    const presented = presentVerifiedRecord(record, comparableRecords);
-    if (!presented) continue;
-    verifiedRecordsByLog.set(record.exercise_log_id, [
-      ...(verifiedRecordsByLog.get(record.exercise_log_id) ?? []),
-      presented,
+    const logId = record.event.sourceExerciseLogId;
+    if (!logId) continue;
+    verifiedRecordsByLog.set(logId, [
+      ...(verifiedRecordsByLog.get(logId) ?? []),
+      record,
     ]);
   }
   const candidates: PerformedWorkoutHistoryCandidate[] = [{
@@ -1014,6 +936,21 @@ export async function getWorkoutHistorySessionDetail(
     eligibility: { statuses: ["completed", "partial", "cancelled", "skipped"], includeMeaningfulCancelled: true },
   });
   if (!activity) throw new WorkoutHistoryReaderError("history_not_found", "Workout history item was not found.", 404);
+  const resultKind = snapshot?.workload_model_version === "resistance_sets_v1"
+    || logs.some((log) => log.reps !== null || log.weight_kg !== null)
+    ? "strength_sets" as const
+    : metrics.length > 0 || segments.length > 0
+      ? "semantic_metrics" as const
+      : "limited" as const;
+  const presentedActivity = {
+    ...activity,
+    capabilities: presentWorkoutHistorySession(activity, {
+      exerciseCount: null,
+      completedSetCount: null,
+      reliableVolume: null,
+      resultKind,
+    }).capabilities,
+  };
   const exercises = groupExerciseDetail({
     logs,
     snapshotItems,
@@ -1024,6 +961,7 @@ export async function getWorkoutHistorySessionDetail(
     segments,
     segmentMetrics,
     verifiedRecordsByLog,
+    resultKind,
   });
   const completedLogs = logs.filter((log) => Boolean(log.completed_at));
   const reliableVolumeValues = completedLogs
@@ -1036,7 +974,7 @@ export async function getWorkoutHistorySessionDetail(
   ]));
   return {
     contractVersion: WORKOUT_HISTORY_CONTRACT_VERSION,
-    activity,
+    activity: presentedActivity,
     historyRevision: rootSession.history_revision ?? 0,
     summary: {
       exerciseCount: exercises.filter((exercise) => exercise.performedSets.length > 0).length,
@@ -1056,6 +994,7 @@ export async function getWorkoutHistorySessionDetail(
       exerciseNameBySnapshotItemId,
     ),
     notices: [],
+    resultKind,
   };
 }
 
@@ -1117,8 +1056,10 @@ export async function getScheduledWorkoutHistoryDetail(
       plannedSetCount: null,
       performedSets: [],
       missingPlannedSets: [],
+      resultKind: "limited",
     })),
     timeline: [],
     notices: ["partial-availability"],
+    resultKind: "limited",
   };
 }

@@ -64,6 +64,7 @@ function trackedRuntimeFilesContaining(needle) {
     )
     .filter((file) => !file.startsWith("docs/") && !isTestFile(file));
   return tracked
+    .filter((file) => existsSync(resolve(root, file)))
     .filter((file) =>
       readFileSync(resolve(root, file), "utf8").includes(needle),
     )

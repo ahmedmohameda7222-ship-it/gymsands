@@ -5,6 +5,7 @@ import { RotateCcw, Trash2 } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   Card,
   CardContent,
@@ -28,6 +29,7 @@ export function RecentlyDeletedWorkouts() {
   const { locale, tr } = useTrainTranslation();
   const [items, setItems] = useState<DeletedWorkout[]>([]);
   const [loading, setLoading] = useState(true);
+  const confirm = useConfirm();
   const accessToken = session?.access_token;
 
   const load = useCallback(async () => {
@@ -51,14 +53,6 @@ export function RecentlyDeletedWorkouts() {
 
   async function mutate(item: DeletedWorkout, kind: "restore" | "purge") {
     if (!accessToken) return;
-    if (
-      kind === "purge" &&
-      !window.confirm(
-        tr("historyPermanentDeleteConfirmation", { title: item.workout_name }),
-      )
-    )
-      return;
-
     const response = await fetch(`/api/workouts/history/${item.id}/${kind}`, {
       method: "POST",
       headers: {
@@ -90,6 +84,17 @@ export function RecentlyDeletedWorkouts() {
           : tr("historyWorkoutPermanentlyDeleted"),
     });
     void load();
+  }
+
+  function requestPurge(item: DeletedWorkout) {
+    confirm.ask({
+      title: tr("historyDeletePermanently"),
+      description: tr("historyPermanentDeleteConfirmation", { title: item.workout_name }),
+      confirmLabel: tr("historyDeletePermanently"),
+      cancelLabel: tr("historyKeepWorkout"),
+      variant: "destructive",
+      onConfirm: () => void mutate(item, "purge"),
+    });
   }
 
   return (
@@ -138,7 +143,7 @@ export function RecentlyDeletedWorkouts() {
                 <Button
                   type="button"
                   variant="destructive"
-                  onClick={() => void mutate(item, "purge")}
+                  onClick={() => requestPurge(item)}
                 >
                   <Trash2 className="size-4" />
                   {tr("historyDeletePermanently")}
@@ -148,6 +153,7 @@ export function RecentlyDeletedWorkouts() {
           ))
         )}
       </CardContent>
+      {confirm.dialog}
     </Card>
   );
 }

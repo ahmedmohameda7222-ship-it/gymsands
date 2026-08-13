@@ -97,3 +97,9 @@ Applied migrations must never be renamed, rewritten, reordered, deleted, or repl
 - `20260813042754_exercise_detail_personal_records_authority.sql` is repository-only and classified `pending` in the canonical migration ledger.
 - It has **not** been applied to Plaivra Production and intentionally has no Production migration version or name.
 - Do not replay or apply it before explicit Planner approval of this phase's merge and release sequence.
+
+## Workout History redesign pending migration
+
+- `20260813071926_workout_history_redesign_read_contract.sql` is repository-only and classified `pending` in the canonical migration ledger.
+- It adds owner-scoped first-page summary and global-history existence read functions; it has **not** been applied to Plaivra Production and intentionally has no Production migration identity.
+- Do not replay or apply it before explicit Planner approval of the Workout History redesign merge and release sequence.

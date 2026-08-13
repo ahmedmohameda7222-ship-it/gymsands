@@ -65,28 +65,21 @@ afterEach(() => {
 });
 
 describe("Workout History keyboard selection", () => {
-  it("keeps a semantic detail link and treats keyboard-style desktop activation as preview selection", async () => {
+  it("keeps one semantic detail link with a visible keyboard focus treatment", async () => {
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
       value: vi.fn(() => ({ matches: true })),
     });
-    const onSelect = vi.fn();
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
 
     await act(async () => {
-      root.render(<WorkoutHistoryCard item={item} onSelect={onSelect} />);
+      root.render(<WorkoutHistoryCard item={item} />);
     });
     const link = container.querySelector<HTMLAnchorElement>("a");
     expect(link?.getAttribute("href")).toBe("/workout-history/11111111-1111-4111-8111-111111111111");
     expect(link?.className).toContain("focus-visible:ring-2");
-
-    await act(async () => {
-      link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 0 }));
-    });
-    expect(onSelect).toHaveBeenCalledOnce();
-    expect(onSelect).toHaveBeenCalledWith(item);
 
     await act(async () => root.unmount());
   });
