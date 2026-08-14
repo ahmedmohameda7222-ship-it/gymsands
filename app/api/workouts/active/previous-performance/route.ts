@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { env } from "@/lib/env";
 import { requireUser } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import {
@@ -18,9 +19,18 @@ function validId(value: string) {
   return value.length > 0 && value.length <= 240 && !/[\u0000-\u001f]/u.test(value);
 }
 
+function isRenderedQaMockRequest(request: Request) {
+  return env.useMockAuth
+    && env.productionQaBuild
+    && request.headers.get("authorization")?.trim() === "Bearer plaivra-local-qa";
+}
+
 export async function GET(request: Request) {
   const limited = rateLimit(request, "active-workout-previous-performance", 90, 60_000);
   if (limited) return limited;
+  if (isRenderedQaMockRequest(request)) {
+    return NextResponse.json({ data: null }, { headers });
+  }
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
 
