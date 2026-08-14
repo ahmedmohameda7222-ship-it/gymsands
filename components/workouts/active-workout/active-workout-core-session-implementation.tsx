@@ -29,6 +29,7 @@ import {
   dispatchActiveWorkoutExecutionBackground,
   type ActiveWorkoutExecutionDispatchOptions
 } from "@/components/workouts/active-workout/active-workout-command-dispatch";
+import { resolveActiveWorkoutExecutionCapability } from "@/components/workouts/active-workout/active-workout-execution-capability";
 import { ActiveWorkoutExecutionShell } from "@/components/workouts/active-workout/active-workout-execution-shell";
 import { ActiveWorkoutMiniHeatMap } from "@/components/workouts/active-workout/active-workout-mini-heat-map";
 import { useActiveWorkoutMuscleLoad } from "@/components/workouts/active-workout/active-workout-muscle-load-controller";
@@ -38,7 +39,6 @@ import {
   acknowledgeSetWrites,
   buildActiveWorkoutReview,
   buildCanonicalLogRows,
-  buildPrs,
   buildSessionSets,
   buildSummary,
   buildWorkoutContextLogRows,
@@ -50,12 +50,11 @@ import {
   makeFrozenExerciseState,
   mergeSetPatch,
   mockPrescriptionItemsFromPlan,
-  previousPerformance,
-  previousSetForExercise,
   roundWorkoutMetric,
   setHasValidEffortInputs,
   toNumberOrNull,
   type ActiveWorkoutExerciseState,
+  type ActiveWorkoutPreviousPerformance,
   type ActiveWorkoutSetState,
   type ActiveWorkoutSource,
   type ActiveWorkoutSummary
@@ -122,17 +121,16 @@ import { validateWorkoutSetEffortInput } from "@/services/database/workout-set-d
 import type { WorkoutSessionExecutionCursorRow } from "@/services/database/workout-session-execution";
 import {
   getOrStartWorkoutDaySession,
-  getOpenWorkoutSessionWithStatus,
-  getWorkoutHistoryDetailed
+  getOpenWorkoutSessionWithStatus
 } from "@/services/database/workout-sessions";
+import { readActiveWorkoutPreviousPerformanceClient } from "@/services/workouts/active-workout/previous-performance-client";
 import type {
   ExerciseAlternativeReason,
   UserExerciseAlternative,
   UserProgressionTarget,
   Workout,
   WorkoutSession,
-  WorkoutSessionExecutionState,
-  WorkoutSessionSummary
+  WorkoutSessionExecutionState
 } from "@/types";
 
 export type { ActiveWorkoutSource } from "./active-workout-runtime-model";
@@ -154,6 +152,35 @@ function useLatest<T>(value: T) {
     ref.current = value;
   }, [value]);
   return ref;
+}
+
+function stablePreviousPerformanceIdentity(item: ActiveWorkoutExerciseState | undefined) {
+  if (!item) return null;
+  if (item.prescriptionItem.sourcePlanActivityId) {
+    return { kind: "plan_activity" as const, value: item.prescriptionItem.sourcePlanActivityId };
+  }
+  if (item.exercise.source_workout_id) {
+    return { kind: "source_workout" as const, value: item.exercise.source_workout_id };
+  }
+  if (item.prescriptionItem.sourcePlanExerciseId) {
+    return { kind: "plan_exercise" as const, value: item.prescriptionItem.sourcePlanExerciseId };
+  }
+  return null;
+}
+
+function unsupportedExecutionCopy(locale: string) {
+  if (locale === "de") return {
+    title: "Diese Aktivität wird im aktiven Training noch nicht unterstützt.",
+    description: "Für diese Aktivität zeigt Plaivra keine Krafttrainingsfelder an. Kehre zu deinen Workouts zurück und wähle eine unterstützte Krafteinheit."
+  };
+  if (locale === "ar") return {
+    title: "هذا النشاط غير مدعوم بعد في التمرين النشط.",
+    description: "لن يعرض Plaivra حقول تمارين القوة لهذا النشاط. ارجع إلى التمارين واختر جلسة قوة مدعومة."
+  };
+  return {
+    title: "This activity is not supported in Active Workout yet.",
+    description: "Plaivra will not show Strength fields for this activity. Return to workouts and choose a supported Strength session."
+  };
 }
 
 export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSource }) {
@@ -198,12 +225,12 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const [isSaving, setIsSaving] = useState(false);
   const [isStarting, setIsStarting] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
   const [completedSummary, setCompletedSummary] = useState<ActiveWorkoutSummary | null>(null);
   const [progressionTargets, setProgressionTargets] = useState<UserProgressionTarget[]>([]);
   const [alternatives, setAlternatives] = useState<UserExerciseAlternative[]>([]);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
+  const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false);
   const [completionRecovery, setCompletionRecovery] = useState<"none" | "retry" | "reconnect">("none");
   const [conflictingSession, setConflictingSession] = useState<WorkoutSession | null>(null);
   const [launchRevision, setLaunchRevision] = useState(0);
@@ -212,19 +239,18 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const [isSavingAlternative, setIsSavingAlternative] = useState(false);
   const [setFeedback, setSetFeedback] = useState("");
   const [setFeedbackVariant, setSetFeedbackVariant] = useState<"info" | "error">("info");
-  const [prFeedback, setPrFeedback] = useState("");
   const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
-  const [controllerConflictDeviceId, setControllerConflictDeviceId] =
-    useState<string | null>(null);
-  const [syncState, setSyncState] =
-    useState<ActiveWorkoutSyncState>("online_synced");
+  const [controllerConflictDeviceId, setControllerConflictDeviceId] = useState<string | null>(null);
+  const [syncState, setSyncState] = useState<ActiveWorkoutSyncState>("online_synced");
   const [pendingOperationCount, setPendingOperationCount] = useState(0);
-  const [dataConflict, setDataConflict] =
-    useState<ActiveWorkoutSetConflict | null>(null);
+  const [dataConflict, setDataConflict] = useState<ActiveWorkoutSetConflict | null>(null);
   const [tabLeader, setTabLeader] = useState(false);
   const [takeoverConfirmationOpen, setTakeoverConfirmationOpen] = useState(false);
   const [executionCursorItems, setExecutionCursorItems] = useState<WorkoutSessionExecutionCursorRow[]>([]);
   const [muscleLoadRefreshRevision, setMuscleLoadRefreshRevision] = useState(0);
+  const [previousPerformanceRead, setPreviousPerformanceRead] = useState<Awaited<ReturnType<typeof readActiveWorkoutPreviousPerformanceClient>>>(null);
+  const [previousPerformanceLoading, setPreviousPerformanceLoading] = useState(false);
+  const [previousPerformanceUnavailable, setPreviousPerformanceUnavailable] = useState(false);
   const [detailsRequest, setDetailsRequest] = useState<{
     section: ActiveWorkoutDetailsSection;
     focusTarget: "guide-video" | null;
@@ -237,9 +263,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       workoutSessionId: sessionId,
       onInvalidate: () => {
         if (typeof navigator !== "undefined" && !navigator.onLine) return;
-        void activeSessionStoreRef.current
-          ?.hydrate({ force: true })
-          .catch(() => undefined);
+        void activeSessionStoreRef.current?.hydrate({ force: true }).catch(() => undefined);
       }
     });
   }, [sessionId, userId]);
@@ -257,19 +281,12 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   useEffect(() => {
     if (!userId || !sessionId) return;
-    const leadership = createActiveWorkoutTabLeadership({
-      userId,
-      workoutSessionId: sessionId
-    });
+    const leadership = createActiveWorkoutTabLeadership({ userId, workoutSessionId: sessionId });
     tabLeadershipRef.current = leadership;
     void leadership.acquire().then(setTabLeader);
     const unsubscribe = leadership.subscribe(setTabLeader);
-    const renew = () => {
-      if (leadership.isLeader()) leadership.renew();
-    };
-    const acquireOnFocus = () => {
-      void leadership.acquire().then(setTabLeader);
-    };
+    const renew = () => { if (leadership.isLeader()) leadership.renew(); };
+    const acquireOnFocus = () => { void leadership.acquire().then(setTabLeader); };
     window.addEventListener("pointerdown", renew, { passive: true });
     window.addEventListener("keydown", renew);
     window.addEventListener("focus", acquireOnFocus);
@@ -281,10 +298,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       window.removeEventListener("focus", acquireOnFocus);
       window.removeEventListener("pagehide", leadership.release);
       leadership.dispose();
-      if (tabLeadershipRef.current === leadership)
-        tabLeadershipRef.current = null;
+      if (tabLeadershipRef.current === leadership) tabLeadershipRef.current = null;
     };
   }, [sessionId, userId]);
+
   const muscleLoadController = useActiveWorkoutMuscleLoad({
     sessionId,
     refreshRevision: muscleLoadRefreshRevision,
@@ -301,7 +318,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setStartedAtMs(derivedStartedAt);
     setElapsedSeconds(executionElapsedSeconds(next, now));
     storeTimestamp(workoutTimerKey, derivedStartedAt);
-
     const restLeft = executionRestSecondsLeft(next, now);
     const parsedRestEndsAt = next.rest_ends_at ? Date.parse(next.rest_ends_at) : Number.NaN;
     if (next.view_state === "rest" && restLeft > 0 && Number.isFinite(parsedRestEndsAt)) {
@@ -316,7 +332,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       setIsTimerRunning(false);
       clearStoredValue(restTimerKey);
     }
-
     if (userId) {
       writeActiveWorkoutState(userId, activeWorkoutCacheFromExecution(next, {
         route: sessionRoute,
@@ -347,23 +362,13 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     commandType: Parameters<ActiveSessionStore["dispatch"]>[0]["commandType"],
     payload: Parameters<ActiveSessionStore["dispatch"]>[0]["payload"],
     options: ActiveWorkoutExecutionDispatchOptions = {}
-  ) => dispatchActiveWorkoutExecutionAwaited(
-    executionDispatchContext(),
-    commandType,
-    payload,
-    options
-  ), [executionDispatchContext]);
+  ) => dispatchActiveWorkoutExecutionAwaited(executionDispatchContext(), commandType, payload, options), [executionDispatchContext]);
 
   const dispatchExecutionBackground = useCallback((
     commandType: Parameters<ActiveSessionStore["dispatch"]>[0]["commandType"],
     payload: Parameters<ActiveSessionStore["dispatch"]>[0]["payload"],
     options: ActiveWorkoutExecutionDispatchOptions = {}
-  ) => dispatchActiveWorkoutExecutionBackground(
-    executionDispatchContext(),
-    commandType,
-    payload,
-    options
-  ), [executionDispatchContext]);
+  ) => dispatchActiveWorkoutExecutionBackground(executionDispatchContext(), commandType, payload, options), [executionDispatchContext]);
 
   useEffect(() => {
     let active = true;
@@ -376,6 +381,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setCompletedSummary(null);
     setCompletionRecovery("none");
     setConflictingSession(null);
+    setPreviousPerformanceRead(null);
+    setPreviousPerformanceUnavailable(false);
 
     const currentTr = trRef.current;
     if (!userId) {
@@ -396,25 +403,14 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       ? storedActiveWorkout.sessionId
       : null;
     const sessionStart = (async () => {
-      const openResult = await getOpenWorkoutSessionWithStatus(
-        userId,
-        null,
-        candidateSessionId
-      );
+      const openResult = await getOpenWorkoutSessionWithStatus(userId, null, candidateSessionId);
       if (openResult.error) throw new Error(openResult.error);
       const open = openResult.session;
       const storedRouteMatches = Boolean(
-        open
-        && storedActiveWorkout?.sessionId === open.id
-        && storedActiveWorkout.route === sessionRoute
+        open && storedActiveWorkout?.sessionId === open.id && storedActiveWorkout.route === sessionRoute
       );
       const requestedSourceMatches = Boolean(
-        open
-        && (
-          sourceKind === "plan-day"
-            ? open.plan_day_id === sourceId
-            : open.workout_id === sourceId
-        )
+        open && (sourceKind === "plan-day" ? open.plan_day_id === sourceId : open.workout_id === sourceId)
       );
       if (open && !storedRouteMatches && !requestedSourceMatches) {
         if (active) setConflictingSession(open);
@@ -429,10 +425,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       .then(async (nextSession) => {
         if (!active || !nextSession) return;
         controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
-
         const storedStartedAt = readStoredTimestamp(workoutTimerKey);
         const storedRestEndsAt = readStoredTimestamp(restTimerKey);
-        const exerciseIds = currentDay.exercises.map((exercise) => exercise.id);
         const store = getActiveSessionStore({
           userId,
           workoutSessionId: nextSession.id,
@@ -446,17 +440,11 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           setSyncState(latest.syncState);
           setPendingOperationCount(latest.pendingOperationCount);
           setDataConflict(latest.dataConflict);
-          if (
-            latest.executionState
-            && latest.executionState.controller_device_id !==
-              controllerDeviceIdRef.current
-          ) {
-            setControllerConflictDeviceId(
-              latest.executionState.controller_device_id
-            );
+          if (latest.executionState && latest.executionState.controller_device_id !== controllerDeviceIdRef.current) {
+            setControllerConflictDeviceId(latest.executionState.controller_device_id);
           }
         });
-        const hydration = store.hydrate({
+        await store.hydrate({
           legacyCache: {
             userId,
             sessionId: nextSession.id,
@@ -466,34 +454,24 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             controllerDeviceId: controllerDeviceIdRef.current
           }
         });
-        const [, workoutHistory, targets, savedAlternatives] = await Promise.all([
-          hydration,
-          getWorkoutHistoryDetailed(userId, 100),
-          sourceKind === "plan-day"
-            ? getProgressionTargets(userId, exerciseIds).catch(() => [])
-            : Promise.resolve([]),
-          sourceKind === "plan-day"
-            ? getExerciseAlternatives(userId).catch(() => [])
-            : Promise.resolve([])
-        ]);
         const hydrated = store.getSnapshot();
         let authoritativeState = hydrated.executionState;
         const cursorItems = [...hydrated.prescription];
         const existingLogs = [...hydrated.performedLogs];
         if (!authoritativeState && hydrated.finalProjection) {
           const terminalStates = hydrateStates(
-            cursorItems.map((item) =>
-              makeFrozenExerciseState(item, currentDay.exercises)
-            ),
+            cursorItems.map((item) => makeFrozenExerciseState(item, currentDay.exercises)),
             existingLogs
           );
           setExerciseStates(terminalStates);
           exerciseStatesRef.current = terminalStates;
+          setExecutionCursorItems(cursorItems);
           setSession(nextSession);
-          setHistory(workoutHistory.filter((item) => item.id !== nextSession.id));
+          setSessionNotes(nextSession.notes ?? "");
+          executionHydratedRef.current = true;
           const summary = buildSummary(
             terminalStates,
-            workoutHistory.filter((item) => item.id !== nextSession.id),
+            [],
             Math.max(1, nextSession.duration_minutes ?? 1),
             nextSession.notes ?? "",
             trRef.current,
@@ -501,15 +479,11 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             hydrated.finalProjection.performedLogs
           );
           finalizeVerifiedCompletion(summary);
-          executionHydratedRef.current = true;
           return;
         }
         if (!authoritativeState) throw new Error("The active workout has no execution state.");
 
-        if (
-          controllerDeviceIdRef.current
-          && authoritativeState.controller_device_id === null
-        ) {
+        if (controllerDeviceIdRef.current && authoritativeState.controller_device_id === null) {
           const response = await store.dispatch({
             userId,
             workoutSessionId: nextSession.id,
@@ -523,18 +497,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           });
           authoritativeState = response.state;
         }
-        const controllerConflict =
-          authoritativeState.controller_device_id !== controllerDeviceIdRef.current;
-        setControllerConflictDeviceId(
-          controllerConflict ? authoritativeState.controller_device_id : null
-        );
+        const controllerConflict = authoritativeState.controller_device_id !== controllerDeviceIdRef.current;
+        setControllerConflictDeviceId(controllerConflict ? authoritativeState.controller_device_id : null);
 
-        if (
-          !controllerConflict
-          &&
-          authoritativeState.view_state === "rest"
-          && executionRestSecondsLeft(authoritativeState) <= 0
-        ) {
+        if (!controllerConflict && authoritativeState.view_state === "rest" && executionRestSecondsLeft(authoritativeState) <= 0) {
           const response = await store.dispatch({
             userId,
             workoutSessionId: nextSession.id,
@@ -557,20 +523,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         const cachedSecondaryProjection = hydrated.lastValidSecondaryProjection;
         const cachedStates = Array.isArray(cachedSecondaryProjection)
           && cachedSecondaryProjection.every((item) =>
-            typeof item === "object"
-            && item !== null
-            && "exercise" in item
-            && "prescriptionItem" in item
-            && "sets" in item
-            && Array.isArray(item.sets)
-          )
-          ? cachedSecondaryProjection as ActiveWorkoutExerciseState[]
-          : null;
+            typeof item === "object" && item !== null && "exercise" in item && "prescriptionItem" in item && "sets" in item && Array.isArray(item.sets)
+          ) ? cachedSecondaryProjection as ActiveWorkoutExerciseState[] : null;
         const hydratedStates = hydrateStates(
-          cachedStates
-            ?? authoritativeItems.map((item) =>
-              makeFrozenExerciseState(item, currentDay.exercises)
-            ),
+          cachedStates ?? authoritativeItems.map((item) => makeFrozenExerciseState(item, currentDay.exercises)),
           existingLogs
         );
         setExerciseStates(hydratedStates);
@@ -583,35 +539,20 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         const cursor = authoritativeState.view_state === "set_entry"
           ? nextIncompleteSetCursor(
               hydratedStates.flatMap((exercise, exerciseIndex) =>
-                exercise.sets.map((set, setIndex) => ({
-                  exerciseIndex,
-                  setIndex,
-                  completed: Boolean(set.completedAt)
-                }))
+                exercise.sets.map((set, setIndex) => ({ exerciseIndex, setIndex, completed: Boolean(set.completedAt) }))
               ),
               authoritativeCursor
             )
           : authoritativeCursor;
-        const exerciseIndex = Math.min(
-          Math.max(0, cursor.exerciseIndex),
-          Math.max(0, hydratedStates.length - 1)
-        );
+        const exerciseIndex = Math.min(Math.max(0, cursor.exerciseIndex), Math.max(0, hydratedStates.length - 1));
         const setCount = hydratedStates[exerciseIndex]?.sets.length ?? 1;
-        const setIndex = Math.min(
-          Math.max(0, cursor.setIndex),
-          Math.max(0, setCount - 1)
-        );
+        const setIndex = Math.min(Math.max(0, cursor.setIndex), Math.max(0, setCount - 1));
         setActiveExerciseIndex(exerciseIndex);
         setActiveSetIndex(setIndex);
-        setTimerSeconds(
-          hydratedStates[exerciseIndex]?.sets[setIndex]?.plannedRestSeconds ?? 75
-        );
+        setTimerSeconds(hydratedStates[exerciseIndex]?.sets[setIndex]?.plannedRestSeconds ?? 75);
         mirrorExecutionState(authoritativeState);
         setSession(nextSession);
         setSessionNotes(nextSession.notes ?? "");
-        setHistory(workoutHistory.filter((item) => item.id !== nextSession.id));
-        setProgressionTargets(targets);
-        setAlternatives(savedAlternatives.filter((item) => exerciseIds.includes(item.plan_exercise_id)));
         executionHydratedRef.current = true;
         bumpMuscleLoadRefreshRevision();
       })
@@ -626,9 +567,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           description: userSafeError(error, latestTr("header.loadFailedDescription"))
         });
       })
-      .finally(() => {
-        if (active) setIsStarting(false);
-      });
+      .finally(() => { if (active) setIsStarting(false); });
 
     return () => {
       active = false;
@@ -651,16 +590,31 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   ]);
 
   useEffect(() => {
+    if (!userId || !sessionId || sourceKind !== "plan-day" || !executionHydratedRef.current) {
+      setProgressionTargets([]);
+      setAlternatives([]);
+      return;
+    }
+    let active = true;
+    const exerciseIds = day.exercises.map((exercise) => exercise.id);
+    void getProgressionTargets(userId, exerciseIds)
+      .then((items) => { if (active) setProgressionTargets(items); })
+      .catch(() => { if (active) setProgressionTargets([]); });
+    void getExerciseAlternatives(userId)
+      .then((items) => {
+        if (active) setAlternatives(items.filter((item) => exerciseIds.includes(item.plan_exercise_id)));
+      })
+      .catch(() => { if (active) setAlternatives([]); });
+    return () => { active = false; };
+  }, [day.exercises, sessionId, sourceKind, userId]);
+
+  useEffect(() => {
     const tick = () => {
       const now = activeSessionClock.getSnapshot();
-      setElapsedSeconds(
-        executionState
-          ? executionElapsedSeconds(executionState, now)
-          : Math.max(0, Math.floor((now - startedAtMs) / 1000))
-      );
-      const nextLeft = executionState
-        ? executionRestSecondsLeft(executionState, now)
-        : 0;
+      setElapsedSeconds(executionState
+        ? executionElapsedSeconds(executionState, now)
+        : Math.max(0, Math.floor((now - startedAtMs) / 1000)));
+      const nextLeft = executionState ? executionRestSecondsLeft(executionState, now) : 0;
       setTimerLeft(nextLeft);
       setIsTimerRunning(Boolean(executionState?.view_state === "rest" && nextLeft > 0));
       if (executionState?.view_state === "rest" && nextLeft <= 0) {
@@ -682,28 +636,13 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           title: currentTr("notifications.restFinished"),
           description: currentTr("notifications.nextSetReady")
         });
-        if (
-          typeof window !== "undefined"
-          && "Notification" in window
-          && Notification.permission === "granted"
-        ) {
-          new Notification(currentTr("notifications.restFinished"), {
-            body: currentTr("notifications.nextSetReady")
-          });
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          new Notification(currentTr("notifications.restFinished"), { body: currentTr("notifications.nextSetReady") });
         }
       }
     };
     return activeSessionClock.subscribe(tick);
-  }, [
-    dispatchExecutionBackground,
-    executionState,
-    restTimerKey,
-    sessionId,
-    startedAtMs,
-    toastRef,
-    trRef,
-    userId
-  ]);
+  }, [dispatchExecutionBackground, executionState, restTimerKey, sessionId, startedAtMs, toastRef, trRef, userId]);
 
   useEffect(() => {
     if (!executionHydratedRef.current || !userId || !sessionId || !executionState) return;
@@ -718,7 +657,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       && executionState.active_set_number === setNumber
       && executionState.controller_device_id === controllerDeviceIdRef.current
     ) return;
-
     void dispatchExecutionBackground(
       "move_cursor",
       {
@@ -730,27 +668,50 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       {
         rollback: (currentServerState) => {
           if (!currentServerState) return;
-          const previousCursor = executionCursorToIndexes(
-            currentServerState,
-            executionCursorItems
-          );
+          const previousCursor = executionCursorToIndexes(currentServerState, executionCursorItems);
           setActiveExerciseIndex(previousCursor.exerciseIndex);
           setActiveSetIndex(previousCursor.setIndex);
         }
       }
     );
-  }, [
-    activeExerciseIndex,
-    activeSetIndex,
-    dispatchExecutionBackground,
-    executionCursorItems,
-    executionState,
-    sessionId,
-    userId
-  ]);
+  }, [activeExerciseIndex, activeSetIndex, dispatchExecutionBackground, executionCursorItems, executionState, sessionId, userId]);
 
   const activeExercise = exerciseStates[activeExerciseIndex];
   const activeSet = activeExercise?.sets[activeSetIndex];
+  const executionCapability = useMemo(
+    () => resolveActiveWorkoutExecutionCapability(executionCursorItems),
+    [executionCursorItems]
+  );
+
+  useEffect(() => {
+    const identity = stablePreviousPerformanceIdentity(activeExercise);
+    if (!identity || !activeSet || !sessionId || !executionHydratedRef.current || !executionCapability.supported) {
+      setPreviousPerformanceRead(null);
+      setPreviousPerformanceLoading(false);
+      setPreviousPerformanceUnavailable(false);
+      return;
+    }
+    const controller = new AbortController();
+    setPreviousPerformanceLoading(true);
+    setPreviousPerformanceUnavailable(false);
+    void readActiveWorkoutPreviousPerformanceClient({
+      identity,
+      excludeSessionId: sessionId,
+      setNumber: activeSet.setNumber,
+      signal: controller.signal
+    }).then((value) => {
+      setPreviousPerformanceRead(value);
+      setPreviousPerformanceUnavailable(false);
+    }).catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setPreviousPerformanceRead(null);
+      setPreviousPerformanceUnavailable(true);
+    }).finally(() => {
+      if (!controller.signal.aborted) setPreviousPerformanceLoading(false);
+    });
+    return () => controller.abort();
+  }, [activeExercise, activeSet, executionCapability.supported, sessionId]);
+
   const totalSets = exerciseStates.reduce((sum, item) => sum + item.sets.length, 0);
   const completedSets = exerciseStates.reduce(
     (sum, item) => sum + item.sets.filter((set) => set.completedAt).length,
@@ -759,9 +720,15 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const reviewProjection = buildActiveWorkoutReview(exerciseStates, day.exercises);
   const isFinished = reviewProjection.incompleteSets === 0 && reviewProjection.totalSets > 0;
   const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60));
-  const activePreviousPerformance = activeExercise
-    ? previousPerformance(history, activeExercise.exercise.exercise_name, formatters)
-    : null;
+  const activePreviousPerformance: ActiveWorkoutPreviousPerformance | null = previousPerformanceRead ? {
+    lastWeightKg: previousPerformanceRead.weightKg,
+    lastReps: previousPerformanceRead.reps,
+    lastBestSet: [
+      previousPerformanceRead.weightKg === null ? null : formatters.measurement(previousPerformanceRead.weightKg, "kg"),
+      previousPerformanceRead.reps === null ? null : `${formatters.integer(previousPerformanceRead.reps)} ${tr("units.reps")}`
+    ].filter((value): value is string => Boolean(value)).join(" × ") || null,
+    lastPerformedAt: previousPerformanceRead.performedAt
+  } : null;
   const activeProgressionTarget = progressionTargets.find(
     (target) => target.plan_exercise_id === activeExercise?.exercise.id
   ) ?? null;
@@ -769,13 +736,9 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     (alternative) => alternative.plan_exercise_id === activeExercise?.exercise.id
   );
   const currentGuideUrl = activeExercise?.exercise.exercise_url
-    || (activeExercise?.exercise.notes?.startsWith("http")
-      ? activeExercise.exercise.notes
-      : null);
+    || (activeExercise?.exercise.notes?.startsWith("http") ? activeExercise.exercise.notes : null);
   const currentCustomVideoUrl = activeExercise?.exercise.custom_video_url || null;
-  const currentInstructions = activeExercise?.exercise.instructions
-    || tr("exercise.defaultInstructions");
-  const previewPrs = buildPrs(exerciseStates, history, tr, formatters);
+  const currentInstructions = activeExercise?.exercise.instructions || "";
   const sessionSets = buildSessionSets(exerciseStates);
   const totalVolume = roundWorkoutMetric(
     sessionSets.reduce((sum, set) => sum + set.weightKg * set.reps, 0)
@@ -785,18 +748,11 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const nextSetLabel = activeExercise && !activeExerciseCompleted && activeSet
     ? `${tr("set.label", { count: formatters.integer(activeSet.setNumber) })} / ${formatters.integer(activeExercise.sets.length)}`
     : nextExercise
-      ? tr("exercise.nextExercise", {
-          name: isolateBidiText(nextExercise.exercise.exercise_name)
-        })
+      ? tr("exercise.nextExercise", { name: isolateBidiText(nextExercise.exercise.exercise_name) })
       : tr("navigation.allDone");
   const workoutContext: Record<string, unknown> = {
     plan: day.plan,
-    workout_day: {
-      id: day.id,
-      name: day.day_name,
-      weekday: day.weekday,
-      notes: day.notes
-    },
+    workout_day: { id: day.id, name: day.day_name, weekday: day.weekday, notes: day.notes },
     planned_exercises: executionCursorItems.map((item) => ({
       id: item.sourcePlanExerciseId ?? item.sourcePlanActivityId ?? item.id,
       name: item.activityName,
@@ -806,50 +762,27 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     })),
     active_exercise: activeExercise?.exercise ?? null,
     logged_sets: buildWorkoutContextLogRows(exerciseStates),
-    session: session ? {
-      id: session.id,
-      duration_minutes: durationMinutes,
-      notes: sessionNotes
-    } : null,
-    previous_performance: activePreviousPerformance,
-    possible_prs: previewPrs,
+    session: session ? { id: session.id, duration_minutes: durationMinutes, notes: sessionNotes } : null,
+    previous_performance: previousPerformanceRead,
     skipped_exercises: exerciseStates
       .filter((item) => !item.sets.some((set) => set.completedAt))
       .map((item) => item.exercise.exercise_name),
     saved_progression_target: activeProgressionTarget
   };
 
-  function updateSet(
-    exerciseIndex: number,
-    setIndex: number,
-    patch: Partial<ActiveWorkoutSetState>
-  ) {
+  function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<ActiveWorkoutSetState>) {
     setExerciseStates((current) => {
       const next = current.map((item, itemIndex) => itemIndex === exerciseIndex
-        ? {
-            ...item,
-            sets: item.sets.map((set, currentSetIndex) =>
-              currentSetIndex === setIndex ? mergeSetPatch(set, patch) : set
-            )
-          }
+        ? { ...item, sets: item.sets.map((set, currentSetIndex) => currentSetIndex === setIndex ? mergeSetPatch(set, patch) : set) }
         : item);
       exerciseStatesRef.current = next;
       return next;
     });
   }
 
-  function statesWithSetPatch(
-    exerciseIndex: number,
-    setIndex: number,
-    patch: Partial<ActiveWorkoutSetState>
-  ) {
+  function statesWithSetPatch(exerciseIndex: number, setIndex: number, patch: Partial<ActiveWorkoutSetState>) {
     return exerciseStates.map((item, itemIndex) => itemIndex === exerciseIndex
-      ? {
-          ...item,
-          sets: item.sets.map((set, currentSetIndex) =>
-            currentSetIndex === setIndex ? mergeSetPatch(set, patch) : set
-          )
-        }
+      ? { ...item, sets: item.sets.map((set, currentSetIndex) => currentSetIndex === setIndex ? mergeSetPatch(set, patch) : set) }
       : item);
   }
 
@@ -874,10 +807,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       hasPendingWrites: hasPendingValidSetWrites,
       persistSnapshot: async (states) => {
         if (!sessionId) return;
-        const rows = buildCanonicalLogRows(states, {
-          pendingOnly: true,
-          validOnly: true
-        });
+        const rows = buildCanonicalLogRows(states, { pendingOnly: true, validOnly: true });
         if (!rows.length) return;
         const store = activeSessionStoreRef.current;
         if (!store) throw new Error("The workout execution store is unavailable.");
@@ -923,10 +853,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     } catch (error) {
       toastRef.current({
         title: trRef.current("navigation.minimizeFailedTitle"),
-        description: userSafeError(
-          error,
-          trRef.current("navigation.minimizeFailedDescription")
-        )
+        description: userSafeError(error, trRef.current("navigation.minimizeFailedDescription"))
       });
       return false;
     } finally {
@@ -943,9 +870,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   useEffect(() => {
     exerciseStatesRef.current = exerciseStates;
-    if (exerciseStates.length > 0) {
-      activeSessionStoreRef.current?.setSecondaryProjection(exerciseStates);
-    }
+    if (exerciseStates.length > 0) activeSessionStoreRef.current?.setSecondaryProjection(exerciseStates);
   }, [exerciseStates]);
 
   useEffect(() => {
@@ -980,10 +905,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     if (userId && sessionId && executionHydratedRef.current) {
       void dispatchExecutionBackground(
         "start_rest",
-        {
-          duration_seconds: safeSeconds,
-          controller_device_id: controllerDeviceIdRef.current
-        },
+        { duration_seconds: safeSeconds, controller_device_id: controllerDeviceIdRef.current },
         { rollback: () => restoreRestTimer(previous) }
       );
     }
@@ -1008,9 +930,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     }
   }
 
-  async function reconcileSavedSetAfterExecutionFailure(
-    savedStates: ActiveWorkoutExerciseState[]
-  ) {
+  async function reconcileSavedSetAfterExecutionFailure(savedStates: ActiveWorkoutExerciseState[]) {
     if (!userId || !sessionId) return;
     const store = activeSessionStoreRef.current;
     if (!store) throw new Error("The workout execution store is unavailable.");
@@ -1019,23 +939,13 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     const authoritativeLogs = [...store.getSnapshot().performedLogs];
     if (!authoritativeState) throw new Error("The workout execution state is unavailable.");
     const reconciledStates = hydrateStates(savedStates, authoritativeLogs);
-    const cursor = executionCursorToIndexes(
-      authoritativeState,
-      executionCursorItems,
-      day.exercises
-    );
-    const exerciseIndex = Math.min(
-      Math.max(0, cursor.exerciseIndex),
-      Math.max(0, reconciledStates.length - 1)
-    );
+    const cursor = executionCursorToIndexes(authoritativeState, executionCursorItems, day.exercises);
+    const exerciseIndex = Math.min(Math.max(0, cursor.exerciseIndex), Math.max(0, reconciledStates.length - 1));
     const setCount = reconciledStates[exerciseIndex]?.sets.length ?? 1;
     setExerciseStates(reconciledStates);
     exerciseStatesRef.current = reconciledStates;
     setActiveExerciseIndex(exerciseIndex);
-    setActiveSetIndex(Math.min(
-      Math.max(0, cursor.setIndex),
-      Math.max(0, setCount - 1)
-    ));
+    setActiveSetIndex(Math.min(Math.max(0, cursor.setIndex), Math.max(0, setCount - 1)));
     mirrorExecutionState(authoritativeState);
   }
 
@@ -1043,27 +953,17 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
     const storeSnapshot = activeSessionStoreRef.current?.getSnapshot();
     if (
-      !targetSet
-      || targetSet.completedAt
-      || isSaving
-      || isStarting
-      || !sessionId
-      || !userId
-      || !executionHydratedRef.current
-      || executionState?.session_state === "paused"
-      || storeSnapshot?.root?.status !== "started"
+      !targetSet || targetSet.completedAt || isSaving || isStarting || !sessionId || !userId
+      || !executionHydratedRef.current || executionState?.session_state === "paused"
+      || storeSnapshot?.root?.status !== "started" || !executionCapability.supported
     ) return;
 
-    const setDraftValidation = validateActiveWorkoutSetDraft(
-      targetSet.reps,
-      targetSet.weightKg
-    );
+    const setDraftValidation = validateActiveWorkoutSetDraft(targetSet.reps, targetSet.weightKg);
     if (!setDraftValidation.complete) {
       setSetFeedbackVariant("error");
       setSetFeedback(tr("validation.requiredValues"));
       return;
     }
-
     if (!setHasValidEffortInputs(targetSet)) {
       setActiveExerciseIndex(exerciseIndex);
       setActiveSetIndex(setIndex);
@@ -1076,15 +976,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     const previousActiveSetIndex = activeSetIndex;
     const previousTimer = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     const completedAt = new Date();
-    const nextStates = statesWithSetPatch(exerciseIndex, setIndex, {
-      completedAt: completedAt.toISOString()
-    });
+    const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: completedAt.toISOString() });
     const store = activeSessionStoreRef.current;
     if (!store) {
-      toastRef.current({
-        title: tr("completion.saveFailedTitle"),
-        description: tr("offline.keepOpenRetry")
-      });
+      toastRef.current({ title: tr("completion.saveFailedTitle"), description: tr("offline.keepOpenRetry") });
       return;
     }
 
@@ -1093,9 +988,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       const canonical = store.getSnapshot();
       const currentPrescriptionItem = canonical.prescription.find(
         (item) => item.id === executionCursorItems[exerciseIndex]?.id
-      ) ?? canonical.prescription.find(
-        (item) => item.itemOrder === exerciseIndex + 1
-      );
+      ) ?? canonical.prescription.find((item) => item.itemOrder === exerciseIndex + 1);
       transition = planSessionAfterSetCompletion({
         userId,
         workoutSessionId: sessionId,
@@ -1107,10 +1000,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         controllerDeviceId: controllerDeviceIdRef.current
       });
     } catch (error) {
-      toastRef.current({
-        title: tr("completion.saveFailedTitle"),
-        description: userSafeError(error, tr("offline.keepOpenRetry"))
-      });
+      toastRef.current({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
       return;
     }
 
@@ -1134,7 +1024,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         }
       });
       mirrorExecutionState(response.state);
-
       const acknowledgedStates = acknowledgeSetWrites(nextStates, nextStates);
       setExerciseStates(acknowledgedStates);
       exerciseStatesRef.current = acknowledgedStates;
@@ -1147,15 +1036,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         setIsTimerRunning(false);
         clearStoredValue(restTimerKey);
       }
-      if (
-        transition.nextExerciseIndex !== exerciseIndex
-        && transition.patch.view_state !== "rest"
-      ) {
-        setTimerSeconds(
-          nextStates[transition.nextExerciseIndex]
-            ?.sets[transition.nextSetIndex]
-            ?.plannedRestSeconds ?? 75
-        );
+      if (transition.nextExerciseIndex !== exerciseIndex && transition.patch.view_state !== "rest") {
+        setTimerSeconds(nextStates[transition.nextExerciseIndex]?.sets[transition.nextSetIndex]?.plannedRestSeconds ?? 75);
       }
       setSetFeedbackVariant("info");
       setSetFeedback(tr("set.savedDetails", {
@@ -1163,53 +1045,19 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         reps: formatPlannedReps(targetSet.reps, formatters, "-"),
         weight: formatters.measurement(toNumberOrNull(targetSet.weightKg) ?? 0, "kg")
       }));
-      const currentWeight = toNumberOrNull(targetSet.weightKg) ?? 0;
-      const currentReps = toNumberOrNull(targetSet.reps) ?? 0;
-      const exercise = exerciseStates[exerciseIndex];
-      if (exercise && currentWeight > 0 && currentReps > 0) {
-        const prevPerf = previousPerformance(
-          history,
-          exercise.exercise.exercise_name,
-          formatters
-        );
-        if (
-          prevPerf
-          && (
-            currentWeight > (prevPerf.lastWeightKg ?? 0)
-            || currentReps > (prevPerf.lastReps ?? 0)
-          )
-        ) {
-          setPrFeedback(tr("set.newBest", {
-            name: isolateBidiText(exercise.exercise.exercise_name),
-            weight: formatters.measurement(currentWeight, "kg"),
-            reps: formatters.integer(currentReps)
-          }));
-          window.setTimeout(() => setPrFeedback(""), 3500);
-        }
-      }
     } catch (error) {
-      if (
-        error instanceof Error
-        && "code" in error
-        && error.code === "canonical_set_saved_execution_sync_failed"
-      ) {
+      if (error instanceof Error && "code" in error && error.code === "canonical_set_saved_execution_sync_failed") {
         const acknowledgedStates = acknowledgeSetWrites(nextStates, nextStates);
         setExerciseStates(acknowledgedStates);
         exerciseStatesRef.current = acknowledgedStates;
         bumpMuscleLoadRefreshRevision();
         setSetFeedbackVariant("error");
         setSetFeedback(`${tr("set.saved")} ${tr("offline.keepOpenRetry")}`);
-        toastRef.current({
-          title: tr("set.saved"),
-          description: userSafeError(error, tr("offline.keepOpenRetry"))
-        });
+        toastRef.current({ title: tr("set.saved"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
         try {
           await reconcileSavedSetAfterExecutionFailure(nextStates);
         } catch (reconcileError) {
-          console.warn(
-            "Plaivra saved the completed set but could not reconcile the workout position.",
-            reconcileError
-          );
+          console.warn("Plaivra saved the completed set but could not reconcile the workout position.", reconcileError);
         }
       } else {
         setExerciseStates(previousStates);
@@ -1219,10 +1067,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         restoreRestTimer(previousTimer);
         setSetFeedbackVariant("error");
         setSetFeedback(tr("offline.setSaveCombined"));
-        toastRef.current({
-          title: tr("completion.saveFailedTitle"),
-          description: userSafeError(error, tr("offline.keepOpenRetry"))
-        });
+        toastRef.current({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
       }
     } finally {
       setIsSaving(false);
@@ -1247,10 +1092,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       exerciseStatesRef.current = previousStates;
       setSetFeedbackVariant("error");
       setSetFeedback(legacySetReopenFailed);
-      toastRef.current({
-        title: tr("completion.saveFailedTitle"),
-        description: userSafeError(error, tr("header.loadFailedDescription"))
-      });
+      toastRef.current({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("header.loadFailedDescription")) });
       return false;
     } finally {
       setIsSaving(false);
@@ -1261,29 +1103,16 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     const item = executionCursorItems[exerciseIndex]
       ?? executionCursorItems.find((candidate) => candidate.itemOrder === exerciseIndex + 1)
       ?? null;
-    return {
-      snapshotItemId: item?.id ?? null,
-      itemOrder: item?.itemOrder ?? exerciseIndex + 1,
-      setNumber: setIndex + 1
-    };
+    return { snapshotItemId: item?.id ?? null, itemOrder: item?.itemOrder ?? exerciseIndex + 1, setNumber: setIndex + 1 };
   }
 
   async function openSessionReview() {
-    if (
-      isStarting
-      || isSaving
-      || !sessionId
-      || !userId
-      || !executionHydratedRef.current
-    ) return;
+    if (isStarting || isSaving || !sessionId || !userId || !executionHydratedRef.current || !executionCapability.supported) return;
     const invalidLocation = exerciseStates.flatMap((item, exerciseIndex) =>
       item.sets.map((set, setIndex) => ({ set, exerciseIndex, setIndex }))
     ).find(({ set }) => {
       if (!isPendingSetWrite(set)) return false;
-      return (
-        !setHasValidEffortInputs(set)
-        || !validateActiveWorkoutSetDraft(set.reps, set.weightKg).complete
-      );
+      return !setHasValidEffortInputs(set) || !validateActiveWorkoutSetDraft(set.reps, set.weightKg).complete;
     });
     if (invalidLocation) {
       setActiveExerciseIndex(invalidLocation.exerciseIndex);
@@ -1307,20 +1136,13 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       setCompletionRecovery("none");
       setFinishOpen(true);
     } catch (error) {
-      toastRef.current({
-        title: tr("review.openFailedTitle"),
-        description: userSafeError(error, tr("review.openFailedDescription"))
-      });
+      toastRef.current({ title: tr("review.openFailedTitle"), description: userSafeError(error, tr("review.openFailedDescription")) });
     } finally {
       setIsSaving(false);
     }
   }
 
-  async function leaveReviewAtSet(
-    exerciseIndex: number,
-    setIndex: number,
-    reopen: boolean
-  ) {
+  async function leaveReviewAtSet(exerciseIndex: number, setIndex: number, reopen: boolean) {
     if (isSaving || !userId || !sessionId || !executionHydratedRef.current) return;
     if (reopen) {
       const reopened = await restartSet(exerciseIndex, setIndex);
@@ -1340,9 +1162,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       setActiveSetIndex(setIndex);
       setFinishOpen(false);
       setCompletionRecovery("none");
-      window.requestAnimationFrame(() => {
-        document.getElementById("active-set-reps")?.focus();
-      });
+      window.requestAnimationFrame(() => { document.getElementById("active-set-reps")?.focus(); });
     } catch {
       // The serialized dispatcher already surfaced a localized recoverable error.
     } finally {
@@ -1352,13 +1172,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   function continueWorkoutFromReview() {
     const target = exerciseStates.flatMap((item, exerciseIndex) =>
-      item.prescriptionItem.executionState === "skipped"
-        ? []
-        : item.sets.map((set, setIndex) => ({
-            exerciseIndex,
-            setIndex,
-            completed: Boolean(set.completedAt)
-          }))
+      item.prescriptionItem.executionState === "skipped" ? [] : item.sets.map((set, setIndex) => ({ exerciseIndex, setIndex, completed: Boolean(set.completedAt) }))
     ).find((item) => !item.completed);
     if (!target) return;
     void leaveReviewAtSet(target.exerciseIndex, target.setIndex, false);
@@ -1374,9 +1188,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     bumpMuscleLoadRefreshRevision();
     toastRef.current({
       title: tr("completion.title"),
-      description: tr("completion.savedNamedWorkout", {
-        name: isolateBidiText(day.day_name)
-      })
+      description: tr("completion.savedNamedWorkout", { name: isolateBidiText(day.day_name) })
     });
     celebrate(tr("completion.title"));
   }
@@ -1386,17 +1198,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     if (!store) throw new Error("The workout execution store is unavailable.");
     await store.hydrate({ force: true });
     const recovered = store.getSnapshot();
-    if (
-      recovered.root
-      && recovered.root.status !== "started"
-      && !recovered.executionState
-    ) return "terminal" as const;
+    if (recovered.root && recovered.root.status !== "started" && !recovered.executionState) return "terminal" as const;
     if (recovered.root?.status === "started" && recovered.executionState) {
       mirrorExecutionState(recovered.executionState);
-      if (
-        recovered.executionState.session_state !== "review"
-        || recovered.executionState.view_state !== "session_review"
-      ) {
+      if (recovered.executionState.session_state !== "review" || recovered.executionState.view_state !== "session_review") {
         const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
         await dispatchExecutionAwaited("move_cursor", {
           active_snapshot_item_id: cursor.snapshotItemId,
@@ -1413,18 +1218,12 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function completeSession() {
-    if (!sessionId || isSaving || isStarting || !executionHydratedRef.current) return;
+    if (!sessionId || isSaving || isStarting || !executionHydratedRef.current || !executionCapability.supported) return;
     const invalidLocation = exerciseStates.flatMap((item, exerciseIndex) =>
       item.sets.map((set, setIndex) => ({ set, exerciseIndex, setIndex }))
-    ).find(({ set }) =>
-      Boolean(set.completedAt || set.hasPersistedLog) && !setHasValidEffortInputs(set)
-    );
+    ).find(({ set }) => Boolean(set.completedAt || set.hasPersistedLog) && !setHasValidEffortInputs(set));
     if (invalidLocation) {
-      await leaveReviewAtSet(
-        invalidLocation.exerciseIndex,
-        invalidLocation.setIndex,
-        Boolean(invalidLocation.set.completedAt)
-      );
+      await leaveReviewAtSet(invalidLocation.exerciseIndex, invalidLocation.setIndex, Boolean(invalidLocation.set.completedAt));
       setActionsOpen(true);
       return;
     }
@@ -1438,10 +1237,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         notes: sessionNotes,
         durationMinutes,
         finalLogs: sourceKind === "direct"
-          ? buildCanonicalLogRows(exerciseStates, {
-              pendingOnly: true,
-              validOnly: true
-            })
+          ? buildCanonicalLogRows(exerciseStates, { pendingOnly: true, validOnly: true })
           : buildCanonicalLogRows(exerciseStates)
       });
       const terminal = store.getSnapshot();
@@ -1449,20 +1245,15 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         setSyncState("terminal_pending");
         setPendingOperationCount(terminal.pendingOperationCount);
         setFinishOpen(true);
-        toastRef.current({
-          title: tr("sync.terminalPending"),
-          description: tr("sync.terminalPendingDescription")
-        });
+        toastRef.current({ title: tr("sync.terminalPending"), description: tr("sync.terminalPendingDescription") });
         return;
       }
-      if (
-        !terminal.root
-        || terminal.root.status === "started"
-        || terminal.executionState
-      ) throw new Error("The completed workout session could not be confirmed.");
+      if (!terminal.root || terminal.root.status === "started" || terminal.executionState) {
+        throw new Error("The completed workout session could not be confirmed.");
+      }
       const summary = buildSummary(
         exerciseStates,
-        history,
+        [],
         durationMinutes,
         sessionNotes,
         tr,
@@ -1477,7 +1268,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           const recoveredTerminal = store.getSnapshot();
           const summary = buildSummary(
             exerciseStates,
-            history,
+            [],
             durationMinutes,
             sessionNotes,
             tr,
@@ -1487,19 +1278,41 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           finalizeVerifiedCompletion(summary);
         } else {
           setCompletionRecovery("retry");
-          toastRef.current({
-            title: tr("completion.recoveryTitle"),
-            description: tr("completion.retryDescription")
-          });
+          toastRef.current({ title: tr("completion.recoveryTitle"), description: tr("completion.retryDescription") });
         }
       } catch {
         setFinishOpen(true);
         setCompletionRecovery("reconnect");
-        toastRef.current({
-          title: tr("completion.recoveryTitle"),
-          description: userSafeError(error, tr("completion.reconnectDescription"))
-        });
+        toastRef.current({ title: tr("completion.recoveryTitle"), description: userSafeError(error, tr("completion.reconnectDescription")) });
       }
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function cancelCurrentSession() {
+    const store = activeSessionStoreRef.current;
+    if (!userId || !sessionId || !store || isSaving || isStarting) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      toastRef.current({ title: tr("minimized.cancelFailedTitle"), description: tr("minimized.cancelFailedDescription") });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await store.cancelSession();
+      clearActiveWorkoutState(userId);
+      clearStoredValue(workoutTimerKey);
+      clearStoredValue(restTimerKey);
+      setCancelConfirmationOpen(false);
+      toastRef.current({ title: tr("minimized.cancelledTitle"), description: tr("minimized.cancelledDescription") });
+      const backHref = readPreviousActiveWorkoutRoute(userId)
+        ?? (sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts");
+      window.location.assign(backHref);
+    } catch (error) {
+      toastRef.current({
+        title: tr("minimized.cancelFailedTitle"),
+        description: userSafeError(error, tr("minimized.cancelFailedDescription"))
+      });
     } finally {
       setIsSaving(false);
     }
@@ -1528,13 +1341,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       await store.hydrate({ force: true });
     } catch (error) {
       await store.hydrate({ force: true }).catch(() => undefined);
-      setControllerConflictDeviceId(
-        store.getSnapshot().executionState?.controller_device_id ?? null
-      );
-      toastRef.current({
-        title: tr("multiDevice.changedElsewhere"),
-        description: userSafeError(error, tr("multiDevice.unsavedPreserved"))
-      });
+      setControllerConflictDeviceId(store.getSnapshot().executionState?.controller_device_id ?? null);
+      toastRef.current({ title: tr("multiDevice.changedElsewhere"), description: userSafeError(error, tr("multiDevice.unsavedPreserved")) });
     } finally {
       setIsSaving(false);
     }
@@ -1555,10 +1363,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       setConflictingSession(null);
       setLaunchRevision((current) => current + 1);
     } catch (error) {
-      toastRef.current({
-        title: tr("conflict.cancelFailedTitle"),
-        description: userSafeError(error, tr("conflict.cancelFailedDescription"))
-      });
+      toastRef.current({ title: tr("conflict.cancelFailedTitle"), description: userSafeError(error, tr("conflict.cancelFailedDescription")) });
     } finally {
       setIsSaving(false);
     }
@@ -1606,7 +1411,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     const store = activeSessionStoreRef.current;
     const snapshotItemId = executionCursorItems[activeExerciseIndex]?.id;
     if (!store || !snapshotItemId) return;
-
     setIsSaving(true);
     try {
       await store.skipExercise(snapshotItemId, "user_skipped");
@@ -1618,40 +1422,20 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       );
       const state = snapshot.executionState;
       const cursor = state
-        ? executionCursorToIndexes(
-            state,
-            items,
-            nextStates.map((item) => item.exercise)
-          )
-        : {
-            exerciseIndex: Math.min(
-              activeExerciseIndex + 1,
-              Math.max(0, nextStates.length - 1)
-            ),
-            setIndex: 0
-          };
-      const nextExerciseIndex = Math.min(
-        Math.max(0, cursor.exerciseIndex),
-        Math.max(0, nextStates.length - 1)
-      );
+        ? executionCursorToIndexes(state, items, nextStates.map((item) => item.exercise))
+        : { exerciseIndex: Math.min(activeExerciseIndex + 1, Math.max(0, nextStates.length - 1)), setIndex: 0 };
+      const nextExerciseIndex = Math.min(Math.max(0, cursor.exerciseIndex), Math.max(0, nextStates.length - 1));
       const nextSetCount = nextStates[nextExerciseIndex]?.sets.length ?? 1;
-
       setExecutionCursorItems(items);
       setExerciseStates(nextStates);
       exerciseStatesRef.current = nextStates;
       setActiveExerciseIndex(nextExerciseIndex);
-      setActiveSetIndex(Math.min(
-        Math.max(0, cursor.setIndex),
-        Math.max(0, nextSetCount - 1)
-      ));
+      setActiveSetIndex(Math.min(Math.max(0, cursor.setIndex), Math.max(0, nextSetCount - 1)));
       if (state) mirrorExecutionState(state);
       setActionsOpen(false);
       bumpMuscleLoadRefreshRevision();
     } catch (error) {
-      toastRef.current({
-        title: tr("completion.saveFailedTitle"),
-        description: userSafeError(error, tr("offline.keepOpenRetry"))
-      });
+      toastRef.current({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
     } finally {
       setIsSaving(false);
     }
@@ -1664,15 +1448,17 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     const originalName = activeExercise.exercise.exercise_name;
     setIsSavingAlternative(true);
     try {
-      await store.replaceExercise({
-        sourcePlanExerciseId: activeExercise.exercise.id,
-        replacement
-      });
+      await store.replaceExercise({ sourcePlanExerciseId: activeExercise.exercise.id, replacement });
       setExerciseStates((current) => {
         const next = current.map((item, index) => index === activeExerciseIndex
           ? {
               ...item,
-              exercise: { ...item.exercise, exercise_name: replacement.name }
+              exercise: {
+                ...item.exercise,
+                exercise_name: replacement.name,
+                source_workout_id: replacement.id,
+                workout_id: replacement.id
+              }
             }
           : item);
         exerciseStatesRef.current = next;
@@ -1682,9 +1468,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       bumpMuscleLoadRefreshRevision();
       toastRef.current({
         title: tr("exercise.replacementReady"),
-        description: tr("exercise.replacementReadyDescription", {
-          name: isolateBidiText(replacement.name)
-        })
+        description: tr("exercise.replacementReadyDescription", { name: isolateBidiText(replacement.name) })
       });
       void createExerciseAlternative(userId, {
         plan_exercise_id: activeExercise.exercise.id,
@@ -1697,16 +1481,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       }).then((saved) => {
         setAlternatives((current) => [saved, ...current]);
       }).catch((error) => {
-        console.warn(
-          "Plaivra recorded the workout replacement but could not save the optional alternative shortcut.",
-          error
-        );
+        console.warn("Plaivra recorded the workout replacement but could not save the optional alternative shortcut.", error);
       });
     } catch (error) {
-      toastRef.current({
-        title: tr("exercise.replacementFailed"),
-        description: userSafeError(error)
-      });
+      toastRef.current({ title: tr("exercise.replacementFailed"), description: userSafeError(error) });
     } finally {
       setIsSavingAlternative(false);
     }
@@ -1715,13 +1493,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   function applyPreviousSet(exerciseIndex: number, setIndex: number) {
     const item = exerciseStates[exerciseIndex];
     const targetSet = item?.sets[setIndex];
-    if (!item || !targetSet) return;
-    const previous = previousSetForExercise(
-      history,
-      item.exercise.exercise_name,
-      targetSet.setNumber
-    );
-    if (!previous) {
+    if (!item || !targetSet || exerciseIndex !== activeExerciseIndex || setIndex !== activeSetIndex || !previousPerformanceRead) {
       toastRef.current({
         title: tr("exercise.noPreviousPerformance"),
         description: tr("exercise.noPreviousSetDescription")
@@ -1729,20 +1501,14 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       return;
     }
     updateSet(exerciseIndex, setIndex, {
-      reps: previous.reps === null ? targetSet.reps : String(previous.reps),
-      weightKg: previous.weightKg === null
-        ? targetSet.weightKg
-        : String(previous.weightKg)
+      reps: previousPerformanceRead.reps === null ? targetSet.reps : String(previousPerformanceRead.reps),
+      weightKg: previousPerformanceRead.weightKg === null ? targetSet.weightKg : String(previousPerformanceRead.weightKg)
     });
   }
 
   if (isStarting) {
     return (
-      <div
-        data-active-workout-controller
-        className="mx-auto flex min-h-[18rem] w-full max-w-3xl items-center justify-center"
-        dir={dir}
-      >
+      <div data-active-workout-controller className="mx-auto flex min-h-[18rem] w-full max-w-3xl items-center justify-center" dir={dir}>
         <div className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground" role="status">
           <RefreshCcw className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
           {tr("header.loadingSession")}
@@ -1753,21 +1519,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   if (loadFailed) {
     return (
-      <div
-        data-active-workout-controller
-        className="mx-auto w-full max-w-2xl rounded-[var(--radius-lg)] border bg-card p-5"
-        dir={dir}
-      >
+      <div data-active-workout-controller className="mx-auto w-full max-w-2xl rounded-[var(--radius-lg)] border bg-card p-5" dir={dir}>
         <h1 className="font-semibold">{tr("header.loadFailedTitle")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {tr("header.loadFailedDescription")}
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          className="mt-4 min-h-12"
-          onClick={() => window.location.reload()}
-        >
+        <p className="mt-2 text-sm text-muted-foreground">{tr("header.loadFailedDescription")}</p>
+        <Button type="button" variant="outline" className="mt-4 min-h-12" onClick={() => window.location.reload()}>
           <RefreshCcw className="h-4 w-4" aria-hidden="true" />
           {tr("common.retry")}
         </Button>
@@ -1779,9 +1534,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     const stored = userId ? readActiveWorkoutState(userId) : null;
     const resumeHref = resolveActiveWorkoutRoute(conflictingSession, stored);
     const backHref = userId
-      ? readPreviousActiveWorkoutRoute(userId) ?? (
-          sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts"
-        )
+      ? readPreviousActiveWorkoutRoute(userId) ?? (sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts")
       : sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts";
     return (
       <div data-active-workout-controller dir={dir}>
@@ -1798,11 +1551,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   if (!exerciseStates.length) {
     return (
-      <div
-        data-active-workout-controller
-        className="mx-auto w-full max-w-2xl rounded-[var(--radius-lg)] border bg-card p-5"
-        dir={dir}
-      >
+      <div data-active-workout-controller className="mx-auto w-full max-w-2xl rounded-[var(--radius-lg)] border bg-card p-5" dir={dir}>
         <h1 className="font-semibold">{tr("header.noExercises")}</h1>
         <Button asChild variant="outline" className="mt-4 min-h-12">
           <Link href="/my-workout/plans">
@@ -1816,26 +1565,34 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   if (!activeExercise || !activeSet) return null;
 
+  if (!executionCapability.supported) {
+    const copy = unsupportedExecutionCopy(language);
+    const backHref = userId
+      ? readPreviousActiveWorkoutRoute(userId) ?? (sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts")
+      : sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts";
+    return (
+      <div data-active-workout-controller data-aw10-unsupported-execution className="mx-auto w-full max-w-2xl border-s-2 border-warning bg-card p-5" dir={dir}>
+        <h1 className="text-lg font-semibold">{copy.title}</h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{copy.description}</p>
+        <Button asChild variant="outline" className="mt-5 min-h-12">
+          <Link href={backHref} prefetch={false}>
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+            {tr("multiDevice.goBack")}
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+
   const activeRpeValidation = validateWorkoutSetEffortInput(activeSet.rpe, "rpe");
   const activeRirValidation = validateWorkoutSetEffortInput(activeSet.rir, "rir");
-  const activeSetValidation = validateActiveWorkoutSetDraft(
-    activeSet.reps,
-    activeSet.weightKg
-  );
+  const activeSetValidation = validateActiveWorkoutSetDraft(activeSet.reps, activeSet.weightKg);
   const isPaused = executionState?.session_state === "paused";
   const restActive = executionState?.view_state === "rest" && timerLeft > 0;
   const reviewOpen = Boolean(
-    finishOpen
-    || executionState?.session_state === "review"
-    || executionState?.view_state === "session_review"
+    finishOpen || executionState?.session_state === "review" || executionState?.view_state === "session_review"
   );
-  const primaryActionKind = isPaused
-    ? "resume"
-    : restActive
-      ? "skip-rest"
-      : isFinished
-        ? "finish"
-        : "complete-set";
+  const primaryActionKind = isPaused ? "resume" : restActive ? "skip-rest" : isFinished ? "finish" : "complete-set";
   const primaryActionLabel = isPaused
     ? tr("common.resume")
     : restActive
@@ -1844,125 +1601,47 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         ? tr("common.finish")
         : tr("set.finishNumbered", { count: formatters.integer(activeSet.setNumber) });
   const primaryActionDisabled = Boolean(
-    completedSummary
-    || isSaving
-    || isStarting
-    || !tabLeader
-    || controllerConflictDeviceId !== null
-    || !sessionId
+    completedSummary || isSaving || isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId
     || (!isPaused && !restActive && !isFinished && (
-      Boolean(activeSet.completedAt)
-      || !activeSetValidation.complete
-      || Boolean(activeRpeValidation.error)
-      || Boolean(activeRirValidation.error)
+      Boolean(activeSet.completedAt) || !activeSetValidation.complete || Boolean(activeRpeValidation.error) || Boolean(activeRirValidation.error)
     ))
   );
   const activeSetPath = buildActiveWorkoutSetPath(
-    activeExercise.sets.map((set) => ({
-      setNumber: set.setNumber,
-      completed: Boolean(set.completedAt)
-    })),
+    activeExercise.sets.map((set) => ({ setNumber: set.setNumber, completed: Boolean(set.completedAt) })),
     activeSet.setNumber
   );
   const handlePrimaryAction = () => {
-    if (isPaused) {
-      void togglePause();
-    } else if (restActive) {
-      stopRestTimer();
-    } else if (isFinished) {
-      void openSessionReview();
-    } else {
-      void finishSet(activeExerciseIndex, activeSetIndex);
-    }
+    if (isPaused) void togglePause();
+    else if (restActive) stopRestTimer();
+    else if (isFinished) void openSessionReview();
+    else void finishSet(activeExerciseIndex, activeSetIndex);
   };
-  const busy =
-    isSaving
-    || isStarting
-    || controllerConflictDeviceId !== null
-    || !tabLeader;
-  const syncNotice =
-    syncState === "online_synced" || controllerConflictDeviceId
-      ? null
-      : (
-    <section
-      data-aw9-sync-state={syncState}
-      role="status"
-      className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] mx-auto max-w-xl rounded-[16px] border border-border/70 bg-background/95 px-4 py-3 shadow-lg backdrop-blur lg:bottom-4"
-    >
+  const busy = isSaving || isStarting || controllerConflictDeviceId !== null || !tabLeader;
+  const syncNotice = syncState === "online_synced" || controllerConflictDeviceId ? null : (
+    <section data-aw9-sync-state={syncState} role="status" className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] mx-auto max-w-xl rounded-[16px] border border-border/70 bg-background/95 px-4 py-3 shadow-lg backdrop-blur lg:bottom-4">
       <p className="text-sm font-semibold">{tr(`sync.${syncState}`)}</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">
-        {tr("sync.pendingCount", { count: pendingOperationCount })}
-      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{tr("sync.pendingCount", { count: pendingOperationCount })}</p>
       {syncState === "data_conflict" ? (
         <>
           {dataConflict ? (
             <div className="mt-2 rounded-xl bg-muted/55 p-3 text-sm">
-              <p className="font-semibold">
-                {tr("sync.setConflict", {
-                  set: formatters.integer(dataConflict.local.setNumber),
-                  exercise: isolateBidiText(dataConflict.local.exerciseName)
-                })}
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                {tr("sync.thisDevice")}: {tr("sync.setValues", {
-                  weight: formatters.decimal(dataConflict.local.weightKg ?? 0),
-                  reps: formatters.integer(dataConflict.local.reps ?? 0)
-                })}
-              </p>
-              <p className="text-muted-foreground">
-                {tr("sync.server")}: {dataConflict.server
-                  ? tr("sync.setValues", {
-                      weight: formatters.decimal(dataConflict.server.weight_kg ?? 0),
-                      reps: formatters.integer(dataConflict.server.reps ?? 0)
-                    })
-                  : tr("completion.metricUnavailable")}
-              </p>
+              <p className="font-semibold">{tr("sync.setConflict", { set: formatters.integer(dataConflict.local.setNumber), exercise: isolateBidiText(dataConflict.local.exerciseName) })}</p>
+              <p className="mt-1 text-muted-foreground">{tr("sync.thisDevice")}: {tr("sync.setValues", { weight: formatters.decimal(dataConflict.local.weightKg ?? 0), reps: formatters.integer(dataConflict.local.reps ?? 0) })}</p>
+              <p className="text-muted-foreground">{tr("sync.server")}: {dataConflict.server ? tr("sync.setValues", { weight: formatters.decimal(dataConflict.server.weight_kg ?? 0), reps: formatters.integer(dataConflict.server.reps ?? 0) }) : tr("completion.metricUnavailable")}</p>
             </div>
           ) : null}
           <div className="mt-2 grid grid-cols-2 gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-10"
-            onClick={() => {
-              void activeSessionStoreRef.current
-                ?.resolveDataConflict("server")
-                .catch(() => undefined);
-            }}
-          >
-            {tr("sync.keepServer")}
-          </Button>
-          <Button
-            type="button"
-            className="min-h-10"
-            onClick={() => {
-              void activeSessionStoreRef.current
-                ?.resolveDataConflict("local")
-                .catch(() => undefined);
-            }}
-          >
-            {tr("sync.useLocal")}
-          </Button>
+            <Button type="button" variant="outline" className="min-h-10" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("server").catch(() => undefined); }}>{tr("sync.keepServer")}</Button>
+            <Button type="button" className="min-h-10" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("local").catch(() => undefined); }}>{tr("sync.useLocal")}</Button>
           </div>
         </>
       ) : null}
-      {syncState === "retry_needed"
-        || syncState === "device_conflict" ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-2 min-h-10 w-full"
-            onClick={() => {
-              void activeSessionStoreRef.current
-                ?.retryPendingTransport()
-                .catch(() => undefined);
-            }}
-          >
-            {tr("common.retry")}
-          </Button>
-        ) : null}
+      {syncState === "retry_needed" || syncState === "device_conflict" ? (
+        <Button type="button" variant="outline" className="mt-2 min-h-10 w-full" onClick={() => { void activeSessionStoreRef.current?.retryPendingTransport().catch(() => undefined); }}>{tr("common.retry")}</Button>
+      ) : null}
     </section>
   );
+
   const allQuickActions = buildActiveWorkoutQuickActions({
     sourceKind,
     hasGuideOrVideo: Boolean(currentGuideUrl || currentCustomVideoUrl),
@@ -1977,17 +1656,11 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       "guide-video": tr("actions.guideVideo"),
       "replace-today": tr("actions.replaceToday"),
       "skip-today": tr("actions.skipToday"),
-      "ask-plaivra": tr("actions.askPlaivra")
+      "ask-plaivra": tr("chatGPT.ask")
     }
   });
-  const mobileQuickActions = projectActiveWorkoutQuickActions(
-    allQuickActions,
-    "mobile"
-  );
-  const desktopQuickActions = projectActiveWorkoutQuickActions(
-    allQuickActions,
-    "desktop"
-  );
+  const mobileQuickActions = projectActiveWorkoutQuickActions(allQuickActions, "mobile");
+  const desktopQuickActions = projectActiveWorkoutQuickActions(allQuickActions, "desktop");
   const openDetails = (
     section: ActiveWorkoutDetailsSection,
     trigger: HTMLButtonElement,
@@ -1998,79 +1671,49 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setActionsOpen(true);
   };
   const deviceConflictBackHref = userId
-    ? readPreviousActiveWorkoutRoute(userId)
-      ?? (sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts")
+    ? readPreviousActiveWorkoutRoute(userId) ?? (sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts")
     : "/workouts";
-  const handleQuickAction = (
-    action: ActiveWorkoutQuickAction,
-    trigger: HTMLButtonElement
-  ) => {
+  const handleQuickAction = (action: ActiveWorkoutQuickAction, trigger: HTMLButtonElement) => {
     if (action.disabled) return;
     if (action.intent === "apply-previous-set") {
       applyPreviousSet(activeExerciseIndex, activeSetIndex);
       return;
     }
-    openDetails(
-      action.destination ?? "overview",
-      trigger,
-      action.id === "guide-video" ? "guide-video" : null
-    );
+    openDetails(action.destination ?? "overview", trigger, action.id === "guide-video" ? "guide-video" : null);
   };
   const miniHeatMap = (
-    <ActiveWorkoutMiniHeatMap
-      controller={muscleLoadController}
-      onOpen={(trigger) => openDetails("muscle-load", trigger)}
-    />
+    <ActiveWorkoutMiniHeatMap controller={muscleLoadController} onOpen={(trigger) => openDetails("muscle-load", trigger)} />
   );
-  const desktopMiniHeatMap = (
-    <ActiveWorkoutMiniHeatMap
-      controller={muscleLoadController}
-      onOpen={(trigger) => openDetails("muscle-load", trigger)}
-    />
-  );
+  const desktopMiniHeatMap = miniHeatMap;
+  const previousPerformanceValue = activePreviousPerformance?.lastBestSet
+    ?? (previousPerformanceUnavailable ? tr("completion.metricUnavailable") : null);
+  const previousPerformanceDate = activePreviousPerformance?.lastPerformedAt
+    ? formatters.date(activePreviousPerformance.lastPerformedAt)
+    : null;
 
   if (completedSummary || reviewOpen) {
     return (
       <div data-active-workout-controller className="contents">
         {syncNotice}
         {!tabLeader ? (
-          <section
-            data-aw9-tab-conflict
-            role="status"
-            className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur"
-          >
+          <section data-aw9-tab-conflict role="status" className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur">
             <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-3 min-h-11 w-full"
-              onClick={() => {
-                const leadership = tabLeadershipRef.current;
-                if (!leadership) return;
-                void leadership.acquire(true).then(setTabLeader);
-              }}
-            >
-              {tr("multiDevice.continueThisTab")}
-            </Button>
+            <Button type="button" variant="outline" className="mt-3 min-h-11 w-full" onClick={() => { const leadership = tabLeadershipRef.current; if (!leadership) return; void leadership.acquire(true).then(setTabLeader); }}>{tr("multiDevice.continueThisTab")}</Button>
           </section>
         ) : null}
         <ActiveWorkoutReviewBridge
           open={reviewOpen}
           busy={busy}
           sessionAvailable={Boolean(sessionId)}
+          sessionId={sessionId}
           durationMinutes={durationMinutes}
           totalVolume={totalVolume}
-          previewPrs={previewPrs}
           sessionNotes={sessionNotes}
           onSessionNotesChange={setSessionNotes}
           onComplete={() => { void completeSession(); }}
           onContinue={continueWorkoutFromReview}
-          onJumpToSet={(exerciseIndex, setIndex) => {
-            void leaveReviewAtSet(exerciseIndex, setIndex, false);
-          }}
-          onReopenSet={(exerciseIndex, setIndex) => {
-            void leaveReviewAtSet(exerciseIndex, setIndex, true);
-          }}
+          onJumpToSet={(exerciseIndex, setIndex) => { void leaveReviewAtSet(exerciseIndex, setIndex, false); }}
+          onReopenSet={(exerciseIndex, setIndex) => { void leaveReviewAtSet(exerciseIndex, setIndex, true); }}
           onRetryCompletion={() => { void completeSession(); }}
           completionRecovery={completionRecovery}
           completedSummary={completedSummary}
@@ -2088,122 +1731,57 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     <div data-active-workout-controller className="contents">
       {syncNotice}
       {!tabLeader ? (
-        <section
-          data-aw9-tab-conflict
-          role="status"
-          className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur"
-        >
+        <section data-aw9-tab-conflict role="status" className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur">
           <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {tr("multiDevice.viewOnly")}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-3 min-h-11 w-full"
-            onClick={() => {
-              const leadership = tabLeadershipRef.current;
-              if (!leadership) return;
-              void leadership.acquire(true).then(setTabLeader);
-            }}
-          >
-            {tr("multiDevice.continueThisTab")}
-          </Button>
+          <p className="mt-1 text-sm text-muted-foreground">{tr("multiDevice.viewOnly")}</p>
+          <Button type="button" variant="outline" className="mt-3 min-h-11 w-full" onClick={() => { const leadership = tabLeadershipRef.current; if (!leadership) return; void leadership.acquire(true).then(setTabLeader); }}>{tr("multiDevice.continueThisTab")}</Button>
         </section>
       ) : null}
       {controllerConflictDeviceId ? (
-        <section
-          data-aw9-device-conflict
-          role="status"
-          className="fixed inset-x-3 top-3 z-[65] mx-auto max-w-xl rounded-[18px] border border-warning/40 bg-background/95 p-4 shadow-lg backdrop-blur"
-        >
+        <section data-aw9-device-conflict role="status" className="fixed inset-x-3 top-3 z-[65] mx-auto max-w-xl rounded-[18px] border border-warning/40 bg-background/95 p-4 shadow-lg backdrop-blur">
           <h2 className="font-semibold">{tr("multiDevice.activeElsewhere")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {tr("multiDevice.viewOnly")}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{tr("multiDevice.viewOnly")}</p>
           <div className="mt-3 grid gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11 w-full"
-              onClick={() => {
-                document
-                  .querySelector("[data-aw5-execution-shell]")
-                  ?.scrollIntoView({ block: "start" });
-              }}
-            >
-              {tr("multiDevice.viewCurrent")}
-            </Button>
-            <Button
-              type="button"
-              className="min-h-11 w-full"
-              onClick={() => setTakeoverConfirmationOpen(true)}
-              disabled={
-                isSaving
-                || (typeof navigator !== "undefined" && !navigator.onLine)
-              }
-            >
-              {tr("multiDevice.takeOver")}
-            </Button>
-            <Button asChild variant="ghost" className="min-h-11 w-full">
-              <Link href={deviceConflictBackHref} prefetch={false}>
-                {tr("multiDevice.goBack")}
-              </Link>
-            </Button>
+            <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => { document.querySelector("[data-aw5-execution-shell]")?.scrollIntoView({ block: "start" }); }}>{tr("multiDevice.viewCurrent")}</Button>
+            <Button type="button" className="min-h-11 w-full" onClick={() => setTakeoverConfirmationOpen(true)} disabled={isSaving || (typeof navigator !== "undefined" && !navigator.onLine)}>{tr("multiDevice.takeOver")}</Button>
+            <Button asChild variant="ghost" className="min-h-11 w-full"><Link href={deviceConflictBackHref} prefetch={false}>{tr("multiDevice.goBack")}</Link></Button>
           </div>
         </section>
       ) : null}
-      <Dialog
-        open={takeoverConfirmationOpen}
-        onOpenChange={setTakeoverConfirmationOpen}
-      >
+
+      <Dialog open={takeoverConfirmationOpen} onOpenChange={setTakeoverConfirmationOpen}>
         <DialogContent data-aw9-takeover-confirmation className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{tr("multiDevice.takeoverConfirmTitle")}</DialogTitle>
-            <DialogDescription>
-              {tr("multiDevice.takeoverConfirmDescription")}
-            </DialogDescription>
+            <DialogDescription>{tr("multiDevice.takeoverConfirmDescription")}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-12"
-              onClick={() => setTakeoverConfirmationOpen(false)}
-              disabled={isSaving}
-            >
-              {tr("common.back")}
-            </Button>
-            <Button
-              type="button"
-              className="min-h-12"
-              onClick={() => {
-                setTakeoverConfirmationOpen(false);
-                void takeOverWorkout();
-              }}
-              disabled={isSaving}
-            >
-              {tr("multiDevice.confirmTakeover")}
-            </Button>
+            <Button type="button" variant="outline" className="min-h-12" onClick={() => setTakeoverConfirmationOpen(false)} disabled={isSaving}>{tr("common.back")}</Button>
+            <Button type="button" className="min-h-12" onClick={() => { setTakeoverConfirmationOpen(false); void takeOverWorkout(); }} disabled={isSaving}>{tr("multiDevice.confirmTakeover")}</Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={cancelConfirmationOpen} onOpenChange={setCancelConfirmationOpen}>
+        <DialogContent data-aw10-cancel-confirmation className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tr("minimized.cancelQuestion")}</DialogTitle>
+            <DialogDescription>{tr("minimized.cancelDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" className="min-h-12" onClick={() => setCancelConfirmationOpen(false)} disabled={isSaving}>{tr("common.back")}</Button>
+            <Button type="button" variant="destructive" className="min-h-12" onClick={() => { void cancelCurrentSession(); }} disabled={isSaving || (typeof navigator !== "undefined" && !navigator.onLine)}>{isSaving ? tr("minimized.cancelling") : tr("minimized.cancelWorkout")}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <ActiveWorkoutExecutionShell
         direction={dir}
         sessionLabel={sourceKind === "direct" ? tr("header.workoutSession") : day.day_name}
         exerciseName={activeExercise.exercise.exercise_name}
-        exercisePositionLabel={tr("header.exerciseProgress", {
-          current: formatters.integer(activeExerciseIndex + 1),
-          total: formatters.integer(exerciseStates.length)
-        })}
-        setPositionLabel={tr("header.setProgress", {
-          current: formatters.integer(activeSetIndex + 1),
-          total: formatters.integer(activeExercise.sets.length)
-        })}
-        completedSetsLabel={tr("header.completedSetsProgress", {
-          completed: formatters.integer(completedSets),
-          total: formatters.integer(totalSets)
-        })}
+        exercisePositionLabel={tr("header.exerciseProgress", { current: formatters.integer(activeExerciseIndex + 1), total: formatters.integer(exerciseStates.length) })}
+        setPositionLabel={tr("header.setProgress", { current: formatters.integer(activeSetIndex + 1), total: formatters.integer(activeExercise.sets.length) })}
+        completedSetsLabel={tr("header.completedSetsProgress", { completed: formatters.integer(completedSets), total: formatters.integer(totalSets) })}
         elapsedLabel={formatters.timer(elapsedSeconds)}
         progress={clampWorkoutProgress(completedSets, totalSets)}
         miniHeatMap={miniHeatMap}
@@ -2214,33 +1792,19 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         paused={Boolean(isPaused)}
         busy={busy}
         restActive={restActive}
-        restLabel={`${tr("rest.resting")} · ${formatters.timer(timerLeft)}`}
+        restLabel={formatters.timer(timerLeft)}
         nextContextLabel={nextSetLabel}
-        currentSetLabel={tr("set.label", {
-          count: formatters.integer(activeSet.setNumber)
-        })}
+        currentSetLabel={tr("set.label", { count: formatters.integer(activeSet.setNumber) })}
         repsLabel={tr("set.reps")}
         weightLabel={tr("set.weightKg")}
         repsDraft={activeSet.reps}
         weightDraft={activeSet.weightKg}
-        repsError={activeSet.reps.trim() && activeSetValidation.repsError
-          ? activeSetValidation.repsError === "invalid"
-            ? tr("validation.wholeReps")
-            : tr("validation.requiredValues")
-          : null}
-        weightError={activeSet.weightKg.trim() && activeSetValidation.weightError
-          ? tr("validation.nonNegative")
-          : null}
-        inputHint={!activeSet.reps.trim() || !activeSet.weightKg.trim()
-          ? tr("validation.requiredValues")
-          : null}
+        repsError={activeSet.reps.trim() && activeSetValidation.repsError ? activeSetValidation.repsError === "invalid" ? tr("validation.wholeReps") : tr("validation.requiredValues") : null}
+        weightError={activeSet.weightKg.trim() && activeSetValidation.weightError ? tr("validation.nonNegative") : null}
+        inputHint={!activeSet.reps.trim() || !activeSet.weightKg.trim() ? tr("validation.requiredValues") : null}
         setPathLabel={tr("set.path")}
         setPath={activeSetPath}
-        setPathStateLabels={{
-          completed: tr("navigation.completed"),
-          active: tr("common.active"),
-          available: tr("navigation.notStarted")
-        }}
+        setPathStateLabels={{ completed: tr("navigation.completed"), active: tr("common.active"), available: tr("navigation.notStarted") }}
         formatSetNumber={formatters.integer}
         currentSetNumber={activeSet.setNumber}
         persisted={activeSet.hasPersistedLog}
@@ -2252,40 +1816,24 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         moreLabel={tr("common.more")}
         pauseLabel={tr("common.pause")}
         resumeLabel={tr("common.resume")}
-        finishLabel={tr("common.finish")}
+        finishLabel={tr("minimized.finishWorkout")}
+        cancelLabel={tr("minimized.cancelWorkout")}
+        askChatGptLabel={tr("chatGPT.ask")}
+        previousPerformanceLabel={tr("exercise.previousPerformance")}
+        previousPerformanceValue={previousPerformanceValue}
+        previousPerformanceDate={previousPerformanceDate}
+        previousPerformanceLoading={previousPerformanceLoading}
+        usePreviousLabel={tr("exercise.useValues")}
         addThirtySecondsLabel={tr("rest.addThirtySeconds")}
         restPresetSectionLabel={tr("actions.timerControls")}
-        restPresetLabels={[30, 60, 90, 180].map((seconds) => ({
-          seconds,
-          label: restPresetLabel(seconds, tr)
-        }))}
+        restPresetLabels={[30, 60, 90, 180].map((seconds) => ({ seconds, label: restPresetLabel(seconds, tr) }))}
         feedback={(
-          <>
-            <InlineFeedback
-              message={setFeedback}
-              variant={setFeedbackVariant}
-              onClose={() => setSetFeedback("")}
-            />
-            <InlineFeedback
-              message={prFeedback}
-              onClose={() => setPrFeedback("")}
-            />
-          </>
+          <InlineFeedback message={setFeedback} variant={setFeedbackVariant} onClose={() => setSetFeedback("")} />
         )}
-        onRepsChange={(value) => updateSet(
-          activeExerciseIndex,
-          activeSetIndex,
-          { reps: value }
-        )}
-        onWeightChange={(value) => updateSet(
-          activeExerciseIndex,
-          activeSetIndex,
-          { weightKg: value }
-        )}
+        onRepsChange={(value) => updateSet(activeExerciseIndex, activeSetIndex, { reps: value })}
+        onWeightChange={(value) => updateSet(activeExerciseIndex, activeSetIndex, { weightKg: value })}
         onSelectSet={(setNumber) => {
-          const setIndex = activeExercise.sets.findIndex(
-            (set) => set.setNumber === setNumber
-          );
+          const setIndex = activeExercise.sets.findIndex((set) => set.setNumber === setNumber);
           if (setIndex < 0) return;
           void flushPendingSetWrites();
           setActiveSetIndex(setIndex);
@@ -2293,10 +1841,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         onPrimaryAction={handlePrimaryAction}
         onPauseResume={() => { void togglePause(); }}
         onFinish={() => { void openSessionReview(); }}
-        onOpenDetails={(trigger) => {
-          openDetails("overview", trigger);
-        }}
+        onCancel={() => setCancelConfirmationOpen(true)}
+        onOpenDetails={(trigger) => openDetails("overview", trigger)}
         onQuickAction={handleQuickAction}
+        onUsePrevious={previousPerformanceRead ? () => applyPreviousSet(activeExerciseIndex, activeSetIndex) : undefined}
         onAddThirtySeconds={() => startRestTimer(timerLeft + 30)}
         onStartRest={startRestTimer}
         detailsContent={(
@@ -2317,24 +1865,14 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             tr={tr}
             formatters={formatters}
             legacyReopenSetLabel={legacyReopenSetLabel}
-            onApplyPreviousSet={() => applyPreviousSet(
-              activeExerciseIndex,
-              activeSetIndex
-            )}
+            onApplyPreviousSet={() => applyPreviousSet(activeExerciseIndex, activeSetIndex)}
             onRestartSet={() => { void restartSet(activeExerciseIndex, activeSetIndex); }}
-            onUpdateSet={(patch) => updateSet(
-              activeExerciseIndex,
-              activeSetIndex,
-              patch
-            )}
+            onUpdateSet={(patch) => updateSet(activeExerciseIndex, activeSetIndex, patch)}
             muscleLoadController={muscleLoadController}
             activeAlternatives={activeAlternatives}
             replacementReason={replacementReason}
             onReplacementReasonChange={setReplacementReason}
-            onUseReplacement={() => {
-              setActionsOpen(false);
-              window.setTimeout(() => setReplacementPickerOpen(true), 0);
-            }}
+            onUseReplacement={() => { setActionsOpen(false); window.setTimeout(() => setReplacementPickerOpen(true), 0); }}
             onSkipExercise={() => { void skipCurrentExercise(); }}
             isSavingAlternative={isSavingAlternative}
             workoutContext={workoutContext}
