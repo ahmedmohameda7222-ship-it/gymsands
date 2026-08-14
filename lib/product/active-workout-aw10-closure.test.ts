@@ -73,6 +73,8 @@ describe("AW-10 canonical Active Workout closure", () => {
     expect(entry).toContain("report.results.length !== 30");
     expect(entry).toContain("offlineDurability");
     expect(entry).toContain("terminalPending");
+    expect(entry).toContain("serverTerminalWins");
+    expect(entry).toContain('result.checks?.serverTerminalWins === true');
     expect(entry).toContain("conflictChoices");
     expect(entry).toContain('result.checks?.resolution === "server"');
     expect(entry).toContain('result.checks?.resolution === "local"');
