@@ -61,6 +61,10 @@ describe("AW-10 canonical Active Workout closure", () => {
   });
 
   it("classifies only aborted Previous Performance enrichment and preserves fail-closed coverage", () => {
+    expect(entry).toContain("let underlyingExitCode = 0");
+    expect(entry).toContain("underlyingExitCode = Number(process.exitCode ?? 0)");
+    expect(entry).toContain("AW-10 underlying runner exited with code");
+    expect(entry).toContain("process.exitCode = 0");
     expect(entry).toContain('item.error !== "net::ERR_ABORTED"');
     expect(entry).toContain('url.pathname === "/api/workouts/active/previous-performance"');
     expect(entry).toContain('url.searchParams.has("kind")');
@@ -69,7 +73,11 @@ describe("AW-10 canonical Active Workout closure", () => {
     expect(entry).toContain("report.results.length !== 30");
     expect(entry).toContain("offlineDurability");
     expect(entry).toContain("terminalPending");
-    expect(entry).toContain("throw originalFailure");
+    expect(entry).toContain("conflictChoices");
+    expect(entry).toContain('result.checks?.resolution === "server"');
+    expect(entry).toContain('result.checks?.resolution === "local"');
+    expect(entry).toContain("throw underlyingFailure");
+    expect(entry).not.toContain("if (!originalFailure)");
   });
 
   it("keeps the canonical npm runner stable while scoped PR Quality adds strict classification", () => {
