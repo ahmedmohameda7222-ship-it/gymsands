@@ -74,7 +74,7 @@ describe("AW-10 canonical Active Workout closure", () => {
 
   it("keeps the canonical npm runner stable while scoped PR Quality adds strict classification", () => {
     expect(workflow.match(/run-aw10-active-workout-closure-qa-entry\.mjs/g)).toHaveLength(1);
-    expect(workflow.match(/npm run qa:active-workout:aw10/g)).toHaveLength(0);
+    expect(workflow.match(/npm run qa:active-workout:aw10/g) ?? []).toHaveLength(0);
     expect(workflow.match(/ci-reports\/active-workout-aw10-evidence/g)).toHaveLength(2);
     expect(workflow).toContain(
       "QA_AW10_EVIDENCE_DIR: ci-reports/active-workout-aw10-evidence",
