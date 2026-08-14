@@ -21,8 +21,10 @@ export function WorkoutHistoryCard({ item }: { item: WorkoutHistorySessionSummar
   const semanticFacts: HistoryFact[] = item.resultKind === "semantic_metrics"
     ? (item.resultFacts ?? []).map((metric) => presentWorkoutMetric(metric, locale)).filter((fact): fact is { label: string; value: string } => Boolean(fact))
     : [];
+  const hasSemanticActivityDuration = item.resultKind === "semantic_metrics"
+    && (item.resultFacts ?? []).some((metric) => metric.metricKey === "duration_seconds" && Boolean(presentWorkoutMetric(metric, locale)));
   const facts: HistoryFact[] = [
-    item.durationMinutes === null ? null : { label: tr("historyDurationMetric"), value: tr("historyMinutesShort", { count: item.durationMinutes }) },
+    item.durationMinutes === null || hasSemanticActivityDuration ? null : { label: tr("historyDurationMetric"), value: tr("historyMinutesShort", { count: item.durationMinutes }) },
     ...(item.resultKind === "strength_sets" ? [
       item.completedSetCount === null ? null : { label: tr("historyCompletedSetsMetric"), value: number.format(item.completedSetCount) },
       item.exerciseCount === null ? null : { label: tr("historyExercisesMetric"), value: number.format(item.exerciseCount) },
