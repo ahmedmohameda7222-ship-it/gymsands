@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import { readActiveWorkoutSessionCache } from "@/lib/workouts/active-session-sync";
 import { readActiveWorkoutSessionAuthenticated } from "@/services/workouts/active-session-client";
-import type { Weekday, Workout, WorkoutSession, WorkoutSessionSummary } from "@/types";
+import type { Weekday, Workout, WorkoutSession } from "@/types";
 import {
   getOrStartWorkoutSession as startOrResumeDirectWorkoutSession
 } from "./direct-workout-sessions";
@@ -49,21 +49,6 @@ function directWorkoutIdentity(workout: Workout, resolvedWorkoutId?: string | nu
     catalog_version: null,
     is_global: true
   };
-}
-
-/**
- * Active Workout previously used the legacy detailed-history reader as a
- * bootstrap dependency and then matched exercise display names across as many
- * as 100 sessions. That authority is intentionally retired. Stable-identity
- * Previous Performance is a separate secondary enrichment; until it resolves,
- * execution receives no historical substitute rather than fuzzy/name-based
- * data. This explicit facade export shadows the legacy star export.
- */
-export async function getWorkoutHistoryDetailed(
-  _userId: string,
-  _limit = 100
-): Promise<WorkoutSessionSummary[]> {
-  return [];
 }
 
 export async function getOpenWorkoutSessionWithStatus(
