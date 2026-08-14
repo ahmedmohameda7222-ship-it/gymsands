@@ -37,12 +37,13 @@ const workoutSessionsLegacy = source(
 );
 
 describe("AW-5 Active Workout UI core source contract", () => {
-  it("converges both routes on one shared controller and shell", () => {
+  it("converges both routes on one shared controller and execution-first shell", () => {
     expect(dayRoute).toContain("ActiveWorkoutCoreSession");
     expect(directRoute).toContain("ActiveWorkoutCoreSession");
     expect(controller).toContain("ActiveWorkoutExecutionShell");
     expect(controller).toContain('sourceKind === "plan-day"');
     expect(controller).toContain('sourceKind === "direct"');
+    expect(shell).toContain("data-aw10-execution-first");
   });
 
   it("preserves AW-4 authority for clock, transitions, canonical sets, and terminal completion", () => {
@@ -60,16 +61,20 @@ describe("AW-5 Active Workout UI core source contract", () => {
     );
   });
 
-  it("keeps the compact primary shell free of rejected legacy presentation", () => {
+  it("keeps the primary shell focused on execution rather than a dashboard", () => {
     expect(shell).toContain("data-aw5-execution-shell");
     expect(shell).toContain("data-aw5-mini-heat-map-slot");
+    expect(shell).toContain("data-aw10-session-menu");
+    expect(shell).toContain("data-aw10-exercise-details-trigger");
+    expect(shell).toContain("data-aw10-exercise-actions");
     expect(shell).toContain("data-active-set-details-trigger");
     expect(shell).toContain("active-set-reps");
     expect(shell).toContain("active-set-weight");
     expect(shell).toContain('aria-current={item.state === "active" ? "step"');
+    expect(shell).toContain("data-aw10-paused-state");
+    expect(shell).toContain("data-aw10-rest-state");
     expect(shell).not.toContain("SessionMuscleLoadPanel");
     expect(shell).not.toContain("Saving...");
-    expect(shell).not.toContain("Saved");
     expect(shell).not.toContain("carousel");
     expect(shell).not.toMatch(/>\s*\{progressPercent\}%\s*</);
   });
@@ -77,21 +82,18 @@ describe("AW-5 Active Workout UI core source contract", () => {
   it("renders completion as an accessible terminal surface instead of stacking it above the editor", () => {
     expect(reviewBridge).toContain("if (completedSummary)");
     expect(reviewBridge).toContain("data-aw5-completion-surface");
+    expect(reviewBridge).toContain("data-aw10-terminal-completion");
     expect(reviewBridge).toContain("fixed inset-0");
     expect(reviewBridge).toContain("overflow-y-auto bg-background");
     expect(reviewBridge).toContain("min-h-dvh");
     expect(reviewBridge).toContain('role="main"');
-    expect(reviewBridge).toContain(
-      'aria-labelledby="aw5-completed-summary-title"',
-    );
+    expect(reviewBridge).toContain('aria-labelledby="aw5-completed-summary-title"');
     expect(reviewBridge).toContain("completionSurfaceRef");
     expect(reviewBridge).toContain("sibling.inert = true");
-    expect(reviewBridge).toContain(
-      'sibling.setAttribute("aria-hidden", "true")',
-    );
+    expect(reviewBridge).toContain('sibling.setAttribute("aria-hidden", "true")');
     expect(reviewBridge).toContain("surface.focus()");
-    expect(reviewBridge).toContain("<WorkoutSummaryCard");
-    expect(reviewBridge).not.toContain("{completedSummary ? (");
+    expect(reviewBridge).toContain("<CompletionSurface");
+    expect(reviewBridge).not.toContain("<WorkoutSummaryCard");
   });
 
   it("removes the loaded direct-route hero and uses one localized generic session label", () => {
@@ -111,7 +113,7 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(sourceCompatibility).toContain('"single-workout-rest"');
   });
 
-  it("extracts pure runtime calculations and bounds the authority-critical takeover dialog", () => {
+  it("keeps controller orchestration on mature authorities and isolates secondary presentation bridges", () => {
     expect(controller).toContain("ActiveWorkoutDetailsBridge");
     expect(controller).toContain("ActiveWorkoutReviewBridge");
     expect(controller).toContain("active-workout-runtime-model");
@@ -120,11 +122,11 @@ describe("AW-5 Active Workout UI core source contract", () => {
     );
     expect(controller.match(/from\s+["']@\/components\/ui\/dialog["']/g)).toHaveLength(1);
     expect(controller).toContain("data-aw9-takeover-confirmation");
-    expect(controller.match(/<Dialog\b/g)).toHaveLength(1);
+    expect(controller).toContain("data-aw10-cancel-confirmation");
+    expect(controller.match(/<Dialog\b/g)).toHaveLength(2);
     expect(controller).not.toContain("AiActionRequestDialog");
     expect(controller).not.toContain("WorkoutAiActionPanel");
     expect(controller).not.toContain("ExercisePickerDialog");
-    expect(controller).not.toContain("MotionCard");
     expect(runtimeModel).not.toContain('from "react"');
     expect(runtimeModel).not.toContain("getActiveSessionStore");
     expect(runtimeModel).not.toContain("activeSessionClock");
@@ -141,15 +143,13 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(controller).toContain("const userId = user?.id ?? null");
     expect(controller).toContain("const sourceKind = source.kind");
     expect(controller).toContain("const sourceId =");
-    expect(controller).not.toContain(
-      "[mirrorExecutionState, session, toast, tr, user]",
-    );
+    expect(controller).not.toContain("[mirrorExecutionState, session, toast, tr, user]");
     expect(controller).not.toContain("user.id");
     expect(controller).not.toContain("react-hooks/exhaustive-deps");
     expect(directPage).not.toContain("react-hooks/exhaustive-deps");
   });
 
-  it("exposes explicit logical close and session-sticky geometry contracts", () => {
+  it("exposes logical close geometry, safe-area session actions, and final shell selectors", () => {
     expect(workoutSessionScreen).toContain("data-workout-session-close");
     expect(workoutSessionScreen).toContain("start-3");
     expect(workoutSessionScreen).not.toContain("end-3 top-3");
@@ -158,16 +158,20 @@ describe("AW-5 Active Workout UI core source contract", () => {
     expect(shell).toContain('placement="session"');
     for (const selector of [
       "data-aw5-session-title",
-      "data-aw5-metadata",
-      "data-aw5-pause-resume",
+      "data-aw10-session-menu",
+      "data-aw10-exercise-details-trigger",
+      "data-aw10-exercise-actions",
       "data-aw5-set-path",
       "data-aw5-rest-presets",
       "data-aw5-primary-editor",
       "data-aw5-feedback",
       "data-aw5-sticky-actions",
+      "data-aw5-primary-action",
     ]) {
       expect(shell).toContain(selector);
     }
+    expect(shell).toContain("env(safe-area-inset-bottom)");
+    expect(shell).toContain("MobileStickyActionsSpacer");
   });
 
   it("permits mock auth in production only for the explicit rendered-QA build", () => {
