@@ -22,6 +22,15 @@ describe("Workout History semantic metric presentation", () => {
     expect(JSON.stringify(running)).not.toContain("distance_meters");
   });
 
+  it("localizes semantic duration minutes for EN, DE, and AR", () => {
+    expect(formatWorkoutMetricValue("duration_seconds", 65, "en-US")).toBe("1 min 5 sec");
+    expect(formatWorkoutMetricValue("duration_seconds", 65, "de-DE")).toBe("1 Min. 5 Sek.");
+    const arabic = formatWorkoutMetricValue("duration_seconds", 65, "ar");
+    expect(arabic).toContain("د");
+    expect(arabic).toContain("ث");
+    expect(arabic).not.toContain("min");
+  });
+
   it("fails closed for unknown metric semantics", () => {
     expect(workoutMetricLabel("machine_metric_v9", "en-US")).toBeNull();
     expect(formatWorkoutMetricValue("machine_metric_v9", 42, "en-US")).toBeNull();
