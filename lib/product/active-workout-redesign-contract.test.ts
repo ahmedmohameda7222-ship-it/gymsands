@@ -26,9 +26,11 @@ describe("Active Workout final binding redesign authority", () => {
   it("authenticates owner-scoped secondary API reads", () => {
     for (const client of [previousClient, recordsClient]) {
       expect(client).toContain("supabase.auth.getSession()");
-      expect(client).toContain("Authorization: `Bearer ${");
       expect(client).toContain('env.useMockAuth ? "plaivra-local-qa"');
     }
+    expect(previousClient).toContain("Authorization: `Bearer ${await accessToken()}`");
+    expect(recordsClient).toContain("const authorization = `Bearer ${await accessToken()}`");
+    expect(recordsClient).toContain("Authorization: authorization");
   });
 
   it("separates session controls, exercise details, exercise actions, and set details", () => {
