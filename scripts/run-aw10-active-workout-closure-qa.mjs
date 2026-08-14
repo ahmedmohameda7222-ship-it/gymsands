@@ -133,16 +133,21 @@ async function completeCurrentSet(page, { skipRest = true } = {}) {
   }
 }
 
+async function openSessionMenu(page) {
+  const trigger = visible(page, "[data-aw10-session-menu] > summary");
+  await trigger.click({ timeout: 10_000 });
+  await page.waitForFunction(() => {
+    const menu = document.querySelector("[data-aw10-session-menu]");
+    return menu instanceof HTMLDetailsElement && menu.open;
+  }, undefined, { timeout: 5_000 });
+  return visible(page, "[data-aw10-session-menu]");
+}
+
 async function openReview(page) {
-  const mobileFinish = page.locator("[data-aw5-finish-action]:visible");
-  if (await mobileFinish.count()) {
-    await mobileFinish.first().click({ timeout: 10_000 });
-  } else {
-    await page.getByRole("button", { name: "Finish", exact: true })
-      .filter({ visible: true })
-      .last()
-      .click({ timeout: 10_000 });
-  }
+  const menu = await openSessionMenu(page);
+  const buttons = menu.locator("button:visible");
+  if (await buttons.count() < 2) throw new Error("Session menu does not expose Finish Workout.");
+  await buttons.nth(1).click({ timeout: 10_000 });
   await visible(page, "[data-aw7-review-surface]").waitFor({
     state: "visible",
     timeout: 15_000
@@ -168,7 +173,7 @@ async function completePartial(page) {
     state: "visible",
     timeout: 20_000
   });
-  await visible(page, "[data-aw8-performance]").waitFor({
+  await visible(page, "[data-aw10-terminal-completion]").waitFor({
     state: "visible",
     timeout: 10_000
   });
@@ -352,7 +357,7 @@ async function measure(page) {
       shellState: document.querySelector("[data-aw5-execution-shell]")?.getAttribute("data-aw5-session-state") ?? null,
       reviewCount: [...document.querySelectorAll("[data-aw7-review-surface]")].filter(isVisible).length,
       completionCount: [...document.querySelectorAll("[data-aw7-completion-surface]")].filter(isVisible).length,
-      performanceCount: [...document.querySelectorAll("[data-aw8-performance]")].filter(isVisible).length,
+      performanceCount: [...document.querySelectorAll("[data-aw10-terminal-completion]")].filter(isVisible).length,
       syncState: document.querySelector("[data-aw9-sync-state]")?.getAttribute("data-aw9-sync-state") ?? null,
       tabConflictCount: [...document.querySelectorAll("[data-aw9-tab-conflict]")].filter(isVisible).length,
       deviceConflictCount: [...document.querySelectorAll("[data-aw9-device-conflict]")].filter(isVisible).length,
@@ -399,7 +404,10 @@ async function prepareAction({ scenario, context, page, fixture, checks }) {
     return page;
   }
   if (scenario.action === "paused") {
-    await visible(page, "[data-aw5-pause-resume]").click({ timeout: 10_000 });
+    const menu = await openSessionMenu(page);
+    const buttons = menu.locator("button:visible");
+    if (!await buttons.count()) throw new Error("Session menu does not expose Pause Workout.");
+    await buttons.first().click({ timeout: 10_000 });
     await page.waitForFunction(() => document.querySelector("[data-aw5-execution-shell]")
       ?.getAttribute("data-aw5-session-state") === "paused", undefined, { timeout: 10_000 });
     checks.paused = true;
