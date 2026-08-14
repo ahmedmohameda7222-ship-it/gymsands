@@ -7,7 +7,9 @@ const details = readFileSync("components/workouts/active-workout/active-workout-
 const review = readFileSync("components/workouts/active-workout/active-workout-review-bridge.tsx", "utf8");
 const runtime = readFileSync("components/workouts/active-workout/active-workout-runtime-model.ts", "utf8");
 const previous = readFileSync("services/workouts/active-workout/previous-performance-server.ts", "utf8");
+const previousClient = readFileSync("services/workouts/active-workout/previous-performance-client.ts", "utf8");
 const records = readFileSync("app/api/workouts/active/[sessionId]/personal-records/route.ts", "utf8");
+const recordsClient = readFileSync("services/workouts/active-workout/terminal-personal-records-client.ts", "utf8");
 
 describe("Active Workout final binding redesign authority", () => {
   it("keeps broad history and display-name matching out of live execution", () => {
@@ -19,6 +21,14 @@ describe("Active Workout final binding redesign authority", () => {
     expect(previous).toContain('"plan_activity"');
     expect(previous).toContain('"plan_exercise"');
     expect(previous).toContain('"source_workout"');
+  });
+
+  it("authenticates owner-scoped secondary API reads", () => {
+    for (const client of [previousClient, recordsClient]) {
+      expect(client).toContain("supabase.auth.getSession()");
+      expect(client).toContain("Authorization: `Bearer ${");
+      expect(client).toContain('env.useMockAuth ? "plaivra-local-qa"');
+    }
   });
 
   it("separates session controls, exercise details, exercise actions, and set details", () => {
