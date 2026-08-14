@@ -162,8 +162,8 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(qa).toContain('{ name: "360x780", width: 360, height: 780 }');
     expect(qa).toContain("horizontalOverflowMatrix");
     expect(prQuality).toContain("name: ui-and-i18n");
-    expect(prQuality).toContain("for shard in $(seq 1 16)");
-    expect(prQuality).toContain('--shard="${shard}/16"');
+    expect(prQuality).toContain("for shard in $(seq 1 32)");
+    expect(prQuality).toContain('--shard="${shard}/32"');
     expect(prQuality).not.toContain("npm run test:i18n");
     expect(prQuality).toContain("npm run qa:rendered");
     expect(prQuality).toContain("npm run qa:train");
