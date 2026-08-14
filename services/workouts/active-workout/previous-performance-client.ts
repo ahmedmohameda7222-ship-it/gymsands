@@ -1,5 +1,7 @@
 "use client";
 
+import { env } from "@/lib/env";
+import { supabase } from "@/lib/supabase/client";
 import type {
   ActiveWorkoutPerformanceIdentity,
   ActiveWorkoutPreviousPerformanceRead
@@ -11,6 +13,13 @@ export type ActiveWorkoutPreviousPerformanceRequest = {
   setNumber?: number | null;
   signal?: AbortSignal;
 };
+
+async function accessToken() {
+  const session = supabase ? await supabase.auth.getSession() : null;
+  const token = session?.data.session?.access_token || (env.useMockAuth ? "plaivra-local-qa" : "");
+  if (!token) throw new Error("Please sign in again.");
+  return token;
+}
 
 export async function readActiveWorkoutPreviousPerformanceClient(
   input: ActiveWorkoutPreviousPerformanceRequest
@@ -27,7 +36,10 @@ export async function readActiveWorkoutPreviousPerformanceClient(
     cache: "no-store",
     credentials: "same-origin",
     signal: input.signal,
-    headers: { Accept: "application/json" }
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${await accessToken()}`
+    }
   });
   if (!response.ok) throw new Error("Previous performance is unavailable.");
   const body = await response.json() as { data?: ActiveWorkoutPreviousPerformanceRead | null };
