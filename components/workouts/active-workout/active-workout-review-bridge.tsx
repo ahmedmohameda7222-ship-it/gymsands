@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ChevronDown, Circle, RefreshCcw, Save } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, RefreshCcw, Save, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,20 +19,27 @@ import type {
   ActiveWorkoutTranslator
 } from "@/lib/i18n/active-workout";
 import { isolateBidiText } from "@/lib/i18n/active-workout";
+import {
+  refreshAndReadActiveWorkoutPersonalRecords,
+  type ActiveWorkoutCanonicalPersonalRecord
+} from "@/services/workouts/active-workout/terminal-personal-records-client";
 
+import { ActiveWorkoutMuscleLoadSection } from "./active-workout-muscle-load-section";
+import type { ActiveWorkoutMuscleLoadController } from "./active-workout-muscle-load-controller";
 import type {
   ActiveWorkoutReviewProjection,
   ActiveWorkoutSummary
 } from "./active-workout-runtime-model";
-import type { ActiveWorkoutMuscleLoadController } from "./active-workout-muscle-load-controller";
 
 export type ActiveWorkoutReviewBridgeProps = {
   open: boolean;
   busy: boolean;
   sessionAvailable: boolean;
+  sessionId?: string | null;
   durationMinutes: number;
   totalVolume: number;
-  previewPrs: readonly string[];
+  /** @deprecated Review no longer presents candidate PRs. */
+  previewPrs?: readonly string[];
   sessionNotes: string;
   onSessionNotesChange: (value: string) => void;
   onComplete: () => void;
@@ -58,19 +65,89 @@ function SummaryFact({ label, value }: { label: string; value: string }) {
   );
 }
 
+function canonicalRecordLabel(
+  record: ActiveWorkoutCanonicalPersonalRecord,
+  tr: ActiveWorkoutTranslator,
+  formatters: ActiveWorkoutFormatters
+) {
+  if (record.recordType === "highest_load") {
+    return tr("completion.highestWeightPr", {
+      name: isolateBidiText(record.exerciseName),
+      weight: formatters.measurement(record.recordValue, "kg")
+    });
+  }
+  if (record.recordType === "same_load_max_repetitions") {
+    return tr("completion.maxRepsPr", {
+      name: isolateBidiText(record.exerciseName),
+      reps: formatters.integer(record.recordValue)
+    });
+  }
+  if (record.recordType === "estimated_one_rep_max") {
+    return tr("completion.estimatedOneRepMaxPr", {
+      name: isolateBidiText(record.exerciseName),
+      weight: formatters.measurement(record.recordValue, "kg")
+    });
+  }
+  if (record.recordType === "exercise_session_volume") {
+    return tr("completion.volumePr", {
+      name: isolateBidiText(record.exerciseName),
+      volume: formatters.decimal(record.recordValue, 0)
+    });
+  }
+  return null;
+}
+
 function CompletionSurface({
   summary,
+  sessionId,
   dayName,
+  muscleLoadController,
   tr,
   formatters
 }: {
   summary: ActiveWorkoutSummary;
+  sessionId: string | null;
   dayName: string;
+  muscleLoadController: ActiveWorkoutMuscleLoadController;
   tr: ActiveWorkoutTranslator;
   formatters: ActiveWorkoutFormatters;
 }) {
+  const [recordState, setRecordState] = useState<"pending" | "loaded" | "unavailable">(
+    sessionId ? "pending" : "unavailable"
+  );
+  const [records, setRecords] = useState<ActiveWorkoutCanonicalPersonalRecord[]>([]);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setRecordState("unavailable");
+      setRecords([]);
+      return;
+    }
+    const controller = new AbortController();
+    setRecordState("pending");
+    refreshAndReadActiveWorkoutPersonalRecords(sessionId, controller.signal)
+      .then((next) => {
+        setRecords(next);
+        setRecordState("loaded");
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setRecords([]);
+        setRecordState("unavailable");
+      });
+    return () => controller.abort();
+  }, [sessionId]);
+
+  const localizedRecords = records.flatMap((record) => {
+    const label = canonicalRecordLabel(record, tr, formatters);
+    return label ? [{ ...record, label }] : [];
+  });
+  const showVolume = summary.performance && summary.performance.externalLoadVolume > 0;
+  const showAverageRpe = summary.performance?.averageRpe !== null
+    && summary.performance?.averageRpe !== undefined;
+
   return (
-    <div data-aw5-completed-summary data-aw7-completed-summary data-aw10-terminal-completion className="mx-auto w-full max-w-2xl">
+    <div data-aw5-completed-summary data-aw7-completed-summary data-aw10-terminal-completion className="mx-auto w-full max-w-3xl">
       <div className="border-b border-border/70 pb-6">
         <CheckCircle2 className="h-10 w-10 text-success" aria-hidden="true" />
         <h1 id="aw5-completed-summary-title" className="mt-4 text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-3xl">
@@ -83,6 +160,12 @@ function CompletionSurface({
         <SummaryFact label={tr("review.minutes")} value={formatters.measurement(summary.durationMinutes, "minutes", 0)} />
         <SummaryFact label={tr("review.completedSets")} value={formatters.ratio(summary.completedSets, summary.totalPlannedSets)} />
         <SummaryFact label={tr("review.completedExercises")} value={formatters.integer(summary.completedExercises)} />
+        {showVolume ? (
+          <SummaryFact label={tr("review.volume")} value={formatters.measurement(summary.performance!.externalLoadVolume, "kg")} />
+        ) : null}
+        {showAverageRpe ? (
+          <SummaryFact label={tr("completion.averageRpe")} value={formatters.decimal(summary.performance!.averageRpe!, 1)} />
+        ) : null}
       </div>
 
       {(summary.partialExercises.length || summary.skippedExercises.length || summary.replacedExercises.length) ? (
@@ -105,16 +188,41 @@ function CompletionSurface({
         </section>
       ) : null}
 
-      <section data-aw10-pr-post-save-only className="py-5" aria-live="polite">
-        <p className="text-sm text-muted-foreground">
-          {/* The old locally-derived summary.prs is intentionally not rendered. Canonical
-              Personal Records are a post-terminal, fail-soft authority and pending is
-              never represented as a fabricated zero. */}
-          {tr("completion.savedHistory")}
-        </p>
+      <section data-aw10-pr-post-save-only className="border-b border-border/70 py-5" aria-live="polite">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Trophy className="h-4 w-4" aria-hidden="true" />
+          {tr("review.personalRecords")}
+        </h2>
+        {recordState === "pending" ? (
+          <p className="mt-2 text-sm text-muted-foreground" role="status">{tr("common.loading")}</p>
+        ) : recordState === "unavailable" ? (
+          <p className="mt-2 text-sm text-muted-foreground">{tr("completion.metricUnavailable")}</p>
+        ) : localizedRecords.length ? (
+          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+            {localizedRecords.map((record) => <li key={record.id}>{record.label}</li>)}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">{tr("completion.neutralChange")}</p>
+        )}
       </section>
 
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+      <section data-aw7-final-muscle-load className="border-b border-border/70 py-5" aria-labelledby="aw7-final-muscle-load-title">
+        <h2 id="aw7-final-muscle-load-title" className="text-sm font-semibold text-foreground">
+          {tr("completion.finalMuscleLoad")}
+        </h2>
+        <div className="mt-3">
+          <ActiveWorkoutMuscleLoadSection controller={muscleLoadController} />
+        </div>
+      </section>
+
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+        {sessionId ? (
+          <Button asChild variant="outline" className="min-h-12 sm:min-w-44">
+            <Link href={`/workout-history/${encodeURIComponent(sessionId)}`} prefetch={false}>
+              {tr("completion.viewDetails")}
+            </Link>
+          </Button>
+        ) : null}
         <Button asChild className="min-h-12 sm:min-w-44">
           <Link href="/dashboard" prefetch={false}>{tr("completion.backToToday")}</Link>
         </Button>
@@ -127,6 +235,7 @@ export function ActiveWorkoutReviewBridge({
   open,
   busy,
   sessionAvailable,
+  sessionId = null,
   durationMinutes,
   totalVolume,
   sessionNotes,
@@ -140,6 +249,7 @@ export function ActiveWorkoutReviewBridge({
   completedSummary,
   review,
   dayName,
+  muscleLoadController,
   tr,
   formatters
 }: ActiveWorkoutReviewBridgeProps) {
@@ -179,8 +289,15 @@ export function ActiveWorkoutReviewBridge({
   if (completedSummary) {
     return (
       <div ref={completionSurfaceRef} data-aw5-completion-surface data-aw7-completion-surface role="main" aria-labelledby="aw5-completed-summary-title" tabIndex={-1} className="fixed inset-0 z-[70] overflow-y-auto bg-background outline-none">
-        <div className="mx-auto flex min-h-dvh w-full items-center px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 lg:py-10">
-          <CompletionSurface summary={completedSummary} dayName={dayName} tr={tr} formatters={formatters} />
+        <div className="mx-auto flex min-h-dvh w-full items-start px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 lg:py-10">
+          <CompletionSurface
+            summary={completedSummary}
+            sessionId={sessionId}
+            dayName={dayName}
+            muscleLoadController={muscleLoadController}
+            tr={tr}
+            formatters={formatters}
+          />
         </div>
       </div>
     );
@@ -266,7 +383,7 @@ export function ActiveWorkoutReviewBridge({
 
             <section className="grid grid-cols-2 gap-4 border-y border-border/70 py-4 sm:grid-cols-3">
               <SummaryFact label={tr("review.minutes")} value={formatters.measurement(durationMinutes, "minutes", 0)} />
-              <SummaryFact label={tr("review.volume")} value={formatters.measurement(totalVolume, "kg")} />
+              {totalVolume > 0 ? <SummaryFact label={tr("review.volume")} value={formatters.measurement(totalVolume, "kg")} /> : null}
               <SummaryFact label={tr("review.completedExercises")} value={formatters.integer(review.completedExercises)} />
             </section>
 
