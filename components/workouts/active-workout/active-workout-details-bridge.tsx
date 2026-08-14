@@ -59,8 +59,10 @@ export type ActiveWorkoutDetailsBridgeProps = {
   busy: boolean;
   tr: ActiveWorkoutTranslator;
   formatters: ActiveWorkoutFormatters;
+  /** @deprecated Reopen belongs to Review, not Set Details. */
   legacyReopenSetLabel: string;
   onApplyPreviousSet: () => void;
+  /** @deprecated Reopen belongs to Review, not Set Details. */
   onRestartSet: () => void;
   onUpdateSet: (patch: Partial<ActiveWorkoutSetState>) => void;
   muscleLoadController: ActiveWorkoutMuscleLoadController;
@@ -71,6 +73,7 @@ export type ActiveWorkoutDetailsBridgeProps = {
   onSkipExercise: () => void;
   isSavingAlternative: boolean;
   workoutContext: Record<string, unknown>;
+  /** @deprecated Timer reset is not a Set Details field. */
   onResetTimer: () => void;
   sessionSourceId: string;
   replacementPickerOpen: boolean;
@@ -95,9 +98,7 @@ export function ActiveWorkoutDetailsBridge({
   busy,
   tr,
   formatters,
-  legacyReopenSetLabel,
   onApplyPreviousSet,
-  onRestartSet,
   onUpdateSet,
   muscleLoadController,
   activeAlternatives,
@@ -107,7 +108,6 @@ export function ActiveWorkoutDetailsBridge({
   onSkipExercise,
   isSavingAlternative,
   workoutContext,
-  onResetTimer,
   sessionSourceId,
   replacementPickerOpen,
   onReplacementPickerOpenChange,
@@ -184,22 +184,21 @@ export function ActiveWorkoutDetailsBridge({
                   {tr("details.exerciseOverview")}
                 </h3>
                 <p className="mt-2 text-lg font-semibold"><bdi>{activeExercise.exercise.exercise_name}</bdi></p>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  <bdi dir="auto">{currentInstructions}</bdi>
-                </p>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  {tr("details.currentSetContext", {
-                    set: formatters.integer(activeSet.setNumber),
-                    planned: activeSet.plannedReps ?? "-"
-                  })}
-                </p>
+                {currentInstructions.trim() ? (
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold">{tr("details.instructions")}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                      <bdi dir="auto">{currentInstructions}</bdi>
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="mt-4">
                   <p className="text-sm font-semibold">{tr("exercise.previousPerformance")}</p>
                   {previousPerformance ? (
                     <div className="mt-1 space-y-1 text-sm text-muted-foreground">
                       {previousPerformance.lastBestSet ? (
-                        <p>{tr("details.previousBest", { value: previousPerformance.lastBestSet })}</p>
+                        <p>{previousPerformance.lastBestSet}</p>
                       ) : null}
                       {previousPerformance.lastPerformedAt ? (
                         <p>{tr("details.previousDate", {
@@ -209,19 +208,21 @@ export function ActiveWorkoutDetailsBridge({
                     </div>
                   ) : (
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {tr("exercise.noPreviousSetDescription")}
+                      {tr("exercise.noPreviousPerformance")}
                     </p>
                   )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 min-h-11"
-                    onClick={onApplyPreviousSet}
-                    disabled={Boolean(activeSet.completedAt) || busy}
-                  >
-                    {tr("exercise.previousSet")}
-                  </Button>
+                  {previousPerformance ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 min-h-11"
+                      onClick={onApplyPreviousSet}
+                      disabled={Boolean(activeSet.completedAt) || busy}
+                    >
+                      {tr("exercise.useValues")}
+                    </Button>
+                  ) : null}
                 </div>
 
                 <div
@@ -254,6 +255,7 @@ export function ActiveWorkoutDetailsBridge({
 
               <section
                 data-aw6-details-current-set
+                data-aw10-set-details-exact
                 aria-labelledby="aw6-details-current-set-title"
                 className="scroll-mt-4 py-5"
               >
@@ -356,16 +358,6 @@ export function ActiveWorkoutDetailsBridge({
                     />
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {activeSet.completedAt ? (
-                    <Button type="button" variant="outline" onClick={onRestartSet} disabled={busy}>
-                      {legacyReopenSetLabel}
-                    </Button>
-                  ) : null}
-                  <Button type="button" variant="outline" onClick={onResetTimer} disabled={busy}>
-                    {tr("actions.resetWorkoutTimer")}
-                  </Button>
-                </div>
               </section>
 
               <section
@@ -452,7 +444,7 @@ export function ActiveWorkoutDetailsBridge({
                     className="mt-3"
                     actions={[{
                       type: "replace_exercise",
-                      label: tr("actions.askPlaivraReplacement"),
+                      label: tr("chatGPT.ask"),
                       description: tr("chatGPT.replaceDescription")
                     }]}
                     sourceType="plan_exercise"
@@ -478,7 +470,7 @@ export function ActiveWorkoutDetailsBridge({
                   tabIndex={-1}
                   className="text-base font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {tr("details.assistance")}
+                  {tr("chatGPT.ask")}
                 </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {tr("chatGPT.actionsDescription")}
