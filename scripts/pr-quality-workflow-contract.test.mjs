@@ -71,12 +71,23 @@ test("UI job is selected only by rendered outputs", () => {
   assert.doesNotMatch(ui, /if: needs\.classify\.outputs\.ui == 'true'/);
 });
 
-test("automatic PR Quality owns one complete unit suite with bounded worker lifetime", () => {
+test("automatic PR Quality owns one complete unit suite with fail-closed bounded worker lifetime", () => {
   const core = jobSection("core", "database");
   const ui = jobSection("ui", "ci-contracts");
   assert.match(core, /for shard in \$\(seq 1 32\)/);
+  assert.match(core, /check_name="unit-\$\{shard\}-of-32"/);
   assert.match(core, /\.\/node_modules\/\.bin\/vitest run --config vitest\.unit\.config\.mjs/);
   assert.match(core, /--shard="\$\{shard\}\/32"/);
+  assert.match(core, /shard_log="ci-reports\/\$\{check_name\}\.log"/);
+  assert.match(core, /grep -Eq "heap out of memory\|Allocation failed - JavaScript heap out of memory" "\$shard_log"/);
+  assert.match(core, /if ! grep -Eq[\s\S]*then\n\s+exit 1\n\s+fi/);
+  assert.match(core, /\.\/node_modules\/\.bin\/vitest list --config vitest\.unit\.config\.mjs/);
+  assert.match(core, /--filesOnly --static-parse/);
+  assert.match(core, /test "\$\{#shard_files\[@\]\}" -gt 0/);
+  assert.match(core, /for file in "\$\{shard_files\[@\]\}"/);
+  assert.match(core, /--name "unit-\$\{shard\}-of-32-file-\$\{file_index\}"/);
+  assert.match(core, /\.\/node_modules\/\.bin\/vitest run --config vitest\.unit\.config\.mjs "\$file"/);
+  assert.doesNotMatch(core, /\|\|\s*true/);
   assert.doesNotMatch(workflow, /npm run test:i18n/);
   assert.doesNotMatch(workflow, /npm run test:workout-history(?:\s|$)/);
   assert.doesNotMatch(workflow, /Legacy workflow-text contracts/);
