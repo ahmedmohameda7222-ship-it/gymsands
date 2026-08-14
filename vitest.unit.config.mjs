@@ -1,16 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-// The full unit suite has grown beyond the default V8 worker heap while all
-// assertions remain green. Vitest forks inherit NODE_OPTIONS from this config
-// process, so give only unit-test workers bounded headroom without changing
-// test semantics or broad workflow resource policy.
-const unitWorkerHeap = "--max-old-space-size=5120";
-if (!process.env.NODE_OPTIONS?.includes("--max-old-space-size")) {
-  process.env.NODE_OPTIONS = [process.env.NODE_OPTIONS, unitWorkerHeap]
-    .filter(Boolean)
-    .join(" ");
-}
-
 export default defineConfig({
   test: {
     globals: true,
