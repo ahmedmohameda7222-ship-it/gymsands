@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ActiveWorkoutPerformanceIdentity =
   | { kind: "plan_activity"; value: string }
+  | { kind: "plan_exercise"; value: string }
   | { kind: "source_workout"; value: string };
 
 export type ActiveWorkoutPreviousPerformanceRead = {
@@ -41,9 +42,13 @@ export async function readActiveWorkoutPreviousPerformance(
     .eq("workout_sessions.status", "completed")
     .not("completed_at", "is", null);
 
-  query = identity.kind === "plan_activity"
-    ? query.eq("plan_activity_id", identity.value)
-    : query.eq("source_workout_id", identity.value);
+  if (identity.kind === "plan_activity") {
+    query = query.eq("plan_activity_id", identity.value);
+  } else if (identity.kind === "plan_exercise") {
+    query = query.eq("plan_exercise_id", identity.value);
+  } else {
+    query = query.eq("source_workout_id", identity.value);
+  }
 
   if (options.excludeSessionId) query = query.neq("workout_session_id", options.excludeSessionId);
   if (options.setNumber && Number.isInteger(options.setNumber) && options.setNumber > 0) {
