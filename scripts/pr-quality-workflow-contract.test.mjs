@@ -71,10 +71,12 @@ test("UI job is selected only by rendered outputs", () => {
   assert.doesNotMatch(ui, /if: needs\.classify\.outputs\.ui == 'true'/);
 });
 
-test("automatic PR Quality owns no duplicated unit subsets", () => {
+test("automatic PR Quality owns one complete unit suite with bounded worker lifetime", () => {
   const core = jobSection("core", "database");
   const ui = jobSection("ui", "ci-contracts");
-  assert.match(core, /npm run test:unit/);
+  assert.match(core, /for shard in \$\(seq 1 16\)/);
+  assert.match(core, /\.\/node_modules\/\.bin\/vitest run --config vitest\.unit\.config\.mjs/);
+  assert.match(core, /--shard="\$\{shard\}\/16"/);
   assert.doesNotMatch(workflow, /npm run test:i18n/);
   assert.doesNotMatch(workflow, /npm run test:workout-history(?:\s|$)/);
   assert.doesNotMatch(workflow, /Legacy workflow-text contracts/);
@@ -90,7 +92,7 @@ test("all rendered commands remain explicit and individually conditional", () =>
   const commands = [
     ["General rendered QA", "rendered_general", "npm run qa:rendered"],
     ["Train rendered QA", "rendered_train", "npm run qa:train"],
-    ["Active Workout rendered QA", "rendered_active_workout", "npm run qa:active-workout:aw10"],
+    ["Active Workout rendered QA", "rendered_active_workout", "node scripts/run-aw10-active-workout-closure-qa-entry.mjs"],
     ["Workout History rendered QA", "rendered_workout_history", "npm run qa:workout-history"],
   ];
   for (const [stepName, output, command] of commands) {
