@@ -9,7 +9,7 @@ export type WorkoutMetricLanguage = "en" | "de" | "ar";
 const COPY = {
   en: {
     metrics: { repetitions: "Repetitions", external_load_kg: "Load", bodyweight_kg: "Body weight", assistance_load_kg: "Assistance", duration_seconds: "Duration", distance_meters: "Distance", rounds: "Rounds" },
-    units: { kg: "kg", repetitions: "reps", rounds: "rounds", meters: "m", kilometers: "km", seconds: "sec" },
+    units: { kg: "kg", repetitions: "reps", rounds: "rounds", meters: "m", kilometers: "km", minutes: "min", seconds: "sec" },
     sides: { bilateral: "Both sides", left: "Left", right: "Right" },
     setTypes: { warmup: "Warm-up", working: "Working set", normal: "Normal set", failure: "To failure", drop: "Drop set", backoff: "Back-off set", amrap: "AMRAP", timed: "Timed", other: "Other" },
     segments: { primary: "Primary effort", drop: "Drop", rest_pause: "Rest-pause", other: "Additional effort" },
@@ -18,7 +18,7 @@ const COPY = {
   },
   de: {
     metrics: { repetitions: "Wiederholungen", external_load_kg: "Last", bodyweight_kg: "Körpergewicht", assistance_load_kg: "Unterstützung", duration_seconds: "Dauer", distance_meters: "Distanz", rounds: "Runden" },
-    units: { kg: "kg", repetitions: "Wdh.", rounds: "Runden", meters: "m", kilometers: "km", seconds: "Sek." },
+    units: { kg: "kg", repetitions: "Wdh.", rounds: "Runden", meters: "m", kilometers: "km", minutes: "Min.", seconds: "Sek." },
     sides: { bilateral: "Beide Seiten", left: "Links", right: "Rechts" },
     setTypes: { warmup: "Aufwärmen", working: "Arbeitssatz", normal: "Normaler Satz", failure: "Bis zum Versagen", drop: "Dropsatz", backoff: "Back-off-Satz", amrap: "AMRAP", timed: "Auf Zeit", other: "Sonstiger Satz" },
     segments: { primary: "Hauptbelastung", drop: "Reduzierung", rest_pause: "Pause-Wiederholung", other: "Zusätzliche Belastung" },
@@ -27,7 +27,7 @@ const COPY = {
   },
   ar: {
     metrics: { repetitions: "التكرارات", external_load_kg: "الحمل", bodyweight_kg: "وزن الجسم", assistance_load_kg: "المساعدة", duration_seconds: "المدة", distance_meters: "المسافة", rounds: "الجولات" },
-    units: { kg: "كجم", repetitions: "تكرار", rounds: "جولة", meters: "م", kilometers: "كم", seconds: "ث" },
+    units: { kg: "كجم", repetitions: "تكرار", rounds: "جولة", meters: "م", kilometers: "كم", minutes: "د", seconds: "ث" },
     sides: { bilateral: "الجانبان", left: "اليسار", right: "اليمين" },
     setTypes: { warmup: "إحماء", working: "مجموعة عمل", normal: "مجموعة عادية", failure: "حتى الفشل", drop: "مجموعة إسقاط", backoff: "مجموعة تخفيف", amrap: "أقصى تكرارات", timed: "موقّتة", other: "مجموعة أخرى" },
     segments: { primary: "الجهد الرئيسي", drop: "إسقاط", rest_pause: "راحة قصيرة", other: "جهد إضافي" },
@@ -98,7 +98,7 @@ export function formatWorkoutMetricValue(metricKey: string, value: number, local
   if (metricKey === "duration_seconds") {
     const minutes = Math.floor(value / 60);
     const seconds = Math.round(value % 60);
-    return minutes ? `${number(minutes, locale, 0)} min${seconds ? ` ${number(seconds, locale, 0)} ${copy.units.seconds}` : ""}` : `${number(seconds, locale, 0)} ${copy.units.seconds}`;
+    return minutes ? `${number(minutes, locale, 0)} ${copy.units.minutes}${seconds ? ` ${number(seconds, locale, 0)} ${copy.units.seconds}` : ""}` : `${number(seconds, locale, 0)} ${copy.units.seconds}`;
   }
   if (metricKey === "distance_meters") return value >= 1000
     ? `${number(value / 1000, locale, 2)} ${copy.units.kilometers}`
