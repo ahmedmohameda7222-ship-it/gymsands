@@ -47,13 +47,13 @@ describe("AW-1B Active Workout surface contract", () => {
       "amrap",
       "timed",
       "other",
-      "newBest",
     ] as const) {
       for (const messages of localeMessages)
         expect(messages.ActiveWorkout.set[key]?.trim()).not.toBe("");
       expect(activeWorkoutSurface).toContain(`tr("set.${key}"`);
     }
     for (const messages of localeMessages) {
+      expect(messages.ActiveWorkout.set.newBest?.trim()).not.toBe("");
       expect(messages.ActiveWorkout.actions.machineOccupied.trim()).not.toBe(
         "",
       );
@@ -62,6 +62,7 @@ describe("AW-1B Active Workout surface contract", () => {
         expect(messages.ActiveWorkout.units[unit]?.trim()).not.toBe("");
       }
     }
+    expect(activeWorkoutSurface).not.toContain('tr("set.newBest"');
     expect(details).toContain(
       '<option value="machine_taken">{tr("actions.machineOccupied")}</option>',
     );
@@ -104,13 +105,20 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(minimizedBar).toContain('dir="ltr"');
   });
 
-  it("routes visible Active Workout measurements and counts through the formatter contract", () => {
+  it("routes visible Active Workout measurements and canonical records through the formatter contract", () => {
     expect(review).toContain('formatters.measurement(totalVolume, "kg")');
     expect(review).toContain(
       'formatters.measurement(durationMinutes, "minutes", 0)',
     );
-    expect(review).toContain("formatters.ratio(review.completedSets, review.totalSets)");
-    expect(review).toContain("formatters.integer(previewPrs.length)");
+    expect(review).toContain(
+      "formatters.ratio(summary.completedSets, summary.totalPlannedSets)",
+    );
+    expect(review).toContain("formatters.integer(summary.completedExercises)");
+    expect(review).toContain('formatters.measurement(record.recordValue, "kg")');
+    expect(review).toContain("formatters.integer(record.recordValue)");
+    expect(review).toContain("formatters.decimal(record.recordValue, 0)");
+    expect(review).toContain("refreshAndReadActiveWorkoutPersonalRecords");
+    expect(review).not.toContain("formatters.integer(previewPrs.length)");
     expect(controller).toContain("formatSetNumber={formatters.integer}");
     expect(controller).toContain(
       "clampWorkoutProgress(completedSets, totalSets)",
