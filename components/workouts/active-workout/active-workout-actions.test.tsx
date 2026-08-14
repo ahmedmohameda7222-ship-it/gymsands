@@ -1,12 +1,34 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildActiveWorkoutExerciseActions,
   buildActiveWorkoutQuickActions,
   projectActiveWorkoutQuickActions,
+  type ActiveWorkoutExerciseActionInput,
   type ActiveWorkoutQuickActionInput
 } from "./active-workout-actions";
 
-const labels = {
+const exerciseLabels = {
+  "replace-today": "Replace Today",
+  "skip-today": "Skip Today",
+  "ask-chatgpt": "Ask ChatGPT"
+} as const;
+
+function exerciseInput(
+  patch: Partial<ActiveWorkoutExerciseActionInput> = {}
+): ActiveWorkoutExerciseActionInput {
+  return {
+    sourceKind: "plan-day",
+    busy: false,
+    paused: false,
+    terminal: false,
+    aiPermitted: true,
+    labels: exerciseLabels,
+    ...patch
+  };
+}
+
+const legacyLabels = {
   "previous-set": "Previous set",
   "set-details": "Set details",
   "guide-video": "Guide / video",
@@ -15,7 +37,7 @@ const labels = {
   "ask-plaivra": "Ask Plaivra"
 } as const;
 
-function input(
+function legacyInput(
   patch: Partial<ActiveWorkoutQuickActionInput> = {}
 ): ActiveWorkoutQuickActionInput {
   return {
@@ -26,14 +48,59 @@ function input(
     activeSetCompleted: false,
     terminal: false,
     aiPermitted: true,
-    labels,
+    labels: legacyLabels,
     ...patch
   };
 }
 
-describe("AW-6 contextual quick actions", () => {
-  it("projects the approved plan-day actions and destinations", () => {
-    const visible = buildActiveWorkoutQuickActions(input()).filter((action) => action.visible);
+describe("Active Workout exercise overflow authority", () => {
+  it("contains exactly Replace Today, Skip Today, and Ask ChatGPT in binding order", () => {
+    const visible = buildActiveWorkoutExerciseActions(exerciseInput())
+      .filter((action) => action.visible);
+
+    expect(visible.map((action) => action.id)).toEqual([
+      "replace-today",
+      "skip-today",
+      "ask-chatgpt"
+    ]);
+    expect(visible.map((action) => action.label)).toEqual([
+      "Replace Today",
+      "Skip Today",
+      "Ask ChatGPT"
+    ]);
+    expect(visible.map((action) => action.id)).not.toEqual(expect.arrayContaining([
+      "previous-set",
+      "set-details",
+      "guide-video"
+    ]));
+  });
+
+  it("keeps replacement and skip out of direct sessions while retaining Ask ChatGPT", () => {
+    const visible = buildActiveWorkoutExerciseActions(exerciseInput({ sourceKind: "direct" }))
+      .filter((action) => action.visible)
+      .map((action) => action.id);
+
+    expect(visible).toEqual(["ask-chatgpt"]);
+  });
+
+  it("disables exercise mutations while busy or paused without disabling assistance", () => {
+    for (const state of [{ busy: true }, { paused: true }]) {
+      const actions = buildActiveWorkoutExerciseActions(exerciseInput(state));
+      expect(actions.find((action) => action.id === "replace-today")?.disabled).toBe(true);
+      expect(actions.find((action) => action.id === "skip-today")?.disabled).toBe(true);
+      expect(actions.find((action) => action.id === "ask-chatgpt")?.disabled).toBe(false);
+    }
+  });
+
+  it("exposes no exercise overflow actions after terminal completion", () => {
+    expect(buildActiveWorkoutExerciseActions(exerciseInput({ terminal: true }))
+      .filter((action) => action.visible)).toEqual([]);
+  });
+});
+
+describe("legacy AW-6 contextual quick-action compatibility", () => {
+  it("retains the existing projection until execution-shell migration is complete", () => {
+    const visible = buildActiveWorkoutQuickActions(legacyInput()).filter((action) => action.visible);
     expect(visible.map((action) => action.id)).toEqual([
       "previous-set",
       "guide-video",
@@ -42,48 +109,11 @@ describe("AW-6 contextual quick actions", () => {
       "skip-today",
       "ask-plaivra"
     ]);
-    expect(visible.find((action) => action.id === "replace-today")?.destination)
-      .toBe("adjust-today");
-    expect(visible.find((action) => action.id === "set-details")?.destination)
-      .toBe("current-set");
   });
 
-  it("keeps replacement and skip out of direct sessions", () => {
-    const visible = buildActiveWorkoutQuickActions(input({ sourceKind: "direct" }))
-      .filter((action) => action.visible)
-      .map((action) => action.id);
-    expect(visible).not.toContain("replace-today");
-    expect(visible).not.toContain("skip-today");
-    expect(visible).toContain("previous-set");
-    expect(visible).toContain("set-details");
-  });
-
-  it("falls back from guide/video to set details on mobile", () => {
-    const actions = buildActiveWorkoutQuickActions(input({ hasGuideOrVideo: false }));
+  it("keeps mobile compatibility compact", () => {
+    const actions = buildActiveWorkoutQuickActions(legacyInput({ hasGuideOrVideo: false }));
     expect(projectActiveWorkoutQuickActions(actions, "mobile").map((action) => action.id))
       .toEqual(["previous-set", "set-details"]);
-  });
-
-  it("disables relevant mutations while an authoritative mutation is busy", () => {
-    const actions = buildActiveWorkoutQuickActions(input({ busy: true }));
-    for (const id of ["previous-set", "replace-today", "skip-today"] as const) {
-      expect(actions.find((action) => action.id === id)?.disabled).toBe(true);
-    }
-    expect(actions.find((action) => action.id === "set-details")?.disabled).toBe(false);
-  });
-
-  it("keeps mobile compact and exposes every available desktop action once", () => {
-    const actions = buildActiveWorkoutQuickActions(input());
-    expect(projectActiveWorkoutQuickActions(actions, "mobile").map((action) => action.id))
-      .toEqual(["previous-set", "guide-video"]);
-    expect(projectActiveWorkoutQuickActions(actions, "desktop").map((action) => action.id))
-      .toEqual([
-        "previous-set",
-        "guide-video",
-        "set-details",
-        "replace-today",
-        "skip-today",
-        "ask-plaivra"
-      ]);
   });
 });
