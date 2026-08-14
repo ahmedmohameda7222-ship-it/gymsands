@@ -82,6 +82,7 @@ if (!underlyingFailure) {
   const offlineRefresh = actionResults("offline-refresh");
   const reconnect = actionResults("reconnect");
   const terminalPending = actionResults("terminal-pending");
+  const serverTerminal = actionResults("server-terminal");
   const conflictServer = actionResults("conflict-server");
   const conflictLocal = actionResults("conflict-local");
 
@@ -97,6 +98,9 @@ if (!underlyingFailure) {
     terminalPending:
       terminalPending.length === 1
       && terminalPending.every((result) => successful(result) && result.checks?.terminalPending === true && result.checks?.pendingBefore > 0 && result.measured?.syncState === "terminal_pending"),
+    serverTerminalWins:
+      serverTerminal.length === 1
+      && serverTerminal.every((result) => successful(result) && result.checks?.serverTerminalWins === true && result.checks?.pendingBefore > 0 && result.checks?.pendingAfter === 0),
     conflictChoices:
       conflictServer.length === 1
       && conflictServer.every((result) => successful(result) && result.checks?.dataConflictSeen === true && result.checks?.pendingAfter === 0 && result.checks?.resolution === "server")
