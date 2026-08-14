@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const runner = readFileSync("scripts/run-aw10-active-workout-closure-qa.mjs", "utf8");
+const entry = readFileSync("scripts/run-aw10-active-workout-closure-qa-entry.mjs", "utf8");
 const fixture = readFileSync("scripts/train-layout-qa-fixture.mjs", "utf8");
 const workflow = readFileSync(".github/workflows/pr-quality.yml", "utf8");
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
@@ -59,6 +60,18 @@ describe("AW-10 canonical Active Workout closure", () => {
     expect(runner).toContain('takeoverButton instanceof HTMLButtonElement && !takeoverButton.disabled');
   });
 
+  it("classifies only aborted Previous Performance enrichment and preserves fail-closed coverage", () => {
+    expect(entry).toContain('item.error !== "net::ERR_ABORTED"');
+    expect(entry).toContain('url.pathname === "/api/workouts/active/previous-performance"');
+    expect(entry).toContain('url.searchParams.has("kind")');
+    expect(entry).toContain('url.searchParams.has("identity")');
+    expect(entry).toContain("unexpectedRequests.length === 0");
+    expect(entry).toContain("report.results.length !== 30");
+    expect(entry).toContain("offlineDurability");
+    expect(entry).toContain("terminalPending");
+    expect(entry).toContain("throw originalFailure");
+  });
+
   it("runs once in scoped PR Quality and uploads the selected evidence artifact", () => {
     expect(workflow.match(/npm run qa:active-workout:aw10/g)).toHaveLength(1);
     expect(workflow.match(/ci-reports\/active-workout-aw10-evidence/g)).toHaveLength(2);
@@ -66,7 +79,7 @@ describe("AW-10 canonical Active Workout closure", () => {
       "QA_AW10_EVIDENCE_DIR: ci-reports/active-workout-aw10-evidence",
     );
     expect(packageJson.scripts["qa:active-workout:aw10"]).toBe(
-      "node scripts/run-aw10-active-workout-closure-qa.mjs",
+      "node scripts/run-aw10-active-workout-closure-qa-entry.mjs",
     );
   });
 });
