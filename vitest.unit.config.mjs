@@ -1,5 +1,8 @@
 import { defineConfig } from "vitest/config";
 
+const identityTest = "components/workouts/active-workout/active-workout-core-session.identity.test.tsx";
+const isolateIdentityHarness = process.argv.includes(identityTest) && !process.argv.includes("--exclude");
+
 export default defineConfig({
   test: {
     globals: true,
@@ -11,7 +14,10 @@ export default defineConfig({
       "components/**/*.test.ts",
       "components/**/*.test.tsx"
     ],
-    exclude: ["**/*.integration.test.ts"]
+    exclude: ["**/*.integration.test.ts"],
+    setupFiles: isolateIdentityHarness
+      ? ["./components/workouts/active-workout/active-workout-core-session.identity.setup.ts"]
+      : []
   },
   resolve: {
     alias: {
