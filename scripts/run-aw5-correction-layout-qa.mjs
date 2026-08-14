@@ -187,6 +187,28 @@ async function installSecondaryRoutes(context, scenario) {
       maximum_value: 1000000,
       supports_side: false
     };
+    const sets = [1, 2].map((setOrder) => ({
+      id: setIds[setOrder - 1],
+      snapshot_item_id: itemId,
+      snapshot_id: snapshotId,
+      workout_session_id: contract.activeSessionId,
+      user_id: contract.userId,
+      set_order: setOrder,
+      performed_order_hint: null,
+      set_type: "working",
+      target_mode: setOrder === 1 ? "distance" : "custom",
+      side_mode: "none",
+      rest_seconds: 90,
+      tempo_target: null,
+      schema_version: 1,
+      created_at: "2026-07-27T08:00:00.000Z"
+    }));
+    await context.route(/\/rest\/v1\/workout_session_prescription_sets(?:\?.*)?$/, (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "content-range": "0-1/2" },
+      body: JSON.stringify(sets)
+    }));
     await context.route(/\/rest\/v1\/workout_session_prescription_metric_targets(?:\?.*)?$/, (route) => route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -246,11 +268,14 @@ async function enterReview(page) {
 
 async function finishPartial(page) {
   const actions = visible(page, "[data-aw7-review-actions]");
-  const buttons = actions.locator("button:visible");
-  await buttons.last().click({ timeout: 10_000 });
+  const finish = actions.getByRole("button", { name: /finish/i }).first();
+  if (!await finish.count()) throw new Error("Review does not expose a semantic Finish action.");
+  await finish.click({ timeout: 10_000 });
   const confirmation = visible(page, "[data-aw7-partial-confirmation]");
   await confirmation.waitFor({ state: "visible", timeout: 10_000 });
-  await confirmation.locator("button:visible").last().click({ timeout: 10_000 });
+  const confirmFinish = confirmation.getByRole("button", { name: /finish/i }).first();
+  if (!await confirmFinish.count()) throw new Error("Partial confirmation does not expose a semantic Finish action.");
+  await confirmFinish.click({ timeout: 10_000 });
   await visible(page, "[data-aw7-completion-surface]").waitFor({ state: "visible", timeout: 20_000 });
 }
 
@@ -393,7 +418,11 @@ async function runScenario(browser, scenario) {
   const page = await context.newPage();
   page.on("pageerror", (error) => observation.failures.push(`pageerror: ${error.message}`));
   page.on("console", (message) => {
-    if (message.type() === "error") observation.failures.push(`console error: ${message.text()}`);
+    if (message.type() !== "error") return;
+    const text = message.text();
+    const expectedSecondaryFailure = (scenario.previous === "failure" || scenario.records === "failure")
+      && /Failed to load resource: the server responded with a status of 503/i.test(text);
+    if (!expectedSecondaryFailure) observation.failures.push(`console error: ${text}`);
   });
 
   try {
