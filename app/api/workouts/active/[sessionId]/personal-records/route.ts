@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { env } from "@/lib/env";
 import { requireUser } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { isUuid } from "@/lib/utils";
@@ -21,18 +22,27 @@ export type ActiveWorkoutCanonicalPersonalRecord = {
   achievedAt: string;
 };
 
+function isRenderedQaMockRequest(request: Request) {
+  return env.useMockAuth
+    && env.productionQaBuild
+    && request.headers.get("authorization")?.trim() === "Bearer plaivra-local-qa";
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ sessionId: string }> }
 ) {
   const limited = rateLimit(request, "active-workout-terminal-personal-records", 60, 60_000);
   if (limited) return limited;
-  const auth = await requireUser(request);
-  if (auth instanceof NextResponse) return auth;
   const { sessionId } = await context.params;
   if (!isUuid(sessionId)) {
     return NextResponse.json({ error: "Workout session is invalid." }, { status: 400, headers });
   }
+  if (isRenderedQaMockRequest(request)) {
+    return NextResponse.json({ data: [] }, { headers });
+  }
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
   const root = await auth.supabase
     .from("workout_sessions")
