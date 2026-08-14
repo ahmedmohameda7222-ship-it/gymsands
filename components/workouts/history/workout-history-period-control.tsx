@@ -48,14 +48,14 @@ export function WorkoutHistoryPeriodControl({
 
   return (
     <section className="border-y border-border/70 py-2" aria-label={tr("historyPageTitle")}>
-      <div className="flex gap-1 overflow-x-auto pb-1" role="group">
+      <div className="grid grid-cols-2 gap-1 sm:grid-cols-4" role="group" data-workout-history-period-controls>
         {modes.map((value) => (
           <Button
             key={value}
             type="button"
             size="sm"
             variant={mode === value ? "default" : "ghost"}
-            className="min-h-11 shrink-0 rounded-xl px-3"
+            className="h-auto min-h-11 min-w-0 whitespace-normal rounded-xl px-2 py-2 leading-tight"
             aria-pressed={mode === value}
             aria-expanded={value === "custom" ? customOpen : undefined}
             aria-controls={value === "custom" ? "workout-history-custom-period" : undefined}
