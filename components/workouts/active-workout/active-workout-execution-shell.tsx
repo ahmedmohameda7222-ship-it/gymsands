@@ -96,6 +96,10 @@ function PrimaryActionIcon({ kind }: { kind: ActiveWorkoutPrimaryActionKind }) {
   return <CheckCircle2 className="h-5 w-5" aria-hidden="true" />;
 }
 
+function actionById(actions: readonly ActiveWorkoutQuickAction[], id: ActiveWorkoutQuickAction["id"]) {
+  return actions.find((action) => action.id === id && action.visible);
+}
+
 export function ActiveWorkoutExecutionShell({
   direction,
   sessionLabel,
@@ -106,10 +110,6 @@ export function ActiveWorkoutExecutionShell({
   elapsedLabel,
   progress,
   miniHeatMap,
-  desktopMiniHeatMap,
-  muscleLoadStatusLabel,
-  mobileQuickActions,
-  desktopQuickActions,
   paused,
   busy,
   restActive,
@@ -153,405 +153,210 @@ export function ActiveWorkoutExecutionShell({
   onOpenDetails,
   onQuickAction,
   onAddThirtySeconds,
-  onStartRest
+  onStartRest,
+  desktopQuickActions
 }: ActiveWorkoutExecutionShellProps) {
   const progressPercent = Math.round(progress * 100);
   const resolvedPrimaryActionDisabled = primaryActionKind === "complete-set"
     ? busy || completed
     : primaryActionDisabled;
+  const previousSet = actionById(desktopQuickActions, "previous-set");
+  const setDetails = actionById(desktopQuickActions, "set-details");
+  const exerciseActions = [
+    actionById(desktopQuickActions, "replace-today"),
+    actionById(desktopQuickActions, "skip-today"),
+    actionById(desktopQuickActions, "ask-plaivra")
+  ].filter((action): action is ActiveWorkoutQuickAction => Boolean(action));
 
   return (
     <div
       data-aw5-execution-shell
+      data-aw10-execution-first
       data-aw5-session-state={paused ? "paused" : restActive ? "rest" : completed ? "completed" : "set-entry"}
       data-active-set-state
       data-active-set-number={currentSetNumber}
       data-active-set-persisted={persisted ? "true" : "false"}
       data-active-set-completed={completed ? "true" : "false"}
       data-active-set-has-details={hasDetails ? "true" : "false"}
-      className="mx-auto w-full max-w-6xl lg:pb-6"
+      className="mx-auto w-full max-w-3xl pb-4 lg:pb-8"
       dir={direction}
     >
       {completionContent}
 
       <header
         data-aw5-header
-        className="sticky top-0 z-30 -mx-4 border-b border-border/70 bg-background/95 py-3 pe-4 ps-[4.25rem] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:-mx-6 sm:pe-6 sm:ps-[4.75rem] lg:static lg:mx-0 lg:rounded-[var(--radius-xl)] lg:border lg:bg-card/90 lg:px-5 lg:py-4"
+        className="sticky top-0 z-30 -mx-4 border-b border-border/70 bg-background/95 py-3 pe-4 ps-[4.25rem] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:-mx-6 sm:pe-6 sm:ps-[4.75rem] lg:static lg:mx-0 lg:px-0"
       >
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <h1
-              data-aw5-session-title
-              className="truncate text-[15px] font-semibold leading-5 text-foreground"
-            >
-              <bdi>{sessionLabel}</bdi>
-            </h1>
-            <div
-              data-aw5-metadata
-              className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-4 text-muted-foreground"
-            >
-              <span>{exercisePositionLabel}</span>
-              <span>{setPositionLabel}</span>
-              <span dir="ltr" className="inline-flex items-center gap-1 tabular-nums">
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 data-aw5-session-title className="truncate text-sm font-semibold text-foreground">
+                <bdi>{sessionLabel}</bdi>
+              </h1>
+              <span dir="ltr" className="inline-flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground">
                 <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
                 {elapsedLabel}
               </span>
-              {restActive ? (
-                <span dir="ltr" className="font-semibold tabular-nums text-primary">
-                  {restLabel}
-                </span>
-              ) : null}
             </div>
+            <p className="mt-1 text-xs text-muted-foreground">{exercisePositionLabel}</p>
           </div>
-
-          <div data-aw5-mini-heat-map-slot className="lg:hidden">{miniHeatMap}</div>
+          <div data-aw5-mini-heat-map-slot>{miniHeatMap}</div>
+          <details className="relative shrink-0" data-aw10-session-menu>
+            <summary className="flex size-10 cursor-pointer list-none items-center justify-center rounded-md border border-border bg-background text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" aria-label={moreLabel}>
+              <Ellipsis className="h-5 w-5" aria-hidden="true" />
+            </summary>
+            <div className="absolute end-0 z-50 mt-2 w-52 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg">
+              <button type="button" className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-start text-sm hover:bg-muted" onClick={onPauseResume} disabled={busy}>
+                {paused ? <CirclePlay className="h-4 w-4" aria-hidden="true" /> : <CirclePause className="h-4 w-4" aria-hidden="true" />}
+                {paused ? resumeLabel : pauseLabel}
+              </button>
+              <button type="button" className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-start text-sm hover:bg-muted" onClick={onFinish} disabled={busy}>
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                {finishLabel}
+              </button>
+            </div>
+          </details>
         </div>
-
-        <div className="mt-2.5 flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <div
-              role="progressbar"
-              aria-label={completedSetsLabel}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={progressPercent}
-              className="h-1.5 overflow-hidden rounded-full bg-muted"
-            >
-              <div
-                className="h-full rounded-full bg-primary motion-safe:transition-[width] motion-safe:duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-              {completedSetsLabel}
-            </p>
+        <div className="mt-2.5">
+          <div role="progressbar" aria-label={completedSetsLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent} className="h-1 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${progressPercent}%` }} />
           </div>
-          <Button
-            data-aw5-pause-resume
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="min-h-10 shrink-0"
-            onClick={onPauseResume}
-            disabled={busy}
-            aria-label={paused ? resumeLabel : pauseLabel}
-          >
-            {paused
-              ? <CirclePlay className="h-4 w-4" aria-hidden="true" />
-              : <CirclePause className="h-4 w-4" aria-hidden="true" />}
-            {paused ? resumeLabel : pauseLabel}
-          </Button>
+          <p className="mt-1 text-[11px] text-muted-foreground">{completedSetsLabel}</p>
         </div>
       </header>
 
-      <main className="mt-3 grid items-start gap-4 sm:mt-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-6">
-        <section aria-labelledby="aw5-current-exercise" className="min-w-0">
-          <div className="border-b border-border/70 pb-3 sm:pb-4">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-primary">{currentSetLabel}</p>
-              <h2
-                id="aw5-current-exercise"
-                data-aw5-exercise-title
-                className="mt-1 text-[clamp(1.45rem,5.8vw,2.25rem)] font-semibold leading-[1.08] tracking-[-0.035em] text-foreground"
-              >
-                <bdi>{exerciseName}</bdi>
-              </h2>
-            </div>
-            <div
-              data-aw6-mobile-quick-actions
-              className="mt-3 grid grid-cols-3 gap-2 lg:hidden"
-            >
-              {mobileQuickActions.map((action) => (
-                <Button
-                  key={action.id}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="min-h-10 min-w-0 px-2 text-[11px]"
-                  onClick={(event) => onQuickAction(action, event.currentTarget)}
-                  disabled={action.disabled}
-                >
-                  <span className="truncate">{action.label}</span>
-                </Button>
-              ))}
-              <Button
-                data-active-set-details-trigger
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-10 min-w-0 px-2 text-[11px]"
-                aria-label={moreLabel}
-                onClick={(event) => onOpenDetails(event.currentTarget)}
-              >
-                <Ellipsis className="h-4 w-4" aria-hidden="true" />
-                <span className="truncate">{moreLabel}</span>
+      <main className="mt-4 sm:mt-6">
+        {paused ? (
+          <section data-aw10-paused-state className="flex min-h-[52vh] flex-col items-center justify-center text-center">
+            <CirclePause className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+            <p className="mt-4 text-sm font-semibold text-foreground">{pauseLabel}</p>
+            <Button type="button" className="mt-5 min-h-[52px] min-w-52" onClick={onPauseResume} disabled={busy}>
+              <CirclePlay className="h-5 w-5" aria-hidden="true" />
+              {resumeLabel}
+            </Button>
+          </section>
+        ) : restActive ? (
+          <section data-aw10-rest-state className="flex min-h-[52vh] flex-col items-center justify-center text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{restPresetSectionLabel}</p>
+            <p dir="ltr" className="mt-3 text-5xl font-semibold tabular-nums tracking-[-0.05em] text-foreground sm:text-6xl">{restLabel}</p>
+            <p className="mt-3 max-w-md text-sm text-muted-foreground">{nextContextLabel}</p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <Button type="button" variant="outline" className="min-h-11" onClick={onAddThirtySeconds} disabled={busy}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                {addThirtySecondsLabel}
               </Button>
+              {restPresetLabels.map((preset) => (
+                <Button key={preset.seconds} type="button" variant="outline" className="min-h-11" onClick={() => onStartRest(preset.seconds)} disabled={busy}>
+                  {preset.label}
+                </Button>
+              ))}
             </div>
-          </div>
-
-          <div data-aw5-primary-editor className="mt-4 sm:mt-5">
-            <div className="grid grid-cols-2 gap-3 sm:max-w-xl">
-              <div className="space-y-1.5 sm:space-y-2">
-                <Label htmlFor="active-set-reps" className="text-xs font-semibold text-muted-foreground">
-                  {repsLabel}
-                </Label>
-                <Input
-                  id="active-set-reps"
-                  dir="ltr"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={repsDraft}
-                  onChange={(event) => onRepsChange(event.target.value)}
-                  disabled={busy}
-                  aria-invalid={Boolean(repsError)}
-                  aria-describedby={repsError ? "active-set-reps-error" : undefined}
-                  className="h-14 text-center text-2xl font-semibold tabular-nums sm:h-[4.5rem] sm:text-3xl"
-                  placeholder="0"
-                />
-                {repsError ? (
-                  <p id="active-set-reps-error" role="alert" className="text-xs text-destructive">
-                    {repsError}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="space-y-1.5 sm:space-y-2">
-                <Label htmlFor="active-set-weight" className="text-xs font-semibold text-muted-foreground">
-                  {weightLabel}
-                </Label>
-                <Input
-                  id="active-set-weight"
-                  dir="ltr"
-                  type="text"
-                  inputMode="decimal"
-                  value={weightDraft}
-                  onChange={(event) => onWeightChange(event.target.value)}
-                  disabled={busy}
-                  aria-invalid={Boolean(weightError)}
-                  aria-describedby={weightError ? "active-set-weight-error" : undefined}
-                  className="h-14 text-center text-2xl font-semibold tabular-nums sm:h-[4.5rem] sm:text-3xl"
-                  placeholder="0"
-                />
-                {weightError ? (
-                  <p id="active-set-weight-error" role="alert" className="text-xs text-destructive">
-                    {weightError}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            {inputHint ? (
-              <p className="mt-2 text-xs text-muted-foreground">{inputHint}</p>
-            ) : null}
-          </div>
-
-          <div data-aw5-set-path className="mt-4 sm:mt-5">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-xs font-semibold text-muted-foreground">{setPathLabel}</h3>
-              <span className="text-[11px] text-muted-foreground">{setPositionLabel}</span>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {setPath.map((item) => (
+          </section>
+        ) : (
+          <section aria-labelledby="aw5-current-exercise" className="min-w-0">
+            <div className="flex items-start gap-3 border-b border-border/70 pb-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-muted-foreground">{exercisePositionLabel}</p>
                 <button
-                  key={item.number}
-                  data-aw5-set-path-number={item.number}
                   type="button"
-                  aria-current={item.state === "active" ? "step" : undefined}
-                  aria-label={`${setPathLabel} ${formatSetNumber(item.number)}: ${setPathStateLabels[item.state]}`}
-                  disabled={busy}
-                  onClick={() => onSelectSet(item.number)}
-                  className={cn(
-                    "inline-flex h-10 min-w-10 items-center justify-center rounded-[var(--radius-sm)] border px-3 text-sm font-semibold tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring sm:h-11 sm:min-w-11",
-                    item.state === "completed"
-                      ? "border-success/35 bg-success/10 text-success"
-                      : item.state === "active"
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-card text-muted-foreground hover:border-primary/45 hover:text-foreground"
-                  )}
+                  data-aw10-exercise-details-trigger
+                  className="mt-1 block max-w-full text-start text-[clamp(1.6rem,6vw,2.5rem)] font-semibold leading-[1.05] tracking-[-0.04em] text-foreground outline-none hover:underline hover:decoration-1 hover:underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={(event) => onOpenDetails(event.currentTarget)}
                 >
-                  {item.state === "completed" ? (
-                    <>
-                      <Check className="h-4 w-4" aria-hidden="true" />
-                      <span className="sr-only">{setPathStateLabels.completed}</span>
-                    </>
-                  ) : formatSetNumber(item.number)}
+                  <bdi id="aw5-current-exercise" data-aw5-exercise-title>{exerciseName}</bdi>
                 </button>
-              ))}
+                <p className="mt-2 text-xs text-muted-foreground">{setPositionLabel}</p>
+              </div>
+              {exerciseActions.length ? (
+                <details className="relative shrink-0" data-aw10-exercise-actions>
+                  <summary className="flex size-11 cursor-pointer list-none items-center justify-center rounded-md border border-border bg-background outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring" aria-label={moreLabel}>
+                    <Ellipsis className="h-5 w-5" aria-hidden="true" />
+                  </summary>
+                  <div className="absolute end-0 z-40 mt-2 w-52 rounded-lg border border-border bg-popover p-1.5 shadow-lg">
+                    {exerciseActions.map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        className={cn("min-h-11 w-full rounded-md px-3 text-start text-sm hover:bg-muted disabled:opacity-50", action.id === "skip-today" && "text-amber-700 dark:text-amber-300")}
+                        onClick={(event) => onQuickAction(action, event.currentTarget)}
+                        disabled={action.disabled}
+                      >
+                        {action.id === "ask-plaivra" ? "Ask ChatGPT" : action.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </div>
-          </div>
 
-          {restActive ? (
-            <div className="mt-4 border-t border-border/70 pt-4 sm:mt-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{restLabel}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{nextContextLabel}</p>
+            {previousSet ? (
+              <div data-aw10-previous-performance className="mt-4 flex flex-wrap items-center gap-2 border-b border-border/70 pb-4 text-sm">
+                <span className="text-muted-foreground">{previousSet.label}</span>
+                <Button type="button" variant="ghost" size="sm" className="min-h-9" onClick={(event) => onQuickAction(previousSet, event.currentTarget)} disabled={previousSet.disabled}>
+                  {previousSet.label}
+                </Button>
+              </div>
+            ) : null}
+
+            <div data-aw5-primary-editor className="mt-5">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="active-set-reps" className="text-xs font-semibold text-muted-foreground">{repsLabel}</Label>
+                  <Input id="active-set-reps" dir="ltr" type="text" inputMode="numeric" pattern="[0-9]*" value={repsDraft} onChange={(event) => onRepsChange(event.target.value)} disabled={busy} aria-invalid={Boolean(repsError)} aria-describedby={repsError ? "active-set-reps-error" : undefined} className="h-16 text-center text-3xl font-semibold tabular-nums sm:h-20 sm:text-4xl" placeholder="0" />
+                  {repsError ? <p id="active-set-reps-error" role="alert" className="text-xs text-destructive">{repsError}</p> : null}
                 </div>
-                <Button
-                  data-aw5-add-thirty
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="hidden lg:inline-flex"
-                  onClick={onAddThirtySeconds}
-                  disabled={busy}
-                >
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  {addThirtySecondsLabel}
-                </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="active-set-weight" className="text-xs font-semibold text-muted-foreground">{weightLabel}</Label>
+                  <Input id="active-set-weight" dir="ltr" type="text" inputMode="decimal" value={weightDraft} onChange={(event) => onWeightChange(event.target.value)} disabled={busy} aria-invalid={Boolean(weightError)} aria-describedby={weightError ? "active-set-weight-error" : undefined} className="h-16 text-center text-3xl font-semibold tabular-nums sm:h-20 sm:text-4xl" placeholder="0" />
+                  {weightError ? <p id="active-set-weight-error" role="alert" className="text-xs text-destructive">{weightError}</p> : null}
+                </div>
               </div>
-              <div data-aw5-rest-presets className="mt-3 grid grid-cols-4 gap-2 lg:hidden">
-                {restPresetLabels.map((preset) => (
-                  <Button
-                    key={preset.seconds}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="min-h-11 px-1.5 text-xs"
-                    onClick={() => onStartRest(preset.seconds)}
-                    disabled={busy}
-                  >
-                    {preset.label}
-                  </Button>
+              {inputHint ? <p className="mt-2 text-xs text-muted-foreground">{inputHint}</p> : null}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3 border-y border-border/70 py-3">
+              <p className="text-xs font-semibold text-muted-foreground">{currentSetLabel}</p>
+              {setDetails ? (
+                <Button data-active-set-details-trigger type="button" variant="ghost" size="sm" onClick={(event) => onQuickAction(setDetails, event.currentTarget)} disabled={setDetails.disabled}>
+                  {setDetails.label}
+                </Button>
+              ) : null}
+            </div>
+
+            <div data-aw5-set-path className="mt-4">
+              <h3 className="text-xs font-semibold text-muted-foreground">{setPathLabel}</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {setPath.map((item) => (
+                  <button key={item.number} data-aw5-set-path-number={item.number} type="button" aria-current={item.state === "active" ? "step" : undefined} aria-label={`${setPathLabel} ${formatSetNumber(item.number)}: ${setPathStateLabels[item.state]}`} disabled={busy} onClick={() => onSelectSet(item.number)} className={cn("inline-flex h-11 min-w-11 items-center justify-center rounded-md border px-3 text-sm font-semibold tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring", item.state === "completed" ? "border-success/35 bg-success/10 text-success" : item.state === "active" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground") }>
+                    {item.state === "completed" ? <><Check className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{setPathStateLabels.completed}</span></> : formatSetNumber(item.number)}
+                  </button>
                 ))}
               </div>
             </div>
-          ) : null}
+          </section>
+        )}
 
-          <div data-aw5-feedback aria-live="polite" className="mt-3 sm:mt-4">
-            {feedback}
-          </div>
-        </section>
-
-        <aside className="hidden lg:sticky lg:top-4 lg:block lg:rounded-[var(--radius-lg)] lg:border lg:border-border/70 lg:bg-card/75 lg:p-4">
-          <div className="flex items-center gap-3 border-b border-border/70 pb-4">
-            {desktopMiniHeatMap}
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-foreground">{muscleLoadStatusLabel}</p>
-              <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{completedSetsLabel}</p>
-            </div>
-          </div>
-
-          <Button
-            data-aw5-primary-action
-            type="button"
-            className="mt-4 min-h-[52px] w-full text-[15px]"
-            onClick={onPrimaryAction}
-            disabled={resolvedPrimaryActionDisabled}
-            aria-busy={busy}
-          >
-            <PrimaryActionIcon kind={primaryActionKind} />
-            {primaryActionLabel}
-          </Button>
-
-          <div data-aw6-desktop-quick-actions className="mt-4 border-t border-border/70 pt-4">
-            <h3 className="text-xs font-semibold text-muted-foreground">
-              {moreLabel}
-            </h3>
-            <div className="mt-2 grid gap-2">
-              {desktopQuickActions.map((action) => (
-                <Button
-                  key={action.id}
-                  data-active-set-details-trigger={
-                    action.id === "set-details" ? true : undefined
-                  }
-                  type="button"
-                  variant={action.id === "skip-today" ? "outline" : "ghost"}
-                  size="sm"
-                  className={cn(
-                    "min-h-10 w-full justify-start",
-                    action.id === "skip-today" && "border-amber-500/40 hover:bg-amber-500/10"
-                  )}
-                  onClick={(event) => onQuickAction(action, event.currentTarget)}
-                  disabled={action.disabled}
-                >
-                  {action.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {restActive ? (
-            <div data-aw5-rest-presets className="mt-4 border-t border-border/70 pt-4">
-              <h3 className="text-xs font-semibold text-muted-foreground">
-                {restPresetSectionLabel}
-              </h3>
-              <div className="mt-2 grid grid-cols-4 gap-2">
-                {restPresetLabels.map((preset) => (
-                  <Button
-                    key={preset.seconds}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="min-h-11 px-1.5 text-xs"
-                    onClick={() => onStartRest(preset.seconds)}
-                    disabled={busy}
-                  >
-                    {preset.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <Button
-            type="button"
-            variant="ghost"
-            className="mt-2 w-full"
-            onClick={onFinish}
-            disabled={busy}
-          >
-            {finishLabel}
-          </Button>
-        </aside>
+        <div data-aw5-feedback aria-live="polite" className="mt-4">{feedback}</div>
       </main>
 
       {detailsContent}
 
-      <MobileStickyActions
-        placement="session"
-        data-aw5-sticky-actions
-        className="z-[60]"
-        aria-busy={busy}
-      >
-        <div className="mx-auto flex w-full max-w-xl items-center gap-2.5">
-          {restActive ? (
-            <Button
-              data-aw5-add-thirty
-              type="button"
-              variant="outline"
-              className="min-h-[52px] shrink-0 px-3 text-xs"
-              onClick={onAddThirtySeconds}
-              disabled={busy}
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              {addThirtySecondsLabel}
+      {!paused ? (
+        <MobileStickyActions placement="session" data-aw5-sticky-actions className="z-[60]" aria-busy={busy}>
+          <div className="mx-auto flex w-full max-w-3xl items-center gap-2.5">
+            {restActive ? (
+              <Button data-aw5-add-thirty type="button" variant="outline" className="min-h-[52px] shrink-0 px-3 text-xs" onClick={onAddThirtySeconds} disabled={busy}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                {addThirtySecondsLabel}
+              </Button>
+            ) : null}
+            <Button data-aw5-primary-action type="button" className="min-h-[52px] flex-1 text-[15px]" onClick={onPrimaryAction} disabled={resolvedPrimaryActionDisabled} aria-busy={busy}>
+              <PrimaryActionIcon kind={primaryActionKind} />
+              {primaryActionLabel}
             </Button>
-          ) : primaryActionKind === "complete-set" ? (
-            <Button
-              data-aw5-finish-action
-              type="button"
-              variant="outline"
-              className="min-h-[52px] shrink-0 px-3 text-xs"
-              onClick={onFinish}
-              disabled={busy}
-            >
-              {finishLabel}
-            </Button>
-          ) : null}
-          <Button
-            data-aw5-primary-action
-            type="button"
-            className="min-h-[52px] flex-1 text-[15px]"
-            onClick={onPrimaryAction}
-            disabled={resolvedPrimaryActionDisabled}
-            aria-busy={busy}
-          >
-            <PrimaryActionIcon kind={primaryActionKind} />
-            {primaryActionLabel}
-          </Button>
-        </div>
-      </MobileStickyActions>
+          </div>
+        </MobileStickyActions>
+      ) : null}
       <MobileStickyActionsSpacer placement="session" />
     </div>
   );
