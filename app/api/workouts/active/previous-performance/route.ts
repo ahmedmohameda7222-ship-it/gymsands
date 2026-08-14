@@ -35,7 +35,7 @@ export async function GET(request: Request) {
   const session = url.searchParams.get("session")?.trim() || null;
   const setRaw = url.searchParams.get("set");
   const setNumber = setRaw ? Number(setRaw) : null;
-  if ((kind !== "plan_activity" && kind !== "source_workout") || !validId(value)
+  if ((kind !== "plan_activity" && kind !== "plan_exercise" && kind !== "source_workout") || !validId(value)
       || (session && !validId(session))
       || (setNumber !== null && (!Number.isInteger(setNumber) || setNumber < 1 || setNumber > 500))) {
     return NextResponse.json({ error: "Invalid previous-performance query." }, { status: 400, headers });
