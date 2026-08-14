@@ -108,8 +108,30 @@ jobs:
         run: |
           set -euo pipefail
           for shard in $(seq 1 32); do
-            node scripts/run-ci-check.mjs --name "unit-${shard}-of-32" -- \
-              ./node_modules/.bin/vitest run --config vitest.unit.config.mjs --shard="${shard}/32"
+            check_name="unit-${shard}-of-32"
+            if node scripts/run-ci-check.mjs --name "$check_name" -- \
+              ./node_modules/.bin/vitest run --config vitest.unit.config.mjs --shard="${shard}/32"; then
+              continue
+            fi
+
+            shard_log="ci-reports/${check_name}.log"
+            if ! grep -Eq "heap out of memory|Allocation failed - JavaScript heap out of memory" "$shard_log"; then
+              exit 1
+            fi
+
+            mapfile -t shard_files < <(
+              ./node_modules/.bin/vitest list --config vitest.unit.config.mjs \
+                --shard="${shard}/32" --filesOnly --static-parse
+            )
+            test "${#shard_files[@]}" -gt 0
+
+            file_index=0
+            for file in "${shard_files[@]}"; do
+              file_index=$((file_index + 1))
+              node scripts/run-ci-check.mjs \
+                --name "unit-${shard}-of-32-file-${file_index}" -- \
+                ./node_modules/.bin/vitest run --config vitest.unit.config.mjs "$file"
+            done
           done
       - name: Upload focused failure diagnostics
         if: failure()
