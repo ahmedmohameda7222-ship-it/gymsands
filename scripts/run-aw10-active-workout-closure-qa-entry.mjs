@@ -10,28 +10,41 @@ const reportPath = path.join(outputDir, "aw10-active-workout-closure-results.jso
 await mkdir(outputDir, { recursive: true });
 
 let originalFailure = null;
+let underlyingExitCode = 0;
 try {
   await import("./run-aw10-active-workout-closure-qa.mjs");
+  underlyingExitCode = Number(process.exitCode ?? 0);
 } catch (error) {
   originalFailure = error;
+  underlyingExitCode = Number(process.exitCode ?? 1);
 }
 
-if (!originalFailure) {
+const underlyingFailure = originalFailure
+  ?? (underlyingExitCode !== 0
+    ? new Error(`AW-10 underlying runner exited with code ${underlyingExitCode}.`)
+    : null);
+
+if (!underlyingFailure) {
   // The underlying AW-10 owner is already fully green. No normalization needed.
   process.exitCode = 0;
 } else {
+  // The underlying runner can fail by setting process.exitCode without throwing.
+  // Clear that inherited status only while the strict classifier decides whether
+  // the recorded failure is the one explicitly permitted secondary-read abort.
+  process.exitCode = 0;
+
   let report;
   try {
     report = JSON.parse(await readFile(reportPath, "utf8"));
   } catch {
-    throw originalFailure;
+    throw underlyingFailure;
   }
 
   if (!Array.isArray(report.results) || report.results.length !== 30) {
-    throw originalFailure;
+    throw underlyingFailure;
   }
   if (!report.headSha || report.headSha !== (process.env.QA_HEAD_SHA || process.env.GITHUB_SHA)) {
-    throw originalFailure;
+    throw underlyingFailure;
   }
 
   function isExpectedSecondaryAbort(item) {
@@ -69,6 +82,8 @@ if (!originalFailure) {
   const offlineRefresh = actionResults("offline-refresh");
   const reconnect = actionResults("reconnect");
   const terminalPending = actionResults("terminal-pending");
+  const conflictServer = actionResults("conflict-server");
+  const conflictLocal = actionResults("conflict-local");
 
   report.coverage = {
     ...report.coverage,
@@ -81,7 +96,12 @@ if (!originalFailure) {
       && reconnect.every((result) => successful(result) && result.checks?.offlineSaved === true && result.checks?.reconnected === true && result.checks?.pendingAfter === 0),
     terminalPending:
       terminalPending.length === 1
-      && terminalPending.every((result) => successful(result) && result.checks?.terminalPending === true && result.checks?.pendingBefore > 0 && result.measured?.syncState === "terminal_pending")
+      && terminalPending.every((result) => successful(result) && result.checks?.terminalPending === true && result.checks?.pendingBefore > 0 && result.measured?.syncState === "terminal_pending"),
+    conflictChoices:
+      conflictServer.length === 1
+      && conflictServer.every((result) => successful(result) && result.checks?.dataConflictSeen === true && result.checks?.pendingAfter === 0 && result.checks?.resolution === "server")
+      && conflictLocal.length === 1
+      && conflictLocal.every((result) => successful(result) && result.checks?.dataConflictSeen === true && result.checks?.pendingAfter === 0 && result.checks?.resolution === "local")
   };
 
   const resultFailures = report.results.flatMap((result) =>
@@ -96,6 +116,7 @@ if (!originalFailure) {
   ];
   report.normalization = {
     policy: "ignore-only-aborted-previous-performance-secondary-read",
+    underlyingExitCode,
     normalizedAt: new Date().toISOString(),
     normalizedScenarioCount: report.results.filter((result) => result.expectedSecondaryAborts?.length).length
   };
@@ -103,7 +124,7 @@ if (!originalFailure) {
   await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 
   if (report.failures.length) {
-    throw originalFailure;
+    throw underlyingFailure;
   }
 
   process.exitCode = 0;
