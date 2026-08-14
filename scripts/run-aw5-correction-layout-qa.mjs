@@ -1,475 +1,469 @@
 import { chromium } from "@playwright/test";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import {
   baseUrl,
+  contract,
   dayRoute,
   directRoute,
-  errorMessage,
+  headSha,
+  itemId,
   observations,
+  outputDir,
   reportPayload,
-  requestRecord,
+  serverMode,
+  setIds,
+  snapshotId,
   writeReport
 } from "./aw5-correction-qa-shared.mjs";
 import { installAw5CorrectionFixture } from "./train-layout-qa-fixture.mjs";
-import { captureFailure, record } from "./aw5-correction-qa-diagnostics.mjs";
 
-let browser;
+if (!headSha) throw new Error("QA_HEAD_SHA is required for exact-head Active Workout evidence.");
+if (serverMode !== "production") throw new Error(`Active Workout rendered QA requires production mode, received ${serverMode}.`);
 
-async function openSession({
+const evidenceDir = path.join(outputDir, "active-workout-redesign");
+await mkdir(evidenceDir, { recursive: true });
+
+const visualMatrix = [
+  ["plan-day-set-entry-en-390x844", 390, 844, "en", "light", false],
+  ["plan-day-set-entry-de-393x852", 393, 852, "de", "light", false],
+  ["plan-day-set-entry-ar-430x932", 430, 932, "ar", "light", false],
+  ["plan-day-set-entry-en-dark-768x1024", 768, 1024, "en", "dark", false],
+  ["direct-set-entry-en-1024x768", 1024, 768, "en", "light", true],
+  ["plan-day-set-entry-de-dark-1280x800", 1280, 800, "de", "dark", false],
+  ["direct-set-entry-en-dark-1440x900", 1440, 900, "en", "dark", true],
+  ["plan-day-set-entry-en-wide-1728x1000", 1728, 1000, "en", "light", false],
+  ["plan-day-set-entry-en-tiny-320x568", 320, 568, "en", "light", false]
+].map(([name, width, height, language, theme, direct]) => ({
   name,
-  route = dayRoute,
-  viewport,
-  language = "en",
-  theme = "light",
-  delayCanonical = false
-}) {
-  const direct = route === directRoute;
-  const context = await browser.newContext({
-    viewport,
-    reducedMotion: "reduce",
-    colorScheme: theme
-  });
-  const session = {
-    name,
-    direct,
-    context,
-    page: null,
-    response: null,
-    fixture: null,
-    pageErrors: [],
-    consoleErrors: [],
-    consoleWarnings: [],
-    requestFailures: [],
-    requestHistory: []
-  };
-  try {
-    const page = await context.newPage();
-    session.page = page;
-    session.fixture = await installAw5CorrectionFixture(
-      context,
-      { direct, language, theme, delayCanonical },
-      session.requestHistory
-    );
-    page.on("pageerror", (error) => session.pageErrors.push(error.message));
-    page.on("console", (message) => {
-      if (message.type() === "error") {
-        session.consoleErrors.push(message.text());
-      }
-      if (message.type() === "warning") session.consoleWarnings.push(message.text());
-    });
-    page.on("requestfailed", (request) => {
-      session.requestFailures.push({
-        ...requestRecord(request, "failed"),
-        failure: request.failure()?.errorText ?? "unknown request failure"
-      });
-    });
-    page.on("request", (request) => {
-      if (/supabase\.co|\/api\//.test(request.url())) {
-        session.requestHistory.push(requestRecord(request));
-      }
-    });
-    page.on("response", (response) => {
-      const request = response.request();
-      if (/supabase\.co|\/api\//.test(request.url())) {
-        session.requestHistory.push({
-          ...requestRecord(request, `response:${response.status()}`),
-          status: response.status()
-        });
-      }
-    });
-    session.response = await page.goto(`${baseUrl}${route}`, {
-      waitUntil: "domcontentloaded",
-      timeout: 45_000
-    });
-    await page.waitForSelector("[data-aw5-execution-shell]", {
-      state: "visible",
-      timeout: 20_000
-    });
-    await page.waitForFunction(
-      (expected) => document.documentElement.lang === expected,
-      language,
-      { timeout: 10_000 }
-    );
-    await page.waitForTimeout(150);
-    return session;
-  } catch (error) {
-    if (session.page) {
-      await captureFailure(session, error, { bootstrapFailed: true });
-      error.aw5Recorded = true;
-    }
-    error.aw5Session = session;
-    throw error;
+  viewport: { width, height },
+  language,
+  theme,
+  direct
+}));
+
+const stateMatrix = [
+  { name: "plan-day-session-menu-en-390x844", action: "session-menu" },
+  { name: "plan-day-details-en-390x844", action: "details" },
+  { name: "plan-day-set-details-en-390x844", action: "set-details" },
+  { name: "plan-day-exercise-actions-en-390x844", action: "exercise-actions" },
+  { name: "plan-day-previous-performance-en-390x844", action: "previous", previous: "available" },
+  { name: "plan-day-previous-failure-en-390x844", action: "previous-failure", previous: "failure" },
+  { name: "plan-day-rest-en-390x844", action: "rest" },
+  { name: "plan-day-paused-en-390x844", action: "paused" },
+  { name: "plan-day-session-review-en-390x844", action: "review" },
+  { name: "plan-day-completed-summary-en-390x844", action: "completion", records: "available" },
+  { name: "plan-day-completed-summary-record-failure-en-390x844", action: "completion", records: "failure" },
+  { name: "plan-day-keyboard-reps-en-390x844", action: "keyboard" },
+  { name: "plan-day-200pct-text-zoom-en-1024x768", action: "zoom", viewport: { width: 1024, height: 768 } },
+  { name: "plan-day-reduced-motion-en-390x844", action: "baseline", reducedMotion: "reduce" },
+  { name: "plan-day-unsupported-nonstrength-en-390x844", action: "unsupported", unsupported: true },
+  { name: "plan-day-details-ar-430x932", action: "details", language: "ar", viewport: { width: 430, height: 932 } },
+  { name: "plan-day-session-review-de-768x1024", action: "review", language: "de", viewport: { width: 768, height: 1024 } },
+  { name: "plan-day-completed-summary-dark-en-1440x900", action: "completion", theme: "dark", records: "empty", viewport: { width: 1440, height: 900 } }
+].map((scenario) => ({
+  viewport: { width: 390, height: 844 },
+  language: "en",
+  theme: "light",
+  direct: false,
+  previous: "empty",
+  records: "empty",
+  reducedMotion: "no-preference",
+  unsupported: false,
+  ...scenario
+}));
+
+function visible(page, selector) {
+  return page.locator(`${selector}:visible`).first();
+}
+
+async function assertNoHorizontalOverflow(page, failures) {
+  const geometry = await page.evaluate(() => ({
+    document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    body: document.body ? document.body.scrollWidth - document.body.clientWidth : 0
+  }));
+  if (geometry.document > 1) failures.push(`document horizontal overflow ${geometry.document}px`);
+  if (geometry.body > 1) failures.push(`body horizontal overflow ${geometry.body}px`);
+}
+
+async function assertPrimaryVisible(page, failures) {
+  const primary = visible(page, "[data-aw5-primary-action]");
+  if (!await primary.count()) {
+    failures.push("dominant primary action is not visible");
+    return;
+  }
+  const box = await primary.boundingBox();
+  if (!box) failures.push("dominant primary action has no rendered box");
+}
+
+async function assertBaseline(page, scenario, failures) {
+  const shell = visible(page, "[data-aw5-execution-shell]");
+  await shell.waitFor({ state: "visible", timeout: 20_000 });
+  const state = await shell.getAttribute("data-aw5-session-state");
+  if (state !== "set-entry") failures.push(`unexpected baseline session state ${state}`);
+  if (await page.locator("h2[data-aw5-exercise-title]:visible").count() !== 1) {
+    failures.push("active exercise is not one semantic h2 heading");
+  }
+  if (!await visible(page, "[data-aw5-mini-heat-map-slot]").count()) failures.push("Mini Heat Map is missing");
+  if (!await visible(page, "[data-aw10-session-menu] > summary").count()) failures.push("Session menu trigger is missing");
+  if (!await visible(page, "[data-aw10-exercise-details-trigger]").count()) failures.push("Exercise Details trigger is missing");
+  if (!scenario.direct && !await visible(page, "[data-aw10-exercise-actions] > summary").count()) failures.push("Exercise actions trigger is missing");
+  if (!await visible(page, "[data-active-set-details-trigger]").count()) failures.push("Set Details trigger is missing");
+  if (!await visible(page, "#active-set-reps").count()) failures.push("Reps input is missing");
+  if (!await visible(page, "#active-set-weight").count()) failures.push("Weight input is missing");
+  if (!await visible(page, "[data-aw5-set-path]").count()) failures.push("Set path is missing");
+  await assertPrimaryVisible(page, failures);
+  await assertNoHorizontalOverflow(page, failures);
+  if (scenario.language === "ar") {
+    const direction = await shell.getAttribute("dir");
+    if (direction !== "rtl") failures.push(`Arabic shell direction is ${direction}, expected rtl`);
   }
 }
 
-function visiblePrimary(page) {
-  return page.locator("[data-aw5-primary-action]:visible").first();
+async function installSecondaryRoutes(context, scenario) {
+  await context.route(/\/api\/workouts\/active\/previous-performance(?:\?.*)?$/, async (route) => {
+    if (scenario.previous === "failure") {
+      return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "qa previous failure" }) });
+    }
+    const data = scenario.previous === "available" ? {
+      identity: { kind: "plan_exercise", value: contract.activeFirstExerciseId },
+      workoutSessionId: "31000000-0000-4000-8000-000000000001",
+      exerciseLogId: "32000000-0000-4000-8000-000000000001",
+      setNumber: 1,
+      reps: 8,
+      weightKg: 80,
+      performedAt: "2026-07-20T08:30:00.000Z"
+    } : null;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "cache-control": "private, no-store" },
+      body: JSON.stringify({ data })
+    });
+  });
+
+  await context.route(/\/api\/workouts\/active\/[^/]+\/personal-records(?:\?.*)?$/, async (route) => {
+    if (scenario.records === "failure") {
+      return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "qa record failure" }) });
+    }
+    const data = scenario.records === "available" ? [{
+      id: "33000000-0000-4000-8000-000000000001",
+      exerciseName: contract.activeFirstExerciseName,
+      recordType: "highest_load",
+      recordValue: 80,
+      recordUnit: "kg",
+      achievedAt: "2026-07-27T09:00:00.000Z"
+    }] : [];
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "cache-control": "private, no-store" },
+      body: JSON.stringify({ data })
+    });
+  });
+
+  if (scenario.unsupported) {
+    const target = {
+      id: "34000000-0000-4000-8000-000000000001",
+      prescription_set_id: setIds[0],
+      snapshot_item_id: itemId,
+      workout_session_id: contract.activeSessionId,
+      user_id: contract.userId,
+      metric_key: "distance_meters",
+      metric_version: 1,
+      side: "none",
+      target_value: 5000,
+      minimum_value: null,
+      maximum_value: null,
+      target_mode: "distance",
+      created_at: "2026-07-27T08:00:00.000Z"
+    };
+    const definition = {
+      metric_key: "distance_meters",
+      metric_version: 1,
+      value_kind: "decimal",
+      minimum_value: 0,
+      maximum_value: 1000000,
+      supports_side: false
+    };
+    await context.route(/\/rest\/v1\/workout_session_prescription_metric_targets(?:\?.*)?$/, (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "content-range": "0-0/1" },
+      body: JSON.stringify([target])
+    }));
+    await context.route(/\/rest\/v1\/workout_performance_metric_definitions(?:\?.*)?$/, (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "content-range": "0-0/1" },
+      body: JSON.stringify([definition])
+    }));
+  }
 }
 
-async function enterSet(page, reps = "8", weight = "80") {
-  await page.locator("#active-set-reps").fill(reps, { timeout: 10_000 });
-  await page.locator("#active-set-weight").fill(weight, { timeout: 10_000 });
-}
-
-async function openSessionReview(page) {
-  const mobileFinish = page.locator("[data-aw5-finish-action]:visible");
-  if (await mobileFinish.count()) {
-    await mobileFinish.click({ timeout: 10_000 });
+async function openSession(page, scenario) {
+  const response = await page.goto(`${baseUrl}${scenario.direct ? directRoute : dayRoute}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 45_000
+  });
+  if (!response || response.status() >= 400) throw new Error(`session navigation failed with ${response?.status() ?? "no response"}`);
+  if (scenario.unsupported) {
+    await visible(page, "[data-aw10-unsupported-execution]").waitFor({ state: "visible", timeout: 20_000 });
   } else {
-    await page.getByRole("button", { name: /^Finish$/i }).click({ timeout: 10_000 });
+    await visible(page, "[data-aw5-execution-shell]").waitFor({ state: "visible", timeout: 20_000 });
+    await page.waitForFunction(() => {
+      const conflict = document.querySelector("[data-aw9-tab-conflict]");
+      return !(conflict instanceof HTMLElement) || conflict.getClientRects().length === 0;
+    }, undefined, { timeout: 15_000 });
   }
-  await page.locator("[data-aw5-session-review]").waitFor({
-    state: "visible",
-    timeout: 10_000
-  });
 }
 
-async function completeTwoSetSession(page) {
-  await enterSet(page, "8", "80");
-  await visiblePrimary(page).click({ timeout: 10_000 });
-  await page.waitForSelector('[data-aw5-session-state="rest"]', {
-    state: "visible",
-    timeout: 15_000
-  });
-  await visiblePrimary(page).click({ timeout: 10_000 });
-  await page.waitForSelector('[data-active-set-number="2"]', {
-    state: "visible",
-    timeout: 15_000
-  });
-  await enterSet(page, "9", "82.5");
-  await visiblePrimary(page).click({ timeout: 10_000 });
-  await page.waitForSelector('[data-aw5-session-state="completed"]', {
-    state: "visible",
-    timeout: 15_000
-  });
-  await visiblePrimary(page).click({ timeout: 10_000 });
-  await page.locator("[data-aw5-session-review]").waitFor({
-    state: "visible",
-    timeout: 10_000
-  });
+async function completeOneSet(page) {
+  await page.locator("#active-set-reps").fill("8");
+  await page.locator("#active-set-weight").fill("80");
+  await visible(page, "[data-aw5-primary-action]").click({ timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector("[data-aw5-execution-shell]")?.getAttribute("data-aw5-session-state") === "rest", undefined, { timeout: 15_000 });
 }
 
-async function terminalBehaviorFailures(page) {
-  const surface = page.locator("[data-aw5-completion-surface]");
-  await surface.waitFor({ state: "visible", timeout: 15_000 });
-  const back = surface.getByRole("link", { name: /back to workouts/i });
-  await back.scrollIntoViewIfNeeded();
-  await page.waitForTimeout(50);
+async function openSessionMenu(page) {
+  await visible(page, "[data-aw10-session-menu] > summary").click({ timeout: 10_000 });
+  const menu = visible(page, "[data-aw10-session-menu]");
+  await page.waitForFunction(() => {
+    const element = document.querySelector("[data-aw10-session-menu]");
+    return element instanceof HTMLDetailsElement && element.open;
+  }, undefined, { timeout: 5_000 });
+  return menu;
+}
 
-  const state = await page.evaluate(() => {
-    const surface = document.querySelector("[data-aw5-completion-surface]");
-    const visible = (element) => {
-      if (!(element instanceof HTMLElement)) return false;
-      const style = getComputedStyle(element);
-      const rect = element.getBoundingClientRect();
-      return style.display !== "none"
-        && style.visibility !== "hidden"
-        && rect.width > 0
-        && rect.height > 0;
-    };
-    const isolated = (element) => {
-      let current = element;
-      while (current && current !== surface) {
-        if (current.inert || current.getAttribute("aria-hidden") === "true") return true;
-        current = current.parentElement;
-      }
-      return false;
-    };
-    const backgroundControls = [
-      ...document.querySelectorAll(
-        "[data-aw5-pause-resume], [data-aw5-primary-editor] input, [data-aw5-set-path] button, [data-aw5-sticky-actions] button, [data-workout-session-close]"
-      )
-    ].filter((element) => !surface?.contains(element));
-    const visibleMainLandmarks = [...document.querySelectorAll("main, [role='main']")]
-      .filter((element) =>
-        element.getAttribute("role") !== "presentation"
-        && !isolated(element)
-        && visible(element)
-      );
-    const backLink = surface?.querySelector("a");
-    const backRect = backLink?.getBoundingClientRect() ?? null;
-    return {
-      focused: document.activeElement === surface,
-      activeInside: Boolean(surface?.contains(document.activeElement)),
-      visibleMainLandmarks: visibleMainLandmarks.length,
-      editorVisible: visible(document.querySelector("[data-aw5-primary-editor]")),
-      pauseVisible: visible(document.querySelector("[data-aw5-pause-resume]")),
-      setPathVisible: visible(document.querySelector("[data-aw5-set-path]")),
-      stickyVisible: visible(document.querySelector("[data-aw5-sticky-actions]")),
-      allBackgroundIsolated: backgroundControls.every(isolated),
-      backgroundTabbable: backgroundControls.filter((element) =>
-        !isolated(element)
-        && !element.hasAttribute("disabled")
-        && element.getAttribute("tabindex") !== "-1"
-      ).length,
-      horizontalOverflowPx: surface instanceof HTMLElement
-        ? Math.max(0, surface.scrollWidth - surface.clientWidth)
-        : 0,
-      backWithinViewport: Boolean(
-        backRect
-        && backRect.top >= -1
-        && backRect.bottom <= innerHeight + 1
-      )
-    };
-  });
-  const failures = [];
-  if (!state.focused) failures.push("completion surface did not receive initial focus");
-  if (state.visibleMainLandmarks !== 1) failures.push(`visible main landmark count is ${state.visibleMainLandmarks}`);
-  if (state.editorVisible) failures.push("underlying editor remains visible");
-  if (state.pauseVisible) failures.push("underlying Pause/Resume remains visible");
-  if (state.setPathVisible) failures.push("underlying set path remains visible");
-  if (state.stickyVisible) failures.push("underlying sticky footer remains visible");
-  if (!state.allBackgroundIsolated) failures.push("background interactive branches are not inert and aria-hidden");
-  if (state.backgroundTabbable) failures.push(`${state.backgroundTabbable} background controls remain tabbable`);
-  if (state.horizontalOverflowPx > 1) failures.push(`completion surface horizontal overflow is ${state.horizontalOverflowPx}px`);
-  if (!state.backWithinViewport) failures.push("Back to workouts is not reachable without a safe-area collision");
+async function enterReview(page) {
+  const menu = await openSessionMenu(page);
+  const buttons = menu.locator("button:visible");
+  if (await buttons.count() < 2) throw new Error("Session menu does not expose Finish Workout.");
+  await buttons.nth(1).click({ timeout: 10_000 });
+  await visible(page, "[data-aw7-review-surface]").waitFor({ state: "visible", timeout: 15_000 });
+}
 
+async function finishPartial(page) {
+  const actions = visible(page, "[data-aw7-review-actions]");
+  const buttons = actions.locator("button:visible");
+  await buttons.last().click({ timeout: 10_000 });
+  const confirmation = visible(page, "[data-aw7-partial-confirmation]");
+  await confirmation.waitFor({ state: "visible", timeout: 10_000 });
+  await confirmation.locator("button:visible").last().click({ timeout: 10_000 });
+  await visible(page, "[data-aw7-completion-surface]").waitFor({ state: "visible", timeout: 20_000 });
+}
+
+async function keyboardFill(page, failures) {
+  let reachedReps = false;
+  for (let index = 0; index < 30; index += 1) {
+    await page.keyboard.press("Tab");
+    const id = await page.evaluate(() => document.activeElement?.id ?? "");
+    if (id === "active-set-reps") {
+      reachedReps = true;
+      break;
+    }
+  }
+  if (!reachedReps) {
+    failures.push("keyboard traversal did not reach Reps input");
+    return;
+  }
+  await page.keyboard.type("8");
   await page.keyboard.press("Tab");
-  const tabInside = await page.evaluate(() =>
-    Boolean(document.querySelector("[data-aw5-completion-surface]")?.contains(document.activeElement))
-  );
-  await page.keyboard.press("Shift+Tab");
-  const reverseTabInside = await page.evaluate(() =>
-    Boolean(document.querySelector("[data-aw5-completion-surface]")?.contains(document.activeElement))
-  );
-  if (!tabInside || !reverseTabInside) failures.push("focus escaped the terminal completion surface");
-  return failures;
+  const activeId = await page.evaluate(() => document.activeElement?.id ?? "");
+  if (activeId !== "active-set-weight") failures.push(`keyboard traversal reached ${activeId || "no id"}, expected Weight input`);
+  else await page.keyboard.type("80");
 }
 
-async function runScenario(config, exercise, recordOptions = {}) {
-  const startedAt = Date.now();
-  console.log(`[AW5-QA] START ${config.name}`);
-  let session;
+async function exerciseScenario(page, scenario, failures) {
+  if (scenario.unsupported) {
+    if (await page.locator("#active-set-reps").count()) failures.push("unsupported non-Strength rendered Reps");
+    if (await page.locator("#active-set-weight").count()) failures.push("unsupported non-Strength rendered Weight");
+    if (await page.locator("[data-aw5-mini-heat-map-slot]").count()) failures.push("unsupported non-Strength rendered Strength Mini Heat Map");
+    await assertNoHorizontalOverflow(page, failures);
+    return;
+  }
+
+  await assertBaseline(page, scenario, failures);
+
+  if (scenario.action === "session-menu") {
+    const menu = await openSessionMenu(page);
+    const buttons = menu.locator("button:visible");
+    if (await buttons.count() !== 3) failures.push(`Session menu exposes ${await buttons.count()} actions, expected exactly 3`);
+    const labels = await buttons.allTextContents();
+    if (!labels.some((label) => /cancel|abbrechen|إلغاء/i.test(label))) failures.push("Session menu does not expose localized destructive Cancel Workout");
+  } else if (scenario.action === "details") {
+    await visible(page, "[data-aw10-exercise-details-trigger]").click();
+    await visible(page, "[data-active-set-details-dialog]").waitFor({ state: "visible", timeout: 10_000 });
+    if (!await visible(page, "[data-aw6-details-overview]").count()) failures.push("Exercise Name did not open Exercise Overview");
+  } else if (scenario.action === "set-details") {
+    await visible(page, "[data-active-set-details-trigger]").click();
+    const section = visible(page, "[data-aw10-set-details-exact]");
+    await section.waitFor({ state: "visible", timeout: 10_000 });
+    for (const id of ["active-set-rpe", "active-set-rir", "active-set-type", "active-set-note"]) {
+      if (!await section.locator(`#${id}`).count()) failures.push(`Set Details missing ${id}`);
+    }
+    if (await section.getByRole("button").count()) failures.push("Set Details contains an unrelated button/action");
+  } else if (scenario.action === "exercise-actions") {
+    await visible(page, "[data-aw10-exercise-actions] > summary").click();
+    const menu = visible(page, "[data-aw10-exercise-actions]");
+    const buttons = menu.locator("button:visible");
+    if (await buttons.count() !== 3) failures.push(`Exercise Actions exposes ${await buttons.count()} actions, expected exactly 3`);
+    const labels = (await buttons.allTextContents()).map((value) => value.trim()).filter(Boolean);
+    if (!labels.some((value) => value.includes("ChatGPT"))) failures.push("Exercise Actions does not use Ask ChatGPT member-facing branding");
+  } else if (scenario.action === "previous") {
+    const performance = visible(page, "[data-aw10-previous-performance]");
+    await performance.waitFor({ state: "visible", timeout: 10_000 });
+    const use = performance.locator("button:visible");
+    if (!await use.count()) failures.push("Previous Performance has no explicit Use action when data is available");
+    else {
+      await use.click();
+      if (await page.locator("#active-set-reps").inputValue() !== "8") failures.push("Use did not copy previous repetitions");
+      if (await page.locator("#active-set-weight").inputValue() !== "80") failures.push("Use did not copy previous weight");
+    }
+  } else if (scenario.action === "previous-failure") {
+    const performance = visible(page, "[data-aw10-previous-performance]");
+    await performance.waitFor({ state: "visible", timeout: 10_000 });
+    if (!await visible(page, "#active-set-reps").count()) failures.push("Previous Performance failure blocked execution");
+    await assertPrimaryVisible(page, failures);
+  } else if (scenario.action === "rest") {
+    await completeOneSet(page);
+    if (!await visible(page, "[data-aw10-rest-state]").count()) failures.push("Rest did not become an independent dominant state");
+    const presets = visible(page, "[data-aw5-rest-presets]").locator("button:visible");
+    if (await presets.count() < 5) failures.push("Rest does not expose +30 seconds and required presets");
+    await assertPrimaryVisible(page, failures);
+    await visible(page, "[data-aw5-primary-action]").click();
+  } else if (scenario.action === "paused") {
+    const menu = await openSessionMenu(page);
+    await menu.locator("button:visible").first().click();
+    await visible(page, "[data-aw10-paused-state]").waitFor({ state: "visible", timeout: 10_000 });
+    if (await page.locator("[data-aw5-primary-action]:visible").count()) failures.push("Paused state still exposes Complete Set / primary execution action");
+    const resume = visible(page, "[data-aw10-paused-state]").locator("button:visible");
+    if (!await resume.count()) failures.push("Paused state has no dominant Resume action");
+  } else if (scenario.action === "review") {
+    await enterReview(page);
+    if (await page.locator("[data-aw10-pr-post-save-only]:visible").count()) failures.push("Review exposes Personal Records before terminal save");
+    if (!await visible(page, "#finish-notes").count()) failures.push("Review note editor is missing");
+  } else if (scenario.action === "completion") {
+    await completeOneSet(page);
+    await visible(page, "[data-aw5-primary-action]").click();
+    await page.waitForFunction(() => document.querySelector("[data-aw5-execution-shell]")?.getAttribute("data-aw5-session-state") !== "rest", undefined, { timeout: 10_000 });
+    await enterReview(page);
+    await finishPartial(page);
+    const records = visible(page, "[data-aw10-pr-post-save-only]");
+    await records.waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForTimeout(250);
+    if (!await visible(page, "[data-aw7-final-muscle-load]").count()) failures.push("Completion is missing final muscle analysis");
+    if (!await page.locator('[data-aw7-completion-surface] a[href^="/workout-history/"]:visible').count()) failures.push("Completion lacks canonical View Workout Details link");
+    if (scenario.records === "failure" && !await visible(page, "[data-aw7-completion-surface]").count()) failures.push("Personal Records failure invalidated completion");
+  } else if (scenario.action === "keyboard") {
+    await keyboardFill(page, failures);
+  } else if (scenario.action === "zoom") {
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await page.waitForTimeout(100);
+    await assertNoHorizontalOverflow(page, failures);
+    await assertPrimaryVisible(page, failures);
+  }
+
+  await assertNoHorizontalOverflow(page, failures);
+}
+
+async function runScenario(browser, scenario) {
+  const requestHistory = [];
+  const observation = {
+    name: scenario.name,
+    viewport: scenario.viewport,
+    language: scenario.language,
+    theme: scenario.theme,
+    action: scenario.action ?? "baseline",
+    direct: scenario.direct,
+    bootstrapFailed: false,
+    failures: [],
+    metrics: null,
+    requests: requestHistory
+  };
+  observations.push(observation);
+  console.log(`[AW5-QA] START ${scenario.name}`);
+
+  const context = await browser.newContext({
+    viewport: scenario.viewport,
+    reducedMotion: scenario.reducedMotion ?? "no-preference",
+    colorScheme: scenario.theme === "dark" ? "dark" : "light"
+  });
+  const page = await context.newPage();
+  page.on("pageerror", (error) => observation.failures.push(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() === "error") observation.failures.push(`console error: ${message.text()}`);
+  });
+
   try {
-    session = await openSession(config);
-    const outcome = await exercise(session);
-    const failures = await record(
-      session,
-      outcome?.recordOptions ?? recordOptions,
-      outcome?.failures ?? []
-    );
-    if (failures.length) {
-      console.error(`[AW5-QA] FAIL ${config.name} rendered assertion failure ${failures.join(" | ")}`);
-    } else {
-      console.log(`[AW5-QA] PASS ${config.name} ${Date.now() - startedAt}`);
-    }
+    await installAw5CorrectionFixture(context, {
+      direct: scenario.direct,
+      language: scenario.language,
+      theme: scenario.theme,
+      delayCanonical: false,
+      muscleScenario: "ready",
+      includeGuide: true
+    }, requestHistory);
+    await installSecondaryRoutes(context, scenario);
+    await openSession(page, scenario);
+    await exerciseScenario(page, scenario, observation.failures);
+    const screenshotPath = path.join(evidenceDir, `${scenario.name}.png`);
+    await page.screenshot({ path: screenshotPath, fullPage: true, animations: "disabled" });
+    observation.screenshot = path.relative(outputDir, screenshotPath);
   } catch (error) {
-    session = session ?? error.aw5Session;
-    let classification = "unhandled application error";
-    let reason = errorMessage(error);
-    if (!error.aw5Recorded && session?.page) {
-      const captured = await captureFailure(session, error);
-      classification = captured.classification;
-      reason = captured.failure;
-    } else if (error.aw5Recorded) {
-      const last = observations.at(-1);
-      classification = last?.classification ?? classification;
+    observation.bootstrapFailed = true;
+    observation.failures.push(error instanceof Error ? error.message : String(error));
+    try {
+      const screenshotPath = path.join(evidenceDir, `${scenario.name}-failure.png`);
+      await page.screenshot({ path: screenshotPath, fullPage: true, animations: "disabled" });
+      observation.screenshot = path.relative(outputDir, screenshotPath);
+    } catch {
+      // Preserve the original failure.
     }
-    console.error(`[AW5-QA] FAIL ${config.name} ${classification} ${reason}`);
   } finally {
-    if (session?.fixture && !session.fixture.canonicalSettled()) {
-      session.fixture.releaseCanonical();
-      await session.fixture.waitForCanonical();
-    }
-    await session?.context?.close().catch(() => undefined);
-    await writeReport();
+    await context.close();
+  }
+
+  if (observation.failures.length) {
+    console.error(`[AW5-QA] FAIL ${scenario.name} ${observation.failures.join(" | ")}`);
+  } else {
+    console.log(`[AW5-QA] PASS ${scenario.name}`);
   }
 }
 
+const browser = await chromium.launch({ headless: true });
 try {
-  browser = await chromium.launch({ headless: true });
-
-  for (const scenario of [
-    { name: "plan-day-set-entry-en-320x568", viewport: { width: 320, height: 568 }, options: { initial320: true } },
-    { name: "plan-day-set-entry-en-390x844", viewport: { width: 390, height: 844 } },
-    { name: "direct-set-entry-en-390x844", route: directRoute, viewport: { width: 390, height: 844 } },
-    { name: "direct-set-entry-en-1440x900", route: directRoute, viewport: { width: 1440, height: 900 } },
-    { name: "plan-day-set-entry-de-390x844", viewport: { width: 390, height: 844 }, language: "de" },
-    { name: "plan-day-set-entry-ar-390x844", viewport: { width: 390, height: 844 }, language: "ar" },
-    { name: "plan-day-set-entry-dark-en-1440x900", viewport: { width: 1440, height: 900 }, theme: "dark" }
-  ]) {
-    await runScenario(scenario, async (session) => {
-      const failures = [];
-      if (session.direct) {
-        const label = (await session.page.locator("[data-aw5-session-title]").innerText({ timeout: 10_000 })).trim();
-        if (label !== "Workout session") failures.push(`direct session label is ${JSON.stringify(label)}`);
-      }
-      return { failures, recordOptions: scenario.options };
-    });
-  }
-
-  await runScenario(
-    { name: "plan-day-validation-error-en-390x844", viewport: { width: 390, height: 844 } },
-    async (session) => {
-      await session.page.locator("#active-set-reps").fill("", { timeout: 10_000 });
-      await session.page.locator("#active-set-weight").fill("40", { timeout: 10_000 });
-      const before = await session.page.locator("[data-active-set-state]").getAttribute("data-active-set-number");
-      await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForFunction(
-        () => (document.querySelector("[data-aw5-feedback]")?.textContent?.trim().length ?? 0) > 0,
-        null,
-        { timeout: 10_000 }
-      );
-      const after = await session.page.locator("[data-active-set-state]").getAttribute("data-active-set-number");
-      return { failures: before === after ? [] : ["validation error advanced the canonical cursor"] };
-    }
-  );
-
-  await runScenario(
-    {
-      name: "plan-day-busy-en-390x844",
-      viewport: { width: 390, height: 844 },
-      delayCanonical: true
-    },
-    async (session) => {
-      await enterSet(session.page);
-      await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForFunction(
-        () => document.querySelector("[data-aw5-sticky-actions]")?.getAttribute("aria-busy") === "true",
-        null,
-        { timeout: 10_000 }
-      );
-      const busy = await session.page.evaluate(() => ({
-        repsDisabled: document.querySelector("#active-set-reps")?.disabled,
-        weightDisabled: document.querySelector("#active-set-weight")?.disabled,
-        feedbackText: document.querySelector("[data-aw5-feedback]")?.textContent ?? ""
-      }));
-      const failures = [];
-      if (!busy.repsDisabled || !busy.weightDisabled) failures.push("busy completion did not disable the primary editor");
-      if (/Saving\.\.\.|Saved/i.test(busy.feedbackText)) failures.push("busy completion exposed rejected save-state chrome");
-      return { failures };
-    }
-  );
-
-  for (const scenario of [
-    { name: "plan-day-rest-en-390x844", viewport: { width: 390, height: 844 } },
-    { name: "plan-day-rest-en-320x568", viewport: { width: 320, height: 568 } },
-    { name: "plan-day-rest-en-1440x900", viewport: { width: 1440, height: 900 } }
-  ]) {
-    await runScenario(scenario, async (session) => {
-      await enterSet(session.page);
-      await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-aw5-session-state="rest"]', {
-        state: "visible",
-        timeout: 15_000
-      });
-      const failures = [];
-      const restText = (await visiblePrimary(session.page).innerText({ timeout: 10_000 })).trim();
-      if (!/skip/i.test(restText)) failures.push(`rest CTA is ${JSON.stringify(restText)}`);
-      const presets = session.page.locator("[data-aw5-rest-presets]:visible button");
-      if (await presets.count() < 1) failures.push("rest presets are missing");
-      const addThirty = session.page.locator("[data-aw5-add-thirty]:visible");
-      const addThirtyCount = await addThirty.count();
-      if (addThirtyCount !== 1) {
-        failures.push(`visible Add 30 control count is ${addThirtyCount}, expected 1`);
-      } else {
-        await addThirty.click({ timeout: 10_000 });
-        const state = await session.page.locator("[data-aw5-execution-shell]").getAttribute("data-aw5-session-state");
-        if (state !== "rest") failures.push("Add 30 left the authoritative rest state");
-      }
-      await session.page.locator("[data-aw5-rest-presets]:visible").evaluate((element) => {
-        element.scrollIntoView({ block: "center" });
-      });
-      return { failures };
-    });
-  }
-
-  await runScenario(
-    { name: "plan-day-paused-en-390x844", viewport: { width: 390, height: 844 } },
-    async (session) => {
-      await session.page.locator("[data-aw5-pause-resume]").click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-aw5-session-state="paused"]', {
-        state: "visible",
-        timeout: 10_000
-      });
-      const label = (await visiblePrimary(session.page).innerText({ timeout: 10_000 })).trim();
-      return { failures: /resume/i.test(label) ? [] : [`paused primary action is ${JSON.stringify(label)}`] };
-    }
-  );
-
-  for (const scenario of [
-    { name: "plan-day-details-ar-390x844", viewport: { width: 390, height: 844 }, language: "ar" },
-    { name: "plan-day-details-dark-en-1440x900", viewport: { width: 1440, height: 900 }, theme: "dark" }
-  ]) {
-    await runScenario(scenario, async (session) => {
-      await session.page.locator("[data-active-set-details-trigger]:visible").click({
-        timeout: 10_000
-      });
-      await session.page.waitForSelector("[data-active-set-details-dialog]", {
-        state: "visible",
-        timeout: 10_000
-      });
-    });
-  }
-
-  for (const scenario of [
-    { name: "plan-day-session-review-en-390x844", viewport: { width: 390, height: 844 } },
-    { name: "plan-day-session-review-en-1440x900", viewport: { width: 1440, height: 900 } }
-  ]) {
-    await runScenario(scenario, async (session) => {
-      await openSessionReview(session.page);
-    });
-  }
-
-  await runScenario(
-    { name: "plan-day-partial-review-en-390x844", viewport: { width: 390, height: 844 } },
-    async (session) => {
-      await enterSet(session.page, "8", "80");
-      await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await session.page.waitForSelector('[data-aw5-session-state="rest"]', {
-        state: "visible",
-        timeout: 15_000
-      });
-      await visiblePrimary(session.page).click({ timeout: 10_000 });
-      await openSessionReview(session.page);
-      const reviewText = await session.page.locator("[data-aw5-session-review]").innerText();
-      return { failures: /1\s*\/\s*2/.test(reviewText) ? [] : ["partial review does not display 1 of 2 completed sets"] };
-    }
-  );
-
-  for (const scenario of [
-    { name: "plan-day-completed-summary-en-320x568", viewport: { width: 320, height: 568 } },
-    { name: "plan-day-completed-summary-en-390x844", viewport: { width: 390, height: 844 } },
-    { name: "plan-day-completed-summary-en-1440x900", viewport: { width: 1440, height: 900 } }
-  ]) {
-    await runScenario(scenario, async (session) => {
-      await completeTwoSetSession(session.page);
-      const review = session.page.locator("[data-aw5-session-review]");
-      await review.getByRole("button", { name: /save.*finish/i }).click({ timeout: 10_000 });
-      const failures = await terminalBehaviorFailures(session.page);
-      const completedText = await session.page.locator("[data-aw5-completed-summary]").innerText();
-      if (!/\b1\b/.test(completedText) || !/\b0\b/.test(completedText)) {
-        failures.push("completed summary does not expose completed and partial exercise counts");
-      }
-      return { failures };
-    });
-  }
-
-  for (const keyboard of ["reps", "weight"]) {
-    await runScenario(
-      {
-        name: `plan-day-keyboard-${keyboard}-en-390x844`,
-        viewport: { width: 390, height: 844 }
-      },
-      async (session) => {
-        await session.page.setViewportSize({ width: 390, height: 464 });
-        const input = session.page.locator(`#active-set-${keyboard}`);
-        await input.focus({ timeout: 10_000 });
-        await input.evaluate((element) => element.scrollIntoView({ block: "center" }));
-        await session.page.waitForTimeout(100);
-        return { recordOptions: { keyboard } };
-      }
-    );
+  for (const scenario of [...visualMatrix.map((item) => ({
+    ...item,
+    action: "baseline",
+    previous: "empty",
+    records: "empty",
+    reducedMotion: "no-preference",
+    unsupported: false
+  })), ...stateMatrix]) {
+    await runScenario(browser, scenario);
   }
 } finally {
-  await browser?.close().catch(() => undefined);
-  await writeReport();
+  await browser.close();
 }
+
+await writeReport();
+await writeFile(
+  path.join(evidenceDir, "active-workout-redesign-evidence.json"),
+  `${JSON.stringify({
+    headSha,
+    serverMode,
+    requiredViewports: visualMatrix.map((item) => item.viewport),
+    scenarioCount: observations.length,
+    screenshotCount: observations.filter((item) => item.screenshot).length,
+    failures: reportPayload().failures
+  }, null, 2)}\n`,
+  "utf8"
+);
 
 const failures = reportPayload().failures;
 if (failures.length) {
-  console.error(`AW-5 correction layout QA failed:\n- ${failures.join("\n- ")}`);
-  process.exitCode = 1;
-} else {
-  console.log(`AW-5 correction layout QA passed with ${observations.length} clean rendered observations.`);
+  throw new Error(`Active Workout redesign rendered QA failed:\n${failures.map((failure) => `- ${failure}`).join("\n")}`);
 }
+console.log(`[AW5-QA] PASS ${observations.length} Active Workout redesign scenarios at ${headSha}`);
