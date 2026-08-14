@@ -177,6 +177,9 @@ export function buildSummary(
 
   return {
     ...base,
+    // Personal Records are server-derived after terminal save. The runtime
+    // summary must never carry a local candidate or predicted PR authority.
+    prs: [],
     completedSets: review.completedSets,
     totalPlannedSets: review.totalSets,
     completedExercises: review.completedExercises,
