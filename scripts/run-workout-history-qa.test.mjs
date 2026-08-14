@@ -83,6 +83,10 @@ test("runner captures PNGs, inspects pixels and DOM, and emits machine evidence"
     new URL("./run-workout-history-core-qa.mjs", import.meta.url),
     "utf8",
   );
+  const zoomPeriodSource = await readFile(
+    new URL("./run-workout-history-zoom-period-qa.mjs", import.meta.url),
+    "utf8",
+  );
   assert.match(source, /page\.screenshot/u);
   assert.match(source, /sharp\(screenshotPath\)\.stats/u);
   assert.match(source, /horizontalOverflowPx/u);
@@ -91,7 +95,14 @@ test("runner captures PNGs, inspects pixels and DOM, and emits machine evidence"
   assert.match(source, /workout-history-qa-results\.json/u);
   assert.match(source, /QA_HEAD_SHA/u);
   assert.match(source, /QA_SERVER_MODE/u);
+  assert.match(source, /run-workout-history-zoom-period-qa\.mjs/u);
   assert.match(coreSource, /data-stale-history-action-notice/u);
   assert.match(coreSource, /semantic-detail/u);
   assert.match(coreSource, /documentElement\.style\.zoom/u);
+  assert.match(zoomPeriodSource, /data-workout-history-period-controls/u);
+  assert.match(zoomPeriodSource, /buttonCount === 4/u);
+  assert.match(zoomPeriodSource, /allButtonsVisible/u);
+  assert.match(zoomPeriodSource, /allLabelsUnclipped/u);
+  assert.match(zoomPeriodSource, /groupHorizontalOverflowPx/u);
+  assert.match(zoomPeriodSource, /documentHorizontalOverflowPx/u);
 });
