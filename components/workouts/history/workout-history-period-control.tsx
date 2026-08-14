@@ -48,7 +48,7 @@ export function WorkoutHistoryPeriodControl({
 
   return (
     <section className="border-y border-border/70 py-2" aria-label={tr("historyPageTitle")}>
-      <div className="grid grid-cols-2 gap-1 sm:grid-cols-4" role="group" data-workout-history-period-controls>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-1" role="group" data-workout-history-period-controls>
         {modes.map((value) => (
           <Button
             key={value}
