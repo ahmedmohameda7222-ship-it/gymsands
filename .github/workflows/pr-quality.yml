@@ -105,7 +105,12 @@ jobs:
       - name: Typecheck
         run: node scripts/run-ci-check.mjs --name typecheck -- npm run typecheck
       - name: Unit tests
-        run: node scripts/run-ci-check.mjs --name unit -- npm run test:unit
+        run: |
+          set -euo pipefail
+          for shard in $(seq 1 16); do
+            node scripts/run-ci-check.mjs --name "unit-${shard}-of-16" -- \
+              ./node_modules/.bin/vitest run --config vitest.unit.config.mjs --shard="${shard}/16"
+          done
       - name: Upload focused failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -230,7 +235,9 @@ jobs:
           needs.classify.outputs.rendered_active_workout == 'true'
         env:
           QA_AW10_EVIDENCE_DIR: ci-reports/active-workout-aw10-evidence
-        run: node scripts/run-ci-check.mjs --name active-workout-rendered-qa -- npm run qa:active-workout:aw10
+        run: >-
+          node scripts/run-ci-check.mjs --name active-workout-rendered-qa --
+          node scripts/run-aw10-active-workout-closure-qa-entry.mjs
       - name: Workout History rendered QA
         if: >-
           needs.classify.outputs.rendered_general == 'true' ||
