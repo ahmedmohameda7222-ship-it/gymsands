@@ -1,5 +1,8 @@
 "use client";
 
+import { env } from "@/lib/env";
+import { supabase } from "@/lib/supabase/client";
+
 export type ActiveWorkoutCanonicalPersonalRecord = {
   id: string;
   exerciseName: string;
@@ -9,10 +12,18 @@ export type ActiveWorkoutCanonicalPersonalRecord = {
   achievedAt: string;
 };
 
+async function accessToken() {
+  const session = supabase ? await supabase.auth.getSession() : null;
+  const token = session?.data.session?.access_token || (env.useMockAuth ? "plaivra-local-qa" : "");
+  if (!token) throw new Error("Please sign in again.");
+  return token;
+}
+
 export async function refreshAndReadActiveWorkoutPersonalRecords(
   sessionId: string,
   signal?: AbortSignal
 ): Promise<ActiveWorkoutCanonicalPersonalRecord[]> {
+  const authorization = `Bearer ${await accessToken()}`;
   // The canonical workout is already terminal before this runs. Record rebuild
   // is a secondary projection: failure never rolls back or invalidates save.
   await fetch(`/api/workouts/history/${encodeURIComponent(sessionId)}/verified-records`, {
@@ -20,7 +31,7 @@ export async function refreshAndReadActiveWorkoutPersonalRecords(
     credentials: "same-origin",
     cache: "no-store",
     signal,
-    headers: { Accept: "application/json" }
+    headers: { Accept: "application/json", Authorization: authorization }
   }).catch(() => undefined);
 
   const response = await fetch(
@@ -30,7 +41,7 @@ export async function refreshAndReadActiveWorkoutPersonalRecords(
       credentials: "same-origin",
       cache: "no-store",
       signal,
-      headers: { Accept: "application/json" }
+      headers: { Accept: "application/json", Authorization: authorization }
     }
   );
   if (!response.ok) throw new Error("Personal records are unavailable.");
