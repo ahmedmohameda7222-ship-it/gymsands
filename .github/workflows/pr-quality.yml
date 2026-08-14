@@ -107,9 +107,9 @@ jobs:
       - name: Unit tests
         run: |
           set -euo pipefail
-          for shard in $(seq 1 16); do
-            node scripts/run-ci-check.mjs --name "unit-${shard}-of-16" -- \
-              ./node_modules/.bin/vitest run --config vitest.unit.config.mjs --shard="${shard}/16"
+          for shard in $(seq 1 32); do
+            node scripts/run-ci-check.mjs --name "unit-${shard}-of-32" -- \
+              ./node_modules/.bin/vitest run --config vitest.unit.config.mjs --shard="${shard}/32"
           done
       - name: Upload focused failure diagnostics
         if: failure()
