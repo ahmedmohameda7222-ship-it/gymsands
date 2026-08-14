@@ -67,7 +67,7 @@
     "@zxing/library": "0.21.3",
     "bidi-js": "1.0.3",
     "class-variance-authority": "^0.7.1",
-    "clsx": "^1.2.1",
+    "clsx": "^2.1.1",
     "framer-motion": "^12.23.24",
     "jose": "^6.2.3",
     "jszip": "3.10.1",
