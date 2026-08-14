@@ -1,0 +1,59 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const core = readFileSync("components/workouts/active-workout/active-workout-core-session-implementation.tsx", "utf8");
+const shell = readFileSync("components/workouts/active-workout/active-workout-execution-shell.tsx", "utf8");
+const details = readFileSync("components/workouts/active-workout/active-workout-details-bridge.tsx", "utf8");
+const review = readFileSync("components/workouts/active-workout/active-workout-review-bridge.tsx", "utf8");
+const runtime = readFileSync("components/workouts/active-workout/active-workout-runtime-model.ts", "utf8");
+const previous = readFileSync("services/workouts/active-workout/previous-performance-server.ts", "utf8");
+const records = readFileSync("app/api/workouts/active/[sessionId]/personal-records/route.ts", "utf8");
+
+describe("Active Workout final binding redesign authority", () => {
+  it("keeps broad history and display-name matching out of live execution", () => {
+    expect(core).not.toContain("getWorkoutHistoryDetailed");
+    expect(core).not.toContain("previousSetForExercise");
+    expect(core).not.toContain("previousPerformance(history");
+    expect(previous).not.toContain("exercise_name");
+    expect(previous).toContain(".limit(1)");
+    expect(previous).toContain('"plan_activity"');
+    expect(previous).toContain('"plan_exercise"');
+    expect(previous).toContain('"source_workout"');
+  });
+
+  it("separates session controls, exercise details, exercise actions, and set details", () => {
+    expect(shell).toContain("data-aw10-session-menu");
+    expect(shell).toContain("data-aw10-exercise-details-trigger");
+    expect(shell).toContain("data-aw10-exercise-actions");
+    expect(shell).toContain("data-active-set-details-trigger");
+    expect(core).toContain('tr("minimized.cancelWorkout")');
+    expect(core).toContain('tr("chatGPT.ask")');
+    expect(details).toContain("data-aw10-set-details-exact");
+    expect(details).not.toContain('>{legacyReopenSetLabel}<');
+    expect(details).not.toContain('>{tr("actions.resetWorkoutTimer")}<');
+  });
+
+  it("never presents local or candidate Personal Records", () => {
+    expect(core).not.toContain("buildPrs");
+    expect(core).not.toContain("possible_prs");
+    expect(runtime).toContain("prs: []");
+    expect(review).toContain("data-aw10-pr-post-save-only");
+    expect(review).toContain("refreshAndReadActiveWorkoutPersonalRecords");
+    expect(records).toContain('.eq("workout_session_id", sessionId)');
+    expect(records).toContain('.eq("source_kind", "workout_derived")');
+    expect(records).toContain(".limit(50)");
+  });
+
+  it("keeps completion canonical and restores final muscle analysis", () => {
+    expect(core).toContain("terminal.finalProjection?.performedLogs");
+    expect(review).toContain("data-aw7-final-muscle-load");
+    expect(review).toContain("/workout-history/${encodeURIComponent(sessionId)}");
+    expect(review).toContain('tr("completion.viewDetails")');
+  });
+
+  it("fails explicit non-Strength execution closed", () => {
+    expect(core).toContain("resolveActiveWorkoutExecutionCapability");
+    expect(core).toContain("data-aw10-unsupported-execution");
+    expect(core).toContain("if (!executionCapability.supported)");
+  });
+});
