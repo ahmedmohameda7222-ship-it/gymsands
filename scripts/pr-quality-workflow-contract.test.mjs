@@ -74,9 +74,9 @@ test("UI job is selected only by rendered outputs", () => {
 test("automatic PR Quality owns one complete unit suite with bounded worker lifetime", () => {
   const core = jobSection("core", "database");
   const ui = jobSection("ui", "ci-contracts");
-  assert.match(core, /for shard in \$\(seq 1 16\)/);
+  assert.match(core, /for shard in \$\(seq 1 32\)/);
   assert.match(core, /\.\/node_modules\/\.bin\/vitest run --config vitest\.unit\.config\.mjs/);
-  assert.match(core, /--shard="\$\{shard\}\/16"/);
+  assert.match(core, /--shard="\$\{shard\}\/32"/);
   assert.doesNotMatch(workflow, /npm run test:i18n/);
   assert.doesNotMatch(workflow, /npm run test:workout-history(?:\s|$)/);
   assert.doesNotMatch(workflow, /Legacy workflow-text contracts/);
