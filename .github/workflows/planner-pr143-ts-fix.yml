@@ -1,0 +1,33 @@
+name: Planner PR143 Typecheck Repair
+
+on:
+  push:
+    branches:
+      - feat/active-workout-redesign
+    paths:
+      - .github/workflows/planner-pr143-ts-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-redesign
+          fetch-depth: 0
+      - name: Apply typecheck repair
+        run: python3 scripts/planner-pr143-ts-fix.py
+      - name: Diff integrity
+        run: git diff --check
+      - name: Commit repair
+        run: |
+          git config user.name "Plaivra Planner QA"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(active-workout): initialize focused details authority before effect"
+          git push origin HEAD:feat/active-workout-redesign
