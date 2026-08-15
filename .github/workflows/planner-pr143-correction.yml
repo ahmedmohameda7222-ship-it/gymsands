@@ -21,7 +21,7 @@ jobs:
           ref: feat/active-workout-redesign
           fetch-depth: 0
       - name: Apply exact Planner corrections
-        run: python3 scripts/planner-pr143-correction.py
+        run: python3 scripts/planner-pr143-correction-hotfix.py
       - name: Diff integrity
         run: git diff --check
       - name: Commit corrected branch
