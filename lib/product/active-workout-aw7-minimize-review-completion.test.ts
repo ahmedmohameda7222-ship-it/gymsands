@@ -106,11 +106,13 @@ describe("AW-7 minimize, review, and completion source contract", () => {
     expect(review).toContain("refreshAndReadActiveWorkoutPersonalRecords");
     expect(review).toContain('useState<"pending" | "loaded" | "unavailable">');
     expect(review).toContain('recordState === "pending"');
-    expect(review).toContain('recordState === "unavailable"');
+    expect(review).toContain('setRecordState("unavailable")');
+    expect(review).toContain('recordState === "pending" || localizedRecords.length');
     expect(review).toContain("data-aw10-pr-post-save-only");
     expect(recordsClient).toContain("verified-records");
     expect(recordsClient).toContain("Personal records are unavailable");
-    expect(recordsClient).toContain(".catch(() => undefined)");
+    expect(recordsClient).toContain("if (!refreshResponse.ok)");
+    expect(recordsClient).not.toContain(".catch(() => undefined)");
   });
 
   it("links terminal completion to canonical Workout History detail", () => {
