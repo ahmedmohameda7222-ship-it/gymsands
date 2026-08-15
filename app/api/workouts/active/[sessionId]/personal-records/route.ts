@@ -4,6 +4,7 @@ import { env } from "@/lib/env";
 import { requireUser } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { isUuid } from "@/lib/utils";
+import { readPersonalRecordsMain } from "@/services/personal-records/server";
 
 export const runtime = "nodejs";
 
@@ -46,43 +47,34 @@ export async function GET(
 
   const root = await auth.supabase
     .from("workout_sessions")
-    .select("id,status")
+    .select("id,status,deleted_at")
     .eq("id", sessionId)
     .eq("user_id", auth.user.id)
     .maybeSingle();
   if (root.error) {
     return NextResponse.json({ error: "Personal records are unavailable right now." }, { status: 503, headers });
   }
-  if (!root.data || root.data.status === "started") {
+  if (!root.data || root.data.status === "started" || root.data.deleted_at) {
     return NextResponse.json({ error: "Workout session is not terminal." }, { status: 409, headers });
   }
 
-  const result = await auth.supabase
-    .from("personal_records")
-    .select("id,exercise_name,derived_record_type,record_value,record_unit,achieved_at")
-    .eq("user_id", auth.user.id)
-    .eq("workout_session_id", sessionId)
-    .eq("source_kind", "workout_derived")
-    .not("derived_record_type", "is", null)
-    .not("record_value", "is", null)
-    .not("record_unit", "is", null)
-    .not("achieved_at", "is", null)
-    .order("achieved_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(50);
-
-  if (result.error) {
+  try {
+    const projected = await readPersonalRecordsMain(auth.supabase, auth.user.id, { limit: 50 });
+    const data: ActiveWorkoutCanonicalPersonalRecord[] = projected.groups
+      .flatMap((group) => group.records.map((record) => record.currentBest))
+      .filter((event) => event.source === "verified" && event.sourceWorkoutId === sessionId)
+      .sort((left, right) => right.achievedAt.localeCompare(left.achievedAt) || right.eventId.localeCompare(left.eventId))
+      .slice(0, 50)
+      .map((event) => ({
+        id: event.eventId,
+        exerciseName: event.subject.name,
+        recordType: event.definition.key,
+        recordValue: event.value,
+        recordUnit: event.definition.canonicalUnit,
+        achievedAt: event.achievedAt
+      }));
+    return NextResponse.json({ data }, { headers });
+  } catch {
     return NextResponse.json({ error: "Personal records are unavailable right now." }, { status: 503, headers });
   }
-
-  const data: ActiveWorkoutCanonicalPersonalRecord[] = (result.data ?? []).map((row) => ({
-    id: String(row.id),
-    exerciseName: String(row.exercise_name),
-    recordType: String(row.derived_record_type),
-    recordValue: Number(row.record_value),
-    recordUnit: String(row.record_unit),
-    achievedAt: String(row.achieved_at)
-  })).filter((row) => Number.isFinite(row.recordValue));
-
-  return NextResponse.json({ data }, { headers });
 }

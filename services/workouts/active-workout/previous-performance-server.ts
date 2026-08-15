@@ -40,6 +40,7 @@ export async function readActiveWorkoutPreviousPerformance(
     .select("id,workout_session_id,set_number,reps,weight_kg,completed_at,created_at,workout_sessions!inner(user_id,status)")
     .eq("workout_sessions.user_id", userId)
     .eq("workout_sessions.status", "completed")
+    .is("workout_sessions.deleted_at", null)
     .not("completed_at", "is", null);
 
   if (identity.kind === "plan_activity") {

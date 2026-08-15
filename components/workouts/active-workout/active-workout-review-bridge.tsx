@@ -188,23 +188,21 @@ function CompletionSurface({
         </section>
       ) : null}
 
-      <section data-aw10-pr-post-save-only className="border-b border-border/70 py-5" aria-live="polite">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Trophy className="h-4 w-4" aria-hidden="true" />
-          {tr("review.personalRecords")}
-        </h2>
-        {recordState === "pending" ? (
-          <p className="mt-2 text-sm text-muted-foreground" role="status">{tr("common.loading")}</p>
-        ) : recordState === "unavailable" ? (
-          <p className="mt-2 text-sm text-muted-foreground">{tr("completion.metricUnavailable")}</p>
-        ) : localizedRecords.length ? (
-          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-            {localizedRecords.map((record) => <li key={record.id}>{record.label}</li>)}
-          </ul>
-        ) : (
-          <p className="mt-2 text-sm text-muted-foreground">{tr("completion.neutralChange")}</p>
-        )}
-      </section>
+      {recordState === "pending" || localizedRecords.length ? (
+        <section data-aw10-pr-post-save-only className="border-b border-border/70 py-5" aria-live="polite">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Trophy className="h-4 w-4" aria-hidden="true" />
+            {tr("review.personalRecords")}
+          </h2>
+          {recordState === "pending" ? (
+            <p className="mt-2 text-sm text-muted-foreground" role="status">{tr("common.loading")}</p>
+          ) : (
+            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+              {localizedRecords.map((record) => <li key={record.id}>{record.label}</li>)}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       <section data-aw7-final-muscle-load className="border-b border-border/70 py-5" aria-labelledby="aw7-final-muscle-load-title">
         <h2 id="aw7-final-muscle-load-title" className="text-sm font-semibold text-foreground">

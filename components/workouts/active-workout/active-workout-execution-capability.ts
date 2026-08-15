@@ -18,11 +18,14 @@ export function resolveActiveWorkoutExecutionCapability(
   const structured = prescription.flatMap((item) =>
     item.prescriptionSets.flatMap((set) => set.targets.map((target) => target.metricKey))
   );
-  if (structured.some((key) => strengthMetrics.has(key))) {
-    return { supported: true, contract: "strength_reps_weight_v1", source: "structured" };
-  }
+  // Current live execution supports only the Strength contract. If a frozen
+  // structured prescription carries any explicit non-Strength execution semantic,
+  // fail closed rather than silently discarding part of a mixed contract.
   if (structured.some((key) => nonStrengthMetrics.has(key))) {
     return { supported: false, reason: "unsupported_non_strength_contract" };
+  }
+  if (structured.some((key) => strengthMetrics.has(key))) {
+    return { supported: true, contract: "strength_reps_weight_v1", source: "structured" };
   }
 
   // Frozen compatibility truth may predate normalized metric targets. Detect

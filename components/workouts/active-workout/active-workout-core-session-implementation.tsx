@@ -168,6 +168,12 @@ function stablePreviousPerformanceIdentity(item: ActiveWorkoutExerciseState | un
   return null;
 }
 
+function executionTargetLabel(locale: string) {
+  if (locale === "de") return "Ziel";
+  if (locale === "ar") return "الهدف";
+  return "Target";
+}
+
 function unsupportedExecutionCopy(locale: string) {
   if (locale === "de") return {
     title: "Diese Aktivität wird im aktiven Training noch nicht unterstützt.",
@@ -1649,7 +1655,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     paused: Boolean(isPaused),
     activeSetCompleted: Boolean(activeSet.completedAt),
     terminal: Boolean(completedSummary),
-    aiPermitted: true,
+    // Visibility is limited to an authenticated ChatGPT entry point; the
+    // QuickChatGPT provider remains the authoritative per-section read/write
+    // permission gate when the action opens.
+    aiPermitted: Boolean(userId),
     labels: {
       "previous-set": tr("exercise.previousSet"),
       "set-details": tr("actions.setDetails"),
@@ -1781,6 +1790,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         exerciseName={activeExercise.exercise.exercise_name}
         exercisePositionLabel={tr("header.exerciseProgress", { current: formatters.integer(activeExerciseIndex + 1), total: formatters.integer(exerciseStates.length) })}
         setPositionLabel={tr("header.setProgress", { current: formatters.integer(activeSetIndex + 1), total: formatters.integer(activeExercise.sets.length) })}
+        targetLabel={executionTargetLabel(language)}
+        targetValue={activeSet.plannedReps ? `${activeSet.plannedReps} ${tr("units.reps")}` : null}
         completedSetsLabel={tr("header.completedSetsProgress", { completed: formatters.integer(completedSets), total: formatters.integer(totalSets) })}
         elapsedLabel={formatters.timer(elapsedSeconds)}
         progress={clampWorkoutProgress(completedSets, totalSets)}

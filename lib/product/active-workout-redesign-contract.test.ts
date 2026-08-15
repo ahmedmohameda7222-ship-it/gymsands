@@ -17,6 +17,7 @@ describe("Active Workout final binding redesign authority", () => {
     expect(core).not.toContain("previousSetForExercise");
     expect(core).not.toContain("previousPerformance(history");
     expect(previous).not.toContain("exercise_name");
+    expect(previous).toContain('.is("workout_sessions.deleted_at", null)');
     expect(previous).toContain(".limit(1)");
     expect(previous).toContain('"plan_activity"');
     expect(previous).toContain('"plan_exercise"');
@@ -41,6 +42,11 @@ describe("Active Workout final binding redesign authority", () => {
     expect(core).toContain('tr("minimized.cancelWorkout")');
     expect(core).toContain('tr("chatGPT.ask")');
     expect(details).toContain("data-aw10-set-details-exact");
+    expect(details).toContain('hidden={effectiveSection !== "overview"}');
+    expect(details).toContain('hidden={effectiveSection !== "current-set"}');
+    expect(details).toContain('hidden={effectiveSection !== "muscle-load"}');
+    expect(shell).toContain("data-aw10-current-target");
+    expect(core).not.toContain("aiPermitted: true");
     expect(details).not.toContain('>{legacyReopenSetLabel}<');
     expect(details).not.toContain('>{tr("actions.resetWorkoutTimer")}<');
   });
@@ -51,9 +57,11 @@ describe("Active Workout final binding redesign authority", () => {
     expect(runtime).toContain("prs: []");
     expect(review).toContain("data-aw10-pr-post-save-only");
     expect(review).toContain("refreshAndReadActiveWorkoutPersonalRecords");
-    expect(records).toContain('.eq("workout_session_id", sessionId)');
-    expect(records).toContain('.eq("source_kind", "workout_derived")');
-    expect(records).toContain(".limit(50)");
+    expect(records).toContain("readPersonalRecordsMain");
+    expect(records).toContain('event.source === "verified"');
+    expect(records).toContain("event.sourceWorkoutId === sessionId");
+    expect(records).not.toContain('.from("personal_records")');
+    expect(records).toContain(".slice(0, 50)");
   });
 
   it("keeps completion canonical and restores final muscle analysis", () => {

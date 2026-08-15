@@ -37,6 +37,8 @@ export type ActiveWorkoutExecutionShellProps = {
   exerciseName: string;
   exercisePositionLabel: string;
   setPositionLabel: string;
+  targetLabel?: string;
+  targetValue?: string | null;
   completedSetsLabel: string;
   elapsedLabel: string;
   progress: number;
@@ -122,6 +124,8 @@ export function ActiveWorkoutExecutionShell({
   exerciseName,
   exercisePositionLabel,
   setPositionLabel,
+  targetLabel,
+  targetValue,
   completedSetsLabel,
   elapsedLabel,
   progress,
@@ -355,6 +359,13 @@ export function ActiveWorkoutExecutionShell({
                 </details>
               ) : null}
             </div>
+
+            {targetValue ? (
+              <section data-aw10-current-target className="border-b border-border/70 py-4" aria-label={targetLabel}>
+                <p className="text-xs font-semibold text-muted-foreground">{targetLabel}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground"><bdi dir="auto">{targetValue}</bdi></p>
+              </section>
+            ) : null}
 
             {showPreviousPerformance ? (
               <section data-aw10-previous-performance className="border-b border-border/70 py-4" aria-label={previousPerformanceLabel}>

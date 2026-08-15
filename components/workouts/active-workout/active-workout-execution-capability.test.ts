@@ -32,6 +32,12 @@ describe("Active Workout execution capability", () => {
     }))).toEqual({ supported: false, reason: "unsupported_non_strength_contract" });
   });
 
+  it("fails closed for a mixed structured contract instead of discarding non-Strength semantics", () => {
+    expect(resolveActiveWorkoutExecutionCapability(prescription({
+      metrics: ["repetitions", "distance_meters"]
+    }))).toEqual({ supported: false, reason: "unsupported_non_strength_contract" });
+  });
+
   it("fails closed for legacy non-Strength semantic fields", () => {
     expect(resolveActiveWorkoutExecutionCapability(prescription({
       raw: { distance_meters: 5000, duration_seconds: 1200 }

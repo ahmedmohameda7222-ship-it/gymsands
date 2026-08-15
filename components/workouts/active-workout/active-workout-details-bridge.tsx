@@ -135,9 +135,7 @@ export function ActiveWorkoutDetailsBridge({
         "adjust-today": adjustTodayRef,
         assistance: assistanceRef
       };
-      const requested = requestedSection === "adjust-today" && sourceKind !== "plan-day"
-        ? overviewRef.current
-        : sectionRefs[requestedSection].current;
+      const requested = sectionRefs[effectiveSection].current;
       const focusTarget = requestedFocusTarget === "guide-video"
         ? guideGroupRef.current
         : requested;
@@ -145,9 +143,20 @@ export function ActiveWorkoutDetailsBridge({
       focusTarget?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [open, requestedFocusTarget, requestedSection, sourceKind]);
+  }, [effectiveSection, open, requestedFocusTarget]);
 
   const closeBeforeAi = () => onOpenChange(false);
+  const effectiveSection: ActiveWorkoutDetailsSection =
+    requestedSection === "adjust-today" && sourceKind !== "plan-day" ? "overview" : requestedSection;
+  const dialogTitle = effectiveSection === "overview"
+    ? tr("details.exerciseOverview")
+    : effectiveSection === "current-set"
+      ? tr("actions.setDetails")
+      : effectiveSection === "muscle-load"
+        ? tr("details.muscleLoad")
+        : effectiveSection === "adjust-today"
+          ? tr("details.adjustToday")
+          : tr("chatGPT.ask");
 
   return (
     <>
@@ -164,7 +173,7 @@ export function ActiveWorkoutDetailsBridge({
           className="max-h-[92dvh] overflow-hidden p-0 lg:inset-y-6 lg:left-auto lg:right-6 lg:h-[calc(100dvh-3rem)] lg:max-h-[calc(100dvh-3rem)] lg:w-[440px] lg:max-w-[440px] lg:translate-x-0 lg:translate-y-0 lg:rounded-[28px] lg:border lg:rtl:left-6 lg:rtl:right-auto"
         >
           <DialogHeader className="mb-0 shrink-0 border-b border-border/70 p-5 pe-16">
-            <DialogTitle>{tr("details.activeWorkoutDetails")}</DialogTitle>
+            <DialogTitle>{dialogTitle}</DialogTitle>
             <DialogDescription>{tr("details.activeWorkoutDetailsDescription")}</DialogDescription>
           </DialogHeader>
 
@@ -172,6 +181,7 @@ export function ActiveWorkoutDetailsBridge({
             <div className="divide-y divide-border/70">
               <section
                 data-aw6-details-overview
+                hidden={effectiveSection !== "overview"}
                 aria-labelledby="aw6-details-overview-title"
                 className="scroll-mt-4 py-5"
               >
@@ -255,6 +265,7 @@ export function ActiveWorkoutDetailsBridge({
 
               <section
                 data-aw6-details-current-set
+                hidden={effectiveSection !== "current-set"}
                 data-aw10-set-details-exact
                 aria-labelledby="aw6-details-current-set-title"
                 className="scroll-mt-4 py-5"
@@ -362,6 +373,7 @@ export function ActiveWorkoutDetailsBridge({
 
               <section
                 data-aw6-details-muscle-load
+                hidden={effectiveSection !== "muscle-load"}
                 aria-labelledby="aw6-details-muscle-load-title"
                 className="scroll-mt-4 py-5"
               >
@@ -381,6 +393,7 @@ export function ActiveWorkoutDetailsBridge({
               {sourceKind === "plan-day" ? (
                 <section
                   data-aw6-details-adjust-today
+                hidden={effectiveSection !== "adjust-today"}
                   aria-labelledby="aw6-details-adjust-today-title"
                   className="scroll-mt-4 py-5"
                 >
@@ -461,6 +474,7 @@ export function ActiveWorkoutDetailsBridge({
 
               <section
                 data-aw6-details-assistance
+                hidden={effectiveSection !== "assistance"}
                 aria-labelledby="aw6-details-assistance-title"
                 className="scroll-mt-4 py-5"
               >
