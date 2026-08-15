@@ -125,6 +125,19 @@ export function ActiveWorkoutDetailsBridge({
   const rpeErrorId = activeRpeValidation.error ? "active-set-rpe-error" : undefined;
   const rirErrorId = activeRirValidation.error ? "active-set-rir-error" : undefined;
 
+  const closeBeforeAi = () => onOpenChange(false);
+  const effectiveSection: ActiveWorkoutDetailsSection =
+    requestedSection === "adjust-today" && sourceKind !== "plan-day" ? "overview" : requestedSection;
+  const dialogTitle = effectiveSection === "overview"
+    ? tr("details.exerciseOverview")
+    : effectiveSection === "current-set"
+      ? tr("actions.setDetails")
+      : effectiveSection === "muscle-load"
+        ? tr("details.muscleLoad")
+        : effectiveSection === "adjust-today"
+          ? tr("details.adjustToday")
+          : tr("chatGPT.ask");
+
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(() => {
@@ -144,19 +157,6 @@ export function ActiveWorkoutDetailsBridge({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [effectiveSection, open, requestedFocusTarget]);
-
-  const closeBeforeAi = () => onOpenChange(false);
-  const effectiveSection: ActiveWorkoutDetailsSection =
-    requestedSection === "adjust-today" && sourceKind !== "plan-day" ? "overview" : requestedSection;
-  const dialogTitle = effectiveSection === "overview"
-    ? tr("details.exerciseOverview")
-    : effectiveSection === "current-set"
-      ? tr("actions.setDetails")
-      : effectiveSection === "muscle-load"
-        ? tr("details.muscleLoad")
-        : effectiveSection === "adjust-today"
-          ? tr("details.adjustToday")
-          : tr("chatGPT.ask");
 
   return (
     <>
