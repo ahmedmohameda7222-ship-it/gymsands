@@ -8,13 +8,15 @@ export function SessionHistoryActions({
   capabilities,
   sessionId,
   title,
+  freshAuthority,
 }: {
   capabilities: WorkoutHistoryCapabilities;
   sessionId: string;
   title: string;
+  freshAuthority: boolean;
 }) {
   const { tr } = useTrainTranslation();
-  if (!capabilities.repeatWorkout) return null;
+  if (!freshAuthority || !capabilities.repeatWorkout) return null;
   return (
     <section
       className="grid gap-2"

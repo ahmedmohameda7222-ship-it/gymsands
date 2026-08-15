@@ -56,10 +56,15 @@ function expectedConsoleError(scenario, message) {
 async function openCorrection(page) {
   await page
     .getByRole("button", {
+      name: /more actions|weitere aktionen|إجراءات إضافية/iu,
+    })
+    .click();
+  await page
+    .getByRole("menuitem", {
       name: /correct session|training korrigieren|تصحيح الجلسة/iu,
     })
     .click();
-  await page.waitForSelector('[role="dialog"]');
+  await page.waitForSelector("[data-workout-history-correction-dialog]");
 }
 
 async function saveCorrection(page) {
@@ -106,23 +111,13 @@ async function prepareScenario(page, scenario, observation) {
       .click();
     await page.waitForFunction(
       () =>
-        document.querySelectorAll("[data-workout-history-card]").length > 20,
+        document.querySelectorAll("[data-workout-history-row]").length > 20,
     );
   } else if (scenario.action === "filters") {
     await page
       .getByRole("button", { name: /filters|filter/iu })
       .first()
       .click();
-  } else if (scenario.action === "desktop-select") {
-    await page.locator("[data-workout-history-card] a").first().click();
-    await page.waitForSelector(
-      '[data-workout-history-card][data-selected="true"]',
-    );
-  } else if (scenario.action === "expand-exercise") {
-    const toggles = page.locator(
-      'section[aria-labelledby="session-history-exercises-title"] button',
-    );
-    if ((await toggles.count()) > 1) await toggles.nth(1).click();
   } else if (scenario.action === "correction") {
     await openCorrection(page);
   } else if (scenario.action === "correction-edit") {
@@ -133,7 +128,7 @@ async function prepareScenario(page, scenario, observation) {
     await page.getByLabel(/^RIR$/iu).first().fill("1.5");
     await page.getByLabel(/set note|satznotiz|ملاحظة المجموعة/iu).first().fill("Controlled corrected set");
     await saveCorrection(page);
-    await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+    await page.locator("[data-workout-history-correction-dialog]").waitFor({ state: "hidden" });
   } else if (scenario.action === "correction-add") {
     await openCorrection(page);
     const addButton = page
@@ -147,7 +142,7 @@ async function prepareScenario(page, scenario, observation) {
     await addedSet.getByLabel(/^RPE$/iu).fill("8");
     await addedSet.getByLabel(/^RIR$/iu).fill("2");
     await saveCorrection(page);
-    await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+    await page.locator("[data-workout-history-correction-dialog]").waitFor({ state: "hidden" });
   } else if (scenario.action === "correction-remove") {
     await openCorrection(page);
     await page
@@ -155,7 +150,7 @@ async function prepareScenario(page, scenario, observation) {
       .first()
       .click();
     await saveCorrection(page);
-    await page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+    await page.locator("[data-workout-history-correction-dialog]").waitFor({ state: "hidden" });
   } else if (scenario.action === "correction-conflict") {
     await openCorrection(page);
     await page
@@ -168,16 +163,21 @@ async function prepareScenario(page, scenario, observation) {
       })
       .waitFor();
   } else if (scenario.action === "delete-confirmation") {
-    page.once("dialog", async (dialog) => {
-      observation.nativeDialog = safeText(dialog.message());
-      await dialog.dismiss();
-    });
     await page
       .getByRole("button", {
+        name: /more actions|weitere aktionen|إجراءات إضافية/iu,
+      })
+      .click();
+    await page
+      .getByRole("menuitem", {
         name: /delete workout|training löschen|حذف التمرين/iu,
       })
       .click();
-    await page.waitForTimeout(100);
+    await page
+      .getByRole("dialog", {
+        name: /delete workout|training löschen|حذف التمرين/iu,
+      })
+      .waitFor();
   } else if (scenario.action === "recently-deleted") {
     const item = page.getByText("Strength B", { exact: true });
     await item.waitFor();
@@ -198,8 +198,11 @@ async function prepareScenario(page, scenario, observation) {
     const item = page.getByText("Strength B", { exact: true });
     await item.waitFor();
     await item.scrollIntoViewIfNeeded();
-    page.once("dialog", (dialog) => dialog.accept());
     await page
+      .getByRole("button", { name: "Delete permanently", exact: true })
+      .click();
+    await page
+      .getByRole("dialog", { name: "Delete permanently" })
       .getByRole("button", { name: "Delete permanently", exact: true })
       .click();
     await page
@@ -211,6 +214,51 @@ async function prepareScenario(page, scenario, observation) {
       .click();
     await page.waitForSelector('[role="dialog"]');
     await page.waitForTimeout(100);
+  } else if (scenario.action === "stale-detail") {
+    await page.waitForSelector("[data-stale-history-action-notice]");
+    observation.repeatActionAvailable = await page.getByRole("button", { name: /repeat workout|wiederholen|ØªÙƒØ±Ø§Ø±/iu }).count() > 0;
+    await page.getByRole("button", { name: /more actions|weitere aktionen|Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©/iu }).click();
+    observation.correctActionAvailable = await page.getByRole("menuitem", { name: /correct session|training korrigieren|ØªØµØ­ÙŠØ­ Ø§Ù„Ø¬Ù„Ø³Ø©/iu }).count() > 0;
+    observation.deleteActionAvailable = await page.getByRole("menuitem", { name: /delete workout|training lÃ¶schen|Ø­Ø°Ù Ø§Ù„ØªÙ…Ø±ÙŠÙ†/iu }).count() > 0;
+    await page.keyboard.press("Escape");
+  } else if (scenario.action === "semantic-detail") {
+    observation.repeatActionAvailable = await page.getByRole("button", { name: /repeat workout|wiederholen|ØªÙƒØ±Ø§Ø±/iu }).count() > 0;
+    const moreActions = page.getByRole("button", { name: /more actions|weitere aktionen|Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©/iu });
+    if (await moreActions.count() > 0) {
+      await moreActions.click();
+      observation.correctActionAvailable = await page.getByRole("menuitem", { name: /correct session|training korrigieren|ØªØµØ­ÙŠØ­ Ø§Ù„Ø¬Ù„Ø³Ø©/iu }).count() > 0;
+      await page.keyboard.press("Escape");
+    } else {
+      observation.correctActionAvailable = false;
+    }
+  } else if (scenario.action === "zoom-list") {
+    await page.waitForSelector("[data-workout-history-row]");
+    observation.zoomControlsReachable = await page.evaluate(() => {
+      const elements = [
+        document.querySelector('input[type="search"]'),
+        document.querySelector('[data-workout-history-page] button'),
+        document.querySelector('[data-workout-history-row] a'),
+      ];
+      return elements.every((element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.right <= innerWidth;
+      });
+    });
+  } else if (scenario.action === "zoom-detail") {
+    await page.waitForSelector("[data-set-history-row]");
+    observation.zoomControlsReachable = await page.evaluate(() => {
+      const elements = [
+        document.querySelector('[data-session-history-page] a[href="/workout-history"]'),
+        document.querySelector('[data-session-history-page] button'),
+        document.querySelector('[data-set-history-row]'),
+      ];
+      return elements.every((element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.right <= innerWidth;
+      });
+    });
   } else if (scenario.action === "keyboard") {
     for (let count = 0; count < 5; count += 1) await page.keyboard.press("Tab");
   }
@@ -294,6 +342,11 @@ try {
       waitUntil: "domcontentloaded",
       timeout: 45_000,
     });
+    if (scenario.zoom !== 1) {
+      await page.evaluate((zoom) => {
+        document.documentElement.style.zoom = String(zoom);
+      }, scenario.zoom);
+    }
     await prepareScenario(page, scenario, observation);
     const fileName = `${String(observations.length + 1).padStart(2, "0")}-${scenario.name}-${scenario.viewport.name}-${scenario.language}-${scenario.theme}.png`;
     const screenshotPath = path.join(outputDir, fileName);
@@ -320,8 +373,12 @@ try {
           document.documentElement.scrollWidth -
             document.documentElement.clientWidth,
         ),
-        cards: document.querySelectorAll("[data-workout-history-card]").length,
+        cards: document.querySelectorAll("[data-workout-history-row]").length,
         detail: Boolean(document.querySelector("[data-session-history-page]")),
+        zoom: document.documentElement.style.zoom || "1",
+        staleActionNotice: Boolean(document.querySelector("[data-stale-history-action-notice]")),
+        setRows: document.querySelectorAll("[data-set-history-row]").length,
+        rawMetricKeysVisible: /future_unknown_metric|distance_meters|duration_seconds/u.test(document.querySelector("main")?.textContent ?? ""),
         snapshotVersion:
           document
             .querySelector("[data-session-history-page]")
@@ -424,6 +481,14 @@ try {
           !dom.muscleSummary ||
           dom.muscleSvgCount < 2
         )) ||
+      (scenario.action === "stale-detail" &&
+        (!dom.staleActionNotice || observation.repeatActionAvailable || observation.correctActionAvailable || observation.deleteActionAvailable)) ||
+      (scenario.action === "semantic-list" &&
+        (dom.cards !== 1 || dom.rawMetricKeysVisible)) ||
+      (scenario.action === "semantic-detail" &&
+        (dom.setRows !== 0 || dom.muscleSummary || dom.rawMetricKeysVisible || observation.repeatActionAvailable || observation.correctActionAvailable)) ||
+      ((scenario.action === "zoom-list" || scenario.action === "zoom-detail") &&
+        (dom.zoom !== "2" || !observation.zoomControlsReachable)) ||
       (scenario.action === "correction-edit" && !editPayloadValid) ||
       (scenario.action === "correction-add" && !addPayloadValid) ||
       (scenario.action === "correction-remove" && !removePayloadValid) ||

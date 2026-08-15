@@ -1,10 +1,12 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import type { WorkoutHistoryDateRange, WorkoutHistoryPeriodMode } from "@/lib/workouts/history/date-range";
 
@@ -34,6 +36,7 @@ export function WorkoutHistoryPeriodControl({
   onApplyCustom: () => void;
 }) {
   const { locale, tr } = useTrainTranslation();
+  const [customOpen, setCustomOpen] = useState(false);
   const formatter = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: range.timezone });
   const displayTo = new Date(new Date(range.to).getTime() - 1);
   const labels = {
@@ -44,19 +47,19 @@ export function WorkoutHistoryPeriodControl({
   };
 
   return (
-    <section className="rounded-[20px] border border-border/70 bg-card p-3 shadow-sm" aria-label={tr("historyPageTitle")}>
-      <div className="flex gap-1 overflow-x-auto pb-1" role="group">
+    <section className="border-y border-border/70 py-2" aria-label={tr("historyPageTitle")}>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-1" role="group" data-workout-history-period-controls>
         {modes.map((value) => (
           <Button
             key={value}
             type="button"
             size="sm"
             variant={mode === value ? "default" : "ghost"}
-            className="min-h-10 shrink-0 rounded-xl px-3"
+            className="h-auto min-h-11 min-w-0 whitespace-normal rounded-xl px-2 py-2 leading-tight"
             aria-pressed={mode === value}
-            aria-expanded={value === "custom" ? mode === "custom" : undefined}
+            aria-expanded={value === "custom" ? customOpen : undefined}
             aria-controls={value === "custom" ? "workout-history-custom-period" : undefined}
-            onClick={() => onModeChange(value)}
+            onClick={() => value === "custom" ? setCustomOpen(true) : onModeChange(value)}
           >
             {labels[value]}
           </Button>
@@ -75,9 +78,13 @@ export function WorkoutHistoryPeriodControl({
         </Button>
       </div>
 
-      {mode === "custom" ? (
-        <div id="workout-history-custom-period" className="mt-3">
-          <div className="grid gap-3 border-t border-border/70 pt-3 sm:grid-cols-2">
+      <Dialog open={customOpen} onOpenChange={setCustomOpen}>
+        <DialogContent id="workout-history-custom-period" closeLabel={tr("historyCloseFilters")} className="pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+          <DialogHeader>
+            <DialogTitle>{tr("historyPeriodCustom")}</DialogTitle>
+            <DialogDescription>{tr("historyCustomPeriodDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
             <Label className="space-y-1.5 text-xs text-muted-foreground">
               <span>{tr("historyCustomFrom")}</span>
               <Input type="date" value={customFrom} onChange={(event) => onCustomFromChange(event.target.value)} />
@@ -86,12 +93,12 @@ export function WorkoutHistoryPeriodControl({
               <span>{tr("historyCustomTo")}</span>
               <Input type="date" value={customTo} onChange={(event) => onCustomToChange(event.target.value)} />
             </Label>
-            <Button type="button" className="sm:col-span-2" onClick={onApplyCustom}>
+            <Button type="button" className="min-h-12 sm:col-span-2" onClick={() => { onApplyCustom(); setCustomOpen(false); }}>
               {tr("historyApplyPeriod")}
             </Button>
           </div>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

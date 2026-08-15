@@ -5,6 +5,7 @@ import {
   DEFAULT_INTEGRATION_DATABASE,
   DEFAULT_INTEGRATION_POSTGRES_IMAGE,
   buildDisposablePostgresArgs,
+  hasCompletedDisposablePostgresInitialization,
   isRetryableContainerState,
   parsePublishedPostgresPort,
   requireLocalPostgresUrl,
@@ -73,6 +74,19 @@ test("only proven container termination or unhealthy state is retryable", () => 
   assert.equal(isRetryableContainerState({ Running: false, ExitCode: 0 }), true);
   assert.equal(isRetryableContainerState({ Running: false, ExitCode: 137, OOMKilled: true }), true);
   assert.equal(isRetryableContainerState({ Running: true, Health: { Status: "unhealthy" } }), true);
+});
+
+test("disposable PostgreSQL readiness waits past the temporary bootstrap server", () => {
+  assert.equal(
+    hasCompletedDisposablePostgresInitialization("database system is ready to accept connections"),
+    false,
+  );
+  assert.equal(
+    hasCompletedDisposablePostgresInitialization(
+      "PostgreSQL init process complete; ready for start up.\ndatabase system is ready to accept connections",
+    ),
+    true,
+  );
 });
 
 test("integration execution launches the installed Vitest entrypoint without a platform shell shim", () => {

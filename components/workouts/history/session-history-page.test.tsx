@@ -21,6 +21,7 @@ function detail(sourceKind: "performed" | "scheduled_fallback" = "performed"): W
   const performed = sourceKind === "performed";
   return {
     contractVersion: 1,
+    resultKind: performed ? "strength_sets" : "limited",
     activity: {
       contractVersion: 1,
       activityId: performed ? "11111111-1111-4111-8111-111111111111" : "scheduled:11111111-1111-4111-8111-111111111111",
@@ -88,8 +89,8 @@ describe("Workout History session detail surface", () => {
     const summary = renderToStaticMarkup(<SessionHistorySummary detail={value} />);
     const exercise = renderToStaticMarkup(<ExerciseHistorySection exercise={value.exercises[0]!} defaultOpen />);
 
-    expect(summary).toContain("640");
-    expect(summary).toContain("historyReliableVolumeMetric");
+    expect(summary).toContain("historyCompletedSetsMetric");
+    expect(summary).toContain("historyExercisesMetric");
     expect(exercise).toContain("historyActualResult");
     expect(exercise).toContain("historyMissingPlannedSet");
     expect(exercise).toContain("Controlled");
@@ -100,7 +101,7 @@ describe("Workout History session detail surface", () => {
     const value = detail("scheduled_fallback");
     const summary = renderToStaticMarkup(<SessionHistorySummary detail={value} />);
     const exercise = renderToStaticMarkup(<ExerciseHistorySection exercise={value.exercises[0]!} defaultOpen={false} />);
-    expect(summary).toContain("historyDurationMetric");
+    expect(summary).toContain("historyMinutesShort");
     expect(summary).not.toContain("historyReliableVolumeMetric");
     expect(exercise).toContain("Bench press");
     expect(exercise).not.toContain("historyActualResult");
@@ -112,8 +113,8 @@ describe("Workout History session detail surface", () => {
     const performedRoute = readFileSync("app/(private)/workout-history/[sessionId]/page.tsx", "utf8");
     const scheduledRoute = readFileSync("app/(private)/workout-history/scheduled/[scheduledSessionId]/page.tsx", "utf8");
     const order = [
-      "<SessionHistorySummary", "<SessionHistoryInsight", "<SessionHistoryMuscleSummary",
-      "<ExerciseHistorySection", "<SessionHistoryNotes", "<SessionHistoryTimeline", "<SessionHistoryActions",
+      "<SessionHistorySummary", "<ExerciseHistorySection", "<SessionHistoryMuscleSummary",
+      "<SessionHistoryNotes", "<SessionHistoryTimeline", "<SessionHistoryActions",
     ].map((token) => page.indexOf(token));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((left, right) => left - right));
@@ -121,12 +122,12 @@ describe("Workout History session detail surface", () => {
     expect(scheduledRoute).toContain('source="scheduled_fallback"');
   });
 
-  it("uses completed versioned muscle analysis and never announces technical completeness codes", () => {
+  it("uses Workout History-owned training focus semantics without the Active Workout controller", () => {
     const source = readFileSync("components/workouts/history/session-history-muscle-summary.tsx", "utf8");
-    expect(source).toContain('mode: "completed"');
     expect(source).toContain("MuscleHeatMap");
-    expect(source).not.toContain("effectiveCompleteness");
+    expect(source).toContain("historyHighestExposure");
+    expect(source).toContain("historyAlsoTrained");
+    expect(source).not.toContain("active-session-muscle-analysis");
     expect(source).not.toContain("reasonCodes");
-    expect(source).not.toContain("snapshotSchemaVersion");
   });
 });

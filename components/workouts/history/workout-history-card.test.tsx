@@ -4,8 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/i18n/train", () => ({
   useTrainTranslation: () => ({
     locale: "en-US",
-    tr: (key: string, values?: Record<string, string | number>) =>
-      values?.count === undefined ? key : `${key}:${values.count}`,
+    tr: (key: string, values?: Record<string, string | number>) => {
+      if (key === "historyDurationMetric") return "Duration";
+      if (key === "historyMinutesShort" && values?.count !== undefined) return `${values.count} min`;
+      return values?.count === undefined ? key : `${key}:${values.count}`;
+    },
   }),
 }));
 
@@ -63,14 +66,13 @@ describe("Workout History mobile card", () => {
   it("renders a compact full-card detail link with no expanded data graph", () => {
     const markup = renderToStaticMarkup(<WorkoutHistoryCard item={item()} />);
 
-    expect(markup).toContain("data-workout-history-card");
-    expect(markup).toContain("min-h-[158px]");
+    expect(markup).toContain("data-workout-history-row");
+    expect(markup).toContain("min-h-20");
     expect(markup).toContain('/workout-history/11111111-1111-4111-8111-111111111111');
     expect(markup).toContain("Push day");
     expect(markup).not.toContain("5200");
     expect(markup).not.toContain("notes");
-    expect((markup.match(/<dl/g) ?? [])).toHaveLength(1);
-    expect((markup.match(/<dd/g) ?? [])).toHaveLength(3);
+    expect(markup).not.toContain("<dl");
   });
 
   it("shows a lifecycle indicator only for an exceptional state", () => {
@@ -89,5 +91,22 @@ describe("Workout History mobile card", () => {
     })} />);
     expect(markup).toContain('/workout-history/scheduled/33333333-3333-4333-8333-333333333333');
     expect(markup).not.toContain("source=scheduled");
+  });
+
+  it("prefers semantic activity duration over the generic session duration", () => {
+    const markup = renderToStaticMarkup(<WorkoutHistoryCard item={item({
+      title: "City endurance run",
+      durationMinutes: 52,
+      resultKind: "semantic_metrics",
+      resultFacts: [
+        { metricKey: "distance_meters", side: "none", value: 5_000, unit: "meters" },
+        { metricKey: "duration_seconds", side: "none", value: 2_100, unit: "seconds" },
+      ],
+    })} />);
+
+    expect(markup).toContain("5 km");
+    expect(markup).toContain("35 min");
+    expect(markup).not.toContain("52 min");
+    expect(markup.match(/Duration/gu)).toHaveLength(1);
   });
 });

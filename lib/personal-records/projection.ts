@@ -6,6 +6,7 @@ import type {
   PersonalRecordDefinition,
   PersonalRecordLineageDetail,
   PersonalRecordLineageSummary,
+  PersonalRecordSessionProjection,
   PersonalRecordsMainResult,
   PersonalRecordSubject,
 } from "./contracts";
@@ -181,6 +182,7 @@ export function canonicalizePersonalRecordRows(rows: readonly PersonalRecordRawR
       rawAchievedAt: row.achieved_at ?? `${row.record_date}T12:00:00.000Z`,
       source: row.source_kind === "workout_derived" ? "verified" as const : "manual" as const,
       sourceWorkoutId: row.source_kind === "workout_derived" ? row.workout_session_id : null,
+      sourceExerciseLogId: row.source_kind === "workout_derived" ? row.exercise_log_id ?? null : null,
       notes: row.notes,
       editable: row.source_kind === "manual",
       eventSemanticsVersion: row.event_semantics_version ?? (row.source_kind === "workout_derived" ? "wh6-historical-v1" : "manual-legacy-v1"),
@@ -210,6 +212,32 @@ export function canonicalizePersonalRecordRows(rows: readonly PersonalRecordRawR
     }
   }
   return canonical.sort((left, right) => right.achievedAt.localeCompare(left.achievedAt) || right.eventId.localeCompare(left.eventId));
+}
+
+export function projectPersonalRecordSessions(
+  rows: readonly PersonalRecordRawRow[],
+  sessionIds: readonly string[],
+): PersonalRecordSessionProjection {
+  const wanted = new Set(sessionIds);
+  const canonical = canonicalizePersonalRecordRows(rows);
+  const byLineage = new Map<string, CanonicalPersonalRecordEvent[]>();
+  for (const event of canonical) {
+    byLineage.set(event.lineageId, [...(byLineage.get(event.lineageId) ?? []), event]);
+  }
+  const eventsBySessionId: Record<string, PersonalRecordSessionProjection["eventsBySessionId"][string]> = {};
+  for (const event of canonical) {
+    const sessionId = event.source === "verified" ? event.sourceWorkoutId : null;
+    if (!sessionId || !wanted.has(sessionId)) continue;
+    const lineage = [...(byLineage.get(event.lineageId) ?? [])]
+      .sort((left, right) => left.achievedAt.localeCompare(right.achievedAt) || left.eventId.localeCompare(right.eventId));
+    const index = lineage.findIndex((candidate) => candidate.eventId === event.eventId);
+    const projected = { event, previousComparable: index > 0 ? lineage[index - 1] : null };
+    eventsBySessionId[sessionId] = [...(eventsBySessionId[sessionId] ?? []), projected];
+  }
+  for (const sessionId of Object.keys(eventsBySessionId)) {
+    eventsBySessionId[sessionId].sort((left, right) => left.event.achievedAt.localeCompare(right.event.achievedAt) || left.event.eventId.localeCompare(right.event.eventId));
+  }
+  return { eventsBySessionId };
 }
 
 function lineages(events: readonly CanonicalPersonalRecordEvent[]): PersonalRecordLineageSummary[] {

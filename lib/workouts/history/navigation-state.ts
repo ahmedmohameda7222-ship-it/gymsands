@@ -22,7 +22,6 @@ export type WorkoutHistoryNavigationState = {
   statuses: WorkoutHistoryLifecycle[];
   progressOnly: boolean;
   sort: WorkoutHistorySort;
-  selected: string | null;
 };
 
 function normalized(value: string | null): string {
@@ -64,7 +63,6 @@ export function parseWorkoutHistoryNavigationState(
     statuses: statuses.length ? [...new Set(statuses)] : ["completed", "partial"],
     progressOnly: params.get("progress") === "true",
     sort: requestedSort && SORTS.has(requestedSort) ? requestedSort : "newest",
-    selected: normalized(params.get("selected")) || null,
   };
 }
 
@@ -81,6 +79,5 @@ export function workoutHistoryNavigationSearchParams(state: WorkoutHistoryNaviga
   if (state.statuses.join(",") !== "completed,partial") params.set("status", state.statuses.join(","));
   if (state.progressOnly) params.set("progress", "true");
   if (state.sort !== "newest") params.set("sort", state.sort);
-  if (state.selected) params.set("selected", state.selected);
   return params;
 }

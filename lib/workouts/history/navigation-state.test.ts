@@ -19,7 +19,6 @@ describe("Workout History navigation state", () => {
       status: "partial,completed",
       progress: "true",
       sort: "longest_duration",
-      selected: "performed:22222222-2222-4222-8222-222222222222",
     });
     const parsed = parseWorkoutHistoryNavigationState(source, new Date("2026-08-01T12:00:00Z"), "UTC");
     const restored = parseWorkoutHistoryNavigationState(
@@ -30,6 +29,7 @@ describe("Workout History navigation state", () => {
     expect(restored).toEqual(parsed);
     expect(workoutHistoryNavigationSearchParams(parsed).has("cursor")).toBe(false);
     expect(workoutHistoryNavigationSearchParams(parsed).has("notes")).toBe(false);
+    expect(workoutHistoryNavigationSearchParams(parsed).has("selected")).toBe(false);
   });
 
   it("defaults to the current month, completed plus partial, and newest", () => {

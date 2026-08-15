@@ -14,6 +14,8 @@ const headSha = process.env.QA_HEAD_SHA || process.env.GITHUB_SHA || "";
 const DETAIL_ID = "20000000-0000-4000-8000-000000000002";
 const SCHEDULED_ID = "21000000-0000-4000-8000-000000000001";
 const QA_TOKEN = "plaivra-rendered-qa-access-token";
+const developmentVerification =
+  (process.env.QA_BUILD_COMMAND ?? "").startsWith("development ");
 
 if (!/^[a-f0-9]{40}$/iu.test(headSha)) {
   throw new Error("QA_HEAD_SHA must be the exact 40-character head under inspection.");
@@ -197,6 +199,7 @@ function detail(sourceKind = "performed") {
         calculatePerformanceMetrics: performed,
         calculateVerifiedRecords: performed,
         repeatWorkout: performed,
+        downloadReport: performed,
         correctSession: performed,
         softDeleteSession: performed,
       },
@@ -280,6 +283,21 @@ async function installFixture(context, scenario, state) {
   await context.route(/^https:\/\/[^/]+\.supabase\.co\//u, async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
   });
+  await context.route(
+    /\/api\/workouts\/sessions\/[^/]+\/muscle-analysis(?:\?.*)?$/u,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          snapshotId: "qa-report-muscle-snapshot",
+          snapshotSchemaVersion: "workout_session_muscle_snapshot_v2",
+          effectiveCompleteness: "unavailable",
+          analysis: null,
+        }),
+      });
+    },
+  );
   await context.route(`${origin}/api/workouts/history/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -344,6 +362,10 @@ try {
       if (
         message.type() === "error" &&
         !(
+          developmentVerification &&
+          /React requires eval\(\) in development mode/iu.test(message.text())
+        ) &&
+        !(
           scenario.outcome === "failure" &&
           /Failed to load resource: the server responded with a status of 503/iu.test(message.text())
         )
@@ -359,7 +381,17 @@ try {
       timeout: 45_000,
     });
     await page.waitForSelector("[data-session-history-page]", { timeout: 20_000 });
-    const button = page.locator("[data-workout-report-download]");
+    const button = page.getByRole("button", {
+      name: /more actions|weitere aktionen|إجراءات إضافية/iu,
+    });
+    const chooseReport = async () => {
+      await button.click();
+      await page
+        .getByRole("menuitem", {
+          name: /download report|bericht herunterladen|تنزيل التقرير/iu,
+        })
+        .click();
+    };
     const before = await page.evaluate(() => ({ href: location.href, scrollY: scrollY }));
     let suggestedFilename = null;
     let busyObserved = false;
@@ -369,12 +401,12 @@ try {
     if (scenario.outcome === "scheduled") {
       if ((await button.count()) !== 0) throw new Error("Scheduled fallback exposed the P8A report action.");
     } else if (scenario.outcome === "failure") {
-      await button.click();
+      await chooseReport();
       const failedTitle = scenario.language === "de"
-        ? "PDF konnte nicht erstellt werden"
+        ? "Bericht konnte nicht heruntergeladen werden"
         : scenario.language === "ar"
-          ? "تعذر إعداد ملف PDF"
-          : "Could not prepare PDF";
+          ? "تعذر تنزيل التقرير"
+          : "Report could not be downloaded";
       const alert = page.getByText(failedTitle, { exact: true });
       await alert.waitFor({ timeout: 10_000 });
       failureToast =
@@ -382,7 +414,7 @@ try {
       actionRestored = await button.isEnabled();
     } else {
       const downloadPromise = page.waitForEvent("download", { timeout: 15_000 });
-      await button.click();
+      await chooseReport();
       if (scenario.outcome === "slow") {
         busyObserved = await button.isDisabled();
         if (!busyObserved) throw new Error("Slow report request did not expose a disabled busy state.");
@@ -399,10 +431,7 @@ try {
       lang: document.documentElement.lang,
       dir: document.documentElement.dir,
       overflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
-      buttonCount: document.querySelectorAll("[data-workout-report-download]").length,
-      buttonMinHeight: document.querySelector("[data-workout-report-download]") instanceof HTMLElement
-        ? getComputedStyle(document.querySelector("[data-workout-report-download]")).minHeight
-        : null,
+      buttonCount: document.querySelectorAll('[data-session-history-page] button').length,
     }));
 
     const fileName = `${String(observations.length + 1).padStart(2, "0")}-${scenario.name}.png`;
@@ -437,9 +466,9 @@ try {
     const requestValid = state.reportRequests.length === (performed ? 1 : 0);
     const authValid = state.reportRequests.every((item) => item.authorization === `Bearer ${QA_TOKEN}`);
     const filenameValid = !suggestedFilename || /^plaivra-workout-report-\d{4}-\d{2}-\d{2}\.pdf$/u.test(suggestedFilename);
-    const actionValid = performed ? after.buttonCount === 1 : after.buttonCount === 0;
+    const actionValid = performed ? (await button.count()) === 1 : (await button.count()) === 0;
     const minHeightValid =
-      !performed || Number.parseFloat(after.buttonMinHeight ?? "0") >= 44;
+      !performed || (await button.evaluate((element) => element.getBoundingClientRect().height)) >= 44;
     const languageValid = after.lang === scenario.language;
     const directionValid =
       after.dir === (scenario.language === "ar" ? "rtl" : "ltr");

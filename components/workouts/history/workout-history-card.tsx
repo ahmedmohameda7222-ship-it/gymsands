@@ -1,109 +1,49 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Clock3, Dumbbell, Layers3, Trophy } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
+import { HistoryFactList, type HistoryFact } from "@/components/workouts/history/history-fact-list";
 import { useTrainTranslation } from "@/lib/i18n/train";
-import { cn } from "@/lib/utils";
+import { presentWorkoutMetric } from "@/lib/workouts/metric-presentation";
 import type { WorkoutHistorySessionSummary } from "@/types/workout-history";
 
-export function WorkoutHistoryCard({ item, selected = false, onSelect }: { item: WorkoutHistorySessionSummary; selected?: boolean; onSelect?: (item: WorkoutHistorySessionSummary) => void }) {
+export function WorkoutHistoryCard({ item }: { item: WorkoutHistorySessionSummary; onSelect?: (item: WorkoutHistorySessionSummary) => void }) {
   const { locale, tr } = useTrainTranslation();
-  const date = new Intl.DateTimeFormat(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-  }).format(new Date(item.effectiveAt));
+  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const time = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(new Date(item.effectiveAt));
   const detailId = item.canonicalSessionId ?? item.scheduledSessionId;
   const href = detailId
-    ? item.sourceKind === "scheduled_fallback"
-      ? `/workout-history/scheduled/${encodeURIComponent(detailId)}`
-      : `/workout-history/${encodeURIComponent(detailId)}`
+    ? item.sourceKind === "scheduled_fallback" ? `/workout-history/scheduled/${encodeURIComponent(detailId)}` : `/workout-history/${encodeURIComponent(detailId)}`
     : "/workout-history";
-  const lifecycle = item.lifecycle === "partial"
-    ? tr("historyPartial")
-    : item.lifecycle === "skipped"
-      ? tr("historySkipped")
-      : item.lifecycle === "cancelled"
-        ? tr("historyCancelled")
-        : null;
-  const metrics = [
-    item.durationMinutes === null ? null : {
-      icon: Clock3,
-      label: tr("historyDurationMetric"),
-      value: tr("historyMinutesShort", { count: item.durationMinutes }),
-    },
-    item.completedSetCount === null ? null : {
-      icon: Layers3,
-      label: tr("historySetsMetric"),
-      value: String(item.completedSetCount),
-    },
-    item.exerciseCount === null ? null : {
-      icon: Dumbbell,
-      label: tr("historyExercisesMetric"),
-      value: String(item.exerciseCount),
-    },
-  ].filter((metric): metric is { icon: typeof Clock3; label: string; value: string } => Boolean(metric)).slice(0, 3);
+  const lifecycle = item.lifecycle === "partial" ? tr("historyPartial") : item.lifecycle === "skipped" ? tr("historySkipped") : item.lifecycle === "cancelled" ? tr("historyCancelled") : null;
+  const semanticFacts: HistoryFact[] = item.resultKind === "semantic_metrics"
+    ? (item.resultFacts ?? []).map((metric) => presentWorkoutMetric(metric, locale)).filter((fact): fact is { label: string; value: string } => Boolean(fact))
+    : [];
+  const hasSemanticActivityDuration = item.resultKind === "semantic_metrics"
+    && (item.resultFacts ?? []).some((metric) => metric.metricKey === "duration_seconds" && Boolean(presentWorkoutMetric(metric, locale)));
+  const facts: HistoryFact[] = [
+    item.durationMinutes === null || hasSemanticActivityDuration ? null : { label: tr("historyDurationMetric"), value: tr("historyMinutesShort", { count: item.durationMinutes }) },
+    ...(item.resultKind === "strength_sets" ? [
+      item.completedSetCount === null ? null : { label: tr("historyCompletedSetsMetric"), value: number.format(item.completedSetCount) },
+      item.exerciseCount === null ? null : { label: tr("historyExercisesMetric"), value: number.format(item.exerciseCount) },
+    ] : semanticFacts),
+    (item.verifiedRecordCount ?? 0) > 0 ? { label: tr("historyVerifiedRecord"), value: number.format(item.verifiedRecordCount ?? 0) } : null,
+  ].filter((fact): fact is HistoryFact => Boolean(fact));
 
   return (
-    <article className={cn("group relative min-h-[158px] overflow-hidden rounded-[18px] border border-border/70 bg-card shadow-sm transition motion-reduce:transition-none hover:border-primary/30 hover:shadow-md focus-within:ring-2 focus-within:ring-primary/40", selected && "border-primary/50 ring-2 ring-primary/20")} data-workout-history-card data-selected={selected || undefined}>
-      <Link
-        href={href}
-        className="flex min-h-[158px] flex-col p-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-        aria-label={`${selected ? `${tr("historySelectedWorkout")}: ` : ""}${tr("historyOpenDetails")}: ${item.title}`}
-        onClick={(event) => {
-          if (onSelect && window.matchMedia("(min-width: 1024px)").matches) {
-            event.preventDefault();
-            onSelect(item);
-          }
-        }}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="line-clamp-2 text-base font-semibold leading-5 text-foreground">{item.title}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">{date}</p>
+    <article className="group border-b border-border/70" data-workout-history-row>
+      <Link href={href} className="flex min-h-20 items-center gap-3 py-3 outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 motion-reduce:transition-none" aria-label={`${tr("historyOpenDetails")}: ${item.title}`}>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <h3 className="text-base font-semibold leading-5 text-foreground">{item.title}</h3>
+            <span className="text-xs text-muted-foreground">{time}</span>
+            {lifecycle ? <span className="text-xs font-semibold text-warning">{lifecycle}</span> : null}
           </div>
-          {lifecycle ? (
-            <span className={cn(
-              "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-              item.lifecycle === "skipped" ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground",
-            )}>
-              {lifecycle}
-            </span>
-          ) : null}
+          {facts.length ? <p className="mt-1.5 text-sm text-muted-foreground"><HistoryFactList facts={facts} /></p> : <p className="mt-1.5 text-sm text-muted-foreground">{tr("historyLimitedResults")}</p>}
         </div>
-
-        {metrics.length ? (
-          <dl className="mt-4 grid grid-cols-3 gap-2">
-            {metrics.map(({ icon: Icon, label, value }) => (
-              <div key={label} className="min-w-0 rounded-xl bg-muted/40 px-2.5 py-2">
-                <dt className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <Icon className="size-3" aria-hidden="true" />
-                  <span className="truncate">{label}</span>
-                </dt>
-                <dd className="mt-1 truncate text-sm font-semibold tabular-nums text-foreground"><bdi dir="ltr">{value}</bdi></dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-
-        <div className="mt-auto flex items-end justify-between gap-3 pt-3">
-          <div className="flex min-w-0 flex-wrap gap-1.5">
-            {(item.verifiedRecordCount ?? 0) > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-                <Trophy className="size-3" aria-hidden="true" />
-                {item.verifiedRecordCount === 1
-                  ? tr("historyPrCountOne")
-                  : tr("historyPrCount", { count: item.verifiedRecordCount ?? 0 })}
-              </span>
-            ) : null}
-            {item.category ? <span className="max-w-40 truncate rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">{item.category}</span> : null}
-            {item.exerciseNames.slice(0, 2).map((name) => (
-              <span key={name} className="max-w-32 truncate rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">{name}</span>
-            ))}
-          </div>
-          <ChevronRight className="size-5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" aria-hidden="true" />
-        </div>
+        <ChevronRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none" aria-hidden="true" />
       </Link>
     </article>
   );

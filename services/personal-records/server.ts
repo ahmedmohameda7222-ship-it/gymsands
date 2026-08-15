@@ -6,6 +6,7 @@ import { MANUAL_RECORD_DEFINITIONS, type ManualPersonalRecordInput } from "@/lib
 import {
   projectExercisePerformance,
   projectPersonalRecordDetail,
+  projectPersonalRecordSessions,
   projectPersonalRecordsMain,
   type PersonalRecordRawRow,
 } from "@/lib/personal-records/projection";
@@ -99,6 +100,26 @@ export async function readExercisePersonalRecords(supabase: SupabaseClient, user
     lastPerformedAt: latest.data.completed_at ?? latest.data.created_at ?? projected.lastPerformedAt,
     recentWorkoutId: projected.recentWorkoutId ?? latest.data.workout_session_id,
   };
+}
+
+export async function readWorkoutHistoryPersonalRecordSessions(
+  supabase: SupabaseClient,
+  userId: string,
+  sessionIds: string[],
+) {
+  if (!sessionIds.length) return { eventsBySessionId: {} };
+  const { data, error } = await supabase.rpc("get_workout_history_pr_projection_inputs_v1", {
+    p_user_id: userId,
+    p_session_ids: sessionIds,
+  });
+  if (error || !Array.isArray(data)) {
+    throw new PersonalRecordsServerError(
+      "workout_history_personal_records_read_failed",
+      "Workout Personal Records could not load.",
+      503,
+    );
+  }
+  return projectPersonalRecordSessions(data as PersonalRecordRawRow[], sessionIds);
 }
 
 function validateManualInput(input: ManualPersonalRecordInput) {

@@ -4,8 +4,13 @@ import { describe, expect, it } from "vitest";
 const service = readFileSync("services/workouts/history/verified-records.ts", "utf8");
 const route = readFileSync("app/api/workouts/history/[sessionId]/verified-records/route.ts", "utf8");
 const reader = readFileSync("services/workouts/history/server-reader.ts", "utf8");
+const personalRecordsService = readFileSync("services/personal-records/server.ts", "utf8");
 const migration = readFileSync(
   "supabase/migrations/20260801201500_workout_history_verified_record_rebuild.sql",
+  "utf8",
+);
+const redesignMigration = readFileSync(
+  "supabase/migrations/20260813071926_workout_history_redesign_read_contract.sql",
   "utf8",
 );
 
@@ -47,9 +52,11 @@ describe("WH-6 verified record integration boundaries", () => {
   });
 
   it("hides stale derived rows and attaches current winners to exact source sets", () => {
-    expect(reader).toContain("recordsAreCurrent");
-    expect(reader).toContain("DERIVED_METRICS_FORMULA_VERSION");
+    expect(reader).toContain("readWorkoutHistoryPersonalRecordSessions");
+    expect(reader).not.toContain("current_personal_records");
+    expect(personalRecordsService).toContain("get_workout_history_pr_projection_inputs_v1");
+    expect(redesignMigration).toContain("get_workout_history_pr_projection_inputs_v1");
     expect(reader).toContain("verifiedRecordsByLog");
-    expect(reader).toContain("previousValue");
+    expect(reader).toContain("sourceExerciseLogId");
   });
 });

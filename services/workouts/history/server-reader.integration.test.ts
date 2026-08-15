@@ -14,6 +14,9 @@ const secret = "integration-test-history-secret-at-least-32-characters";
 function queryClient(rows: Record<string, unknown[]>) {
   const calls: Array<{ table: string; method: string; args: unknown[] }> = [];
   const client = {
+    rpc: vi.fn(async (name: string) => name === "get_workout_history_pr_projection_inputs_v1"
+      ? { data: rows.personal_records ?? [], error: null }
+      : { data: null, error: { message: `Unexpected RPC: ${name}` } }),
     from: vi.fn((table: string) => {
       const builder: Record<string, unknown> = {};
       const equalities = new Map<string, unknown>();
@@ -210,8 +213,8 @@ describe("Workout History server list integration", () => {
       roots[1]!.id,
     ]);
     expect(second.items.map((item) => item.activityId)).toEqual([roots[0]!.id]);
-    expect(first.summary.eligibleWorkoutCount).toBe(3);
-    expect(second.summary).toEqual(first.summary);
+    expect(first.summary?.eligibleWorkoutCount).toBe(3);
+    expect(second.summary).toBeUndefined();
     expect(new Set([...first.items, ...second.items].map((item) => item.activityId)).size)
       .toBe(3);
   });
