@@ -25,14 +25,19 @@ export async function refreshAndReadActiveWorkoutPersonalRecords(
 ): Promise<ActiveWorkoutCanonicalPersonalRecord[]> {
   const authorization = `Bearer ${await accessToken()}`;
   // The canonical workout is already terminal before this runs. Record rebuild
-  // is a secondary projection: failure never rolls back or invalidates save.
-  await fetch(`/api/workouts/history/${encodeURIComponent(sessionId)}/verified-records`, {
-    method: "POST",
-    credentials: "same-origin",
-    cache: "no-store",
-    signal,
-    headers: { Accept: "application/json", Authorization: authorization }
-  }).catch(() => undefined);
+  // is a secondary projection: failure never rolls back or invalidates save,
+  // but it must not be treated as a confirmed empty/stale PR result either.
+  const refreshResponse = await fetch(
+    `/api/workouts/history/${encodeURIComponent(sessionId)}/verified-records`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      signal,
+      headers: { Accept: "application/json", Authorization: authorization }
+    }
+  );
+  if (!refreshResponse.ok) throw new Error("Personal records are unavailable.");
 
   const response = await fetch(
     `/api/workouts/active/${encodeURIComponent(sessionId)}/personal-records`,
