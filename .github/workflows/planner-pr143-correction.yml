@@ -27,6 +27,7 @@ jobs:
       - name: Commit corrected branch
         shell: bash
         run: |
+          # The transport files delete themselves before this commit.
           if git diff --quiet && git diff --cached --quiet; then
             echo "No correction diff produced" >&2
             exit 1
