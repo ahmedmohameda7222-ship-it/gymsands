@@ -32,6 +32,7 @@ describe("Active Workout final binding redesign authority", () => {
     expect(previousClient).toContain("Authorization: `Bearer ${await accessToken()}`");
     expect(recordsClient).toContain("const authorization = `Bearer ${await accessToken()}`");
     expect(recordsClient).toContain("Authorization: authorization");
+    expect(recordsClient).toContain("if (!refreshResponse.ok)");
   });
 
   it("separates session controls, exercise details, exercise actions, and set details", () => {
