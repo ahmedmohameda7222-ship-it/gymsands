@@ -4,7 +4,7 @@ import { env } from "@/lib/env";
 import { requireUser } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { isUuid } from "@/lib/utils";
-import { readPersonalRecordsMain } from "@/services/personal-records/server";
+import { readWorkoutHistoryPersonalRecordSessions } from "@/services/personal-records/server";
 
 export const runtime = "nodejs";
 
@@ -59,20 +59,21 @@ export async function GET(
   }
 
   try {
-    const projected = await readPersonalRecordsMain(auth.supabase, auth.user.id, { limit: 50 });
-    const data: ActiveWorkoutCanonicalPersonalRecord[] = projected.groups
-      .flatMap((group) => group.records.map((record) => record.currentBest))
-      .filter((event) => event.source === "verified" && event.sourceWorkoutId === sessionId)
-      .sort((left, right) => right.achievedAt.localeCompare(left.achievedAt) || right.eventId.localeCompare(left.eventId))
-      .slice(0, 50)
-      .map((event) => ({
+    const projected = await readWorkoutHistoryPersonalRecordSessions(
+      auth.supabase,
+      auth.user.id,
+      [sessionId]
+    );
+    const data: ActiveWorkoutCanonicalPersonalRecord[] = (projected.eventsBySessionId[sessionId] ?? [])
+      .map(({ event }) => ({
         id: event.eventId,
         exerciseName: event.subject.name,
         recordType: event.definition.key,
         recordValue: event.value,
         recordUnit: event.definition.canonicalUnit,
         achievedAt: event.achievedAt
-      }));
+      }))
+      .sort((left, right) => right.achievedAt.localeCompare(left.achievedAt) || right.id.localeCompare(left.id));
     return NextResponse.json({ data }, { headers });
   } catch {
     return NextResponse.json({ error: "Personal records are unavailable right now." }, { status: 503, headers });
