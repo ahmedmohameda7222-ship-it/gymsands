@@ -213,7 +213,9 @@ async function writeReport() {
     bounded: listScenarios.every((scenario) =>
       scenario.maxRequests <= REAL_SERVICE_BUDGETS.maxListRequests
       && scenario.maxRowsTransferred <= REAL_SERVICE_BUDGETS.maxListRowsTransferred),
-    nPlusOne: Math.abs(first.maxRequests - second.maxRequests) > 1,
+    firstPageOnlyContextRequests: first.maxRequests - second.maxRequests,
+    nPlusOne: second.maxRequests > first.maxRequests
+      || first.maxRequests - second.maxRequests !== 2,
   };
   const checks = {
     firstPage: first.p95Ms <= REAL_SERVICE_BUDGETS.firstPageP95Ms,

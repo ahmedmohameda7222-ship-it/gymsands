@@ -4,6 +4,7 @@ import {
   customWorkoutHistoryPeriodRange,
   currentMonthWorkoutHistoryRange,
   shiftWorkoutHistoryPeriodAnchor,
+  shiftWorkoutHistoryPeriodRange,
   validateWorkoutHistoryDateRange,
   workoutHistoryPeriodRange,
   zonedLocalDateTimeToIso,
@@ -48,6 +49,24 @@ describe("Workout History calendar ranges", () => {
       "month",
       -1,
     ).toISOString()).toBe("2026-07-01T12:00:00.000Z");
+    expect(shiftWorkoutHistoryPeriodRange(
+      "2026-07-31T22:00:00.000Z",
+      "month",
+      -1,
+      "Europe/Berlin",
+    )).toMatchObject({
+      from: "2026-06-30T22:00:00.000Z",
+      to: "2026-07-31T22:00:00.000Z",
+    });
+    expect(shiftWorkoutHistoryPeriodRange(
+      "2026-07-31T10:00:00.000Z",
+      "month",
+      -1,
+      "Pacific/Kiritimati",
+    )).toMatchObject({
+      from: "2026-06-30T10:00:00.000Z",
+      to: "2026-07-31T10:00:00.000Z",
+    });
   });
 
   it("converts local midnight using the offset active on that date", () => {

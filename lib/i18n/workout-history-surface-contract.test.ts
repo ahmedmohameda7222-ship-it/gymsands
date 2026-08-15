@@ -17,7 +17,7 @@ const componentPaths = [
   "components/workouts/history/session-history-muscle-summary.tsx",
   "components/workouts/history/exercise-history-section.tsx",
   "components/workouts/history/set-history-row.tsx",
-  "components/workouts/history/session-history-insight.tsx",
+  "components/workouts/history/session-history-more-actions.tsx",
   "components/workouts/history/session-history-notes.tsx",
   "components/workouts/history/session-history-timeline.tsx",
   "components/workouts/history/session-history-actions.tsx",

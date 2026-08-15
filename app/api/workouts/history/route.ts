@@ -19,7 +19,7 @@ import {
   WorkoutHistoryRequestError,
 } from "@/lib/workouts/history/request";
 import { readWorkoutHistoryFilterOptions } from "@/services/workouts/history/filter-options";
-import { listWorkoutHistoryKeyset } from "@/services/workouts/history/server-list-reader";
+import { hasAnyWorkoutHistory, listWorkoutHistoryKeyset } from "@/services/workouts/history/server-list-reader";
 import { WorkoutHistoryReaderError } from "@/services/workouts/history/server-reader";
 
 export const runtime = "nodejs";
@@ -200,10 +200,14 @@ export async function GET(request: Request) {
             input,
           ),
         );
+    const existencePromise = input.cursor
+      ? Promise.resolve(null)
+      : measured(() => hasAnyWorkoutHistory(context.supabase, context.user.id));
 
-    const [listResult, filtersResult] = await Promise.all([
+    const [listResult, filtersResult, existenceResult] = await Promise.all([
       listPromise,
       filtersPromise,
+      existencePromise,
     ]);
     const response = listResult.value;
     const periodOptions = filtersResult?.value ?? null;
@@ -219,7 +223,13 @@ export async function GET(request: Request) {
 
     return withWorkoutHistoryHeaders(
       NextResponse.json(
-        periodOptions ? { ...response, filterOptions: periodOptions } : response,
+        input.cursor
+          ? response
+          : {
+              ...response,
+              hasAnyHistory: existenceResult?.value ?? false,
+              ...(periodOptions ? { filterOptions: periodOptions } : {}),
+            },
       ),
       requestId,
       workoutHistoryServerTiming({

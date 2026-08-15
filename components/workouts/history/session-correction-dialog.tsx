@@ -1,22 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Plus, RotateCcw, Trash2 } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
 import { getWorkoutHistoryCorrectionCopy } from "@/lib/i18n/workout-history-correction";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { workoutSetTypeLabel } from "@/lib/workouts/metric-presentation";
 import { validateWorkoutSetEffortInput } from "@/services/database/workout-set-details";
 import type {
   WorkoutHistoryExerciseDetail,
@@ -259,7 +260,8 @@ function buildSetOperations(draft: EditableExercise[]) {
 
 export function SessionCorrectionDialog({
   sessionId,
-  title,
+  open,
+  onOpenChange,
   historyRevision,
   notes,
   durationMinutes,
@@ -267,7 +269,8 @@ export function SessionCorrectionDialog({
   onChanged,
 }: {
   sessionId: string;
-  title: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   historyRevision: number;
   notes: string | null;
   durationMinutes: number | null;
@@ -276,15 +279,15 @@ export function SessionCorrectionDialog({
 }) {
   const { session } = useAuth();
   const { toast } = useToast();
-  const { language, tr } = useTrainTranslation();
+  const { language, locale, tr } = useTrainTranslation();
   const copy = getWorkoutHistoryCorrectionCopy(language);
-  const [open, setOpen] = useState(false);
   const [note, setNote] = useState(notes ?? "");
   const [duration, setDuration] = useState(durationMinutes?.toString() ?? "");
   const [draft, setDraft] = useState<EditableExercise[]>(() => editableExercises(exercises));
   const [busy, setBusy] = useState(false);
   const [validation, setValidation] = useState<string | null>(null);
   const [revisionConflict, setRevisionConflict] = useState(false);
+  const discard = useConfirm();
 
   useEffect(() => {
     if (!open) return;
@@ -305,6 +308,21 @@ export function SessionCorrectionDialog({
   const sessionChanged = note !== (notes ?? "")
     || duration !== (durationMinutes?.toString() ?? "");
   const hasChanges = sessionChanged || draftHasChanges(draft);
+
+  function changeOpen(nextOpen: boolean) {
+    if (!nextOpen && hasChanges && !busy) {
+      discard.ask({
+        title: tr("historyDiscardCorrectionTitle"),
+        description: tr("historyDiscardCorrectionDescription"),
+        confirmLabel: tr("historyDiscardCorrection"),
+        cancelLabel: tr("historyKeepEditing"),
+        variant: "destructive",
+        onConfirm: () => onOpenChange(false),
+      });
+      return;
+    }
+    onOpenChange(nextOpen);
+  }
 
   async function request(path: string, body: unknown) {
     const token = session?.access_token;
@@ -426,7 +444,7 @@ export function SessionCorrectionDialog({
         },
         setOperations,
       });
-      setOpen(false);
+      onOpenChange(false);
       toast({
         title: tr("historyWorkoutUpdated"),
         description: result.projection_refresh_pending === true
@@ -450,60 +468,10 @@ export function SessionCorrectionDialog({
     }
   }
 
-  async function restore(deleteKey: string) {
-    try {
-      await request(`/api/workouts/history/${sessionId}/restore`, {
-        idempotencyKey: `history-restore:${deleteKey}`,
-      });
-      toast({ title: tr("historyWorkoutRestored") });
-      onChanged();
-    } catch (error) {
-      toast({
-        title: tr("historyRestoreFailed"),
-        description:
-          error instanceof Error ? error.message : tr("historyRetry"),
-        variant: "error",
-      });
-    }
-  }
-
-  async function remove() {
-    if (!window.confirm(tr("historyDeleteConfirmation", { title }))) return;
-    const deleteKey = crypto.randomUUID();
-    setBusy(true);
-    try {
-      await request(`/api/workouts/history/${sessionId}/delete`, {
-        idempotencyKey: `history-delete:${deleteKey}`,
-      });
-      toast({
-        title: tr("historyWorkoutDeleted"),
-        description: tr("historyWorkoutDeletedDescription"),
-        actionLabel: tr("historyUndo"),
-        onAction: () => void restore(deleteKey),
-      });
-      onChanged();
-    } catch (error) {
-      toast({
-        title: tr("historyWorkoutDeleted"),
-        description:
-          error instanceof Error ? error.message : tr("historyRetry"),
-        variant: "error",
-      });
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
-    <div className="flex flex-wrap gap-2">
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button type="button" variant="outline" className="min-h-12">
-            <Pencil className="size-4" />
-            {tr("historyCorrectSession")}
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl">
+    <>
+      <Dialog open={open} onOpenChange={changeOpen}>
+        <DialogContent data-workout-history-correction-dialog className="h-[100dvh] max-h-[100dvh] overflow-y-auto rounded-none pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-auto sm:max-h-[90dvh] sm:max-w-3xl sm:rounded-[24px]">
           <DialogHeader>
             <DialogTitle>{tr("historyCorrectTitle")}</DialogTitle>
             <DialogDescription>
@@ -570,7 +538,7 @@ export function SessionCorrectionDialog({
                         <label className="grid gap-1 text-xs font-medium">
                           {copy.setType}
                           <select disabled={set.removed} className="min-h-10 rounded-lg border border-input bg-background px-2 text-sm" value={set.setType} onChange={(event) => updateSet(exercise.identity, set.key, { setType: event.target.value })}>
-                            {setTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                            {setTypes.map((type) => <option key={type} value={type}>{workoutSetTypeLabel(type, locale) ?? tr("historyNoMetric")}</option>)}
                           </select>
                         </label>
                         <label className="grid gap-1 text-xs font-medium">
@@ -611,7 +579,7 @@ export function SessionCorrectionDialog({
             <div className="mt-3 rounded-xl border border-warning/30 bg-warning/5 p-3" role="alert">
               <p className="text-sm text-foreground">{copy.revisionConflict}</p>
               <Button type="button" variant="outline" className="mt-2" onClick={() => {
-                setOpen(false);
+                onOpenChange(false);
                 onChanged();
               }}>
                 <RotateCcw className="size-4" />
@@ -629,16 +597,7 @@ export function SessionCorrectionDialog({
           </Button>
         </DialogContent>
       </Dialog>
-      <Button
-        type="button"
-        variant="destructive"
-        className="min-h-12"
-        disabled={busy}
-        onClick={() => void remove()}
-      >
-        <Trash2 className="size-4" />
-        {tr("historyDeleteWorkout")}
-      </Button>
-    </div>
+      {discard.dialog}
+    </>
   );
 }

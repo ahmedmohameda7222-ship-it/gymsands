@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   detail: vi.fn(),
   filterOptions: vi.fn(),
+  hasAny: vi.fn(),
   list: vi.fn(),
   projectionCurrent: vi.fn(),
   rateLimit: vi.fn(() => null as Response | null),
@@ -24,6 +25,7 @@ vi.mock("@/services/workouts/history/record-projection-state", () => ({
   workoutHistoryRecordProjectionIsCurrent: mocks.projectionCurrent,
 }));
 vi.mock("@/services/workouts/history/server-list-reader", () => ({
+  hasAnyWorkoutHistory: mocks.hasAny,
   listWorkoutHistoryKeyset: mocks.list,
 }));
 vi.mock("@/services/workouts/history/shared-session-metrics", () => ({
@@ -86,6 +88,7 @@ describe("Workout History API routes", () => {
       filterOptions: { workoutTypes: [], muscles: [], exercises: [], plans: [] },
     });
     mocks.filterOptions.mockResolvedValue(periodOptions);
+    mocks.hasAny.mockResolvedValue(true);
     mocks.detail.mockResolvedValue(detailResponse());
     mocks.projectionCurrent.mockResolvedValue(true);
     mocks.sharedMetrics.mockResolvedValue({ externalLoadVolume: 0 });
@@ -132,7 +135,7 @@ describe("Workout History API routes", () => {
       ownerId,
       expect.objectContaining({ search: "Push Day", statuses: ["completed"] }),
     );
-    expect(await response.json()).toMatchObject({ filterOptions: periodOptions });
+    expect(await response.json()).toMatchObject({ filterOptions: periodOptions, hasAnyHistory: true });
   });
 
   it("does not repeat the period filter-option scan for cursor pages", async () => {
@@ -142,6 +145,7 @@ describe("Workout History API routes", () => {
     ));
     expect(response.status).toBe(200);
     expect(mocks.filterOptions).not.toHaveBeenCalled();
+    expect(mocks.hasAny).not.toHaveBeenCalled();
   });
 
   it("rejects invalid periods, limits, filters, and oversized cursors with stable codes", async () => {

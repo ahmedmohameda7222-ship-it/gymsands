@@ -40,13 +40,14 @@ const mocks = vi.hoisted(() => ({
     session: { access_token: string } | null;
   },
   push: vi.fn(),
+  replace: vi.fn(),
   list: vi.fn(),
   loadMore: null as (() => void) | null,
 }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/workout-history",
-  useRouter: () => ({ push: mocks.push }),
+  useRouter: () => ({ push: mocks.push, replace: mocks.replace }),
   useSearchParams: () => new URLSearchParams(mocks.url),
 }));
 
@@ -218,13 +219,6 @@ vi.mock(
   }),
 );
 
-vi.mock(
-  "@/components/workouts/history/workout-history-desktop-preview",
-  () => ({
-    WorkoutHistoryDesktopPreview: () => <aside data-preview />,
-  }),
-);
-
 vi.mock("@/components/workouts/train-ui", () => ({
   TrainPageContainer: ({
     children,
@@ -335,10 +329,11 @@ function emptyHistoryResponse(ownerId = ownerA): WorkoutHistoryListResponse {
   return {
     ...response,
     summary: {
-      ...response.summary,
+      ...response.summary!,
       eligibleWorkoutCount: 0,
     },
     items: [],
+    hasAnyHistory: false,
   };
 }
 
@@ -407,6 +402,9 @@ beforeEach(() => {
   mocks.push.mockReset().mockImplementation((href: string) => {
     mocks.url = href.split("?")[1] ?? "";
   });
+  mocks.replace.mockReset().mockImplementation((href: string) => {
+    mocks.url = href.split("?")[1] ?? "";
+  });
   mocks.list
     .mockReset()
     .mockResolvedValue(historyResponse(ownerA, "Owner A"));
@@ -434,12 +432,11 @@ describe("Workout History request stability", () => {
     });
   });
 
-  it("does not refetch for selected-only navigation or equivalent parameter ordering", async () => {
+  it("ignores legacy selected navigation and equivalent parameter ordering", async () => {
     await renderPage();
-    click("[data-select-item]");
+    mocks.url = `${mocks.url}&selected=performed%3Alegacy`;
     await renderPage();
 
-    expect(mocks.url).toContain("selected=");
     expect(mocks.list).toHaveBeenCalledOnce();
 
     mocks.url = mocks.url
@@ -457,7 +454,7 @@ describe("Workout History request stability", () => {
     expect(mocks.list).toHaveBeenCalledOnce();
   });
 
-  it("treats a successful empty response as resolved across rerender and selected-only navigation", async () => {
+  it("treats a successful empty response as resolved across rerender and ignored legacy navigation", async () => {
     mocks.list.mockResolvedValue(emptyHistoryResponse());
     await renderPage();
     expect(mocks.list).toHaveBeenCalledOnce();
@@ -489,6 +486,8 @@ describe("Workout History request stability", () => {
     expect(mocks.list.mock.calls[1]?.[1]).toMatchObject({
       workoutTypes: ["strength"],
     });
+    expect(mocks.push).toHaveBeenCalledOnce();
+    expect(mocks.replace).not.toHaveBeenCalled();
   });
 
   it("debounces normalized search into one committed request and ignores the same normalized value", async () => {
@@ -509,6 +508,8 @@ describe("Workout History request stability", () => {
     expect(mocks.list.mock.calls[1]?.[1]).toMatchObject({
       search: "bench press",
     });
+    expect(mocks.replace).toHaveBeenCalledOnce();
+    expect(mocks.push).not.toHaveBeenCalled();
 
     await changeSearch("bench    press");
     await act(async () => {
@@ -516,6 +517,7 @@ describe("Workout History request stability", () => {
     });
     await renderPage();
     expect(mocks.list).toHaveBeenCalledTimes(2);
+    expect(mocks.replace).toHaveBeenCalledOnce();
   });
 
   it("does not refetch for a token refresh and uses the latest token on the next genuine query", async () => {
@@ -715,24 +717,33 @@ describe("Workout History request stability", () => {
   });
 
   it("freezes the implicit default range for the mounted page across a month boundary", async () => {
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const timezone = vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+      .mockImplementation(function resolvedOptionsInBerlin(this: Intl.DateTimeFormat) {
+        return { ...resolvedOptions.call(this), timeZone: "Europe/Berlin" };
+      });
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-31T23:59:00.000Z"));
-    mocks.url = "";
-    await renderPage();
+    try {
+      vi.setSystemTime(new Date("2026-08-31T23:59:00.000Z"));
+      mocks.url = "";
+      await renderPage();
 
-    expect(mocks.list).toHaveBeenCalledOnce();
-    expect(mocks.list.mock.calls[0]?.[1]).toMatchObject({
-      from: expect.stringContaining("2026-08-01"),
-      to: expect.stringContaining("2026-09-01"),
-    });
+      expect(mocks.list).toHaveBeenCalledOnce();
+      expect(mocks.list.mock.calls[0]?.[1]).toMatchObject({
+        from: "2026-08-31T22:00:00.000Z",
+        to: "2026-09-30T22:00:00.000Z",
+      });
 
-    vi.setSystemTime(new Date("2026-09-01T00:01:00.000Z"));
-    mocks.url = "selected=performed%3Amonth-boundary";
-    await renderPage();
-    mocks.url = "";
-    await renderPage();
+      vi.setSystemTime(new Date("2026-09-01T00:01:00.000Z"));
+      mocks.url = "selected=performed%3Amonth-boundary";
+      await renderPage();
+      mocks.url = "";
+      await renderPage();
 
-    expect(mocks.list).toHaveBeenCalledOnce();
+      expect(mocks.list).toHaveBeenCalledOnce();
+    } finally {
+      timezone.mockRestore();
+    }
   });
 });
 

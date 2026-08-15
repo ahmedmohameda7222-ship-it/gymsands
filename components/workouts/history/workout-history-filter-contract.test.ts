@@ -8,10 +8,11 @@ describe("Workout History filter surface", () => {
     for (const field of ["workoutType", "muscle", "exercise", "plan", "statuses", "progressOnly", "sort"]) {
       expect(filters).toContain(field);
     }
-    for (const key of ["period", "from", "to", "q", "type", "muscle", "exercise", "plan", "status", "progress", "sort", "selected"]) {
+    for (const key of ["period", "from", "to", "q", "type", "muscle", "exercise", "plan", "status", "progress", "sort"]) {
       expect(navigation).toContain(`\"${key}\"`);
     }
     expect(navigation).not.toContain('params.set("notes"');
     expect(navigation).not.toContain('params.set("cursor"');
+    expect(navigation).not.toContain('params.set("selected"');
   });
 });

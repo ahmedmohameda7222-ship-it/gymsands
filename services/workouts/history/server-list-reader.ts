@@ -14,15 +14,13 @@ import {
 } from "@/lib/workouts/history/cursor";
 import { deriveSessionMetrics, type DerivedMetricLog } from "@/lib/workouts/derived-metrics";
 import { presentWorkoutHistorySession } from "@/lib/workouts/history/presentation";
+import { resolveWorkoutHistoryResultKind } from "@/lib/workouts/history/result-kind";
 import { resolveCanonicalWorkoutActivity } from "@/lib/workouts/history/resolve-activity";
+import { isSupportedWorkoutMetricKey } from "@/lib/workouts/metric-presentation";
 import { WorkoutHistoryReaderError } from "@/services/workouts/history/server-reader";
-import {
-  DERIVED_METRICS_FORMULA_VERSION,
-  DERIVED_METRICS_SCHEMA_VERSION,
-} from "@/lib/workouts/derived-metrics";
+import { readWorkoutHistoryPersonalRecordSessions } from "@/services/personal-records/server";
 import {
   WORKOUT_HISTORY_CONTRACT_VERSION,
-  type WorkoutHistoryFilterOptions,
   type WorkoutHistoryListRequest,
   type WorkoutHistoryListResponse,
   type WorkoutHistoryListSummary,
@@ -63,7 +61,7 @@ type PerformedLogRow = DerivedMetricLog & {
   completed_at: string | null;
 };
 
-type SnapshotRow = { id: string; workout_session_id: string };
+type SnapshotRow = { id: string; workout_session_id: string; workload_model_version: string };
 type SnapshotItemRow = {
   snapshot_id: string;
   source_plan_exercise_id: string | null;
@@ -85,14 +83,12 @@ type SnapshotItemRow = {
   performed_total_sets: number | null;
 };
 type MappingEntryRow = { mapping_set_id: string; muscle_id: string };
-type VerifiedRecordRow = { workout_session_id: string };
-type PlanNameRow = { id: string; name: string };
-
 type PageMetadata = {
   logsBySession: Map<string, PerformedLogRow[]>;
   itemsBySession: Map<string, SnapshotItemRow[]>;
   muscleIdsBySession: Map<string, Set<string>>;
   verifiedCountBySession: Map<string, number>;
+  resultKindBySession: Map<string, "strength_sets" | "semantic_metrics" | "limited">;
 };
 
 function chunks<T>(values: readonly T[]): T[][] {
@@ -114,10 +110,6 @@ function numeric(value: number | string | null | undefined): number | null {
 
 function normalizedText(value: string | null | undefined): string {
   return (value ?? "").normalize("NFKC").trim().toLocaleLowerCase("en-US");
-}
-
-function humanize(value: string): string {
-  return value.replace(/[_-]+/g, " ").replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase());
 }
 
 function snapshotIdentity(item: SnapshotItemRow): string {
@@ -244,7 +236,7 @@ async function readSummary(
   userId: string,
   request: WorkoutHistoryListRequest,
 ): Promise<WorkoutHistoryListSummary> {
-  const result = await supabase.rpc("get_workout_history_period_summary_v1", {
+  const result = await supabase.rpc("get_workout_history_period_context_v2", {
     ...rpcParameters(userId, request),
   });
   if (result.error)
@@ -275,8 +267,9 @@ async function readPageMetadata(
     itemsBySession: new Map(),
     muscleIdsBySession: new Map(),
     verifiedCountBySession: new Map(),
+    resultKindBySession: new Map(),
   };
-  const [logs, snapshots, verified] = await Promise.all([
+  const [logs, snapshots, personalRecords] = await Promise.all([
     readInChunks<PerformedLogRow>(
       supabase,
       "exercise_logs",
@@ -287,17 +280,11 @@ async function readPageMetadata(
     readInChunks<SnapshotRow>(
       supabase,
       "workout_session_muscle_snapshots",
-      "id,workout_session_id",
+      "id,workout_session_id,workload_model_version",
       "workout_session_id",
       sessionIds,
     ),
-    readInChunks<VerifiedRecordRow>(
-      supabase,
-      "current_personal_records",
-      "workout_session_id",
-      "workout_session_id",
-      sessionIds,
-    ),
+    readWorkoutHistoryPersonalRecordSessions(supabase, userId, sessionIds),
   ]);
   const items = await readInChunks<SnapshotItemRow>(
     supabase,
@@ -318,6 +305,7 @@ async function readPageMetadata(
   const itemsBySession = new Map<string, SnapshotItemRow[]>();
   const muscleIdsBySession = new Map<string, Set<string>>();
   const verifiedCountBySession = new Map<string, number>();
+  const resultKindBySession = new Map<string, "strength_sets" | "semantic_metrics" | "limited">();
   const musclesByMapping = new Map<string, string[]>();
   for (const entry of mappingEntries) {
     musclesByMapping.set(entry.mapping_set_id, [
@@ -352,13 +340,24 @@ async function readPageMetadata(
     }
     muscleIdsBySession.set(sessionId, muscles);
   }
-  for (const record of verified) {
-    verifiedCountBySession.set(
-      record.workout_session_id,
-      (verifiedCountBySession.get(record.workout_session_id) ?? 0) + 1,
-    );
+  for (const sessionId of sessionIds) {
+    verifiedCountBySession.set(sessionId, personalRecords.eventsBySessionId[sessionId]?.length ?? 0);
+    const sessionLogs = logsBySession.get(sessionId) ?? [];
+    const authoritativeWorkloadModelVersion = snapshots.find((snapshot) => snapshot.workout_session_id === sessionId)?.workload_model_version;
+    const strengthValues = sessionLogs.some((log) => log.reps !== null || log.weight_kg !== null);
+    const semanticValues = sessionLogs.some((log) => [
+      ...(log.performance_metrics ?? []),
+      ...(log.segments ?? []).flatMap((segment) => "metric_values" in segment
+        ? (segment.metric_values ?? [])
+        : "metricValues" in segment ? (segment.metricValues ?? []) : []),
+    ].some((metric) => isSupportedWorkoutMetricKey(String(metric.metric_key ?? metric.metricKey ?? ""))));
+    resultKindBySession.set(sessionId, resolveWorkoutHistoryResultKind({
+      authoritativeWorkloadModelVersion,
+      hasSupportedStructuredMetrics: semanticValues,
+      hasLegacyStrengthValues: strengthValues,
+    }));
   }
-  return { logsBySession, itemsBySession, muscleIdsBySession, verifiedCountBySession };
+  return { logsBySession, itemsBySession, muscleIdsBySession, verifiedCountBySession, resultKindBySession };
 }
 
 async function readPerformedRoots(
@@ -429,41 +428,12 @@ function presentationMetadata(
     exerciseIds: [...identityNames.keys()],
     exerciseNames: [...identityNames.values()],
     muscleIds: [...(metadata.muscleIdsBySession.get(sessionId) ?? [])],
-  };
-}
-
-async function readPlanNames(
-  supabase: SupabaseClient,
-  userId: string,
-  planIds: string[],
-): Promise<Map<string, string>> {
-  if (!planIds.length) return new Map();
-  const result = await supabase
-    .from("user_workout_plans")
-    .select("id,name")
-    .eq("user_id", userId)
-    .in("id", planIds);
-  if (result.error)
-    throw new WorkoutHistoryReaderError("history_read_failed", "Workout history could not load.", 503);
-  return new Map(((result.data ?? []) as unknown as PlanNameRow[]).map((plan) => [plan.id, plan.name]));
-}
-
-function filterOptions(
-  items: WorkoutHistorySessionSummary[],
-  planNames: Map<string, string>,
-): WorkoutHistoryFilterOptions {
-  return {
-    workoutTypes: unique(items.map((item) => item.category)).sort().map((value) => ({ value, label: humanize(value) })),
-    muscles: unique(items.flatMap((item) => item.muscleIds)).sort().map((value) => ({ value, label: humanize(value) })),
-    exercises: [...new Map(items.flatMap((item) => item.exerciseIds.map((value, index) => [
-      value,
-      {
-        value,
-        label: item.exerciseNames[index] ?? humanize(value.replace(/^[^:]+:/, "")),
-        degraded: value.startsWith("name:") || undefined,
-      },
-    ]))).values()].sort((left, right) => left.label.localeCompare(right.label)),
-    plans: [...planNames].map(([value, label]) => ({ value, label })).sort((left, right) => left.label.localeCompare(right.label)),
+    resultKind: metadata.resultKindBySession.get(sessionId) ?? "limited" as const,
+    resultFacts: [
+      ...(derived.durationSeconds > 0 ? [{ metricKey: "duration_seconds", side: "none" as const, value: derived.durationSeconds, unit: "seconds" }] : []),
+      ...(derived.distanceMeters > 0 ? [{ metricKey: "distance_meters", side: "none" as const, value: derived.distanceMeters, unit: "meters" }] : []),
+      ...(derived.rounds > 0 ? [{ metricKey: "rounds", side: "none" as const, value: derived.rounds, unit: "rounds" }] : []),
+    ],
   };
 }
 
@@ -476,7 +446,7 @@ export async function listWorkoutHistoryKeyset(
   const limit = Math.min(50, Math.max(1, request.limit ?? 20));
   const [rootRows, summary] = await Promise.all([
     readRootRows(supabase, userId, request, cursorSecret),
-    readSummary(supabase, userId, request),
+    request.cursor ? Promise.resolve(undefined) : readSummary(supabase, userId, request),
   ]);
   const hasMore = rootRows.length > limit;
   const pageRoots = rootRows.slice(0, limit);
@@ -517,20 +487,23 @@ export async function listWorkoutHistoryKeyset(
       ? presentationMetadata(activity.canonicalSessionId, metadata)
       : undefined,
   )).sort(compareSummary(sort));
-  const planNames = await readPlanNames(
-    supabase,
-    userId,
-    unique(items.map((item) => item.planId)),
-  );
   return {
     contractVersion: WORKOUT_HISTORY_CONTRACT_VERSION,
     period: { from: request.from, to: request.to, timezone: request.timezone },
-    summary,
+    ...(summary ? { summary } : {}),
     items,
     nextCursor: hasMore && items.length
       ? encodeWorkoutHistoryCursor(cursorFor(items.at(-1)!, sort), cursorSecret)
       : null,
     notices: [],
-    filterOptions: filterOptions(items, planNames),
   };
+}
+
+export async function hasAnyWorkoutHistory(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<boolean> {
+  const result = await supabase.rpc("has_any_workout_history_v1", { p_user_id: userId });
+  if (result.error) throw new WorkoutHistoryReaderError("history_read_failed", "Workout history could not load.", 503);
+  return result.data === true;
 }

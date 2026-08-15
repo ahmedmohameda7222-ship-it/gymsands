@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canonicalizePersonalRecordRows, projectPersonalRecordDetail, projectPersonalRecordsMain, type PersonalRecordRawRow } from "./projection";
+import { canonicalizePersonalRecordRows, projectPersonalRecordDetail, projectPersonalRecordSessions, projectPersonalRecordsMain, type PersonalRecordRawRow } from "./projection";
 
 function verified(overrides: Partial<PersonalRecordRawRow>): PersonalRecordRawRow {
   return {
@@ -42,6 +42,40 @@ describe("canonical Personal Records projection", () => {
       manual({ canonical_value: 110, effective_achieved_at: "2026-06-01T09:00:00.000Z", achieved_at: "2026-06-01T09:00:00.000Z" }),
     ]);
     expect(events.map((event) => event.value)).toEqual([110]);
+  });
+
+  it("counts only canonical Verified session events and keeps Manual evidence as Previous Best", () => {
+    const weakerSessionId = "10000000-0000-4000-8000-000000000001";
+    const strongerSessionId = "10000000-0000-4000-8000-000000000002";
+    const rows = [
+      manual({
+        canonical_value: 110,
+        achieved_at: "2026-06-01T09:00:00.000Z",
+        effective_achieved_at: "2026-06-01T09:00:00.000Z",
+      }),
+      verified({
+        workout_session_id: weakerSessionId,
+        exercise_log_id: "20000000-0000-4000-8000-000000000001",
+        record_value: 105,
+        weight_kg: 105,
+        achieved_at: "2026-07-01T10:00:00.000Z",
+      }),
+      verified({
+        workout_session_id: strongerSessionId,
+        exercise_log_id: "20000000-0000-4000-8000-000000000002",
+        record_value: 120,
+        weight_kg: 120,
+        achieved_at: "2026-08-01T10:00:00.000Z",
+      }),
+    ];
+
+    const projection = projectPersonalRecordSessions(rows, [weakerSessionId, strongerSessionId]);
+    expect(projection.eventsBySessionId[weakerSessionId]).toBeUndefined();
+    expect(projection.eventsBySessionId[strongerSessionId]).toHaveLength(1);
+    expect(projection.eventsBySessionId[strongerSessionId]?.[0]).toMatchObject({
+      event: { source: "verified", value: 120, sourceExerciseLogId: "20000000-0000-4000-8000-000000000002" },
+      previousComparable: { source: "manual", value: 110 },
+    });
   });
 
   it("supports lower-better current best and stable lineage URLs", () => {

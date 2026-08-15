@@ -1,3 +1,5 @@
+import type { PersonalRecordSessionEvent } from "@/lib/personal-records/contracts";
+
 export const WORKOUT_HISTORY_CONTRACT_VERSION = 1 as const;
 
 export type WorkoutHistorySourceKind = "performed" | "scheduled_fallback";
@@ -18,7 +20,10 @@ export type WorkoutHistoryCapabilities = {
   repeatWorkout: boolean;
   correctSession: boolean;
   softDeleteSession: boolean;
+  downloadReport?: boolean;
 };
+
+export type WorkoutHistoryActivityResultKind = "strength_sets" | "semantic_metrics" | "limited";
 
 export type CanonicalWorkoutActivity = {
   contractVersion: typeof WORKOUT_HISTORY_CONTRACT_VERSION;
@@ -90,6 +95,8 @@ export type WorkoutHistorySessionSummary = CanonicalWorkoutActivity & {
   exerciseNames: string[];
   muscleIds: string[];
   insight: string | null;
+  resultKind?: WorkoutHistoryActivityResultKind;
+  resultFacts?: WorkoutHistoryMetricValue[];
 };
 
 export type WorkoutHistoryListSummary = {
@@ -125,7 +132,8 @@ export type WorkoutHistoryListResponse = {
     to: string;
     timezone: string;
   };
-  summary: WorkoutHistoryListSummary;
+  summary?: WorkoutHistoryListSummary;
+  hasAnyHistory?: boolean;
   items: WorkoutHistorySessionSummary[];
   nextCursor: string | null;
   notices: WorkoutHistoryListNotice[];
@@ -149,7 +157,7 @@ export type WorkoutHistoryExerciseSetDetail = {
   verifiedRecords: WorkoutHistoryVerifiedRecord[];
 };
 
-export type WorkoutHistoryVerifiedRecord = {
+export type WorkoutHistoryVerifiedRecord = PersonalRecordSessionEvent | {
   id: string;
   recordType: "highest_load" | "same_load_max_repetitions" | "estimated_one_rep_max" | "exercise_session_volume";
   currentValue: number;
@@ -204,6 +212,7 @@ export type WorkoutHistoryExerciseDetail = {
   plannedSetCount: number | null;
   performedSets: WorkoutHistoryExerciseSetDetail[];
   missingPlannedSets: WorkoutHistoryPlannedSet[];
+  resultKind?: WorkoutHistoryActivityResultKind;
 };
 
 export type WorkoutHistoryDetailSummary = {
@@ -242,4 +251,5 @@ export type WorkoutHistorySessionDetailResponse = {
   exercises: WorkoutHistoryExerciseDetail[];
   timeline: WorkoutHistoryTimelineEntry[];
   notices: WorkoutHistoryDetailNotice[];
+  resultKind?: WorkoutHistoryActivityResultKind;
 };

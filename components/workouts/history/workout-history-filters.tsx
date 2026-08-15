@@ -32,7 +32,6 @@ export type WorkoutHistoryFilterValue = {
 export function WorkoutHistoryFilters({
   open,
   value,
-  resultCount,
   options,
   onOpenChange,
   onChange,
@@ -40,7 +39,6 @@ export function WorkoutHistoryFilters({
 }: {
   open: boolean;
   value: WorkoutHistoryFilterValue;
-  resultCount: number | null;
   options?: WorkoutHistoryFilterOptions;
   onOpenChange: (open: boolean) => void;
   onChange: (value: WorkoutHistoryFilterValue) => void;
@@ -51,13 +49,15 @@ export function WorkoutHistoryFilters({
   useEffect(() => {
     if (open) setDraft(value);
   }, [open, value]);
-  const activeLabels = [
-    ...value.statuses
-      .filter((status) => status === "skipped" || status === "cancelled")
-      .map((status) => tr(status === "skipped" ? "historySkippedStatus" : "historyCancelledStatus")),
+  const defaultStatuses: WorkoutHistoryLifecycle[] = ["completed", "partial"];
+  const statusChanged = value.statuses.length !== defaultStatuses.length || value.statuses.some((status) => !defaultStatuses.includes(status));
+  const allActiveLabels = [
+    ...(statusChanged ? [value.statuses.map((status) => tr(lifecycleKeys.find(([candidate]) => candidate === status)![1])).join(", ")] : []),
     ...(value.progressOnly ? [tr("historyProgressOnly")] : []),
     ...[value.workoutType, value.muscle, value.exercise, value.plan].filter(Boolean),
-  ].slice(0, 3);
+    ...(value.sort === "oldest" ? [tr("historySortOldest")] : value.sort === "longest_duration" ? [tr("historySortLongest")] : []),
+  ];
+  const activeLabels = allActiveLabels.slice(0, 2);
 
   function toggleStatus(status: WorkoutHistoryLifecycle) {
     const statuses = draft.statuses.includes(status)
@@ -65,15 +65,6 @@ export function WorkoutHistoryFilters({
       : [...draft.statuses, status];
     setDraft({ ...draft, statuses });
   }
-  const draftMatchesApplied = draft.progressOnly === value.progressOnly
-    && draft.workoutType === value.workoutType
-    && draft.muscle === value.muscle
-    && draft.exercise === value.exercise
-    && draft.plan === value.plan
-    && draft.sort === value.sort
-    && draft.statuses.length === value.statuses.length
-    && draft.statuses.every((status) => value.statuses.includes(status));
-
   function changeOpen(nextOpen: boolean) {
     onOpenChange(nextOpen);
   }
@@ -97,13 +88,14 @@ export function WorkoutHistoryFilters({
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" className="h-12 rounded-2xl" onClick={() => changeOpen(true)}>
           <Filter className="size-4" aria-hidden="true" />
-          {tr("historyFiltersAction")}
+          {tr("historyFiltersAction")}{allActiveLabels.length ? ` (${allActiveLabels.length})` : ""}
         </Button>
         {activeLabels.map((label) => (
           <span key={label} className="inline-flex min-h-9 items-center rounded-full bg-primary/10 px-3 text-xs font-medium text-primary">
             {label}
           </span>
         ))}
+        {allActiveLabels.length > activeLabels.length ? <span className="text-xs text-muted-foreground">+{allActiveLabels.length - activeLabels.length}</span> : null}
         {activeLabels.length ? (
           <Button type="button" variant="ghost" size="sm" onClick={clearAll}>
             <X className="size-4" aria-hidden="true" />
@@ -182,9 +174,7 @@ export function WorkoutHistoryFilters({
               onChange(draft);
               onOpenChange(false);
             }}>
-              {resultCount === null || !draftMatchesApplied
-                ? tr("historyFiltersAction")
-                : tr("historyApplyFilters", { count: resultCount })}
+              {tr("historyApplyFiltersAction")}
             </Button>
             <Button type="button" variant="outline" className="min-h-12" onClick={clearAll}>
               {tr("historyClearFilters")}

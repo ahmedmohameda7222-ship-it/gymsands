@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { WorkoutHistoryDesktopPreview } from "@/components/workouts/history/workout-history-desktop-preview";
 import {
   WorkoutHistoryFilters,
   type WorkoutHistoryFilterValue,
@@ -23,7 +22,7 @@ import { TrainPageContainer } from "@/components/workouts/train-ui";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import {
   customWorkoutHistoryPeriodRange,
-  shiftWorkoutHistoryPeriodAnchor,
+  shiftWorkoutHistoryPeriodRange,
   workoutHistoryPeriodRange,
   workoutHistoryTimeZoneParts,
 } from "@/lib/workouts/history/date-range";
@@ -65,6 +64,8 @@ type CursorRequest = {
   controller: AbortController;
   promise: Promise<void>;
 };
+
+type NavigationMode = "push" | "replace";
 
 function inputDate(value: Date, timezone: string): string {
   const parts = workoutHistoryTimeZoneParts(value, timezone);
@@ -198,14 +199,14 @@ export function WorkoutHistoryPage() {
   ]);
 
   const writeNavigation = useCallback(
-    (next: WorkoutHistoryNavigationState) => {
+    (next: WorkoutHistoryNavigationState, mode: NavigationMode = "push") => {
       const nextParams = workoutHistoryNavigationSearchParams(next);
       const nextString = nextParams.toString();
       const currentString = workoutHistoryNavigationSearchParams(
         navigationRef.current,
       ).toString();
       if (nextString === currentString) return;
-      router.push(
+      router[mode](
         nextString ? `${pathname}?${nextString}` : pathname,
         { scroll: false },
       );
@@ -234,8 +235,7 @@ export function WorkoutHistoryPage() {
       writeNavigation({
         ...navigationRef.current,
         search: normalized,
-        selected: null,
-      });
+      }, "replace");
     }, 300);
     return () => window.clearTimeout(timer);
   }, [navigationState.search, searchInput, writeNavigation]);
@@ -454,8 +454,8 @@ export function WorkoutHistoryPage() {
   const response = visibleFirstPage.response;
   const nextCursor = response?.nextCursor ?? null;
 
+  const hasSearch = navigationState.search.length > 0;
   const hasFilters =
-    navigationState.search.length > 0 ||
     filters.progressOnly ||
     filters.workoutType.length > 0 ||
     filters.muscle.length > 0 ||
@@ -473,7 +473,15 @@ export function WorkoutHistoryPage() {
   } else if (visibleFirstPage.blockingError && !response) {
     pageState = "blocking-error";
   } else if (!response?.items.length) {
-    pageState = hasFilters ? "filtered-empty" : "empty";
+    pageState = response?.hasAnyHistory === false
+      ? "empty"
+      : hasSearch && hasFilters
+        ? "search-filter-empty"
+        : hasSearch
+          ? "search-empty"
+          : hasFilters
+            ? "filtered-empty"
+            : "period-empty";
   }
 
   const visibleNotice = response?.notices.includes("stale-data")
@@ -481,26 +489,26 @@ export function WorkoutHistoryPage() {
     : response?.notices.includes("partial-availability")
       ? "partial-availability"
       : null;
-  const selectedId = navigationState.selected;
-  const selectedItem =
-    response?.items.find((item) => item.activityId === selectedId) ??
-    null;
-  const periodDays = Math.max(
-    1,
-    (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000,
-  );
-
-  const selectDesktopItem = useCallback(
-    (item: WorkoutHistoryListResponse["items"][number]) => {
-      writeNavigation({
-        ...navigationRef.current,
-        selected: item.activityId,
-      });
-    },
-    [writeNavigation],
-  );
-
   function clearFilters() {
+    setFiltersOpen(false);
+    writeNavigation({
+      ...navigationRef.current,
+      workoutType: "",
+      muscle: "",
+      exercise: "",
+      plan: "",
+      statuses: defaultFilters.statuses,
+      progressOnly: false,
+      sort: "newest",
+    });
+  }
+
+  function clearSearch() {
+    setSearchInput("");
+    writeNavigation({ ...navigationRef.current, search: "" });
+  }
+
+  function clearSearchAndFilters() {
     setSearchInput("");
     setFiltersOpen(false);
     writeNavigation({
@@ -513,7 +521,6 @@ export function WorkoutHistoryPage() {
       statuses: defaultFilters.statuses,
       progressOnly: false,
       sort: "newest",
-      selected: null,
     });
   }
 
@@ -529,26 +536,20 @@ export function WorkoutHistoryPage() {
       ...navigationRef.current,
       period: nextMode,
       range: nextRange,
-      selected: null,
     });
   }
 
   function shiftPeriod(direction: -1 | 1) {
     const effectiveMode = mode === "custom" ? "month" : mode;
-    const nextAnchor = shiftWorkoutHistoryPeriodAnchor(
-      new Date(range.from),
+    const nextRange = shiftWorkoutHistoryPeriodRange(
+      range.from,
       effectiveMode,
       direction,
-    );
-    const nextRange = workoutHistoryPeriodRange(
-      effectiveMode,
-      nextAnchor,
       timezone,
     );
     writeNavigation({
       ...navigationRef.current,
       range: nextRange,
-      selected: null,
     });
   }
 
@@ -563,7 +564,6 @@ export function WorkoutHistoryPage() {
         ...navigationRef.current,
         period: "custom",
         range: nextRange,
-        selected: null,
       });
     } catch {
       // Draft values remain available for correction.
@@ -591,11 +591,10 @@ export function WorkoutHistoryPage() {
         onApplyCustom={applyCustomRange}
       />
 
-      {pageState === "ready" && response ? (
-        <div className="lg:hidden">
+      {pageState === "ready" && response?.summary ? (
+        <div>
           <WorkoutHistorySummary
             summary={response.summary}
-            periodDays={periodDays}
           />
         </div>
       ) : null}
@@ -608,9 +607,6 @@ export function WorkoutHistoryPage() {
         <WorkoutHistoryFilters
           open={filtersOpen}
           value={filters}
-          resultCount={
-            response?.summary.eligibleWorkoutCount ?? null
-          }
           options={response?.filterOptions}
           onOpenChange={setFiltersOpen}
           onChange={(nextFilters) => {
@@ -623,7 +619,6 @@ export function WorkoutHistoryPage() {
               statuses: nextFilters.statuses,
               progressOnly: nextFilters.progressOnly,
               sort: nextFilters.sort,
-              selected: null,
             });
           }}
           onClear={clearFilters}
@@ -635,16 +630,16 @@ export function WorkoutHistoryPage() {
         notice={visibleNotice}
         onRetry={() => void loadFirstPage(true)}
         onClearFilters={clearFilters}
+        onClearSearch={clearSearch}
+        onClearSearchAndFilters={clearSearchAndFilters}
       />
 
       {pageState === "ready" && response ? (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] lg:items-start lg:gap-6 xl:gap-8">
-          <div className="space-y-4 md:max-w-[760px] lg:max-w-none">
+        <div className="mx-auto w-full max-w-4xl">
+          <div className="space-y-4">
             <WorkoutHistoryTimeline
               items={response.items}
               timezone={timezone}
-              selectedId={selectedId}
-              onSelect={selectDesktopItem}
             />
             {nextCursor || loadMoreError ? (
               <WorkoutHistoryLoadMore
@@ -653,14 +648,6 @@ export function WorkoutHistoryPage() {
                 onLoadMore={() => void loadMore()}
               />
             ) : null}
-          </div>
-          <div className="hidden lg:block">
-            <WorkoutHistoryDesktopPreview
-              item={selectedItem ?? response.items[0] ?? null}
-              summary={response.summary}
-              range={range}
-              periodDays={periodDays}
-            />
           </div>
         </div>
       ) : null}

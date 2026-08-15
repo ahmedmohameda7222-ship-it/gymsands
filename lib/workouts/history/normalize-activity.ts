@@ -31,6 +31,7 @@ function performedCapabilities(
     repeatWorkout: isPerformance,
     correctSession: isPerformance,
     softDeleteSession: true,
+    downloadReport: isPerformance,
   };
 }
 
@@ -44,6 +45,7 @@ const SCHEDULED_FALLBACK_CAPABILITIES: WorkoutHistoryCapabilities = {
   repeatWorkout: false,
   correctSession: false,
   softDeleteSession: false,
+  downloadReport: false,
 };
 
 function requiredTimestamp(value: string | null | undefined, label: string): string {

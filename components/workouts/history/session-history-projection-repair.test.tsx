@@ -39,6 +39,7 @@ vi.mock("@/services/workouts/history/verified-records-client", () => ({
 vi.mock("@/lib/i18n/train", () => ({
   useTrainTranslation: () => ({
     dir: "ltr",
+    language: "en",
     locale: "en-US",
     tr: (key: string) => key,
   }),
@@ -54,9 +55,9 @@ vi.mock("@/components/workouts/train-ui", () => ({
   TrainPageContainer: ({ children }: { children?: ReactNode }) => <main>{children}</main>,
 }));
 vi.mock("@/components/workouts/history/exercise-history-section", () => ({ ExerciseHistorySection: () => <div /> }));
-vi.mock("@/components/workouts/history/session-history-actions", () => ({ SessionHistoryActions: () => <div /> }));
-vi.mock("@/components/workouts/history/session-correction-dialog", () => ({ SessionCorrectionDialog: () => <div /> }));
-vi.mock("@/components/workouts/history/session-history-insight", () => ({ SessionHistoryInsight: () => <div /> }));
+vi.mock("@/components/workouts/history/session-history-actions", () => ({ SessionHistoryActions: ({ freshAuthority }: { freshAuthority: boolean }) => <div data-repeat-authority={freshAuthority} /> }));
+vi.mock("@/components/workouts/history/session-correction-dialog", () => ({ SessionCorrectionDialog: () => <div data-correction-dialog /> }));
+vi.mock("@/components/workouts/history/session-history-more-actions", () => ({ SessionHistoryMoreActions: ({ freshAuthority }: { freshAuthority: boolean }) => <div data-more-actions-authority={freshAuthority} /> }));
 vi.mock("@/components/workouts/history/session-history-muscle-summary", () => ({ SessionHistoryMuscleSummary: () => <div /> }));
 vi.mock("@/components/workouts/history/session-history-notes", () => ({ SessionHistoryNotes: () => <div /> }));
 vi.mock("@/components/workouts/history/session-history-summary", () => ({ SessionHistorySummary: () => <div /> }));
@@ -111,7 +112,7 @@ function detailResponse(
         calculatePerformanceMetrics: true,
         calculateVerifiedRecords: true,
         repeatWorkout: true,
-        correctSession: false,
+        correctSession: true,
         softDeleteSession: true,
       },
     },
@@ -230,5 +231,44 @@ describe("Session History automatic projection repair", () => {
     expect(mocks.detail).toHaveBeenCalledTimes(2);
     expect(container?.textContent).toContain("Current detail");
     expect(container?.textContent).not.toContain("Stale detail");
+  });
+
+  it("preserves cached detail but fails fresh-authority actions closed until a successful refresh", async () => {
+    mocks.detail
+      .mockResolvedValueOnce(detailResponse(sessionA, "Readable cached detail"))
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(detailResponse(sessionA, "Fresh detail"));
+
+    await renderPage();
+    expect(container?.querySelector("[data-more-actions-authority=true]")).not.toBeNull();
+    expect(container?.querySelector("[data-repeat-authority=true]")).not.toBeNull();
+    expect(container?.querySelector("[data-correction-dialog]")).not.toBeNull();
+
+    await act(async () => window.dispatchEvent(new Event("online")));
+    await flush();
+
+    expect(container?.textContent).toContain("Readable cached detail");
+    expect(container?.textContent).toContain("historyStaleDetailNotice");
+    expect(container?.textContent).toContain("historyStaleActionsUnavailable");
+    expect(container?.querySelector("[data-more-actions-authority=false]")).not.toBeNull();
+    expect(container?.querySelector("[data-repeat-authority=false]")).not.toBeNull();
+    expect(container?.querySelector("[data-correction-dialog]")).toBeNull();
+
+    await act(async () => window.dispatchEvent(new Event("online")));
+    await flush();
+
+    expect(container?.textContent).toContain("Fresh detail");
+    expect(container?.textContent).not.toContain("historyStaleActionsUnavailable");
+    expect(container?.querySelector("[data-more-actions-authority=true]")).not.toBeNull();
+    expect(container?.querySelector("[data-repeat-authority=true]")).not.toBeNull();
+    expect(container?.querySelector("[data-correction-dialog]")).not.toBeNull();
+  });
+
+  it("keeps an initial failure without cached detail blocking", async () => {
+    mocks.detail.mockRejectedValueOnce(new Error("unavailable"));
+    await renderPage();
+    expect(container?.textContent).toContain("historyDetailLoadFailed");
+    expect(container?.textContent).not.toContain("Readable cached detail");
+    expect(container?.querySelector("[data-more-actions-authority]")).toBeNull();
   });
 });

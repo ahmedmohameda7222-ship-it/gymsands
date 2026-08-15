@@ -187,6 +187,33 @@ export function shiftWorkoutHistoryPeriodAnchor(
   return addUtcMonths(anchor, direction * (mode === "three-months" ? 3 : 1));
 }
 
+export function shiftWorkoutHistoryPeriodRange(
+  rangeFrom: string,
+  mode: Exclude<WorkoutHistoryPeriodMode, "custom">,
+  direction: -1 | 1,
+  timezone: string,
+): WorkoutHistoryDateRange {
+  const localStart = workoutHistoryTimeZoneParts(
+    new Date(rangeFrom),
+    timezone,
+  );
+  const calendarAnchor = new Date(
+    Date.UTC(localStart.year, localStart.month - 1, localStart.day, 12),
+  );
+  const shifted = calendarDate(
+    shiftWorkoutHistoryPeriodAnchor(calendarAnchor, mode, direction),
+  );
+  const localMidday = zonedLocalDateTimeToIso(
+    { ...shifted, hour: 12 },
+    timezone,
+  );
+  return workoutHistoryPeriodRange(
+    mode,
+    new Date(localMidday),
+    timezone,
+  );
+}
+
 export function validateWorkoutHistoryDateRange(
   from: string,
   to: string,
