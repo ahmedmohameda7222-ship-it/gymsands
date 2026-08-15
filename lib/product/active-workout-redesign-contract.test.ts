@@ -46,6 +46,7 @@ describe("Active Workout final binding redesign authority", () => {
     expect(details).toContain('hidden={effectiveSection !== "overview"}');
     expect(details).toContain('hidden={effectiveSection !== "current-set"}');
     expect(details).toContain('hidden={effectiveSection !== "muscle-load"}');
+    expect(details.indexOf("const effectiveSection")).toBeLessThan(details.indexOf("useEffect(() =>"));
     expect(shell).toContain("data-aw10-current-target");
     expect(core).not.toContain("aiPermitted: true");
     expect(details).not.toContain('>{legacyReopenSetLabel}<');
