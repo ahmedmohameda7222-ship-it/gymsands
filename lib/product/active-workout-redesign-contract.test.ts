@@ -57,9 +57,11 @@ describe("Active Workout final binding redesign authority", () => {
     expect(runtime).toContain("prs: []");
     expect(review).toContain("data-aw10-pr-post-save-only");
     expect(review).toContain("refreshAndReadActiveWorkoutPersonalRecords");
+    expect(review).toContain('recordState === "pending" || localizedRecords.length');
     expect(records).toContain("readPersonalRecordsMain");
     expect(records).toContain('event.source === "verified"');
     expect(records).toContain("event.sourceWorkoutId === sessionId");
+    expect(records).toContain('.select("id,status,deleted_at")');
     expect(records).not.toContain('.from("personal_records")');
     expect(records).toContain(".slice(0, 50)");
   });
