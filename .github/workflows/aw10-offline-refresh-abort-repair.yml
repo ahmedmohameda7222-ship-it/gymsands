@@ -26,22 +26,26 @@ jobs:
 
           path = Path('scripts/run-aw10-active-workout-closure-qa.mjs')
           text = path.read_text()
-          old = '''  const unexpectedRequests = failedRequests.filter((item) => !(
-            item.error === "net::ERR_ABORTED" && new URL(item.url).searchParams.has("_rsc")
-          ));'''
-          new = '''  const unexpectedRequests = failedRequests.filter((item) => {
-            if (item.error !== "net::ERR_ABORTED") return true;
-            const url = new URL(item.url);
-            if (url.searchParams.has("_rsc")) return false;
-            if (scenario.action !== "offline-refresh") return true;
-            return !(
-              url.pathname === "/api/workouts/active/previous-performance"
-              || /^\\/api\\/workouts\\/sessions\\/[^/]+\\/muscle-analysis$/.test(url.pathname)
-            );
-          });'''
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one AW10 baseline classifier, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
+          start_marker = '  const unexpectedRequests = failedRequests.filter((item) => !('
+          end_marker = '  if (unexpectedRequests.length)'
+          if text.count(start_marker) != 1:
+              raise SystemExit(f'expected one AW10 baseline classifier start, found {text.count(start_marker)}')
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+          replacement = "\n".join([
+              '  const unexpectedRequests = failedRequests.filter((item) => {',
+              '    if (item.error !== "net::ERR_ABORTED") return true;',
+              '    const url = new URL(item.url);',
+              '    if (url.searchParams.has("_rsc")) return false;',
+              '    if (scenario.action !== "offline-refresh") return true;',
+              '    return !(',
+              '      url.pathname === "/api/workouts/active/previous-performance"',
+              '      || /^\\/api\\/workouts\\/sessions\\/[^/]+\\/muscle-analysis$/.test(url.pathname)',
+              '    );',
+              '  });',
+              ''
+          ])
+          path.write_text(text[:start] + replacement + text[end:])
           PY
       - name: Commit clean result
         shell: bash
