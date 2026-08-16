@@ -99,7 +99,9 @@ describe("AW-1B Active Workout surface contract", () => {
     );
     expect(controller).toContain("name: isolateBidiText(replacement.name)");
     expect(replacement).toContain("<bdi>{recommendation.workout.name}</bdi>");
-    expect(details).toContain('<bdi dir="auto">{currentInstructions}</bdi>');
+    expect(details).not.toContain("currentInstructions");
+    expect(details).not.toContain("data-aw6-details-overview");
+    expect(controller).toContain("activeWorkoutExerciseDetailHref");
     expect(review).toContain('id="finish-notes"');
     expect(review).toContain('dir="auto"');
     expect(minimizedBar).toContain("<bdi>{title}</bdi>");
