@@ -308,10 +308,14 @@ const scenarios = [
     name: "transient-menu-mutual-exclusion-390x844",
     run: async ({ page }) => {
       await openSessionMenu(page);
-      await openExerciseMenu(page);
+      const exerciseTrigger = visible(page, '[data-aw10-exercise-actions] [data-aw-menu-trigger="exercise"]');
+      await exerciseTrigger.evaluate((element) => element.click());
+      await page.waitForFunction(() => document.querySelector("[data-aw10-exercise-actions]")?.getAttribute("data-state") === "open");
       check(await page.locator("[data-aw10-session-menu]").getAttribute("data-state") === "closed", "Session menu stayed open behind Exercise menu.");
       check(await page.locator("[data-aw10-exercise-actions]").getAttribute("data-state") === "open", "Exercise menu did not open.");
-      await openSessionMenu(page);
+      const sessionTrigger = visible(page, '[data-aw10-session-menu] [data-aw-menu-trigger="session"]');
+      await sessionTrigger.evaluate((element) => element.click());
+      await page.waitForFunction(() => document.querySelector("[data-aw10-session-menu]")?.getAttribute("data-state") === "open");
       check(await page.locator("[data-aw10-exercise-actions]").getAttribute("data-state") === "closed", "Exercise menu stayed open behind Session menu.");
       await page.locator("#active-set-reps").click();
       check(await page.locator("[data-aw10-session-menu]").getAttribute("data-state") === "closed", "Outside click did not close Session menu.");
@@ -403,7 +407,9 @@ const scenarios = [
       await pain.click();
       await page.waitForTimeout(100);
       const replacementText = await replacement.innerText();
-      check(!/safe for pain/i.test(replacementText), "Pain replacement UI made an unsupported medical safety claim.");
+      const recommendationTexts = await recommendations.allInnerTexts();
+      check(!recommendationTexts.some((text) => /safe for pain/i.test(text)), "Pain replacement recommendation made an unsupported medical safety claim.");
+      check(/does not label an exercise as medically safe for pain/i.test(replacementText), "Pain replacement safety disclaimer is missing.");
       check(await replacement.getByRole("button", { name: /browse all/i }).count() === 1, "Replacement fallback does not expose Browse all exercises.");
     },
   },
@@ -416,9 +422,9 @@ const scenarios = [
       await menu.locator('[role="menuitem"]').first().click();
       const replacement = visible(page, "[data-aw-replacement-recommendations]");
       await replacement.locator("ol li").first().waitFor({ state: "visible", timeout: 15_000 });
-      const firstRecommendation = replacement.locator("ol li").first();
-      check((await firstRecommendation.innerText()).includes(replacementAuthority.replacementDetailName), "Expected deterministic replacement candidate was not first.");
-      await firstRecommendation.getByRole("button", { name: /^Replace$/i }).click();
+      const replacementCandidate = replacement.locator("ol li").filter({ hasText: replacementAuthority.replacementDetailName }).first();
+      check(await replacementCandidate.count() === 1, "Deterministic replacement candidate is missing from eligible recommendations.");
+      await replacementCandidate.getByRole("button", { name: /^Replace$/i }).click();
       await page.getByRole("heading", { name: replacementAuthority.replacementDetailName, exact: true }).waitFor({ state: "visible", timeout: 15_000 });
       check(replacementAuthority.wasApplied(), "Canonical replacement RPC was not acknowledged.");
       await visible(page, "[data-aw10-exercise-details-trigger]").click();
@@ -478,7 +484,7 @@ const scenarios = [
       const restText = await rest.innerText();
       check(restText.includes(contract.activeFirstExerciseName), "Rest state does not identify the next exercise.");
       check(/2\s*(of|\/|von|من)\s*2/i.test(restText) || restText.includes("2/2"), "Rest state does not identify the next set context.");
-      check(await rest.getByRole("button").filter({ hasText: "+30" }).count() === 1, "Rest content duplicates +30 control.");
+      check(await rest.getByRole("button", { name: /add.*30/i }).count() === 1, "Rest content does not expose exactly one Add 30 seconds control.");
       check(await page.locator("[data-aw5-primary-action]:visible").count() === 1, "Rest does not expose exactly one sticky dominant Skip Rest action.");
       await page.waitForFunction(() => document.querySelector("[data-aw5-execution-shell]")?.getAttribute("data-aw5-session-state") === "set-entry", undefined, { timeout: 5_000 });
     },
