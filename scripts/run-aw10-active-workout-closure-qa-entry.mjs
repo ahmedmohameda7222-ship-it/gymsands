@@ -136,3 +136,10 @@ if (!underlyingFailure) {
     `[AW10-QA] PASS ${report.results.length} scenarios after strict optional-enrichment abort classification at ${report.headSha}`
   );
 }
+
+// The existing AW-10 closure remains the prerequisite authority. Once it is
+// green (either natively or through the narrowly permitted previous-performance
+// abort classification above), run the supplemental exact-head product QA that
+// proves the new Active Workout navigation, replacement, optimistic, and draft
+// contracts introduced by the full implementation authority.
+await import("./run-active-workout-full-authority-qa.mjs");
