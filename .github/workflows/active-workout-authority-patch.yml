@@ -25,6 +25,7 @@ jobs:
           node scripts/apply-active-workout-core-authority-v2.mjs
           node scripts/apply-active-workout-i18n.mjs
           node scripts/apply-active-workout-replacement-ui.mjs
+          node scripts/fix-active-workout-replacement-ui.mjs
       - name: Commit implementation patch
         shell: bash
         run: |
