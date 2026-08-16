@@ -255,6 +255,14 @@ async function runScenario(browser, scenario) {
       muscleScenario: "ready",
       includeGuide: true,
     }, requestHistory);
+    await context.route(/\/api\/personal-records\/exercise(?:\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "cache-control": "private, no-store" },
+        body: JSON.stringify({ performed: false, lastPerformedAt: null, highestLoad: null, estimatedOneRepMax: null, recentWorkoutId: null })
+      });
+    });
     if (scenario.multiExercise) await installMultiExerciseOverrides(context);
     const replacementAuthority = scenario.replacementCatalog
       ? await installReplacementOverrides(context, Boolean(scenario.replacementApply))
