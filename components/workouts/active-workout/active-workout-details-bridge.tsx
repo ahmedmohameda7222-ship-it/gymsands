@@ -137,6 +137,11 @@ export function ActiveWorkoutDetailsBridge({
         : effectiveSection === "adjust-today"
           ? tr("details.adjustToday")
           : tr("chatGPT.ask");
+  const dialogDescription = effectiveSection === "overview"
+    ? activeExercise.exercise.exercise_name
+    : effectiveSection === "current-set"
+      ? tr("set.label", { count: formatters.integer(activeSet.setNumber) })
+      : dialogTitle;
 
   useEffect(() => {
     if (!open) return;
@@ -174,7 +179,7 @@ export function ActiveWorkoutDetailsBridge({
         >
           <DialogHeader className="mb-0 shrink-0 border-b border-border/70 p-5 pe-16">
             <DialogTitle>{dialogTitle}</DialogTitle>
-            <DialogDescription>{tr("details.activeWorkoutDetailsDescription")}</DialogDescription>
+            <DialogDescription><bdi dir="auto">{dialogDescription}</bdi></DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">

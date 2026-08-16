@@ -110,6 +110,7 @@ async function assertBaseline(page, scenario, failures) {
   if (!await visible(page, "[data-aw10-exercise-details-trigger]").count()) failures.push("Exercise Details trigger is missing");
   if (!scenario.direct && !await visible(page, "[data-aw10-exercise-actions] > summary").count()) failures.push("Exercise actions trigger is missing");
   if (!await visible(page, "[data-active-set-details-trigger]").count()) failures.push("Set Details trigger is missing");
+  if (!await visible(page, "[data-aw10-current-target]").count()) failures.push("Frozen prescription target is missing");
   if (!await visible(page, "#active-set-reps").count()) failures.push("Reps input is missing");
   if (!await visible(page, "#active-set-weight").count()) failures.push("Weight input is missing");
   if (!await visible(page, "[data-aw5-set-path]").count()) failures.push("Set path is missing");
