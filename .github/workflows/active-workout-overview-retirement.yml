@@ -1,0 +1,33 @@
+name: Active Workout Overview Retirement
+
+on:
+  pull_request:
+    branches: [main]
+    types: [reopened]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  retire:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/active-workout-full-implementation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Retire duplicate Active Workout overview authority
+        run: node scripts/retire-active-workout-overview-authority.mjs
+      - name: Remove temporary retirement authority and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/active-workout-overview-retirement.yml scripts/retire-active-workout-overview-authority.mjs
+          git config user.name "plaivra-implementation"
+          git config user.email "actions@users.noreply.github.com"
+          git add --all
+          git commit -m "Retire duplicate Active Workout exercise overview"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
