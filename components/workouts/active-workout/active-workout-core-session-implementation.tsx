@@ -2010,6 +2010,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         primaryActionDisabled={primaryActionDisabled}
         moreLabel={tr("common.more")}
         pauseLabel={tr("common.pause")}
+        pausedStateLabel={tr("common.paused")}
         resumeLabel={tr("common.resume")}
         finishLabel={tr("minimized.finishWorkout")}
         cancelLabel={tr("minimized.cancelWorkout")}

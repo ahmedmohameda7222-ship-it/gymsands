@@ -10,11 +10,11 @@ import {
   snapshotId
 } from "./aw5-correction-qa-shared.mjs";
 
-function catalogPayload(url, includeGuide) {
+function catalogPayload(url, includeGuide, activityName = directExerciseName) {
   const activity = {
     id: activityId,
     slug: "barbell_squat",
-    name: directExerciseName,
+    name: activityName,
     shortDescription: "Deterministic AW-5 rendered verification activity.",
     instructions: includeGuide ? [{ order: 1, text: "Brace and move with control." }] : [],
     difficulty: "intermediate",
@@ -365,7 +365,7 @@ export async function installAw5CorrectionFixture(context, {
     user_id: contract.userId,
     item_order: 1,
     source_plan_exercise_id: sourceExerciseId,
-    source_plan_activity_id: direct ? activityId : null,
+    source_plan_activity_id: activityId,
     activity_name_snapshot: exerciseName,
     planned_prescription: { sets: 2, reps: "8-10", rest_seconds: restSeconds },
     planned_sets: 2,
@@ -442,7 +442,7 @@ export async function installAw5CorrectionFixture(context, {
         "cache-control": "private, no-store",
         "x-plaivra-qa-fixture": "aw5-correction-catalog"
       },
-      body: JSON.stringify(catalogPayload(new URL(route.request().url()), includeGuide))
+      body: JSON.stringify(catalogPayload(new URL(route.request().url()), includeGuide, exerciseName))
     });
   });
 

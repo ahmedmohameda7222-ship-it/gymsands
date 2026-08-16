@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  activityId,
   baseUrl,
   contract,
   dayRoute,
@@ -26,6 +27,7 @@ const evidenceDir = path.join(outputDir, "active-workout-redesign");
 await mkdir(evidenceDir, { recursive: true });
 
 const visualMatrix = [
+  ["plan-day-set-entry-en-360x800", 360, 800, "en", "light", false],
   ["plan-day-set-entry-en-390x844", 390, 844, "en", "light", false],
   ["plan-day-set-entry-de-393x852", 393, 852, "de", "light", false],
   ["plan-day-set-entry-ar-430x932", 430, 932, "ar", "light", false],
@@ -106,9 +108,9 @@ async function assertBaseline(page, scenario, failures) {
     failures.push("active exercise is not one semantic h2 heading");
   }
   if (!await visible(page, "[data-aw5-mini-heat-map-slot]").count()) failures.push("Mini Heat Map is missing");
-  if (!await visible(page, "[data-aw10-session-menu] > summary").count()) failures.push("Session menu trigger is missing");
+  if (!await visible(page, '[data-aw10-session-menu] [data-aw-menu-trigger="session"]').count()) failures.push("Session menu trigger is missing");
   if (!await visible(page, "[data-aw10-exercise-details-trigger]").count()) failures.push("Exercise Details trigger is missing");
-  if (!scenario.direct && !await visible(page, "[data-aw10-exercise-actions] > summary").count()) failures.push("Exercise actions trigger is missing");
+  if (!scenario.direct && !await visible(page, '[data-aw10-exercise-actions] [data-aw-menu-trigger="exercise"]').count()) failures.push("Exercise actions trigger is missing");
   if (!await visible(page, "[data-active-set-details-trigger]").count()) failures.push("Set Details trigger is missing");
   if (!await visible(page, "[data-aw10-current-target]").count()) failures.push("Frozen prescription target is missing");
   if (!await visible(page, "#active-set-reps").count()) failures.push("Reps input is missing");
@@ -250,12 +252,9 @@ async function completeOneSet(page) {
 }
 
 async function openSessionMenu(page) {
-  await visible(page, "[data-aw10-session-menu] > summary").click({ timeout: 10_000 });
+  await visible(page, '[data-aw10-session-menu] [data-aw-menu-trigger="session"]').click({ timeout: 10_000 });
   const menu = visible(page, "[data-aw10-session-menu]");
-  await page.waitForFunction(() => {
-    const element = document.querySelector("[data-aw10-session-menu]");
-    return element instanceof HTMLDetailsElement && element.open;
-  }, undefined, { timeout: 5_000 });
+  await page.waitForFunction(() => document.querySelector("[data-aw10-session-menu]")?.getAttribute("data-state") === "open", undefined, { timeout: 5_000 });
   return menu;
 }
 
@@ -320,8 +319,8 @@ async function exerciseScenario(page, scenario, failures) {
     if (!labels.some((label) => /cancel|abbrechen|إلغاء/i.test(label))) failures.push("Session menu does not expose localized destructive Cancel Workout");
   } else if (scenario.action === "details") {
     await visible(page, "[data-aw10-exercise-details-trigger]").click();
-    await visible(page, "[data-active-set-details-dialog]").waitFor({ state: "visible", timeout: 10_000 });
-    if (!await visible(page, "[data-aw6-details-overview]").count()) failures.push("Exercise Name did not open Exercise Overview");
+    await page.waitForURL((url) => url.pathname === `/workouts/${activityId}` && url.searchParams.get("returnTo") === dayRoute, { timeout: 15_000 });
+    if (page.url().includes("/workouts/session/")) failures.push("Exercise Name did not leave Active Workout for canonical Exercise Detail");
   } else if (scenario.action === "set-details") {
     await visible(page, "[data-active-set-details-trigger]").click();
     const section = visible(page, "[data-aw10-set-details-exact]");
@@ -331,7 +330,8 @@ async function exerciseScenario(page, scenario, failures) {
     }
     if (await section.getByRole("button").count()) failures.push("Set Details contains an unrelated button/action");
   } else if (scenario.action === "exercise-actions") {
-    await visible(page, "[data-aw10-exercise-actions] > summary").click();
+    await visible(page, '[data-aw10-exercise-actions] [data-aw-menu-trigger="exercise"]').click();
+    await page.waitForFunction(() => document.querySelector("[data-aw10-exercise-actions]")?.getAttribute("data-state") === "open", undefined, { timeout: 5_000 });
     const menu = visible(page, "[data-aw10-exercise-actions]");
     const buttons = menu.locator("button:visible");
     if (await buttons.count() !== 3) failures.push(`Exercise Actions exposes ${await buttons.count()} actions, expected exactly 3`);

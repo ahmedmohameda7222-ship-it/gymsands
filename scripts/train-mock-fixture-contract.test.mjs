@@ -89,6 +89,7 @@ test("final redesign runner is exact-head production QA with screenshot evidence
 
 test("final redesign runner covers the binding viewport, locale, theme, accessibility, and state matrix", () => {
   for (const token of [
+    "360x800",
     "390x844",
     "393x852",
     "430x932",

@@ -81,6 +81,7 @@ export type ActiveWorkoutExecutionShellProps = {
   primaryActionDisabled: boolean;
   moreLabel: string;
   pauseLabel: string;
+  pausedStateLabel: string;
   resumeLabel: string;
   finishLabel: string;
   cancelLabel?: string;
@@ -196,6 +197,7 @@ export function ActiveWorkoutExecutionShell({
   primaryActionDisabled,
   moreLabel,
   pauseLabel,
+  pausedStateLabel,
   resumeLabel,
   finishLabel,
   cancelLabel,
@@ -348,7 +350,8 @@ export function ActiveWorkoutExecutionShell({
         {paused ? (
           <section data-aw10-paused-state className="flex min-h-[50vh] flex-col items-center justify-center px-4 text-center">
             <CirclePause className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
-            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">{pauseLabel}</p>
+            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">{pausedStateLabel}</p>
+            <p data-aw10-paused-elapsed dir="ltr" className="mt-2 text-3xl font-semibold tabular-nums text-foreground">{elapsedLabel}</p>
             <p className="mt-3 max-w-lg text-xl font-semibold text-foreground"><bdi>{exerciseName}</bdi></p>
             <p className="mt-1 text-sm text-muted-foreground">{setPositionLabel}</p>
             <Button type="button" className="mt-6 min-h-[52px] min-w-52" onClick={onPauseResume} disabled={busy}>
@@ -537,8 +540,8 @@ export function ActiveWorkoutExecutionShell({
       {detailsContent}
       {exerciseNavigatorContent}
 
-      <MobileStickyActionsSpacer />
-      <MobileStickyActions data-aw10-sticky-actions>
+      <MobileStickyActionsSpacer placement="session" />
+      <MobileStickyActions placement="session" data-aw10-sticky-actions>
         <Button type="button" data-aw5-primary-action className="min-h-[54px] w-full text-base font-semibold" onClick={onPrimaryAction} disabled={resolvedPrimaryActionDisabled}>
           <PrimaryActionIcon kind={primaryActionKind} />
           {primaryActionLabel}
