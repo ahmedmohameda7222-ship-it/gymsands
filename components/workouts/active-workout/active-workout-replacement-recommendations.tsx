@@ -71,9 +71,36 @@ export function ActiveWorkoutReplacementRecommendations({
   const [loading, setLoading] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const sessionIdsKey = useMemo(() => [...sessionExerciseIds].sort().join("|"), [sessionExerciseIds]);
+  const stableSessionExerciseIds = useMemo(
+    () => new Set(sessionIdsKey ? sessionIdsKey.split("|") : []),
+    [sessionIdsKey],
+  );
+  const stableOriginal = useMemo<ReplacementExerciseProfile>(() => ({
+    id: original.id,
+    name: original.name,
+    targetMuscle: original.targetMuscle,
+    equipment: original.equipment,
+    difficulty: original.difficulty,
+    mechanics: original.mechanics,
+    forceType: original.forceType,
+    movementPattern: original.movementPattern,
+    secondaryMuscles: [...original.secondaryMuscles],
+    catalogDegraded: original.catalogDegraded,
+  }), [
+    original.catalogDegraded,
+    original.difficulty,
+    original.equipment,
+    original.forceType,
+    original.id,
+    original.mechanics,
+    original.movementPattern,
+    original.name,
+    original.secondaryMuscles,
+    original.targetMuscle,
+  ]);
 
   useEffect(() => {
-    if (!userId || !original.id) {
+    if (!userId || !stableOriginal.id) {
       setRecommendations([]);
       setUnavailable(true);
       return;
@@ -83,11 +110,11 @@ export function ActiveWorkoutReplacementRecommendations({
     setUnavailable(false);
     void getActiveWorkoutReplacementRecommendations({
       userId,
-      original,
+      original: stableOriginal,
       reason,
       locale,
       savedAlternatives,
-      sessionExerciseIds,
+      sessionExerciseIds: stableSessionExerciseIds,
       signal: controller.signal,
       limit: 5,
     }).then((result) => {
@@ -102,7 +129,7 @@ export function ActiveWorkoutReplacementRecommendations({
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [locale, original, reason, savedAlternatives, sessionExerciseIds, sessionIdsKey, userId]);
+  }, [locale, reason, savedAlternatives, stableOriginal, stableSessionExerciseIds, userId]);
 
   return (
     <div data-aw-replacement-recommendations className="mt-4 space-y-4">
