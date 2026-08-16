@@ -5,10 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check } from "lucide-react";
 
 import { useUserSettings } from "@/lib/settings/user-settings-context";
-import {
-  createWorkoutFeedbackController,
-  type WorkoutFeedbackController,
-} from "@/lib/workouts/workout-feedback";
+import { createWorkoutFeedbackController } from "@/lib/workouts/workout-feedback";
 
 type SuccessFeedbackValue = {
   celebrate: (message?: string) => void;
@@ -24,42 +21,37 @@ export function SuccessFeedbackProvider({ children }: { children: React.ReactNod
   const { settings } = useUserSettings();
   const [message, setMessage] = useState<string | null>(null);
   const timeoutRef = useRef<number | null>(null);
-  const feedbackRef = useRef<WorkoutFeedbackController | null>(null);
-
-  if (!feedbackRef.current) {
-    feedbackRef.current = createWorkoutFeedbackController({
-      sounds: settings.workoutSounds,
-      haptics: settings.haptics,
-    });
-  }
+  const [feedback] = useState(() => createWorkoutFeedbackController({
+    sounds: settings.workoutSounds,
+    haptics: settings.haptics,
+  }));
 
   useEffect(() => {
-    feedbackRef.current?.updatePreferences({
+    feedback.updatePreferences({
       sounds: settings.workoutSounds,
       haptics: settings.haptics,
     });
-  }, [settings.haptics, settings.workoutSounds]);
+  }, [feedback, settings.haptics, settings.workoutSounds]);
 
   useEffect(() => () => {
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-    feedbackRef.current?.dispose();
-    feedbackRef.current = null;
-  }, []);
+    feedback.dispose();
+  }, [feedback]);
 
   const setCompleted = useCallback(() => {
-    feedbackRef.current?.setCompleted();
-  }, []);
+    feedback.setCompleted();
+  }, [feedback]);
 
   const error = useCallback(() => {
-    feedbackRef.current?.error();
-  }, []);
+    feedback.error();
+  }, [feedback]);
 
   const workoutCompleted = useCallback((nextMessage = "Nice work") => {
-    feedbackRef.current?.workoutCompleted();
+    feedback.workoutCompleted();
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
     setMessage(nextMessage);
     timeoutRef.current = window.setTimeout(() => setMessage(null), reduceMotion ? 900 : 1350);
-  }, [reduceMotion]);
+  }, [feedback, reduceMotion]);
 
   const celebrate = workoutCompleted;
 
