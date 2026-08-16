@@ -94,6 +94,7 @@ describe("AW-10 canonical Active Workout closure", () => {
       "canonical-exercise-detail-draft-return-390x844",
       "exercise-navigator-canonical-cursor-pause-rest-430x932",
       "replacement-intelligence-reason-aware-390x844",
+      "replacement-exercise-detail-identity-390x844",
       "optimistic-complete-network-delay-390x844",
       "optimistic-hard-failure-rollback-auto-dismiss-390x844",
       "natural-rest-expiry-next-context-390x844",

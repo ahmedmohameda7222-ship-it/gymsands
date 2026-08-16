@@ -223,8 +223,11 @@ export function frozenExercise(
       ? liveExercises[0]
       : undefined;
   const firstSet = item.prescriptionSets[0] ?? null;
+  const actualExerciseId = item.actualGlobalExerciseId ?? item.actualCustomExerciseId ?? null;
   return live ? {
     ...live,
+    workout_id: actualExerciseId ?? live.workout_id,
+    source_workout_id: actualExerciseId ?? live.source_workout_id,
     exercise_name: item.activityName,
     sets: item.prescriptionSets.length || item.plannedSets,
     reps: frozenRepetitionsTarget(item, firstSet),
@@ -232,8 +235,8 @@ export function frozenExercise(
   } : {
     id: item.sourcePlanExerciseId ?? item.id,
     plan_day_id: "",
-    workout_id: null,
-    source_workout_id: null,
+    workout_id: actualExerciseId,
+    source_workout_id: actualExerciseId,
     exercise_name: item.activityName,
     category: null,
     target_muscle: null,

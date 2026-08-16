@@ -125,6 +125,9 @@ async function installMultiExerciseOverrides(context) {
   });
 }
 
+const replacementDetailId = "11111111-1111-4111-8111-111111111121";
+const replacementDetailName = "Dumbbell Goblet Squat";
+
 function replacementCatalogPayload(url) {
   const meta = {
     apiVersion: "v2",
@@ -158,7 +161,7 @@ function replacementCatalogPayload(url) {
   });
   const activities = [
     make(activityId, contract.activeFirstExerciseName, "Barbell", "intermediate"),
-    make("11111111-1111-4111-8111-111111111121", "Dumbbell Goblet Squat", "Dumbbell", "intermediate"),
+    make(replacementDetailId, replacementDetailName, "Dumbbell", "intermediate"),
     make("11111111-1111-4111-8111-111111111122", "Bodyweight Box Squat", "Bodyweight", "beginner"),
     make("11111111-1111-4111-8111-111111111123", "Leg Press", "Machine", "intermediate", "knee_dominant"),
   ];
@@ -186,7 +189,30 @@ function replacementCatalogPayload(url) {
   return { data: [], meta };
 }
 
-async function installReplacementOverrides(context) {
+async function installReplacementOverrides(context, enableCanonicalReplacement = false) {
+  let replacementApplied = false;
+  const replacementItem = () => ({
+    id: itemId, snapshot_id: snapshotId, user_id: contract.userId, item_order: 1,
+    source_plan_exercise_id: contract.activeFirstExerciseId, source_plan_activity_id: activityId,
+    activity_name_snapshot: contract.activeFirstExerciseName,
+    actual_target_type: replacementApplied ? "global_exercise" : null,
+    actual_global_exercise_id: replacementApplied ? replacementDetailId : null,
+    actual_custom_exercise_id: null, actual_provider: null, actual_provider_activity_id: null,
+    actual_name_snapshot: replacementApplied ? replacementDetailName : null,
+    planned_prescription: { sets: 2, reps: "8-10", rest_seconds: 90 }, planned_sets: 2,
+    state: replacementApplied ? "replaced" : "planned"
+  });
+  if (enableCanonicalReplacement) {
+    await context.route(/\/rest\/v1\/workout_session_muscle_snapshot_items(?:\?.*)?$/, async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", headers: { "content-range": "0-0/1" }, body: JSON.stringify([replacementItem()]) });
+    });
+    await context.route(/\/rest\/v1\/rpc\/replace_workout_session_snapshot_item_atomic(?:\?.*)?$/, async (route) => {
+      const payload = route.request().postDataJSON();
+      check(payload?.p_replacement_identity === replacementDetailId, `Replacement RPC used unexpected identity ${payload?.p_replacement_identity}.`);
+      replacementApplied = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(replacementItem()) });
+    });
+  }
   await context.route("**/api/activity-catalog/**", async (route) => {
     const url = new URL(route.request().url());
     await route.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "private, no-store" }, body: JSON.stringify(replacementCatalogPayload(url)) });
@@ -197,6 +223,7 @@ async function installReplacementOverrides(context) {
     const candidates = Array.isArray(payload?.p_candidates) ? payload.p_candidates : [];
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(candidates.map((candidate) => ({ key: candidate.key, eligible: true, reason: null }))) });
   });
+  return { replacementDetailId, replacementDetailName, wasApplied: () => replacementApplied };
 }
 
 async function runScenario(browser, scenario) {
@@ -229,12 +256,14 @@ async function runScenario(browser, scenario) {
       includeGuide: true,
     }, requestHistory);
     if (scenario.multiExercise) await installMultiExerciseOverrides(context);
-    if (scenario.replacementCatalog) await installReplacementOverrides(context);
+    const replacementAuthority = scenario.replacementCatalog
+      ? await installReplacementOverrides(context, Boolean(scenario.replacementApply))
+      : null;
     const route = scenario.direct ? directRoute : dayRoute;
     const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded", timeout: 45_000 });
     check(response && response.status() < 400, `session navigation failed: ${response?.status() ?? "no response"}`);
     await waitForActiveShell(page);
-    await scenario.run({ page, context, fixture });
+    await scenario.run({ page, context, fixture, replacementAuthority });
     await assertNoHorizontalOverflow(page);
   } catch (error) {
     observation.failures.push(error instanceof Error ? error.message : String(error));
@@ -376,6 +405,30 @@ const scenarios = [
       const replacementText = await replacement.innerText();
       check(!/safe for pain/i.test(replacementText), "Pain replacement UI made an unsupported medical safety claim.");
       check(await replacement.getByRole("button", { name: /browse all/i }).count() === 1, "Replacement fallback does not expose Browse all exercises.");
+    },
+  },
+  {
+    name: "replacement-exercise-detail-identity-390x844",
+    replacementCatalog: true,
+    replacementApply: true,
+    run: async ({ page, replacementAuthority }) => {
+      const menu = await openExerciseMenu(page);
+      await menu.locator('[role="menuitem"]').first().click();
+      const replacement = visible(page, "[data-aw-replacement-recommendations]");
+      await replacement.locator("ol li").first().waitFor({ state: "visible", timeout: 15_000 });
+      const firstRecommendation = replacement.locator("ol li").first();
+      check((await firstRecommendation.innerText()).includes(replacementAuthority.replacementDetailName), "Expected deterministic replacement candidate was not first.");
+      await firstRecommendation.getByRole("button", { name: /^Replace$/i }).click();
+      await page.getByRole("heading", { name: replacementAuthority.replacementDetailName, exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+      check(replacementAuthority.wasApplied(), "Canonical replacement RPC was not acknowledged.");
+      await visible(page, "[data-aw10-exercise-details-trigger]").click();
+      await page.waitForURL((url) => url.pathname === `/workouts/${replacementAuthority.replacementDetailId}` && url.searchParams.get("returnTo") === dayRoute, { timeout: 20_000 });
+      await page.getByText(replacementAuthority.replacementDetailName, { exact: true }).first().waitFor({ state: "visible", timeout: 15_000 });
+      const back = page.locator(`a[href="${dayRoute}"]`).first();
+      await back.click();
+      await page.waitForURL((url) => url.pathname === dayRoute, { timeout: 20_000 });
+      await waitForActiveShell(page);
+      await page.getByRole("heading", { name: replacementAuthority.replacementDetailName, exact: true }).waitFor({ state: "visible", timeout: 15_000 });
     },
   },
   {

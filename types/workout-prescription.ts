@@ -122,9 +122,15 @@ export type WorkoutSessionPrescriptionItem = {
   sourcePlanExerciseId: string | null;
   sourcePlanActivityId: string | null;
   activityName: string;
+  originalActivityName?: string;
+  actualTargetType?: "global_exercise" | "custom_exercise" | null;
+  actualGlobalExerciseId?: string | null;
+  actualCustomExerciseId?: string | null;
+  actualProvider?: string | null;
+  actualProviderActivityId?: string | null;
   rawCompatibilityPrescription: PlannedActivityPrescription;
   plannedSets: number | null;
-  executionState: "planned" | "completed" | "adjusted" | "skipped";
+  executionState: "planned" | "completed" | "adjusted" | "skipped" | "replaced";
   normalizationStatus: WorkoutPrescriptionNormalizationStatus;
   prescriptionSets: FrozenWorkoutPrescriptionSet[];
 };

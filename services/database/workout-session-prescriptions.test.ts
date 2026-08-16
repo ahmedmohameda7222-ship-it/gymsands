@@ -65,6 +65,35 @@ describe("immutable workout-session prescription projection", () => {
     expect(unavailable.prescriptionSets).toEqual([]);
   });
 
+  it("hydrates canonical replaced snapshot identity without overwriting original plan identity", () => {
+    const replacementId = "11111111-1111-4111-8111-111111111121";
+    const [projection] = normalizeWorkoutSessionPrescriptionRows({
+      snapshot,
+      items: [{
+        ...item,
+        state: "replaced",
+        actual_target_type: "global_exercise",
+        actual_global_exercise_id: replacementId,
+        actual_custom_exercise_id: null,
+        actual_provider: null,
+        actual_provider_activity_id: null,
+        actual_name_snapshot: "Dumbbell Goblet Squat"
+      }],
+      sets: [setRow()],
+      targets: [targetRow()],
+      definitions
+    });
+    expect(projection).toMatchObject({
+      executionState: "replaced",
+      sourcePlanExerciseId: "exercise-a",
+      sourcePlanActivityId: "activity-a",
+      originalActivityName: "Frozen Press",
+      activityName: "Dumbbell Goblet Squat",
+      actualTargetType: "global_exercise",
+      actualGlobalExerciseId: replacementId
+    });
+  });
+
   it("fails closed on duplicate set order, duplicate target identity and owner/session mismatches", () => {
     expect(() => normalizeWorkoutSessionPrescriptionRows({
       snapshot, items: [item], sets: [setRow(), setRow({ id: "set-b" })], targets: [], definitions
