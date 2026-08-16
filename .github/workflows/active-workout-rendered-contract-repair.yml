@@ -1,0 +1,33 @@
+name: Active Workout Rendered Contract Repair
+
+on:
+  pull_request:
+    branches: [main]
+    types: [reopened]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  repair:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/active-workout-full-implementation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply bounded rendered contract repair
+        run: node scripts/apply-active-workout-rendered-contract-repair.mjs
+      - name: Remove temporary repair authority and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/active-workout-rendered-contract-repair.yml scripts/apply-active-workout-rendered-contract-repair.mjs
+          git config user.name "plaivra-implementation"
+          git config user.email "actions@users.noreply.github.com"
+          git add --all
+          git commit -m "Repair Active Workout rendered product contracts"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
