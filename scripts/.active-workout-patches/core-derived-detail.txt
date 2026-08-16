@@ -1,0 +1,35 @@
+  const activeSetKey = `${sessionId ?? "no-session"}:${activeExercise.prescriptionItem.id}:${activeSet.setNumber}`;
+  const showCurrentValidation = validationAttemptKey === activeSetKey;
+  const progressionTargetValue = activeProgressionTarget
+    ? [
+        activeProgressionTarget.next_target_weight_kg === null ? null : formatters.measurement(activeProgressionTarget.next_target_weight_kg, "kg"),
+        activeProgressionTarget.next_target_reps === null ? null : `${formatters.integer(activeProgressionTarget.next_target_reps)} ${tr("units.reps")}`
+      ].filter((value): value is string => Boolean(value)).join(" × ") || null
+    : null;
+  const navigatorRows = buildActiveWorkoutExerciseNavigatorRows({
+    exercises: exerciseStates,
+    activeExerciseIndex,
+    originalNamesByPlanExerciseId: new Map(day.exercises.map((exercise) => [exercise.id, exercise.exercise_name]))
+  });
+  const nextExecutionExercise = exerciseStates[activeExerciseIndex] ?? null;
+  const nextExecutionSet = nextExecutionExercise?.sets[activeSetIndex] ?? null;
+  const nextExecutionSetLabel = nextExecutionExercise && nextExecutionSet
+    ? tr("header.setProgress", { current: formatters.integer(nextExecutionSet.setNumber), total: formatters.integer(nextExecutionExercise.sets.length) })
+    : tr("navigation.allDone");
+  const nextExecutionTarget = nextExecutionSet?.plannedReps ? `${nextExecutionSet.plannedReps} ${tr("units.reps")}` : null;
+  const exerciseDetailId = resolveActiveWorkoutExerciseDetailId({
+    sourceWorkoutId: activeExercise.exercise.source_workout_id,
+    workoutId: activeExercise.exercise.workout_id,
+    sourcePlanActivityId: activeExercise.prescriptionItem.sourcePlanActivityId
+  });
+
+  async function openCanonicalExerciseDetail() {
+    if (!exerciseDetailId) {
+      setSetFeedbackVariant("error");
+      setSetFeedback(tr("exercise.detailsUnavailable"));
+      return;
+    }
+    const preserved = await preserveWorkoutForNavigation();
+    if (!preserved) return;
+    window.location.assign(activeWorkoutExerciseDetailHref(exerciseDetailId, sessionRoute));
+  }
