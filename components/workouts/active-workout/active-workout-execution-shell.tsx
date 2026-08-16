@@ -277,6 +277,19 @@ export function ActiveWorkoutExecutionShell({
     action(trigger);
   }
 
+  const exerciseNavigatorTrigger = onOpenExerciseNavigator ? (
+    <button
+      type="button"
+      data-aw-exercise-navigator-trigger
+      className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={(event) => closeThenWithTrigger(onOpenExerciseNavigator, event.currentTarget)}
+      aria-haspopup="dialog"
+    >
+      {exercisePositionLabel}
+      <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+    </button>
+  ) : <p className="text-xs font-semibold text-muted-foreground">{exercisePositionLabel}</p>;
+
   return (
     <div
       data-aw5-execution-shell
@@ -354,6 +367,7 @@ export function ActiveWorkoutExecutionShell({
             <p data-aw10-paused-elapsed dir="ltr" className="mt-2 text-3xl font-semibold tabular-nums text-foreground">{elapsedLabel}</p>
             <p className="mt-3 max-w-lg text-xl font-semibold text-foreground"><bdi>{exerciseName}</bdi></p>
             <p className="mt-1 text-sm text-muted-foreground">{setPositionLabel}</p>
+            <div className="mt-3">{exerciseNavigatorTrigger}</div>
             <Button type="button" className="mt-6 min-h-[52px] min-w-52" onClick={onPauseResume} disabled={busy}>
               <CirclePlay className="h-5 w-5" aria-hidden="true" />
               {resumeLabel}
@@ -361,6 +375,7 @@ export function ActiveWorkoutExecutionShell({
           </section>
         ) : restActive ? (
           <section data-aw10-rest-state className="flex min-h-[50vh] flex-col items-center justify-center px-4 text-center">
+            <div className="mb-2">{exerciseNavigatorTrigger}</div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{restPresetSectionLabel}</p>
             <p dir="ltr" className="mt-3 text-5xl font-semibold tabular-nums tracking-[-0.05em] text-foreground sm:text-6xl">{restLabel}</p>
             <div className="mt-5 max-w-lg">
@@ -387,18 +402,7 @@ export function ActiveWorkoutExecutionShell({
           <section aria-labelledby="aw5-current-exercise" className="min-w-0">
             <div className="flex items-start gap-3 border-b border-border/70 pb-4">
               <div className="min-w-0 flex-1">
-                {onOpenExerciseNavigator ? (
-                  <button
-                    type="button"
-                    data-aw-exercise-navigator-trigger
-                    className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={(event) => closeThenWithTrigger(onOpenExerciseNavigator, event.currentTarget)}
-                    aria-haspopup="dialog"
-                  >
-                    {exercisePositionLabel}
-                    <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                ) : <p className="text-xs font-semibold text-muted-foreground">{exercisePositionLabel}</p>}
+                {exerciseNavigatorTrigger}
                 <h2 id="aw5-current-exercise" data-aw5-exercise-title className="mt-0.5 text-[clamp(1.6rem,6vw,2.5rem)] font-semibold leading-[1.08] tracking-[-0.04em] text-foreground">
                   <button
                     type="button"
@@ -536,24 +540,28 @@ export function ActiveWorkoutExecutionShell({
         )}
       </main>
 
-      <div className="mt-3" aria-live="polite">{feedback}</div>
+      <div data-aw5-feedback className="mt-3" aria-live="polite">{feedback}</div>
       {detailsContent}
       {exerciseNavigatorContent}
 
-      <MobileStickyActionsSpacer placement="session" />
-      <MobileStickyActions placement="session" data-aw10-sticky-actions>
-        <Button type="button" data-aw5-primary-action className="min-h-[54px] w-full text-base font-semibold" onClick={onPrimaryAction} disabled={resolvedPrimaryActionDisabled}>
-          <PrimaryActionIcon kind={primaryActionKind} />
-          {primaryActionLabel}
-        </Button>
-      </MobileStickyActions>
+      {!paused ? (
+        <>
+          <MobileStickyActionsSpacer placement="session" />
+          <MobileStickyActions placement="session" data-aw10-sticky-actions>
+            <Button type="button" data-aw5-primary-action className="min-h-[54px] w-full text-base font-semibold" onClick={onPrimaryAction} disabled={resolvedPrimaryActionDisabled}>
+              <PrimaryActionIcon kind={primaryActionKind} />
+              {primaryActionLabel}
+            </Button>
+          </MobileStickyActions>
 
-      <div className="mt-7 hidden lg:block">
-        <Button type="button" data-aw5-primary-action className="min-h-[54px] w-full text-base font-semibold" onClick={onPrimaryAction} disabled={resolvedPrimaryActionDisabled}>
-          <PrimaryActionIcon kind={primaryActionKind} />
-          {primaryActionLabel}
-        </Button>
-      </div>
+          <div className="mt-7 hidden lg:block">
+            <Button type="button" data-aw5-primary-action className="min-h-[54px] w-full text-base font-semibold" onClick={onPrimaryAction} disabled={resolvedPrimaryActionDisabled}>
+              <PrimaryActionIcon kind={primaryActionKind} />
+              {primaryActionLabel}
+            </Button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
