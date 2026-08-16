@@ -2,6 +2,7 @@
 
 import { createCatalogRequestGroupId } from "@/services/activity-catalog/client";
 import {
+  getWorkout,
   getWorkoutAlternatives,
   getWorkoutsWithStatus,
 } from "@/services/database/workout-library";
@@ -13,6 +14,7 @@ import type {
 } from "@/types";
 import {
   rankActiveWorkoutReplacements,
+  replacementProfileFromWorkout,
   type RankedReplacement,
   type ReplacementExerciseProfile,
 } from "./replacement-ranking";
@@ -32,6 +34,10 @@ function filtersFor(original: ReplacementExerciseProfile) {
   return original.targetMuscle ? { primaryMuscles: [original.targetMuscle] } : {};
 }
 
+function abortIfNeeded(signal?: AbortSignal) {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+}
+
 export async function getActiveWorkoutReplacementRecommendations(input: {
   userId: string;
   original: ReplacementExerciseProfile;
@@ -42,41 +48,53 @@ export async function getActiveWorkoutReplacementRecommendations(input: {
   signal?: AbortSignal;
   limit?: number;
 }): Promise<ActiveWorkoutReplacementRecommendationResult> {
-  if (input.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  abortIfNeeded(input.signal);
   const requestGroupId = createCatalogRequestGroupId();
   const requestContext = { requestGroupId, signal: input.signal };
 
+  const canonicalOriginal = input.original.id
+    ? await getWorkout(input.original.id, input.locale, requestContext).catch((error) => {
+        abortIfNeeded(input.signal);
+        console.warn("Plaivra could not enrich replacement source metadata.", error);
+        return null;
+      })
+    : null;
+  abortIfNeeded(input.signal);
+  const original = canonicalOriginal ? replacementProfileFromWorkout(canonicalOriginal) : input.original;
+
   const [alternativeResult, catalogResult] = await Promise.all([
-    input.original.id
-      ? getWorkoutAlternatives(input.original.id, 20, input.locale, requestContext)
-          .catch((error) => {
-            if (input.signal?.aborted) throw error;
-            return { data: [] as Workout[], status: { source: "fallback" as const } };
-          })
-      : Promise.resolve({ data: [] as Workout[], status: { source: "fallback" as const } }),
-    getWorkoutsWithStatus("", filtersFor(input.original), 0, input.locale, requestContext)
-      .catch((error) => {
-        if (input.signal?.aborted) throw error;
-        return { data: [] as Workout[], status: { source: "fallback" as const } };
-      }),
+    original.id
+      ? getWorkoutAlternatives(original.id, 20, input.locale, requestContext).catch((error) => {
+          abortIfNeeded(input.signal);
+          console.warn("Plaivra could not load catalog alternatives for replacement ranking.", error);
+          return null;
+        })
+      : Promise.resolve(null),
+    getWorkoutsWithStatus("", filtersFor(original), 0, input.locale, requestContext).catch((error) => {
+      abortIfNeeded(input.signal);
+      console.warn("Plaivra could not load replacement candidates.", error);
+      return null;
+    }),
   ]);
 
-  if (input.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-  const candidates = uniqueWorkouts([...alternativeResult.data, ...catalogResult.data])
-    .filter((candidate) => candidate.id !== input.original.id)
+  abortIfNeeded(input.signal);
+  const alternatives = alternativeResult?.data ?? [];
+  const catalog = catalogResult?.data ?? [];
+  const candidates = uniqueWorkouts([...alternatives, ...catalog])
+    .filter((candidate) => candidate.id !== original.id)
     .slice(0, 80);
   if (!candidates.length) {
-    return { recommendations: [], source: "catalog" };
+    return { recommendations: [], source: alternatives.length ? "alternatives" : "catalog" };
   }
 
   const eligibility = await getWorkoutReplacementEligibility(
     input.userId,
     candidates.map((workout) => ({ key: workout.id, workout })),
   );
-  if (input.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  abortIfNeeded(input.signal);
 
   const recommendations = rankActiveWorkoutReplacements({
-    original: input.original,
+    original,
     candidates,
     eligibility,
     savedAlternatives: input.savedAlternatives,
@@ -84,8 +102,8 @@ export async function getActiveWorkoutReplacementRecommendations(input: {
     reason: input.reason,
   }).slice(0, Math.min(Math.max(input.limit ?? 5, 1), 8));
 
-  const hasAlternatives = alternativeResult.data.length > 0;
-  const hasCatalog = catalogResult.data.length > 0;
+  const hasAlternatives = alternatives.length > 0;
+  const hasCatalog = catalog.length > 0;
   return {
     recommendations,
     source: hasAlternatives && hasCatalog ? "combined" : hasAlternatives ? "alternatives" : "catalog",
