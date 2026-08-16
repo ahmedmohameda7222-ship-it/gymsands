@@ -6,6 +6,7 @@ const shell = readFileSync("components/workouts/active-workout/active-workout-ex
 const details = readFileSync("components/workouts/active-workout/active-workout-details-bridge.tsx", "utf8");
 const review = readFileSync("components/workouts/active-workout/active-workout-review-bridge.tsx", "utf8");
 const runtime = readFileSync("components/workouts/active-workout/active-workout-runtime-model.ts", "utf8");
+const runtimeCore = readFileSync("components/workouts/active-workout/active-workout-runtime-model-core.ts", "utf8");
 const previous = readFileSync("services/workouts/active-workout/previous-performance-server.ts", "utf8");
 const previousClient = readFileSync("services/workouts/active-workout/previous-performance-client.ts", "utf8");
 const records = readFileSync("app/api/workouts/active/[sessionId]/personal-records/route.ts", "utf8");
@@ -53,6 +54,13 @@ describe("Active Workout final binding redesign authority", () => {
     expect(core).not.toContain("aiPermitted: true");
     expect(details).not.toContain('>{legacyReopenSetLabel}<');
     expect(details).not.toContain('>{tr("actions.resetWorkoutTimer")}<');
+  });
+
+  it("preserves authoritative frozen repetition targets through the compatibility path", () => {
+    expect(runtimeCore).toContain("function frozenRepetitionsTarget");
+    expect(runtimeCore).toContain("item.rawCompatibilityPrescription.reps");
+    expect(runtimeCore).toContain("plannedReps: frozenRepetitionsTarget(item, frozenSet)");
+    expect(runtimeCore).toContain("reps: frozenRepetitionsTarget(item, firstSet)");
   });
 
   it("never presents local or candidate Personal Records", () => {
