@@ -136,6 +136,7 @@
       "start": "Start rest",
       "finished": "Rest finished",
       "resting": "Resting",
+      "label": "Rest",
       "presetThirtySeconds": "30 sec",
       "presetSixtySeconds": "60 sec",
       "presetNinetySeconds": "90 sec",

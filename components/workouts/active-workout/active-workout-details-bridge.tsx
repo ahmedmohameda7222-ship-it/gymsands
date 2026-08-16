@@ -107,7 +107,7 @@ export function ActiveWorkoutDetailsBridge({
 }: ActiveWorkoutDetailsBridgeProps) {
   const currentSetRef = useRef<HTMLHeadingElement>(null);
   const muscleLoadRef = useRef<HTMLHeadingElement>(null);
-  const adjustTodayRef = useRef<HTMLHeadingElement>(null);
+  const adjustTodayRef = useRef<HTMLElement>(null);
   const assistanceRef = useRef<HTMLHeadingElement>(null);
   const activeRpeValidation = validateWorkoutSetEffortInput(activeSet.rpe, "rpe");
   const activeRirValidation = validateWorkoutSetEffortInput(activeSet.rir, "rir");
@@ -140,22 +140,24 @@ export function ActiveWorkoutDetailsBridge({
     : effectiveSection === "muscle-load"
       ? tr("details.muscleLoad")
       : effectiveSection === "adjust-today"
-        ? tr("details.adjustToday")
+        ? tr("actions.replaceToday")
         : tr("chatGPT.ask");
   const dialogDescription = effectiveSection === "current-set"
     ? tr("set.label", { count: formatters.integer(activeSet.setNumber) })
-    : dialogTitle;
+    : effectiveSection === "adjust-today"
+      ? tr("actions.replaceTodayDescription")
+      : dialogTitle;
 
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(() => {
-      const sectionRefs: Record<ActiveWorkoutDetailsSection, RefObject<HTMLHeadingElement | null>> = {
-        "current-set": currentSetRef,
-        "muscle-load": muscleLoadRef,
-        "adjust-today": adjustTodayRef,
-        assistance: assistanceRef
-      };
-      const requested = sectionRefs[effectiveSection].current;
+      const requested = effectiveSection === "current-set"
+        ? currentSetRef.current
+        : effectiveSection === "muscle-load"
+          ? muscleLoadRef.current
+          : effectiveSection === "adjust-today"
+            ? adjustTodayRef.current
+            : assistanceRef.current;
       requested?.scrollIntoView({ block: "start" });
       requested?.focus({ preventScroll: true });
     });
@@ -312,22 +314,13 @@ export function ActiveWorkoutDetailsBridge({
 
               {sourceKind === "plan-day" ? (
                 <section
+                  ref={adjustTodayRef}
+                  tabIndex={-1}
                   data-aw6-details-adjust-today
-                hidden={effectiveSection !== "adjust-today"}
-                  aria-labelledby="aw6-details-adjust-today-title"
-                  className="scroll-mt-4 py-5"
+                  hidden={effectiveSection !== "adjust-today"}
+                  aria-label={tr("actions.replaceToday")}
+                  className="scroll-mt-4 py-5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <h3
-                    id="aw6-details-adjust-today-title"
-                    ref={adjustTodayRef}
-                    tabIndex={-1}
-                    className="text-base font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {tr("details.adjustToday")}
-                  </h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {tr("actions.replaceTodayDescription")}
-                  </p>
                   <ActiveWorkoutReplacementRecommendations
                     userId={userId ?? ""}
                     original={replacementOriginal}

@@ -167,11 +167,11 @@ function useLatest<T>(value: T) {
 
 function stablePreviousPerformanceIdentity(item: ActiveWorkoutExerciseState | undefined) {
   if (!item) return null;
-  if (item.prescriptionItem.sourcePlanActivityId) {
-    return { kind: "plan_activity" as const, value: item.prescriptionItem.sourcePlanActivityId };
-  }
   if (item.exercise.source_workout_id) {
     return { kind: "source_workout" as const, value: item.exercise.source_workout_id };
+  }
+  if (item.prescriptionItem.sourcePlanActivityId) {
+    return { kind: "plan_activity" as const, value: item.prescriptionItem.sourcePlanActivityId };
   }
   if (item.prescriptionItem.sourcePlanExerciseId) {
     return { kind: "plan_exercise" as const, value: item.prescriptionItem.sourcePlanExerciseId };
@@ -273,8 +273,9 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const [executionCursorItems, setExecutionCursorItems] = useState<WorkoutSessionExecutionCursorRow[]>([]);
   const [muscleLoadRefreshRevision, setMuscleLoadRefreshRevision] = useState(0);
   const [previousPerformanceRead, setPreviousPerformanceRead] = useState<Awaited<ReturnType<typeof readActiveWorkoutPreviousPerformanceClient>>>(null);
+  const [previousPerformanceResolvedKey, setPreviousPerformanceResolvedKey] = useState<string | null>(null);
   const [previousPerformanceLoading, setPreviousPerformanceLoading] = useState(false);
-  const [previousPerformanceUnavailable, setPreviousPerformanceUnavailable] = useState(false);
+  const [previousPerformanceUnavailableKey, setPreviousPerformanceUnavailableKey] = useState<string | null>(null);
   const [detailsRequest, setDetailsRequest] = useState<{
     section: ActiveWorkoutDetailsSection;
   }>({ section: "current-set" });
@@ -302,7 +303,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const autosaveAdapterRef = useRef<WorkoutSetAutosaveAdapter<ActiveWorkoutExerciseState[]> | null>(null);
   const autosaveCoordinatorRef = useRef<WorkoutSetAutosaveCoordinator | null>(null);
   const pendingSetCommandKeyRef = useRef<string | null>(null);
-  const pendingSetCompletionPromiseRef = useRef<Promise<void> | null>(null);
+  const pendingSetCompletionPromiseRef = useRef<Promise<boolean> | null>(null);
   const effectiveExecutionState = optimisticCompletion?.projectedExecutionState ?? executionState;
 
   useEffect(() => {
@@ -408,7 +409,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setCompletionRecovery("none");
     setConflictingSession(null);
     setPreviousPerformanceRead(null);
-    setPreviousPerformanceUnavailable(false);
+    setPreviousPerformanceResolvedKey(null);
+    setPreviousPerformanceUnavailableKey(null);
 
     const currentTr = trRef.current;
     if (!userId) {
@@ -711,35 +713,63 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     () => resolveActiveWorkoutExecutionCapability(executionCursorItems),
     [executionCursorItems]
   );
+  const previousPerformanceIdentity = stablePreviousPerformanceIdentity(activeExercise);
+  const previousPerformanceIdentityKind = previousPerformanceIdentity?.kind ?? null;
+  const previousPerformanceIdentityValue = previousPerformanceIdentity?.value ?? null;
+  const previousPerformanceSetNumber = activeSet?.setNumber ?? null;
+  const previousPerformanceLookupKey = previousPerformanceIdentityKind && previousPerformanceIdentityValue && sessionId && previousPerformanceSetNumber
+    ? `${previousPerformanceIdentityKind}:${previousPerformanceIdentityValue}:${sessionId}:${previousPerformanceSetNumber}`
+    : null;
+  const previousPerformanceReadForCurrentKey = previousPerformanceResolvedKey === previousPerformanceLookupKey
+    ? previousPerformanceRead
+    : null;
+  const previousPerformanceUnavailable = previousPerformanceUnavailableKey === previousPerformanceLookupKey;
 
   useEffect(() => {
-    const identity = stablePreviousPerformanceIdentity(activeExercise);
-    if (!identity || !activeSet || !sessionId || !executionHydratedRef.current || !executionCapability.supported) {
+    if (
+      !previousPerformanceIdentityKind
+      || !previousPerformanceIdentityValue
+      || !previousPerformanceSetNumber
+      || !previousPerformanceLookupKey
+      || !sessionId
+      || !executionHydratedRef.current
+      || !executionCapability.supported
+    ) {
       setPreviousPerformanceRead(null);
+      setPreviousPerformanceResolvedKey(null);
       setPreviousPerformanceLoading(false);
-      setPreviousPerformanceUnavailable(false);
+      setPreviousPerformanceUnavailableKey(null);
       return;
     }
     const controller = new AbortController();
     setPreviousPerformanceLoading(true);
-    setPreviousPerformanceUnavailable(false);
+    setPreviousPerformanceUnavailableKey(null);
     void readActiveWorkoutPreviousPerformanceClient({
-      identity,
+      identity: { kind: previousPerformanceIdentityKind, value: previousPerformanceIdentityValue },
       excludeSessionId: sessionId,
-      setNumber: activeSet.setNumber,
+      setNumber: previousPerformanceSetNumber,
       signal: controller.signal
     }).then((value) => {
       setPreviousPerformanceRead(value);
-      setPreviousPerformanceUnavailable(false);
+      setPreviousPerformanceResolvedKey(previousPerformanceLookupKey);
+      setPreviousPerformanceUnavailableKey(null);
     }).catch((error) => {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setPreviousPerformanceRead(null);
-      setPreviousPerformanceUnavailable(true);
+      setPreviousPerformanceResolvedKey(previousPerformanceLookupKey);
+      setPreviousPerformanceUnavailableKey(previousPerformanceLookupKey);
     }).finally(() => {
       if (!controller.signal.aborted) setPreviousPerformanceLoading(false);
     });
     return () => controller.abort();
-  }, [activeExercise, activeSet, executionCapability.supported, sessionId]);
+  }, [
+    executionCapability.supported,
+    previousPerformanceIdentityKind,
+    previousPerformanceIdentityValue,
+    previousPerformanceLookupKey,
+    previousPerformanceSetNumber,
+    sessionId
+  ]);
 
   const totalSets = exerciseStates.reduce((sum, item) => sum + item.sets.length, 0);
   const completedSets = exerciseStates.reduce(
@@ -749,14 +779,14 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const reviewProjection = buildActiveWorkoutReview(exerciseStates, day.exercises);
   const isFinished = reviewProjection.incompleteSets === 0 && reviewProjection.totalSets > 0;
   const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60));
-  const activePreviousPerformance: ActiveWorkoutPreviousPerformance | null = previousPerformanceRead ? {
-    lastWeightKg: previousPerformanceRead.weightKg,
-    lastReps: previousPerformanceRead.reps,
+  const activePreviousPerformance: ActiveWorkoutPreviousPerformance | null = previousPerformanceReadForCurrentKey ? {
+    lastWeightKg: previousPerformanceReadForCurrentKey.weightKg,
+    lastReps: previousPerformanceReadForCurrentKey.reps,
     lastBestSet: [
-      previousPerformanceRead.weightKg === null ? null : formatters.measurement(previousPerformanceRead.weightKg, "kg"),
-      previousPerformanceRead.reps === null ? null : `${formatters.integer(previousPerformanceRead.reps)} ${tr("units.reps")}`
+      previousPerformanceReadForCurrentKey.weightKg === null ? null : formatters.measurement(previousPerformanceReadForCurrentKey.weightKg, "kg"),
+      previousPerformanceReadForCurrentKey.reps === null ? null : `${formatters.integer(previousPerformanceReadForCurrentKey.reps)} ${tr("units.reps")}`
     ].filter((value): value is string => Boolean(value)).join(" × ") || null,
-    lastPerformedAt: previousPerformanceRead.performedAt
+    lastPerformedAt: previousPerformanceReadForCurrentKey.performedAt
   } : null;
   const activeProgressionTarget = progressionTargets.find(
     (target) => target.plan_exercise_id === activeExercise?.exercise.id
@@ -788,7 +818,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     active_exercise: activeExercise?.exercise ?? null,
     logged_sets: buildWorkoutContextLogRows(exerciseStates),
     session: session ? { id: session.id, duration_minutes: durationMinutes, notes: sessionNotes } : null,
-    previous_performance: previousPerformanceRead,
+    previous_performance: previousPerformanceReadForCurrentKey,
     skipped_exercises: exerciseStates
       .filter((item) => !item.sets.some((set) => set.completedAt))
       .map((item) => item.exercise.exercise_name),
@@ -953,6 +983,17 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     else clearStoredValue(restTimerKey);
   }
 
+  function queueAfterPendingSetCompletion(action: () => void) {
+    const pendingCompletion = pendingSetCompletionPromiseRef.current;
+    if (!pendingCompletion) {
+      action();
+      return;
+    }
+    void pendingCompletion.then((acknowledged) => {
+      if (acknowledged) action();
+    });
+  }
+
   function startRestTimer(seconds: number) {
     const safeSeconds = Math.max(0, seconds);
     if (!safeSeconds) return;
@@ -964,11 +1005,13 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setIsTimerRunning(true);
     storeTimestamp(restTimerKey, deadline);
     if (userId && sessionId && executionHydratedRef.current) {
-      void dispatchExecutionBackground(
-        "start_rest",
-        { duration_seconds: safeSeconds, controller_device_id: controllerDeviceIdRef.current },
-        { rollback: () => restoreRestTimer(previous) }
-      );
+      queueAfterPendingSetCompletion(() => {
+        void dispatchExecutionBackground(
+          "start_rest",
+          { duration_seconds: safeSeconds, controller_device_id: controllerDeviceIdRef.current },
+          { rollback: () => restoreRestTimer(previous) }
+        );
+      });
     }
   }
 
@@ -979,15 +1022,17 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setIsTimerRunning(false);
     clearStoredValue(restTimerKey);
     if (userId && sessionId && executionHydratedRef.current) {
-      void dispatchExecutionBackground(
-        "clear_rest",
-        {
-          view_state: "set_entry",
-          completion_reason: "user_skipped",
-          controller_device_id: controllerDeviceIdRef.current
-        },
-        { rollback: () => restoreRestTimer(previous) }
-      );
+      queueAfterPendingSetCompletion(() => {
+        void dispatchExecutionBackground(
+          "clear_rest",
+          {
+            view_state: "set_entry",
+            completion_reason: "user_skipped",
+            controller_device_id: controllerDeviceIdRef.current
+          },
+          { rollback: () => restoreRestTimer(previous) }
+        );
+      });
     }
   }
 
@@ -1100,7 +1145,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     }
     setCompleted();
 
-    const operation = (async () => {
+    const operation = (async (): Promise<boolean> => {
       try {
         const response = await store.completeCanonicalSet({
           logs: buildCanonicalLogRows(nextStates, { pendingOnly: true }),
@@ -1138,6 +1183,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           targetSet.setNumber
         ).catch(() => undefined);
         bumpMuscleLoadRefreshRevision();
+        return true;
       } catch (error) {
         if (error instanceof Error && "code" in error && error.code === "canonical_set_saved_execution_sync_failed") {
           const acknowledgedStates = acknowledgeSetWrites(nextStates, nextStates);
@@ -1169,6 +1215,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           setSetFeedback(tr("set.saveFailedValuesKept"));
           feedbackError();
         }
+        return false;
       } finally {
         if (pendingSetCommandKeyRef.current === setKey) pendingSetCommandKeyRef.current = null;
         setIsSaving(false);
@@ -1639,7 +1686,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   function applyPreviousSet(exerciseIndex: number, setIndex: number) {
     const item = exerciseStates[exerciseIndex];
     const targetSet = item?.sets[setIndex];
-    if (!item || !targetSet || exerciseIndex !== activeExerciseIndex || setIndex !== activeSetIndex || !previousPerformanceRead) {
+    if (!item || !targetSet || exerciseIndex !== activeExerciseIndex || setIndex !== activeSetIndex || !previousPerformanceReadForCurrentKey) {
       toastRef.current({
         title: tr("exercise.noPreviousPerformance"),
         description: tr("exercise.noPreviousSetDescription")
@@ -1647,8 +1694,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       return;
     }
     updateSet(exerciseIndex, setIndex, {
-      reps: previousPerformanceRead.reps === null ? targetSet.reps : String(previousPerformanceRead.reps),
-      weightKg: previousPerformanceRead.weightKg === null ? targetSet.weightKg : String(previousPerformanceRead.weightKg)
+      reps: previousPerformanceReadForCurrentKey.reps === null ? targetSet.reps : String(previousPerformanceReadForCurrentKey.reps),
+      weightKg: previousPerformanceReadForCurrentKey.weightKg === null ? targetSet.weightKg : String(previousPerformanceReadForCurrentKey.weightKg)
     });
   }
 
@@ -1746,9 +1793,13 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       : isFinished
         ? tr("common.finish")
         : tr("set.finishNumbered", { count: formatters.integer(activeSet.setNumber) });
+  const optimisticRestInteraction = Boolean(restActive && optimisticCompletion && isSaving);
   const primaryActionDisabled = Boolean(
-    completedSummary || isSaving || isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId
+    completedSummary || (isSaving && !optimisticRestInteraction) || isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId
     || (!isPaused && !restActive && !isFinished && Boolean(activeSet.completedAt))
+  );
+  const restControlsDisabled = Boolean(
+    isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId || (isSaving && !optimisticCompletion)
   );
   const activeSetPath = buildActiveWorkoutSetPath(
     activeExercise.sets.map((set) => ({ setNumber: set.setNumber, completed: Boolean(set.completedAt) })),
@@ -1970,6 +2021,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         paused={Boolean(isPaused)}
         busy={busy}
         restActive={restActive}
+        restControlsDisabled={restControlsDisabled}
         restLabel={formatters.timer(timerLeft)}
         nextContextLabel={nextSetLabel}
         nextLabel={tr("rest.next")}
@@ -1984,7 +2036,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         repsError={(showCurrentValidation || activeSet.reps.trim()) && activeSetValidation.repsError ? activeSetValidation.repsError === "invalid" ? tr("validation.wholeReps") : tr("validation.repsRequired") : null}
         weightError={(showCurrentValidation || activeSet.weightKg.trim()) && activeSetValidation.weightError ? activeSetValidation.weightError === "required" ? tr("validation.weightRequired") : tr("validation.nonNegative") : null}
         inputHint={null}
-        setPathLabel={tr("set.path")}
+        setPathLabel={tr("set.labelPlural")}
         setPath={activeSetPath}
         setPathStateLabels={{ completed: tr("navigation.completed"), active: tr("common.active"), available: tr("navigation.notStarted") }}
         formatSetNumber={formatters.integer}
@@ -2005,10 +2057,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         previousPerformanceLabel={tr("exercise.previousPerformance")}
         previousPerformanceValue={previousPerformanceValue}
         previousPerformanceDate={previousPerformanceDate}
-        previousPerformanceLoading={previousPerformanceLoading}
+        previousPerformanceLoading={previousPerformanceLoading && previousPerformanceResolvedKey !== previousPerformanceLookupKey}
         usePreviousLabel={tr("exercise.useValues")}
         addThirtySecondsLabel={tr("rest.addThirtySeconds")}
-        restPresetSectionLabel={tr("actions.timerControls")}
+        restPresetSectionLabel={tr("rest.label")}
         restPresetLabels={[30, 60, 90, 180].map((seconds) => ({ seconds, label: restPresetLabel(seconds, tr) }))}
         feedback={(
           <InlineFeedback message={setFeedback} variant={setFeedbackVariant} onClose={() => setSetFeedback("")} />
@@ -2031,7 +2083,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           setExerciseNavigatorOpen(true);
         }}
         onQuickAction={handleQuickAction}
-        onUsePrevious={previousPerformanceRead ? () => applyPreviousSet(activeExerciseIndex, activeSetIndex) : undefined}
+        onUsePrevious={previousPerformanceReadForCurrentKey ? () => applyPreviousSet(activeExerciseIndex, activeSetIndex) : undefined}
         onAddThirtySeconds={() => startRestTimer(timerLeft + 30)}
         onStartRest={startRestTimer}
         exerciseNavigatorContent={(

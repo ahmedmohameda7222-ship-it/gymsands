@@ -53,6 +53,7 @@ export type ActiveWorkoutExecutionShellProps = {
   paused: boolean;
   busy: boolean;
   restActive: boolean;
+  restControlsDisabled: boolean;
   restLabel: string;
   nextContextLabel: string;
   nextExerciseName?: string | null;
@@ -170,6 +171,7 @@ export function ActiveWorkoutExecutionShell({
   paused,
   busy,
   restActive,
+  restControlsDisabled,
   restLabel,
   nextContextLabel,
   nextExerciseName,
@@ -251,7 +253,30 @@ export function ActiveWorkoutExecutionShell({
       if (!(target instanceof Element) || !target.closest(selector)) setOpenMenu(null);
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      const selector = openMenu === "session"
+        ? "[data-aw10-session-menu]"
+        : "[data-aw10-exercise-actions]";
+      const menu = document.querySelector(`${selector} [role="menu"]`);
+      const enabledItems = menu
+        ? Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).filter((item) => !item.disabled)
+        : [];
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) && enabledItems.length) {
+        event.preventDefault();
+        const currentIndex = enabledItems.findIndex((item) => item === document.activeElement);
+        const nextIndex = event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? enabledItems.length - 1
+            : event.key === "ArrowDown"
+              ? (currentIndex + 1 + enabledItems.length) % enabledItems.length
+              : currentIndex < 0
+                ? enabledItems.length - 1
+                : (currentIndex - 1 + enabledItems.length) % enabledItems.length;
+        enabledItems[nextIndex]?.focus();
+        return;
+      }
       if (event.key !== "Escape") return;
+      event.preventDefault();
       const previous = openMenu;
       setOpenMenu(null);
       window.requestAnimationFrame(() => {
@@ -358,7 +383,7 @@ export function ActiveWorkoutExecutionShell({
         </div>
       </header>
 
-      <main className="mt-4 sm:mt-6">
+      <main className="mt-3 sm:mt-6">
         {paused ? (
           <section data-aw10-paused-state className="flex min-h-[50vh] flex-col items-center justify-center px-4 text-center">
             <CirclePause className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
@@ -375,7 +400,7 @@ export function ActiveWorkoutExecutionShell({
         ) : restActive ? (
           <section data-aw10-rest-state className="flex min-h-[50vh] flex-col items-center justify-center px-4 text-center">
             <div className="mb-2">{exerciseNavigatorTrigger}</div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{restPresetSectionLabel}</p>
+            <p data-aw10-rest-label className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{restPresetSectionLabel}</p>
             <p dir="ltr" className="mt-3 text-5xl font-semibold tabular-nums tracking-[-0.05em] text-foreground sm:text-6xl">{restLabel}</p>
             <div className="mt-5 max-w-lg">
               <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">{nextLabel ?? "Next"}</p>
@@ -386,12 +411,12 @@ export function ActiveWorkoutExecutionShell({
               </p>
             </div>
             <div data-aw5-rest-presets className="mt-6 flex flex-wrap justify-center gap-2">
-              <Button type="button" variant="outline" className="min-h-11" onClick={onAddThirtySeconds} disabled={busy}>
+              <Button type="button" variant="outline" className="min-h-11" onClick={onAddThirtySeconds} disabled={restControlsDisabled}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 {addThirtySecondsLabel}
               </Button>
               {restPresetLabels.map((preset) => (
-                <Button key={preset.seconds} type="button" variant="outline" className="min-h-11 min-w-12" onClick={() => onStartRest(preset.seconds)} disabled={busy}>
+                <Button key={preset.seconds} type="button" variant="outline" className="min-h-11 min-w-12" onClick={() => onStartRest(preset.seconds)} disabled={restControlsDisabled}>
                   {preset.label}
                 </Button>
               ))}
@@ -399,17 +424,18 @@ export function ActiveWorkoutExecutionShell({
           </section>
         ) : (
           <section aria-labelledby="aw5-current-exercise" className="min-w-0">
-            <div className="flex items-start gap-3 border-b border-border/70 pb-4">
+            <div className="flex items-start gap-3 border-b border-border/70 pb-3 sm:pb-4">
               <div className="min-w-0 flex-1">
                 {exerciseNavigatorTrigger}
-                <h2 id="aw5-current-exercise" data-aw5-exercise-title className="mt-0.5 text-[clamp(1.6rem,6vw,2.5rem)] font-semibold leading-[1.08] tracking-[-0.04em] text-foreground">
+                <h2 id="aw5-current-exercise" data-aw5-exercise-title className="mt-0.5 text-[clamp(1.5rem,6vw,2.5rem)] font-semibold leading-[1.08] tracking-[-0.04em] text-foreground">
                   <button
                     type="button"
                     data-aw10-exercise-details-trigger
-                    className="group inline-flex min-h-12 max-w-full items-start gap-1.5 text-start outline-none hover:underline hover:decoration-1 hover:underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={exerciseName}
+                    className="group flex min-h-12 max-w-full items-start gap-1.5 text-start outline-none hover:underline hover:decoration-1 hover:underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={(event) => closeThenWithTrigger(onOpenDetails, event.currentTarget)}
                   >
-                    <bdi className="min-w-0 break-words">{exerciseName}</bdi>
+                    <bdi className="line-clamp-2 min-w-0 break-words lg:line-clamp-none">{exerciseName}</bdi>
                     <ChevronRight className="mt-[0.18em] h-[0.8em] w-[0.8em] shrink-0 rtl:rotate-180" aria-hidden="true" />
                   </button>
                 </h2>
@@ -445,14 +471,14 @@ export function ActiveWorkoutExecutionShell({
             </div>
 
             {(targetValue || progressionTargetValue) ? (
-              <div className="flex flex-wrap gap-x-5 gap-y-2 border-b border-border/70 py-3 text-sm">
+              <div className="flex flex-wrap gap-x-5 gap-y-2 border-b border-border/70 py-2.5 text-sm sm:py-3">
                 {targetValue ? <p data-aw10-current-target><span className="text-muted-foreground">{targetLabel}</span> · <bdi className="font-semibold text-foreground" dir="auto">{targetValue}</bdi></p> : null}
                 {progressionTargetValue ? <p data-aw-progression-target><span className="text-muted-foreground">{progressionTargetLabel}</span> · <bdi className="font-semibold text-foreground" dir="auto">{progressionTargetValue}</bdi></p> : null}
               </div>
             ) : null}
 
             {showPreviousPerformance ? (
-              <section data-aw10-previous-performance className="border-b border-border/70 py-4">
+              <section data-aw10-previous-performance className="border-b border-border/70 py-3 sm:py-4">
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-muted-foreground">{previousPerformanceLabel}</p>
@@ -470,10 +496,10 @@ export function ActiveWorkoutExecutionShell({
               </section>
             ) : null}
 
-            <section data-aw5-primary-editor className="py-5" aria-label={currentSetLabel}>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="active-set-reps">{repsLabel}</Label>
+            <section data-aw5-primary-editor className="py-4 sm:py-5" aria-label={currentSetLabel}>
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <div data-aw10-reps-field className="min-w-0 space-y-1.5">
+                  <Label htmlFor="active-set-reps" className="block break-words text-xs leading-tight sm:text-sm">{repsLabel}</Label>
                   <Input
                     id="active-set-reps"
                     dir="ltr"
@@ -483,12 +509,12 @@ export function ActiveWorkoutExecutionShell({
                     aria-invalid={Boolean(repsError)}
                     aria-describedby={repsError ? "active-set-reps-error" : undefined}
                     disabled={busy || completed}
-                    className="h-14 text-lg tabular-nums"
+                    className="h-14 text-center text-xl font-semibold tabular-nums"
                   />
                   {repsError ? <p id="active-set-reps-error" role="alert" className="text-xs text-destructive">{repsError}</p> : null}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="active-set-weight">{weightLabel}</Label>
+                <div data-aw10-weight-field className="min-w-0 space-y-1.5">
+                  <Label htmlFor="active-set-weight" className="block break-words text-xs leading-tight sm:text-sm">{weightLabel}</Label>
                   <Input
                     id="active-set-weight"
                     dir="ltr"
@@ -498,14 +524,14 @@ export function ActiveWorkoutExecutionShell({
                     aria-invalid={Boolean(weightError)}
                     aria-describedby={weightError ? "active-set-weight-error" : undefined}
                     disabled={busy || completed}
-                    className="h-14 text-lg tabular-nums"
+                    className="h-14 text-center text-xl font-semibold tabular-nums"
                   />
                   {weightError ? <p id="active-set-weight-error" role="alert" className="text-xs text-destructive">{weightError}</p> : null}
                 </div>
               </div>
 
               <div className="mt-5 flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold text-muted-foreground">{setPathLabel}</p>
+                <p data-aw10-sets-label className="text-xs font-semibold text-muted-foreground">{setPathLabel}</p>
                 {setDetails ? (
                   <Button type="button" data-active-set-details-trigger variant="ghost" className="min-h-11 px-2" onClick={(event) => closeThenWithTrigger((trigger) => onQuickAction(setDetails, trigger), event.currentTarget)} disabled={setDetails.disabled}>
                     {setDetails.label}

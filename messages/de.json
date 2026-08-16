@@ -136,6 +136,7 @@
       "start": "Pause starten",
       "finished": "Pause beendet",
       "resting": "Pause",
+      "label": "Pause",
       "presetThirtySeconds": "30 Sek.",
       "presetSixtySeconds": "60 Sek.",
       "presetNinetySeconds": "90 Sek.",
