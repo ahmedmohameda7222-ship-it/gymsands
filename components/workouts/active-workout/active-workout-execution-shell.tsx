@@ -383,7 +383,7 @@ export function ActiveWorkoutExecutionShell({
         </div>
       </header>
 
-      <main className="mt-3 sm:mt-6">
+      <main className="mt-2 sm:mt-6">
         {paused ? (
           <section data-aw10-paused-state className="flex min-h-[50vh] flex-col items-center justify-center px-4 text-center">
             <CirclePause className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
@@ -424,7 +424,7 @@ export function ActiveWorkoutExecutionShell({
           </section>
         ) : (
           <section aria-labelledby="aw5-current-exercise" className="min-w-0">
-            <div className="flex items-start gap-3 border-b border-border/70 pb-3 sm:pb-4">
+            <div className="flex items-start gap-3 border-b border-border/70 pb-2 sm:pb-4">
               <div className="min-w-0 flex-1">
                 {exerciseNavigatorTrigger}
                 <h2 id="aw5-current-exercise" data-aw5-exercise-title className="mt-0.5 text-[clamp(1.5rem,6vw,2.5rem)] font-semibold leading-[1.08] tracking-[-0.04em] text-foreground">
@@ -471,14 +471,14 @@ export function ActiveWorkoutExecutionShell({
             </div>
 
             {(targetValue || progressionTargetValue) ? (
-              <div className="flex flex-wrap gap-x-5 gap-y-2 border-b border-border/70 py-2.5 text-sm sm:py-3">
+              <div className="flex flex-wrap gap-x-5 gap-y-2 border-b border-border/70 py-2 text-sm sm:py-3">
                 {targetValue ? <p data-aw10-current-target><span className="text-muted-foreground">{targetLabel}</span> · <bdi className="font-semibold text-foreground" dir="auto">{targetValue}</bdi></p> : null}
                 {progressionTargetValue ? <p data-aw-progression-target><span className="text-muted-foreground">{progressionTargetLabel}</span> · <bdi className="font-semibold text-foreground" dir="auto">{progressionTargetValue}</bdi></p> : null}
               </div>
             ) : null}
 
             {showPreviousPerformance ? (
-              <section data-aw10-previous-performance className="border-b border-border/70 py-3 sm:py-4">
+              <section data-aw10-previous-performance className="border-b border-border/70 py-2 sm:py-4">
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-muted-foreground">{previousPerformanceLabel}</p>
@@ -496,7 +496,7 @@ export function ActiveWorkoutExecutionShell({
               </section>
             ) : null}
 
-            <section data-aw5-primary-editor className="py-4 sm:py-5" aria-label={currentSetLabel}>
+            <section data-aw5-primary-editor className="py-3 sm:py-5" aria-label={currentSetLabel}>
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <div data-aw10-reps-field className="min-w-0 space-y-1.5">
                   <Label htmlFor="active-set-reps" className="block break-words text-xs leading-tight sm:text-sm">{repsLabel}</Label>

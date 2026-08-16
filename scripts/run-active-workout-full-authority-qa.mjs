@@ -340,6 +340,7 @@ async function waitForPreviousPerformanceValue(page) {
 
 async function assertCorrectionMobileHierarchy(page, width, language) {
   await waitForPreviousPerformanceValue(page);
+  await page.evaluate(() => document.fonts.ready);
   const metrics = await page.evaluate(() => {
     const rect = (selector) => {
       const element = document.querySelector(selector);
@@ -677,6 +678,7 @@ const scenarios = [
     direct: true,
     run: async ({ page }) => {
       const title = visible(page, "[data-aw10-exercise-details-trigger]");
+      await page.evaluate(() => document.fonts.ready);
       const text = (await title.innerText()).trim();
       check(text.length > 40, "Long exercise title fixture was not rendered.");
       check(await title.getAttribute("aria-label") === text, "Long exercise title does not preserve its full accessible name.");
@@ -813,7 +815,7 @@ const scenarios = [
     run: async ({ page }) => {
       await completeCurrentSet(page);
       await visible(page, "[data-aw10-rest-state]").waitFor({ state: "visible", timeout: 5_000 });
-      check((await page.locator("[data-aw10-rest-label]").innerText()).trim() === localizedCorrectionCopy[language].rest, `Localized Rest label is incorrect for ${language}.`);
+      check((await page.locator("[data-aw10-rest-label]").textContent())?.trim() === localizedCorrectionCopy[language].rest, `Localized Rest label is incorrect for ${language}.`);
     },
   })),
   {
@@ -823,6 +825,7 @@ const scenarios = [
     language: "ar",
     run: async ({ page }) => {
       const title = visible(page, "[data-aw10-exercise-details-trigger]");
+      await page.evaluate(() => document.fonts.ready);
       check(await title.getAttribute("aria-label") === (await title.innerText()).trim(), "Arabic long title lost its full accessible name.");
       check(await title.locator("svg").isVisible(), "Arabic long-title Exercise Detail chevron is not visible.");
       check(await page.evaluate(() => (document.documentElement.dir || getComputedStyle(document.documentElement).direction) === "rtl"), "Arabic long-title execution is not RTL.");
