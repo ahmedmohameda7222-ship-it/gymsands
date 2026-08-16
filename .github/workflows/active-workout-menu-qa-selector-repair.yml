@@ -1,0 +1,46 @@
+name: Active Workout Menu QA Selector Repair
+on:
+  push:
+    branches: ["feat/active-workout-full-implementation"]
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-full-implementation
+          fetch-depth: 0
+      - name: Repair mature rendered menu selectors
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          targets = [
+              Path('scripts/run-aw5-correction-layout-qa.mjs'),
+              Path('scripts/run-aw10-active-workout-closure-qa.mjs'),
+          ]
+          old = 'menu.locator("button:visible")'
+          new = 'menu.locator(\'[role="menuitem"]:visible\')'
+          expected = {
+              'scripts/run-aw5-correction-layout-qa.mjs': 4,
+              'scripts/run-aw10-active-workout-closure-qa.mjs': 2,
+          }
+          for path in targets:
+              text = path.read_text()
+              count = text.count(old)
+              if count != expected[str(path)]:
+                  raise SystemExit(f'{path}: expected {expected[str(path)]} menu button selectors, found {count}')
+              path.write_text(text.replace(old, new))
+          PY
+      - name: Commit clean result
+        shell: bash
+        run: |
+          rm .github/workflows/active-workout-menu-qa-selector-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Fix Active Workout rendered menu selectors"
+          git push origin HEAD:feat/active-workout-full-implementation
