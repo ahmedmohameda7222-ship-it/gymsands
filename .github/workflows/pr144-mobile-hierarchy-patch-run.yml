@@ -1,0 +1,47 @@
+name: PR144 Mobile Hierarchy Patch Run
+
+on:
+  push:
+    branches:
+      - feat/active-workout-full-implementation
+    paths:
+      - .github/workflows/pr144-mobile-hierarchy-patch-run.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-full-implementation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply staged patch
+        run: python scripts/pr144-mobile-hierarchy-patch.py
+      - name: Install dependencies
+        run: npm ci
+      - name: Focused contracts
+        run: npx vitest run lib/product/active-workout-pr144-correction-authority.test.ts lib/product/active-workout-aw10-closure.test.ts
+      - name: Typecheck and syntax
+        shell: bash
+        run: |
+          npm run typecheck
+          node --check scripts/run-active-workout-full-authority-qa.mjs
+          git diff --check
+      - name: Commit source and retire staging script
+        shell: bash
+        run: |
+          rm scripts/pr144-mobile-hierarchy-patch.py
+          git config user.name "Plaivra Repository Delivery"
+          git config user.email "actions@users.noreply.github.com"
+          git add components/workouts/active-workout/active-workout-execution-shell.tsx scripts/run-active-workout-full-authority-qa.mjs scripts/pr144-mobile-hierarchy-patch.py
+          git diff --cached --check
+          git commit -m "fix: close PR144 small-mobile hierarchy gaps"
+          git push origin HEAD:feat/active-workout-full-implementation
