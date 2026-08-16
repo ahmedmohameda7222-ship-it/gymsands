@@ -23,7 +23,8 @@ describe("AW-10 canonical Active Workout closure", () => {
   });
 
   it("uses durable fixture authority instead of DOM-only simulation", () => {
-    expect(runner).toContain("indexedDB.open(\"plaivra-active-workout-v1\", 1)");
+    expect(runner).toContain("indexedDB.open(\"plaivra-active-workout-v1\", 2)");
+    expect(runner).toContain("set_drafts");
     expect(runner).toContain("mutateFirstOperation");
     expect(runner).toContain("mutateCachedController");
     expect(runner).toContain("fixture.setServerRootStatus(\"completed\")");
