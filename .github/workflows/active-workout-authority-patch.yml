@@ -22,7 +22,7 @@ jobs:
       - name: Apply deterministic repository patches
         run: |
           node scripts/apply-active-workout-authority.mjs
-          node scripts/apply-active-workout-core-authority.mjs
+          node scripts/apply-active-workout-core-authority-v2.mjs
       - name: Commit implementation patch
         shell: bash
         run: |
