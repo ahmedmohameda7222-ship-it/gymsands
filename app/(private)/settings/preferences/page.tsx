@@ -11,8 +11,6 @@ import {
   Loader2,
   Palette,
   Ruler,
-  Volume2,
-  Vibrate,
   Zap
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -297,21 +295,19 @@ export default function PreferencesPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <SettingsToggleRow
-            icon={Volume2}
             label={t("settings.workoutSounds")}
             description={t("settings.workoutSoundsDescription")}
-            checked={settings.workoutSounds}
+            defaultOn={settings.workoutSounds}
             disabled={controlsDisabled}
-            onCheckedChange={(checked) => void updatePreference("workoutSounds", checked, t("settings.workoutSounds"))}
+            onChange={(checked: boolean) => void updatePreference("workoutSounds", checked, t("settings.workoutSounds"))}
             {...rowStatus("workoutSounds")}
           />
           <SettingsToggleRow
-            icon={Vibrate}
             label={t("settings.haptics")}
             description={t("settings.hapticsDescription")}
-            checked={settings.haptics}
+            defaultOn={settings.haptics}
             disabled={controlsDisabled}
-            onCheckedChange={(checked) => void updatePreference("haptics", checked, t("settings.haptics"))}
+            onChange={(checked: boolean) => void updatePreference("haptics", checked, t("settings.haptics"))}
             {...rowStatus("haptics")}
           />
         </CardContent>

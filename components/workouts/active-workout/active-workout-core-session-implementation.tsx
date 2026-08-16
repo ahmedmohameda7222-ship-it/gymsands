@@ -870,6 +870,21 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     []
   );
 
+  const persistSetDrafts = useCallback(async (states = exerciseStatesRef.current) => {
+    if (!userId || !sessionId || !states.length) return;
+    await writeActiveWorkoutSetDrafts({
+      userId,
+      workoutSessionId: sessionId,
+      drafts: states.flatMap((exercise) => exercise.sets
+        .filter((set) => !set.completedAt)
+        .map((set) => ({
+          snapshotItemId: exercise.prescriptionItem.id,
+          setNumber: set.setNumber,
+          draft: { reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, rir: set.rir, setType: set.setType, notes: set.notes }
+        })))
+    });
+  }, [sessionId, userId]);
+
   const preserveWorkoutForNavigation = useCallback(async () => {
     if (minimizePendingRef.current) return false;
     minimizePendingRef.current = true;
@@ -908,21 +923,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     exerciseStatesRef.current = exerciseStates;
     if (exerciseStates.length > 0) activeSessionStoreRef.current?.setSecondaryProjection(exerciseStates);
   }, [exerciseStates]);
-
-  const persistSetDrafts = useCallback(async (states = exerciseStatesRef.current) => {
-    if (!userId || !sessionId || !states.length) return;
-    await writeActiveWorkoutSetDrafts({
-      userId,
-      workoutSessionId: sessionId,
-      drafts: states.flatMap((exercise) => exercise.sets
-        .filter((set) => !set.completedAt)
-        .map((set) => ({
-          snapshotItemId: exercise.prescriptionItem.id,
-          setNumber: set.setNumber,
-          draft: { reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, rir: set.rir, setType: set.setType, notes: set.notes }
-        })))
-    });
-  }, [sessionId, userId]);
 
   useEffect(() => {
     if (!sessionId || !userId || isStarting || !exerciseStates.length) return;
@@ -1847,7 +1847,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const progressionTargetValue = activeProgressionTarget
     ? [
         activeProgressionTarget.next_target_weight_kg === null ? null : formatters.measurement(activeProgressionTarget.next_target_weight_kg, "kg"),
-        activeProgressionTarget.next_target_reps === null ? null : `${formatters.integer(activeProgressionTarget.next_target_reps)} ${tr("units.reps")}`
+        activeProgressionTarget.next_target_reps === null ? null : `${formatters.integer(Number(activeProgressionTarget.next_target_reps))} ${tr("units.reps")}`
       ].filter((value): value is string => Boolean(value)).join(" × ") || null
     : null;
   const navigatorRows = buildActiveWorkoutExerciseNavigatorRows({

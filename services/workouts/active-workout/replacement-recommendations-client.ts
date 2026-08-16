@@ -4,7 +4,7 @@ import { createCatalogRequestGroupId } from "@/services/activity-catalog/client"
 import {
   getWorkout,
   getWorkoutAlternatives,
-  getWorkoutsWithStatus,
+  getWorkouts,
 } from "@/services/database/workout-library";
 import { getWorkoutReplacementEligibility } from "@/services/database/workout-replacement-eligibility";
 import type {
@@ -70,7 +70,7 @@ export async function getActiveWorkoutReplacementRecommendations(input: {
           return null;
         })
       : Promise.resolve(null),
-    getWorkoutsWithStatus("", filtersFor(original), 0, input.locale, requestContext).catch((error) => {
+    getWorkouts("", filtersFor(original), 0, input.locale, requestContext).catch((error) => {
       abortIfNeeded(input.signal);
       console.warn("Plaivra could not load replacement candidates.", error);
       return null;
@@ -79,7 +79,7 @@ export async function getActiveWorkoutReplacementRecommendations(input: {
 
   abortIfNeeded(input.signal);
   const alternatives = alternativeResult?.data ?? [];
-  const catalog = catalogResult?.data ?? [];
+  const catalog = catalogResult ?? [];
   const candidates = uniqueWorkouts([...alternatives, ...catalog])
     .filter((candidate) => candidate.id !== original.id)
     .slice(0, 80);

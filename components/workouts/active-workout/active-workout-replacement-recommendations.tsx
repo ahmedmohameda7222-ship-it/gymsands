@@ -17,7 +17,14 @@ import type {
   Workout,
 } from "@/types";
 
-const SUPPORTED_REASONS: ExerciseAlternativeReason[] = [
+type SupportedReplacementReason =
+  | "machine_taken"
+  | "no_equipment"
+  | "pain_or_discomfort"
+  | "too_hard"
+  | "other";
+
+const SUPPORTED_REASONS: readonly SupportedReplacementReason[] = [
   "machine_taken",
   "no_equipment",
   "pain_or_discomfort",
@@ -25,7 +32,7 @@ const SUPPORTED_REASONS: ExerciseAlternativeReason[] = [
   "other",
 ];
 
-const reasonTranslationKey: Record<(typeof SUPPORTED_REASONS)[number], string> = {
+const reasonTranslationKey: Record<SupportedReplacementReason, string> = {
   machine_taken: "replacement.reasonMachineTaken",
   no_equipment: "replacement.reasonEquipmentUnavailable",
   pain_or_discomfort: "replacement.reasonPainDiscomfort",
