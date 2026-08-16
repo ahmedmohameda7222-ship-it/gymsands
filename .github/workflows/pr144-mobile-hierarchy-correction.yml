@@ -1,0 +1,83 @@
+name: PR144 Mobile Hierarchy Correction
+
+on:
+  push:
+    branches:
+      - feat/active-workout-full-implementation
+    paths:
+      - .github/workflows/pr144-mobile-hierarchy-correction.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-full-implementation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply bounded mobile hierarchy and QA timing corrections
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one replacement, found {count}: {old!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          shell = 'components/workouts/active-workout/active-workout-execution-shell.tsx'
+          replace_once(shell, '<main className="mt-3 sm:mt-6">', '<main className="mt-2 sm:mt-6">')
+          replace_once(shell, 'className="flex items-start gap-3 border-b border-border/70 pb-3 sm:pb-4"', 'className="flex items-start gap-3 border-b border-border/70 pb-2 sm:pb-4"')
+          replace_once(shell, 'className="flex flex-wrap gap-x-5 gap-y-2 border-b border-border/70 py-2.5 text-sm sm:py-3"', 'className="flex flex-wrap gap-x-5 gap-y-2 border-b border-border/70 py-2 text-sm sm:py-3"')
+          replace_once(shell, 'data-aw10-previous-performance className="border-b border-border/70 py-3 sm:py-4"', 'data-aw10-previous-performance className="border-b border-border/70 py-2 sm:py-4"')
+          replace_once(shell, '<section data-aw5-primary-editor className="py-4 sm:py-5" aria-label={currentSetLabel}>', '<section data-aw5-primary-editor className="py-3 sm:py-5" aria-label={currentSetLabel}>')
+
+          qa = 'scripts/run-active-workout-full-authority-qa.mjs'
+          replace_once(qa, '''async function assertCorrectionMobileHierarchy(page, width, language) {
+  await waitForPreviousPerformanceValue(page);
+  const metrics = await page.evaluate(() => {''', '''async function assertCorrectionMobileHierarchy(page, width, language) {
+  await waitForPreviousPerformanceValue(page);
+  await page.evaluate(() => document.fonts.ready);
+  const metrics = await page.evaluate(() => {''')
+          replace_once(qa, '''      const text = (await title.innerText()).trim();
+      check(text.length > 40, "Long exercise title fixture was not rendered.");''', '''      await page.evaluate(() => document.fonts.ready);
+      const text = (await title.innerText()).trim();
+      check(text.length > 40, "Long exercise title fixture was not rendered.");''')
+          replace_once(qa, '''      check((await page.locator("[data-aw10-rest-label]").innerText()).trim() === localizedCorrectionCopy[language].rest, `Localized Rest label is incorrect for ${language}.`);''', '''      check((await page.locator("[data-aw10-rest-label]").textContent())?.trim() === localizedCorrectionCopy[language].rest, `Localized Rest label is incorrect for ${language}.`);''')
+          replace_once(qa, '''      const title = visible(page, "[data-aw10-exercise-details-trigger]");
+      check(await title.getAttribute("aria-label") === (await title.innerText()).trim(), "Arabic long title lost its full accessible name.");''', '''      const title = visible(page, "[data-aw10-exercise-details-trigger]");
+      await page.evaluate(() => document.fonts.ready);
+      check(await title.getAttribute("aria-label") === (await title.innerText()).trim(), "Arabic long title lost its full accessible name.");''')
+          PY
+      - name: Deterministic dependency install
+        run: npm ci
+      - name: Focused correction contracts
+        run: npx vitest run lib/product/active-workout-pr144-correction-authority.test.ts lib/product/active-workout-aw10-closure.test.ts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: QA syntax and patch hygiene
+        shell: bash
+        run: |
+          node --check scripts/run-active-workout-full-authority-qa.mjs
+          git diff --check
+      - name: Commit validated correction source only
+        shell: bash
+        run: |
+          git config user.name "Plaivra Repository Delivery"
+          git config user.email "actions@users.noreply.github.com"
+          git add components/workouts/active-workout/active-workout-execution-shell.tsx scripts/run-active-workout-full-authority-qa.mjs
+          git diff --cached --check
+          git commit -m "fix: close PR144 small-mobile hierarchy gaps"
+          git push origin HEAD:feat/active-workout-full-implementation
