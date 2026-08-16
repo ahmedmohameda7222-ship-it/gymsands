@@ -20,7 +20,6 @@ import { ActiveWorkoutMuscleLoadSection } from "@/components/workouts/active-wor
 import { ActiveWorkoutReplacementRecommendations } from "@/components/workouts/active-workout/active-workout-replacement-recommendations";
 import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dialog";
 import {
-  isolateBidiText,
   type ActiveWorkoutFormatters,
   type ActiveWorkoutTranslator
 } from "@/lib/i18n/active-workout";

@@ -1589,7 +1589,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function applyStableReplacement(replacement: Workout): Promise<boolean> {
-    if (sourceKind !== "plan-day" || !userId || !sessionId || !activeExercise) return;
+    if (sourceKind !== "plan-day" || !userId || !sessionId || !activeExercise) return false;
     const store = activeSessionStoreRef.current;
     if (!store) return false;
     const originalName = activeExercise.exercise.exercise_name;
@@ -1630,6 +1630,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       }).catch((error) => {
         console.warn("Plaivra recorded the workout replacement but could not save the optional alternative shortcut.", error);
       });
+      return true;
     } catch (error) {
       setSetFeedbackVariant("error");
       setSetFeedback(tr("replacement.unavailable"));
