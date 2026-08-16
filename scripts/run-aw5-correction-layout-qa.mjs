@@ -260,7 +260,7 @@ async function openSessionMenu(page) {
 
 async function enterReview(page) {
   const menu = await openSessionMenu(page);
-  const buttons = menu.locator("button:visible");
+  const buttons = menu.locator('[role="menuitem"]:visible');
   if (await buttons.count() < 2) throw new Error("Session menu does not expose Finish Workout.");
   await buttons.nth(1).click({ timeout: 10_000 });
   await visible(page, "[data-aw7-review-surface]").waitFor({ state: "visible", timeout: 15_000 });
@@ -313,7 +313,7 @@ async function exerciseScenario(page, scenario, failures) {
 
   if (scenario.action === "session-menu") {
     const menu = await openSessionMenu(page);
-    const buttons = menu.locator("button:visible");
+    const buttons = menu.locator('[role="menuitem"]:visible');
     if (await buttons.count() !== 3) failures.push(`Session menu exposes ${await buttons.count()} actions, expected exactly 3`);
     const labels = await buttons.allTextContents();
     if (!labels.some((label) => /cancel|abbrechen|إلغاء/i.test(label))) failures.push("Session menu does not expose localized destructive Cancel Workout");
@@ -333,7 +333,7 @@ async function exerciseScenario(page, scenario, failures) {
     await visible(page, '[data-aw10-exercise-actions] [data-aw-menu-trigger="exercise"]').click();
     await page.waitForFunction(() => document.querySelector("[data-aw10-exercise-actions]")?.getAttribute("data-state") === "open", undefined, { timeout: 5_000 });
     const menu = visible(page, "[data-aw10-exercise-actions]");
-    const buttons = menu.locator("button:visible");
+    const buttons = menu.locator('[role="menuitem"]:visible');
     if (await buttons.count() !== 3) failures.push(`Exercise Actions exposes ${await buttons.count()} actions, expected exactly 3`);
     const labels = (await buttons.allTextContents()).map((value) => value.trim()).filter(Boolean);
     if (!labels.some((value) => value.includes("ChatGPT"))) failures.push("Exercise Actions does not use Ask ChatGPT member-facing branding");
@@ -361,7 +361,7 @@ async function exerciseScenario(page, scenario, failures) {
     await visible(page, "[data-aw5-primary-action]").click();
   } else if (scenario.action === "paused") {
     const menu = await openSessionMenu(page);
-    await menu.locator("button:visible").first().click();
+    await menu.locator('[role="menuitem"]:visible').first().click();
     await visible(page, "[data-aw10-paused-state]").waitFor({ state: "visible", timeout: 10_000 });
     if (await page.locator("[data-aw5-primary-action]:visible").count()) failures.push("Paused state still exposes Complete Set / primary execution action");
     const resume = visible(page, "[data-aw10-paused-state]").locator("button:visible");

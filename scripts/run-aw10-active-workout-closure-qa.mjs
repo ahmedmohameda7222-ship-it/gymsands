@@ -144,7 +144,7 @@ async function openSessionMenu(page) {
 
 async function openReview(page) {
   const menu = await openSessionMenu(page);
-  const buttons = menu.locator("button:visible");
+  const buttons = menu.locator('[role="menuitem"]:visible');
   if (await buttons.count() < 2) throw new Error("Session menu does not expose Finish Workout.");
   await buttons.nth(1).click({ timeout: 10_000 });
   await visible(page, "[data-aw7-review-surface]").waitFor({
@@ -410,7 +410,7 @@ async function prepareAction({ scenario, context, page, fixture, checks }) {
   }
   if (scenario.action === "paused") {
     const menu = await openSessionMenu(page);
-    const buttons = menu.locator("button:visible");
+    const buttons = menu.locator('[role="menuitem"]:visible');
     if (!await buttons.count()) throw new Error("Session menu does not expose Pause Workout.");
     await buttons.first().click({ timeout: 10_000 });
     await page.waitForFunction(() => document.querySelector("[data-aw5-execution-shell]")
