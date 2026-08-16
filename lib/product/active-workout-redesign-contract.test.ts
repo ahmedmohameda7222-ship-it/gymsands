@@ -36,15 +36,18 @@ describe("Active Workout final binding redesign authority", () => {
     expect(recordsClient).toContain("if (!refreshResponse.ok)");
   });
 
-  it("separates session controls, exercise details, exercise actions, and set details", () => {
+  it("separates session controls, canonical exercise details, exercise actions, and set details", () => {
     expect(shell).toContain("data-aw10-session-menu");
     expect(shell).toContain("data-aw10-exercise-details-trigger");
     expect(shell).toContain("data-aw10-exercise-actions");
     expect(shell).toContain("data-active-set-details-trigger");
     expect(core).toContain('tr("minimized.cancelWorkout")');
     expect(core).toContain('tr("chatGPT.ask")');
+    expect(core).toContain("openCanonicalExerciseDetail");
+    expect(core).toContain("activeWorkoutExerciseDetailHref");
     expect(details).toContain("data-aw10-set-details-exact");
-    expect(details).toContain('hidden={effectiveSection !== "overview"}');
+    expect(details).not.toContain("data-aw6-details-overview");
+    expect(details).not.toContain('hidden={effectiveSection !== "overview"}');
     expect(details).toContain('hidden={effectiveSection !== "current-set"}');
     expect(details).toContain('hidden={effectiveSection !== "muscle-load"}');
     expect(details.indexOf("const effectiveSection")).toBeLessThan(details.indexOf("useEffect(() =>"));
