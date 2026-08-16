@@ -111,11 +111,11 @@ function WorkoutSessionScreenSurface({
       <Button
         data-workout-session-close
         type="button"
-        variant="outline"
+        variant="ghost"
         size="icon"
         onClick={() => { void handleMinimize(); }}
         disabled={isMinimizing}
-        className="absolute start-3 top-3 z-[40] h-12 w-12 rounded-full bg-card/95 shadow-lg backdrop-blur sm:start-5 sm:top-5 lg:start-1"
+        className="absolute start-3 top-3 z-[40] h-12 w-12 rounded-none border-0 bg-transparent shadow-none hover:bg-transparent focus-visible:ring-2 focus-visible:ring-ring sm:start-5 sm:top-5 lg:start-1"
         aria-label={t("accessibility.minimizeWorkout")}
         title={t("accessibility.minimizeWorkout")}
       >

@@ -506,7 +506,7 @@ export function ActiveWorkoutExecutionShell({
               </div>
               <ol data-aw10-set-path className="mt-1 flex min-w-0 items-center" aria-label={setPathLabel}>
                 {setPath.map((item, index) => (
-                  <li key={item.setNumber} className="flex min-w-0 flex-1 items-center last:flex-none">
+                  <li key={item.number} className="flex min-w-0 flex-1 items-center last:flex-none">
                     <button
                       type="button"
                       className={cn(
@@ -515,12 +515,12 @@ export function ActiveWorkoutExecutionShell({
                         item.state === "active" && "border-2 border-primary bg-background text-primary",
                         item.state === "available" && "border-border bg-background text-muted-foreground hover:border-primary/60 hover:text-foreground",
                       )}
-                      aria-label={`${setPathStateLabels[item.state]} ${formatSetNumber(item.setNumber)}`}
+                      aria-label={`${setPathStateLabels[item.state]} ${formatSetNumber(item.number)}`}
                       aria-current={item.state === "active" ? "step" : undefined}
-                      onClick={() => onSelectSet(item.setNumber)}
-                      disabled={busy || item.state === "completed" || item.state === "active"}
+                      onClick={() => onSelectSet(item.number)}
+                      disabled={busy || item.state === "active"}
                     >
-                      {item.state === "completed" ? <Check className="h-4 w-4" aria-hidden="true" /> : formatSetNumber(item.setNumber)}
+                      {item.state === "completed" ? <Check className="h-4 w-4" aria-hidden="true" /> : formatSetNumber(item.number)}
                     </button>
                     {index < setPath.length - 1 ? <span aria-hidden="true" className={cn("mx-1 h-px min-w-2 flex-1 bg-border", item.state === "completed" && "bg-primary/70")} /> : null}
                   </li>

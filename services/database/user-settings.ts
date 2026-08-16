@@ -48,6 +48,8 @@ export type UserAppSettings = {
   compactMode: boolean;
   reduceAnimations: boolean;
   largeTextMode: boolean;
+  workoutSounds: boolean;
+  haptics: boolean;
   daysPerWeek: string | null;
   workoutDuration: string | null;
   preferredSplit: string | null;
@@ -109,6 +111,8 @@ export type UserAppSettingsRow = {
   compact_mode: boolean;
   reduce_animations: boolean;
   large_text_mode: boolean;
+  workout_sounds?: boolean;
+  haptics?: boolean;
   days_per_week: string | null;
   workout_duration: string | null;
   preferred_split: string | null;
@@ -169,6 +173,8 @@ export const defaultUserAppSettings: UserAppSettings = {
   compactMode: false,
   reduceAnimations: false,
   largeTextMode: false,
+  workoutSounds: true,
+  haptics: true,
   daysPerWeek: null,
   workoutDuration: null,
   preferredSplit: null,
@@ -289,6 +295,8 @@ export function normalizeUserAppSettings(
     compactMode: bool(value.compactMode),
     reduceAnimations: bool(value.reduceAnimations),
     largeTextMode: bool(value.largeTextMode),
+    workoutSounds: bool(value.workoutSounds, true),
+    haptics: bool(value.haptics, true),
     trackBodyWeight: bool(value.trackBodyWeight),
     trackBodyMeasurements: bool(value.trackBodyMeasurements),
     trackProgressPhotos: bool(value.trackProgressPhotos),
@@ -337,6 +345,8 @@ export function normalizeUserAppSettingsRow(
       compactMode: row.compact_mode,
       reduceAnimations: row.reduce_animations,
       largeTextMode: row.large_text_mode,
+      workoutSounds: bool(row.workout_sounds, true),
+      haptics: bool(row.haptics, true),
       daysPerWeek: row.days_per_week,
       workoutDuration: row.workout_duration,
       preferredSplit: row.preferred_split,
@@ -401,6 +411,8 @@ function settingsToDatabase(settings: UserAppSettings) {
     compact_mode: settings.compactMode,
     reduce_animations: settings.reduceAnimations,
     large_text_mode: settings.largeTextMode,
+    workout_sounds: settings.workoutSounds,
+    haptics: settings.haptics,
     days_per_week: stringOrNull(settings.daysPerWeek),
     workout_duration: stringOrNull(settings.workoutDuration),
     preferred_split: stringOrNull(settings.preferredSplit),

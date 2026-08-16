@@ -11,6 +11,8 @@ import {
   Loader2,
   Palette,
   Ruler,
+  Volume2,
+  Vibrate,
   Zap
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -285,6 +287,33 @@ export default function PreferencesPage() {
               onSelect={(themeId) => void updatePreference("themeId", themeId, "Theme")}
             />
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/70" data-workout-feedback-preferences>
+        <CardHeader>
+          <CardTitle className="text-base">Workout feedback</CardTitle>
+          <CardDescription>Control optional sound and supported-device haptics during workout execution.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <SettingsToggleRow
+            icon={Volume2}
+            label="Workout sounds"
+            description="Play short, restrained feedback sounds when sets and workouts complete."
+            checked={settings.workoutSounds}
+            disabled={controlsDisabled}
+            onCheckedChange={(checked) => void updatePreference("workoutSounds", checked, "Workout sounds")}
+            {...rowStatus("workoutSounds")}
+          />
+          <SettingsToggleRow
+            icon={Vibrate}
+            label="Haptics"
+            description="Request subtle haptic feedback on supported devices. Unsupported browsers safely do nothing."
+            checked={settings.haptics}
+            disabled={controlsDisabled}
+            onCheckedChange={(checked) => void updatePreference("haptics", checked, "Haptics")}
+            {...rowStatus("haptics")}
+          />
         </CardContent>
       </Card>
 

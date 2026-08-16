@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, Heart, MoreHorizontal, Play, Plus } from "lucide-react";
 
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
 import { TrainPageContainer } from "@/components/workouts/train-ui";
 import { addToPlanActivityPayload } from "@/lib/exercise-detail/model";
+import { validatedActiveWorkoutReturnTo } from "@/lib/workouts/active-workout-detail-navigation";
 import { useExerciseDetailTranslation } from "@/lib/i18n/exercise-detail";
 import { cn } from "@/lib/utils";
 import { CatalogClientError } from "@/services/activity-catalog/client";
@@ -27,6 +28,9 @@ type Secondary<T> = { kind: "loading" | "ready" | "failed"; data: T };
 
 export default function WorkoutDetailsPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const returnTo = validatedActiveWorkoutReturnTo(searchParams.get("returnTo"));
+  const backHref = returnTo ?? "/workouts";
   const { user } = useAuth();
   const { toast } = useToast();
   const { dir, locale, ed } = useExerciseDetailTranslation();
@@ -95,7 +99,7 @@ export default function WorkoutDetailsPage() {
 
   if (!core) {
     if (coreState === "loading") return <ExerciseProfileSkeleton label={ed("loading")} />;
-    return <TrainPageContainer className="max-w-[1040px] py-4" dir={dir}><div className="mx-auto max-w-xl py-20 text-center"><h1 className="text-2xl font-semibold">{coreState === "not_found" ? ed("notFound") : ed("coreFailed")}</h1><p className="mt-3 text-muted-foreground">{coreState === "not_found" ? ed("notFoundDescription") : ed("coreFailed")}</p><div className="mt-6 flex justify-center gap-3">{coreState === "failed" ? <Button onClick={loadCore}>{ed("retry")}</Button> : null}<Button asChild variant="outline"><Link href="/workouts">{ed("back")}</Link></Button></div></div></TrainPageContainer>;
+    return <TrainPageContainer className="max-w-[1040px] py-4" dir={dir}><div className="mx-auto max-w-xl py-20 text-center"><h1 className="text-2xl font-semibold">{coreState === "not_found" ? ed("notFound") : ed("coreFailed")}</h1><p className="mt-3 text-muted-foreground">{coreState === "not_found" ? ed("notFoundDescription") : ed("coreFailed")}</p><div className="mt-6 flex justify-center gap-3">{coreState === "failed" ? <Button onClick={loadCore}>{ed("retry")}</Button> : null}<Button asChild variant="outline"><Link href={backHref}>{ed("back")}</Link></Button></div></div></TrainPageContainer>;
   }
 
   const exercise = core.core;
@@ -108,7 +112,7 @@ export default function WorkoutDetailsPage() {
   const anatomyAnalysis = exercise.target.anatomyAvailable ? exerciseAnatomyAnalysis(exercise) : null;
 
   return <TrainPageContainer className="max-w-[1040px] py-2 sm:py-4" dir={dir}>
-    <Button asChild variant="ghost" className="min-h-11 px-0 hover:bg-transparent"><Link href="/workouts"><ArrowLeft className="h-4 w-4 rtl:rotate-180" />{ed("back")}</Link></Button>
+    <Button asChild variant="ghost" className="min-h-11 px-0 hover:bg-transparent"><Link href={backHref}><ArrowLeft className="h-4 w-4 rtl:rotate-180" />{ed("back")}</Link></Button>
     <header className="mt-5 border-b pb-7 sm:flex sm:items-start sm:justify-between sm:gap-8">
       <div className="min-w-0"><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{exercise.name}</h1>{exercise.shortDescription ? <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">{exercise.shortDescription}</p> : null}{metadata.length ? <p className="mt-3 text-sm text-muted-foreground">{metadata.map((item, index) => <span key={String(item)}>{index ? " · " : ""}<bdi>{item}</bdi></span>)}</p> : null}</div>
       <div className="mt-5 flex flex-wrap gap-2 sm:mt-0 sm:justify-end">

@@ -9,7 +9,7 @@ export type ActiveWorkoutSetDraftValidation = {
   reps: number | null;
   weightKg: number | null;
   repsError: "required" | "invalid" | null;
-  weightError: "invalid" | null;
+  weightError: "required" | "invalid" | null;
   complete: boolean;
 };
 
@@ -43,7 +43,7 @@ export function validateActiveWorkoutSetDraft(
     : Number.isInteger(reps)
       ? null
       : "invalid";
-  const weightError = weightKg === null || weightKg < 0 ? "invalid" : null;
+  const weightError = weightKg === null ? "required" : weightKg < 0 ? "invalid" : null;
 
   return {
     reps,
