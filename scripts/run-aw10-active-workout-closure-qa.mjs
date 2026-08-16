@@ -554,6 +554,14 @@ try {
       muscleScenario: "ready",
       includeGuide: true
     }, requestHistory);
+    await context.route(/\/api\/workouts\/active\/previous-performance(?:\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "cache-control": "private, no-store" },
+        body: JSON.stringify({ data: null })
+      });
+    });
     const consoleErrors = [];
     const pageErrors = [];
     const failedRequests = [];
