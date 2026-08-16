@@ -517,6 +517,7 @@ export function ActiveWorkoutExecutionShell({
                   <li key={item.number} className="flex min-w-0 flex-1 items-center last:flex-none">
                     <button
                       type="button"
+                      data-aw5-set-path-number={item.number}
                       className={cn(
                         "flex size-11 shrink-0 items-center justify-center rounded-full border text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
                         item.state === "completed" && "border-primary bg-primary text-primary-foreground",

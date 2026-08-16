@@ -61,13 +61,16 @@ describe("approved Train Phase 1 UI contracts", () => {
   it("localizes the day-focus session while preserving stable set and replacement identifiers", () => {
     const controller = source("components/workouts/active-workout/active-workout-core-session-implementation.tsx");
     const details = source("components/workouts/active-workout/active-workout-details-bridge.tsx");
+    const replacement = source("components/workouts/active-workout/active-workout-replacement-recommendations.tsx");
     const shell = source("components/workouts/active-workout/active-workout-execution-shell.tsx");
     const activeWorkout = `${controller}\n${details}`;
     for (const key of ["normal", "warmup", "working", "failure", "drop", "backoff", "amrap", "timed", "other"]) {
       expect(activeWorkout).toContain(`tr("set.${key}"`);
     }
     expect(controller).toContain("useActiveWorkoutTranslation");
-    expect(details).toContain('<option value="machine_taken">{tr("actions.machineOccupied")}</option>');
+    expect(replacement).toContain('"machine_taken"');
+    expect(replacement).toContain('machine_taken: "replacement.reasonMachineTaken"');
+    expect(replacement).toContain('tr(reasonTranslationKey[candidateReason])');
     expect(controller).toContain('moreLabel={tr("common.more")}');
     expect(shell).toContain("aria-label={moreLabel}");
     expect(activeWorkout).not.toContain('<option value="normal">Normal</option>');
