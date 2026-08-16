@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "f6583b9602006494e22a3193794d85952685a4bd"
+          test "$(git rev-parse HEAD^)" = "51f73e2f4d0ed0432506de2a5d8ddea69363bfde"
       - name: Apply frozen-target and semantic-description corrections
         shell: bash
         run: |
@@ -31,118 +31,108 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          runtime = Path('components/workouts/active-workout/active-workout-runtime-model-core.ts')
+          runtime = Path("components/workouts/active-workout/active-workout-runtime-model-core.ts")
           text = runtime.read_text()
-          anchor = '''export function frozenExercise(
-          item: WorkoutSessionPrescriptionItem,
-          liveExercises: UserWorkoutPlanExercise[]
-          ): UserWorkoutPlanExercise {'''
-          helper = '''function frozenRepetitionsTarget(
-          item: WorkoutSessionPrescriptionItem,
-          set: FrozenWorkoutPrescriptionSet | null | undefined
-          ): string | null {
-            const normalized = frozenRepetitionsProjection(set);
-            if (normalized) return normalized;
-            const compatibility = item.rawCompatibilityPrescription.reps;
-            if (typeof compatibility === "number") {
-              return Number.isFinite(compatibility) && compatibility > 0 ? String(compatibility) : null;
-            }
-            if (typeof compatibility === "string") {
-              const trimmed = compatibility.trim();
-              return trimmed || null;
-            }
-            return null;
-          }
-
-          export function frozenExercise(
-          item: WorkoutSessionPrescriptionItem,
-          liveExercises: UserWorkoutPlanExercise[]
-          ): UserWorkoutPlanExercise {'''
+          anchor = "export function frozenExercise("
+          helper = "\n".join([
+              "function frozenRepetitionsTarget(",
+              "  item: WorkoutSessionPrescriptionItem,",
+              "  set: FrozenWorkoutPrescriptionSet | null | undefined",
+              "): string | null {",
+              "  const normalized = frozenRepetitionsProjection(set);",
+              "  if (normalized) return normalized;",
+              "  const compatibility = item.rawCompatibilityPrescription.reps;",
+              "  if (typeof compatibility === \"number\") {",
+              "    return Number.isFinite(compatibility) && compatibility > 0 ? String(compatibility) : null;",
+              "  }",
+              "  if (typeof compatibility === \"string\") {",
+              "    const trimmed = compatibility.trim();",
+              "    return trimmed || null;",
+              "  }",
+              "  return null;",
+              "}",
+              "",
+              "export function frozenExercise(",
+          ])
           if text.count(anchor) != 1:
-            raise SystemExit('runtime frozenExercise anchor mismatch')
+              raise SystemExit("runtime frozenExercise anchor mismatch")
           text = text.replace(anchor, helper, 1)
-          if text.count('reps: frozenRepetitionsProjection(firstSet),') != 2:
-            raise SystemExit('runtime frozen exercise reps replacements mismatch')
-          text = text.replace('reps: frozenRepetitionsProjection(firstSet),', 'reps: frozenRepetitionsTarget(item, firstSet),')
-          if text.count('plannedReps: frozenRepetitionsProjection(frozenSet),') != 1:
-            raise SystemExit('runtime planned reps replacement mismatch')
-          text = text.replace('plannedReps: frozenRepetitionsProjection(frozenSet),', 'plannedReps: frozenRepetitionsTarget(item, frozenSet),', 1)
+          if text.count("reps: frozenRepetitionsProjection(firstSet),") != 2:
+              raise SystemExit("runtime frozen exercise reps replacements mismatch")
+          text = text.replace(
+              "reps: frozenRepetitionsProjection(firstSet),",
+              "reps: frozenRepetitionsTarget(item, firstSet),",
+          )
+          if text.count("plannedReps: frozenRepetitionsProjection(frozenSet),") != 1:
+              raise SystemExit("runtime planned reps replacement mismatch")
+          text = text.replace(
+              "plannedReps: frozenRepetitionsProjection(frozenSet),",
+              "plannedReps: frozenRepetitionsTarget(item, frozenSet),",
+              1,
+          )
           runtime.write_text(text)
 
-          test = Path('components/workouts/active-workout/active-workout-runtime-model.test.ts')
+          test = Path("components/workouts/active-workout/active-workout-runtime-model.test.ts")
           text = test.read_text()
-          old = '''  frozenExercise,
-            hydrateStates,
-            mergeSetPatch,
-            normalizeExerciseName,'''
-          new = '''  frozenExercise,
-            hydrateStates,
-            makeFrozenExerciseState,
-            mergeSetPatch,
-            mockPrescriptionItemsFromPlan,
-            normalizeExerciseName,'''
+          old = "  frozenExercise,\n  hydrateStates,\n  mergeSetPatch,\n  normalizeExerciseName,"
+          new = "  frozenExercise,\n  hydrateStates,\n  makeFrozenExerciseState,\n  mergeSetPatch,\n  mockPrescriptionItemsFromPlan,\n  normalizeExerciseName,"
           if text.count(old) != 1:
-            raise SystemExit('runtime test import anchor mismatch')
+              raise SystemExit("runtime test import anchor mismatch")
           text = text.replace(old, new, 1)
-          anchor = '''  it("normalizes numeric drafts and exercise identity deterministically", () => {'''
-          regression = '''  it("uses frozen compatibility repetitions as the visible target when normalized set targets are unavailable", () => {
-            const item = mockPrescriptionItemsFromPlan([exercise], "session-compat", "user-compat")[0]!;
-            const state = makeFrozenExerciseState(item, [exercise]);
-            expect(state.exercise.reps).toBe("8-10");
-            expect(state.sets.map((set) => set.plannedReps)).toEqual(["8-10", "8-10"]);
-          });
-
-          it("normalizes numeric drafts and exercise identity deterministically", () => {'''
+          anchor = '  it("normalizes numeric drafts and exercise identity deterministically", () => {'
+          regression = "\n".join([
+              '  it("uses frozen compatibility repetitions as the visible target when normalized set targets are unavailable", () => {',
+              '    const item = mockPrescriptionItemsFromPlan([exercise], "session-compat", "user-compat")[0]!;',
+              '    const state = makeFrozenExerciseState(item, [exercise]);',
+              '    expect(state.exercise.reps).toBe("8-10");',
+              '    expect(state.sets.map((set) => set.plannedReps)).toEqual(["8-10", "8-10"]);',
+              '  });',
+              '',
+              '  it("normalizes numeric drafts and exercise identity deterministically", () => {',
+          ])
           if text.count(anchor) != 1:
-            raise SystemExit('runtime regression anchor mismatch')
+              raise SystemExit("runtime regression anchor mismatch")
           text = text.replace(anchor, regression, 1)
           test.write_text(text)
 
-          details = Path('components/workouts/active-workout/active-workout-details-bridge.tsx')
+          details = Path("components/workouts/active-workout/active-workout-details-bridge.tsx")
           text = details.read_text()
-          old = '''          : tr("chatGPT.ask");
-
-            useEffect(() => {'''
-          new = '''          : tr("chatGPT.ask");
-            const dialogDescription = effectiveSection === "overview"
-              ? activeExercise.exercise.exercise_name
-              : effectiveSection === "current-set"
-                ? tr("set.label", { count: formatters.integer(activeSet.setNumber) })
-                : dialogTitle;
-
-            useEffect(() => {'''
+          marker = '          : tr("chatGPT.ask");\n\n  useEffect(() => {'
+          replacement = "\n".join([
+              '          : tr("chatGPT.ask");',
+              '  const dialogDescription = effectiveSection === "overview"',
+              '    ? activeExercise.exercise.exercise_name',
+              '    : effectiveSection === "current-set"',
+              '      ? tr("set.label", { count: formatters.integer(activeSet.setNumber) })',
+              '      : dialogTitle;',
+              '',
+              '  useEffect(() => {',
+          ])
+          if text.count(marker) != 1:
+              raise SystemExit("details description declaration anchor mismatch")
+          text = text.replace(marker, replacement, 1)
+          old = '<DialogDescription>{tr("details.activeWorkoutDetailsDescription")}</DialogDescription>'
+          new = '<DialogDescription><bdi dir="auto">{dialogDescription}</bdi></DialogDescription>'
           if text.count(old) != 1:
-            raise SystemExit('details description declaration anchor mismatch')
-          text = text.replace(old, new, 1)
-          old = '''            <DialogDescription>{tr("details.activeWorkoutDetailsDescription")}</DialogDescription>'''
-          new = '''            <DialogDescription><bdi dir="auto">{dialogDescription}</bdi></DialogDescription>'''
-          if text.count(old) != 1:
-            raise SystemExit('details description render anchor mismatch')
+              raise SystemExit("details description render anchor mismatch")
           text = text.replace(old, new, 1)
           details.write_text(text)
 
-          qa = Path('scripts/run-aw5-correction-layout-qa.mjs')
+          qa = Path("scripts/run-aw5-correction-layout-qa.mjs")
           text = qa.read_text()
-          old = '''  if (!await visible(page, "[data-active-set-details-trigger]").count()) failures.push("Set Details trigger is missing");
-            if (!await visible(page, "#active-set-reps").count()) failures.push("Reps input is missing");'''
-          new = '''  if (!await visible(page, "[data-active-set-details-trigger]").count()) failures.push("Set Details trigger is missing");
-            if (!await visible(page, "[data-aw10-current-target]").count()) failures.push("Frozen prescription target is missing");
-            if (!await visible(page, "#active-set-reps").count()) failures.push("Reps input is missing");'''
+          old = '  if (!await visible(page, "[data-active-set-details-trigger]").count()) failures.push("Set Details trigger is missing");\n  if (!await visible(page, "#active-set-reps").count()) failures.push("Reps input is missing");'
+          new = '  if (!await visible(page, "[data-active-set-details-trigger]").count()) failures.push("Set Details trigger is missing");\n  if (!await visible(page, "[data-aw10-current-target]").count()) failures.push("Frozen prescription target is missing");\n  if (!await visible(page, "#active-set-reps").count()) failures.push("Reps input is missing");'
           if text.count(old) != 1:
-            raise SystemExit('rendered QA target anchor mismatch')
+              raise SystemExit("rendered QA target anchor mismatch")
           text = text.replace(old, new, 1)
           qa.write_text(text)
 
-          contract = Path('lib/product/active-workout-redesign-contract.test.ts')
+          contract = Path("lib/product/active-workout-redesign-contract.test.ts")
           text = contract.read_text()
-          old = '''    expect(shell).toContain("data-aw10-current-target");
-            expect(core).not.toContain("aiPermitted: true");'''
-          new = '''    expect(shell).toContain("data-aw10-current-target");
-            expect(details).toContain("const dialogDescription");
-            expect(details).not.toContain('tr("details.activeWorkoutDetailsDescription")');
-            expect(core).not.toContain("aiPermitted: true");'''
+          old = '    expect(shell).toContain("data-aw10-current-target");\n    expect(core).not.toContain("aiPermitted: true");'
+          new = '    expect(shell).toContain("data-aw10-current-target");\n    expect(details).toContain("const dialogDescription");\n    expect(details).not.toContain(\'tr("details.activeWorkoutDetailsDescription")\');\n    expect(core).not.toContain("aiPermitted: true");'
           if text.count(old) != 1:
-            raise SystemExit('product contract description anchor mismatch')
+              raise SystemExit("product contract description anchor mismatch")
           text = text.replace(old, new, 1)
           contract.write_text(text)
           PY
