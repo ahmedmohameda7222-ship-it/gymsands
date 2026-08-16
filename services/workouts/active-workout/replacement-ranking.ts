@@ -42,6 +42,7 @@ type RankingSignal = {
   mechanics: number;
   forceType: number;
   equipmentAlternative: number;
+  equipmentConflict: number;
   easierDifficulty: number;
   usedBefore: number;
   sessionDuplicate: number;
@@ -57,6 +58,7 @@ const BASE_WEIGHTS: SignalWeights = Object.freeze({
   mechanics: 10,
   forceType: 8,
   equipmentAlternative: 8,
+  equipmentConflict: 0,
   easierDifficulty: 8,
   usedBefore: 12,
   sessionDuplicate: -30,
@@ -64,8 +66,8 @@ const BASE_WEIGHTS: SignalWeights = Object.freeze({
 });
 
 const REASON_WEIGHT_OVERRIDES: Partial<Record<ExerciseAlternativeReason, Partial<SignalWeights>>> = Object.freeze({
-  machine_taken: Object.freeze({ primaryMuscle: 42, movement: 22, equipmentAlternative: 22 }),
-  no_equipment: Object.freeze({ primaryMuscle: 42, equipmentAlternative: 30, movement: 16 }),
+  machine_taken: Object.freeze({ primaryMuscle: 42, movement: 22, equipmentAlternative: 22, equipmentConflict: -48 }),
+  no_equipment: Object.freeze({ primaryMuscle: 42, equipmentAlternative: 30, equipmentConflict: -56, movement: 16 }),
   too_hard: Object.freeze({ primaryMuscle: 42, movement: 20, easierDifficulty: 28 }),
   pain_or_discomfort: Object.freeze({ primaryMuscle: 38, movement: 8, mechanics: 12, equipmentAlternative: 8 }),
   other: Object.freeze({ primaryMuscle: 40, movement: 20, secondaryMuscle: 14 }),
@@ -93,7 +95,12 @@ function normalized(value: string | null | undefined) {
 }
 
 function values(value: string | null | undefined) {
-  return new Set(normalized(value).split(/\s*(?:,|\/|\+|\band\b)\s*/u).filter(Boolean));
+  return new Set(
+    (value ?? "")
+      .split(/(?:,|\/|\+|\band\b)/iu)
+      .map((item) => normalized(item))
+      .filter(Boolean),
+  );
 }
 
 function overlap(left: readonly string[], right: readonly string[]) {
@@ -162,6 +169,7 @@ function signalFor(input: {
     mechanics: same(input.original.mechanics, candidate.mechanics) ? 1 : 0,
     forceType: same(input.original.forceType, candidate.forceType) ? 1 : 0,
     equipmentAlternative: equipmentDiffers(input.original.equipment, candidate.equipment),
+    equipmentConflict: same(input.original.equipment, candidate.equipment) ? 1 : 0,
     easierDifficulty: easierDifficulty(input.original.difficulty, candidate.difficulty),
     usedBefore: savedNames.has(normalized(candidate.name)) ? 1 : 0,
     sessionDuplicate: input.sessionExerciseIds.has(candidate.id) ? 1 : 0,

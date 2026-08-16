@@ -325,6 +325,8 @@ export async function installAw5CorrectionFixture(context, {
   language,
   theme,
   delayCanonical,
+  canonicalSetFailure = false,
+  restSeconds = 90,
   muscleScenario = "ready",
   includeGuide = true
 }, requestHistory) {
@@ -365,7 +367,7 @@ export async function installAw5CorrectionFixture(context, {
     source_plan_exercise_id: sourceExerciseId,
     source_plan_activity_id: direct ? activityId : null,
     activity_name_snapshot: exerciseName,
-    planned_prescription: { sets: 2, reps: "8-10", rest_seconds: 90 },
+    planned_prescription: { sets: 2, reps: "8-10", rest_seconds: restSeconds },
     planned_sets: 2,
     state: "planned"
   };
@@ -380,7 +382,7 @@ export async function installAw5CorrectionFixture(context, {
     set_type: "working",
     target_mode: "custom",
     side_mode: "none",
-    rest_seconds: 90,
+    rest_seconds: restSeconds,
     tempo_target: null,
     schema_version: 1,
     created_at: "2026-07-27T08:00:00.000Z"
@@ -403,6 +405,8 @@ export async function installAw5CorrectionFixture(context, {
     compact_mode: false,
     reduce_animations: true,
     large_text_mode: false,
+    workout_sounds: true,
+    haptics: true,
     quick_log_sections: ["workout"],
     created_at: "2026-07-27T00:00:00.000Z",
     updated_at: "2026-07-27T00:00:00.000Z"
@@ -533,6 +537,10 @@ export async function installAw5CorrectionFixture(context, {
     }
     if (method === "POST" && pathname.includes("/rest/v1/rpc/upsert_workout_set_logs_atomic")) {
       if (delayCanonical) await delayedCanonical.promise;
+      if (canonicalSetFailure) {
+        canonicalFinished.resolve();
+        return respond({ message: "qa canonical set failure" }, 503);
+      }
       const payload = request.postDataJSON();
       const incoming = Array.isArray(payload?.p_logs) ? payload.p_logs : [];
       for (const log of incoming) {

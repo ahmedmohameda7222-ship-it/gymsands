@@ -228,7 +228,6 @@ export function ActiveWorkoutExecutionShell({
   desktopQuickActions,
 }: ActiveWorkoutExecutionShellProps) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   const sessionMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const exerciseMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const progressPercent = Math.round(progress * 100);
@@ -244,7 +243,11 @@ export function ActiveWorkoutExecutionShell({
   useEffect(() => {
     if (!openMenu) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpenMenu(null);
+      const selector = openMenu === "session"
+        ? "[data-aw10-session-menu]"
+        : "[data-aw10-exercise-actions]";
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest(selector)) setOpenMenu(null);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -274,7 +277,6 @@ export function ActiveWorkoutExecutionShell({
 
   return (
     <div
-      ref={rootRef}
       data-aw5-execution-shell
       data-aw10-execution-first
       data-aw5-session-state={paused ? "paused" : restActive ? "rest" : completed ? "completed" : "set-entry"}

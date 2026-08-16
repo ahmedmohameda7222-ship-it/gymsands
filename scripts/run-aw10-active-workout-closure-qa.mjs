@@ -134,12 +134,11 @@ async function completeCurrentSet(page, { skipRest = true } = {}) {
 }
 
 async function openSessionMenu(page) {
-  const trigger = visible(page, "[data-aw10-session-menu] > summary");
+  const trigger = visible(page, '[data-aw10-session-menu] [data-aw-menu-trigger="session"]');
   await trigger.click({ timeout: 10_000 });
-  await page.waitForFunction(() => {
-    const menu = document.querySelector("[data-aw10-session-menu]");
-    return menu instanceof HTMLDetailsElement && menu.open;
-  }, undefined, { timeout: 5_000 });
+  await page.waitForFunction(() =>
+    document.querySelector("[data-aw10-session-menu]")?.getAttribute("data-state") === "open",
+  undefined, { timeout: 5_000 });
   return visible(page, "[data-aw10-session-menu]");
 }
 
@@ -193,7 +192,7 @@ async function waitForOnlineSynced(page) {
 
 async function openDatabase(page) {
   return page.evaluate(async () => {
-    const request = indexedDB.open("plaivra-active-workout-v1", 1);
+    const request = indexedDB.open("plaivra-active-workout-v1", 2);
     return await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(true);
       request.onerror = () => reject(request.error);
@@ -210,6 +209,12 @@ async function openDatabase(page) {
           operations.createIndex("by_user", "userId");
           operations.createIndex("by_state", "state");
         }
+        if (!database.objectStoreNames.contains("set_drafts")) {
+          const drafts = database.createObjectStore("set_drafts", { keyPath: "key" });
+          drafts.createIndex("by_session", ["userId", "workoutSessionId"]);
+          drafts.createIndex("by_user", "userId");
+          drafts.createIndex("by_expiry", "expiresAt");
+        }
       };
     });
   });
@@ -218,7 +223,7 @@ async function openDatabase(page) {
 async function operationCount(page) {
   await openDatabase(page);
   return page.evaluate(async () => {
-    const request = indexedDB.open("plaivra-active-workout-v1", 1);
+    const request = indexedDB.open("plaivra-active-workout-v1", 2);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -251,7 +256,7 @@ async function waitForNoPendingOperations(page, timeoutMs = 20_000) {
 async function mutateFirstOperation(page, patch) {
   await openDatabase(page);
   return page.evaluate(async (nextPatch) => {
-    const request = indexedDB.open("plaivra-active-workout-v1", 1);
+    const request = indexedDB.open("plaivra-active-workout-v1", 2);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -279,7 +284,7 @@ async function mutateFirstOperation(page, patch) {
 async function mutateCachedController(page, controllerDeviceId) {
   await openDatabase(page);
   return page.evaluate(async (nextController) => {
-    const request = indexedDB.open("plaivra-active-workout-v1", 1);
+    const request = indexedDB.open("plaivra-active-workout-v1", 2);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);

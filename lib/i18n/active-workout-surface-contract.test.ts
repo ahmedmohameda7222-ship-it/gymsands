@@ -8,6 +8,9 @@ const controller = source(
 const details = source(
   "components/workouts/active-workout/active-workout-details-bridge.tsx",
 );
+const replacement = source(
+  "components/workouts/active-workout/active-workout-replacement-recommendations.tsx",
+);
 const review = source(
   "components/workouts/active-workout/active-workout-review-bridge.tsx",
 );
@@ -63,9 +66,9 @@ describe("AW-1B Active Workout surface contract", () => {
       }
     }
     expect(activeWorkoutSurface).not.toContain('tr("set.newBest"');
-    expect(details).toContain(
-      '<option value="machine_taken">{tr("actions.machineOccupied")}</option>',
-    );
+    expect(details).toContain("<ActiveWorkoutReplacementRecommendations");
+    expect(replacement).toContain("SUPPORTED_REASONS");
+    expect(replacement).toContain("replacement.reasonMachineTaken");
     expect(shell).toContain("data-active-set-details-trigger");
     expect(controller).toContain('moreLabel={tr("common.more")}');
     expect(controller).toContain("legacyReopenSetLabel");
@@ -95,9 +98,7 @@ describe("AW-1B Active Workout surface contract", () => {
       'tr("exercise.replacementReadyDescription", {',
     );
     expect(controller).toContain("name: isolateBidiText(replacement.name)");
-    expect(details).toContain(
-      "isolateBidiText(alternative.alternative_exercise_name)",
-    );
+    expect(replacement).toContain("<bdi>{recommendation.workout.name}</bdi>");
     expect(details).toContain('<bdi dir="auto">{currentInstructions}</bdi>');
     expect(review).toContain('id="finish-notes"');
     expect(review).toContain('dir="auto"');
