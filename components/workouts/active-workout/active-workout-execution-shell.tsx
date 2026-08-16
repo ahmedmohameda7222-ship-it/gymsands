@@ -471,7 +471,7 @@ export function ActiveWorkoutExecutionShell({
               </section>
             ) : null}
 
-            <section className="py-5" aria-label={currentSetLabel}>
+            <section data-aw5-primary-editor className="py-5" aria-label={currentSetLabel}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="active-set-reps">{repsLabel}</Label>
