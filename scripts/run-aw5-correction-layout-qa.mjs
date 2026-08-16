@@ -376,8 +376,14 @@ async function exerciseScenario(page, scenario, failures) {
     await enterReview(page);
     await finishPartial(page);
     const records = visible(page, "[data-aw10-pr-post-save-only]");
-    await records.waitFor({ state: "visible", timeout: 10_000 });
-    await page.waitForTimeout(250);
+    if (scenario.records === "available") {
+      await records.waitFor({ state: "visible", timeout: 10_000 });
+    } else {
+      await page.waitForTimeout(500);
+      if (await page.locator("[data-aw10-pr-post-save-only]:visible").count()) {
+        failures.push("Completion exposes Personal Records without canonical records");
+      }
+    }
     if (!await visible(page, "[data-aw7-final-muscle-load]").count()) failures.push("Completion is missing final muscle analysis");
     if (!await page.locator('[data-aw7-completion-surface] a[href^="/workout-history/"]:visible').count()) failures.push("Completion lacks canonical View Workout Details link");
     if (scenario.records === "failure" && !await visible(page, "[data-aw7-completion-surface]").count()) failures.push("Personal Records failure invalidated completion");
