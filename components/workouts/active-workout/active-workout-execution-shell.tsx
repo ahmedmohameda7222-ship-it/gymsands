@@ -513,7 +513,7 @@ export function ActiveWorkoutExecutionShell({
                   </Button>
                 ) : null}
               </div>
-              <ol data-aw10-set-path className="mt-1 flex min-w-0 items-center" aria-label={setPathLabel}>
+              <ol data-aw5-set-path data-aw10-set-path className="mt-1 flex min-w-0 items-center" aria-label={setPathLabel}>
                 {setPath.map((item, index) => (
                   <li key={item.number} className="flex min-w-0 flex-1 items-center last:flex-none">
                     <button
@@ -547,7 +547,7 @@ export function ActiveWorkoutExecutionShell({
       {!paused ? (
         <>
           <MobileStickyActionsSpacer placement="session" />
-          <MobileStickyActions placement="session" data-aw10-sticky-actions>
+          <MobileStickyActions placement="session" data-aw5-sticky-actions data-aw10-sticky-actions>
             <Button type="button" data-aw5-primary-action className="min-h-[54px] w-full text-base font-semibold" onClick={onPrimaryAction} disabled={resolvedPrimaryActionDisabled}>
               <PrimaryActionIcon kind={primaryActionKind} />
               {primaryActionLabel}
