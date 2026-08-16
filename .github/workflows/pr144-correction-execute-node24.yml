@@ -1,0 +1,66 @@
+name: PR144 Correction Execute Node24
+
+on:
+  push:
+    branches:
+      - feat/active-workout-full-implementation
+    paths:
+      - .github/workflows/pr144-correction-execute-node24.yml
+
+permissions:
+  contents: write
+
+jobs:
+  execute:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-full-implementation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Extract bounded correction script from repository authority helper
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/pr144-correction-authority-apply-v2.yml').read_text().splitlines()
+          start = workflow.index('      - name: Apply correction-only implementation')
+          end = workflow.index('      - name: Install dependencies')
+          run_line = next(i for i in range(start, end) if workflow[i] == '        run: |')
+          body = []
+          for line in workflow[run_line + 1:end]:
+              if line.startswith('          '):
+                  body.append(line[10:])
+              elif line == '':
+                  body.append('')
+              else:
+                  raise SystemExit(f'unexpected indentation in correction script: {line!r}')
+          Path('/tmp/pr144-correction-apply.sh').write_text('\n'.join(body) + '\n')
+          PY
+          bash /tmp/pr144-correction-apply.sh
+      - name: Deterministic dependency install
+        run: npm ci
+      - name: Focused correction contracts
+        run: npx vitest run lib/product/active-workout-pr144-correction-authority.test.ts lib/product/active-workout-aw10-closure.test.ts
+      - name: Typecheck bounded implementation
+        run: npm run typecheck
+      - name: Patch hygiene
+        run: git diff --check
+      - name: Commit validated correction source only
+        shell: bash
+        run: |
+          git config user.name "Plaivra Repository Delivery"
+          git config user.email "actions@users.noreply.github.com"
+          git add components/workouts/active-workout/active-workout-execution-shell.tsx \
+            components/workouts/active-workout/active-workout-core-session-implementation.tsx \
+            components/workouts/active-workout/active-workout-details-bridge.tsx \
+            messages/en.json messages/de.json messages/ar.json \
+            lib/product/active-workout-pr144-correction-authority.test.ts
+          git diff --cached --check
+          git commit -m "fix: apply PR144 focused Active Workout corrections"
+          git push origin HEAD:feat/active-workout-full-implementation
