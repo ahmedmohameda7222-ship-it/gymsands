@@ -44,9 +44,10 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(mini).toContain("onOpen(event.currentTarget)");
   });
 
-  it("keeps one responsive Details surface with the approved section order", () => {
+  it("keeps one responsive session Details surface without duplicating canonical Exercise Detail", () => {
+    expect(details).not.toContain("data-aw6-details-overview");
+    expect(details).not.toContain("details.exerciseGuideVideo");
     const order = [
-      "data-aw6-details-overview",
       "data-aw6-details-current-set",
       "data-aw6-details-muscle-load",
       "data-aw6-details-adjust-today",
@@ -67,8 +68,9 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(shell).toContain("data-aw10-exercise-actions");
     expect(shell).toContain("data-aw10-session-menu");
     expect(core).toContain("setDetailsTriggerRef.current = trigger");
-    expect(core).toContain('openDetails("overview", trigger)');
-    expect(core).toContain('action.destination ?? "overview"');
+    expect(core).toContain("openCanonicalExerciseDetail");
+    expect(core).toContain("activeWorkoutExerciseDetailHref");
+    expect(core).toContain('action.destination ?? "current-set"');
     expect(actions).toContain("buildActiveWorkoutExerciseActions");
     expect(actions).toContain('"replace-today"');
     expect(actions).toContain('"skip-today"');
@@ -93,9 +95,9 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
 
   it("opens approved sections without URL state or dialog stacking", () => {
     expect(core).toContain('openDetails("muscle-load", trigger)');
-    expect(core).toContain('openDetails("overview", trigger)');
-    expect(core).toContain('action.destination ?? "overview"');
-    expect(core).toContain('action.id === "guide-video" ? "guide-video" : null');
+    expect(core).toContain('action.destination ?? "current-set"');
+    expect(core).not.toContain('openDetails("overview", trigger)');
+    expect(core).not.toContain('"guide-video"');
     expect(core).not.toMatch(/searchParams|URLSearchParams/);
     expect(core).toContain("window.setTimeout(() => setReplacementPickerOpen(true), 0)");
     expect(details).toContain("onBeforeOpen={closeBeforeAi}");
@@ -155,13 +157,12 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
       };
       for (const key of [
         "activeWorkoutDetails",
-        "exerciseOverview",
         "currentSet",
         "muscleLoad",
         "adjustToday",
         "assistance"
       ]) expect(messages.ActiveWorkout.details[key]?.trim()).not.toBe("");
-      for (const key of ["guideVideo", "skipToday", "chooseReplacement"]) {
+      for (const key of ["skipToday", "chooseReplacement"]) {
         expect(messages.ActiveWorkout.actions[key]?.trim()).not.toBe("");
       }
       expect(messages.ActiveWorkout.heatMap.currentSessionMuscleLoad?.trim()).not.toBe("");

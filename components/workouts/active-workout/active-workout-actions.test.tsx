@@ -31,7 +31,6 @@ function exerciseInput(
 const legacyLabels = {
   "previous-set": "Previous set",
   "set-details": "Set details",
-  "guide-video": "Guide / video",
   "replace-today": "Replace today",
   "skip-today": "Skip today",
   "ask-plaivra": "Ask Plaivra"
@@ -42,7 +41,6 @@ function legacyInput(
 ): ActiveWorkoutQuickActionInput {
   return {
     sourceKind: "plan-day",
-    hasGuideOrVideo: true,
     busy: false,
     paused: false,
     activeSetCompleted: false,
@@ -98,21 +96,21 @@ describe("Active Workout exercise overflow authority", () => {
   });
 });
 
-describe("legacy AW-6 contextual quick-action compatibility", () => {
-  it("retains the existing projection until execution-shell migration is complete", () => {
+describe("bounded Active Workout contextual action projection", () => {
+  it("excludes canonical Exercise Detail content from the in-workout action projection", () => {
     const visible = buildActiveWorkoutQuickActions(legacyInput()).filter((action) => action.visible);
     expect(visible.map((action) => action.id)).toEqual([
       "previous-set",
-      "guide-video",
       "set-details",
       "replace-today",
       "skip-today",
       "ask-plaivra"
     ]);
+    expect(visible.map((action) => action.id)).not.toContain("guide-video");
   });
 
-  it("keeps mobile compatibility compact", () => {
-    const actions = buildActiveWorkoutQuickActions(legacyInput({ hasGuideOrVideo: false }));
+  it("keeps the mobile projection focused on Previous Performance and Set Details", () => {
+    const actions = buildActiveWorkoutQuickActions(legacyInput());
     expect(projectActiveWorkoutQuickActions(actions, "mobile").map((action) => action.id))
       .toEqual(["previous-set", "set-details"]);
   });

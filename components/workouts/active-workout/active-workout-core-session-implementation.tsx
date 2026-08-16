@@ -277,8 +277,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const [previousPerformanceUnavailable, setPreviousPerformanceUnavailable] = useState(false);
   const [detailsRequest, setDetailsRequest] = useState<{
     section: ActiveWorkoutDetailsSection;
-    focusTarget: "guide-video" | null;
-  }>({ section: "overview", focusTarget: null });
+  }>({ section: "current-set" });
 
   useEffect(() => {
     if (!userId || !sessionId) return;
@@ -765,10 +764,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const activeAlternatives = alternatives.filter(
     (alternative) => alternative.plan_exercise_id === activeExercise?.exercise.id
   );
-  const currentGuideUrl = activeExercise?.exercise.exercise_url
-    || (activeExercise?.exercise.notes?.startsWith("http") ? activeExercise.exercise.notes : null);
-  const currentCustomVideoUrl = activeExercise?.exercise.custom_video_url || null;
-  const currentInstructions = activeExercise?.exercise.instructions || "";
   const sessionSets = buildSessionSets(exerciseStates);
   const totalVolume = roundWorkoutMetric(
     sessionSets.reduce((sum, set) => sum + set.weightKg * set.reps, 0)
@@ -1793,7 +1788,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   const allQuickActions = buildActiveWorkoutQuickActions({
     sourceKind,
-    hasGuideOrVideo: Boolean(currentGuideUrl || currentCustomVideoUrl),
     busy,
     paused: Boolean(isPaused),
     activeSetCompleted: Boolean(activeSet.completedAt),
@@ -1805,21 +1799,15 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     labels: {
       "previous-set": tr("exercise.previousSet"),
       "set-details": tr("actions.setDetails"),
-      "guide-video": tr("actions.guideVideo"),
       "replace-today": tr("actions.replaceToday"),
       "skip-today": tr("actions.skipToday"),
       "ask-plaivra": tr("chatGPT.ask")
     }
   });
-  const mobileQuickActions = projectActiveWorkoutQuickActions(allQuickActions, "mobile");
   const desktopQuickActions = projectActiveWorkoutQuickActions(allQuickActions, "desktop");
-  const openDetails = (
-    section: ActiveWorkoutDetailsSection,
-    trigger: HTMLButtonElement,
-    focusTarget: "guide-video" | null = null
-  ) => {
+  const openDetails = (section: ActiveWorkoutDetailsSection, trigger: HTMLButtonElement) => {
     setDetailsTriggerRef.current = trigger;
-    setDetailsRequest({ section, focusTarget });
+    setDetailsRequest({ section });
     setActionsOpen(true);
   };
   const deviceConflictBackHref = userId
@@ -1831,7 +1819,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       applyPreviousSet(activeExerciseIndex, activeSetIndex);
       return;
     }
-    openDetails(action.destination ?? "overview", trigger, action.id === "guide-video" ? "guide-video" : null);
+    openDetails(action.destination ?? "current-set", trigger);
   };
   const miniHeatMap = (
     <ActiveWorkoutMiniHeatMap controller={muscleLoadController} onOpen={(trigger) => openDetails("muscle-load", trigger)} />
@@ -1978,7 +1966,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         miniHeatMap={miniHeatMap}
         desktopMiniHeatMap={desktopMiniHeatMap}
         muscleLoadStatusLabel={tr("heatMap.currentSessionMuscleLoad")}
-        mobileQuickActions={mobileQuickActions}
         desktopQuickActions={desktopQuickActions}
         paused={Boolean(isPaused)}
         busy={busy}
@@ -2066,22 +2053,16 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             onOpenChange={handleSetDetailsOpenChange}
             returnFocusRef={setDetailsTriggerRef}
             requestedSection={detailsRequest.section}
-            requestedFocusTarget={detailsRequest.focusTarget}
             sourceKind={sourceKind}
             userId={userId}
             locale={language}
             sessionExerciseIds={new Set(exerciseStates.map((item) => item.exercise.source_workout_id ?? item.exercise.workout_id).filter((value): value is string => Boolean(value)))}
             activeExercise={activeExercise}
             activeSet={activeSet}
-            previousPerformance={activePreviousPerformance}
-            currentInstructions={currentInstructions}
-            currentGuideUrl={currentGuideUrl}
-            currentCustomVideoUrl={currentCustomVideoUrl}
             busy={busy}
             tr={tr}
             formatters={formatters}
             legacyReopenSetLabel={legacyReopenSetLabel}
-            onApplyPreviousSet={() => applyPreviousSet(activeExerciseIndex, activeSetIndex)}
             onRestartSet={() => { void restartSet(activeExerciseIndex, activeSetIndex); }}
             onUpdateSet={(patch) => updateSet(activeExerciseIndex, activeSetIndex, patch)}
             muscleLoadController={muscleLoadController}

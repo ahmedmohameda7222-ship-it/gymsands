@@ -49,7 +49,6 @@ export type ActiveWorkoutExecutionShellProps = {
   miniHeatMap: ReactNode;
   desktopMiniHeatMap?: ReactNode;
   muscleLoadStatusLabel?: string;
-  mobileQuickActions?: readonly ActiveWorkoutQuickAction[];
   desktopQuickActions: readonly ActiveWorkoutQuickAction[];
   paused: boolean;
   busy: boolean;

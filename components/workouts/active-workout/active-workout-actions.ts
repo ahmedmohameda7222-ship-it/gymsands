@@ -1,5 +1,4 @@
 export type ActiveWorkoutDetailsSection =
-  | "overview"
   | "current-set"
   | "muscle-load"
   | "adjust-today"
@@ -68,15 +67,13 @@ export function buildActiveWorkoutExerciseActions(
 }
 
 /*
- * Legacy AW-6 quick-action projection remains exported temporarily while the
- * execution shell is migrated to the separated authorities above. Keeping the
- * compatibility surface bounded avoids coupling this semantic correction to
- * the mature session engine in a single change.
+ * Contextual quick actions remain a bounded projection for Set Details,
+ * Previous Performance and exercise/session actions. Exercise-level Detail
+ * content is intentionally excluded because canonical Exercise Detail owns it.
  */
 export type ActiveWorkoutQuickActionId =
   | "previous-set"
   | "set-details"
-  | "guide-video"
   | "replace-today"
   | "skip-today"
   | "ask-plaivra";
@@ -97,7 +94,6 @@ export type ActiveWorkoutQuickActionLabels = Readonly<
 
 export type ActiveWorkoutQuickActionInput = {
   sourceKind: "plan-day" | "direct";
-  hasGuideOrVideo: boolean;
   busy: boolean;
   paused: boolean;
   activeSetCompleted: boolean;
@@ -121,15 +117,6 @@ export function buildActiveWorkoutQuickActions(
       destination: null,
       intent: "apply-previous-set",
       priority: 10
-    },
-    {
-      id: "guide-video",
-      label: input.labels["guide-video"],
-      visible: input.hasGuideOrVideo && !input.terminal,
-      disabled: false,
-      destination: "overview",
-      intent: "open-details",
-      priority: 20
     },
     {
       id: "set-details",
@@ -180,8 +167,7 @@ export function projectActiveWorkoutQuickActions(
   if (surface === "desktop") return visible.slice(0, 6);
 
   const previous = visible.find((action) => action.id === "previous-set");
-  const contextual = visible.find((action) => action.id === "guide-video")
-    ?? visible.find((action) => action.id === "set-details");
+  const contextual = visible.find((action) => action.id === "set-details");
   return [previous, contextual].filter(
     (action): action is ActiveWorkoutQuickAction => Boolean(action)
   );
