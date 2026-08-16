@@ -1,0 +1,37 @@
+name: Active Workout Detail PR QA Isolation
+on:
+  push:
+    branches: ["feat/active-workout-full-implementation"]
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-full-implementation
+          fetch-depth: 0
+      - name: Add deterministic Exercise Detail performance read
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/run-active-workout-full-authority-qa.mjs')
+          s = p.read_text()
+          old = '''    fixture = await installAw5CorrectionFixture(context, {\n      direct: Boolean(scenario.direct),\n      language: scenario.language ?? "en",\n      theme: scenario.theme ?? "light",\n      delayCanonical: Boolean(scenario.delayCanonical),\n      canonicalSetFailure: Boolean(scenario.canonicalSetFailure),\n      restSeconds: scenario.restSeconds ?? 90,\n      muscleScenario: "ready",\n      includeGuide: true,\n    }, requestHistory);'''
+          new = old + '''\n    await context.route(/\\/api\\/personal-records\\/exercise(?:\\?.*)?$/, async (route) => {\n      await route.fulfill({\n        status: 200,\n        contentType: "application/json",\n        headers: { "cache-control": "private, no-store" },\n        body: JSON.stringify({ performed: false, lastPerformedAt: null, highestLoad: null, estimatedOneRepMax: null, recentWorkoutId: null })\n      });\n    });'''
+          if s.count(old) != 1:
+              raise SystemExit(f'full-authority fixture anchor count={s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit clean result
+        shell: bash
+        run: |
+          rm .github/workflows/active-workout-detail-pr-qa-isolation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Isolate Exercise Detail personal-records QA read"
+          git push origin HEAD:feat/active-workout-full-implementation
