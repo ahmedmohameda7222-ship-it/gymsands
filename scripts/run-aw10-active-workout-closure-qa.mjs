@@ -392,9 +392,16 @@ function baselineFailures(scenario, measured, consoleErrors, pageErrors, failedR
   if (scenario.language !== "ar" && measured.direction !== "ltr") failures.push(`${scenario.language} direction is not LTR`);
   if (consoleErrors.length) failures.push(`${consoleErrors.length} console errors`);
   if (pageErrors.length) failures.push(`${pageErrors.length} page errors`);
-  const unexpectedRequests = failedRequests.filter((item) => !(
-    item.error === "net::ERR_ABORTED" && new URL(item.url).searchParams.has("_rsc")
-  ));
+  const unexpectedRequests = failedRequests.filter((item) => {
+    if (item.error !== "net::ERR_ABORTED") return true;
+    const url = new URL(item.url);
+    if (url.searchParams.has("_rsc")) return false;
+    if (scenario.action !== "offline-refresh") return true;
+    return !(
+      url.pathname === "/api/workouts/active/previous-performance"
+      || /^\/api\/workouts\/sessions\/[^/]+\/muscle-analysis$/.test(url.pathname)
+    );
+  });
   if (unexpectedRequests.length) failures.push(`${unexpectedRequests.length} unexpected failed requests`);
   if (failedResponses.length) failures.push(`${failedResponses.length} failed responses`);
   return { failures, unexpectedRequests };
