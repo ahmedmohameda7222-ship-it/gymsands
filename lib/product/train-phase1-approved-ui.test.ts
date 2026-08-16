@@ -72,7 +72,8 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(replacement).toContain('machine_taken: "replacement.reasonMachineTaken"');
     expect(replacement).toContain('tr(reasonTranslationKey[candidateReason])');
     expect(controller).toContain('moreLabel={tr("common.more")}');
-    expect(shell).toContain("aria-label={moreLabel}");
+    expect(shell).toContain("aria-label={label}");
+    expect(shell).toContain("label={moreLabel}");
     expect(activeWorkout).not.toContain('<option value="normal">Normal</option>');
   });
 
