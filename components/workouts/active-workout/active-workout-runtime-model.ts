@@ -11,7 +11,8 @@ import {
   acknowledgeSetWrites as acknowledgeSetWritesCore,
   buildActiveWorkoutReview as buildActiveWorkoutReviewCore,
   buildCanonicalLogRows as buildCanonicalLogRowsCore,
-  buildSummary as buildSummaryCore
+  buildSummary as buildSummaryCore,
+  directWorkoutDay as directWorkoutDayCore
 } from "./active-workout-runtime-model-core";
 import type {
   ActiveWorkoutFormatters,
@@ -19,8 +20,20 @@ import type {
 } from "@/lib/i18n/active-workout";
 import type {
   UserWorkoutPlanExercise,
+  Workout,
+  WorkoutPlanDaySession,
   WorkoutSessionSummary
 } from "@/types";
+
+const directWorkoutDayCache = new WeakMap<Workout, WorkoutPlanDaySession>();
+
+export function directWorkoutDay(workout: Workout): WorkoutPlanDaySession {
+  const cached = directWorkoutDayCache.get(workout);
+  if (cached) return cached;
+  const projected = directWorkoutDayCore(workout);
+  directWorkoutDayCache.set(workout, projected);
+  return projected;
+}
 
 export class ActiveWorkoutDraftValidationError extends Error {
   readonly retryable = false;
@@ -177,6 +190,9 @@ export function buildSummary(
 
   return {
     ...base,
+    // Personal Records are server-derived after terminal save. The runtime
+    // summary must never carry a local candidate or predicted PR authority.
+    prs: [],
     completedSets: review.completedSets,
     totalPlannedSets: review.totalSets,
     completedExercises: review.completedExercises,

@@ -196,6 +196,23 @@ export function directWorkoutDay(workout: Workout): WorkoutPlanDaySession {
   };
 }
 
+function frozenRepetitionsTarget(
+  item: WorkoutSessionPrescriptionItem,
+  set: FrozenWorkoutPrescriptionSet | null | undefined
+): string | null {
+  const normalized = frozenRepetitionsProjection(set);
+  if (normalized) return normalized;
+  const compatibility = item.rawCompatibilityPrescription.reps;
+  if (typeof compatibility === "number") {
+    return Number.isFinite(compatibility) && compatibility > 0 ? String(compatibility) : null;
+  }
+  if (typeof compatibility === "string") {
+    const trimmed = compatibility.trim();
+    return trimmed || null;
+  }
+  return null;
+}
+
 export function frozenExercise(
   item: WorkoutSessionPrescriptionItem,
   liveExercises: UserWorkoutPlanExercise[]
@@ -210,7 +227,7 @@ export function frozenExercise(
     ...live,
     exercise_name: item.activityName,
     sets: item.prescriptionSets.length || item.plannedSets,
-    reps: frozenRepetitionsProjection(firstSet),
+    reps: frozenRepetitionsTarget(item, firstSet),
     rest_seconds: firstSet?.restSeconds ?? null
   } : {
     id: item.sourcePlanExerciseId ?? item.id,
@@ -222,7 +239,7 @@ export function frozenExercise(
     target_muscle: null,
     equipment: null,
     sets: item.prescriptionSets.length || item.plannedSets,
-    reps: frozenRepetitionsProjection(firstSet),
+    reps: frozenRepetitionsTarget(item, firstSet),
     rest_seconds: firstSet?.restSeconds ?? null,
     sort_order: item.itemOrder,
     notes: null
@@ -259,7 +276,7 @@ export function makeFrozenExerciseState(
       logWriteRequired: false,
       completedAt: null,
       frozenPrescriptionSet: frozenSet,
-      plannedReps: frozenRepetitionsProjection(frozenSet),
+      plannedReps: frozenRepetitionsTarget(item, frozenSet),
       plannedRestSeconds: frozenSet?.restSeconds ?? null
     }))
   };

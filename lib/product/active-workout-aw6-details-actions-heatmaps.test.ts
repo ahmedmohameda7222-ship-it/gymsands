@@ -5,6 +5,7 @@ const source = (path: string) => readFileSync(path, "utf8");
 
 const core = source("components/workouts/active-workout/active-workout-core-session-implementation.tsx");
 const shell = source("components/workouts/active-workout/active-workout-execution-shell.tsx");
+const actions = source("components/workouts/active-workout/active-workout-actions.ts");
 const controller = source(
   "components/workouts/active-workout/active-workout-muscle-load-controller.ts"
 );
@@ -18,8 +19,6 @@ const fullMap = source(
   "components/workouts/active-workout/active-workout-muscle-load-section.tsx"
 );
 const sessionPanel = source("components/workouts/session-muscle-load-panel.tsx");
-const aw5CorrectionQa = source("scripts/run-aw5-correction-layout-qa.mjs");
-const trainLayoutQa = source("scripts/run-train-layout-qa-base.mjs");
 
 describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
   it("uses one active-session request owner for mini and full consumers", () => {
@@ -35,7 +34,7 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(controller).toContain("generation !== requestGenerationRef.current");
   });
 
-  it("replaces the placeholder with a compact dual-view map and no compact labels or state card", () => {
+  it("keeps the compact dual-view mini heat map without compact labels or a state card", () => {
     expect(shell).not.toContain("PersonStanding");
     expect(shell).toContain("data-aw5-mini-heat-map-slot");
     expect(mini).toContain('mode="compact"');
@@ -45,7 +44,7 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(mini).toContain("onOpen(event.currentTarget)");
   });
 
-  it("keeps the binding Details order and one responsive surface", () => {
+  it("keeps one responsive Details surface with the approved section order", () => {
     const order = [
       "data-aw6-details-overview",
       "data-aw6-details-current-set",
@@ -62,7 +61,37 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(details).toContain("requested?.scrollIntoView");
   });
 
-  it("opens the approved sections without URL state or dialog stacking", () => {
+  it("separates Exercise Details, Set Details, and Exercise Actions", () => {
+    expect(shell.match(/data-active-set-details-trigger/g)).toHaveLength(1);
+    expect(shell).toContain("data-aw10-exercise-details-trigger");
+    expect(shell).toContain("data-aw10-exercise-actions");
+    expect(shell).toContain("data-aw10-session-menu");
+    expect(core).toContain("setDetailsTriggerRef.current = trigger");
+    expect(core).toContain('openDetails("overview", trigger)');
+    expect(core).toContain('action.destination ?? "overview"');
+    expect(actions).toContain("buildActiveWorkoutExerciseActions");
+    expect(actions).toContain('"replace-today"');
+    expect(actions).toContain('"skip-today"');
+    expect(actions).toContain('"ask-chatgpt"');
+  });
+
+  it("limits Set Details to RPE, RIR, Set Type, and Set Note", () => {
+    const section = details.slice(
+      details.indexOf("data-aw10-set-details-exact"),
+      details.indexOf("data-aw6-details-muscle-load")
+    );
+    expect(section).toContain('htmlFor="active-set-rpe"');
+    expect(section).toContain('htmlFor="active-set-rir"');
+    expect(section).toContain('htmlFor="active-set-type"');
+    expect(section).toContain('htmlFor="active-set-note"');
+    expect(section).not.toContain("onRestartSet");
+    expect(section).not.toContain("onResetTimer");
+    expect(section).not.toContain("ExercisePickerDialog");
+    expect(section).not.toContain("AiActionRequestDialog");
+    expect(section).not.toContain("ActiveWorkoutMuscleLoadSection");
+  });
+
+  it("opens approved sections without URL state or dialog stacking", () => {
     expect(core).toContain('openDetails("muscle-load", trigger)');
     expect(core).toContain('openDetails("overview", trigger)');
     expect(core).toContain('action.destination ?? "overview"');
@@ -72,39 +101,16 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(details).toContain("onBeforeOpen={closeBeforeAi}");
   });
 
-  it("preserves one visible canonical Details trigger per responsive layout", () => {
-    expect(shell.match(/data-active-set-details-trigger/g)).toHaveLength(2);
-    expect(shell).toContain('className="mt-3 grid grid-cols-3 gap-2 lg:hidden"');
-    expect(shell).toContain(
-      'data-active-set-details-trigger={\n                    action.id === "set-details" ? true : undefined'
-    );
-    expect(shell).toContain("data-aw6-desktop-quick-actions");
-    expect(shell).toContain(
-      "onClick={(event) => onQuickAction(action, event.currentTarget)}"
-    );
-    expect(core).toContain("setDetailsTriggerRef.current = trigger");
-    expect(core).toContain('action.destination ?? "overview"');
-    expect(aw5CorrectionQa).toContain(
-      'locator("[data-active-set-details-trigger]:visible")'
-    );
-    expect(aw5CorrectionQa).toContain(
-      'feedbackText: document.querySelector("[data-aw5-feedback]")'
-    );
-    expect(aw5CorrectionQa).toContain(
-      'locator("[data-aw5-rest-presets]:visible")'
-    );
-    expect(trainLayoutQa).toContain(
-      '...document.querySelectorAll("[data-active-set-details-trigger]")'
-    );
-    expect(trainLayoutQa).toContain("].filter(visible).length");
-    expect(shell.match(/data-aw5-rest-presets/g)).toHaveLength(2);
-    expect(shell).toContain(
-      'data-aw5-rest-presets className="mt-3 grid grid-cols-4 gap-2 lg:hidden"'
-    );
-    expect(shell).toContain('<MobileStickyActionsSpacer placement="session" />');
+  it("keeps rest and sticky geometry compatible with the execution-first shell", () => {
+    expect(shell.match(/data-aw5-rest-presets/g)).toHaveLength(1);
+    expect(shell).toContain("data-aw10-rest-state");
+    expect(shell).toContain("data-aw10-paused-state");
+    expect(shell).toContain("MobileStickyActionsSpacer");
+    expect(shell).toContain("env(safe-area-inset-bottom)");
+    expect(shell).toContain("data-aw5-primary-action");
   });
 
-  it("refreshes only after acknowledged persisted mutations, not local drafts", () => {
+  it("refreshes muscle analysis only after acknowledged persisted mutations, not local drafts", () => {
     const updateSet = core.slice(
       core.indexOf("function updateSet("),
       core.indexOf("function statesWithSetPatch(")
@@ -122,7 +128,7 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
       );
     }
     const canonicalCompletion = core.indexOf("await store.completeCanonicalSet");
-    expect(core.slice(canonicalCompletion, canonicalCompletion + 2200))
+    expect(core.slice(canonicalCompletion, canonicalCompletion + 2600))
       .toContain("bumpMuscleLoadRefreshRevision()");
   });
 
@@ -131,13 +137,16 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
     expect(details).toContain('sourceKind === "plan-day"');
     expect(details).toContain("ExercisePickerDialog");
     expect(details).toContain("onSkipExercise");
-    expect(shell).toContain("mobileQuickActions");
-    expect(shell).toContain("desktopQuickActions");
+    expect(actions).toContain('sourceKind === "plan-day"');
   });
 
-  it("adds complete EN DE AR member-facing copy without fallback English", () => {
+  it("uses ChatGPT-branded member-facing assistance in EN DE AR", () => {
+    expect(core).toContain('"ask-plaivra": tr("chatGPT.ask")');
+    expect(details).toContain('tr("chatGPT.ask")');
+    expect(details).not.toContain('tr("actions.askPlaivra")');
     for (const locale of ["en", "de", "ar"]) {
-      const messages = JSON.parse(source(`messages/${locale}.json`)) as {
+      const raw = source(`messages/${locale}.json`);
+      const messages = JSON.parse(raw) as {
         ActiveWorkout: {
           details: Record<string, string>;
           actions: Record<string, string>;
@@ -152,14 +161,11 @@ describe("AW-6 Details, Actions, and Heat Maps source contract", () => {
         "adjustToday",
         "assistance"
       ]) expect(messages.ActiveWorkout.details[key]?.trim()).not.toBe("");
-      for (const key of [
-        "guideVideo",
-        "skipToday",
-        "askPlaivra",
-        "chooseReplacement"
-      ]) expect(messages.ActiveWorkout.actions[key]?.trim()).not.toBe("");
-      expect(messages.ActiveWorkout.heatMap.currentSessionMuscleLoad?.trim())
-        .not.toBe("");
+      for (const key of ["guideVideo", "skipToday", "chooseReplacement"]) {
+        expect(messages.ActiveWorkout.actions[key]?.trim()).not.toBe("");
+      }
+      expect(messages.ActiveWorkout.heatMap.currentSessionMuscleLoad?.trim()).not.toBe("");
+      expect(raw).toContain("ChatGPT");
     }
   });
 });

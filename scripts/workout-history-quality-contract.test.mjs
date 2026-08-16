@@ -33,7 +33,10 @@ test("dedicated Workout History commands remain explicit", () => {
 test("PR Quality retains existing QA and adds focused History evidence", () => {
   assert.match(prQuality, /npm run qa:rendered/u);
   assert.match(prQuality, /npm run qa:train/u);
-  assert.match(prQuality, /npm run qa:active-workout:aw10/u);
+  assert.match(
+    prQuality,
+    /node scripts\/run-aw10-active-workout-closure-qa-entry\.mjs/u,
+  );
   assert.match(prQuality, /npm run qa:workout-history/u);
   assert.match(prQuality, /workout-history-qa-evidence\//u);
   assert.match(prQuality, /npm run test:workout-history:integration/u);

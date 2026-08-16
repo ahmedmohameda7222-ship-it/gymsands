@@ -71,10 +71,18 @@ test("UI job is selected only by rendered outputs", () => {
   assert.doesNotMatch(ui, /if: needs\.classify\.outputs\.ui == 'true'/);
 });
 
-test("automatic PR Quality owns no duplicated unit subsets", () => {
+test("automatic PR Quality owns one complete unit suite with isolated heavy identity coverage", () => {
   const core = jobSection("core", "database");
   const ui = jobSection("ui", "ci-contracts");
-  assert.match(core, /npm run test:unit/);
+  const heavyTest = "components/workouts/active-workout/active-workout-core-session.identity.test.tsx";
+
+  assert.equal(occurrences(core, `heavy_test=\"${heavyTest}\"`), 1);
+  assert.equal(occurrences(core, "--name unit-active-workout-core-identity"), 1);
+  assert.equal(occurrences(core, "--pool=threads --maxWorkers=1 \"$heavy_test\""), 1);
+  assert.match(core, /for shard in \$\(seq 1 32\)/);
+  assert.match(core, /\.\/node_modules\/\.bin\/vitest run --config vitest\.unit\.config\.mjs/);
+  assert.match(core, /--exclude "\$heavy_test" --shard="\$\{shard\}\/32"/);
+  assert.doesNotMatch(core, /--filesOnly|--static-parse|heap out of memory|\|\|\s*true/);
   assert.doesNotMatch(workflow, /npm run test:i18n/);
   assert.doesNotMatch(workflow, /npm run test:workout-history(?:\s|$)/);
   assert.doesNotMatch(workflow, /Legacy workflow-text contracts/);
@@ -90,7 +98,7 @@ test("all rendered commands remain explicit and individually conditional", () =>
   const commands = [
     ["General rendered QA", "rendered_general", "npm run qa:rendered"],
     ["Train rendered QA", "rendered_train", "npm run qa:train"],
-    ["Active Workout rendered QA", "rendered_active_workout", "npm run qa:active-workout:aw10"],
+    ["Active Workout rendered QA", "rendered_active_workout", "node scripts/run-aw10-active-workout-closure-qa-entry.mjs"],
     ["Workout History rendered QA", "rendered_workout_history", "npm run qa:workout-history"],
   ];
   for (const [stepName, output, command] of commands) {

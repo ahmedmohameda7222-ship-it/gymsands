@@ -19,7 +19,9 @@ import {
   directWorkoutDay,
   frozenExercise,
   hydrateStates,
+  makeFrozenExerciseState,
   mergeSetPatch,
+  mockPrescriptionItemsFromPlan,
   normalizeExerciseName,
   previousSetForExercise,
   toNumberOrNull,
@@ -169,6 +171,13 @@ describe("active workout runtime model", () => {
       video_url: workout.video_url,
       custom_video_url: workout.custom_video_url
     });
+  });
+
+  it("uses frozen compatibility repetitions as the visible target when normalized set targets are unavailable", () => {
+    const item = mockPrescriptionItemsFromPlan([exercise], "session-compat", "user-compat")[0]!;
+    const state = makeFrozenExerciseState(item, [exercise]);
+    expect(state.exercise.reps).toBe("8-10");
+    expect(state.sets.map((set) => set.plannedReps)).toEqual(["8-10", "8-10"]);
   });
 
   it("normalizes numeric drafts and exercise identity deterministically", () => {

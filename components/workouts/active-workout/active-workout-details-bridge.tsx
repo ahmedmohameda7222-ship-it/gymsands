@@ -59,8 +59,10 @@ export type ActiveWorkoutDetailsBridgeProps = {
   busy: boolean;
   tr: ActiveWorkoutTranslator;
   formatters: ActiveWorkoutFormatters;
+  /** @deprecated Reopen belongs to Review, not Set Details. */
   legacyReopenSetLabel: string;
   onApplyPreviousSet: () => void;
+  /** @deprecated Reopen belongs to Review, not Set Details. */
   onRestartSet: () => void;
   onUpdateSet: (patch: Partial<ActiveWorkoutSetState>) => void;
   muscleLoadController: ActiveWorkoutMuscleLoadController;
@@ -71,6 +73,7 @@ export type ActiveWorkoutDetailsBridgeProps = {
   onSkipExercise: () => void;
   isSavingAlternative: boolean;
   workoutContext: Record<string, unknown>;
+  /** @deprecated Timer reset is not a Set Details field. */
   onResetTimer: () => void;
   sessionSourceId: string;
   replacementPickerOpen: boolean;
@@ -95,9 +98,7 @@ export function ActiveWorkoutDetailsBridge({
   busy,
   tr,
   formatters,
-  legacyReopenSetLabel,
   onApplyPreviousSet,
-  onRestartSet,
   onUpdateSet,
   muscleLoadController,
   activeAlternatives,
@@ -107,7 +108,6 @@ export function ActiveWorkoutDetailsBridge({
   onSkipExercise,
   isSavingAlternative,
   workoutContext,
-  onResetTimer,
   sessionSourceId,
   replacementPickerOpen,
   onReplacementPickerOpenChange,
@@ -125,6 +125,24 @@ export function ActiveWorkoutDetailsBridge({
   const rpeErrorId = activeRpeValidation.error ? "active-set-rpe-error" : undefined;
   const rirErrorId = activeRirValidation.error ? "active-set-rir-error" : undefined;
 
+  const closeBeforeAi = () => onOpenChange(false);
+  const effectiveSection: ActiveWorkoutDetailsSection =
+    requestedSection === "adjust-today" && sourceKind !== "plan-day" ? "overview" : requestedSection;
+  const dialogTitle = effectiveSection === "overview"
+    ? tr("details.exerciseOverview")
+    : effectiveSection === "current-set"
+      ? tr("actions.setDetails")
+      : effectiveSection === "muscle-load"
+        ? tr("details.muscleLoad")
+        : effectiveSection === "adjust-today"
+          ? tr("details.adjustToday")
+          : tr("chatGPT.ask");
+  const dialogDescription = effectiveSection === "overview"
+    ? activeExercise.exercise.exercise_name
+    : effectiveSection === "current-set"
+      ? tr("set.label", { count: formatters.integer(activeSet.setNumber) })
+      : dialogTitle;
+
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(() => {
@@ -135,9 +153,7 @@ export function ActiveWorkoutDetailsBridge({
         "adjust-today": adjustTodayRef,
         assistance: assistanceRef
       };
-      const requested = requestedSection === "adjust-today" && sourceKind !== "plan-day"
-        ? overviewRef.current
-        : sectionRefs[requestedSection].current;
+      const requested = sectionRefs[effectiveSection].current;
       const focusTarget = requestedFocusTarget === "guide-video"
         ? guideGroupRef.current
         : requested;
@@ -145,9 +161,7 @@ export function ActiveWorkoutDetailsBridge({
       focusTarget?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [open, requestedFocusTarget, requestedSection, sourceKind]);
-
-  const closeBeforeAi = () => onOpenChange(false);
+  }, [effectiveSection, open, requestedFocusTarget]);
 
   return (
     <>
@@ -164,14 +178,15 @@ export function ActiveWorkoutDetailsBridge({
           className="max-h-[92dvh] overflow-hidden p-0 lg:inset-y-6 lg:left-auto lg:right-6 lg:h-[calc(100dvh-3rem)] lg:max-h-[calc(100dvh-3rem)] lg:w-[440px] lg:max-w-[440px] lg:translate-x-0 lg:translate-y-0 lg:rounded-[28px] lg:border lg:rtl:left-6 lg:rtl:right-auto"
         >
           <DialogHeader className="mb-0 shrink-0 border-b border-border/70 p-5 pe-16">
-            <DialogTitle>{tr("details.activeWorkoutDetails")}</DialogTitle>
-            <DialogDescription>{tr("details.activeWorkoutDetailsDescription")}</DialogDescription>
+            <DialogTitle>{dialogTitle}</DialogTitle>
+            <DialogDescription><bdi dir="auto">{dialogDescription}</bdi></DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
             <div className="divide-y divide-border/70">
               <section
                 data-aw6-details-overview
+                hidden={effectiveSection !== "overview"}
                 aria-labelledby="aw6-details-overview-title"
                 className="scroll-mt-4 py-5"
               >
@@ -184,22 +199,21 @@ export function ActiveWorkoutDetailsBridge({
                   {tr("details.exerciseOverview")}
                 </h3>
                 <p className="mt-2 text-lg font-semibold"><bdi>{activeExercise.exercise.exercise_name}</bdi></p>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  <bdi dir="auto">{currentInstructions}</bdi>
-                </p>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  {tr("details.currentSetContext", {
-                    set: formatters.integer(activeSet.setNumber),
-                    planned: activeSet.plannedReps ?? "-"
-                  })}
-                </p>
+                {currentInstructions.trim() ? (
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold">{tr("details.instructions")}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                      <bdi dir="auto">{currentInstructions}</bdi>
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="mt-4">
                   <p className="text-sm font-semibold">{tr("exercise.previousPerformance")}</p>
                   {previousPerformance ? (
                     <div className="mt-1 space-y-1 text-sm text-muted-foreground">
                       {previousPerformance.lastBestSet ? (
-                        <p>{tr("details.previousBest", { value: previousPerformance.lastBestSet })}</p>
+                        <p>{previousPerformance.lastBestSet}</p>
                       ) : null}
                       {previousPerformance.lastPerformedAt ? (
                         <p>{tr("details.previousDate", {
@@ -209,19 +223,21 @@ export function ActiveWorkoutDetailsBridge({
                     </div>
                   ) : (
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {tr("exercise.noPreviousSetDescription")}
+                      {tr("exercise.noPreviousPerformance")}
                     </p>
                   )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 min-h-11"
-                    onClick={onApplyPreviousSet}
-                    disabled={Boolean(activeSet.completedAt) || busy}
-                  >
-                    {tr("exercise.previousSet")}
-                  </Button>
+                  {previousPerformance ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 min-h-11"
+                      onClick={onApplyPreviousSet}
+                      disabled={Boolean(activeSet.completedAt) || busy}
+                    >
+                      {tr("exercise.useValues")}
+                    </Button>
+                  ) : null}
                 </div>
 
                 <div
@@ -254,6 +270,8 @@ export function ActiveWorkoutDetailsBridge({
 
               <section
                 data-aw6-details-current-set
+                hidden={effectiveSection !== "current-set"}
+                data-aw10-set-details-exact
                 aria-labelledby="aw6-details-current-set-title"
                 className="scroll-mt-4 py-5"
               >
@@ -356,20 +374,11 @@ export function ActiveWorkoutDetailsBridge({
                     />
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {activeSet.completedAt ? (
-                    <Button type="button" variant="outline" onClick={onRestartSet} disabled={busy}>
-                      {legacyReopenSetLabel}
-                    </Button>
-                  ) : null}
-                  <Button type="button" variant="outline" onClick={onResetTimer} disabled={busy}>
-                    {tr("actions.resetWorkoutTimer")}
-                  </Button>
-                </div>
               </section>
 
               <section
                 data-aw6-details-muscle-load
+                hidden={effectiveSection !== "muscle-load"}
                 aria-labelledby="aw6-details-muscle-load-title"
                 className="scroll-mt-4 py-5"
               >
@@ -389,6 +398,7 @@ export function ActiveWorkoutDetailsBridge({
               {sourceKind === "plan-day" ? (
                 <section
                   data-aw6-details-adjust-today
+                hidden={effectiveSection !== "adjust-today"}
                   aria-labelledby="aw6-details-adjust-today-title"
                   className="scroll-mt-4 py-5"
                 >
@@ -452,7 +462,7 @@ export function ActiveWorkoutDetailsBridge({
                     className="mt-3"
                     actions={[{
                       type: "replace_exercise",
-                      label: tr("actions.askPlaivraReplacement"),
+                      label: tr("chatGPT.ask"),
                       description: tr("chatGPT.replaceDescription")
                     }]}
                     sourceType="plan_exercise"
@@ -469,6 +479,7 @@ export function ActiveWorkoutDetailsBridge({
 
               <section
                 data-aw6-details-assistance
+                hidden={effectiveSection !== "assistance"}
                 aria-labelledby="aw6-details-assistance-title"
                 className="scroll-mt-4 py-5"
               >
@@ -478,7 +489,7 @@ export function ActiveWorkoutDetailsBridge({
                   tabIndex={-1}
                   className="text-base font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {tr("details.assistance")}
+                  {tr("chatGPT.ask")}
                 </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {tr("chatGPT.actionsDescription")}

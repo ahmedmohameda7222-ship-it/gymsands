@@ -5,6 +5,74 @@ export type ActiveWorkoutDetailsSection =
   | "adjust-today"
   | "assistance";
 
+/**
+ * Exercise-level overflow actions are deliberately separate from the exercise
+ * name/details affordance and Set Details. The binding Active Workout product
+ * contract exposes only these three actions from the exercise-level menu.
+ */
+export type ActiveWorkoutExerciseActionId =
+  | "replace-today"
+  | "skip-today"
+  | "ask-chatgpt";
+
+export type ActiveWorkoutExerciseAction = {
+  id: ActiveWorkoutExerciseActionId;
+  label: string;
+  visible: boolean;
+  disabled: boolean;
+  destination: "adjust-today" | "assistance";
+};
+
+export type ActiveWorkoutExerciseActionLabels = Readonly<
+  Record<ActiveWorkoutExerciseActionId, string>
+>;
+
+export type ActiveWorkoutExerciseActionInput = {
+  sourceKind: "plan-day" | "direct";
+  busy: boolean;
+  paused: boolean;
+  terminal: boolean;
+  aiPermitted: boolean;
+  labels: ActiveWorkoutExerciseActionLabels;
+};
+
+export function buildActiveWorkoutExerciseActions(
+  input: ActiveWorkoutExerciseActionInput
+): ActiveWorkoutExerciseAction[] {
+  const mutationDisabled = input.busy || input.paused || input.terminal;
+  const planDayVisible = input.sourceKind === "plan-day" && !input.terminal;
+
+  return [
+    {
+      id: "replace-today",
+      label: input.labels["replace-today"],
+      visible: planDayVisible,
+      disabled: mutationDisabled,
+      destination: "adjust-today"
+    },
+    {
+      id: "skip-today",
+      label: input.labels["skip-today"],
+      visible: planDayVisible,
+      disabled: mutationDisabled,
+      destination: "adjust-today"
+    },
+    {
+      id: "ask-chatgpt",
+      label: input.labels["ask-chatgpt"],
+      visible: input.aiPermitted && !input.terminal,
+      disabled: false,
+      destination: "assistance"
+    }
+  ];
+}
+
+/*
+ * Legacy AW-6 quick-action projection remains exported temporarily while the
+ * execution shell is migrated to the separated authorities above. Keeping the
+ * compatibility surface bounded avoids coupling this semantic correction to
+ * the mature session engine in a single change.
+ */
 export type ActiveWorkoutQuickActionId =
   | "previous-set"
   | "set-details"
