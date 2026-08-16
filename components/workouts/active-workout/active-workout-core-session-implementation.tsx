@@ -1588,10 +1588,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     }
   }
 
-  async function applyStableReplacement(replacement: Workout) {
+  async function applyStableReplacement(replacement: Workout): Promise<boolean> {
     if (sourceKind !== "plan-day" || !userId || !sessionId || !activeExercise) return;
     const store = activeSessionStoreRef.current;
-    if (!store) return;
+    if (!store) return false;
     const originalName = activeExercise.exercise.exercise_name;
     setIsSavingAlternative(true);
     try {
@@ -1631,7 +1631,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         console.warn("Plaivra recorded the workout replacement but could not save the optional alternative shortcut.", error);
       });
     } catch (error) {
+      setSetFeedbackVariant("error");
+      setSetFeedback(tr("replacement.unavailable"));
       toastRef.current({ title: tr("exercise.replacementFailed"), description: userSafeError(error) });
+      return false;
     } finally {
       setIsSavingAlternative(false);
     }
@@ -2063,6 +2066,9 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             requestedSection={detailsRequest.section}
             requestedFocusTarget={detailsRequest.focusTarget}
             sourceKind={sourceKind}
+            userId={userId}
+            locale={language}
+            sessionExerciseIds={new Set(exerciseStates.map((item) => item.exercise.source_workout_id ?? item.exercise.workout_id).filter((value): value is string => Boolean(value)))}
             activeExercise={activeExercise}
             activeSet={activeSet}
             previousPerformance={activePreviousPerformance}
@@ -2089,7 +2095,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             replacementPickerOpen={replacementPickerOpen}
             onReplacementPickerOpenChange={setReplacementPickerOpen}
             dayName={day.day_name}
-            onAddReplacement={(replacement) => { void applyStableReplacement(replacement); }}
+            onAddReplacement={applyStableReplacement}
           />
         )}
       />

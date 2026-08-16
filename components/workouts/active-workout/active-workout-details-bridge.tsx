@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import type { ActiveWorkoutDetailsSection } from "@/components/workouts/active-workout/active-workout-actions";
 import type { ActiveWorkoutMuscleLoadController } from "@/components/workouts/active-workout/active-workout-muscle-load-controller";
 import { ActiveWorkoutMuscleLoadSection } from "@/components/workouts/active-workout/active-workout-muscle-load-section";
+import { ActiveWorkoutReplacementRecommendations } from "@/components/workouts/active-workout/active-workout-replacement-recommendations";
 import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dialog";
 import {
   isolateBidiText,
@@ -50,6 +51,9 @@ export type ActiveWorkoutDetailsBridgeProps = {
   requestedSection: ActiveWorkoutDetailsSection;
   requestedFocusTarget: ActiveWorkoutDetailsFocusTarget;
   sourceKind: "plan-day" | "direct";
+  userId: string | null;
+  locale: string;
+  sessionExerciseIds: ReadonlySet<string>;
   activeExercise: ActiveWorkoutExerciseState;
   activeSet: ActiveWorkoutSetState;
   previousPerformance: ActiveWorkoutPreviousPerformance | null;
@@ -79,7 +83,7 @@ export type ActiveWorkoutDetailsBridgeProps = {
   replacementPickerOpen: boolean;
   onReplacementPickerOpenChange: (open: boolean) => void;
   dayName: string;
-  onAddReplacement: (replacement: Workout) => void;
+  onAddReplacement: (replacement: Workout) => Promise<boolean>;
 };
 
 export function ActiveWorkoutDetailsBridge({
@@ -89,6 +93,9 @@ export function ActiveWorkoutDetailsBridge({
   requestedSection,
   requestedFocusTarget,
   sourceKind,
+  userId,
+  locale,
+  sessionExerciseIds,
   activeExercise,
   activeSet,
   previousPerformance,
@@ -124,6 +131,24 @@ export function ActiveWorkoutDetailsBridge({
   const activeRirValidation = validateWorkoutSetEffortInput(activeSet.rir, "rir");
   const rpeErrorId = activeRpeValidation.error ? "active-set-rpe-error" : undefined;
   const rirErrorId = activeRirValidation.error ? "active-set-rir-error" : undefined;
+  const replacementOriginal = useMemo(() => ({
+    id: activeExercise.exercise.source_workout_id ?? activeExercise.exercise.workout_id ?? activeExercise.prescriptionItem.sourcePlanActivityId ?? "",
+    name: activeExercise.exercise.exercise_name,
+    targetMuscle: activeExercise.exercise.target_muscle,
+    equipment: activeExercise.exercise.equipment,
+    difficulty: null,
+    mechanics: null,
+    forceType: null,
+    movementPattern: null,
+    secondaryMuscles: [] as string[]
+  }), [
+    activeExercise.exercise.equipment,
+    activeExercise.exercise.exercise_name,
+    activeExercise.exercise.source_workout_id,
+    activeExercise.exercise.target_muscle,
+    activeExercise.exercise.workout_id,
+    activeExercise.prescriptionItem.sourcePlanActivityId
+  ]);
 
   const closeBeforeAi = () => onOpenChange(false);
   const effectiveSection: ActiveWorkoutDetailsSection =
@@ -413,51 +438,38 @@ export function ActiveWorkoutDetailsBridge({
                   <p className="mt-2 text-sm text-muted-foreground">
                     {tr("actions.replaceTodayDescription")}
                   </p>
-                  {activeAlternatives.length ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {tr("actions.savedAlternatives", {
-                        names: activeAlternatives
-                          .map((alternative) => isolateBidiText(alternative.alternative_exercise_name))
-                          .join(", ")
-                      })}
-                    </p>
-                  ) : null}
-                  <Label htmlFor="active-workout-replacement-reason" className="mt-4 block">
-                    {tr("actions.chooseReason")}
-                  </Label>
-                  <select
-                    id="active-workout-replacement-reason"
-                    value={replacementReason}
-                    onChange={(event) => onReplacementReasonChange(
-                      event.target.value as ExerciseAlternativeReason
-                    )}
-                    className="mt-1.5 h-12 w-full rounded-[14px] border border-input bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  <ActiveWorkoutReplacementRecommendations
+                    userId={userId ?? ""}
+                    original={replacementOriginal}
+                    reason={replacementReason}
+                    onReasonChange={onReplacementReasonChange}
+                    locale={locale}
+                    savedAlternatives={activeAlternatives}
+                    sessionExerciseIds={sessionExerciseIds}
+                    busy={busy || isSavingAlternative}
+                    onReplace={(replacement) => {
+                      void onAddReplacement(replacement).then((saved) => {
+                        if (saved) onOpenChange(false);
+                      });
+                    }}
+                    onBrowseAll={() => {
+                      onOpenChange(false);
+                      onUseReplacement();
+                    }}
+                    tr={tr}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-3 min-h-11 border-amber-500/40 text-foreground hover:bg-amber-500/10"
+                    onClick={() => {
+                      onOpenChange(false);
+                      onSkipExercise();
+                    }}
                     disabled={busy}
                   >
-                    <option value="machine_taken">{tr("actions.machineOccupied")}</option>
-                    <option value="no_equipment">{tr("actions.equipmentUnavailable")}</option>
-                    <option value="pain_or_discomfort">{tr("actions.painDiscomfort")}</option>
-                    <option value="too_hard">{tr("actions.tooHardToday")}</option>
-                    <option value="other">{tr("actions.other")}</option>
-                  </select>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      onClick={onUseReplacement}
-                      disabled={isSavingAlternative || busy}
-                    >
-                      {tr("actions.chooseReplacement")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="border-amber-500/40 text-foreground hover:bg-amber-500/10"
-                      onClick={onSkipExercise}
-                      disabled={busy}
-                    >
-                      {tr("actions.skipExerciseToday")}
-                    </Button>
-                  </div>
+                    {tr("actions.skipExerciseToday")}
+                  </Button>
                   <AiActionRequestDialog
                     className="mt-3"
                     actions={[{

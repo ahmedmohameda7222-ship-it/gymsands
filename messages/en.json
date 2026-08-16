@@ -80,7 +80,9 @@
       "replacementReady": "Replacement ready for today",
       "replacementReadyDescription": "{name} is now shown in this workout. Your saved plan did not change.",
       "replacementFailed": "Could not save replacement",
-      "repsDisplay": "{reps} reps"
+      "repsDisplay": "{reps} reps",
+      "nextTarget": "Next target",
+      "detailsUnavailable": "Exercise details aren’t available for this exercise yet."
     },
     "set": {
       "label": "Set {count}",
@@ -120,7 +122,9 @@
       "newBest": "{name}: new best — {weight} × {reps} reps",
       "labelPlural": "Sets",
       "rpeInvalid": "Enter an RPE from 0 to 10 with at most one decimal place.",
-      "rirInvalid": "Enter an RIR from 0 to 20 with at most one decimal place."
+      "rirInvalid": "Enter an RIR from 0 to 20 with at most one decimal place.",
+      "savedResyncing": "Set saved. Workout position is resyncing.",
+      "saveFailedValuesKept": "Couldn’t save this set. Your values were kept."
     },
     "rest": {
       "beforeSet": "Rest before set {number}",
@@ -457,7 +461,9 @@
       "validNumber": "Enter a valid number.",
       "nonNegative": "Values cannot be negative.",
       "wholeReps": "Reps must be a whole number.",
-      "unusualValue": "This value looks unusual. Check it before continuing."
+      "unusualValue": "This value looks unusual. Check it before continuing.",
+      "repsRequired": "Enter reps.",
+      "weightRequired": "Enter weight. Use 0 for bodyweight or no added load."
     },
     "notifications": {
       "restFinished": "Rest finished",
@@ -481,6 +487,42 @@
       "resumeWorkout": "Resume active workout",
       "finishWorkout": "Finish active workout",
       "cancelWorkout": "Cancel active workout"
+    },
+    "navigator": {
+      "title": "Workout exercises",
+      "description": "Choose an exercise to continue your workout.",
+      "pausedDescription": "Review the workout. Resume before changing exercises.",
+      "readOnlyDescription": "You can review the workout here. Continue on the controlling device to change exercises.",
+      "replacedFrom": "Replaced {name}"
+    },
+    "replacement": {
+      "whyReplace": "Why are you replacing it?",
+      "reasonMachineTaken": "Machine taken",
+      "reasonEquipmentUnavailable": "Equipment unavailable",
+      "reasonPainDiscomfort": "Pain / discomfort",
+      "reasonTooHard": "Too hard today",
+      "reasonOther": "Other",
+      "painCaution": "Choose an option that feels appropriate for you. Plaivra does not label an exercise as medically safe for pain.",
+      "bestMatches": "Best matches",
+      "loading": "Finding eligible replacements",
+      "unavailable": "Recommendations could not be loaded. Your current exercise was kept.",
+      "noMatches": "No strong eligible matches were found for this reason.",
+      "replace": "Replace",
+      "browseAll": "Browse all exercises",
+      "samePrimaryMuscles": "Same primary muscles",
+      "similarMovement": "Similar movement",
+      "differentEquipment": "Different equipment",
+      "easierVariation": "Easier variation",
+      "usedBefore": "Used before",
+      "strongIdentity": "Fully tracked"
     }
+  },
+  "settings": {
+    "workoutFeedback": "Workout feedback",
+    "workoutFeedbackDescription": "Control optional sound and supported-device haptics during workout execution.",
+    "workoutSounds": "Workout sounds",
+    "workoutSoundsDescription": "Play short, restrained feedback sounds when sets and workouts complete.",
+    "haptics": "Haptics",
+    "hapticsDescription": "Use subtle haptic feedback on supported devices. Unsupported browsers do nothing."
   }
 }
