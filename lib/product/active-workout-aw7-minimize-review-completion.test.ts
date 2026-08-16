@@ -45,15 +45,19 @@ describe("AW-7 minimize, review, and completion source contract", () => {
     expect(indicator).toContain("projectActiveWorkoutMinimizedProgress(prescription, logs)");
   });
 
-  it("minimizes only after the core flushes and returns to a validated prior route", () => {
+  it("minimizes through the shared session-safe navigation boundary before returning to a validated prior route", () => {
     expect(core).toContain("useRegisterActiveWorkoutMinimize(minimizeWorkout)");
-    const minimize = core.slice(
-      core.indexOf("const minimizeWorkout"),
-      core.lastIndexOf("useRegisterActiveWorkoutMinimize")
+    expect(core).toContain("const minimizeWorkout = preserveWorkoutForNavigation");
+    const preserve = core.slice(
+      core.indexOf("const preserveWorkoutForNavigation"),
+      core.indexOf("const minimizeWorkout")
     );
-    expect(minimize).toContain("flushPendingSetWrites()");
-    expect(minimize).toContain("return true");
-    expect(minimize).toContain("return false");
+    expect(preserve).toContain("pendingSetCompletionPromiseRef.current");
+    expect(preserve).toContain("await persistSetDrafts()");
+    expect(preserve).toContain("await flushPendingSetWrites()");
+    expect(preserve).toContain("mirrorExecutionState(authoritativeState)");
+    expect(preserve).toContain("return true");
+    expect(preserve).toContain("return false");
     expect(screen).toContain("readPreviousActiveWorkoutRoute");
     expect(screen).toContain("requestMinimize()");
     expect(screen).toContain("useReducedMotion");
