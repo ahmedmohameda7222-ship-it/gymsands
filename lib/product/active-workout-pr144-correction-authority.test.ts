@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const shell = readFileSync("components/workouts/active-workout/active-workout-execution-shell.tsx", "utf8");
 const core = readFileSync("components/workouts/active-workout/active-workout-core-session-implementation.tsx", "utf8");
 const details = readFileSync("components/workouts/active-workout/active-workout-details-bridge.tsx", "utf8");
+const screen = readFileSync("components/workouts/workout-session-screen.tsx", "utf8");
 const en = JSON.parse(readFileSync("messages/en.json", "utf8"));
 const de = JSON.parse(readFileSync("messages/de.json", "utf8"));
 const ar = JSON.parse(readFileSync("messages/ar.json", "utf8"));
@@ -16,6 +17,12 @@ describe("PR #144 focused correction authority", () => {
     expect(shell).toContain('aria-label={exerciseName}');
     expect(shell).toContain('data-aw10-reps-field');
     expect(shell).toContain('data-aw10-weight-field');
+  });
+
+  it("anchors the transformed full-screen session to the viewport so the mobile CTA stays visible", () => {
+    expect(screen).toContain('className="fixed inset-0 z-50 flex flex-col bg-background"');
+    expect(screen).toContain('style={{ willChange: "transform" }}');
+    expect(shell).toContain('<MobileStickyActions placement="session" data-aw5-sticky-actions data-aw10-sticky-actions>');
   });
 
   it("keys Previous Performance only from stable semantic primitives", () => {
