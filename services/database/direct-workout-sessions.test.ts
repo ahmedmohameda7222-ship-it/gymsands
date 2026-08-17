@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Workout } from "@/types";
+import type { Workout, WorkoutSessionPrescriptionItem } from "@/types";
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock("@/lib/supabase/client", () => ({ supabase: { rpc: mocks.rpc } }));
 
+import { resolveActiveWorkoutExecutionCapability } from "@/components/workouts/active-workout/active-workout-execution-capability";
 import {
   getOrStartWorkoutSession,
   getStableWorkoutIdentity,
@@ -26,6 +27,13 @@ function workout(overrides: Partial<Workout> = {}): Workout {
     is_global: true,
     ...overrides
   };
+}
+
+function frozenCompatibility(raw: Record<string, unknown>): WorkoutSessionPrescriptionItem[] {
+  return [{
+    rawCompatibilityPrescription: raw,
+    prescriptionSets: [{ targets: [] }]
+  }] as unknown as WorkoutSessionPrescriptionItem[];
 }
 
 describe("authoritative direct workout sessions", () => {
@@ -66,6 +74,25 @@ describe("authoritative direct workout sessions", () => {
       reps: null,
       rest_seconds: null
     }))).toEqual({});
+  });
+
+  it("H: provider/catalog membership with no execution contract cannot become Reps/Weight authority", () => {
+    const provider = workout({
+      id: "provider-activity-1",
+      catalog_source: "external",
+      catalog_slug: "strength-looking-name",
+      category: "Strength",
+      target_muscle: "Chest",
+      sets: null,
+      reps: null,
+      rest_seconds: null
+    });
+    const raw = plannedPrescriptionForDirectWorkout(provider);
+    expect(raw).toEqual({});
+    expect(resolveActiveWorkoutExecutionCapability(frozenCompatibility(raw))).toEqual({
+      supported: false,
+      reason: "unknown_execution_contract"
+    });
   });
 
   it("delegates start and resume to one server-authoritative RPC", async () => {
