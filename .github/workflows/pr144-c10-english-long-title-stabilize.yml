@@ -1,0 +1,44 @@
+name: PR144 C10 English Long Title QA
+
+on:
+  push:
+    branches:
+      - feat/active-workout-full-implementation
+    paths:
+      - .github/workflows/pr144-c10-english-long-title-stabilize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  stabilize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-full-implementation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply English long-title QA patch
+        run: python scripts/pr144-c10-english-long-title-stabilize.py
+      - name: Deterministic dependency install
+        run: npm ci
+      - name: Focused correction contracts
+        run: npx vitest run lib/product/active-workout-pr144-correction-authority.test.ts lib/product/active-workout-aw10-closure.test.ts
+      - name: Validate QA syntax and patch hygiene
+        run: |
+          node --check scripts/run-active-workout-full-authority-qa.mjs
+          git diff --check
+      - name: Commit validated QA authority
+        run: |
+          git config user.name "Plaivra Repository Delivery"
+          git config user.email "actions@users.noreply.github.com"
+          git add scripts/run-active-workout-full-authority-qa.mjs
+          git rm scripts/pr144-c10-english-long-title-stabilize.py
+          git diff --cached --check
+          git commit -m "test: settle English long-title hierarchy verification"
+          git push origin HEAD:feat/active-workout-full-implementation
