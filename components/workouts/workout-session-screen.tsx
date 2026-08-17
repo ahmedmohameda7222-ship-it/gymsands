@@ -95,7 +95,7 @@ function WorkoutSessionScreenSurface({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex flex-col bg-background"
+      className="absolute inset-0 z-50 flex flex-col bg-background"
       style={{ willChange: "transform" }}
       initial={reduceMotion ? false : { y: "100%" }}
       animate={isClosing ? { y: "100%" } : { y: 0 }}
