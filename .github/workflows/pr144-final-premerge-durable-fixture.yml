@@ -6,6 +6,7 @@ on:
       - feat/active-workout-full-implementation
     paths:
       - .github/workflows/pr144-final-premerge-durable-fixture.yml
+      - scripts/pr144-final-premerge-durable-fixture-fix.py
 
 permissions:
   contents: write
