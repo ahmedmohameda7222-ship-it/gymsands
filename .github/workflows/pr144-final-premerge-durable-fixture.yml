@@ -48,7 +48,7 @@ jobs:
         run: npm ci
       - name: Focused C4 contracts and QA syntax
         run: |
-          npx vitest run components/workouts/active-workout/active-workout-reliability-priority.test.ts
+          npx vitest run --config vitest.unit.config.mjs components/workouts/active-workout/active-workout-reliability-priority.test.ts
           node --check scripts/run-active-workout-final-premerge-qa.mjs
           git diff --check
       - name: Install Chromium
