@@ -718,7 +718,7 @@ const scenarios = [
     direct: true,
     run: async ({ page }) => {
       const title = visible(page, "[data-aw10-exercise-details-trigger]");
-      await page.evaluate(() => document.fonts.ready);
+      await waitForSettledExecutionLayout(page);
       const text = (await title.innerText()).trim();
       check(text.length > 40, "Long exercise title fixture was not rendered.");
       check(await title.getAttribute("aria-label") === text, "Long exercise title does not preserve its full accessible name.");
