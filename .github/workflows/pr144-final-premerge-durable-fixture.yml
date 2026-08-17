@@ -1,0 +1,102 @@
+name: PR144 Final Pre-Merge Durable Fixture
+
+on:
+  push:
+    branches:
+      - feat/active-workout-full-implementation
+    paths:
+      - .github/workflows/pr144-final-premerge-durable-fixture.yml
+
+permissions:
+  contents: write
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+  SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+  PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+  PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+  PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+  PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+  PLAIVRA_RELEASE_ENVIRONMENT: ci
+  PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+  PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  SUPABASE_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+  QA_SERVER_MODE: production
+  QA_MOCK_AUTH_BUILD_VALUE: "true"
+  QA_BASE_URL: http://localhost:3000
+
+jobs:
+  validate-and-commit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-full-implementation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply durable fixture correction
+        run: python scripts/pr144-final-premerge-durable-fixture-fix.py
+      - name: Deterministic dependency install
+        run: npm ci
+      - name: Focused C4 contracts and QA syntax
+        run: |
+          npx vitest run components/workouts/active-workout/active-workout-reliability-priority.test.ts
+          node --check scripts/run-active-workout-final-premerge-qa.mjs
+          git diff --check
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build mock-auth QA application
+        run: NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build
+      - name: Start production QA server
+        run: |
+          mkdir -p ci-reports
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start > ci-reports/qa-server.log 2>&1 &
+          echo "$!" > /tmp/pr144-qa-server.pid
+      - name: Wait for production QA server
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat ci-reports/qa-server.log
+          exit 1
+      - name: Run exact final pre-merge rendered authority
+        env:
+          QA_HEAD_SHA: ${{ github.sha }}
+          QA_AW10_EVIDENCE_DIR: ci-reports/active-workout-aw10-evidence
+        run: node scripts/run-active-workout-final-premerge-qa.mjs
+      - name: Stop production QA server
+        if: always()
+        run: |
+          if [ -f /tmp/pr144-qa-server.pid ]; then
+            kill "$(cat /tmp/pr144-qa-server.pid)" 2>/dev/null || true
+          fi
+      - name: Upload rendered diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr144-final-premerge-durable-fixture-${{ github.run_id }}
+          path: ci-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Commit validated durable fixture correction
+        if: success()
+        run: |
+          git config user.name "Plaivra Repository Delivery"
+          git config user.email "actions@users.noreply.github.com"
+          git add scripts/run-active-workout-final-premerge-qa.mjs
+          git rm scripts/pr144-final-premerge-durable-fixture-fix.py
+          git diff --cached --check
+          git commit -m "test: stabilize durable combined reliability fixture"
+          git push origin HEAD:feat/active-workout-full-implementation
