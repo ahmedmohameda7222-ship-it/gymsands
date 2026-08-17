@@ -1,0 +1,43 @@
+name: PR144 Final Pre-Merge Rendered Fixture
+
+on:
+  push:
+    branches:
+      - feat/active-workout-full-implementation
+    paths:
+      - .github/workflows/pr144-final-premerge-rendered-fixture.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-commit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-full-implementation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply rendered fixture correction
+        run: python scripts/pr144-final-premerge-rendered-fixture-fix.py
+      - name: Deterministic dependency install
+        run: npm ci
+      - name: Validate focused contracts and QA syntax
+        run: |
+          npx vitest run components/workouts/active-workout/active-workout-reliability-priority.test.ts components/workouts/active-workout/active-workout-execution-capability.test.ts services/database/direct-workout-sessions.test.ts
+          node --check scripts/run-active-workout-final-premerge-qa.mjs
+          git diff --check
+      - name: Commit validated fixture correction
+        run: |
+          git config user.name "Plaivra Repository Delivery"
+          git config user.email "actions@users.noreply.github.com"
+          git add scripts/run-active-workout-final-premerge-qa.mjs
+          git rm scripts/pr144-final-premerge-rendered-fixture-fix.py
+          git diff --cached --check
+          git commit -m "test: stabilize combined reliability rendered fixture"
+          git push origin HEAD:feat/active-workout-full-implementation
