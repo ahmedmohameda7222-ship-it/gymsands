@@ -61,6 +61,7 @@ import {
   type ActiveWorkoutSummary
 } from "@/components/workouts/active-workout/active-workout-runtime-model";
 import { activeWorkoutStorageIdentities } from "@/components/workouts/active-workout/active-workout-source-compatibility";
+import { resolveActiveWorkoutReliabilityPresentation } from "@/components/workouts/active-workout/active-workout-reliability-priority";
 import {
   buildActiveWorkoutSetPath,
   clampWorkoutProgress,
@@ -1812,30 +1813,30 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     else void finishSet(activeExerciseIndex, activeSetIndex);
   };
   const busy = isSaving || isStarting || controllerConflictDeviceId !== null || !tabLeader;
-  const syncNotice = syncState === "online_synced" || controllerConflictDeviceId ? null : (
-    <section data-aw9-sync-state={syncState} role="status" className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] mx-auto max-w-xl rounded-[16px] border border-border/70 bg-background/95 px-4 py-3 shadow-lg backdrop-blur lg:bottom-4">
-      <p className="text-sm font-semibold">{tr(`sync.${syncState}`)}</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{tr("sync.pendingCount", { count: pendingOperationCount })}</p>
-      {syncState === "data_conflict" ? (
-        <>
-          {dataConflict ? (
-            <div className="mt-2 rounded-xl bg-muted/55 p-3 text-sm">
-              <p className="font-semibold">{tr("sync.setConflict", { set: formatters.integer(dataConflict.local.setNumber), exercise: isolateBidiText(dataConflict.local.exerciseName) })}</p>
-              <p className="mt-1 text-muted-foreground">{tr("sync.thisDevice")}: {tr("sync.setValues", { weight: formatters.decimal(dataConflict.local.weightKg ?? 0), reps: formatters.integer(dataConflict.local.reps ?? 0) })}</p>
-              <p className="text-muted-foreground">{tr("sync.server")}: {dataConflict.server ? tr("sync.setValues", { weight: formatters.decimal(dataConflict.server.weight_kg ?? 0), reps: formatters.integer(dataConflict.server.reps ?? 0) }) : tr("completion.metricUnavailable")}</p>
-            </div>
-          ) : null}
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <Button type="button" variant="outline" className="min-h-10" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("server").catch(() => undefined); }}>{tr("sync.keepServer")}</Button>
-            <Button type="button" className="min-h-10" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("local").catch(() => undefined); }}>{tr("sync.useLocal")}</Button>
-          </div>
-        </>
-      ) : null}
-      {syncState === "retry_needed" || syncState === "device_conflict" ? (
-        <Button type="button" variant="outline" className="mt-2 min-h-10 w-full" onClick={() => { void activeSessionStoreRef.current?.retryPendingTransport().catch(() => undefined); }}>{tr("common.retry")}</Button>
-      ) : null}
+  const reliabilityPresentation = resolveActiveWorkoutReliabilityPresentation({
+    syncState,
+    tabLeader,
+    controllerConflictDeviceId
+  });
+  const syncNotice = reliabilityPresentation.showStandaloneSyncStatus && reliabilityPresentation.nonBlockingSyncState ? (
+    <section
+      data-aw9-sync-state={reliabilityPresentation.nonBlockingSyncState}
+      data-aw9-reliability-sync-status
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] mx-auto max-w-xl rounded-[14px] border border-border/70 bg-background/95 px-3 py-2 shadow-md backdrop-blur lg:bottom-4"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{tr(`sync.${reliabilityPresentation.nonBlockingSyncState}`)}</p>
+          <p className="text-xs text-muted-foreground">{tr("sync.pendingCount", { count: pendingOperationCount })}</p>
+        </div>
+        {reliabilityPresentation.nonBlockingSyncState === "retry_needed" ? (
+          <Button type="button" variant="outline" size="sm" className="min-h-9 shrink-0" onClick={() => { void activeSessionStoreRef.current?.retryPendingTransport().catch(() => undefined); }}>{tr("common.retry")}</Button>
+        ) : null}
+      </div>
     </section>
-  );
+  ) : null;
 
   const allQuickActions = buildActiveWorkoutQuickActions({
     sourceKind,
@@ -1864,6 +1865,78 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const deviceConflictBackHref = userId
     ? readPreviousActiveWorkoutRoute(userId) ?? (sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts")
     : "/workouts";
+  const blockingReliabilityNotice = reliabilityPresentation.blockingState ? (
+    <section
+      data-aw9-reliability-blocking={reliabilityPresentation.blockingState}
+      data-aw9-tab-conflict={reliabilityPresentation.blockingState === "tab_conflict" ? "true" : undefined}
+      data-aw9-device-conflict={reliabilityPresentation.blockingState === "device_conflict" ? "true" : undefined}
+      data-aw9-data-conflict={reliabilityPresentation.blockingState === "data_conflict" ? "true" : undefined}
+      data-aw9-sync-state={syncState !== "online_synced" ? syncState : undefined}
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[70] mx-auto max-h-[calc(100dvh-7.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] max-w-xl overflow-y-auto rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur"
+    >
+      {reliabilityPresentation.blockingState === "data_conflict" ? (
+        <>
+          <h2 className="font-semibold">{tr("sync.data_conflict")}</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{tr("sync.pendingCount", { count: pendingOperationCount })}</p>
+          {dataConflict ? (
+            <div className="mt-3 rounded-xl bg-muted/55 p-3 text-sm">
+              <p className="font-semibold">{tr("sync.setConflict", { set: formatters.integer(dataConflict.local.setNumber), exercise: isolateBidiText(dataConflict.local.exerciseName) })}</p>
+              <p className="mt-1 text-muted-foreground">{tr("sync.thisDevice")}: {tr("sync.setValues", { weight: formatters.decimal(dataConflict.local.weightKg ?? 0), reps: formatters.integer(dataConflict.local.reps ?? 0) })}</p>
+              <p className="text-muted-foreground">{tr("sync.server")}: {dataConflict.server ? tr("sync.setValues", { weight: formatters.decimal(dataConflict.server.weight_kg ?? 0), reps: formatters.integer(dataConflict.server.reps ?? 0) }) : tr("completion.metricUnavailable")}</p>
+            </div>
+          ) : null}
+          <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("server").catch(() => undefined); }}>{tr("sync.keepServer")}</Button>
+            <Button type="button" className="min-h-11" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("local").catch(() => undefined); }}>{tr("sync.useLocal")}</Button>
+          </div>
+        </>
+      ) : reliabilityPresentation.blockingState === "device_conflict" ? (
+        <>
+          <h2 className="font-semibold">{controllerConflictDeviceId ? tr("multiDevice.activeElsewhere") : tr("sync.device_conflict")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{controllerConflictDeviceId ? tr("multiDevice.viewOnly") : tr("sync.pendingCount", { count: pendingOperationCount })}</p>
+          {reliabilityPresentation.nonBlockingSyncState ? (
+            <p data-aw9-reliability-sync-substatus className="mt-1 text-xs text-muted-foreground">{tr(`sync.${reliabilityPresentation.nonBlockingSyncState}`)}</p>
+          ) : null}
+          <div className="mt-3 grid gap-2">
+            {controllerConflictDeviceId ? (
+              <>
+                <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => { document.querySelector("[data-aw5-execution-shell]")?.scrollIntoView({ block: "start" }); }}>{tr("multiDevice.viewCurrent")}</Button>
+                <Button type="button" className="min-h-11 w-full" onClick={() => setTakeoverConfirmationOpen(true)} disabled={isSaving || (typeof navigator !== "undefined" && !navigator.onLine)}>{tr("multiDevice.takeOver")}</Button>
+                <Button asChild variant="ghost" className="min-h-11 w-full"><Link href={deviceConflictBackHref} prefetch={false}>{tr("multiDevice.goBack")}</Link></Button>
+              </>
+            ) : (
+              <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => { void activeSessionStoreRef.current?.retryPendingTransport().catch(() => undefined); }}>{tr("common.retry")}</Button>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{tr("multiDevice.viewOnly")}</p>
+          {reliabilityPresentation.nonBlockingSyncState ? (
+            <p data-aw9-reliability-sync-substatus className="mt-1 text-xs text-muted-foreground">{tr(`sync.${reliabilityPresentation.nonBlockingSyncState}`)} · {tr("sync.pendingCount", { count: pendingOperationCount })}</p>
+          ) : null}
+          <Button type="button" variant="outline" className="mt-3 min-h-11 w-full" onClick={() => { const leadership = tabLeadershipRef.current; if (!leadership) return; void leadership.acquire(true).then(setTabLeader); }}>{tr("multiDevice.continueThisTab")}</Button>
+        </>
+      )}
+    </section>
+  ) : null;
+  const takeoverConfirmationDialog = (
+    <Dialog open={takeoverConfirmationOpen} onOpenChange={setTakeoverConfirmationOpen}>
+      <DialogContent data-aw9-takeover-confirmation className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{tr("multiDevice.takeoverConfirmTitle")}</DialogTitle>
+          <DialogDescription>{tr("multiDevice.takeoverConfirmDescription")}</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" className="min-h-12" onClick={() => setTakeoverConfirmationOpen(false)} disabled={isSaving}>{tr("common.back")}</Button>
+          <Button type="button" className="min-h-12" onClick={() => { setTakeoverConfirmationOpen(false); void takeOverWorkout(); }} disabled={isSaving}>{tr("multiDevice.confirmTakeover")}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
   const handleQuickAction = (action: ActiveWorkoutQuickAction, trigger: HTMLButtonElement) => {
     if (action.disabled) return;
     if (action.intent === "apply-previous-set") {
@@ -1921,12 +1994,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     return (
       <div data-active-workout-controller className="contents">
         {syncNotice}
-        {!tabLeader ? (
-          <section data-aw9-tab-conflict role="status" className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur">
-            <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
-            <Button type="button" variant="outline" className="mt-3 min-h-11 w-full" onClick={() => { const leadership = tabLeadershipRef.current; if (!leadership) return; void leadership.acquire(true).then(setTabLeader); }}>{tr("multiDevice.continueThisTab")}</Button>
-          </section>
-        ) : null}
+        {blockingReliabilityNotice}
+        {takeoverConfirmationDialog}
         <ActiveWorkoutReviewBridge
           open={reviewOpen}
           busy={busy}
@@ -1956,37 +2025,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   return (
     <div data-active-workout-controller className="contents">
       {syncNotice}
-      {!tabLeader ? (
-        <section data-aw9-tab-conflict role="status" className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur">
-          <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{tr("multiDevice.viewOnly")}</p>
-          <Button type="button" variant="outline" className="mt-3 min-h-11 w-full" onClick={() => { const leadership = tabLeadershipRef.current; if (!leadership) return; void leadership.acquire(true).then(setTabLeader); }}>{tr("multiDevice.continueThisTab")}</Button>
-        </section>
-      ) : null}
-      {controllerConflictDeviceId ? (
-        <section data-aw9-device-conflict role="status" className="fixed inset-x-3 top-3 z-[65] mx-auto max-w-xl rounded-[18px] border border-warning/40 bg-background/95 p-4 shadow-lg backdrop-blur">
-          <h2 className="font-semibold">{tr("multiDevice.activeElsewhere")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{tr("multiDevice.viewOnly")}</p>
-          <div className="mt-3 grid gap-2">
-            <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => { document.querySelector("[data-aw5-execution-shell]")?.scrollIntoView({ block: "start" }); }}>{tr("multiDevice.viewCurrent")}</Button>
-            <Button type="button" className="min-h-11 w-full" onClick={() => setTakeoverConfirmationOpen(true)} disabled={isSaving || (typeof navigator !== "undefined" && !navigator.onLine)}>{tr("multiDevice.takeOver")}</Button>
-            <Button asChild variant="ghost" className="min-h-11 w-full"><Link href={deviceConflictBackHref} prefetch={false}>{tr("multiDevice.goBack")}</Link></Button>
-          </div>
-        </section>
-      ) : null}
-
-      <Dialog open={takeoverConfirmationOpen} onOpenChange={setTakeoverConfirmationOpen}>
-        <DialogContent data-aw9-takeover-confirmation className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{tr("multiDevice.takeoverConfirmTitle")}</DialogTitle>
-            <DialogDescription>{tr("multiDevice.takeoverConfirmDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" className="min-h-12" onClick={() => setTakeoverConfirmationOpen(false)} disabled={isSaving}>{tr("common.back")}</Button>
-            <Button type="button" className="min-h-12" onClick={() => { setTakeoverConfirmationOpen(false); void takeOverWorkout(); }} disabled={isSaving}>{tr("multiDevice.confirmTakeover")}</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {blockingReliabilityNotice}
+      {takeoverConfirmationDialog}
 
       <Dialog open={cancelConfirmationOpen} onOpenChange={setCancelConfirmationOpen}>
         <DialogContent data-aw10-cancel-confirmation className="sm:max-w-md">
