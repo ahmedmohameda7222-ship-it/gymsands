@@ -338,9 +338,49 @@ async function waitForPreviousPerformanceValue(page) {
   return surface;
 }
 
+async function waitForSettledExecutionLayout(page) {
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForFunction(() => {
+    const scroll = document.querySelector("[data-workout-session-scroll]");
+    const surface = scroll?.parentElement;
+    if (!(surface instanceof HTMLElement)) return false;
+    const transform = getComputedStyle(surface).transform;
+    if (transform && transform !== "none") {
+      const matrix = new DOMMatrixReadOnly(transform);
+      if (Math.abs(matrix.m42) > 0.5) return false;
+    }
+    return true;
+  }, undefined, { timeout: 5_000 });
+
+  let previous = null;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const current = await page.evaluate(() => [
+      "#active-set-reps",
+      "#active-set-weight",
+      "[data-aw5-primary-action]",
+    ].map((selector) => {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) return null;
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    }));
+    if (previous && current.every((rect, index) => {
+      const prior = previous[index];
+      if (!rect || !prior) return rect === prior;
+      return Math.abs(rect.x - prior.x) <= 0.5
+        && Math.abs(rect.y - prior.y) <= 0.5
+        && Math.abs(rect.width - prior.width) <= 0.5
+        && Math.abs(rect.height - prior.height) <= 0.5;
+    })) return;
+    previous = current;
+    await page.waitForTimeout(50);
+  }
+  throw new Error("Active Workout execution layout did not settle before geometry verification.");
+}
+
 async function assertCorrectionMobileHierarchy(page, width, language) {
   await waitForPreviousPerformanceValue(page);
-  await page.evaluate(() => document.fonts.ready);
+  await waitForSettledExecutionLayout(page);
   const metrics = await page.evaluate(() => {
     const rect = (selector) => {
       const element = document.querySelector(selector);
@@ -825,7 +865,7 @@ const scenarios = [
     language: "ar",
     run: async ({ page }) => {
       const title = visible(page, "[data-aw10-exercise-details-trigger]");
-      await page.evaluate(() => document.fonts.ready);
+      await waitForSettledExecutionLayout(page);
       check(await title.getAttribute("aria-label") === (await title.innerText()).trim(), "Arabic long title lost its full accessible name.");
       check(await title.locator("svg").isVisible(), "Arabic long-title Exercise Detail chevron is not visible.");
       check(await page.evaluate(() => (document.documentElement.dir || getComputedStyle(document.documentElement).direction) === "rtl"), "Arabic long-title execution is not RTL.");
