@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { CardSkeleton, ErrorState } from "@/components/ui/state-views";
+import {
+  ActiveWorkoutEntryError,
+  ActiveWorkoutEntryLoading
+} from "@/components/workouts/active-workout/active-workout-entry-state";
 import { useToast } from "@/components/ui/toaster";
 import { WorkoutSessionForm } from "@/components/workouts/workout-session-form";
 import { WorkoutSessionScreen } from "@/components/workouts/workout-session-screen";
-import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
+import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { getUserExerciseVideo, getWorkout } from "@/services/database/workout-library";
 import { getCustomExercise } from "@/services/workouts/exercise-library-store";
@@ -23,71 +26,65 @@ export default function WorkoutSessionPage() {
   const { locale, tr } = useTrainTranslation();
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
+  const loadGenerationRef = useRef(0);
 
   const loadWorkout = useCallback(async () => {
+    const generation = ++loadGenerationRef.current;
     setIsLoading(true);
     setLoadError(null);
-    setLoadErrorDetails(undefined);
     try {
       const customExercise = await getCustomExercise(userId ?? undefined, workoutId);
       const nextWorkout = customExercise ?? await getWorkout(workoutId, locale);
-      const customVideo = userId && !customExercise
-        ? await getUserExerciseVideo(userId, nextWorkout.id)
-        : null;
-      const hydratedWorkout = customVideo?.custom_video_url
-        ? {
-            ...nextWorkout,
-            video_url: customVideo.custom_video_url,
-            custom_video_url: customVideo.custom_video_url
-          }
-        : nextWorkout;
-      setWorkout(hydratedWorkout);
+      if (generation !== loadGenerationRef.current) return;
+
+      // The Workout is the core execution authority. Publish it immediately;
+      // optional media enrichment must never gate Active Workout bootstrap.
+      setWorkout(nextWorkout);
+      setIsLoading(false);
+
+      if (userId && !customExercise) {
+        void getUserExerciseVideo(userId, nextWorkout.id).then((customVideo) => {
+          if (generation !== loadGenerationRef.current || !customVideo?.custom_video_url) return;
+          setWorkout((current) => current?.id === nextWorkout.id
+            ? {
+                ...current,
+                video_url: customVideo.custom_video_url,
+                custom_video_url: customVideo.custom_video_url
+              }
+            : current);
+        }).catch((error) => {
+          // Optional enrichment is deliberately fail-soft. The authoritative
+          // workout remains usable and no fake media is substituted.
+          logRecoverableError("workout-session.optional-video", error);
+        });
+      }
     } catch (error) {
+      if (generation !== loadGenerationRef.current) return;
       logRecoverableError("workout-session.load", error);
       const message = userSafeError(error, tr("workoutSessionOpenFailed"));
       setLoadError(message);
-      setLoadErrorDetails(technicalErrorDetails(error));
       toast({ title: tr("couldNotStartWorkout"), description: message });
     } finally {
-      setIsLoading(false);
+      if (generation === loadGenerationRef.current) setIsLoading(false);
     }
   }, [locale, toast, tr, userId, workoutId]);
 
   useEffect(() => {
     void loadWorkout();
+    return () => {
+      loadGenerationRef.current += 1;
+    };
   }, [loadWorkout]);
 
   return (
     <WorkoutSessionScreen fallbackHref="/workouts">
-      {isLoading ? (
-        <div className="mx-auto w-full max-w-3xl pt-20">
-          <h1 className="mb-4 text-lg font-semibold">{tr("startWorkout")}</h1>
-          <CardSkeleton rows={6} />
-        </div>
-      ) : null}
+      {isLoading ? <ActiveWorkoutEntryLoading /> : null}
       {!isLoading && loadError ? (
-        <div className="mx-auto w-full max-w-3xl pt-20">
-          <ErrorState
-            title={tr("workoutSessionLoadFailed")}
-            description={loadError}
-            onRetry={loadWorkout}
-            fallbackLabel={tr("backToTrain")}
-            fallbackHref="/my-workout/plans"
-            details={loadErrorDetails}
-          />
-        </div>
+        <ActiveWorkoutEntryError onRetry={() => { void loadWorkout(); }} backHref="/workouts" />
       ) : null}
       {!isLoading && !loadError && !workout ? (
-        <div className="mx-auto w-full max-w-3xl pt-20">
-          <ErrorState
-            title={tr("workoutNotFound")}
-            description={tr("workoutSessionLoadFailed")}
-            fallbackLabel={tr("backToTrain")}
-            fallbackHref="/my-workout/plans"
-          />
-        </div>
+        <ActiveWorkoutEntryError onRetry={() => { void loadWorkout(); }} backHref="/workouts" />
       ) : null}
       {!isLoading && !loadError && workout ? (
         <WorkoutSessionForm workout={workout} />
