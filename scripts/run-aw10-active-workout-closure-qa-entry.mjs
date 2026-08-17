@@ -140,6 +140,11 @@ if (!underlyingFailure) {
 // The existing AW-10 closure remains the prerequisite authority. Once it is
 // green (either natively or through the narrowly permitted previous-performance
 // abort classification above), run the supplemental exact-head product QA that
-// proves the new Active Workout navigation, replacement, optimistic, and draft
+// proves the Active Workout navigation, replacement, optimistic, and draft
 // contracts introduced by the full implementation authority.
 await import("./run-active-workout-full-authority-qa.mjs");
+
+// The Planner's final pre-merge correction pass adds focused exact-head rendered
+// evidence for entry loading/media reliability and combined ownership/sync states
+// while retaining the existing AW-10 and full-product authorities unchanged.
+await import("./run-active-workout-final-premerge-qa.mjs");
