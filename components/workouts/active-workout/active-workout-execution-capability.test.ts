@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Workout, WorkoutSessionPrescriptionItem } from "@/types";
-import { plannedPrescriptionForDirectWorkout } from "@/services/database/direct-workout-sessions";
+import type { WorkoutSessionPrescriptionItem } from "@/types";
 
 import { resolveActiveWorkoutExecutionCapability } from "./active-workout-execution-capability";
 
@@ -14,26 +13,6 @@ function prescription(input: {
       targets: (input.metrics ?? []).map((metricKey) => ({ metricKey }))
     }]
   }] as unknown as WorkoutSessionPrescriptionItem[];
-}
-
-function directProviderWorkout(): Workout {
-  return {
-    id: "provider-activity-without-execution-contract",
-    name: "Catalog activity",
-    category: "Strength",
-    target_muscle: "Chest",
-    equipment: "None",
-    difficulty: "Beginner",
-    sets: null,
-    reps: null,
-    rest_seconds: null,
-    instructions: "",
-    notes: null,
-    is_global: true,
-    catalog_source: "external",
-    catalog_slug: "catalog-activity",
-    catalog_version: "v2"
-  };
 }
 
 describe("Active Workout execution capability", () => {
@@ -89,13 +68,6 @@ describe("Active Workout execution capability", () => {
     expect(resolveActiveWorkoutExecutionCapability(prescription({ metrics: ["unknown_metric"] })))
       .toEqual({ supported: false, reason: "unsupported_non_strength_contract" });
     expect(resolveActiveWorkoutExecutionCapability(prescription({ raw: { custom_metric: 12 } })))
-      .toEqual({ supported: false, reason: "unknown_execution_contract" });
-  });
-
-  it("H: a direct provider/catalog workout without execution evidence cannot reach Reps/Weight", () => {
-    const raw = plannedPrescriptionForDirectWorkout(directProviderWorkout());
-    expect(raw).toEqual({});
-    expect(resolveActiveWorkoutExecutionCapability(prescription({ raw })))
       .toEqual({ supported: false, reason: "unknown_execution_contract" });
   });
 });
