@@ -122,4 +122,19 @@ new = '''    await waitForSyncState(page, "offline_saved");
 if text.count(old) != 1:
     raise SystemExit(f"device scenario block count={text.count(old)}")
 text = text.replace(old, new, 1)
+
+old_assertion = '''    check(await page.locator("#active-set-reps").isDisabled(), "non-controller device still allows execution mutation");
+'''
+new_assertion = '''    const enabledExecutionMutations = await page.locator([
+      "#active-set-reps:not(:disabled)",
+      "#active-set-weight:not(:disabled)",
+      "[data-aw5-primary-action]:not(:disabled)",
+      "[data-aw5-rest-presets] button:not(:disabled)",
+      "[data-aw5-set-path] button:not(:disabled)",
+    ].join(", ")).count();
+    check(enabledExecutionMutations === 0, `non-controller device exposes ${enabledExecutionMutations} enabled execution mutation controls`);
+'''
+if text.count(old_assertion) != 1:
+    raise SystemExit(f"device mutation assertion count={text.count(old_assertion)}")
+text = text.replace(old_assertion, new_assertion, 1)
 path.write_text(text)
