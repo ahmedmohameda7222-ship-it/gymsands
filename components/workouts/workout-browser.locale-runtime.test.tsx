@@ -68,7 +68,7 @@ vi.mock("@/services/database/workout-library", () => {
     emptyCanonicalWorkoutFilterOptions: empty,
     getCanonicalWorkoutFilterOptionsWithStatus: mocks.getFilters,
     getWorkoutsWithStatus: mocks.getWorkouts,
-    matchesWorkoutRecord: () => true,
+    matchesWorkoutRecord: (workout: Workout, query: string) => !query || workout.name.toLowerCase().includes(query.toLowerCase()),
     mergeCanonicalWorkoutFilterOptions: (current: unknown) => current,
     normalizeWorkoutFilterText: (value: string) => value.trim().toLowerCase(),
     resolveCanonicalWorkoutFilterValues: (filters: unknown) => filters
@@ -252,9 +252,9 @@ describe("WorkoutBrowser locale, recovery, and Reset runtime contract", () => {
     expect(container.querySelector("[data-empty-state]")?.textContent).toContain("startBrowsing");
   });
 
-  it("keeps prior results and query on failure, shows one persistent recovery surface, emits no duplicate toast, and retry recovers", async () => {
+  it("keeps prior results and query on failure, shows one persistent recovery surface, hides stale source notices, emits no duplicate toast, and retry recovers", async () => {
     mocks.getWorkouts
-      .mockResolvedValueOnce({ data: [workout("bench", "Bench Press")], status: { source: "live" }, pagination: { hasMore: false, nextCursor: null } })
+      .mockResolvedValueOnce({ data: [workout("bench", "Bench Press")], status: { source: "fallback", message: "stale source" }, pagination: { hasMore: false, nextCursor: null } })
       .mockRejectedValueOnce(new Error("catalog unavailable"))
       .mockResolvedValueOnce({ data: [workout("incline", "Incline Press")], status: { source: "live" }, pagination: { hasMore: false, nextCursor: null } });
 
@@ -264,16 +264,18 @@ describe("WorkoutBrowser locale, recovery, and Reset runtime contract", () => {
     await act(async () => { vi.advanceTimersByTime(220); });
     await flush();
     expect(container.textContent).toContain("Bench Press");
+    expect(container.textContent).toContain("librarySourceNotice");
 
     const search = container.querySelector('input[placeholder="searchExercisesLong"]') as HTMLInputElement;
-    await act(async () => inputValue(search, "bench"));
+    await act(async () => inputValue(search, "incline"));
     await act(async () => { vi.advanceTimersByTime(220); });
     await flush();
 
-    expect(search.value).toBe("bench");
+    expect(search.value).toBe("incline");
     expect(container.textContent).toContain("Bench Press");
     expect(container.querySelectorAll("[data-error-state]")).toHaveLength(1);
     expect(container.querySelector("[data-error-state]")?.textContent).toContain("exerciseSearchFailed");
+    expect(container.textContent).not.toContain("librarySourceNotice");
     expect(mocks.toast).not.toHaveBeenCalled();
 
     await act(async () => (container.querySelector("[data-error-retry]") as HTMLButtonElement).click());
@@ -281,7 +283,8 @@ describe("WorkoutBrowser locale, recovery, and Reset runtime contract", () => {
     await flush();
 
     expect(container.querySelectorAll("[data-error-state]")).toHaveLength(0);
-    expect(search.value).toBe("bench");
+    expect(search.value).toBe("incline");
     expect(container.textContent).toContain("Incline Press");
+    expect(container.textContent).not.toContain("Bench Press");
   });
 });
