@@ -90,6 +90,8 @@ jobs:
           test ! -e .github/workflows/p10f-aw5-native-library-fixture.yml
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' vercel.json
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' scripts/provider-release-gates.test.mjs
+          grep -q 'PLAIVRA_ACTIVITY_CATALOG_MODE=library_v2_with_legacy_fallback' .env.example
+          grep -q 'PLAIVRA_ACTIVITY_CATALOG_BASE_URL=https://plaivra-activity-catalog-api.vercel.app' .env.example
           node - <<'NODE'
           const fs = require('node:fs');
           const ledger = JSON.parse(fs.readFileSync('supabase/migration-ledger.json', 'utf8'));
@@ -119,6 +121,8 @@ jobs:
             semanticSnapshotMaterializer: 'lib/activity-catalog/snapshot.ts',
             historicalRewrite: false,
             browserDirectCatalogCalls: 0,
+            productionProviderPolicy: 'explicit_library_v2_primary',
+            productionFallbackPolicy: 'bounded_observable_legacy_only',
             previewBranchAllowlist: 'feat/p10f-activity-catalog-v2-cutover'
           }, null, 2) + '\n');
           NODE
@@ -144,7 +148,7 @@ jobs:
           node-version: 24
       - name: Dedicated Catalog live read-only acceptance
         env:
-          PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://catalog-api.plaivra.com
+          PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
           PLAIVRA_ACTIVITY_CATALOG_API_KEY: ${{ secrets.PLAIVRA_ACTIVITY_CATALOG_API_KEY }}
         run: node scripts/verify-p10f-runtime-cutover-live.mjs
       - name: Verify exact head remains clean
