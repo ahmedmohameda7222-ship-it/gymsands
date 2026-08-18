@@ -1,0 +1,44 @@
+name: PR144 data-conflict blocker correction
+
+on:
+  push:
+    branches:
+      - feat/active-workout-full-implementation
+    paths:
+      - .github/workflows/pr144-data-conflict-blocker-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact trigger head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify audited ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 31c79ea15d1fb00141104f9889ff429bd76fd8c4 HEAD
+          test "$(git rev-list --count 31c79ea15d1fb00141104f9889ff429bd76fd8c4..HEAD)" = "2"
+
+      - name: Materialize narrow correction
+        run: python scripts/pr144-data-conflict-blocker-fix.py
+
+      - name: Commit product correction and remove temporary transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Plaivra Implementation Authority"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/pr144-data-conflict-blocker-fix.yml scripts/pr144-data-conflict-blocker-fix.py
+          git add components/workouts/active-workout/active-workout-core-session-implementation.tsx lib/product/active-workout-pr144-correction-authority.test.ts
+          git diff --cached --check
+          git commit -m "fix(active-workout): block mutations during data conflict"
+          git push origin HEAD:feat/active-workout-full-implementation
