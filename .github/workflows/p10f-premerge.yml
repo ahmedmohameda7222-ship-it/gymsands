@@ -175,6 +175,8 @@ jobs:
       PLAIVRA_PRODUCTION_URL: https://app.plaivra.com
       PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
       PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+      PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+      PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
       PLAIVRA_P10F_DIAGNOSTIC_OUTPUT: p10f-current-production-library.json
     steps:
       - name: Checkout exact diagnostic head
