@@ -1,3 +1,5 @@
+import type { CatalogLocale } from "@/lib/activity-catalog/catalog-locale";
+
 export type LibraryReleaseMetadata = {
   id: string;
   version: string;
@@ -88,7 +90,7 @@ export type LibraryActivityDetail = LibraryActivity & LibrarySemanticAuthority;
 export type LibraryCursorPage = { limit: number; returned: number; nextCursor: string | null };
 export type LibrarySearchParams = {
   domain: string;
-  locale?: string;
+  locale?: CatalogLocale;
   query?: string;
   visibility?: "default" | "searchable" | "advanced" | "hidden";
   limit?: number;
