@@ -177,6 +177,10 @@ function inputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function buttonByText(container: HTMLElement, label: string) {
+  return Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.trim() === label) as HTMLButtonElement;
+}
+
 describe("WorkoutBrowser locale, recovery, and Reset runtime contract", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -232,21 +236,21 @@ describe("WorkoutBrowser locale, recovery, and Reset runtime contract", () => {
 
     await act(async () => root.render(React.createElement(WorkoutBrowser)));
     await flush();
-    const resetBefore = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.trim() === "reset") as HTMLButtonElement;
+    const resetBefore = buttonByText(container, "reset");
     expect(resetBefore.disabled).toBe(true);
 
     await act(async () => (container.querySelector("[data-empty-action]") as HTMLButtonElement).click());
     await act(async () => { vi.advanceTimersByTime(220); });
     await flush();
 
-    const resetActive = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.trim() === "reset") as HTMLButtonElement;
+    const resetActive = buttonByText(container, "reset");
     expect(resetActive.disabled).toBe(false);
     expect(window.location.search).toContain("all=1");
 
     await act(async () => resetActive.click());
     await flush();
 
-    const resetNeutral = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.trim() === "reset") as HTMLButtonElement;
+    const resetNeutral = buttonByText(container, "reset");
     expect(resetNeutral.disabled).toBe(true);
     expect(window.location.search).not.toContain("all=1");
     expect(container.querySelector("[data-empty-state]")?.textContent).toContain("startBrowsing");
@@ -286,5 +290,105 @@ describe("WorkoutBrowser locale, recovery, and Reset runtime contract", () => {
     expect(search.value).toBe("incline");
     expect(container.textContent).toContain("Incline Press");
     expect(container.textContent).not.toContain("Bench Press");
+  });
+
+  it("filters Show All by current Favorites locally without refetching the Catalog", async () => {
+    const favorite = workout("favorite", "Favorite Press");
+    const regular = workout("regular", "Regular Press");
+    mocks.getFavorites.mockResolvedValue({ data: [favorite.id], status: { source: "live" } });
+    mocks.getWorkouts.mockResolvedValue({ data: [favorite, regular], status: { source: "live" }, pagination: { hasMore: false, nextCursor: null } });
+
+    await act(async () => root.render(React.createElement(WorkoutBrowser)));
+    await flush();
+    await act(async () => (container.querySelector("[data-empty-action]") as HTMLButtonElement).click());
+    await act(async () => { vi.advanceTimersByTime(220); });
+    await flush();
+
+    const baseline = mocks.getWorkouts.mock.calls.length;
+    expect(baseline).toBe(1);
+    expect(container.textContent).toContain("Favorite Press");
+    expect(container.textContent).toContain("Regular Press");
+
+    await act(async () => buttonByText(container, "favorites").click());
+    await act(async () => { vi.advanceTimersByTime(220); });
+    await flush();
+
+    expect(mocks.getWorkouts).toHaveBeenCalledTimes(baseline);
+    expect(container.textContent).toContain("Favorite Press");
+    expect(container.textContent).not.toContain("Regular Press");
+    expect(container.textContent).toContain("favoritesOnly");
+
+    await act(async () => buttonByText(container, "favorites").click());
+    await act(async () => { vi.advanceTimersByTime(220); });
+    await flush();
+
+    expect(mocks.getWorkouts).toHaveBeenCalledTimes(baseline);
+    expect(container.textContent).toContain("Favorite Press");
+    expect(container.textContent).toContain("Regular Press");
+  });
+
+  it("applies current Favorites to preserved prior results during a failed new query without refetching", async () => {
+    const favorite = workout("favorite", "Favorite Press");
+    const regular = workout("regular", "Regular Press");
+    mocks.getFavorites.mockResolvedValue({ data: [favorite.id], status: { source: "live" } });
+    mocks.getWorkouts
+      .mockResolvedValueOnce({ data: [favorite, regular], status: { source: "live" }, pagination: { hasMore: false, nextCursor: null } })
+      .mockRejectedValue(new Error("catalog unavailable"));
+
+    await act(async () => root.render(React.createElement(WorkoutBrowser)));
+    await flush();
+    await act(async () => (container.querySelector("[data-empty-action]") as HTMLButtonElement).click());
+    await act(async () => { vi.advanceTimersByTime(220); });
+    await flush();
+
+    const search = container.querySelector('input[placeholder="searchExercisesLong"]') as HTMLInputElement;
+    await act(async () => inputValue(search, "failed query"));
+    await act(async () => { vi.advanceTimersByTime(220); });
+    await flush();
+
+    expect(container.querySelectorAll("[data-error-state]")).toHaveLength(1);
+    expect(search.value).toBe("failed query");
+    expect(container.textContent).toContain("Favorite Press");
+    expect(container.textContent).toContain("Regular Press");
+    const countAfterFailure = mocks.getWorkouts.mock.calls.length;
+    expect(countAfterFailure).toBe(2);
+
+    await act(async () => buttonByText(container, "favorites").click());
+    await act(async () => { vi.advanceTimersByTime(220); });
+    await flush();
+
+    expect(mocks.getWorkouts).toHaveBeenCalledTimes(countAfterFailure);
+    expect(container.querySelectorAll("[data-error-state]")).toHaveLength(1);
+    expect(search.value).toBe("failed query");
+    expect(container.textContent).toContain("Favorite Press");
+    expect(container.textContent).not.toContain("Regular Press");
+
+    await act(async () => buttonByText(container, "favorites").click());
+    await act(async () => { vi.advanceTimersByTime(220); });
+    await flush();
+
+    expect(mocks.getWorkouts).toHaveBeenCalledTimes(countAfterFailure);
+    expect(container.querySelectorAll("[data-error-state]")).toHaveLength(1);
+    expect(search.value).toBe("failed query");
+    expect(container.textContent).toContain("Favorite Press");
+    expect(container.textContent).toContain("Regular Press");
+  });
+
+  it("loads the Library when Favorites is enabled from the neutral browse state", async () => {
+    const favorite = workout("favorite", "Favorite Press");
+    mocks.getFavorites.mockResolvedValue({ data: [favorite.id], status: { source: "live" } });
+    mocks.getWorkouts.mockResolvedValue({ data: [favorite], status: { source: "live" }, pagination: { hasMore: false, nextCursor: null } });
+
+    await act(async () => root.render(React.createElement(WorkoutBrowser)));
+    await flush();
+    expect(mocks.getWorkouts).not.toHaveBeenCalled();
+
+    await act(async () => buttonByText(container, "favorites").click());
+    await act(async () => { vi.advanceTimersByTime(220); });
+    await flush();
+
+    expect(mocks.getWorkouts).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Favorite Press");
+    expect(container.textContent).toContain("favoritesOnly");
   });
 });
