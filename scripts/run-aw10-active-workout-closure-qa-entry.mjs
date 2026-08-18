@@ -144,6 +144,11 @@ if (!underlyingFailure) {
 // contracts introduced by the full implementation authority.
 await import("./run-active-workout-full-authority-qa.mjs");
 
+// The final Replacement request-stability correction proves that live workout
+// timer rerenders do not restart recommendation loading, while a real reason
+// change still produces exactly one semantic refresh.
+await import("./run-active-workout-replacement-request-stability-qa.mjs");
+
 // The Planner's final pre-merge correction pass adds focused exact-head rendered
 // evidence for entry loading/media reliability and combined ownership/sync states
 // while retaining the existing AW-10 and full-product authorities unchanged.
