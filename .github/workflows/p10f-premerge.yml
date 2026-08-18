@@ -175,7 +175,7 @@ jobs:
       PLAIVRA_PRODUCTION_URL: https://app.plaivra.com
       PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
       PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
-      PLAIVRA_P10F_DIAGNOSTIC_OUTPUT: ${{ runner.temp }}/p10f-current-production-library.json
+      PLAIVRA_P10F_DIAGNOSTIC_OUTPUT: p10f-current-production-library.json
     steps:
       - name: Checkout exact diagnostic head
         uses: actions/checkout@v4
@@ -204,6 +204,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: p10f-current-production-provider-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ${{ runner.temp }}/p10f-current-production-library.json
+          path: p10f-current-production-library.json
           if-no-files-found: error
           retention-days: 30
