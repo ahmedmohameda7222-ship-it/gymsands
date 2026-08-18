@@ -31,7 +31,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ doma
       body: { data: result.data, pagination: result.pagination, meta: result.meta, restarted },
       meta: result.meta,
       count: result.data.length,
-      restarted
+      restarted,
+      pageSize: result.pagination.limit,
+      cursorPresent: Boolean(cursor)
     };
   });
 }
