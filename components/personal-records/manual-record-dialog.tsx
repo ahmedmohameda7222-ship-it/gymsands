@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toCatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import { MANUAL_RECORD_DEFINITIONS, type CanonicalPersonalRecordEvent, type ManualPersonalRecordInput, type ManualRecordDefinitionTemplate } from "@/lib/personal-records/contracts";
 import { usePersonalRecordsTranslation } from "@/lib/i18n/personal-records";
 import { buildCatalogAuthoritySnapshot } from "@/lib/activity-catalog/snapshot";
@@ -29,7 +30,8 @@ export function ManualRecordDialog({ open, event, onOpenChange, onSave }: {
   onOpenChange: (open: boolean) => void;
   onSave: (input: ManualPersonalRecordInput) => Promise<void>;
 }) {
-  const { language, dir, locale, pr } = usePersonalRecordsTranslation();
+  const { language, dir, pr } = usePersonalRecordsTranslation();
+  const catalogLocale = toCatalogLocale(language);
   const [sport, setSport] = useState<Sport>("strength");
   const [subjectMode, setSubjectMode] = useState<"catalog_activity" | "custom_subject">("catalog_activity");
   const [subjectId, setSubjectId] = useState("");
@@ -80,7 +82,7 @@ export function ManualRecordDialog({ open, event, onOpenChange, onSave }: {
     if (!catalogQuery.trim()) return;
     setCatalogStatus("loading");
     try {
-      const result = await searchLibraryDomainActivities({ domain: "strength", query: catalogQuery.trim(), limit: 10, locale: locale.slice(0, 2) });
+      const result = await searchLibraryDomainActivities({ domain: "strength", query: catalogQuery.trim(), limit: 10, locale: catalogLocale });
       setCatalogResults(result.data); setCatalogStatus(result.data.length ? "idle" : "empty");
     } catch { setCatalogStatus("failed"); }
   }
@@ -88,7 +90,7 @@ export function ManualRecordDialog({ open, event, onOpenChange, onSave }: {
   async function chooseActivity(activity: LibraryActivity) {
     setCatalogStatus("loading");
     try {
-      const detail = await getLibraryDomainActivity("strength", activity.id, locale.slice(0, 2));
+      const detail = await getLibraryDomainActivity("strength", activity.id, catalogLocale);
       setCatalogActivity(detail.data); setSubjectId(`global:${detail.data.id}`); setSubjectName(detail.data.name); setCatalogResults([]); setCatalogStatus("idle");
     } catch { setCatalogStatus("failed"); }
   }
