@@ -79,6 +79,16 @@ async function createContext(browser, spec) {
   await context.route("**/api/workouts/active-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ session: null }) }));
   await context.route(/^https:\/\/[^/]+\.supabase\.co\//, async (route) => {
     const method = route.request().method();
+    const url = new URL(route.request().url());
+    if (method === "GET" && url.pathname.includes("/rest/v1/user_exercise_favorites")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "content-range": "0-0/0" },
+        body: JSON.stringify((spec.favoriteIds || []).map((exerciseId) => ({ exercise_id: exerciseId })))
+      });
+      return;
+    }
     await route.fulfill({ status: method === "POST" ? 201 : 200, contentType: "application/json", headers: { "content-range": "0-0/0" }, body: method === "HEAD" ? "" : "[]" });
   });
 
