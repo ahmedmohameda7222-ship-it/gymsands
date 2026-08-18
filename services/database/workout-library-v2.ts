@@ -1,6 +1,7 @@
 "use client";
 
 import { libraryActivityToWorkout, libraryAlternativeToWorkout } from "@/lib/activity-catalog/adapter";
+import type { CatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import type { LibraryProviderMeta } from "@/lib/activity-catalog/library-types";
 import {
   createCatalogRequestGroupId,
@@ -73,7 +74,7 @@ export function resolveCanonicalWorkoutFilterValues(filters: WorkoutFilters, opt
   return next;
 }
 
-export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string, context?: WorkoutLibraryRequestContext): Promise<NativeWorkoutLibraryResult<CanonicalWorkoutFilterOptions>> {
+export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: CatalogLocale, context?: WorkoutLibraryRequestContext): Promise<NativeWorkoutLibraryResult<CanonicalWorkoutFilterOptions>> {
   const result = await getLibraryDomainFilters(STRENGTH_DOMAIN, locale, context);
   // P10E Strength intentionally publishes no Library filter definitions. Keep
   // the screen shell but do not invent dimensions from legacy or page samples.
@@ -84,7 +85,7 @@ export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string
   };
 }
 
-export async function getWorkoutFilterOptionsWithStatus(locale?: string, context?: WorkoutLibraryRequestContext): Promise<NativeWorkoutLibraryResult<WorkoutFilterOptions>> {
+export async function getWorkoutFilterOptionsWithStatus(locale?: CatalogLocale, context?: WorkoutLibraryRequestContext): Promise<NativeWorkoutLibraryResult<WorkoutFilterOptions>> {
   const canonical = await getCanonicalWorkoutFilterOptionsWithStatus(locale, context);
   return {
     data: { muscleCategories: [], primaryMuscles: [], equipmentRequired: [], mechanics: [], exerciseTypes: [], forceTypes: [], experienceLevels: [], secondaryMuscles: [] },
@@ -93,11 +94,11 @@ export async function getWorkoutFilterOptionsWithStatus(locale?: string, context
   };
 }
 
-export async function getWorkoutFilterOptions(locale?: string, context?: WorkoutLibraryRequestContext) {
+export async function getWorkoutFilterOptions(locale?: CatalogLocale, context?: WorkoutLibraryRequestContext) {
   return (await getWorkoutFilterOptionsWithStatus(locale, context)).data;
 }
 
-export async function getWorkoutCategories(locale?: string, context?: WorkoutLibraryRequestContext) {
+export async function getWorkoutCategories(locale?: CatalogLocale, context?: WorkoutLibraryRequestContext) {
   await getLibraryDomainFilters(STRENGTH_DOMAIN, locale, context);
   return [] as string[];
 }
@@ -117,7 +118,7 @@ export async function getWorkoutsWithStatus(
   query = "",
   _filters: WorkoutFilters = {},
   cursor: string | null = null,
-  locale?: string,
+  locale?: CatalogLocale,
   context?: WorkoutLibraryRequestContext
 ): Promise<NativeWorkoutLibraryResult<Workout[]>> {
   const result = await searchLibraryDomainActivities({
@@ -156,17 +157,17 @@ export async function getWorkoutsWithStatus(
   };
 }
 
-export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page = 0, locale?: string, context?: WorkoutLibraryRequestContext) {
+export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page = 0, locale?: CatalogLocale, context?: WorkoutLibraryRequestContext) {
   if (page !== 0) throw new Error("Random-access Workout Library pages are not supported by the native cursor contract.");
   return (await getWorkoutsWithStatus(query, filters, null, locale, context)).data;
 }
 
-export async function getWorkout(id: string, locale?: string, context?: WorkoutLibraryRequestContext) {
+export async function getWorkout(id: string, locale?: CatalogLocale, context?: WorkoutLibraryRequestContext) {
   const result = await getLibraryDomainActivity(STRENGTH_DOMAIN, id, locale, context);
   return libraryActivityToWorkout(result.data, result.meta);
 }
 
-export async function getWorkoutAlternatives(id: string, limit = 6, locale?: string, context?: WorkoutLibraryRequestContext) {
+export async function getWorkoutAlternatives(id: string, limit = 6, locale?: CatalogLocale, context?: WorkoutLibraryRequestContext) {
   const result = await getLibraryDomainActivityAlternatives(STRENGTH_DOMAIN, id, { limit: Math.min(Math.max(limit, 1), 10), locale }, context);
   return { data: result.data.map((alternative) => libraryAlternativeToWorkout(alternative, result.meta)), status: statusFromMeta(result.meta) };
 }
