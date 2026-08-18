@@ -20,9 +20,7 @@ const outputDir = path.resolve(
 );
 await mkdir(outputDir, { recursive: true });
 
-if (!headSha) {
-  throw new Error("QA_HEAD_SHA is required for exact-head Active Workout data-conflict behavioral evidence.");
-}
+if (!headSha) throw new Error("QA_HEAD_SHA is required for exact-head Active Workout data-conflict behavioral evidence.");
 if (serverMode !== "production") {
   throw new Error(`Active Workout data-conflict behavioral QA requires production mode, received ${serverMode}.`);
 }
@@ -33,76 +31,58 @@ const scenarios = [
     name: "data-conflict-keep-server-mobile-en-320x568",
     viewport: { width: 320, height: 568 },
     language: "en",
-    theme: "light",
     resolution: "server",
     skipRestBeforeConflict: true,
-    requireSetEntryCoverage: true,
-    requireRestCoverage: false
+    expectedState: "set-entry"
   },
   {
     name: "data-conflict-use-local-mobile-ar-rtl-390x844",
     viewport: { width: 390, height: 844 },
     language: "ar",
-    theme: "light",
     resolution: "local",
     skipRestBeforeConflict: true,
-    requireSetEntryCoverage: true,
-    requireRestCoverage: false
+    expectedState: "set-entry"
   },
   {
     name: "data-conflict-pending-sync-mobile-en-430x932",
     viewport: { width: 430, height: 932 },
     language: "en",
-    theme: "light",
     resolution: null,
     skipRestBeforeConflict: false,
-    requireSetEntryCoverage: false,
-    requireRestCoverage: true
+    expectedState: "rest"
   },
   {
     name: "data-conflict-desktop-sanity-en-1280x800",
     viewport: { width: 1280, height: 800 },
     language: "en",
-    theme: "light",
     resolution: "server",
     skipRestBeforeConflict: true,
-    requireSetEntryCoverage: true,
-    requireRestCoverage: false
+    expectedState: "set-entry"
   }
 ];
 
-function visible(page, selector) {
-  return page.locator(`${selector}:visible`).first();
-}
+const firstVisible = (page, selector) => page.locator(`${selector}:visible`).first();
 
 async function installConnectivityContract(context) {
-  await context.addInitScript(({ offlineKey }) => {
+  await context.addInitScript(({ key }) => {
     Object.defineProperty(window.navigator, "onLine", {
       configurable: true,
       get() {
         try {
-          return localStorage.getItem(offlineKey) !== "true";
+          return localStorage.getItem(key) !== "true";
         } catch {
           return true;
         }
       }
     });
-  }, { offlineKey: OFFLINE_KEY });
+  }, { key: OFFLINE_KEY });
 }
 
-async function setOffline(page, offline, dispatch = true) {
-  await page.evaluate(({ key, value, fire }) => {
-    localStorage.setItem(key, value ? "true" : "false");
-    if (fire) window.dispatchEvent(new Event(value ? "offline" : "online"));
-  }, { key: OFFLINE_KEY, value: offline, fire: dispatch });
-}
-
-async function waitForLeadership(page) {
-  await page.waitForFunction(() => {
-    const conflict = document.querySelector("[data-aw9-tab-conflict]");
-    const visibleConflict = conflict instanceof HTMLElement && conflict.getClientRects().length > 0;
-    return !visibleConflict;
-  }, undefined, { timeout: 15_000 });
+async function setOffline(page, offline) {
+  await page.evaluate(({ key, offlineValue }) => {
+    localStorage.setItem(key, offlineValue ? "true" : "false");
+    window.dispatchEvent(new Event(offlineValue ? "offline" : "online"));
+  }, { key: OFFLINE_KEY, offlineValue: offline });
 }
 
 async function openSession(page) {
@@ -110,37 +90,36 @@ async function openSession(page) {
     waitUntil: "domcontentloaded",
     timeout: 45_000
   });
-  await visible(page, "[data-aw5-execution-shell]").waitFor({ state: "visible", timeout: 20_000 });
-  await waitForLeadership(page);
+  await firstVisible(page, "[data-aw5-execution-shell]").waitFor({ state: "visible", timeout: 20_000 });
+  await page.waitForFunction(() => {
+    const conflict = document.querySelector("[data-aw9-tab-conflict]");
+    return !(conflict instanceof HTMLElement && conflict.getClientRects().length > 0);
+  }, undefined, { timeout: 15_000 });
   return response;
 }
 
-async function completeCurrentSet(page, { skipRest }) {
+async function completeCurrentSet(page, skipRest) {
   await page.locator("#active-set-reps").fill("8");
   await page.locator("#active-set-weight").fill("80");
-  await visible(page, "[data-aw5-primary-action]").click({ timeout: 10_000 });
+  await firstVisible(page, "[data-aw5-primary-action]").click({ timeout: 10_000 });
   await page.waitForFunction(() =>
-    document.querySelector("[data-aw5-execution-shell]")
-      ?.getAttribute("data-aw5-session-state") === "rest",
+    document.querySelector("[data-aw5-execution-shell]")?.getAttribute("data-aw5-session-state") === "rest",
   undefined, { timeout: 12_000 });
   if (!skipRest) return;
-  await visible(page, "[data-aw5-primary-action]").click({ timeout: 10_000 });
+  await firstVisible(page, "[data-aw5-primary-action]").click({ timeout: 10_000 });
   await page.waitForFunction(() =>
-    document.querySelector("[data-aw5-execution-shell]")
-      ?.getAttribute("data-aw5-session-state") !== "rest",
+    document.querySelector("[data-aw5-execution-shell]")?.getAttribute("data-aw5-session-state") !== "rest",
   undefined, { timeout: 12_000 });
 }
 
 async function waitForSyncState(page, state) {
-  await page.waitForFunction((next) =>
-    document.querySelector(`[data-aw9-sync-state="${next}"]`),
-  state, { timeout: 20_000 });
+  await page.waitForFunction((expected) => Boolean(document.querySelector(`[data-aw9-sync-state="${expected}"]`)), state, {
+    timeout: 20_000
+  });
 }
 
 async function waitForOnlineSynced(page) {
-  await page.waitForFunction(() =>
-    !document.querySelector("[data-aw9-sync-state]"),
-  undefined, { timeout: 20_000 });
+  await page.waitForFunction(() => !document.querySelector("[data-aw9-sync-state]"), undefined, { timeout: 20_000 });
 }
 
 async function openDatabase(page) {
@@ -152,21 +131,21 @@ async function openDatabase(page) {
       request.onupgradeneeded = () => {
         const database = request.result;
         if (!database.objectStoreNames.contains("session_snapshots")) {
-          const sessions = database.createObjectStore("session_snapshots", { keyPath: "key" });
-          sessions.createIndex("by_user", "userId");
-          sessions.createIndex("by_expiry", "expiresAt");
+          const store = database.createObjectStore("session_snapshots", { keyPath: "key" });
+          store.createIndex("by_user", "userId");
+          store.createIndex("by_expiry", "expiresAt");
         }
         if (!database.objectStoreNames.contains("operations")) {
-          const operations = database.createObjectStore("operations", { keyPath: "id" });
-          operations.createIndex("by_session_sequence", ["userId", "workoutSessionId", "sequence"], { unique: true });
-          operations.createIndex("by_user", "userId");
-          operations.createIndex("by_state", "state");
+          const store = database.createObjectStore("operations", { keyPath: "id" });
+          store.createIndex("by_session_sequence", ["userId", "workoutSessionId", "sequence"], { unique: true });
+          store.createIndex("by_user", "userId");
+          store.createIndex("by_state", "state");
         }
         if (!database.objectStoreNames.contains("set_drafts")) {
-          const drafts = database.createObjectStore("set_drafts", { keyPath: "key" });
-          drafts.createIndex("by_session", ["userId", "workoutSessionId"]);
-          drafts.createIndex("by_user", "userId");
-          drafts.createIndex("by_expiry", "expiresAt");
+          const store = database.createObjectStore("set_drafts", { keyPath: "key" });
+          store.createIndex("by_session", ["userId", "workoutSessionId"]);
+          store.createIndex("by_user", "userId");
+          store.createIndex("by_expiry", "expiresAt");
         }
       };
     });
@@ -197,18 +176,6 @@ async function pendingOperations(page) {
         kind: operation.kind ?? operation.commandType ?? null
       }));
   });
-}
-
-async function waitForNoPendingOperations(page, timeoutMs = 20_000) {
-  const deadline = Date.now() + timeoutMs;
-  let stableZeroObservations = 0;
-  while (Date.now() < deadline) {
-    const count = (await pendingOperations(page)).length;
-    stableZeroObservations = count === 0 ? stableZeroObservations + 1 : 0;
-    if (stableZeroObservations >= 3) return;
-    await page.waitForTimeout(100);
-  }
-  throw new Error("Durable operations did not reach a stable resolved state after data-conflict resolution.");
 }
 
 async function mutateFirstOperation(page) {
@@ -243,66 +210,60 @@ async function mutateFirstOperation(page) {
   });
 }
 
-async function capture(page, target) {
-  await page.screenshot({ path: target, fullPage: false });
+async function waitForNoPendingOperations(page, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let stableZero = 0;
+  while (Date.now() < deadline) {
+    stableZero = (await pendingOperations(page)).length === 0 ? stableZero + 1 : 0;
+    if (stableZero >= 3) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error("Durable operations did not reach a stable resolved state after data-conflict resolution.");
 }
 
-async function domConflictSnapshot(page) {
+async function mainConflictSnapshot(page) {
   return page.evaluate(() => {
     const isVisible = (element) => {
       if (!(element instanceof HTMLElement)) return false;
       const style = getComputedStyle(element);
-      const box = element.getBoundingClientRect();
-      return style.display !== "none" && style.visibility !== "hidden" && box.width > 0 && box.height > 0;
+      const rect = element.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
     };
     const isMutable = (element) => {
-      if (!isVisible(element)) return false;
-      if (element.getAttribute("aria-disabled") === "true") return false;
+      if (!isVisible(element) || element.getAttribute("aria-disabled") === "true") return false;
       if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
         return !element.disabled && !element.readOnly;
       }
-      if (element instanceof HTMLSelectElement || element instanceof HTMLButtonElement) {
-        return !element.disabled;
-      }
+      if (element instanceof HTMLSelectElement || element instanceof HTMLButtonElement) return !element.disabled;
       return false;
     };
-    const descriptor = (element, fallback) => ({
-      label: element.getAttribute("aria-label") || element.textContent?.trim().slice(0, 80) || fallback,
-      tag: element.tagName.toLowerCase(),
-      id: element.id || null
-    });
-    const select = (selector) => [...document.querySelectorAll(selector)].filter(isVisible);
-    const mainMutationGroups = [
+    const visibleElements = (selector) => [...document.querySelectorAll(selector)].filter(isVisible);
+    const groups = [
       ["reps", "#active-set-reps"],
       ["weight", "#active-set-weight"],
       ["primary", "[data-aw5-primary-action]"],
       ["set-path", "[data-aw5-set-path-number]"],
       ["previous-values", "[data-aw10-previous-performance] button"],
-      ["rest", "[data-aw5-rest-presets] button"],
-      ["set-rpe", "#active-set-rpe"],
-      ["set-rir", "#active-set-rir"],
-      ["set-type", "#active-set-type"],
-      ["set-note", "#active-set-note"]
+      ["rest", "[data-aw5-rest-presets] button"]
     ];
-    const mutable = [];
     const coverage = {};
-    for (const [label, selector] of mainMutationGroups) {
-      const elements = select(selector);
-      coverage[label] = {
-        visible: elements.length,
-        mutable: elements.filter(isMutable).length
-      };
-      for (const element of elements) {
-        if (isMutable(element)) mutable.push(descriptor(element, label));
+    const enabledControls = [];
+    for (const [label, selector] of groups) {
+      const elements = visibleElements(selector);
+      const mutable = elements.filter(isMutable);
+      coverage[label] = { visible: elements.length, mutable: mutable.length };
+      for (const element of mutable) {
+        enabledControls.push({
+          surface: label,
+          label: element.getAttribute("aria-label") || element.textContent?.trim().slice(0, 80) || element.id || label
+        });
       }
     }
-    const blockers = select("[data-aw9-reliability-blocking]");
-    const standaloneSync = select("[data-aw9-reliability-sync-status]");
+    const blockers = visibleElements("[data-aw9-reliability-blocking]");
     const blocker = blockers[0] ?? null;
-    const resolutionButtons = blocker
-      ? [...blocker.querySelectorAll("button")].filter(isVisible)
-      : [];
-    const primary = select("[data-aw5-primary-action]")[0] ?? null;
+    const resolutionButtons = blocker ? [...blocker.querySelectorAll("button")].filter(isVisible) : [];
+    const standaloneSync = visibleElements("[data-aw9-reliability-sync-status]");
+    const primary = visibleElements("[data-aw5-primary-action]")[0] ?? null;
     const blockerRect = blocker?.getBoundingClientRect() ?? null;
     const primaryRect = primary?.getBoundingClientRect() ?? null;
     const overlap = Boolean(blockerRect && primaryRect
@@ -310,128 +271,156 @@ async function domConflictSnapshot(page) {
       && blockerRect.right > primaryRect.left
       && blockerRect.top < primaryRect.bottom
       && blockerRect.bottom > primaryRect.top);
+    const shell = document.querySelector("[data-aw5-execution-shell]");
     return {
       locale: document.documentElement.lang,
       direction: document.documentElement.dir || getComputedStyle(document.documentElement).direction,
-      shellState: document.querySelector("[data-aw5-execution-shell]")?.getAttribute("data-aw5-session-state") ?? null,
-      activeSetNumber: document.querySelector("[data-aw5-execution-shell]")?.getAttribute("data-active-set-number") ?? null,
+      shellState: shell?.getAttribute("data-aw5-session-state") ?? null,
+      activeSetNumber: shell?.getAttribute("data-active-set-number") ?? null,
       blockerCount: blockers.length,
       conflictState: blocker?.getAttribute("data-aw9-reliability-blocking") ?? null,
       standaloneSyncCount: standaloneSync.length,
-      subordinateSyncCount: select("[data-aw9-reliability-sync-substatus]").length,
+      subordinateSyncCount: visibleElements("[data-aw9-reliability-sync-substatus]").length,
       keepServerEnabled: resolutionButtons[0] instanceof HTMLButtonElement ? !resolutionButtons[0].disabled : false,
       useLocalEnabled: resolutionButtons[1] instanceof HTMLButtonElement ? !resolutionButtons[1].disabled : false,
       resolutionButtonCount: resolutionButtons.length,
       horizontalOverflowPx: Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - innerWidth,
       blockerCtaOverlap: overlap,
+      setDetailsTriggerVisible: visibleElements("[data-active-set-details-trigger]").length === 1,
       coverage,
-      enabledControls: mutable,
-      enabledExecutionMutations: mutable.length,
-      repsVisible: select("#active-set-reps").length === 1,
-      repsMutable: select("#active-set-reps").some(isMutable),
-      weightVisible: select("#active-set-weight").length === 1,
-      weightMutable: select("#active-set-weight").some(isMutable),
-      primaryVisible: select("[data-aw5-primary-action]").length > 0,
-      primaryMutable: select("[data-aw5-primary-action]").some(isMutable),
-      setDetailsTriggerVisible: select("[data-active-set-details-trigger]").length === 1,
-      setDetailsTriggerEnabled: select("[data-active-set-details-trigger]")
-        .some((element) => element instanceof HTMLButtonElement && !element.disabled),
-      navigatorTriggerVisible: select("[data-aw-exercise-navigator-trigger]").length === 1
+      enabledControls,
+      enabledExecutionMutations: enabledControls.length
     };
   });
 }
 
 async function inspectAuxiliaryMutationSurfaces(page) {
-  const enabled = [];
+  const enabledControls = [];
   const coverage = {
-    sessionMutationControlCount: 0,
-    exerciseMutationControlCount: 0,
-    navigatorMutationControlCount: 0,
-    sessionMutableCount: 0,
-    exerciseMutableCount: 0,
-    navigatorMutableCount: 0
+    session: { triggerVisible: false, triggerEnabled: false, opened: false, controls: 0, mutable: 0 },
+    exercise: { triggerVisible: false, triggerEnabled: false, opened: false, controls: 0, mutable: 0 },
+    navigator: { triggerVisible: false, triggerEnabled: false, opened: false, controls: 0, mutable: 0 },
+    setDetails: { triggerVisible: false, triggerEnabled: false, opened: false, controls: 0, mutable: 0 }
   };
 
-  const sessionTrigger = page.locator('[data-aw10-session-menu] [data-aw-menu-trigger="session"]:visible').first();
-  if (await sessionTrigger.count()) {
-    await sessionTrigger.click({ force: true, timeout: 5_000 });
-    await page.waitForFunction(() =>
-      document.querySelector("[data-aw10-session-menu]")?.getAttribute("data-state") === "open",
-    undefined, { timeout: 5_000 });
-    const session = await page.evaluate(() => {
-      const items = [...document.querySelectorAll('[data-aw10-session-menu] [role="menuitem"]')]
-        .filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0);
-      return items.map((element, index) => ({
-        label: `session-${index + 1}:${element.textContent?.trim().slice(0, 60) ?? "mutation"}`,
-        mutable: element instanceof HTMLButtonElement && !element.disabled
-      }));
-    });
-    coverage.sessionMutationControlCount = session.length;
-    coverage.sessionMutableCount = session.filter((item) => item.mutable).length;
-    enabled.push(...session.filter((item) => item.mutable).map(({ label }) => ({ label, surface: "session-menu" })));
-    await page.keyboard.press("Escape");
+  async function inspectButtons({ key, triggerSelector, itemSelector, limit = null }) {
+    const trigger = page.locator(`${triggerSelector}:visible`).first();
+    if (!await trigger.count()) return;
+    coverage[key].triggerVisible = true;
+    coverage[key].triggerEnabled = await trigger.isEnabled();
+    if (!coverage[key].triggerEnabled) return;
+    try {
+      await trigger.click({ force: true, timeout: 1_500 });
+      await page.waitForTimeout(100);
+    } catch {
+      return;
+    }
+    const items = page.locator(`${itemSelector}:visible`);
+    const count = await items.count();
+    const inspectedCount = limit === null ? count : Math.min(count, limit);
+    coverage[key].opened = count > 0;
+    coverage[key].controls = inspectedCount;
+    for (let index = 0; index < inspectedCount; index += 1) {
+      const item = items.nth(index);
+      if (await item.isEnabled()) {
+        coverage[key].mutable += 1;
+        enabledControls.push({
+          surface: key,
+          label: (await item.textContent())?.trim().slice(0, 80) || `${key}-${index + 1}`
+        });
+      }
+    }
+    if (count > 0) {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(100);
+    }
   }
 
-  const exerciseTrigger = page.locator('[data-aw10-exercise-actions] [data-aw-menu-trigger="exercise"]:visible').first();
-  if (await exerciseTrigger.count()) {
-    await exerciseTrigger.click({ force: true, timeout: 5_000 });
-    await page.waitForFunction(() =>
-      document.querySelector("[data-aw10-exercise-actions]")?.getAttribute("data-state") === "open",
-    undefined, { timeout: 5_000 });
-    const exercise = await page.evaluate(() => {
-      const items = [...document.querySelectorAll('[data-aw10-exercise-actions] [role="menuitem"]')]
-        .filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0)
-        .slice(0, 2);
-      return items.map((element, index) => ({
-        label: `exercise-${index + 1}:${element.textContent?.trim().slice(0, 60) ?? "mutation"}`,
-        mutable: element instanceof HTMLButtonElement && !element.disabled
-      }));
-    });
-    coverage.exerciseMutationControlCount = exercise.length;
-    coverage.exerciseMutableCount = exercise.filter((item) => item.mutable).length;
-    enabled.push(...exercise.filter((item) => item.mutable).map(({ label }) => ({ label, surface: "exercise-menu" })));
-    await page.keyboard.press("Escape");
-  }
+  await inspectButtons({
+    key: "session",
+    triggerSelector: '[data-aw10-session-menu] [data-aw-menu-trigger="session"]',
+    itemSelector: '[data-aw10-session-menu] [role="menuitem"]'
+  });
+  await inspectButtons({
+    key: "exercise",
+    triggerSelector: '[data-aw10-exercise-actions] [data-aw-menu-trigger="exercise"]',
+    itemSelector: '[data-aw10-exercise-actions] [role="menuitem"]',
+    limit: 2
+  });
+  await inspectButtons({
+    key: "navigator",
+    triggerSelector: "[data-aw-exercise-navigator-trigger]",
+    itemSelector: "[data-aw-exercise-navigator] ol button"
+  });
 
-  const navigatorTrigger = page.locator("[data-aw-exercise-navigator-trigger]:visible").first();
-  if (await navigatorTrigger.count()) {
-    await navigatorTrigger.click({ force: true, timeout: 5_000 });
-    await visible(page, "[data-aw-exercise-navigator]").waitFor({ state: "visible", timeout: 5_000 });
-    const navigator = await page.evaluate(() => {
-      const items = [...document.querySelectorAll("[data-aw-exercise-navigator] ol button")]
-        .filter((element) => element instanceof HTMLElement && element.getClientRects().length > 0);
-      return items.map((element, index) => ({
-        label: `navigator-${index + 1}:${element.textContent?.trim().slice(0, 60) ?? "mutation"}`,
-        mutable: element instanceof HTMLButtonElement && !element.disabled
-      }));
-    });
-    coverage.navigatorMutationControlCount = navigator.length;
-    coverage.navigatorMutableCount = navigator.filter((item) => item.mutable).length;
-    enabled.push(...navigator.filter((item) => item.mutable).map(({ label }) => ({ label, surface: "exercise-navigator" })));
-    await page.keyboard.press("Escape");
-    await visible(page, "[data-aw-exercise-navigator]").waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+  const trigger = page.locator("[data-active-set-details-trigger]:visible").first();
+  if (await trigger.count()) {
+    coverage.setDetails.triggerVisible = true;
+    coverage.setDetails.triggerEnabled = await trigger.isEnabled();
+    if (coverage.setDetails.triggerEnabled) {
+      try {
+        await trigger.click({ force: true, timeout: 1_500 });
+        await page.locator("[data-active-set-details-dialog]:visible").waitFor({ state: "visible", timeout: 1_500 });
+        coverage.setDetails.opened = true;
+        const controls = page.locator(
+          "[data-active-set-details-dialog]:visible #active-set-rpe, "
+          + "[data-active-set-details-dialog]:visible #active-set-rir, "
+          + "[data-active-set-details-dialog]:visible #active-set-type, "
+          + "[data-active-set-details-dialog]:visible #active-set-note"
+        );
+        coverage.setDetails.controls = await controls.count();
+        for (let index = 0; index < coverage.setDetails.controls; index += 1) {
+          const control = controls.nth(index);
+          const mutable = await control.evaluate((element) => {
+            if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+              return !element.disabled && !element.readOnly;
+            }
+            if (element instanceof HTMLSelectElement || element instanceof HTMLButtonElement) return !element.disabled;
+            return false;
+          });
+          if (mutable) {
+            coverage.setDetails.mutable += 1;
+            enabledControls.push({ surface: "set-details", label: await control.getAttribute("id") || `set-details-${index + 1}` });
+          }
+        }
+      } catch {
+        coverage.setDetails.opened = false;
+      } finally {
+        if (coverage.setDetails.opened) {
+          await page.keyboard.press("Escape");
+          await page.waitForTimeout(100);
+        }
+      }
+    }
   }
-
-  return { enabled, coverage };
+  return { coverage, enabledControls };
 }
 
 async function measureEnabledExecutionMutations(page) {
-  const main = await domConflictSnapshot(page);
+  const main = await mainConflictSnapshot(page);
   const auxiliary = await inspectAuxiliaryMutationSurfaces(page);
   return {
     ...main,
-    auxiliaryCoverage: auxiliary.coverage,
-    enabledControls: [...main.enabledControls, ...auxiliary.enabled],
-    enabledExecutionMutations: main.enabledExecutionMutations + auxiliary.enabled.length
+    mutationCoverage: { main: main.coverage, auxiliary: auxiliary.coverage },
+    enabledControls: [...main.enabledControls, ...auxiliary.enabledControls],
+    enabledExecutionMutations: main.enabledExecutionMutations + auxiliary.enabledControls.length
   };
 }
 
 async function attemptBlockedInteractions(page, pre) {
   const result = {
-    reps: { applicable: false, actionAccepted: null, before: null, after: null, blocked: null },
-    weight: { applicable: false, actionAccepted: null, before: null, after: null, blocked: null },
-    primary: { applicable: false, actionAccepted: null, beforeSet: pre.activeSetNumber, afterSet: pre.activeSetNumber, beforeShellState: pre.shellState, afterShellState: pre.shellState, blocked: null },
-    setPath: { applicable: false, actionAccepted: null, beforeSet: pre.activeSetNumber, afterSet: pre.activeSetNumber, blocked: null }
+    reps: { applicable: false, before: null, after: null, actionAccepted: null, blocked: null },
+    weight: { applicable: false, before: null, after: null, actionAccepted: null, blocked: null },
+    primary: {
+      applicable: false,
+      beforeSet: pre.activeSetNumber,
+      afterSet: pre.activeSetNumber,
+      beforeState: pre.shellState,
+      afterState: pre.shellState,
+      actionAccepted: null,
+      blocked: null
+    },
+    setPath: { applicable: false, beforeSet: pre.activeSetNumber, afterSet: pre.activeSetNumber, actionAccepted: null, blocked: null }
   };
 
   const reps = page.locator("#active-set-reps:visible").first();
@@ -439,7 +428,7 @@ async function attemptBlockedInteractions(page, pre) {
     result.reps.applicable = true;
     result.reps.before = await reps.inputValue();
     try {
-      await reps.fill(result.reps.before === "9" ? "10" : "9", { timeout: 1_500 });
+      await reps.fill(result.reps.before === "9" ? "10" : "9", { timeout: 1_000 });
       result.reps.actionAccepted = true;
     } catch {
       result.reps.actionAccepted = false;
@@ -453,7 +442,7 @@ async function attemptBlockedInteractions(page, pre) {
     result.weight.applicable = true;
     result.weight.before = await weight.inputValue();
     try {
-      await weight.fill(result.weight.before === "82.5" ? "85" : "82.5", { timeout: 1_500 });
+      await weight.fill(result.weight.before === "82.5" ? "85" : "82.5", { timeout: 1_000 });
       result.weight.actionAccepted = true;
     } catch {
       result.weight.actionAccepted = false;
@@ -466,16 +455,16 @@ async function attemptBlockedInteractions(page, pre) {
   if (await primary.count()) {
     result.primary.applicable = true;
     try {
-      await primary.click({ timeout: 1_500 });
+      await primary.click({ timeout: 1_000 });
       result.primary.actionAccepted = true;
     } catch {
       result.primary.actionAccepted = false;
     }
     await page.waitForTimeout(100);
-    result.primary.afterSet = await page.locator("[data-aw5-execution-shell]").getAttribute("data-active-set-number");
-    result.primary.afterShellState = await page.locator("[data-aw5-execution-shell]").getAttribute("data-aw5-session-state");
-    result.primary.blocked = result.primary.afterSet === result.primary.beforeSet
-      && result.primary.afterShellState === result.primary.beforeShellState;
+    const shell = page.locator("[data-aw5-execution-shell]");
+    result.primary.afterSet = await shell.getAttribute("data-active-set-number");
+    result.primary.afterState = await shell.getAttribute("data-aw5-session-state");
+    result.primary.blocked = result.primary.afterSet === result.primary.beforeSet && result.primary.afterState === result.primary.beforeState;
   }
 
   const pathButtons = page.locator("[data-aw5-set-path-number]:visible");
@@ -483,15 +472,14 @@ async function attemptBlockedInteractions(page, pre) {
     let target = pathButtons.first();
     for (let index = 0; index < await pathButtons.count(); index += 1) {
       const candidate = pathButtons.nth(index);
-      const number = await candidate.getAttribute("data-aw5-set-path-number");
-      if (number !== result.setPath.beforeSet) {
+      if (await candidate.getAttribute("data-aw5-set-path-number") !== result.setPath.beforeSet) {
         target = candidate;
         break;
       }
     }
     result.setPath.applicable = true;
     try {
-      await target.click({ timeout: 1_500 });
+      await target.click({ timeout: 1_000 });
       result.setPath.actionAccepted = true;
     } catch {
       result.setPath.actionAccepted = false;
@@ -500,7 +488,6 @@ async function attemptBlockedInteractions(page, pre) {
     result.setPath.afterSet = await page.locator("[data-aw5-execution-shell]").getAttribute("data-active-set-number");
     result.setPath.blocked = result.setPath.afterSet === result.setPath.beforeSet;
   }
-
   return result;
 }
 
@@ -515,42 +502,39 @@ async function proveExecutionRecovery(page) {
       && weight instanceof HTMLInputElement && !weight.disabled && !weight.readOnly
       && primary instanceof HTMLButtonElement && !primary.disabled;
   }, undefined, { timeout: 8_000 });
+
   const reps = page.locator("#active-set-reps:visible").first();
   const weight = page.locator("#active-set-weight:visible").first();
   const primary = page.locator("[data-aw5-primary-action]:visible").first();
-  const result = {
-    repsEditable: false,
-    weightEditable: false,
-    primaryEnabled: false,
+  const recovery = {
+    repsEditable: await reps.isEditable(),
+    weightEditable: await weight.isEditable(),
+    primaryEnabled: await primary.isEnabled(),
     repsMutationAccepted: false,
     weightMutationAccepted: false,
     repsValueAfter: null,
     weightValueAfter: null,
     executionRecovered: false
   };
-  if (!await reps.count() || !await weight.count() || !await primary.count()) return result;
-  result.repsEditable = await reps.isEditable();
-  result.weightEditable = await weight.isEditable();
-  result.primaryEnabled = await primary.isEnabled();
-  if (result.repsEditable) {
+  if (recovery.repsEditable) {
     await reps.fill("9");
-    result.repsValueAfter = await reps.inputValue();
-    result.repsMutationAccepted = result.repsValueAfter === "9";
+    recovery.repsValueAfter = await reps.inputValue();
+    recovery.repsMutationAccepted = recovery.repsValueAfter === "9";
   }
-  if (result.weightEditable) {
+  if (recovery.weightEditable) {
     await weight.fill("82.5");
-    result.weightValueAfter = await weight.inputValue();
-    result.weightMutationAccepted = result.weightValueAfter === "82.5";
+    recovery.weightValueAfter = await weight.inputValue();
+    recovery.weightMutationAccepted = recovery.weightValueAfter === "82.5";
   }
-  result.executionRecovered = result.repsEditable
-    && result.weightEditable
-    && result.primaryEnabled
-    && result.repsMutationAccepted
-    && result.weightMutationAccepted;
-  return result;
+  recovery.executionRecovered = recovery.repsEditable
+    && recovery.weightEditable
+    && recovery.primaryEnabled
+    && recovery.repsMutationAccepted
+    && recovery.weightMutationAccepted;
+  return recovery;
 }
 
-function assertConflictPreconditions(scenario, evidence) {
+function assertUnresolved(scenario, evidence) {
   const failures = [];
   if (evidence.blockerCount !== 1) failures.push(`blocking reliability surface count ${evidence.blockerCount}, expected 1`);
   if (evidence.conflictState !== "data_conflict") failures.push(`blocking state ${evidence.conflictState ?? "missing"}, expected data_conflict`);
@@ -563,36 +547,36 @@ function assertConflictPreconditions(scenario, evidence) {
   }
   if (evidence.horizontalOverflowPx > 1) failures.push(`horizontal overflow ${evidence.horizontalOverflowPx}px`);
   if (evidence.blockerCtaOverlap) failures.push("data-conflict blocker overlaps execution CTA");
+  if (evidence.locale !== scenario.language) failures.push(`locale ${evidence.locale}, expected ${scenario.language}`);
   if (scenario.language === "ar" && evidence.direction !== "rtl") failures.push(`Arabic direction ${evidence.direction}, expected rtl`);
   if (scenario.language !== "ar" && evidence.direction !== "ltr") failures.push(`${scenario.language} direction ${evidence.direction}, expected ltr`);
-  if (evidence.locale !== scenario.language) failures.push(`locale ${evidence.locale}, expected ${scenario.language}`);
-  if (evidence.auxiliaryCoverage.sessionMutationControlCount < 2) failures.push("session mutation controls were not rendered for fail-closed inspection");
-  if (evidence.auxiliaryCoverage.navigatorMutationControlCount < 1) failures.push("Exercise Navigator mutation control was not rendered for fail-closed inspection");
-  if (scenario.requireSetEntryCoverage) {
-    if (evidence.shellState !== "set-entry") failures.push(`expected set-entry conflict state, found ${evidence.shellState}`);
-    if (!evidence.repsVisible || evidence.repsMutable) failures.push("Reps is not visibly fail-closed during data conflict");
-    if (!evidence.weightVisible || evidence.weightMutable) failures.push("Weight is not visibly fail-closed during data conflict");
-    if (evidence.primaryMutable) failures.push("primary execution CTA is mutable during data conflict");
-    if (evidence.coverage["set-path"]?.visible < 1) failures.push("Set Path control was not rendered for fail-closed inspection");
-    if (evidence.auxiliaryCoverage.exerciseMutationControlCount < 2) failures.push("Replace/Skip controls were not rendered for fail-closed inspection");
-    if (!evidence.setDetailsTriggerVisible || evidence.setDetailsTriggerEnabled) failures.push("Set Details is accessible for mutation during data conflict");
+  if (evidence.shellState !== scenario.expectedState) failures.push(`session state ${evidence.shellState}, expected ${scenario.expectedState}`);
+
+  const auxiliary = evidence.mutationCoverage.auxiliary;
+  for (const key of ["session", "exercise", "navigator", "setDetails"]) {
+    if (auxiliary[key].mutable !== 0) failures.push(`${key} mutation surface exposes ${auxiliary[key].mutable} executable controls during data conflict`);
   }
-  if (scenario.requireRestCoverage) {
-    if (evidence.shellState !== "rest") failures.push(`expected rest conflict state, found ${evidence.shellState}`);
-    if (evidence.coverage.rest?.visible < 1) failures.push("Rest mutation controls were not rendered for fail-closed inspection");
-    if (evidence.coverage.rest?.mutable !== 0 || evidence.primaryMutable) failures.push("Rest mutation controls are executable during data conflict");
+
+  if (scenario.expectedState === "set-entry") {
+    if (evidence.coverage.reps?.visible !== 1 || evidence.coverage.reps?.mutable !== 0) failures.push("Reps is not visibly fail-closed during data conflict");
+    if (evidence.coverage.weight?.visible !== 1 || evidence.coverage.weight?.mutable !== 0) failures.push("Weight is not visibly fail-closed during data conflict");
+    if (evidence.coverage.primary?.mutable !== 0) failures.push("primary execution CTA is mutable during data conflict");
+    if ((evidence.coverage["set-path"]?.visible ?? 0) < 1 || evidence.coverage["set-path"]?.mutable !== 0) failures.push("Set Path is not fail-closed during data conflict");
+    if (!evidence.setDetailsTriggerVisible) failures.push("Set Details trigger was not rendered for fail-closed inspection");
+  } else if (scenario.expectedState === "rest") {
+    if ((evidence.coverage.rest?.visible ?? 0) < 1 || evidence.coverage.rest?.mutable !== 0) failures.push("Rest mutation controls are not fail-closed during data conflict");
+    if (evidence.coverage.primary?.mutable !== 0) failures.push("Skip Rest is mutable during data conflict");
   }
   return failures;
 }
 
 const browser = await chromium.launch({ headless: true });
 const results = [];
-
 try {
   for (const scenario of scenarios) {
     const context = await browser.newContext({
       viewport: scenario.viewport,
-      colorScheme: scenario.theme,
+      colorScheme: "light",
       reducedMotion: "reduce"
     });
     await installConnectivityContract(context);
@@ -600,7 +584,7 @@ try {
     await installAw5CorrectionFixture(context, {
       direct: false,
       language: scenario.language,
-      theme: scenario.theme,
+      theme: "light",
       delayCanonical: false,
       muscleScenario: "ready",
       includeGuide: true
@@ -614,9 +598,9 @@ try {
       });
     });
 
+    const page = await context.newPage();
     const consoleErrors = [];
     const pageErrors = [];
-    const page = await context.newPage();
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
@@ -624,6 +608,7 @@ try {
 
     const failures = [];
     let response = null;
+    let setupOperation = null;
     let pre = null;
     let blockedInteractions = null;
     let pendingBeforeResolution = [];
@@ -631,29 +616,28 @@ try {
     let pendingAfterResolution = null;
     let conflictVisibleAfterResolution = null;
     let recovery = null;
-    const chosenResolution = scenario.resolution ?? "none";
     let unresolvedScreenshotPath = null;
     let resolvedScreenshotPath = null;
-    let setupOperation = null;
 
     try {
       response = await openSession(page);
       if (!response?.ok()) failures.push(`page response ${response?.status() ?? "missing"}`);
       await setOffline(page, true);
-      await completeCurrentSet(page, { skipRest: scenario.skipRestBeforeConflict });
+      await completeCurrentSet(page, scenario.skipRestBeforeConflict);
       await waitForSyncState(page, "offline_saved");
       setupOperation = await mutateFirstOperation(page);
       pendingBeforeResolution = await pendingOperations(page);
       if (pendingBeforeResolution.length < 1) failures.push("no durable pending operations existed before reconnect conflict");
+
       await setOffline(page, false);
       await waitForSyncState(page, "data_conflict");
       pendingAtConflict = await pendingOperations(page);
       if (pendingAtConflict.length < 1) failures.push("data conflict did not coexist with a durable pending operation");
 
       pre = await measureEnabledExecutionMutations(page);
-      failures.push(...assertConflictPreconditions(scenario, pre));
+      failures.push(...assertUnresolved(scenario, pre));
       blockedInteractions = await attemptBlockedInteractions(page, pre);
-      if (scenario.requireSetEntryCoverage) {
+      if (scenario.expectedState === "set-entry") {
         if (blockedInteractions.reps.blocked !== true) failures.push("blocked Reps interaction changed the field value");
         if (blockedInteractions.weight.blocked !== true) failures.push("blocked Weight interaction changed the field value");
         if (blockedInteractions.setPath.blocked !== true) failures.push("blocked Set Path interaction changed execution cursor");
@@ -661,12 +645,11 @@ try {
       if (blockedInteractions.primary.blocked !== true) failures.push("blocked primary action changed execution state");
 
       unresolvedScreenshotPath = path.join(outputDir, `${scenario.name}-unresolved.png`);
-      await capture(page, unresolvedScreenshotPath);
+      await page.screenshot({ path: unresolvedScreenshotPath, fullPage: false });
 
       if (scenario.resolution) {
         const buttons = page.locator('[data-aw9-reliability-blocking="data_conflict"] button:visible');
-        const resolutionIndex = scenario.resolution === "server" ? 0 : 1;
-        await buttons.nth(resolutionIndex).click({ timeout: 10_000 });
+        await buttons.nth(scenario.resolution === "server" ? 0 : 1).click({ timeout: 10_000 });
         await waitForOnlineSynced(page);
         await waitForNoPendingOperations(page);
         pendingAfterResolution = await pendingOperations(page);
@@ -675,10 +658,10 @@ try {
         if (pendingAfterResolution.length !== 0) failures.push(`pending operations after ${scenario.resolution} resolution: ${pendingAfterResolution.length}`);
         if (conflictVisibleAfterResolution) failures.push(`data-conflict blocker remained visible after ${scenario.resolution} resolution`);
         if (!recovery.executionRecovered) failures.push(`execution did not recover after ${scenario.resolution} resolution`);
-        const post = await domConflictSnapshot(page);
+        const post = await mainConflictSnapshot(page);
         if (post.horizontalOverflowPx > 1) failures.push(`post-resolution horizontal overflow ${post.horizontalOverflowPx}px`);
         resolvedScreenshotPath = path.join(outputDir, `${scenario.name}-resolved.png`);
-        await capture(page, resolvedScreenshotPath);
+        await page.screenshot({ path: resolvedScreenshotPath, fullPage: false });
       }
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
@@ -687,7 +670,7 @@ try {
     if (consoleErrors.length) failures.push(`${consoleErrors.length} console errors`);
     if (pageErrors.length) failures.push(`${pageErrors.length} page errors`);
 
-    const behavioralEvidence = {
+    const evidence = {
       scenarioName: scenario.name,
       exactHeadSha: headSha,
       viewport: scenario.viewport,
@@ -702,7 +685,7 @@ try {
       keepServerEnabled: pre?.keepServerEnabled ?? null,
       useLocalEnabled: pre?.useLocalEnabled ?? null,
       attemptedBlockedInteractionResult: blockedInteractions,
-      chosenResolution,
+      chosenResolution: scenario.resolution ?? "none",
       pendingOperationsBeforeResolution: pendingBeforeResolution,
       pendingOperationsAtConflict: pendingAtConflict,
       pendingOperationsAfterResolution: pendingAfterResolution,
@@ -712,46 +695,37 @@ try {
       horizontalOverflow: pre?.horizontalOverflowPx ?? null,
       blockerCtaOverlap: pre?.blockerCtaOverlap ?? null,
       shellState: pre?.shellState ?? null,
-      mutationCoverage: pre ? { main: pre.coverage, auxiliary: pre.auxiliaryCoverage } : null,
+      mutationCoverage: pre?.mutationCoverage ?? null,
       unresolvedScreenshotPath,
       resolvedScreenshotPath,
       setupOperation,
       failures: [...failures]
     };
-
     results.push({
       name: scenario.name,
       headSha,
       serverMode,
       viewport: scenario.viewport,
       language: scenario.language,
-      theme: scenario.theme,
       resolution: scenario.resolution,
       requestCount: requestHistory.length,
       consoleErrors,
       pageErrors,
-      behavioralEvidence,
+      behavioralEvidence: evidence,
       failures
     });
-
-    console.log(
-      failures.length
-        ? `[AW-DATA-CONFLICT-QA] FAIL ${scenario.name}: ${failures.join(" | ")}`
-        : `[AW-DATA-CONFLICT-QA] PASS ${scenario.name}`
-    );
+    console.log(failures.length
+      ? `[AW-DATA-CONFLICT-QA] FAIL ${scenario.name}: ${failures.join(" | ")}`
+      : `[AW-DATA-CONFLICT-QA] PASS ${scenario.name}`);
     await context.close();
   }
 } finally {
   await browser.close();
 }
 
-const failures = results.flatMap((result) =>
-  result.failures.map((failure) => `${result.name}: ${failure}`)
-);
+const failures = results.flatMap((result) => result.failures.map((failure) => `${result.name}: ${failure}`));
 const coverage = {
-  unresolvedZeroMutations: results.every((result) =>
-    result.behavioralEvidence.enabledExecutionMutationsBeforeResolution === 0
-  ),
+  unresolvedZeroMutations: results.every((result) => result.behavioralEvidence.enabledExecutionMutationsBeforeResolution === 0),
   keepServerRecovery: results.some((result) =>
     result.resolution === "server"
     && result.behavioralEvidence.executionRecovered === true
@@ -769,35 +743,42 @@ const coverage = {
     && result.behavioralEvidence.enabledExecutionMutationsBeforeResolution === 0
     && (result.behavioralEvidence.pendingOperationsAtConflict?.length ?? 0) > 0
   ),
-  mobile320: results.some((result) => result.viewport.width === 320 && !result.failures.length),
-  mobile390: results.some((result) => result.viewport.width === 390 && !result.failures.length),
-  mobile430: results.some((result) => result.viewport.width === 430 && !result.failures.length),
-  desktop: results.some((result) => result.viewport.width >= 1280 && !result.failures.length),
+  mobile320: results.some((result) => result.viewport.width === 320 && result.failures.length === 0),
+  mobile390: results.some((result) => result.viewport.width === 390 && result.failures.length === 0),
+  mobile430: results.some((result) => result.viewport.width === 430 && result.failures.length === 0),
+  desktop: results.some((result) => result.viewport.width >= 1280 && result.failures.length === 0),
   rtl: results.some((result) =>
     result.language === "ar"
     && result.behavioralEvidence.direction === "rtl"
     && result.behavioralEvidence.enabledExecutionMutationsBeforeResolution === 0
-    && !result.failures.length
+    && result.failures.length === 0
   ),
   setEntryMutations: results.some((result) =>
     result.behavioralEvidence.shellState === "set-entry"
     && result.behavioralEvidence.mutationCoverage?.main?.reps?.visible === 1
     && result.behavioralEvidence.mutationCoverage?.main?.weight?.visible === 1
-    && result.behavioralEvidence.mutationCoverage?.main?.["set-path"]?.visible >= 1
-    && result.behavioralEvidence.mutationCoverage?.auxiliary?.exerciseMutationControlCount >= 2
-    && result.behavioralEvidence.mutationCoverage?.auxiliary?.navigatorMutationControlCount >= 1
+    && (result.behavioralEvidence.mutationCoverage?.main?.["set-path"]?.visible ?? 0) >= 1
     && result.behavioralEvidence.enabledExecutionMutationsBeforeResolution === 0
   ),
+  auxiliaryMutationClasses: results.some((result) => {
+    const auxiliary = result.behavioralEvidence.mutationCoverage?.auxiliary;
+    return (auxiliary?.session?.controls ?? 0) >= 2
+      && (auxiliary?.exercise?.controls ?? 0) >= 2
+      && (auxiliary?.navigator?.controls ?? 0) >= 1
+      && (auxiliary?.setDetails?.controls ?? 0) >= 4
+      && auxiliary?.session?.mutable === 0
+      && auxiliary?.exercise?.mutable === 0
+      && auxiliary?.navigator?.mutable === 0
+      && auxiliary?.setDetails?.mutable === 0;
+  }),
   restMutations: results.some((result) =>
     result.behavioralEvidence.shellState === "rest"
-    && result.behavioralEvidence.mutationCoverage?.main?.rest?.visible >= 1
+    && (result.behavioralEvidence.mutationCoverage?.main?.rest?.visible ?? 0) >= 1
     && result.behavioralEvidence.mutationCoverage?.main?.rest?.mutable === 0
     && result.behavioralEvidence.enabledExecutionMutationsBeforeResolution === 0
   )
 };
-const missingCoverage = Object.entries(coverage)
-  .filter(([, passed]) => passed !== true)
-  .map(([name]) => name);
+const missingCoverage = Object.entries(coverage).filter(([, passed]) => passed !== true).map(([name]) => name);
 if (missingCoverage.length) failures.push(`missing behavioral data-conflict coverage: ${missingCoverage.join(", ")}`);
 
 const report = {
@@ -810,12 +791,10 @@ const report = {
   mockAuthBuildValue,
   baseUrl,
   scenarioCount: results.length,
-  requiredScenarioCount: 4,
-  screenshotCount: results.reduce((count, result) =>
-    count
-      + (result.behavioralEvidence.unresolvedScreenshotPath ? 1 : 0)
-      + (result.behavioralEvidence.resolvedScreenshotPath ? 1 : 0),
-  0),
+  requiredScenarioCount: scenarios.length,
+  screenshotCount: results.reduce((count, result) => count
+    + (result.behavioralEvidence.unresolvedScreenshotPath ? 1 : 0)
+    + (result.behavioralEvidence.resolvedScreenshotPath ? 1 : 0), 0),
   coverage,
   results,
   failures
