@@ -156,7 +156,7 @@ function workout(id: string, name: string): Workout {
     instructions: "Controlled repetition",
     notes: null,
     catalog_slug: id,
-    catalog_source: "library_v2",
+    catalog_source: "external",
     exercise_url: null,
     video_url: null,
     custom_video_url: null,
