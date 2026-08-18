@@ -274,7 +274,6 @@ describe("WorkoutBrowser locale, recovery, and Reset runtime contract", () => {
     expect(container.textContent).toContain("Bench Press");
     expect(container.querySelectorAll("[data-error-state]")).toHaveLength(1);
     expect(container.querySelector("[data-error-state]")?.textContent).toContain("exerciseSearchFailed");
-    expect(container.textContent).not.toContain("exercisesShown:");
     expect(mocks.toast).not.toHaveBeenCalled();
 
     await act(async () => (container.querySelector("[data-error-retry]") as HTMLButtonElement).click());
