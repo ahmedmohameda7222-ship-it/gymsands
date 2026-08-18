@@ -44,6 +44,12 @@ type FilterKey =
   | "experienceLevels"
   | "secondaryMuscles";
 
+type SuccessfulBrowseCriteria = {
+  query: string;
+  filters: Record<FilterKey, string[]>;
+  favoritesOnly: boolean;
+};
+
 const emptyFilters: Record<FilterKey, string[]> = {
   muscleCategories: [],
   primaryMuscles: [],
@@ -159,6 +165,7 @@ export function WorkoutBrowser() {
   const [filterError, setFilterError] = useState("");
   const [resultStatus, setResultStatus] = useState<WorkoutLibraryStatus | null>(null);
   const [resultError, setResultError] = useState("");
+  const [lastSuccessfulCriteria, setLastSuccessfulCriteria] = useState<SuccessfulBrowseCriteria | null>(null);
   const [reloadResultsNonce, setReloadResultsNonce] = useState(0);
   const [personalLibraryMessages, setPersonalLibraryMessages] = useState<string[]>([]);
   const [isLoadingPersonalLibrary, setIsLoadingPersonalLibrary] = useState(true);
@@ -238,6 +245,7 @@ export function WorkoutBrowser() {
       setIsLoading(false);
       setResultError("");
       setResultStatus(null);
+      setLastSuccessfulCriteria(null);
       return;
     }
     let active = true;
@@ -249,6 +257,7 @@ export function WorkoutBrowser() {
         .then((result) => {
           if (!active) return;
           setWorkouts(result.data);
+          setLastSuccessfulCriteria({ query: query.trim(), filters, favoritesOnly });
           if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
           setResultStatus(result.status);
           setNextProviderCursor(result.pagination?.nextCursor ?? null);
@@ -268,12 +277,14 @@ export function WorkoutBrowser() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [catalogLocale, filters, hasActiveLibraryRequest, isHydrated, query, reloadResultsNonce, requestFilters, tr]);
+  }, [catalogLocale, favoritesOnly, filters, hasActiveLibraryRequest, isHydrated, query, reloadResultsNonce, requestFilters, tr]);
 
-  const visibleCustomExercises = hasActiveLibraryRequest ? customExercises.filter((workout) => matchesWorkoutRecord(workout, query.trim(), filters, filterOptions)) : [];
-  const visibleGlobalExercises = hasActiveLibraryRequest ? workouts.filter((workout) => matchesWorkoutRecord(workout, query.trim(), filters, filterOptions)) : [];
+  const currentCriteria: SuccessfulBrowseCriteria = { query: query.trim(), filters, favoritesOnly };
+  const displayCriteria = resultError && lastSuccessfulCriteria ? lastSuccessfulCriteria : currentCriteria;
+  const visibleCustomExercises = hasActiveLibraryRequest ? customExercises.filter((workout) => matchesWorkoutRecord(workout, displayCriteria.query, displayCriteria.filters, filterOptions)) : [];
+  const visibleGlobalExercises = hasActiveLibraryRequest ? workouts.filter((workout) => matchesWorkoutRecord(workout, displayCriteria.query, displayCriteria.filters, filterOptions)) : [];
   const allVisibleWorkouts = [...visibleCustomExercises, ...visibleGlobalExercises].filter((workout, index, all) => all.findIndex((item) => item.id === workout.id) === index);
-  const filteredWorkouts = favoritesOnly ? allVisibleWorkouts.filter((workout) => favoriteIds.includes(workout.id)) : allVisibleWorkouts;
+  const filteredWorkouts = displayCriteria.favoritesOnly ? allVisibleWorkouts.filter((workout) => favoriteIds.includes(workout.id)) : allVisibleWorkouts;
   const duplicateExerciseNames = useMemo(() => duplicateWorkoutNames(filteredWorkouts), [filteredWorkouts]);
   const qualityCounts = useMemo(() => summarizeExerciseQuality(filteredWorkouts, duplicateExerciseNames), [duplicateExerciseNames, filteredWorkouts]);
 
@@ -285,6 +296,7 @@ export function WorkoutBrowser() {
     try {
       const result = await getWorkoutsWithStatus(query.trim(), requestFilters, nextProviderCursor, catalogLocale);
       setWorkouts((current) => [...current, ...result.data]);
+      setLastSuccessfulCriteria({ query: query.trim(), filters, favoritesOnly });
       if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
       setResultStatus(result.status);
       setNextProviderCursor(result.pagination?.nextCursor ?? null);
@@ -583,9 +595,9 @@ export function WorkoutBrowser() {
         />
       ) : null}
 
-      {resultMessages.map((message, index) => (
+      {!resultError ? resultMessages.map((message, index) => (
         <StatusBanner key={`${index}-${message}`} tone="warning" title={tr("librarySourceNotice")} description={tr("librarySourceNoticeDescription")} />
-      ))}
+      )) : null}
 
       {resultError ? (
         <ErrorState
