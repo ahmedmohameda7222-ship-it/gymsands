@@ -225,9 +225,9 @@ try {
     if (await reset.isDisabled()) throw new Error("error-recovery: active Show All/query state unexpectedly disabled Reset");
 
     state.failActivities = false;
-    state.activityName = "Recovered Bench Press";
+    state.activityName = "Failure Probe Recovered Bench Press";
     await retry.click();
-    await page.getByText("Recovered Bench Press", { exact: true }).waitFor({ timeout: 20_000 });
+    await page.getByText("Failure Probe Recovered Bench Press", { exact: true }).waitFor({ timeout: 20_000 });
     if (await page.getByText("Exercise search failed", { exact: true }).count() !== 0) throw new Error("error-recovery: persistent error surface remained after successful retry");
     if (await searchInput.inputValue() !== "failure probe") throw new Error("error-recovery: retry changed the query");
     assertStrictRequests("error-recovery", state.libraryRequests, "en");
