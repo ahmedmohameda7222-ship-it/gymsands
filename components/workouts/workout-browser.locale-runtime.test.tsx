@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getFavorites: vi.fn(),
   getCustom: vi.fn(),
   toast: vi.fn(),
+  tr: vi.fn((key: string, variables?: Record<string, unknown>) => variables?.count !== undefined ? `${key}:${variables.count}` : key),
   language: "en" as "en" | "de" | "ar"
 }));
 
@@ -38,7 +39,7 @@ vi.mock("@/lib/i18n/train", () => ({
     language: mocks.language,
     dir: mocks.language === "ar" ? "rtl" : "ltr",
     locale: mocks.language === "en" ? "en-US" : mocks.language === "de" ? "de-DE" : "ar",
-    tr: (key: string, variables?: Record<string, unknown>) => variables?.count !== undefined ? `${key}:${variables.count}` : key
+    tr: mocks.tr
   })
 }));
 
@@ -186,6 +187,7 @@ describe("WorkoutBrowser locale, recovery, and Reset runtime contract", () => {
     window.history.replaceState(null, "", "/workouts");
     mocks.language = "en";
     mocks.toast.mockReset();
+    mocks.tr.mockClear();
     mocks.getFilters.mockReset().mockResolvedValue({
       data: { muscleCategories: [], primaryMuscles: [], equipmentRequired: [], mechanics: [], exerciseTypes: [], forceTypes: [], experienceLevels: [], secondaryMuscles: [] },
       status: { source: "live" }
