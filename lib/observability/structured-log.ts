@@ -18,16 +18,21 @@ export type OperationalLog = {
   operation?: string;
   outcome?: "success" | "success_with_fallback" | "failed_closed" | "invalid_request" | "rejected" | "error" | "ignored";
   provider_requested?: "legacy" | "external" | "external_with_legacy_fallback" | "library_v2" | "library_v2_with_legacy_fallback";
+  provider_primary?: "legacy" | "external" | "library_v2" | "none";
   provider_used?: "legacy" | "external" | "library_v2" | "none";
   fallback_occurred?: boolean;
-  fallback_reason?: "none" | "external_timeout" | "external_network_error" | "external_rate_limited" | "external_upstream_5xx" | "external_not_found";
+  fallback_reason?: "none" | "external_timeout" | "external_network_error" | "external_rate_limited" | "external_upstream_5xx" | "external_not_found" | "catalog_timeout" | "catalog_network_error" | "catalog_rate_limited" | "catalog_upstream_error" | "catalog_not_found";
   fallback_stage?: "none" | "provider_request" | "response_status" | "response_parse" | "response_validation";
+  degraded?: boolean;
+  catalog_domain?: string;
   http_status?: number;
   provider_duration_ms?: number;
   total_duration_ms?: number;
   result_count?: number;
   page?: number;
   limit?: number;
+  page_size?: number;
+  cursor_present?: boolean;
   has_search?: boolean;
   filter_count?: number;
   response_bytes?: number;
@@ -63,8 +68,12 @@ export type OperationalLog = {
   visibility_state?: string;
   connection_type?: string;
   compute_region?: string;
+  library_release_id?: string;
   library_release_version?: string;
+  library_release_checksum?: string;
+  catalog_release_id?: string;
   catalog_release_version?: string;
+  catalog_release_checksum?: string;
   cursor_restarted?: boolean;
 };
 
