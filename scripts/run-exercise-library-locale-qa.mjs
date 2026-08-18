@@ -130,6 +130,16 @@ async function pageMetrics(page) {
   }));
 }
 
+async function waitForLibraryRequest(state, predicate, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const request = state.libraryRequests.find(predicate);
+    if (request) return request;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return null;
+}
+
 function assertStrictRequests(label, requests, expectedLocale) {
   const filters = requests.filter((entry) => entry.pathname.endsWith("/filters"));
   const activities = requests.filter((entry) => entry.pathname.endsWith("/activities"));
@@ -171,9 +181,9 @@ try {
       const searchInput = page.locator('input[placeholder*="Search"]').first();
       await searchInput.fill("bench");
       await page.waitForFunction(() => new URLSearchParams(window.location.search).get("q") === "bench", undefined, { timeout: 10_000 });
-      await page.getByText("QA Bench Press", { exact: true }).first().waitFor({ timeout: 10_000 });
-      const searchRequest = state.libraryRequests.find((entry) => entry.pathname.endsWith("/activities") && entry.query === "bench");
+      const searchRequest = await waitForLibraryRequest(state, (entry) => entry.pathname.endsWith("/activities") && entry.query === "bench");
       if (!searchRequest || searchRequest.locale !== "en") throw new Error("english-mobile: search did not reach Library route with locale=en");
+      await page.getByText("QA Bench Press", { exact: true }).first().waitFor({ timeout: 10_000 });
     }
 
     const screenshotPath = path.join(evidenceDir, `${spec.label}.png`);
