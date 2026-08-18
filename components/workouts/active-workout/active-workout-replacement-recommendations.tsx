@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,47 @@ const explanationTranslationKey: Record<ReplacementReasonCode, string> = {
   strong_identity: "replacement.strongIdentity",
 };
 
+function normalizedRankingText(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .trim()
+    .toLocaleLowerCase("en")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function normalizedSetKey(values: readonly string[]) {
+  return JSON.stringify(
+    [...new Set(values.map((value) => normalizedRankingText(value)).filter(Boolean))].sort(),
+  );
+}
+
+function replacementOriginalSemanticKey(original: ReplacementExerciseProfile) {
+  return JSON.stringify([
+    original.id,
+    original.name,
+    original.targetMuscle,
+    original.equipment,
+    original.difficulty,
+    original.mechanics,
+    original.forceType,
+    original.movementPattern,
+    normalizedSetKey(original.secondaryMuscles),
+    Boolean(original.catalogDegraded),
+  ]);
+}
+
+function savedAlternativesSemanticKey(savedAlternatives: readonly UserExerciseAlternative[]) {
+  return normalizedSetKey(
+    savedAlternatives.map((alternative) => alternative.alternative_exercise_name),
+  );
+}
+
+function sessionExerciseIdsSemanticKey(sessionExerciseIds: ReadonlySet<string>) {
+  return JSON.stringify([...sessionExerciseIds].sort());
+}
+
 export function ActiveWorkoutReplacementRecommendations({
   userId,
   original,
@@ -77,37 +118,23 @@ export function ActiveWorkoutReplacementRecommendations({
   const [recommendations, setRecommendations] = useState<RankedReplacement[]>([]);
   const [loading, setLoading] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
-  const sessionIdsKey = useMemo(() => [...sessionExerciseIds].sort().join("|"), [sessionExerciseIds]);
-  const stableSessionExerciseIds = useMemo(
-    () => new Set(sessionIdsKey ? sessionIdsKey.split("|") : []),
-    [sessionIdsKey],
-  );
-  const stableOriginal = useMemo<ReplacementExerciseProfile>(() => ({
-    id: original.id,
-    name: original.name,
-    targetMuscle: original.targetMuscle,
-    equipment: original.equipment,
-    difficulty: original.difficulty,
-    mechanics: original.mechanics,
-    forceType: original.forceType,
-    movementPattern: original.movementPattern,
-    secondaryMuscles: [...original.secondaryMuscles],
-    catalogDegraded: original.catalogDegraded,
-  }), [
-    original.catalogDegraded,
-    original.difficulty,
-    original.equipment,
-    original.forceType,
-    original.id,
-    original.mechanics,
-    original.movementPattern,
-    original.name,
-    original.secondaryMuscles,
-    original.targetMuscle,
-  ]);
+  const originalKey = replacementOriginalSemanticKey(original);
+  const savedAlternativesKey = savedAlternativesSemanticKey(savedAlternatives);
+  const sessionIdsKey = sessionExerciseIdsSemanticKey(sessionExerciseIds);
+  const latestRecommendationInputsRef = useRef({
+    original,
+    savedAlternatives,
+    sessionExerciseIds,
+  });
+  latestRecommendationInputsRef.current = {
+    original,
+    savedAlternatives,
+    sessionExerciseIds,
+  };
 
   useEffect(() => {
-    if (!userId || !stableOriginal.id) {
+    const currentInputs = latestRecommendationInputsRef.current;
+    if (!userId || !currentInputs.original.id) {
       setRecommendations([]);
       setUnavailable(true);
       return;
@@ -117,11 +144,11 @@ export function ActiveWorkoutReplacementRecommendations({
     setUnavailable(false);
     void getActiveWorkoutReplacementRecommendations({
       userId,
-      original: stableOriginal,
+      original: currentInputs.original,
       reason,
       locale,
-      savedAlternatives,
-      sessionExerciseIds: stableSessionExerciseIds,
+      savedAlternatives: currentInputs.savedAlternatives,
+      sessionExerciseIds: currentInputs.sessionExerciseIds,
       signal: controller.signal,
       limit: 5,
     }).then((result) => {
@@ -136,7 +163,7 @@ export function ActiveWorkoutReplacementRecommendations({
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [locale, reason, savedAlternatives, stableOriginal, stableSessionExerciseIds, userId]);
+  }, [locale, originalKey, reason, savedAlternativesKey, sessionIdsKey, userId]);
 
   return (
     <div data-aw-replacement-recommendations className="mt-4 space-y-4">
