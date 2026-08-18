@@ -12,3 +12,11 @@ const catalogLocaleByLanguage = {
 export function toCatalogLocale(language: SupportedLanguage): CatalogLocale {
   return catalogLocaleByLanguage[language];
 }
+
+export function toCatalogLocaleFromIntlLocale(intlLocale: string): CatalogLocale {
+  const normalized = intlLocale.trim().toLowerCase().replaceAll("_", "-");
+  if (normalized === "en" || normalized.startsWith("en-")) return "en";
+  if (normalized === "de" || normalized.startsWith("de-")) return "de";
+  if (normalized === "ar" || normalized.startsWith("ar-")) return "ar";
+  throw new Error(`Unsupported Plaivra Catalog locale source: ${intlLocale}`);
+}
