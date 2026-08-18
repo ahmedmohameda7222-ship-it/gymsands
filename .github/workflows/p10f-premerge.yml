@@ -74,8 +74,8 @@ jobs:
           grep -q 'nextCursor: string | null' services/database/workout-library-v2.ts
           grep -q 'nextProviderCursor' components/workouts/workout-browser.tsx
           grep -q 'nextCursor' components/workouts/exercise-picker-dialog.tsx
-          grep -q 'requestFilters, null, locale' components/workouts/workout-browser.tsx
-          grep -q 'activeFilters, null, locale' components/workouts/exercise-picker-dialog.tsx
+          grep -q 'requestFilters, null, catalogLocale' components/workouts/workout-browser.tsx
+          grep -q 'activeFilters, null, catalogLocale' components/workouts/exercise-picker-dialog.tsx
           test "$(grep -R -l 'offset' services/activity-catalog/server/library-http-provider.ts app/api/activity-catalog/library-domains 2>/dev/null | wc -l)" = "0"
           grep -q 'AbortController' services/database/workout-library-v2.ts
           grep -q 'buildCatalogAuthoritySnapshot' lib/activity-catalog/snapshot.ts

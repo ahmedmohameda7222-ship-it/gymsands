@@ -78,10 +78,22 @@ function authValue(userId: string, language: "en" | "de" | "ar") {
   };
 }
 
-async function renderProvider() {
+function pendingAuthValue(userId: string) {
+  return {
+    user: { id: userId },
+    isLoading: false,
+    bootstrapStatus: "loading",
+    bootstrapError: null,
+    bootstrap: null,
+  };
+}
+
+async function renderProvider(
+  initialLanguagePreference: "en" | "de" | "ar" = "en",
+) {
   await act(async () => {
     root!.render(
-      <UserSettingsProvider initialLanguagePreference="en">
+      <UserSettingsProvider initialLanguagePreference={initialLanguagePreference}>
         <Probe />
       </UserSettingsProvider>,
     );
@@ -111,6 +123,14 @@ describe("UserSettingsProvider bootstrap hydration", () => {
     expect(latest?.settings.userId).toBe(userA);
     expect(latest?.settings.language).toBe("de");
     expect(latest?.isLoadingSettings).toBe(false);
+  });
+
+  it("preserves the request language while authenticated settings are loading", async () => {
+    authState.value = pendingAuthValue(userA);
+    await renderProvider("de");
+    expect(latest?.settings.userId).toBe(userA);
+    expect(latest?.settings.language).toBe("de");
+    expect(latest?.isLoadingSettings).toBe(true);
   });
 
   it("replaces settings atomically for a new user and accepts later refreshes", async () => {

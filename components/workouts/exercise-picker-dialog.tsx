@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select-field";
 import { CardGridSkeleton } from "@/components/ui/state-views";
+import { toCatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { formatExerciseDisplayList, formatExerciseDisplayValue, type ExerciseDisplayDomain } from "@/lib/train/exercise-display";
@@ -61,7 +62,8 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   maxSelection?: number;
 }) {
   const { user } = useAuth();
-  const { language, dir, locale, tr } = useTrainTranslation();
+  const { language, dir, tr } = useTrainTranslation();
+  const catalogLocale = toCatalogLocale(language);
   const muscleCopy = getMuscleIntelligenceCopy(language);
   const libraryLoadFailedMessage = tr("libraryLoadFailed");
   const replacementMode = maxSelection === 1;
@@ -126,7 +128,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     filtersControllerRef.current?.abort();
     const controller = new AbortController();
     filtersControllerRef.current = controller;
-    void getCanonicalWorkoutFilterOptionsWithStatus(locale, {
+    void getCanonicalWorkoutFilterOptionsWithStatus(catalogLocale, {
       requestGroupId: initialCatalogRequestGroupId,
       signal: controller.signal
     }).then((result) => {
@@ -135,7 +137,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       // Result-derived options remain available if filter metadata fails.
     });
     return () => controller.abort();
-  }, [initialCatalogRequestGroupId, locale, open]);
+  }, [catalogLocale, initialCatalogRequestGroupId, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -156,7 +158,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       setError("");
       setLoadMoreError("");
       setPagination(emptyPagination);
-      getWorkoutsWithStatus(query.trim(), activeFilters, null, locale, {
+      getWorkoutsWithStatus(query.trim(), activeFilters, null, catalogLocale, {
         requestGroupId,
         signal: controller.signal
       })
@@ -182,7 +184,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [activeFilters, initialCatalogRequestGroupId, libraryLoadFailedMessage, locale, open, query]);
+  }, [activeFilters, catalogLocale, initialCatalogRequestGroupId, libraryLoadFailedMessage, open, query]);
 
   useEffect(() => {
     if (!open || !replacementMode) {
@@ -304,7 +306,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     setLoadingMore(true);
     setLoadMoreError("");
     try {
-      const result = await getWorkoutsWithStatus(query.trim(), activeFilters, nextCursor, locale, {
+      const result = await getWorkoutsWithStatus(query.trim(), activeFilters, nextCursor, catalogLocale, {
         requestGroupId,
         signal: controller.signal
       });

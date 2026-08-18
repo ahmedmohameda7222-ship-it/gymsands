@@ -1,5 +1,6 @@
 "use client";
 
+import type { CatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import type { LibraryActivityDetail, LibraryAlternative, LibraryProviderMeta } from "@/lib/activity-catalog/library-types";
 import { catalogActivityDetailModel, customExerciseDetailModel } from "@/lib/exercise-detail/model";
 import type { AddToPlanActivityPayload, ExerciseDetailViewModel } from "@/lib/exercise-detail/contracts";
@@ -20,17 +21,22 @@ export type ResolvedExerciseDetail = {
   initialCustomVideoUrl: string | null;
 };
 
-export async function resolveExerciseDetail(identifier: string, userId: string | undefined, locale: string): Promise<ResolvedExerciseDetail> {
+export async function resolveExerciseDetail(
+  identifier: string,
+  userId: string | undefined,
+  intlLocale: string,
+  catalogLocale: CatalogLocale
+): Promise<ResolvedExerciseDetail> {
   const customResult = await getCustomExercisesWithStatus(userId);
   const custom = customResult.data.find((item) => item.id === identifier);
-  if (custom) return { core: customExerciseDetailModel(custom, locale), catalog: null, initialCustomVideoUrl: custom.custom_video_url ?? null };
+  if (custom) return { core: customExerciseDetailModel(custom, intlLocale), catalog: null, initialCustomVideoUrl: custom.custom_video_url ?? null };
 
-  const domainsResult = await listLibraryDomains(locale);
+  const domainsResult = await listLibraryDomains(catalogLocale);
   const domains = Array.from(new Set(["strength", ...domainsResult.data.map((domain) => domain.key)]));
   let lastError: unknown = null;
   for (const domain of domains) {
     try {
-      const result = await getLibraryDomainActivity(domain, identifier, locale);
+      const result = await getLibraryDomainActivity(domain, identifier, catalogLocale);
       const customVideo = userId ? await getUserExerciseVideo(userId, result.data.id).catch(() => null) : null;
       return { core: catalogActivityDetailModel(result.data, result.meta, domain), catalog: { detail: result.data, meta: result.meta, domain }, initialCustomVideoUrl: customVideo?.custom_video_url ?? null };
     } catch (error) {
@@ -40,12 +46,12 @@ export async function resolveExerciseDetail(identifier: string, userId: string |
   throw lastError ?? new Error("Exercise not found.");
 }
 
-export async function loadExerciseAlternatives(resolved: ResolvedExerciseDetail, locale: string) {
+export async function loadExerciseAlternatives(resolved: ResolvedExerciseDetail, catalogLocale: CatalogLocale) {
   if (!resolved.catalog) return [] as LibraryAlternative[];
   return (await getLibraryDomainActivityAlternatives(
     resolved.catalog.domain,
     resolved.catalog.detail.id,
-    { limit: 10, locale }
+    { limit: 10, locale: catalogLocale }
   )).data;
 }
 

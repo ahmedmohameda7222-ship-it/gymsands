@@ -11,6 +11,7 @@ import {
 import { useToast } from "@/components/ui/toaster";
 import { WorkoutSessionForm } from "@/components/workouts/workout-session-form";
 import { WorkoutSessionScreen } from "@/components/workouts/workout-session-screen";
+import { toCatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { getUserExerciseVideo, getWorkout } from "@/services/database/workout-library";
@@ -23,7 +24,8 @@ export default function WorkoutSessionPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const { locale, tr } = useTrainTranslation();
+  const { language, tr } = useTrainTranslation();
+  const catalogLocale = toCatalogLocale(language);
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,7 +37,7 @@ export default function WorkoutSessionPage() {
     setLoadError(null);
     try {
       const customExercise = await getCustomExercise(userId ?? undefined, workoutId);
-      const nextWorkout = customExercise ?? await getWorkout(workoutId, locale);
+      const nextWorkout = customExercise ?? await getWorkout(workoutId, catalogLocale);
       if (generation !== loadGenerationRef.current) return;
 
       // The Workout is the core execution authority. Publish it immediately;
@@ -68,7 +70,7 @@ export default function WorkoutSessionPage() {
     } finally {
       if (generation === loadGenerationRef.current) setIsLoading(false);
     }
-  }, [locale, toast, tr, userId, workoutId]);
+  }, [catalogLocale, toast, tr, userId, workoutId]);
 
   useEffect(() => {
     void loadWorkout();

@@ -82,8 +82,14 @@ function withDevicePublicPreferences(
   };
 }
 
-function authenticatedDefaults(userId: string) {
-  return normalizeUserAppSettings(defaultUserAppSettings, userId);
+function authenticatedDefaults(
+  userId: string,
+  language?: LanguagePreference,
+) {
+  return normalizeUserAppSettings(
+    language ? { ...defaultUserAppSettings, language } : defaultUserAppSettings,
+    userId,
+  );
 }
 
 export function UserSettingsProvider({
@@ -138,7 +144,9 @@ export function UserSettingsProvider({
     }
 
     if (settings.userId !== userId) {
-      setSettings(withCachedTheme(authenticatedDefaults(userId)));
+      setSettings(
+        withCachedTheme(authenticatedDefaults(userId, initialLanguagePreference)),
+      );
     }
 
     if (bootstrapStatus === "error") {
@@ -147,7 +155,9 @@ export function UserSettingsProvider({
       setSettings((current) =>
         current.userId === userId
           ? current
-          : withCachedTheme(authenticatedDefaults(userId)),
+          : withCachedTheme(
+              authenticatedDefaults(userId, initialLanguagePreference),
+            ),
       );
       setSaveError(message);
       setIsLoadingSettings(false);
@@ -173,7 +183,9 @@ export function UserSettingsProvider({
 
   const visibleSettings = useMemo(() => {
     if (userId && settings.userId !== userId) {
-      return withCachedTheme(authenticatedDefaults(userId));
+      return withCachedTheme(
+        authenticatedDefaults(userId, initialLanguagePreference),
+      );
     }
     if (!userId && settings.userId) {
       return withDevicePublicPreferences(

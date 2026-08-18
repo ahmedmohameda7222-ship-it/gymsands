@@ -2,6 +2,7 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
+import type { CatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import {
   CATALOG_REQUEST_GROUP_ID_HEADER,
   createOperationalCorrelationId,
@@ -106,19 +107,19 @@ export function getCatalogActivityAlternatives(identifier: string, options: { li
   return catalogRequest<CatalogResult<ActivityAlternative[]>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}/alternatives${queryString(options)}`, context);
 }
 
-export function listLibraryDomains(locale?: string, context?: CatalogClientRequestContext) {
+export function listLibraryDomains(locale?: CatalogLocale, context?: CatalogClientRequestContext) {
   return catalogRequest<LibraryEnvelope<LibraryDomain[]>>(`/api/activity-catalog/library-domains${queryString({ locale })}`, context);
 }
 
-export function getLibraryDomain(domain: string, locale?: string, context?: CatalogClientRequestContext) {
+export function getLibraryDomain(domain: string, locale?: CatalogLocale, context?: CatalogClientRequestContext) {
   return catalogRequest<LibraryEnvelope<LibraryDomain>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}${queryString({ locale })}`, context);
 }
 
-export function getLibraryDomainFilters(domain: string, locale?: string, context?: CatalogClientRequestContext) {
+export function getLibraryDomainFilters(domain: string, locale?: CatalogLocale, context?: CatalogClientRequestContext) {
   return catalogRequest<LibraryEnvelope<unknown[]>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/filters${queryString({ locale })}`, context);
 }
 
-export function getLibraryDomainArchetypes(domain: string, locale?: string, context?: CatalogClientRequestContext) {
+export function getLibraryDomainArchetypes(domain: string, locale?: CatalogLocale, context?: CatalogClientRequestContext) {
   return catalogRequest<LibraryEnvelope<unknown[]>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/archetypes${queryString({ locale })}`, context);
 }
 
@@ -127,10 +128,10 @@ export function searchLibraryDomainActivities(params: LibrarySearchParams, conte
   return catalogRequest<LibrarySearchEnvelope>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/activities${queryString(query)}`, context);
 }
 
-export function getLibraryDomainActivity(domain: string, identifier: string, locale?: string, context?: CatalogClientRequestContext) {
+export function getLibraryDomainActivity(domain: string, identifier: string, locale?: CatalogLocale, context?: CatalogClientRequestContext) {
   return catalogRequest<LibraryEnvelope<LibraryActivityDetail>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/activities/${encodeURIComponent(identifier)}${queryString({ locale })}`, context);
 }
 
-export function getLibraryDomainActivityAlternatives(domain: string, identifier: string, options: { limit?: number; locale?: string } = {}, context?: CatalogClientRequestContext) {
+export function getLibraryDomainActivityAlternatives(domain: string, identifier: string, options: { limit?: number; locale?: CatalogLocale } = {}, context?: CatalogClientRequestContext) {
   return catalogRequest<LibraryEnvelope<LibraryAlternative[]>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/activities/${encodeURIComponent(identifier)}/alternatives${queryString(options)}`, context);
 }

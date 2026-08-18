@@ -1,5 +1,6 @@
 "use client";
 
+import { toCatalogLocaleFromIntlLocale } from "@/lib/activity-catalog/catalog-locale";
 import { createCatalogRequestGroupId } from "@/services/activity-catalog/client";
 import {
   getWorkout,
@@ -49,11 +50,12 @@ export async function getActiveWorkoutReplacementRecommendations(input: {
   limit?: number;
 }): Promise<ActiveWorkoutReplacementRecommendationResult> {
   abortIfNeeded(input.signal);
+  const catalogLocale = toCatalogLocaleFromIntlLocale(input.locale);
   const requestGroupId = createCatalogRequestGroupId();
   const requestContext = { requestGroupId, signal: input.signal };
 
   const canonicalOriginal = input.original.id
-    ? await getWorkout(input.original.id, input.locale, requestContext).catch((error) => {
+    ? await getWorkout(input.original.id, catalogLocale, requestContext).catch((error) => {
         abortIfNeeded(input.signal);
         console.warn("Plaivra could not enrich replacement source metadata.", error);
         return null;
@@ -64,13 +66,13 @@ export async function getActiveWorkoutReplacementRecommendations(input: {
 
   const [alternativeResult, catalogResult] = await Promise.all([
     original.id
-      ? getWorkoutAlternatives(original.id, 20, input.locale, requestContext).catch((error) => {
+      ? getWorkoutAlternatives(original.id, 20, catalogLocale, requestContext).catch((error) => {
           abortIfNeeded(input.signal);
           console.warn("Plaivra could not load catalog alternatives for replacement ranking.", error);
           return null;
         })
       : Promise.resolve(null),
-    getWorkouts("", filtersFor(original), 0, input.locale, requestContext).catch((error) => {
+    getWorkouts("", filtersFor(original), 0, catalogLocale, requestContext).catch((error) => {
       abortIfNeeded(input.signal);
       console.warn("Plaivra could not load replacement candidates.", error);
       return null;

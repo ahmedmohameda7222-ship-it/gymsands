@@ -27,6 +27,7 @@ import {
 import { getCustomExercisesWithStatus, getFavoriteExerciseIdsWithStatus, saveCustomExercise, setFavoriteExercise, type CustomExerciseInput } from "@/services/workouts/exercise-library-store";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { toCatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import { cn } from "@/lib/utils";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
@@ -42,6 +43,11 @@ type FilterKey =
   | "forceTypes"
   | "experienceLevels"
   | "secondaryMuscles";
+
+type SuccessfulBrowseCriteria = {
+  query: string;
+  filters: Record<FilterKey, string[]>;
+};
 
 const emptyFilters: Record<FilterKey, string[]> = {
   muscleCategories: [],
@@ -135,7 +141,8 @@ export function WorkoutBrowser() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const { dialog, ask } = useConfirm();
-  const { language, dir, locale, tr } = useTrainTranslation();
+  const { language, dir, tr } = useTrainTranslation();
+  const catalogLocale = toCatalogLocale(language);
   const userId = user?.id;
   const [query, setQuery] = useState("");
   const [filterOptions, setFilterOptions] = useState<CanonicalWorkoutFilterOptions>(emptyOptions);
@@ -157,6 +164,7 @@ export function WorkoutBrowser() {
   const [filterError, setFilterError] = useState("");
   const [resultStatus, setResultStatus] = useState<WorkoutLibraryStatus | null>(null);
   const [resultError, setResultError] = useState("");
+  const [lastSuccessfulCriteria, setLastSuccessfulCriteria] = useState<SuccessfulBrowseCriteria | null>(null);
   const [reloadResultsNonce, setReloadResultsNonce] = useState(0);
   const [personalLibraryMessages, setPersonalLibraryMessages] = useState<string[]>([]);
   const [isLoadingPersonalLibrary, setIsLoadingPersonalLibrary] = useState(true);
@@ -201,7 +209,7 @@ export function WorkoutBrowser() {
   const loadFilterOptions = useCallback(async () => {
     setFilterError("");
     try {
-      const result = await getCanonicalWorkoutFilterOptionsWithStatus(locale);
+      const result = await getCanonicalWorkoutFilterOptionsWithStatus(catalogLocale);
       setFilterOptions(result.data);
       setFilters((current) => resolveCanonicalWorkoutFilterValues(current, result.data) as Record<FilterKey, string[]>);
       setFilterStatus(result.status);
@@ -212,7 +220,7 @@ export function WorkoutBrowser() {
       setFilterError(message);
       toast({ title: tr("workoutFiltersLoadFailed"), description: message });
     }
-  }, [locale, toast, tr]);
+  }, [catalogLocale, toast, tr]);
 
   useEffect(() => {
     void loadFilterOptions();
@@ -236,6 +244,7 @@ export function WorkoutBrowser() {
       setIsLoading(false);
       setResultError("");
       setResultStatus(null);
+      setLastSuccessfulCriteria(null);
       return;
     }
     let active = true;
@@ -243,10 +252,11 @@ export function WorkoutBrowser() {
       setIsLoading(true);
       setNextProviderCursor(null);
       setResultError("");
-      getWorkoutsWithStatus(query.trim(), requestFilters, null, locale)
+      getWorkoutsWithStatus(query.trim(), requestFilters, null, catalogLocale)
         .then((result) => {
           if (!active) return;
           setWorkouts(result.data);
+          setLastSuccessfulCriteria({ query: query.trim(), filters });
           if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
           setResultStatus(result.status);
           setNextProviderCursor(result.pagination?.nextCursor ?? null);
@@ -256,7 +266,6 @@ export function WorkoutBrowser() {
           if (!active) return;
           const message = userSafeError(error, tr("searchFailedFiltersKept"));
           setResultError(message);
-          toast({ title: tr("workoutsLoadFailed"), description: message });
         })
         .finally(() => {
           if (active) setIsLoading(false);
@@ -267,10 +276,12 @@ export function WorkoutBrowser() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [filters, hasActiveLibraryRequest, isHydrated, locale, query, reloadResultsNonce, requestFilters, toast, tr]);
+  }, [catalogLocale, filters, hasActiveLibraryRequest, isHydrated, query, reloadResultsNonce, requestFilters, tr]);
 
-  const visibleCustomExercises = hasActiveLibraryRequest ? customExercises.filter((workout) => matchesWorkoutRecord(workout, query.trim(), filters, filterOptions)) : [];
-  const visibleGlobalExercises = hasActiveLibraryRequest ? workouts.filter((workout) => matchesWorkoutRecord(workout, query.trim(), filters, filterOptions)) : [];
+  const currentCriteria: SuccessfulBrowseCriteria = { query: query.trim(), filters };
+  const displayCriteria = resultError && lastSuccessfulCriteria ? lastSuccessfulCriteria : currentCriteria;
+  const visibleCustomExercises = hasActiveLibraryRequest ? customExercises.filter((workout) => matchesWorkoutRecord(workout, displayCriteria.query, displayCriteria.filters, filterOptions)) : [];
+  const visibleGlobalExercises = hasActiveLibraryRequest ? workouts.filter((workout) => matchesWorkoutRecord(workout, displayCriteria.query, displayCriteria.filters, filterOptions)) : [];
   const allVisibleWorkouts = [...visibleCustomExercises, ...visibleGlobalExercises].filter((workout, index, all) => all.findIndex((item) => item.id === workout.id) === index);
   const filteredWorkouts = favoritesOnly ? allVisibleWorkouts.filter((workout) => favoriteIds.includes(workout.id)) : allVisibleWorkouts;
   const duplicateExerciseNames = useMemo(() => duplicateWorkoutNames(filteredWorkouts), [filteredWorkouts]);
@@ -282,8 +293,9 @@ export function WorkoutBrowser() {
     setIsLoading(true);
     setResultError("");
     try {
-      const result = await getWorkoutsWithStatus(query.trim(), requestFilters, nextProviderCursor, locale);
+      const result = await getWorkoutsWithStatus(query.trim(), requestFilters, nextProviderCursor, catalogLocale);
       setWorkouts((current) => [...current, ...result.data]);
+      setLastSuccessfulCriteria({ query: query.trim(), filters });
       if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
       setResultStatus(result.status);
       setNextProviderCursor(result.pagination?.nextCursor ?? null);
@@ -291,7 +303,6 @@ export function WorkoutBrowser() {
     } catch (error) {
       const message = userSafeError(error, tr("moreExercisesLoadFallback"));
       setResultError(message);
-      toast({ title: tr("moreWorkoutsLoadFailed"), description: message });
     } finally {
       setIsLoading(false);
     }
@@ -417,19 +428,15 @@ export function WorkoutBrowser() {
     resultStatus?.message,
     ...personalLibraryMessages
   ].filter(Boolean) as string[]));
-  const hasDegradedLibraryState = Boolean(resultMessages.length || filterError || resultError);
-  const resultStatusTitle = resultError
-    ? tr("searchFailed")
-    : isLoading
-      ? tr("updatingExerciseResults")
-      : hasActiveLibraryRequest
-        ? tr("exercisesShown", { count: filteredWorkouts.length })
-        : tr("readyToBrowse");
-  const resultStatusDescription = resultError
-    ? tr("searchFailureVisible")
+  const hasDegradedLibraryState = Boolean(resultMessages.length || filterError);
+  const resultStatusTitle = isLoading
+    ? tr("updatingExerciseResults")
     : hasActiveLibraryRequest
-      ? tr("sessionStartLibraryDescription")
-      : tr("libraryBrowseDescription");
+      ? tr("exercisesShown", { count: filteredWorkouts.length })
+      : tr("readyToBrowse");
+  const resultStatusDescription = hasActiveLibraryRequest
+    ? tr("sessionStartLibraryDescription")
+    : tr("libraryBrowseDescription");
 
   const filterPanelContent = (
     <div className="space-y-4">
@@ -491,7 +498,7 @@ export function WorkoutBrowser() {
           <Button variant="outline" onClick={() => setShowFiltersDialog(true)} className="min-h-12 lg:hidden">
             <SlidersHorizontal className="h-4 w-4" /> {tr("filters")} {activeFilterCount ? `(${activeFilterCount})` : ""}
           </Button>
-          <Button variant="outline" onClick={resetFilters} disabled={!query && activeFilterCount === 0 && !favoritesOnly} className="min-h-12">
+          <Button variant="outline" onClick={resetFilters} disabled={!query && activeFilterCount === 0 && !favoritesOnly && !showAllWorkouts} className="min-h-12">
             <RotateCcw className="h-4 w-4" /> {tr("reset")}
           </Button>
         </div>
@@ -571,23 +578,25 @@ export function WorkoutBrowser() {
         </DialogContent>
       </Dialog>
 
-      <StatusBanner
-        tone={resultError ? "error" : hasDegradedLibraryState ? "warning" : "default"}
-        title={resultStatusTitle}
-        description={resultStatusDescription}
-        badges={[
-          resultStatus?.source === "fallback" ? tr("fallbackData") : null,
-          resultStatus?.source === "partial" || filterStatus?.source === "partial" ? tr("partialSource") : null,
-          activeFilterCount ? tr("activeFilters", { count: activeFilterCount }) : null,
-          favoritesOnly ? tr("favoritesOnly") : null,
-          showAllWorkouts ? tr("showingAll") : null,
-          isLoadingPersonalLibrary ? tr("loadingSavedItems") : null
-        ].filter(Boolean) as string[]}
-      />
+      {!resultError ? (
+        <StatusBanner
+          tone={hasDegradedLibraryState ? "warning" : "default"}
+          title={resultStatusTitle}
+          description={resultStatusDescription}
+          badges={[
+            resultStatus?.source === "fallback" ? tr("fallbackData") : null,
+            resultStatus?.source === "partial" || filterStatus?.source === "partial" ? tr("partialSource") : null,
+            activeFilterCount ? tr("activeFilters", { count: activeFilterCount }) : null,
+            favoritesOnly ? tr("favoritesOnly") : null,
+            showAllWorkouts ? tr("showingAll") : null,
+            isLoadingPersonalLibrary ? tr("loadingSavedItems") : null
+          ].filter(Boolean) as string[]}
+        />
+      ) : null}
 
-      {resultMessages.map((message, index) => (
+      {!resultError ? resultMessages.map((message, index) => (
         <StatusBanner key={`${index}-${message}`} tone="warning" title={tr("librarySourceNotice")} description={tr("librarySourceNoticeDescription")} />
-      ))}
+      )) : null}
 
       {resultError ? (
         <ErrorState

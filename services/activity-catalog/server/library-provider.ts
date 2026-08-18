@@ -1,3 +1,4 @@
+import type { CatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import type {
   LibraryActivityDetail,
   LibraryAlternative,
@@ -7,7 +8,7 @@ import type {
   LibrarySearchResult
 } from "@/lib/activity-catalog/library-types";
 
-export type LibraryRequestOptions = { locale?: string };
+export type LibraryRequestOptions = { locale?: CatalogLocale };
 
 export interface LibraryActivityProvider {
   listDomains(options?: LibraryRequestOptions): Promise<LibraryResult<LibraryDomain[]>>;
