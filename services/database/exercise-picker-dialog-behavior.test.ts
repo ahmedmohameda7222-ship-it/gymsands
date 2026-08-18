@@ -72,7 +72,7 @@ vi.mock("@/components/ui/dialog", async () => {
   const Wrapper = ({ children }: { children?: React.ReactNode }) => ReactModule.createElement("div", null, children);
   return {
     Dialog: ({ open, children }: { open: boolean; children?: React.ReactNode }) => open ? ReactModule.createElement(ReactModule.Fragment, null, children) : null,
-    DialogContent: ({ children }: { children?: React.ReactNode }) => ReactModule.createElement("section", null, children),
+    DialogContent: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => ReactModule.createElement("section", { dir }, children),
     DialogDescription: ({ children }: { children?: React.ReactNode }) => ReactModule.createElement("p", null, children),
     DialogHeader: Wrapper,
     DialogTitle: ({ children }: { children?: React.ReactNode }) => ReactModule.createElement("h1", null, children)
