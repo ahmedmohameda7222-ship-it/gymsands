@@ -306,6 +306,18 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const pendingSetCommandKeyRef = useRef<string | null>(null);
   const pendingSetCompletionPromiseRef = useRef<Promise<boolean> | null>(null);
   const effectiveExecutionState = optimisticCompletion?.projectedExecutionState ?? executionState;
+  const reliabilityPresentation = resolveActiveWorkoutReliabilityPresentation({
+    syncState,
+    tabLeader,
+    controllerConflictDeviceId
+  });
+  const executionBlocked = reliabilityPresentation.blockingState === "data_conflict";
+  const isExecutionMutationBlocked = useCallback(() => {
+    const latest = activeSessionStoreRef.current?.getSnapshot();
+    return executionBlocked
+      || latest?.syncState === "data_conflict"
+      || Boolean(latest?.dataConflict);
+  }, [executionBlocked]);
 
   useEffect(() => {
     if (!userId || !sessionId) return;
@@ -656,7 +668,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         setTimerEndsAtMs(null);
         setIsTimerRunning(false);
         clearStoredValue(restTimerKey);
-        if (userId && sessionId && executionHydratedRef.current) {
+        if (userId && sessionId && executionHydratedRef.current && !isExecutionMutationBlocked()) {
           void dispatchExecutionBackground("clear_rest", {
             view_state: "set_entry",
             completion_reason: "natural_expiration",
@@ -674,10 +686,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       }
     };
     return activeSessionClock.subscribe(tick);
-  }, [dispatchExecutionBackground, effectiveExecutionState, optimisticCompletion, restTimerKey, sessionId, startedAtMs, toastRef, trRef, userId]);
+  }, [dispatchExecutionBackground, effectiveExecutionState, isExecutionMutationBlocked, optimisticCompletion, restTimerKey, sessionId, startedAtMs, toastRef, trRef, userId]);
 
   useEffect(() => {
-    if (!executionHydratedRef.current || !userId || !sessionId || !executionState || optimisticCompletion) return;
+    if (!executionHydratedRef.current || !userId || !sessionId || !executionState || optimisticCompletion || isExecutionMutationBlocked()) return;
     const cursorItem = executionCursorItems[activeExerciseIndex]
       ?? executionCursorItems.find((item) => item.itemOrder === activeExerciseIndex + 1)
       ?? null;
@@ -706,7 +718,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         }
       }
     );
-  }, [activeExerciseIndex, activeSetIndex, dispatchExecutionBackground, executionCursorItems, executionState, optimisticCompletion, sessionId, userId]);
+  }, [activeExerciseIndex, activeSetIndex, dispatchExecutionBackground, executionCursorItems, executionState, isExecutionMutationBlocked, optimisticCompletion, sessionId, userId]);
 
   const activeExercise = exerciseStates[activeExerciseIndex];
   const activeSet = activeExercise?.sets[activeSetIndex];
@@ -827,6 +839,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   };
 
   function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<ActiveWorkoutSetState>) {
+    if (isExecutionMutationBlocked()) return;
     setExerciseStates((current) => {
       const next = current.map((item, itemIndex) => itemIndex === exerciseIndex
         ? { ...item, sets: item.sets.map((set, currentSetIndex) => currentSetIndex === setIndex ? mergeSetPatch(set, patch) : set) }
@@ -843,7 +856,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function persistProgress(states = exerciseStates) {
-    if (!sessionId) return;
+    if (!sessionId || isExecutionMutationBlocked()) return;
     const rows = buildCanonicalLogRows(states, { pendingOnly: true });
     if (rows.length) {
       const store = activeSessionStoreRef.current;
@@ -862,7 +875,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       getSnapshot: () => exerciseStatesRef.current,
       hasPendingWrites: hasPendingValidSetWrites,
       persistSnapshot: async (states) => {
-        if (!sessionId) return;
+        if (!sessionId || isExecutionMutationBlocked()) return;
         const rows = buildCanonicalLogRows(states, { pendingOnly: true, validOnly: true });
         if (!rows.length) return;
         const store = activeSessionStoreRef.current;
@@ -880,7 +893,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         console.warn("Plaivra will retry the pending completed-set details.", error);
       }
     };
-  }, [sessionId]);
+  }, [isExecutionMutationBlocked, sessionId]);
 
   useEffect(() => mountWorkoutSetAutosaveCoordinator(
     autosaveCoordinatorRef,
@@ -897,7 +910,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   );
 
   const persistSetDrafts = useCallback(async (states = exerciseStatesRef.current) => {
-    if (!userId || !sessionId || !states.length) return;
+    if (!userId || !sessionId || !states.length || isExecutionMutationBlocked()) return;
     await writeActiveWorkoutSetDrafts({
       userId,
       workoutSessionId: sessionId,
@@ -909,7 +922,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           draft: { reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, rir: set.rir, setType: set.setType, notes: set.notes }
         })))
     });
-  }, [sessionId, userId]);
+  }, [isExecutionMutationBlocked, sessionId, userId]);
 
   const preserveWorkoutForNavigation = useCallback(async () => {
     if (minimizePendingRef.current) return false;
@@ -918,6 +931,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setReplacementPickerOpen(false);
     setExerciseNavigatorOpen(false);
     try {
+      if (isExecutionMutationBlocked()) return true;
       const pendingSet = pendingSetCompletionPromiseRef.current;
       if (pendingSet) await pendingSet.catch(() => undefined);
       await persistSetDrafts();
@@ -934,7 +948,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     } finally {
       minimizePendingRef.current = false;
     }
-  }, [flushPendingSetWrites, mirrorExecutionState, persistSetDrafts, toastRef, trRef]);
+  }, [flushPendingSetWrites, isExecutionMutationBlocked, mirrorExecutionState, persistSetDrafts, toastRef, trRef]);
 
   const minimizeWorkout = preserveWorkoutForNavigation;
 
@@ -942,7 +956,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   function handleSetDetailsOpenChange(open: boolean) {
     setActionsOpen(open);
-    if (!open) void flushPendingSetWrites();
+    if (!open && !isExecutionMutationBlocked()) void flushPendingSetWrites();
   }
 
   useEffect(() => {
@@ -951,10 +965,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }, [exerciseStates]);
 
   useEffect(() => {
-    if (!sessionId || !userId || isStarting || !exerciseStates.length) return;
+    if (!sessionId || !userId || isStarting || !exerciseStates.length || isExecutionMutationBlocked()) return;
     const timeout = window.setTimeout(() => { void persistSetDrafts(exerciseStates).catch(() => undefined); }, 250);
     return () => window.clearTimeout(timeout);
-  }, [exerciseStates, isStarting, persistSetDrafts, sessionId, userId]);
+  }, [exerciseStates, isExecutionMutationBlocked, isStarting, persistSetDrafts, sessionId, userId]);
 
   useEffect(() => {
     if (!setFeedback) return;
@@ -966,9 +980,9 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }, [setFeedback, setFeedbackVariant]);
 
   useEffect(() => {
-    if (!sessionId || isStarting || !hasPendingValidSetWrites(exerciseStates)) return;
+    if (!sessionId || isStarting || isExecutionMutationBlocked() || !hasPendingValidSetWrites(exerciseStates)) return;
     autosaveCoordinatorRef.current?.scheduleFlush(650);
-  }, [exerciseStates, isStarting, sessionId]);
+  }, [exerciseStates, isExecutionMutationBlocked, isStarting, sessionId]);
 
   function restoreRestTimer(snapshot: {
     timerSeconds: number;
@@ -996,6 +1010,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   function startRestTimer(seconds: number) {
+    if (isExecutionMutationBlocked()) return;
     const safeSeconds = Math.max(0, seconds);
     if (!safeSeconds) return;
     const previous = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
@@ -1007,6 +1022,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     storeTimestamp(restTimerKey, deadline);
     if (userId && sessionId && executionHydratedRef.current) {
       queueAfterPendingSetCompletion(() => {
+        if (isExecutionMutationBlocked()) return;
         void dispatchExecutionBackground(
           "start_rest",
           { duration_seconds: safeSeconds, controller_device_id: controllerDeviceIdRef.current },
@@ -1017,6 +1033,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   function stopRestTimer() {
+    if (isExecutionMutationBlocked()) return;
     const previous = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     setTimerLeft(0);
     setTimerEndsAtMs(null);
@@ -1024,6 +1041,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     clearStoredValue(restTimerKey);
     if (userId && sessionId && executionHydratedRef.current) {
       queueAfterPendingSetCompletion(() => {
+        if (isExecutionMutationBlocked()) return;
         void dispatchExecutionBackground(
           "clear_rest",
           {
@@ -1064,7 +1082,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     const setKey = `${sessionId ?? "no-session"}:${snapshotItemId ?? exerciseIndex}:${setIndex + 1}`;
     if (
       !targetSet || targetSet.completedAt || pendingSetCommandKeyRef.current === setKey || isStarting || !sessionId || !userId
-      || !executionHydratedRef.current || effectiveExecutionState?.session_state === "paused"
+      || isExecutionMutationBlocked() || !executionHydratedRef.current || effectiveExecutionState?.session_state === "paused"
       || storeSnapshot?.root?.status !== "started" || !executionCapability.supported || !store
     ) return;
 
@@ -1231,7 +1249,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function restartSet(exerciseIndex: number, setIndex: number) {
-    if (isSaving) return false;
+    if (isSaving || isExecutionMutationBlocked()) return false;
     const previousStates = exerciseStates;
     setIsSaving(true);
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: null });
@@ -1265,7 +1283,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   async function navigateToSessionSet(exerciseIndex: number, setIndex: number) {
     if (
       isSaving || isStarting || !sessionId || !userId || !executionHydratedRef.current
-      || effectiveExecutionState?.session_state === "paused" || !tabLeader || controllerConflictDeviceId
+      || isExecutionMutationBlocked() || effectiveExecutionState?.session_state === "paused" || !tabLeader || controllerConflictDeviceId
     ) return;
     const cursor = executionCursorFor(exerciseIndex, setIndex);
     setIsSaving(true);
@@ -1295,7 +1313,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function openSessionReview() {
-    if (isStarting || isSaving || !sessionId || !userId || !executionHydratedRef.current || !executionCapability.supported) return;
+    if (isStarting || isSaving || isExecutionMutationBlocked() || !sessionId || !userId || !executionHydratedRef.current || !executionCapability.supported) return;
     const invalidLocation = exerciseStates.flatMap((item, exerciseIndex) =>
       item.sets.map((set, setIndex) => ({ set, exerciseIndex, setIndex }))
     ).find(({ set }) => {
@@ -1331,7 +1349,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function leaveReviewAtSet(exerciseIndex: number, setIndex: number, reopen: boolean) {
-    if (isSaving || !userId || !sessionId || !executionHydratedRef.current) return;
+    if (isSaving || isExecutionMutationBlocked() || !userId || !sessionId || !executionHydratedRef.current) return;
     if (reopen) {
       const reopened = await restartSet(exerciseIndex, setIndex);
       if (!reopened) return;
@@ -1383,6 +1401,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function restoreReviewAfterCompletionFailure() {
+    if (isExecutionMutationBlocked()) throw new Error("Workout execution is blocked by an unresolved data conflict.");
     const store = activeSessionStoreRef.current;
     if (!store) throw new Error("The workout execution store is unavailable.");
     await store.hydrate({ force: true });
@@ -1407,7 +1426,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function completeSession() {
-    if (!sessionId || isSaving || isStarting || !executionHydratedRef.current || !executionCapability.supported) return;
+    if (!sessionId || isSaving || isStarting || isExecutionMutationBlocked() || !executionHydratedRef.current || !executionCapability.supported) return;
     const invalidLocation = exerciseStates.flatMap((item, exerciseIndex) =>
       item.sets.map((set, setIndex) => ({ set, exerciseIndex, setIndex }))
     ).find(({ set }) => Boolean(set.completedAt || set.hasPersistedLog) && !setHasValidEffortInputs(set));
@@ -1481,7 +1500,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   async function cancelCurrentSession() {
     const store = activeSessionStoreRef.current;
-    if (!userId || !sessionId || !store || isSaving || isStarting) return;
+    if (!userId || !sessionId || !store || isSaving || isStarting || isExecutionMutationBlocked()) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       toastRef.current({ title: tr("minimized.cancelFailedTitle"), description: tr("minimized.cancelFailedDescription") });
       return;
@@ -1509,6 +1528,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function takeOverWorkout() {
+    if (isExecutionMutationBlocked()) return;
     const store = activeSessionStoreRef.current;
     const localDeviceId = controllerDeviceIdRef.current;
     const latest = store?.getSnapshot().executionState;
@@ -1560,7 +1580,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function togglePause() {
-    if (!executionState || isSaving || isStarting) return;
+    if (!executionState || isSaving || isStarting || isExecutionMutationBlocked()) return;
     setIsSaving(true);
     try {
       await dispatchExecutionAwaited(
@@ -1575,6 +1595,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   function resetWorkoutTimer() {
+    if (isExecutionMutationBlocked()) return;
     const previousStartedAt = startedAtMs;
     const previousElapsed = elapsedSeconds;
     const nextStartedAt = Date.now();
@@ -1597,7 +1618,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function skipCurrentExercise() {
-    if (sourceKind !== "plan-day" || isSaving || isStarting || !activeExercise) return;
+    if (sourceKind !== "plan-day" || isSaving || isStarting || isExecutionMutationBlocked() || !activeExercise) return;
     const store = activeSessionStoreRef.current;
     const snapshotItemId = executionCursorItems[activeExerciseIndex]?.id;
     if (!store || !snapshotItemId) return;
@@ -1632,7 +1653,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function applyStableReplacement(replacement: Workout): Promise<boolean> {
-    if (sourceKind !== "plan-day" || !userId || !sessionId || !activeExercise) return false;
+    if (sourceKind !== "plan-day" || !userId || !sessionId || !activeExercise || isExecutionMutationBlocked()) return false;
     const store = activeSessionStoreRef.current;
     if (!store) return false;
     const originalName = activeExercise.exercise.exercise_name;
@@ -1685,6 +1706,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   function applyPreviousSet(exerciseIndex: number, setIndex: number) {
+    if (isExecutionMutationBlocked()) return;
     const item = exerciseStates[exerciseIndex];
     const targetSet = item?.sets[setIndex];
     if (!item || !targetSet || exerciseIndex !== activeExerciseIndex || setIndex !== activeSetIndex || !previousPerformanceReadForCurrentKey) {
@@ -1796,28 +1818,24 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         : tr("set.finishNumbered", { count: formatters.integer(activeSet.setNumber) });
   const optimisticRestInteraction = Boolean(restActive && optimisticCompletion && isSaving);
   const primaryActionDisabled = Boolean(
-    completedSummary || (isSaving && !optimisticRestInteraction) || isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId
+    executionBlocked || completedSummary || (isSaving && !optimisticRestInteraction) || isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId
     || (!isPaused && !restActive && !isFinished && Boolean(activeSet.completedAt))
   );
   const restControlsDisabled = Boolean(
-    isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId || (isSaving && !optimisticCompletion)
+    executionBlocked || isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId || (isSaving && !optimisticCompletion)
   );
   const activeSetPath = buildActiveWorkoutSetPath(
     activeExercise.sets.map((set) => ({ setNumber: set.setNumber, completed: Boolean(set.completedAt) })),
     activeSet.setNumber
   );
   const handlePrimaryAction = () => {
+    if (isExecutionMutationBlocked()) return;
     if (isPaused) void togglePause();
     else if (restActive) stopRestTimer();
     else if (isFinished) void openSessionReview();
     else void finishSet(activeExerciseIndex, activeSetIndex);
   };
-  const busy = isSaving || isStarting || controllerConflictDeviceId !== null || !tabLeader;
-  const reliabilityPresentation = resolveActiveWorkoutReliabilityPresentation({
-    syncState,
-    tabLeader,
-    controllerConflictDeviceId
-  });
+  const busy = executionBlocked || isSaving || isStarting || controllerConflictDeviceId !== null || !tabLeader;
   const syncNotice = reliabilityPresentation.showStandaloneSyncStatus && reliabilityPresentation.nonBlockingSyncState ? (
     <section
       data-aw9-sync-state={reliabilityPresentation.nonBlockingSyncState}
@@ -2131,7 +2149,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             open={exerciseNavigatorOpen}
             onOpenChange={setExerciseNavigatorOpen}
             rows={navigatorRows}
-            readOnly={!tabLeader || controllerConflictDeviceId !== null}
+            readOnly={executionBlocked || !tabLeader || controllerConflictDeviceId !== null}
             paused={Boolean(isPaused)}
             busy={isSaving}
             onSelect={(exerciseIndex, setIndex) => { void navigateToSessionSet(exerciseIndex, setIndex); }}

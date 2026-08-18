@@ -60,4 +60,25 @@ describe("PR #144 focused correction authority", () => {
     expect(shell).toContain('role="menu"');
     expect(shell).toContain('role="menuitem"');
   });
+
+  it("fails closed for every execution mutation while canonical data conflict is unresolved", () => {
+    expect(core).toContain('const executionBlocked = reliabilityPresentation.blockingState === "data_conflict";');
+    expect(core).toContain('latest?.syncState === "data_conflict"');
+    expect(core).toContain('Boolean(latest?.dataConflict)');
+    expect(core).toContain('const busy = executionBlocked || isSaving || isStarting || controllerConflictDeviceId !== null || !tabLeader;');
+    expect(core).toContain('executionBlocked || completedSummary');
+    expect(core).toContain('executionBlocked || isStarting || !tabLeader');
+    expect(core).toContain('readOnly={executionBlocked || !tabLeader || controllerConflictDeviceId !== null}');
+    expect(core).toContain('function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<ActiveWorkoutSetState>) {\n    if (isExecutionMutationBlocked()) return;');
+    expect(core).toContain('async function restartSet(exerciseIndex: number, setIndex: number) {\n    if (isSaving || isExecutionMutationBlocked()) return false;');
+    expect(core).toContain('async function completeSession() {\n    if (!sessionId || isSaving || isStarting || isExecutionMutationBlocked()');
+    expect(core).toContain('async function skipCurrentExercise() {\n    if (sourceKind !== "plan-day" || isSaving || isStarting || isExecutionMutationBlocked()');
+    expect(core).toContain('async function applyStableReplacement(replacement: Workout): Promise<boolean> {\n    if (sourceKind !== "plan-day" || !userId || !sessionId || !activeExercise || isExecutionMutationBlocked()) return false;');
+    expect(core).toContain('resolveDataConflict("server")');
+    expect(core).toContain('resolveDataConflict("local")');
+    expect(shell).toContain('disabled={busy || completed}');
+    expect(shell).toContain('disabled={busy || item.state === "active"}');
+    expect(details).toContain('disabled={busy}');
+  });
+
 });
