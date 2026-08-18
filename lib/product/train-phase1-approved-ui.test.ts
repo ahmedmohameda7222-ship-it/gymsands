@@ -100,7 +100,7 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(directSession).toContain('userSafeError(error, tr("workoutSessionOpenFailed"))');
     expect(directSession).toContain("const userId = user?.id ?? null");
     expect(directSession).toContain("const workoutId = params.id");
-    expect(directSession).toContain("[locale, toast, tr, userId, workoutId]");
+    expect(directSession).toContain("[catalogLocale, toast, tr, userId, workoutId]");
     expect(activeWorkout).toContain("<ActiveWorkoutMinimizedBar");
     expect(activeWorkout).toContain('t("common.pause")');
     expect(activeWorkout).toContain('t("common.resume")');
