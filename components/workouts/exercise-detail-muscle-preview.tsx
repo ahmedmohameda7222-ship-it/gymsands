@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ExerciseMusclePreview } from "@/components/workouts/exercise-muscle-preview";
 import { TrainPageContainer } from "@/components/workouts/train-ui";
+import { toCatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { getWorkout } from "@/services/database/workout-library";
 import { getCustomExercisesWithStatus } from "@/services/workouts/exercise-library-store";
@@ -14,7 +15,8 @@ import type { Workout } from "@/types";
 export function ExerciseDetailMusclePreview() {
   const params = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { language, dir, locale } = useTrainTranslation();
+  const { language, dir } = useTrainTranslation();
+  const catalogLocale = toCatalogLocale(language);
   const [exercise, setExercise] = useState<Workout | null>(null);
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export function ExerciseDetailMusclePreview() {
       try {
         const customResult = await getCustomExercisesWithStatus(user?.id);
         const customExercise = customResult.data.find((item) => item.id === params.id) ?? null;
-        const nextExercise = customExercise ?? await getWorkout(params.id, locale);
+        const nextExercise = customExercise ?? await getWorkout(params.id, catalogLocale);
         if (current) setExercise(nextExercise);
       } catch {
         if (current) setExercise(null);
@@ -34,7 +36,7 @@ export function ExerciseDetailMusclePreview() {
     return () => {
       current = false;
     };
-  }, [locale, params.id, user?.id]);
+  }, [catalogLocale, params.id, user?.id]);
 
   if (!exercise) return null;
 
