@@ -31,14 +31,14 @@ function libraryMeta(locale) {
   };
 }
 
-function activity(name) {
+function activity(name, id = "9fd807ef-bd6b-4bba-874d-0d2624b1e90a", revisionId = "b9b5345f-44e0-4736-8948-0b05ae26f508") {
   return {
-    id: "9fd807ef-bd6b-4bba-874d-0d2624b1e90a",
-    revisionId: "b9b5345f-44e0-4736-8948-0b05ae26f508",
+    id,
+    revisionId,
     revisionNumber: 4,
     revisionLifecycle: "published",
     revisionChecksum: "qa-revision-checksum",
-    slug: "qa-bench-press",
+    slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
     name,
     shortDescription: "QA strength exercise",
     instructions: [{ order: 1, text: "Lower under control and press." }],
@@ -61,17 +61,18 @@ async function createContext(browser, spec) {
   const context = await browser.newContext({ viewport: spec.viewport, reducedMotion: "reduce" });
   const state = {
     activityName: "QA Bench Press",
+    activities: null,
     failActivities: false,
     libraryRequests: [],
     rejectedLocales: []
   };
 
-  await context.addInitScript(({ languageKey, userId }) => {
+  await context.addInitScript(({ languageKey, userId, favoriteIds }) => {
     localStorage.setItem("plaivra.language.v1", languageKey);
     localStorage.setItem("plaivra-theme-id", "olive");
-    localStorage.setItem(`plaivra-exercise-favorites:${userId}`, JSON.stringify([]));
+    localStorage.setItem(`plaivra-exercise-favorites:${userId}`, JSON.stringify(favoriteIds));
     localStorage.setItem(`plaivra-custom-exercises:${userId}`, JSON.stringify([]));
-  }, { languageKey: spec.key, userId: mockUserId });
+  }, { languageKey: spec.key, userId: mockUserId, favoriteIds: spec.favoriteIds || [] });
   await context.addCookies([{ name: "plaivra.language.v1", value: spec.key, domain: "localhost", path: "/" }]);
 
   await context.route("**/api/billing/entitlements", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ entitlements: [] }) }));
@@ -103,12 +104,13 @@ async function createContext(browser, spec) {
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "catalog_unavailable", error: "Exercise search is temporarily unavailable." }) });
         return;
       }
+      const responseActivities = state.activities || [activity(state.activityName)];
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          data: [activity(state.activityName)],
-          pagination: { limit: 50, returned: 1, nextCursor: null },
+          data: responseActivities,
+          pagination: { limit: 50, returned: responseActivities.length, nextCursor: null },
           meta: libraryMeta(locale),
           restarted: false
         })
@@ -140,6 +142,10 @@ async function waitForLibraryRequest(state, predicate, timeoutMs = 10_000) {
   return null;
 }
 
+function activitiesRequestCount(state) {
+  return state.libraryRequests.filter((entry) => entry.pathname.endsWith("/activities")).length;
+}
+
 function assertStrictRequests(label, requests, expectedLocale) {
   const filters = requests.filter((entry) => entry.pathname.endsWith("/filters"));
   const activities = requests.filter((entry) => entry.pathname.endsWith("/activities"));
@@ -149,10 +155,10 @@ function assertStrictRequests(label, requests, expectedLocale) {
   if (wrong.length) throw new Error(`${label}: expected Catalog locale ${expectedLocale}, observed ${JSON.stringify(wrong)}`);
 }
 
-async function openShowAll(page, label) {
+async function openShowAll(page, label, expectedExercise = "QA Bench Press") {
   const response = await page.goto(`${baseUrl}/workouts?all=1`, { waitUntil: "networkidle", timeout: 45_000 });
   if (!response?.ok()) throw new Error(`${label}: /workouts returned ${response?.status() ?? "no response"}`);
-  await page.getByText("QA Bench Press", { exact: true }).first().waitFor({ timeout: 20_000 });
+  await page.getByText(expectedExercise, { exact: true }).first().waitFor({ timeout: 20_000 });
 }
 
 await mkdir(evidenceDir, { recursive: true });
@@ -243,6 +249,93 @@ try {
       duplicateToast: false,
       recovered: true,
       catalogLocale: "en",
+      screenshot: screenshotPath
+    });
+    await context.close();
+  }
+
+  {
+    const favoriteId = "9fd807ef-bd6b-4bba-874d-0d2624b1e90a";
+    const regularId = "9fd807ef-bd6b-4bba-874d-0d2624b1e90b";
+    const spec = { ...scenarios[0], favoriteIds: [favoriteId] };
+    const { context, state } = await createContext(browser, spec);
+    state.activities = [
+      activity("QA Favorite Press", favoriteId, "b9b5345f-44e0-4736-8948-0b05ae26f508"),
+      activity("QA Regular Press", regularId, "b9b5345f-44e0-4736-8948-0b05ae26f509")
+    ];
+    const page = await context.newPage();
+    await openShowAll(page, "favorites-local-filter-no-refetch", "QA Favorite Press");
+    await page.getByText("QA Regular Press", { exact: true }).first().waitFor({ timeout: 20_000 });
+
+    const favorites = page.getByRole("button", { name: "Favorites", exact: true });
+    const baselineActivitiesRequestCount = activitiesRequestCount(state);
+    if (baselineActivitiesRequestCount !== 1) throw new Error(`favorites-local-filter-no-refetch: expected one initial activities request, observed ${baselineActivitiesRequestCount}`);
+
+    await favorites.click();
+    await page.waitForTimeout(350);
+    const afterFavoritesOnRequestCount = activitiesRequestCount(state);
+    if (afterFavoritesOnRequestCount !== baselineActivitiesRequestCount) throw new Error(`favorites-local-filter-no-refetch: Favorites ON refetched activities ${baselineActivitiesRequestCount} -> ${afterFavoritesOnRequestCount}`);
+    if (await page.getByText("QA Favorite Press", { exact: true }).count() < 1) throw new Error("favorites-local-filter-no-refetch: favorite exercise disappeared with Favorites ON");
+    if (await page.getByText("QA Regular Press", { exact: true }).count() !== 0) throw new Error("favorites-local-filter-no-refetch: non-favorite exercise remained visible with Favorites ON");
+
+    await favorites.click();
+    await page.waitForTimeout(350);
+    const afterFavoritesOffRequestCount = activitiesRequestCount(state);
+    if (afterFavoritesOffRequestCount !== baselineActivitiesRequestCount) throw new Error(`favorites-local-filter-no-refetch: Favorites OFF refetched activities ${baselineActivitiesRequestCount} -> ${afterFavoritesOffRequestCount}`);
+    if (await page.getByText("QA Favorite Press", { exact: true }).count() < 1 || await page.getByText("QA Regular Press", { exact: true }).count() < 1) {
+      throw new Error("favorites-local-filter-no-refetch: both exercises were not restored with Favorites OFF");
+    }
+
+    state.failActivities = true;
+    const searchInput = page.locator('input[placeholder*="Search"]').first();
+    await searchInput.fill("failure probe");
+    const retry = page.getByRole("button", { name: "Try again" });
+    await retry.waitFor({ timeout: 20_000 });
+    const afterFailedSearchRequestCount = activitiesRequestCount(state);
+    if (afterFailedSearchRequestCount !== baselineActivitiesRequestCount + 1) {
+      throw new Error(`favorites-local-filter-no-refetch: failed semantic search request count ${afterFailedSearchRequestCount}, expected ${baselineActivitiesRequestCount + 1}`);
+    }
+    if (await page.getByText("Exercise search failed", { exact: true }).count() !== 1) throw new Error("favorites-local-filter-no-refetch: expected one persistent recovery surface after failed search");
+    if (await searchInput.inputValue() !== "failure probe") throw new Error("favorites-local-filter-no-refetch: failed query was not preserved");
+
+    await favorites.click();
+    await page.waitForTimeout(350);
+    const recoveryFavoritesOnRequestCount = activitiesRequestCount(state);
+    if (recoveryFavoritesOnRequestCount !== afterFailedSearchRequestCount) throw new Error(`favorites-local-filter-no-refetch: Favorites ON during recovery refetched activities ${afterFailedSearchRequestCount} -> ${recoveryFavoritesOnRequestCount}`);
+    if (await page.getByText("QA Favorite Press", { exact: true }).count() < 1) throw new Error("favorites-local-filter-no-refetch: favorite prior result missing during recovery");
+    if (await page.getByText("QA Regular Press", { exact: true }).count() !== 0) throw new Error("favorites-local-filter-no-refetch: non-favorite prior result remained visible during recovery Favorites ON");
+    if (await page.getByText("Exercise search failed", { exact: true }).count() !== 1) throw new Error("favorites-local-filter-no-refetch: recovery surface changed while toggling Favorites");
+
+    await favorites.click();
+    await page.waitForTimeout(350);
+    const recoveryFavoritesOffRequestCount = activitiesRequestCount(state);
+    if (recoveryFavoritesOffRequestCount !== afterFailedSearchRequestCount) throw new Error(`favorites-local-filter-no-refetch: Favorites OFF during recovery refetched activities ${afterFailedSearchRequestCount} -> ${recoveryFavoritesOffRequestCount}`);
+    if (await page.getByText("QA Favorite Press", { exact: true }).count() < 1 || await page.getByText("QA Regular Press", { exact: true }).count() < 1) {
+      throw new Error("favorites-local-filter-no-refetch: prior results were not restored with Favorites OFF during recovery");
+    }
+
+    const metrics = await pageMetrics(page);
+    if (metrics.horizontalOverflowPx > 0 || metrics.bodyOverflowPx > 0) throw new Error(`favorites-local-filter-no-refetch: horizontal overflow detected ${JSON.stringify(metrics)}`);
+    assertStrictRequests("favorites-local-filter-no-refetch", state.libraryRequests, "en");
+
+    const screenshotPath = path.join(evidenceDir, "favorites-local-filter-no-refetch-390x844.png");
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    results.push({
+      scenario: "favorites-local-filter-no-refetch-390x844",
+      viewport: spec.viewport,
+      baselineActivitiesRequestCount,
+      afterFavoritesOnRequestCount,
+      afterFavoritesOffRequestCount,
+      afterFailedSearchRequestCount,
+      recoveryFavoritesOnRequestCount,
+      recoveryFavoritesOffRequestCount,
+      favoriteVisibleWithFavoritesOn: true,
+      nonFavoriteHiddenWithFavoritesOn: true,
+      recoveryFavoriteVisible: true,
+      recoveryNonFavoriteHidden: true,
+      persistentErrorSurfaces: 1,
+      failedQueryPreserved: true,
+      horizontalOverflowPx: metrics.horizontalOverflowPx,
       screenshot: screenshotPath
     });
     await context.close();
