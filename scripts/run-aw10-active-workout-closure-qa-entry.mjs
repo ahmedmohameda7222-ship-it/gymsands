@@ -148,3 +148,8 @@ await import("./run-active-workout-full-authority-qa.mjs");
 // evidence for entry loading/media reliability and combined ownership/sync states
 // while retaining the existing AW-10 and full-product authorities unchanged.
 await import("./run-active-workout-final-premerge-qa.mjs");
+
+// The final QA-only closure permanently proves that unresolved canonical data
+// conflict exposes zero executable workout mutations and that both resolution
+// choices restore real mutation-capable execution at the exact PR head.
+await import("./run-active-workout-data-conflict-behavioral-qa.mjs");
