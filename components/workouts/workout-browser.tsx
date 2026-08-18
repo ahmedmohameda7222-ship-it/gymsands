@@ -47,7 +47,6 @@ type FilterKey =
 type SuccessfulBrowseCriteria = {
   query: string;
   filters: Record<FilterKey, string[]>;
-  favoritesOnly: boolean;
 };
 
 const emptyFilters: Record<FilterKey, string[]> = {
@@ -257,7 +256,7 @@ export function WorkoutBrowser() {
         .then((result) => {
           if (!active) return;
           setWorkouts(result.data);
-          setLastSuccessfulCriteria({ query: query.trim(), filters, favoritesOnly });
+          setLastSuccessfulCriteria({ query: query.trim(), filters });
           if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
           setResultStatus(result.status);
           setNextProviderCursor(result.pagination?.nextCursor ?? null);
@@ -277,14 +276,14 @@ export function WorkoutBrowser() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [catalogLocale, favoritesOnly, filters, hasActiveLibraryRequest, isHydrated, query, reloadResultsNonce, requestFilters, tr]);
+  }, [catalogLocale, filters, hasActiveLibraryRequest, isHydrated, query, reloadResultsNonce, requestFilters, tr]);
 
-  const currentCriteria: SuccessfulBrowseCriteria = { query: query.trim(), filters, favoritesOnly };
+  const currentCriteria: SuccessfulBrowseCriteria = { query: query.trim(), filters };
   const displayCriteria = resultError && lastSuccessfulCriteria ? lastSuccessfulCriteria : currentCriteria;
   const visibleCustomExercises = hasActiveLibraryRequest ? customExercises.filter((workout) => matchesWorkoutRecord(workout, displayCriteria.query, displayCriteria.filters, filterOptions)) : [];
   const visibleGlobalExercises = hasActiveLibraryRequest ? workouts.filter((workout) => matchesWorkoutRecord(workout, displayCriteria.query, displayCriteria.filters, filterOptions)) : [];
   const allVisibleWorkouts = [...visibleCustomExercises, ...visibleGlobalExercises].filter((workout, index, all) => all.findIndex((item) => item.id === workout.id) === index);
-  const filteredWorkouts = displayCriteria.favoritesOnly ? allVisibleWorkouts.filter((workout) => favoriteIds.includes(workout.id)) : allVisibleWorkouts;
+  const filteredWorkouts = favoritesOnly ? allVisibleWorkouts.filter((workout) => favoriteIds.includes(workout.id)) : allVisibleWorkouts;
   const duplicateExerciseNames = useMemo(() => duplicateWorkoutNames(filteredWorkouts), [filteredWorkouts]);
   const qualityCounts = useMemo(() => summarizeExerciseQuality(filteredWorkouts, duplicateExerciseNames), [duplicateExerciseNames, filteredWorkouts]);
 
@@ -296,7 +295,7 @@ export function WorkoutBrowser() {
     try {
       const result = await getWorkoutsWithStatus(query.trim(), requestFilters, nextProviderCursor, catalogLocale);
       setWorkouts((current) => [...current, ...result.data]);
-      setLastSuccessfulCriteria({ query: query.trim(), filters, favoritesOnly });
+      setLastSuccessfulCriteria({ query: query.trim(), filters });
       if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
       setResultStatus(result.status);
       setNextProviderCursor(result.pagination?.nextCursor ?? null);
