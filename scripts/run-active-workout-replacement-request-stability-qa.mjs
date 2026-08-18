@@ -163,19 +163,19 @@ function replacementCatalogPayload(url) {
   return { data: [], meta };
 }
 
-async function waitForTimerChange(timer, previousValue) {
+async function waitForTimerChange(page, timer, previousValue) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    await timer.page().waitForTimeout(100);
+    await page.waitForTimeout(100);
     const currentValue = (await timer.innerText()).trim();
     if (currentValue && currentValue !== previousValue) return currentValue;
   }
   throw new Error(`Workout elapsed timer did not advance from ${previousValue}.`);
 }
 
-async function waitForRequestCount(getCount, expected) {
+async function waitForRequestCount(page, getCount, expected) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (getCount() >= expected) return;
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await page.waitForTimeout(50);
   }
   throw new Error(`Replacement logical request count did not reach ${expected}; observed ${getCount()}.`);
 }
@@ -282,7 +282,7 @@ try {
 
   for (let tick = 0; tick < 2; tick += 1) {
     const previous = observation.timerSamples.at(-1);
-    const next = await waitForTimerChange(elapsedTimer, previous);
+    const next = await waitForTimerChange(page, elapsedTimer, previous);
     observation.timerSamples.push(next);
     observation.timerTicksCrossed += 1;
     check(
@@ -312,7 +312,7 @@ try {
   check(await reasonButtons.count() >= 2, "Replacement reason controls are unavailable.");
   const expectedAfterReason = sourceDetailRequestCount + 1;
   await reasonButtons.nth(1).click();
-  await waitForRequestCount(() => sourceDetailRequestCount, expectedAfterReason);
+  await waitForRequestCount(page, () => sourceDetailRequestCount, expectedAfterReason);
   await page.waitForTimeout(350);
 
   observation.requestCountAfterReasonChange = sourceDetailRequestCount - countBeforeOpen;
