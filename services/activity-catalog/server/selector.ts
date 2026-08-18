@@ -118,6 +118,9 @@ export function createActivityCatalogProvider(
   } = {}
 ) {
   try {
+    if (!options.mode && !serverEnv.plaivraActivityCatalogMode) {
+      throw new CatalogError("catalog_not_configured", { failureStage: "provider_request" });
+    }
     const mode = options.mode ?? parseCatalogProviderMode(serverEnv.plaivraActivityCatalogMode);
     options.observer?.providerRequested(mode);
     const legacy = options.legacy ?? new LegacyActivityCatalogProvider(supabase);
