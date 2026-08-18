@@ -126,11 +126,14 @@ export function ActiveWorkoutReplacementRecommendations({
     savedAlternatives,
     sessionExerciseIds,
   });
-  latestRecommendationInputsRef.current = {
-    original,
-    savedAlternatives,
-    sessionExerciseIds,
-  };
+
+  useEffect(() => {
+    latestRecommendationInputsRef.current = {
+      original,
+      savedAlternatives,
+      sessionExerciseIds,
+    };
+  }, [original, savedAlternatives, sessionExerciseIds]);
 
   useEffect(() => {
     const currentInputs = latestRecommendationInputsRef.current;
