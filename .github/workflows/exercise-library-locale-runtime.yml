@@ -50,11 +50,13 @@ jobs:
           npx vitest run --config vitest.unit.config.mjs
           app/api/activity-catalog/library-locale-contract.test.ts
           lib/activity-catalog/catalog-locale.test.ts
+          lib/settings/user-settings-context.bootstrap.test.tsx
           components/workouts/workout-browser.locale-runtime.test.tsx
           services/database/exercise-picker-dialog-behavior.test.ts
           services/exercise-detail/client.locale.test.ts
           services/activity-catalog/server/library-v2-boundaries.test.ts
           lib/product/train-phase1-approved-semantics.test.ts
+          lib/product/train-phase1-approved-ui.test.ts
       - name: Typecheck typed locale boundaries
         run: npm run typecheck
       - name: Install Chromium
