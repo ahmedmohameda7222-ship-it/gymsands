@@ -14,6 +14,7 @@ import { ExercisePerformance } from "@/components/exercise-detail/exercise-perfo
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
 import { TrainPageContainer } from "@/components/workouts/train-ui";
+import { toCatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import { addToPlanActivityPayload } from "@/lib/exercise-detail/model";
 import { validatedActiveWorkoutReturnTo } from "@/lib/workouts/active-workout-detail-navigation";
 import { useExerciseDetailTranslation } from "@/lib/i18n/exercise-detail";
@@ -33,7 +34,8 @@ export default function WorkoutDetailsPage() {
   const backHref = returnTo ?? "/workouts";
   const { user } = useAuth();
   const { toast } = useToast();
-  const { dir, locale, ed } = useExerciseDetailTranslation();
+  const { language, dir, locale, ed } = useExerciseDetailTranslation();
+  const catalogLocale = toCatalogLocale(language);
   const [core, setCore] = useState<ResolvedExerciseDetail | null>(null);
   const [coreState, setCoreState] = useState<"loading" | "failed" | "not_found">("loading");
   const [favorites, setFavorites] = useState<Secondary<string[]>>({ kind: "loading", data: [] });
@@ -48,11 +50,11 @@ export default function WorkoutDetailsPage() {
   const loadCore = useCallback(() => {
     setCoreState("loading");
     setCore(null);
-    void resolveExerciseDetail(params.id, user?.id, locale).then((resolved) => {
+    void resolveExerciseDetail(params.id, user?.id, locale, catalogLocale).then((resolved) => {
       setCore(resolved);
       setCustomVideoUrl(resolved.initialCustomVideoUrl);
     }).catch((error) => setCoreState(error instanceof CatalogClientError && error.status === 404 ? "not_found" : "failed"));
-  }, [locale, params.id, user?.id]);
+  }, [catalogLocale, locale, params.id, user?.id]);
   useEffect(loadCore, [loadCore]);
 
   useEffect(() => {
@@ -67,9 +69,9 @@ export default function WorkoutDetailsPage() {
     if (!core) return;
     let active = true;
     setAlternatives({ kind: "loading", data: [] });
-    void loadExerciseAlternatives(core, locale).then((data) => active && setAlternatives({ kind: "ready", data })).catch(() => active && setAlternatives({ kind: "failed", data: [] }));
+    void loadExerciseAlternatives(core, catalogLocale).then((data) => active && setAlternatives({ kind: "ready", data })).catch(() => active && setAlternatives({ kind: "failed", data: [] }));
     return () => { active = false; };
-  }, [core, locale]);
+  }, [catalogLocale, core]);
 
   useEffect(() => {
     if (!core) return;
@@ -131,7 +133,7 @@ export default function WorkoutDetailsPage() {
 
     {(exercise.movementPattern || exercise.forceType) ? <section className="border-t py-8" aria-labelledby="exercise-details-heading"><h2 id="exercise-details-heading" className="text-xl font-semibold tracking-tight">{ed("details")}</h2><dl className="mt-5 grid gap-x-10 gap-y-5 sm:grid-cols-2">{exercise.movementPattern ? <Metric label={ed("movement")} value={exercise.movementPattern} /> : null}{exercise.forceType ? <Metric label={ed("force")} value={exercise.forceType} /> : null}</dl></section> : null}
 
-    {alternatives.kind === "failed" ? <section className="border-t py-8"><h2 className="text-xl font-semibold">{ed("alternatives")}</h2><div className="mt-4 flex flex-wrap items-center gap-3"><p className="text-sm text-muted-foreground">{ed("alternativesUnavailable")}</p><Button variant="outline" className="min-h-11" onClick={() => { setAlternatives({ kind: "loading", data: [] }); void loadExerciseAlternatives(core, locale).then((data) => setAlternatives({ kind: "ready", data })).catch(() => setAlternatives({ kind: "failed", data: [] })); }}>{ed("retry")}</Button></div></section> : alternatives.kind === "ready" && alternatives.data.length ? <section className="border-t py-8" aria-labelledby="exercise-alternatives-heading"><h2 id="exercise-alternatives-heading" className="text-xl font-semibold tracking-tight">{ed("alternatives")}</h2><div className="mt-4 divide-y">{visibleAlternatives.map((item) => { const target = item.activity.coverage.find((entry) => entry.role === "primary")?.name; const equipment = item.activity.equipment.map((entry) => entry.name ?? entry.slug).filter(Boolean).join(", "); return <Link key={item.activity.id} href={`/workouts/${item.activity.id}`} className="flex min-h-16 items-center justify-between gap-4 py-3 hover:text-primary"><span><span className="font-medium">{item.activity.name}</span>{target || equipment ? <span className="mt-1 block text-sm text-muted-foreground">{[target, equipment].filter(Boolean).join(" · ")}</span> : null}</span><ArrowRight className="h-4 w-4 shrink-0 rtl:rotate-180" /></Link>; })}</div>{alternatives.data.length > 3 && !showAllAlternatives ? <Button type="button" variant="ghost" className="mt-3 min-h-11 px-0 hover:bg-transparent" onClick={() => setShowAllAlternatives(true)}>{ed("allAlternatives")}</Button> : null}</section> : null}
+    {alternatives.kind === "failed" ? <section className="border-t py-8"><h2 className="text-xl font-semibold">{ed("alternatives")}</h2><div className="mt-4 flex flex-wrap items-center gap-3"><p className="text-sm text-muted-foreground">{ed("alternativesUnavailable")}</p><Button variant="outline" className="min-h-11" onClick={() => { setAlternatives({ kind: "loading", data: [] }); void loadExerciseAlternatives(core, catalogLocale).then((data) => setAlternatives({ kind: "ready", data })).catch(() => setAlternatives({ kind: "failed", data: [] })); }}>{ed("retry")}</Button></div></section> : alternatives.kind === "ready" && alternatives.data.length ? <section className="border-t py-8" aria-labelledby="exercise-alternatives-heading"><h2 id="exercise-alternatives-heading" className="text-xl font-semibold tracking-tight">{ed("alternatives")}</h2><div className="mt-4 divide-y">{visibleAlternatives.map((item) => { const target = item.activity.coverage.find((entry) => entry.role === "primary")?.name; const equipment = item.activity.equipment.map((entry) => entry.name ?? entry.slug).filter(Boolean).join(", "); return <Link key={item.activity.id} href={`/workouts/${item.activity.id}`} className="flex min-h-16 items-center justify-between gap-4 py-3 hover:text-primary"><span><span className="font-medium">{item.activity.name}</span>{target || equipment ? <span className="mt-1 block text-sm text-muted-foreground">{[target, equipment].filter(Boolean).join(" · ")}</span> : null}</span><ArrowRight className="h-4 w-4 shrink-0 rtl:rotate-180" /></Link>; })}</div>{alternatives.data.length > 3 && !showAllAlternatives ? <Button type="button" variant="ghost" className="mt-3 min-h-11 px-0 hover:bg-transparent" onClick={() => setShowAllAlternatives(true)}>{ed("allAlternatives")}</Button> : null}</section> : null}
 
     {mediaUrl ? <ExerciseMedia name={exercise.name} url={mediaUrl} /> : null}
     {user?.id ? <><AddToPlanDialog open={addOpen} onOpenChange={setAddOpen} userId={user.id} activity={addPayload} fields={exercise.prescription?.fields ?? []} /><ExerciseMoreDialog open={moreOpen} onOpenChange={setMoreOpen} userId={user.id} exerciseId={exercise.identity.activityId} exerciseName={exercise.name} customExercise={exercise.identity.source === "custom"} currentUrl={customVideoUrl} onSaved={setCustomVideoUrl} /></> : null}
