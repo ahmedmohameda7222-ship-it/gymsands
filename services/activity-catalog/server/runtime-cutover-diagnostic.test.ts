@@ -48,6 +48,25 @@ function unavailableV2(): LibraryActivityProvider {
   } as unknown as LibraryActivityProvider;
 }
 
+function healthyV2(): LibraryActivityProvider {
+  const searchActivities = vi.fn(async () => ({
+    data: [],
+    pagination: { limit: 50, returned: 0, nextCursor: null },
+    meta: {
+      apiVersion: "v2" as const,
+      locale: "en",
+      libraryRelease: null,
+      catalogRelease: null,
+      source: "library_v2" as const,
+      degraded: false,
+      primarySource: "library_v2" as const,
+      fallbackUsed: false,
+      fallbackReason: null
+    }
+  }));
+  return { searchActivities } as unknown as LibraryActivityProvider;
+}
+
 describe("P10F runtime cutover diagnostics", () => {
   beforeEach(() => __resetLegacyCatalogSnapshotCacheForTests());
 
@@ -74,6 +93,21 @@ describe("P10F runtime cutover diagnostics", () => {
     expect(identities.size).toBe(60);
   });
 
+  it("keeps healthy V2 primary traffic off the legacy provider", async () => {
+    const external = healthyV2();
+    const legacy = createLibraryActivityProvider(legacySupabase(), "legacy");
+    const legacySearch = vi.spyOn(legacy, "searchActivities");
+    const provider = new FallbackLibraryActivityProvider(external, legacy);
+
+    const result = await provider.searchActivities({ domain: "strength", locale: "en", limit: 50 });
+
+    expect(external.searchActivities).toHaveBeenCalledTimes(1);
+    expect(legacySearch).not.toHaveBeenCalled();
+    expect(result.meta.source).toBe("library_v2");
+    expect(result.meta.degraded).toBe(false);
+    expect(result.meta.fallbackUsed).toBe(false);
+  });
+
   it("distinguishes controlled V2 failure from direct legacy by proving the primary attempt before degraded legacy fallback", async () => {
     const external = unavailableV2();
     const legacy = createLibraryActivityProvider(legacySupabase(), "legacy");
@@ -82,7 +116,10 @@ describe("P10F runtime cutover diagnostics", () => {
     const result = await provider.searchActivities({ domain: "strength", locale: "en", limit: 50 });
 
     expect(external.searchActivities).toHaveBeenCalledTimes(1);
+    expect(result.meta.primarySource).toBe("library_v2");
     expect(result.meta.source).toBe("legacy");
+    expect(result.meta.fallbackUsed).toBe(true);
+    expect(result.meta.fallbackReason).toBe("catalog_network_error");
     expect(result.meta.degraded).toBe(true);
     expect(result.data).toHaveLength(50);
     expect(result.pagination.nextCursor).toEqual(expect.any(String));
