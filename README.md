@@ -56,8 +56,10 @@ Tests enforce source code, schema, SQL verification, structured manifests, and o
 - `20260804174500_fix_profiles_update_policy_recursion.sql` was applied exactly once to Plaivra Production as generated migration `20260804180932_fix_profiles_update_policy_recursion`; its repository file remains immutable and is represented as `applied_version_alias`.
 - Plaivra Production contains **87** physical migration records; the latest physical migration is `20260804180932_fix_profiles_update_policy_recursion`.
 - P10F introduces repository migration `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql` as a **pending, pre-merge-only** migration. It has not been applied to Production, has no Production identity, and must not be replayed or applied before explicit Planner approval.
-- Exercise Detail + Personal Records introduces repository migration `20260813042754_exercise_detail_personal_records_authority.sql` as a second **pending, repository-only** migration. It has not been applied to Production, has no Production identity, and must not be replayed or applied before explicit Planner approval.
-- While those two migrations are pending, the canonical ledger records `pendingCount = 2`, `unresolvedCount = 2`, and `historyRepair.state = pending`; the previously applied Production history remains reconciled and unchanged.
+- Exercise Detail + Personal Records introduces repository migration `20260813042754_exercise_detail_personal_records_authority.sql` as a **pending, repository-only** migration. It has not been applied to Production, has no Production identity, and must not be replayed or applied before explicit Planner approval.
+- Workout History redesign migration `20260813071926_workout_history_redesign_read_contract.sql` remains **pending, repository-only** and absent from Production.
+- Active Workout feedback preferences introduce repository migration `20260816044500_active_workout_feedback_preferences.sql` as a **pending, repository-only** additive settings migration. It has not been applied to Production and has no Production identity.
+- While these four migrations are pending, the canonical ledger records `pendingCount = 4`, `unresolvedCount = 4`, and `historyRepair.state = pending`; the previously applied Production history remains reconciled and unchanged.
 - The released compatibility marker remains `20260724232734`. Physical migration advancement and application-release promotion remain separate operations.
 - No application deployment accompanied the PCS-2 or P0 migration applications.
 - Repository state alone does not authorize merge, manual deployment, migration application, or compatibility-marker promotion.
@@ -103,3 +105,9 @@ Applied migrations must never be renamed, rewritten, reordered, deleted, or repl
 - `20260813071926_workout_history_redesign_read_contract.sql` is repository-only and classified `pending` in the canonical migration ledger.
 - It adds owner-scoped first-page summary and global-history existence read functions; it has **not** been applied to Plaivra Production and intentionally has no Production migration identity.
 - Do not replay or apply it before explicit Planner approval of the Workout History redesign merge and release sequence.
+
+## Active Workout feedback preferences pending migration
+
+- `20260816044500_active_workout_feedback_preferences.sql` adds durable account-scoped workout sound and haptic preferences to the existing `user_app_settings` authority.
+- It is repository-only and classified `pending`; it has **not** been applied to Plaivra Production and intentionally has no Production migration identity.
+- Existing `user_app_settings` owner RLS remains authoritative. Do not replay or apply the migration before explicit Planner approval of the Active Workout merge/release sequence.

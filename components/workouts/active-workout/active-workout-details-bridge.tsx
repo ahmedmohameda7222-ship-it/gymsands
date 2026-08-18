@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
@@ -17,9 +17,9 @@ import { Label } from "@/components/ui/label";
 import type { ActiveWorkoutDetailsSection } from "@/components/workouts/active-workout/active-workout-actions";
 import type { ActiveWorkoutMuscleLoadController } from "@/components/workouts/active-workout/active-workout-muscle-load-controller";
 import { ActiveWorkoutMuscleLoadSection } from "@/components/workouts/active-workout/active-workout-muscle-load-section";
+import { ActiveWorkoutReplacementRecommendations } from "@/components/workouts/active-workout/active-workout-replacement-recommendations";
 import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dialog";
 import {
-  isolateBidiText,
   type ActiveWorkoutFormatters,
   type ActiveWorkoutTranslator
 } from "@/lib/i18n/active-workout";
@@ -37,31 +37,25 @@ import type {
 
 import type {
   ActiveWorkoutExerciseState,
-  ActiveWorkoutPreviousPerformance,
   ActiveWorkoutSetState
 } from "./active-workout-runtime-model";
-
-export type ActiveWorkoutDetailsFocusTarget = "guide-video" | null;
 
 export type ActiveWorkoutDetailsBridgeProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
   requestedSection: ActiveWorkoutDetailsSection;
-  requestedFocusTarget: ActiveWorkoutDetailsFocusTarget;
   sourceKind: "plan-day" | "direct";
+  userId: string | null;
+  locale: string;
+  sessionExerciseIds: ReadonlySet<string>;
   activeExercise: ActiveWorkoutExerciseState;
   activeSet: ActiveWorkoutSetState;
-  previousPerformance: ActiveWorkoutPreviousPerformance | null;
-  currentInstructions: string;
-  currentGuideUrl: string | null;
-  currentCustomVideoUrl: string | null;
   busy: boolean;
   tr: ActiveWorkoutTranslator;
   formatters: ActiveWorkoutFormatters;
   /** @deprecated Reopen belongs to Review, not Set Details. */
   legacyReopenSetLabel: string;
-  onApplyPreviousSet: () => void;
   /** @deprecated Reopen belongs to Review, not Set Details. */
   onRestartSet: () => void;
   onUpdateSet: (patch: Partial<ActiveWorkoutSetState>) => void;
@@ -79,7 +73,7 @@ export type ActiveWorkoutDetailsBridgeProps = {
   replacementPickerOpen: boolean;
   onReplacementPickerOpenChange: (open: boolean) => void;
   dayName: string;
-  onAddReplacement: (replacement: Workout) => void;
+  onAddReplacement: (replacement: Workout) => Promise<boolean>;
 };
 
 export function ActiveWorkoutDetailsBridge({
@@ -87,18 +81,15 @@ export function ActiveWorkoutDetailsBridge({
   onOpenChange,
   returnFocusRef,
   requestedSection,
-  requestedFocusTarget,
   sourceKind,
+  userId,
+  locale,
+  sessionExerciseIds,
   activeExercise,
   activeSet,
-  previousPerformance,
-  currentInstructions,
-  currentGuideUrl,
-  currentCustomVideoUrl,
   busy,
   tr,
   formatters,
-  onApplyPreviousSet,
   onUpdateSet,
   muscleLoadController,
   activeAlternatives,
@@ -114,54 +105,64 @@ export function ActiveWorkoutDetailsBridge({
   dayName,
   onAddReplacement
 }: ActiveWorkoutDetailsBridgeProps) {
-  const overviewRef = useRef<HTMLHeadingElement>(null);
   const currentSetRef = useRef<HTMLHeadingElement>(null);
   const muscleLoadRef = useRef<HTMLHeadingElement>(null);
-  const adjustTodayRef = useRef<HTMLHeadingElement>(null);
+  const adjustTodayRef = useRef<HTMLElement>(null);
   const assistanceRef = useRef<HTMLHeadingElement>(null);
-  const guideGroupRef = useRef<HTMLDivElement>(null);
   const activeRpeValidation = validateWorkoutSetEffortInput(activeSet.rpe, "rpe");
   const activeRirValidation = validateWorkoutSetEffortInput(activeSet.rir, "rir");
   const rpeErrorId = activeRpeValidation.error ? "active-set-rpe-error" : undefined;
   const rirErrorId = activeRirValidation.error ? "active-set-rir-error" : undefined;
+  const replacementOriginal = useMemo(() => ({
+    id: activeExercise.exercise.source_workout_id ?? activeExercise.exercise.workout_id ?? activeExercise.prescriptionItem.sourcePlanActivityId ?? "",
+    name: activeExercise.exercise.exercise_name,
+    targetMuscle: activeExercise.exercise.target_muscle,
+    equipment: activeExercise.exercise.equipment,
+    difficulty: null,
+    mechanics: null,
+    forceType: null,
+    movementPattern: null,
+    secondaryMuscles: [] as string[]
+  }), [
+    activeExercise.exercise.equipment,
+    activeExercise.exercise.exercise_name,
+    activeExercise.exercise.source_workout_id,
+    activeExercise.exercise.target_muscle,
+    activeExercise.exercise.workout_id,
+    activeExercise.prescriptionItem.sourcePlanActivityId
+  ]);
 
   const closeBeforeAi = () => onOpenChange(false);
   const effectiveSection: ActiveWorkoutDetailsSection =
-    requestedSection === "adjust-today" && sourceKind !== "plan-day" ? "overview" : requestedSection;
-  const dialogTitle = effectiveSection === "overview"
-    ? tr("details.exerciseOverview")
-    : effectiveSection === "current-set"
-      ? tr("actions.setDetails")
-      : effectiveSection === "muscle-load"
-        ? tr("details.muscleLoad")
-        : effectiveSection === "adjust-today"
-          ? tr("details.adjustToday")
-          : tr("chatGPT.ask");
-  const dialogDescription = effectiveSection === "overview"
-    ? activeExercise.exercise.exercise_name
-    : effectiveSection === "current-set"
-      ? tr("set.label", { count: formatters.integer(activeSet.setNumber) })
+    requestedSection === "adjust-today" && sourceKind !== "plan-day" ? "current-set" : requestedSection;
+  const dialogTitle = effectiveSection === "current-set"
+    ? tr("actions.setDetails")
+    : effectiveSection === "muscle-load"
+      ? tr("details.muscleLoad")
+      : effectiveSection === "adjust-today"
+        ? tr("actions.replaceToday")
+        : tr("chatGPT.ask");
+  const dialogDescription = effectiveSection === "current-set"
+    ? tr("set.label", { count: formatters.integer(activeSet.setNumber) })
+    : effectiveSection === "adjust-today"
+      ? tr("actions.replaceTodayDescription")
       : dialogTitle;
 
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(() => {
-      const sectionRefs: Record<ActiveWorkoutDetailsSection, RefObject<HTMLHeadingElement | null>> = {
-        overview: overviewRef,
-        "current-set": currentSetRef,
-        "muscle-load": muscleLoadRef,
-        "adjust-today": adjustTodayRef,
-        assistance: assistanceRef
-      };
-      const requested = sectionRefs[effectiveSection].current;
-      const focusTarget = requestedFocusTarget === "guide-video"
-        ? guideGroupRef.current
-        : requested;
+      const requested = effectiveSection === "current-set"
+        ? currentSetRef.current
+        : effectiveSection === "muscle-load"
+          ? muscleLoadRef.current
+          : effectiveSection === "adjust-today"
+            ? adjustTodayRef.current
+            : assistanceRef.current;
       requested?.scrollIntoView({ block: "start" });
-      focusTarget?.focus({ preventScroll: true });
+      requested?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [effectiveSection, open, requestedFocusTarget]);
+  }, [effectiveSection, open]);
 
   return (
     <>
@@ -184,90 +185,6 @@ export function ActiveWorkoutDetailsBridge({
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
             <div className="divide-y divide-border/70">
-              <section
-                data-aw6-details-overview
-                hidden={effectiveSection !== "overview"}
-                aria-labelledby="aw6-details-overview-title"
-                className="scroll-mt-4 py-5"
-              >
-                <h3
-                  id="aw6-details-overview-title"
-                  ref={overviewRef}
-                  tabIndex={-1}
-                  className="text-base font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {tr("details.exerciseOverview")}
-                </h3>
-                <p className="mt-2 text-lg font-semibold"><bdi>{activeExercise.exercise.exercise_name}</bdi></p>
-                {currentInstructions.trim() ? (
-                  <div className="mt-4">
-                    <p className="text-sm font-semibold">{tr("details.instructions")}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                      <bdi dir="auto">{currentInstructions}</bdi>
-                    </p>
-                  </div>
-                ) : null}
-
-                <div className="mt-4">
-                  <p className="text-sm font-semibold">{tr("exercise.previousPerformance")}</p>
-                  {previousPerformance ? (
-                    <div className="mt-1 space-y-1 text-sm text-muted-foreground">
-                      {previousPerformance.lastBestSet ? (
-                        <p>{previousPerformance.lastBestSet}</p>
-                      ) : null}
-                      {previousPerformance.lastPerformedAt ? (
-                        <p>{tr("details.previousDate", {
-                          date: formatters.date(previousPerformance.lastPerformedAt)
-                        })}</p>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {tr("exercise.noPreviousPerformance")}
-                    </p>
-                  )}
-                  {previousPerformance ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-3 min-h-11"
-                      onClick={onApplyPreviousSet}
-                      disabled={Boolean(activeSet.completedAt) || busy}
-                    >
-                      {tr("exercise.useValues")}
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div
-                  ref={guideGroupRef}
-                  tabIndex={-1}
-                  className="mt-4 rounded-[var(--radius-md)] bg-muted/30 p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <p className="text-sm font-semibold">{tr("details.exerciseGuideVideo")}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {currentGuideUrl ? (
-                      <Button asChild variant="outline" size="sm" className="min-h-11">
-                        <a href={currentGuideUrl} target="_blank" rel="noreferrer noopener">
-                          {tr("details.openExerciseGuide")}
-                        </a>
-                      </Button>
-                    ) : null}
-                    {currentCustomVideoUrl ? (
-                      <Button asChild variant="outline" size="sm" className="min-h-11">
-                        <a href={currentCustomVideoUrl} target="_blank" rel="noreferrer noopener">
-                          {tr("details.openCustomVideo")}
-                        </a>
-                      </Button>
-                    ) : null}
-                    {!currentGuideUrl && !currentCustomVideoUrl ? (
-                      <p className="text-xs text-muted-foreground">{tr("details.noneSaved")}</p>
-                    ) : null}
-                  </div>
-                </div>
-              </section>
-
               <section
                 data-aw6-details-current-set
                 hidden={effectiveSection !== "current-set"}
@@ -397,67 +314,45 @@ export function ActiveWorkoutDetailsBridge({
 
               {sourceKind === "plan-day" ? (
                 <section
+                  ref={adjustTodayRef}
+                  tabIndex={-1}
                   data-aw6-details-adjust-today
-                hidden={effectiveSection !== "adjust-today"}
-                  aria-labelledby="aw6-details-adjust-today-title"
-                  className="scroll-mt-4 py-5"
+                  hidden={effectiveSection !== "adjust-today"}
+                  aria-label={tr("actions.replaceToday")}
+                  className="scroll-mt-4 py-5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <h3
-                    id="aw6-details-adjust-today-title"
-                    ref={adjustTodayRef}
-                    tabIndex={-1}
-                    className="text-base font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {tr("details.adjustToday")}
-                  </h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {tr("actions.replaceTodayDescription")}
-                  </p>
-                  {activeAlternatives.length ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {tr("actions.savedAlternatives", {
-                        names: activeAlternatives
-                          .map((alternative) => isolateBidiText(alternative.alternative_exercise_name))
-                          .join(", ")
-                      })}
-                    </p>
-                  ) : null}
-                  <Label htmlFor="active-workout-replacement-reason" className="mt-4 block">
-                    {tr("actions.chooseReason")}
-                  </Label>
-                  <select
-                    id="active-workout-replacement-reason"
-                    value={replacementReason}
-                    onChange={(event) => onReplacementReasonChange(
-                      event.target.value as ExerciseAlternativeReason
-                    )}
-                    className="mt-1.5 h-12 w-full rounded-[14px] border border-input bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  <ActiveWorkoutReplacementRecommendations
+                    userId={userId ?? ""}
+                    original={replacementOriginal}
+                    reason={replacementReason}
+                    onReasonChange={onReplacementReasonChange}
+                    locale={locale}
+                    savedAlternatives={activeAlternatives}
+                    sessionExerciseIds={sessionExerciseIds}
+                    busy={busy || isSavingAlternative}
+                    onReplace={(replacement) => {
+                      void onAddReplacement(replacement).then((saved) => {
+                        if (saved) onOpenChange(false);
+                      });
+                    }}
+                    onBrowseAll={() => {
+                      onOpenChange(false);
+                      onUseReplacement();
+                    }}
+                    tr={tr}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-3 min-h-11 border-amber-500/40 text-foreground hover:bg-amber-500/10"
+                    onClick={() => {
+                      onOpenChange(false);
+                      onSkipExercise();
+                    }}
                     disabled={busy}
                   >
-                    <option value="machine_taken">{tr("actions.machineOccupied")}</option>
-                    <option value="no_equipment">{tr("actions.equipmentUnavailable")}</option>
-                    <option value="pain_or_discomfort">{tr("actions.painDiscomfort")}</option>
-                    <option value="too_hard">{tr("actions.tooHardToday")}</option>
-                    <option value="other">{tr("actions.other")}</option>
-                  </select>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      onClick={onUseReplacement}
-                      disabled={isSavingAlternative || busy}
-                    >
-                      {tr("actions.chooseReplacement")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="border-amber-500/40 text-foreground hover:bg-amber-500/10"
-                      onClick={onSkipExercise}
-                      disabled={busy}
-                    >
-                      {tr("actions.skipExerciseToday")}
-                    </Button>
-                  </div>
+                    {tr("actions.skipExerciseToday")}
+                  </Button>
                   <AiActionRequestDialog
                     className="mt-3"
                     actions={[{

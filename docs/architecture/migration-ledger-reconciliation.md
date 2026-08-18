@@ -4,7 +4,7 @@
 **Evidence captured:** 2026-08-03T18:10:27.000Z
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `92d936bc513af83fff41913477a8148a9ab5b845`
-**Status:** Applied Production history reconciled; two repository migrations intentionally pending
+**Status:** Applied Production history reconciled; four repository migrations intentionally pending
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
@@ -12,17 +12,17 @@ This document records migration identity and verification. It does not independe
 
 - Physical Production migration records: **87**
 - Exact applications (`state = applied`): **63**
-- Repository-only pending migrations: **2**
-- `pendingCount = 2`
+- Repository-only pending migrations: **4**
+- `pendingCount = 4`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 2`
+- `unresolvedCount = 4`
 - `historyRepair.state = pending`
 - `release_ready = false` while the repository migrations remain intentionally pending
 - Released compatibility marker: `20260724232734`
 - Latest physical Production record: `20260804180932_fix_profiles_update_policy_recursion`
 - Activity Catalog Production remains isolated from the Main migration ledger
 
-The previously applied Plaivra Production migration history remains reconciled through `20260804180932_fix_profiles_update_policy_recursion`. P10F migration `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql` and Exercise Detail + Personal Records migration `20260813042754_exercise_detail_personal_records_authority.sql` are intentionally classified `pending`. Neither has been applied to Production, neither claims a Production identity, and neither may be replayed or applied before explicit Planner approval.
+The previously applied Plaivra Production migration history remains reconciled through `20260804180932_fix_profiles_update_policy_recursion`. P10F migration `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql`, Exercise Detail + Personal Records migration `20260813042754_exercise_detail_personal_records_authority.sql`, Workout History redesign migration `20260813071926_workout_history_redesign_read_contract.sql`, and Active Workout feedback-preference migration `20260816044500_active_workout_feedback_preferences.sql` are intentionally classified `pending`. None has been applied to Production, none claims a Production identity, and none may be replayed or applied before explicit Planner approval.
 
 Physical schema advancement and compatibility-marker promotion remain separate release operations. The pending P10F repository state does not authorize Production migration application, application deployment, or compatibility-marker promotion.
 
@@ -113,6 +113,13 @@ AW-9 remains represented by repository migration `20260731090000_active_workout_
 - Ledger state: `pending`; Production version/name: intentionally absent.
 - It does not rewrite historical data and was not applied to Plaivra Production.
 - Do not replay or apply it before explicit Planner approval of the Workout History redesign merge/release sequence.
+
+## Active Workout feedback preferences pending migration authority
+
+- `20260816044500_active_workout_feedback_preferences.sql` is the additive account-scoped settings authority for workout sound and haptic preferences.
+- Ledger state: `pending`; Production version/name: intentionally absent.
+- Existing owner-scoped `user_app_settings` RLS remains authoritative; the migration was not applied to Plaivra Production.
+- Do not replay or apply it before explicit Planner approval of the Active Workout merge/release sequence.
 
 ## Authority and verification
 

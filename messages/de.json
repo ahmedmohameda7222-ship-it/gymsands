@@ -80,7 +80,9 @@
       "replacementReady": "Alternative für heute bereit",
       "replacementReadyDescription": "{name} wird jetzt in diesem Training angezeigt. Dein gespeicherter Plan wurde nicht geändert.",
       "replacementFailed": "Alternative konnte nicht gespeichert werden",
-      "repsDisplay": "{reps} Wiederholungen"
+      "repsDisplay": "{reps} Wiederholungen",
+      "nextTarget": "Nächstes Ziel",
+      "detailsUnavailable": "Für diese Übung sind noch keine Übungsdetails verfügbar."
     },
     "set": {
       "label": "Satz {count}",
@@ -120,11 +122,13 @@
       "newBest": "{name}: neue Bestleistung — {weight} × {reps} Wiederholungen",
       "labelPlural": "Sätze",
       "rpeInvalid": "Gib einen RPE-Wert von 0 bis 10 mit höchstens einer Dezimalstelle ein.",
-      "rirInvalid": "Gib einen RIR-Wert von 0 bis 20 mit höchstens einer Dezimalstelle ein."
+      "rirInvalid": "Gib einen RIR-Wert von 0 bis 20 mit höchstens einer Dezimalstelle ein.",
+      "savedResyncing": "Satz gespeichert. Die Workout-Position wird neu synchronisiert.",
+      "saveFailedValuesKept": "Der Satz konnte nicht gespeichert werden. Deine Werte wurden beibehalten."
     },
     "rest": {
       "beforeSet": "Pause vor Satz {number}",
-      "next": "Weiter",
+      "next": "Als Nächstes",
       "skip": "Pause überspringen",
       "addThirtySeconds": "30 Sek. hinzufügen",
       "stopTimer": "Timer stoppen",
@@ -132,6 +136,7 @@
       "start": "Pause starten",
       "finished": "Pause beendet",
       "resting": "Pause",
+      "label": "Pause",
       "presetThirtySeconds": "30 Sek.",
       "presetSixtySeconds": "60 Sek.",
       "presetNinetySeconds": "90 Sek.",
@@ -457,7 +462,9 @@
       "validNumber": "Gib eine gültige Zahl ein.",
       "nonNegative": "Werte dürfen nicht negativ sein.",
       "wholeReps": "Wiederholungen müssen ganze Zahlen sein.",
-      "unusualValue": "Dieser Wert wirkt ungewöhnlich. Prüfe ihn, bevor du fortfährst."
+      "unusualValue": "Dieser Wert wirkt ungewöhnlich. Prüfe ihn, bevor du fortfährst.",
+      "repsRequired": "Wiederholungen eingeben.",
+      "weightRequired": "Gewicht eingeben. Verwende 0 für Körpergewicht oder ohne Zusatzgewicht."
     },
     "notifications": {
       "restFinished": "Pause beendet",
@@ -481,6 +488,42 @@
       "resumeWorkout": "Aktives Training fortsetzen",
       "finishWorkout": "Aktives Training beenden",
       "cancelWorkout": "Aktives Training abbrechen"
+    },
+    "navigator": {
+      "title": "Übungen im Workout",
+      "description": "Wähle eine Übung, um dein Workout fortzusetzen.",
+      "pausedDescription": "Du kannst das Workout ansehen. Setze es fort, bevor du die Übung wechselst.",
+      "readOnlyDescription": "Du kannst das Workout hier ansehen. Wechsle Übungen auf dem steuernden Gerät.",
+      "replacedFrom": "Ersetzt {name}"
+    },
+    "replacement": {
+      "whyReplace": "Warum ersetzt du die Übung?",
+      "reasonMachineTaken": "Gerät belegt",
+      "reasonEquipmentUnavailable": "Equipment nicht verfügbar",
+      "reasonPainDiscomfort": "Schmerz / Beschwerden",
+      "reasonTooHard": "Heute zu schwer",
+      "reasonOther": "Anderer Grund",
+      "painCaution": "Wähle eine Option, die sich für dich passend anfühlt. Plaivra bezeichnet keine Übung als medizinisch sicher bei Schmerzen.",
+      "bestMatches": "Beste Alternativen",
+      "loading": "Geeignete Alternativen werden gesucht",
+      "unavailable": "Empfehlungen konnten nicht geladen werden. Die aktuelle Übung wurde beibehalten.",
+      "noMatches": "Für diesen Grund wurden keine starken geeigneten Alternativen gefunden.",
+      "replace": "Ersetzen",
+      "browseAll": "Alle Übungen durchsuchen",
+      "samePrimaryMuscles": "Gleiche Hauptmuskeln",
+      "similarMovement": "Ähnliche Bewegung",
+      "differentEquipment": "Anderes Equipment",
+      "easierVariation": "Leichtere Variante",
+      "usedBefore": "Schon verwendet",
+      "strongIdentity": "Vollständig trackbar"
     }
+  },
+  "settings": {
+    "workoutFeedback": "Workout-Feedback",
+    "workoutFeedbackDescription": "Steuere optionale Sounds und Haptik auf unterstützten Geräten während des Workouts.",
+    "workoutSounds": "Workout-Sounds",
+    "workoutSoundsDescription": "Spiele kurze, dezente Sounds ab, wenn Sätze und Workouts abgeschlossen werden.",
+    "haptics": "Haptik",
+    "hapticsDescription": "Nutze dezentes haptisches Feedback auf unterstützten Geräten. Nicht unterstützte Browser tun nichts."
   }
 }

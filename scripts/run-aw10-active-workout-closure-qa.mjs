@@ -134,18 +134,17 @@ async function completeCurrentSet(page, { skipRest = true } = {}) {
 }
 
 async function openSessionMenu(page) {
-  const trigger = visible(page, "[data-aw10-session-menu] > summary");
+  const trigger = visible(page, '[data-aw10-session-menu] [data-aw-menu-trigger="session"]');
   await trigger.click({ timeout: 10_000 });
-  await page.waitForFunction(() => {
-    const menu = document.querySelector("[data-aw10-session-menu]");
-    return menu instanceof HTMLDetailsElement && menu.open;
-  }, undefined, { timeout: 5_000 });
+  await page.waitForFunction(() =>
+    document.querySelector("[data-aw10-session-menu]")?.getAttribute("data-state") === "open",
+  undefined, { timeout: 5_000 });
   return visible(page, "[data-aw10-session-menu]");
 }
 
 async function openReview(page) {
   const menu = await openSessionMenu(page);
-  const buttons = menu.locator("button:visible");
+  const buttons = menu.locator('[role="menuitem"]:visible');
   if (await buttons.count() < 2) throw new Error("Session menu does not expose Finish Workout.");
   await buttons.nth(1).click({ timeout: 10_000 });
   await visible(page, "[data-aw7-review-surface]").waitFor({
@@ -193,7 +192,7 @@ async function waitForOnlineSynced(page) {
 
 async function openDatabase(page) {
   return page.evaluate(async () => {
-    const request = indexedDB.open("plaivra-active-workout-v1", 1);
+    const request = indexedDB.open("plaivra-active-workout-v1", 2);
     return await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(true);
       request.onerror = () => reject(request.error);
@@ -210,6 +209,12 @@ async function openDatabase(page) {
           operations.createIndex("by_user", "userId");
           operations.createIndex("by_state", "state");
         }
+        if (!database.objectStoreNames.contains("set_drafts")) {
+          const drafts = database.createObjectStore("set_drafts", { keyPath: "key" });
+          drafts.createIndex("by_session", ["userId", "workoutSessionId"]);
+          drafts.createIndex("by_user", "userId");
+          drafts.createIndex("by_expiry", "expiresAt");
+        }
       };
     });
   });
@@ -218,7 +223,7 @@ async function openDatabase(page) {
 async function operationCount(page) {
   await openDatabase(page);
   return page.evaluate(async () => {
-    const request = indexedDB.open("plaivra-active-workout-v1", 1);
+    const request = indexedDB.open("plaivra-active-workout-v1", 2);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -251,7 +256,7 @@ async function waitForNoPendingOperations(page, timeoutMs = 20_000) {
 async function mutateFirstOperation(page, patch) {
   await openDatabase(page);
   return page.evaluate(async (nextPatch) => {
-    const request = indexedDB.open("plaivra-active-workout-v1", 1);
+    const request = indexedDB.open("plaivra-active-workout-v1", 2);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -279,7 +284,7 @@ async function mutateFirstOperation(page, patch) {
 async function mutateCachedController(page, controllerDeviceId) {
   await openDatabase(page);
   return page.evaluate(async (nextController) => {
-    const request = indexedDB.open("plaivra-active-workout-v1", 1);
+    const request = indexedDB.open("plaivra-active-workout-v1", 2);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -387,9 +392,16 @@ function baselineFailures(scenario, measured, consoleErrors, pageErrors, failedR
   if (scenario.language !== "ar" && measured.direction !== "ltr") failures.push(`${scenario.language} direction is not LTR`);
   if (consoleErrors.length) failures.push(`${consoleErrors.length} console errors`);
   if (pageErrors.length) failures.push(`${pageErrors.length} page errors`);
-  const unexpectedRequests = failedRequests.filter((item) => !(
-    item.error === "net::ERR_ABORTED" && new URL(item.url).searchParams.has("_rsc")
-  ));
+  const unexpectedRequests = failedRequests.filter((item) => {
+    if (item.error !== "net::ERR_ABORTED") return true;
+    const url = new URL(item.url);
+    if (url.searchParams.has("_rsc")) return false;
+    if (scenario.action !== "offline-refresh") return true;
+    return !(
+      url.pathname === "/api/workouts/active/previous-performance"
+      || /^\/api\/workouts\/sessions\/[^/]+\/muscle-analysis$/.test(url.pathname)
+    );
+  });
   if (unexpectedRequests.length) failures.push(`${unexpectedRequests.length} unexpected failed requests`);
   if (failedResponses.length) failures.push(`${failedResponses.length} failed responses`);
   return { failures, unexpectedRequests };
@@ -405,7 +417,7 @@ async function prepareAction({ scenario, context, page, fixture, checks }) {
   }
   if (scenario.action === "paused") {
     const menu = await openSessionMenu(page);
-    const buttons = menu.locator("button:visible");
+    const buttons = menu.locator('[role="menuitem"]:visible');
     if (!await buttons.count()) throw new Error("Session menu does not expose Pause Workout.");
     await buttons.first().click({ timeout: 10_000 });
     await page.waitForFunction(() => document.querySelector("[data-aw5-execution-shell]")
@@ -549,6 +561,14 @@ try {
       muscleScenario: "ready",
       includeGuide: true
     }, requestHistory);
+    await context.route(/\/api\/workouts\/active\/previous-performance(?:\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "cache-control": "private, no-store" },
+        body: JSON.stringify({ data: null })
+      });
+    });
     const consoleErrors = [];
     const pageErrors = [];
     const failedRequests = [];

@@ -89,6 +89,7 @@ test("final redesign runner is exact-head production QA with screenshot evidence
 
 test("final redesign runner covers the binding viewport, locale, theme, accessibility, and state matrix", () => {
   for (const token of [
+    "360x800",
     "390x844",
     "393x852",
     "430x932",
@@ -143,8 +144,9 @@ test("final redesign runner validates the binding interaction hierarchy and fail
   assert.match(redesignRunner, /assertNoHorizontalOverflow/);
 });
 
-test("final redesign runner proves rest controls and dominant CTA without selector masking", () => {
-  assert.match(componentSource, /data-aw5-add-thirty/);
+test("final redesign runner proves one Rest control group and dominant CTA without selector masking", () => {
+  assert.match(componentSource, /data-aw5-rest-presets/);
+  assert.match(componentSource, /onClick=\{onAddThirtySeconds\}/);
   assert.match(redesignRunner, /Rest does not expose \+30 seconds and required presets/);
   assert.match(redesignRunner, /dominant primary action is not visible/);
   assert.doesNotMatch(redesignRunner, /getByRole\([^\n]+\)\.last\(\).*30/);

@@ -43,6 +43,8 @@ function bootstrap(
       compactMode: false,
       reduceAnimations: false,
       largeTextMode: false,
+      workoutSounds: true,
+      haptics: true,
       daysPerWeek: null,
       workoutDuration: null,
       preferredSplit: null,

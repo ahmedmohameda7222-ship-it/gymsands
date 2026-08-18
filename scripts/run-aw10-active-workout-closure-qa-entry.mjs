@@ -136,3 +136,25 @@ if (!underlyingFailure) {
     `[AW10-QA] PASS ${report.results.length} scenarios after strict optional-enrichment abort classification at ${report.headSha}`
   );
 }
+
+// The existing AW-10 closure remains the prerequisite authority. Once it is
+// green (either natively or through the narrowly permitted previous-performance
+// abort classification above), run the supplemental exact-head product QA that
+// proves the Active Workout navigation, replacement, optimistic, and draft
+// contracts introduced by the full implementation authority.
+await import("./run-active-workout-full-authority-qa.mjs");
+
+// The final Replacement request-stability correction proves that live workout
+// timer rerenders do not restart recommendation loading, while a real reason
+// change still produces exactly one semantic refresh.
+await import("./run-active-workout-replacement-request-stability-qa.mjs");
+
+// The Planner's final pre-merge correction pass adds focused exact-head rendered
+// evidence for entry loading/media reliability and combined ownership/sync states
+// while retaining the existing AW-10 and full-product authorities unchanged.
+await import("./run-active-workout-final-premerge-qa.mjs");
+
+// The final QA-only closure permanently proves that unresolved canonical data
+// conflict exposes zero executable workout mutations and that both resolution
+// choices restore real mutation-capable execution at the exact PR head.
+await import("./run-active-workout-data-conflict-behavioral-qa.mjs");

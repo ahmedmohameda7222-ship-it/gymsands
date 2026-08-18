@@ -26,7 +26,8 @@ const metricTargetModes = new Set<WorkoutPrescriptionMetricTargetMode>([
 ]);
 const sides = new Set<WorkoutPrescriptionSide>(["none", "bilateral", "left", "right"]);
 const sideModes = new Set<WorkoutPrescriptionSideMode>(["none", "bilateral", "left", "right", "alternating"]);
-const executionStates = new Set(["planned", "completed", "adjusted", "skipped"] as const);
+const executionStates = new Set(["planned", "completed", "adjusted", "skipped", "replaced"] as const);
+const actualTargetTypes = new Set(["global_exercise", "custom_exercise"] as const);
 
 export type WorkoutPrescriptionSnapshotRow = {
   id: unknown;
@@ -42,6 +43,12 @@ export type WorkoutPrescriptionItemRow = {
   source_plan_exercise_id: unknown;
   source_plan_activity_id: unknown;
   activity_name_snapshot: unknown;
+  actual_target_type?: unknown;
+  actual_global_exercise_id?: unknown;
+  actual_custom_exercise_id?: unknown;
+  actual_provider?: unknown;
+  actual_provider_activity_id?: unknown;
+  actual_name_snapshot?: unknown;
   planned_prescription: unknown;
   planned_sets: unknown;
   state: unknown;
@@ -94,7 +101,7 @@ function fail(message: string): never {
 }
 
 function stringValue(value: unknown, label: string, nullable = false): string | null {
-  if (value === null && nullable) return null;
+  if ((value === null || value === undefined) && nullable) return null;
   if (typeof value !== "string" || !value) fail(`${label} must be a non-empty string.`);
   return value as string;
 }
@@ -199,6 +206,21 @@ export function normalizeWorkoutSessionPrescriptionRows(input: {
     const rawCompatibilityPrescription = objectValue(row.planned_prescription, "item.planned_prescription") as PlannedActivityPrescription;
     const plannedSets = integerValue(row.planned_sets, "item.planned_sets", true);
     if (plannedSets !== null && (plannedSets < 1 || plannedSets > 100)) fail("item.planned_sets is outside 1 through 100.");
+    const executionState = enumValue(row.state, executionStates, "item.state");
+    const originalActivityName = stringValue(row.activity_name_snapshot, "item.activity_name_snapshot")!;
+    const actualTargetType = row.actual_target_type === null || row.actual_target_type === undefined
+      ? null
+      : enumValue(row.actual_target_type, actualTargetTypes, "item.actual_target_type");
+    const actualGlobalExerciseId = stringValue(row.actual_global_exercise_id, "item.actual_global_exercise_id", true);
+    const actualCustomExerciseId = stringValue(row.actual_custom_exercise_id, "item.actual_custom_exercise_id", true);
+    const actualProvider = stringValue(row.actual_provider, "item.actual_provider", true);
+    const actualProviderActivityId = stringValue(row.actual_provider_activity_id, "item.actual_provider_activity_id", true);
+    const actualName = stringValue(row.actual_name_snapshot, "item.actual_name_snapshot", true);
+    if (executionState === "replaced") {
+      if (!actualTargetType || !actualName) fail("replaced item requires canonical actual target and name.");
+      if (actualTargetType === "global_exercise" && !actualGlobalExerciseId) fail("replaced global item requires actual_global_exercise_id.");
+      if (actualTargetType === "custom_exercise" && !actualCustomExerciseId) fail("replaced custom item requires actual_custom_exercise_id.");
+    }
     const item: WorkoutSessionPrescriptionItem = {
       snapshotId,
       id,
@@ -207,10 +229,16 @@ export function normalizeWorkoutSessionPrescriptionRows(input: {
       itemOrder,
       sourcePlanExerciseId: stringValue(row.source_plan_exercise_id, "item.source_plan_exercise_id", true),
       sourcePlanActivityId: stringValue(row.source_plan_activity_id, "item.source_plan_activity_id", true),
-      activityName: stringValue(row.activity_name_snapshot, "item.activity_name_snapshot")!,
+      activityName: actualName ?? originalActivityName,
+      originalActivityName,
+      actualTargetType,
+      actualGlobalExerciseId,
+      actualCustomExerciseId,
+      actualProvider,
+      actualProviderActivityId,
       rawCompatibilityPrescription,
       plannedSets,
-      executionState: enumValue(row.state, executionStates, "item.state"),
+      executionState,
       normalizationStatus: "unavailable",
       prescriptionSets: []
     };
@@ -338,7 +366,7 @@ export function normalizeWorkoutSessionPrescriptionRows(input: {
 }
 
 const snapshotSelection = "id,workout_session_id,user_id";
-const itemSelection = "id,snapshot_id,user_id,item_order,source_plan_exercise_id,source_plan_activity_id,activity_name_snapshot,planned_prescription,planned_sets,state";
+const itemSelection = "id,snapshot_id,user_id,item_order,source_plan_exercise_id,source_plan_activity_id,activity_name_snapshot,actual_target_type,actual_global_exercise_id,actual_custom_exercise_id,actual_provider,actual_provider_activity_id,actual_name_snapshot,planned_prescription,planned_sets,state";
 const setSelection = "id,snapshot_item_id,snapshot_id,workout_session_id,user_id,set_order,performed_order_hint,set_type,target_mode,side_mode,rest_seconds,tempo_target,schema_version,created_at";
 const targetSelection = "id,prescription_set_id,snapshot_item_id,workout_session_id,user_id,metric_key,metric_version,side,target_value,minimum_value,maximum_value,target_mode,created_at";
 const definitionSelection = "metric_key,metric_version,value_kind,minimum_value,maximum_value,supports_side";

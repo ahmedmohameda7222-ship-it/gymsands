@@ -322,7 +322,7 @@ describe("ActiveWorkoutCoreSession primitive bootstrap identity", () => {
         sourcePlanExerciseId: "exercise-day-1",
         sourcePlanActivityId: null,
         activityName: "Bench Press",
-        rawCompatibilityPrescription: {},
+        rawCompatibilityPrescription: { reps: "8" },
         plannedSets: 1,
         executionState: "planned",
         normalizationStatus: "partial",

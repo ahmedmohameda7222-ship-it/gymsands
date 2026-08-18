@@ -8,6 +8,7 @@ import {
 
 const SESSION_STORE = "session_snapshots";
 const OPERATION_STORE = "operations";
+const SET_DRAFT_STORE = "set_drafts";
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -40,7 +41,7 @@ export function activeWorkoutSessionCacheKey(
 
 export async function openActiveWorkoutDatabase(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === "undefined") return null;
-  const request = indexedDB.open(ACTIVE_WORKOUT_INDEXED_DB_NAME, 1);
+  const request = indexedDB.open(ACTIVE_WORKOUT_INDEXED_DB_NAME, 2);
   request.onupgradeneeded = () => {
     const database = request.result;
     if (!database.objectStoreNames.contains(SESSION_STORE)) {
@@ -61,6 +62,12 @@ export async function openActiveWorkoutDatabase(): Promise<IDBDatabase | null> {
       );
       operations.createIndex("by_user", "userId");
       operations.createIndex("by_state", "state");
+    }
+    if (!database.objectStoreNames.contains(SET_DRAFT_STORE)) {
+      const drafts = database.createObjectStore(SET_DRAFT_STORE, { keyPath: "key" });
+      drafts.createIndex("by_session", ["userId", "workoutSessionId"]);
+      drafts.createIndex("by_user", "userId");
+      drafts.createIndex("by_expiry", "expiresAt");
     }
   };
   return requestResult(request);
@@ -199,7 +206,7 @@ export async function clearActiveWorkoutSessionData(
   const database = await openActiveWorkoutDatabase();
   if (!database) return;
   const transaction = database.transaction(
-    [SESSION_STORE, OPERATION_STORE],
+    [SESSION_STORE, OPERATION_STORE, SET_DRAFT_STORE],
     "readwrite",
   );
   transaction
@@ -222,6 +229,12 @@ export async function clearActiveWorkoutSessionData(
     )
       transaction.objectStore(OPERATION_STORE).delete(operation.id);
   }
+  const drafts = await requestResult(
+    transaction.objectStore(SET_DRAFT_STORE).index("by_session").getAll(
+      IDBKeyRange.only([userId, workoutSessionId]),
+    ),
+  ) as Array<{ key: string }>;
+  for (const draft of drafts) transaction.objectStore(SET_DRAFT_STORE).delete(draft.key);
   await transactionDone(transaction);
   database.close();
 }
@@ -230,7 +243,7 @@ export async function clearActiveWorkoutUserData(userId: string) {
   const database = await openActiveWorkoutDatabase();
   if (!database) return;
   const transaction = database.transaction(
-    [SESSION_STORE, OPERATION_STORE],
+    [SESSION_STORE, OPERATION_STORE, SET_DRAFT_STORE],
     "readwrite",
   );
   const sessions = (await requestResult(
@@ -239,12 +252,17 @@ export async function clearActiveWorkoutUserData(userId: string) {
   const operations = (await requestResult(
     transaction.objectStore(OPERATION_STORE).getAll(),
   )) as ActiveWorkoutOperation[];
+  const drafts = (await requestResult(
+    transaction.objectStore(SET_DRAFT_STORE).index("by_user").getAll(userId),
+  )) as Array<{ key: string }>;
   for (const session of sessions)
     if (session.userId === userId)
       transaction.objectStore(SESSION_STORE).delete(session.key);
   for (const operation of operations)
     if (operation.userId === userId)
       transaction.objectStore(OPERATION_STORE).delete(operation.id);
+  for (const draft of drafts)
+    transaction.objectStore(SET_DRAFT_STORE).delete(draft.key);
   await transactionDone(transaction);
   database.close();
 }
@@ -253,11 +271,12 @@ async function clearStaleActiveWorkoutDataNow(now: number) {
   const database = await openActiveWorkoutDatabase();
   if (!database) return;
   const transaction = database.transaction(
-    [SESSION_STORE, OPERATION_STORE],
+    [SESSION_STORE, OPERATION_STORE, SET_DRAFT_STORE],
     "readwrite",
   );
   const sessionStore = transaction.objectStore(SESSION_STORE);
   const operationStore = transaction.objectStore(OPERATION_STORE);
+  const draftStore = transaction.objectStore(SET_DRAFT_STORE);
   const expiredSessions = (await requestResult(
     sessionStore
       .index("by_expiry")
@@ -278,6 +297,10 @@ async function clearStaleActiveWorkoutDataNow(now: number) {
       operationStore.delete(operation.id);
     }
   }
+  const expiredDrafts = await requestResult(
+    draftStore.index("by_expiry").getAll(IDBKeyRange.upperBound(new Date(now).toISOString())),
+  ) as Array<{ key: string }>;
+  for (const draft of expiredDrafts) draftStore.delete(draft.key);
   await transactionDone(transaction);
   database.close();
 }

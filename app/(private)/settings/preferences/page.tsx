@@ -288,6 +288,31 @@ export default function PreferencesPage() {
         </CardContent>
       </Card>
 
+      <Card className="border-border/70" data-workout-feedback-preferences>
+        <CardHeader>
+          <CardTitle className="text-base">{t("settings.workoutFeedback")}</CardTitle>
+          <CardDescription>{t("settings.workoutFeedbackDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <SettingsToggleRow
+            label={t("settings.workoutSounds")}
+            description={t("settings.workoutSoundsDescription")}
+            defaultOn={settings.workoutSounds}
+            disabled={controlsDisabled}
+            onChange={(checked: boolean) => void updatePreference("workoutSounds", checked, t("settings.workoutSounds"))}
+            {...rowStatus("workoutSounds")}
+          />
+          <SettingsToggleRow
+            label={t("settings.haptics")}
+            description={t("settings.hapticsDescription")}
+            defaultOn={settings.haptics}
+            disabled={controlsDisabled}
+            onChange={(checked: boolean) => void updatePreference("haptics", checked, t("settings.haptics"))}
+            {...rowStatus("haptics")}
+          />
+        </CardContent>
+      </Card>
+
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle className="text-base">{t("settings.language")}</CardTitle>

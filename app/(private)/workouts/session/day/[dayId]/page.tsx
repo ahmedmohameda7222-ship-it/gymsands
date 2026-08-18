@@ -2,14 +2,18 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+
+import { useToast } from "@/components/ui/toaster";
+import {
+  ActiveWorkoutEntryError,
+  ActiveWorkoutEntryLoading
+} from "@/components/workouts/active-workout/active-workout-entry-state";
 import { WorkoutDayFocusSession } from "@/components/workouts/workout-day-focus-session";
 import { WorkoutSessionScreen } from "@/components/workouts/workout-session-screen";
-import { CardSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
-import { useToast } from "@/components/ui/toaster";
-import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
+import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
+import { useTrainTranslation } from "@/lib/i18n/train";
 import { getUserWorkoutPlanDay } from "@/services/database/workout-plans";
 import type { WorkoutPlanDaySession } from "@/types";
-import { useTrainTranslation } from "@/lib/i18n/train";
 
 export default function WorkoutDaySessionPage() {
   const params = useParams<{ dayId: string }>();
@@ -17,13 +21,11 @@ export default function WorkoutDaySessionPage() {
   const { tr } = useTrainTranslation();
   const [day, setDay] = useState<WorkoutPlanDaySession | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
 
   async function loadDay() {
     setIsLoading(true);
     setLoadError(null);
-    setLoadErrorDetails(undefined);
     try {
       const nextDay = await getUserWorkoutPlanDay(params.dayId);
       setDay(nextDay);
@@ -31,7 +33,6 @@ export default function WorkoutDaySessionPage() {
       logRecoverableError("workout-day-session.load", error);
       const message = userSafeError(error, tr("workoutDayOpenFailed"));
       setLoadError(message);
-      setLoadErrorDetails(technicalErrorDetails(error));
       toast({ title: tr("workoutDayUnavailable"), description: message });
     } finally {
       setIsLoading(false);
@@ -39,37 +40,17 @@ export default function WorkoutDaySessionPage() {
   }
 
   useEffect(() => {
-    loadDay();
+    void loadDay();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.dayId]);
 
-  if (isLoading) return <CardSkeleton rows={7} />;
-  if (loadError) {
-    return (
-      <ErrorState
-        title={tr("workoutDayUnavailable")}
-        description={loadError}
-        onRetry={loadDay}
-        fallbackLabel={tr("backToTrain")}
-        fallbackHref="/my-workout/plans"
-        details={loadErrorDetails}
-      />
-    );
-  }
-  if (!day) {
-    return (
-      <EmptyState
-        title={tr("workoutDayNotFound")}
-        description={tr("workoutDayNotFound")}
-        actionLabel={tr("backToTrain")}
-        actionHref="/my-workout/plans"
-      />
-    );
-  }
-
   return (
     <WorkoutSessionScreen fallbackHref="/my-workout/plans">
-      <WorkoutDayFocusSession day={day} />
+      {isLoading ? <ActiveWorkoutEntryLoading /> : null}
+      {!isLoading && (loadError || !day) ? (
+        <ActiveWorkoutEntryError onRetry={() => { void loadDay(); }} backHref="/my-workout/plans" />
+      ) : null}
+      {!isLoading && !loadError && day ? <WorkoutDayFocusSession day={day} /> : null}
     </WorkoutSessionScreen>
   );
 }

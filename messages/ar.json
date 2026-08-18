@@ -80,7 +80,9 @@
       "replacementReady": "البديل جاهز لليوم",
       "replacementReadyDescription": "يظهر {name} الآن في هذا التمرين. لم تتغير خطتك المحفوظة.",
       "replacementFailed": "تعذر حفظ البديل",
-      "repsDisplay": "{reps} تكرارات"
+      "repsDisplay": "{reps} تكرارات",
+      "nextTarget": "الهدف التالي",
+      "detailsUnavailable": "تفاصيل هذا التمرين غير متاحة بعد."
     },
     "set": {
       "label": "المجموعة {count}",
@@ -120,7 +122,9 @@
       "newBest": "{name}: أفضل نتيجة جديدة — {weight} × {reps} تكرارات",
       "labelPlural": "المجموعات",
       "rpeInvalid": "أدخل قيمة RPE من 0 إلى 10 وبحد أقصى منزلة عشرية واحدة.",
-      "rirInvalid": "أدخل قيمة RIR من 0 إلى 20 وبحد أقصى منزلة عشرية واحدة."
+      "rirInvalid": "أدخل قيمة RIR من 0 إلى 20 وبحد أقصى منزلة عشرية واحدة.",
+      "savedResyncing": "تم حفظ المجموعة. جارٍ إعادة مزامنة موضع التمرين.",
+      "saveFailedValuesKept": "تعذر حفظ المجموعة. تم الاحتفاظ بالقيم التي أدخلتها."
     },
     "rest": {
       "beforeSet": "راحة قبل المجموعة {number}",
@@ -132,6 +136,7 @@
       "start": "بدء الراحة",
       "finished": "انتهت الراحة",
       "resting": "وقت الراحة",
+      "label": "راحة",
       "presetThirtySeconds": "30 ثانية",
       "presetSixtySeconds": "60 ثانية",
       "presetNinetySeconds": "90 ثانية",
@@ -457,7 +462,9 @@
       "validNumber": "أدخل رقمًا صالحًا.",
       "nonNegative": "لا يمكن أن تكون القيم سالبة.",
       "wholeReps": "يجب أن تكون التكرارات عددًا صحيحًا.",
-      "unusualValue": "تبدو هذه القيمة غير معتادة. تحقق منها قبل المتابعة."
+      "unusualValue": "تبدو هذه القيمة غير معتادة. تحقق منها قبل المتابعة.",
+      "repsRequired": "أدخل عدد التكرارات.",
+      "weightRequired": "أدخل الوزن. استخدم 0 لوزن الجسم أو بدون وزن إضافي."
     },
     "notifications": {
       "restFinished": "انتهت الراحة",
@@ -481,6 +488,42 @@
       "resumeWorkout": "استئناف التمرين النشط",
       "finishWorkout": "إنهاء التمرين النشط",
       "cancelWorkout": "إلغاء التمرين النشط"
+    },
+    "navigator": {
+      "title": "تمارين الجلسة",
+      "description": "اختر تمرينًا للمتابعة داخل نفس الجلسة.",
+      "pausedDescription": "يمكنك مراجعة التمارين. استأنف الجلسة قبل تغيير التمرين.",
+      "readOnlyDescription": "يمكنك مراجعة الجلسة هنا. غيّر التمرين من الجهاز المتحكم في الجلسة.",
+      "replacedFrom": "بديل عن {name}"
+    },
+    "replacement": {
+      "whyReplace": "لماذا تريد استبدال التمرين؟",
+      "reasonMachineTaken": "الجهاز مشغول",
+      "reasonEquipmentUnavailable": "المعدات غير متاحة",
+      "reasonPainDiscomfort": "ألم / عدم ارتياح",
+      "reasonTooHard": "صعب اليوم",
+      "reasonOther": "سبب آخر",
+      "painCaution": "اختر بديلًا تشعر أنه مناسب لك. لا يصف Plaivra أي تمرين بأنه آمن طبيًا للألم.",
+      "bestMatches": "أفضل البدائل",
+      "loading": "جارٍ البحث عن بدائل مؤهلة",
+      "unavailable": "تعذر تحميل التوصيات. تم الإبقاء على التمرين الحالي.",
+      "noMatches": "لم يتم العثور على بدائل مؤهلة قوية لهذا السبب.",
+      "replace": "استبدال",
+      "browseAll": "تصفح كل التمارين",
+      "samePrimaryMuscles": "نفس العضلات الأساسية",
+      "similarMovement": "حركة مشابهة",
+      "differentEquipment": "معدات مختلفة",
+      "easierVariation": "نسخة أسهل",
+      "usedBefore": "استُخدم من قبل",
+      "strongIdentity": "قابل للتتبع بالكامل"
     }
+  },
+  "settings": {
+    "workoutFeedback": "ملاحظات التمرين",
+    "workoutFeedbackDescription": "تحكم في أصوات التمرين والاهتزاز على الأجهزة المدعومة.",
+    "workoutSounds": "أصوات التمرين",
+    "workoutSoundsDescription": "تشغيل أصوات قصيرة وهادئة عند إكمال المجموعات والتمرين.",
+    "haptics": "الاهتزاز",
+    "hapticsDescription": "استخدم اهتزازًا خفيفًا على الأجهزة المدعومة. المتصفحات غير المدعومة لن تفعل شيئًا."
   }
 }

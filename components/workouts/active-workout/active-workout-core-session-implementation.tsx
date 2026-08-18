@@ -31,6 +31,7 @@ import {
 } from "@/components/workouts/active-workout/active-workout-command-dispatch";
 import { resolveActiveWorkoutExecutionCapability } from "@/components/workouts/active-workout/active-workout-execution-capability";
 import { ActiveWorkoutExecutionShell } from "@/components/workouts/active-workout/active-workout-execution-shell";
+import { ActiveWorkoutExerciseNavigator, buildActiveWorkoutExerciseNavigatorRows } from "@/components/workouts/active-workout/active-workout-exercise-navigator";
 import { ActiveWorkoutMiniHeatMap } from "@/components/workouts/active-workout/active-workout-mini-heat-map";
 import { useActiveWorkoutMuscleLoad } from "@/components/workouts/active-workout/active-workout-muscle-load-controller";
 import { ActiveWorkoutReviewBridge } from "@/components/workouts/active-workout/active-workout-review-bridge";
@@ -60,6 +61,7 @@ import {
   type ActiveWorkoutSummary
 } from "@/components/workouts/active-workout/active-workout-runtime-model";
 import { activeWorkoutStorageIdentities } from "@/components/workouts/active-workout/active-workout-source-compatibility";
+import { resolveActiveWorkoutReliabilityPresentation } from "@/components/workouts/active-workout/active-workout-reliability-priority";
 import {
   buildActiveWorkoutSetPath,
   clampWorkoutProgress,
@@ -76,6 +78,7 @@ import {
   writeActiveWorkoutState
 } from "@/lib/active-workout";
 import { userSafeError } from "@/lib/error-formatting";
+import { transientFeedbackDuration } from "@/lib/feedback/transient-feedback";
 import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import {
   isolateBidiText,
@@ -85,6 +88,7 @@ import {
 import { translateTrain } from "@/lib/i18n/train";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp } from "@/lib/workout-persistence";
 import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
+import { activeWorkoutExerciseDetailHref, resolveActiveWorkoutExerciseDetailId } from "@/lib/workouts/active-workout-detail-navigation";
 import { activeSessionClock } from "@/lib/workouts/active-session-store/clock";
 import {
   getActiveSessionStore,
@@ -96,8 +100,16 @@ import {
   type ActiveWorkoutSyncState,
   type ActiveWorkoutTabLeadership
 } from "@/lib/workouts/active-session-sync";
+import {
+  clearActiveWorkoutSessionDrafts,
+  clearActiveWorkoutSetDraft,
+  mergeActiveWorkoutSetDrafts,
+  readActiveWorkoutSetDrafts,
+  writeActiveWorkoutSetDrafts
+} from "@/lib/workouts/active-session-sync/set-drafts";
 import { createSessionCommandId } from "@/lib/workouts/session-engine/commands";
 import { planSessionAfterSetCompletion } from "@/lib/workouts/session-engine/reducer";
+import { projectOptimisticSetCompletion } from "@/lib/workouts/optimistic-set-completion";
 import {
   executionCursorToIndexes,
   executionElapsedSeconds,
@@ -156,11 +168,11 @@ function useLatest<T>(value: T) {
 
 function stablePreviousPerformanceIdentity(item: ActiveWorkoutExerciseState | undefined) {
   if (!item) return null;
-  if (item.prescriptionItem.sourcePlanActivityId) {
-    return { kind: "plan_activity" as const, value: item.prescriptionItem.sourcePlanActivityId };
-  }
   if (item.exercise.source_workout_id) {
     return { kind: "source_workout" as const, value: item.exercise.source_workout_id };
+  }
+  if (item.prescriptionItem.sourcePlanActivityId) {
+    return { kind: "plan_activity" as const, value: item.prescriptionItem.sourcePlanActivityId };
   }
   if (item.prescriptionItem.sourcePlanExerciseId) {
     return { kind: "plan_exercise" as const, value: item.prescriptionItem.sourcePlanExerciseId };
@@ -206,7 +218,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const legacyReopenSetLabel = translateTrain(language, "reopenSet");
   const legacySetReopened = translateTrain(language, "setReopened");
   const legacySetReopenFailed = translateTrain(language, "setReopenFailed");
-  const { celebrate } = useSuccessFeedback();
+  const { celebrate, setCompleted, error: feedbackError } = useSuccessFeedback();
 
   const sessionRoute = sourceKind === "plan-day"
     ? `/workouts/session/day/${sourceId}`
@@ -245,6 +257,13 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const [isSavingAlternative, setIsSavingAlternative] = useState(false);
   const [setFeedback, setSetFeedback] = useState("");
   const [setFeedbackVariant, setSetFeedbackVariant] = useState<"info" | "error">("info");
+  const [validationAttemptKey, setValidationAttemptKey] = useState<string | null>(null);
+  const [exerciseNavigatorOpen, setExerciseNavigatorOpen] = useState(false);
+  const [optimisticCompletion, setOptimisticCompletion] = useState<{
+    commandId: string;
+    setKey: string;
+    projectedExecutionState: WorkoutSessionExecutionState;
+  } | null>(null);
   const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
   const [controllerConflictDeviceId, setControllerConflictDeviceId] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<ActiveWorkoutSyncState>("online_synced");
@@ -255,12 +274,12 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const [executionCursorItems, setExecutionCursorItems] = useState<WorkoutSessionExecutionCursorRow[]>([]);
   const [muscleLoadRefreshRevision, setMuscleLoadRefreshRevision] = useState(0);
   const [previousPerformanceRead, setPreviousPerformanceRead] = useState<Awaited<ReturnType<typeof readActiveWorkoutPreviousPerformanceClient>>>(null);
+  const [previousPerformanceResolvedKey, setPreviousPerformanceResolvedKey] = useState<string | null>(null);
   const [previousPerformanceLoading, setPreviousPerformanceLoading] = useState(false);
-  const [previousPerformanceUnavailable, setPreviousPerformanceUnavailable] = useState(false);
+  const [previousPerformanceUnavailableKey, setPreviousPerformanceUnavailableKey] = useState<string | null>(null);
   const [detailsRequest, setDetailsRequest] = useState<{
     section: ActiveWorkoutDetailsSection;
-    focusTarget: "guide-video" | null;
-  }>({ section: "overview", focusTarget: null });
+  }>({ section: "current-set" });
 
   useEffect(() => {
     if (!userId || !sessionId) return;
@@ -284,6 +303,21 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const exerciseStatesRef = useRef(exerciseStates);
   const autosaveAdapterRef = useRef<WorkoutSetAutosaveAdapter<ActiveWorkoutExerciseState[]> | null>(null);
   const autosaveCoordinatorRef = useRef<WorkoutSetAutosaveCoordinator | null>(null);
+  const pendingSetCommandKeyRef = useRef<string | null>(null);
+  const pendingSetCompletionPromiseRef = useRef<Promise<boolean> | null>(null);
+  const effectiveExecutionState = optimisticCompletion?.projectedExecutionState ?? executionState;
+  const reliabilityPresentation = resolveActiveWorkoutReliabilityPresentation({
+    syncState,
+    tabLeader,
+    controllerConflictDeviceId
+  });
+  const executionBlocked = reliabilityPresentation.blockingState === "data_conflict";
+  const isExecutionMutationBlocked = useCallback(() => {
+    const latest = activeSessionStoreRef.current?.getSnapshot();
+    return executionBlocked
+      || latest?.syncState === "data_conflict"
+      || Boolean(latest?.dataConflict);
+  }, [executionBlocked]);
 
   useEffect(() => {
     if (!userId || !sessionId) return;
@@ -388,7 +422,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setCompletionRecovery("none");
     setConflictingSession(null);
     setPreviousPerformanceRead(null);
-    setPreviousPerformanceUnavailable(false);
+    setPreviousPerformanceResolvedKey(null);
+    setPreviousPerformanceUnavailableKey(null);
 
     const currentTr = trRef.current;
     if (!userId) {
@@ -465,6 +500,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         const cursorItems = [...hydrated.prescription];
         const existingLogs = [...hydrated.performedLogs];
         if (!authoritativeState && hydrated.finalProjection) {
+          await clearActiveWorkoutSessionDrafts(userId, nextSession.id).catch(() => undefined);
           const terminalStates = hydrateStates(
             cursorItems.map((item) => makeFrozenExerciseState(item, currentDay.exercises)),
             existingLogs
@@ -531,10 +567,12 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
           && cachedSecondaryProjection.every((item) =>
             typeof item === "object" && item !== null && "exercise" in item && "prescriptionItem" in item && "sets" in item && Array.isArray(item.sets)
           ) ? cachedSecondaryProjection as ActiveWorkoutExerciseState[] : null;
-        const hydratedStates = hydrateStates(
+        const canonicalHydratedStates = hydrateStates(
           cachedStates ?? authoritativeItems.map((item) => makeFrozenExerciseState(item, currentDay.exercises)),
           existingLogs
         );
+        const restoredDrafts = await readActiveWorkoutSetDrafts(userId, nextSession.id).catch(() => []);
+        const hydratedStates = mergeActiveWorkoutSetDrafts(canonicalHydratedStates, restoredDrafts);
         setExerciseStates(hydratedStates);
         exerciseStatesRef.current = hydratedStates;
         const authoritativeCursor = executionCursorToIndexes(
@@ -617,20 +655,20 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   useEffect(() => {
     const tick = () => {
       const now = activeSessionClock.getSnapshot();
-      setElapsedSeconds(executionState
-        ? executionElapsedSeconds(executionState, now)
+      setElapsedSeconds(effectiveExecutionState
+        ? executionElapsedSeconds(effectiveExecutionState, now)
         : Math.max(0, Math.floor((now - startedAtMs) / 1000)));
-      const nextLeft = executionState ? executionRestSecondsLeft(executionState, now) : 0;
+      const nextLeft = effectiveExecutionState ? executionRestSecondsLeft(effectiveExecutionState, now) : 0;
       setTimerLeft(nextLeft);
-      setIsTimerRunning(Boolean(executionState?.view_state === "rest" && nextLeft > 0));
-      if (executionState?.view_state === "rest" && nextLeft <= 0) {
-        const expiryKey = `${executionState.revision}:${executionState.rest_ends_at}`;
+      setIsTimerRunning(Boolean(effectiveExecutionState?.view_state === "rest" && nextLeft > 0));
+      if (!optimisticCompletion && effectiveExecutionState?.view_state === "rest" && nextLeft <= 0) {
+        const expiryKey = `${effectiveExecutionState.revision}:${effectiveExecutionState.rest_ends_at}`;
         if (restExpiryCommandRef.current === expiryKey) return;
         restExpiryCommandRef.current = expiryKey;
         setTimerEndsAtMs(null);
         setIsTimerRunning(false);
         clearStoredValue(restTimerKey);
-        if (userId && sessionId && executionHydratedRef.current) {
+        if (userId && sessionId && executionHydratedRef.current && !isExecutionMutationBlocked()) {
           void dispatchExecutionBackground("clear_rest", {
             view_state: "set_entry",
             completion_reason: "natural_expiration",
@@ -648,10 +686,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       }
     };
     return activeSessionClock.subscribe(tick);
-  }, [dispatchExecutionBackground, executionState, restTimerKey, sessionId, startedAtMs, toastRef, trRef, userId]);
+  }, [dispatchExecutionBackground, effectiveExecutionState, isExecutionMutationBlocked, optimisticCompletion, restTimerKey, sessionId, startedAtMs, toastRef, trRef, userId]);
 
   useEffect(() => {
-    if (!executionHydratedRef.current || !userId || !sessionId || !executionState) return;
+    if (!executionHydratedRef.current || !userId || !sessionId || !executionState || optimisticCompletion || isExecutionMutationBlocked()) return;
     const cursorItem = executionCursorItems[activeExerciseIndex]
       ?? executionCursorItems.find((item) => item.itemOrder === activeExerciseIndex + 1)
       ?? null;
@@ -680,7 +718,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         }
       }
     );
-  }, [activeExerciseIndex, activeSetIndex, dispatchExecutionBackground, executionCursorItems, executionState, sessionId, userId]);
+  }, [activeExerciseIndex, activeSetIndex, dispatchExecutionBackground, executionCursorItems, executionState, isExecutionMutationBlocked, optimisticCompletion, sessionId, userId]);
 
   const activeExercise = exerciseStates[activeExerciseIndex];
   const activeSet = activeExercise?.sets[activeSetIndex];
@@ -688,35 +726,63 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     () => resolveActiveWorkoutExecutionCapability(executionCursorItems),
     [executionCursorItems]
   );
+  const previousPerformanceIdentity = stablePreviousPerformanceIdentity(activeExercise);
+  const previousPerformanceIdentityKind = previousPerformanceIdentity?.kind ?? null;
+  const previousPerformanceIdentityValue = previousPerformanceIdentity?.value ?? null;
+  const previousPerformanceSetNumber = activeSet?.setNumber ?? null;
+  const previousPerformanceLookupKey = previousPerformanceIdentityKind && previousPerformanceIdentityValue && sessionId && previousPerformanceSetNumber
+    ? `${previousPerformanceIdentityKind}:${previousPerformanceIdentityValue}:${sessionId}:${previousPerformanceSetNumber}`
+    : null;
+  const previousPerformanceReadForCurrentKey = previousPerformanceResolvedKey === previousPerformanceLookupKey
+    ? previousPerformanceRead
+    : null;
+  const previousPerformanceUnavailable = previousPerformanceUnavailableKey === previousPerformanceLookupKey;
 
   useEffect(() => {
-    const identity = stablePreviousPerformanceIdentity(activeExercise);
-    if (!identity || !activeSet || !sessionId || !executionHydratedRef.current || !executionCapability.supported) {
+    if (
+      !previousPerformanceIdentityKind
+      || !previousPerformanceIdentityValue
+      || !previousPerformanceSetNumber
+      || !previousPerformanceLookupKey
+      || !sessionId
+      || !executionHydratedRef.current
+      || !executionCapability.supported
+    ) {
       setPreviousPerformanceRead(null);
+      setPreviousPerformanceResolvedKey(null);
       setPreviousPerformanceLoading(false);
-      setPreviousPerformanceUnavailable(false);
+      setPreviousPerformanceUnavailableKey(null);
       return;
     }
     const controller = new AbortController();
     setPreviousPerformanceLoading(true);
-    setPreviousPerformanceUnavailable(false);
+    setPreviousPerformanceUnavailableKey(null);
     void readActiveWorkoutPreviousPerformanceClient({
-      identity,
+      identity: { kind: previousPerformanceIdentityKind, value: previousPerformanceIdentityValue },
       excludeSessionId: sessionId,
-      setNumber: activeSet.setNumber,
+      setNumber: previousPerformanceSetNumber,
       signal: controller.signal
     }).then((value) => {
       setPreviousPerformanceRead(value);
-      setPreviousPerformanceUnavailable(false);
+      setPreviousPerformanceResolvedKey(previousPerformanceLookupKey);
+      setPreviousPerformanceUnavailableKey(null);
     }).catch((error) => {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setPreviousPerformanceRead(null);
-      setPreviousPerformanceUnavailable(true);
+      setPreviousPerformanceResolvedKey(previousPerformanceLookupKey);
+      setPreviousPerformanceUnavailableKey(previousPerformanceLookupKey);
     }).finally(() => {
       if (!controller.signal.aborted) setPreviousPerformanceLoading(false);
     });
     return () => controller.abort();
-  }, [activeExercise, activeSet, executionCapability.supported, sessionId]);
+  }, [
+    executionCapability.supported,
+    previousPerformanceIdentityKind,
+    previousPerformanceIdentityValue,
+    previousPerformanceLookupKey,
+    previousPerformanceSetNumber,
+    sessionId
+  ]);
 
   const totalSets = exerciseStates.reduce((sum, item) => sum + item.sets.length, 0);
   const completedSets = exerciseStates.reduce(
@@ -726,14 +792,14 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const reviewProjection = buildActiveWorkoutReview(exerciseStates, day.exercises);
   const isFinished = reviewProjection.incompleteSets === 0 && reviewProjection.totalSets > 0;
   const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60));
-  const activePreviousPerformance: ActiveWorkoutPreviousPerformance | null = previousPerformanceRead ? {
-    lastWeightKg: previousPerformanceRead.weightKg,
-    lastReps: previousPerformanceRead.reps,
+  const activePreviousPerformance: ActiveWorkoutPreviousPerformance | null = previousPerformanceReadForCurrentKey ? {
+    lastWeightKg: previousPerformanceReadForCurrentKey.weightKg,
+    lastReps: previousPerformanceReadForCurrentKey.reps,
     lastBestSet: [
-      previousPerformanceRead.weightKg === null ? null : formatters.measurement(previousPerformanceRead.weightKg, "kg"),
-      previousPerformanceRead.reps === null ? null : `${formatters.integer(previousPerformanceRead.reps)} ${tr("units.reps")}`
+      previousPerformanceReadForCurrentKey.weightKg === null ? null : formatters.measurement(previousPerformanceReadForCurrentKey.weightKg, "kg"),
+      previousPerformanceReadForCurrentKey.reps === null ? null : `${formatters.integer(previousPerformanceReadForCurrentKey.reps)} ${tr("units.reps")}`
     ].filter((value): value is string => Boolean(value)).join(" × ") || null,
-    lastPerformedAt: previousPerformanceRead.performedAt
+    lastPerformedAt: previousPerformanceReadForCurrentKey.performedAt
   } : null;
   const activeProgressionTarget = progressionTargets.find(
     (target) => target.plan_exercise_id === activeExercise?.exercise.id
@@ -741,10 +807,6 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const activeAlternatives = alternatives.filter(
     (alternative) => alternative.plan_exercise_id === activeExercise?.exercise.id
   );
-  const currentGuideUrl = activeExercise?.exercise.exercise_url
-    || (activeExercise?.exercise.notes?.startsWith("http") ? activeExercise.exercise.notes : null);
-  const currentCustomVideoUrl = activeExercise?.exercise.custom_video_url || null;
-  const currentInstructions = activeExercise?.exercise.instructions || "";
   const sessionSets = buildSessionSets(exerciseStates);
   const totalVolume = roundWorkoutMetric(
     sessionSets.reduce((sum, set) => sum + set.weightKg * set.reps, 0)
@@ -769,7 +831,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     active_exercise: activeExercise?.exercise ?? null,
     logged_sets: buildWorkoutContextLogRows(exerciseStates),
     session: session ? { id: session.id, duration_minutes: durationMinutes, notes: sessionNotes } : null,
-    previous_performance: previousPerformanceRead,
+    previous_performance: previousPerformanceReadForCurrentKey,
     skipped_exercises: exerciseStates
       .filter((item) => !item.sets.some((set) => set.completedAt))
       .map((item) => item.exercise.exercise_name),
@@ -777,6 +839,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   };
 
   function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<ActiveWorkoutSetState>) {
+    if (isExecutionMutationBlocked()) return;
     setExerciseStates((current) => {
       const next = current.map((item, itemIndex) => itemIndex === exerciseIndex
         ? { ...item, sets: item.sets.map((set, currentSetIndex) => currentSetIndex === setIndex ? mergeSetPatch(set, patch) : set) }
@@ -793,7 +856,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function persistProgress(states = exerciseStates) {
-    if (!sessionId) return;
+    if (!sessionId || isExecutionMutationBlocked()) return;
     const rows = buildCanonicalLogRows(states, { pendingOnly: true });
     if (rows.length) {
       const store = activeSessionStoreRef.current;
@@ -812,7 +875,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       getSnapshot: () => exerciseStatesRef.current,
       hasPendingWrites: hasPendingValidSetWrites,
       persistSnapshot: async (states) => {
-        if (!sessionId) return;
+        if (!sessionId || isExecutionMutationBlocked()) return;
         const rows = buildCanonicalLogRows(states, { pendingOnly: true, validOnly: true });
         if (!rows.length) return;
         const store = activeSessionStoreRef.current;
@@ -830,7 +893,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         console.warn("Plaivra will retry the pending completed-set details.", error);
       }
     };
-  }, [sessionId]);
+  }, [isExecutionMutationBlocked, sessionId]);
 
   useEffect(() => mountWorkoutSetAutosaveCoordinator(
     autosaveCoordinatorRef,
@@ -846,12 +909,32 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     []
   );
 
-  const minimizeWorkout = useCallback(async () => {
+  const persistSetDrafts = useCallback(async (states = exerciseStatesRef.current) => {
+    if (!userId || !sessionId || !states.length || isExecutionMutationBlocked()) return;
+    await writeActiveWorkoutSetDrafts({
+      userId,
+      workoutSessionId: sessionId,
+      drafts: states.flatMap((exercise) => exercise.sets
+        .filter((set) => !set.completedAt)
+        .map((set) => ({
+          snapshotItemId: exercise.prescriptionItem.id,
+          setNumber: set.setNumber,
+          draft: { reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, rir: set.rir, setType: set.setType, notes: set.notes }
+        })))
+    });
+  }, [isExecutionMutationBlocked, sessionId, userId]);
+
+  const preserveWorkoutForNavigation = useCallback(async () => {
     if (minimizePendingRef.current) return false;
     minimizePendingRef.current = true;
     setActionsOpen(false);
     setReplacementPickerOpen(false);
+    setExerciseNavigatorOpen(false);
     try {
+      if (isExecutionMutationBlocked()) return true;
+      const pendingSet = pendingSetCompletionPromiseRef.current;
+      if (pendingSet) await pendingSet.catch(() => undefined);
+      await persistSetDrafts();
       await flushPendingSetWrites();
       const authoritativeState = activeSessionStoreRef.current?.getSnapshot().executionState;
       if (authoritativeState) mirrorExecutionState(authoritativeState);
@@ -865,13 +948,15 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     } finally {
       minimizePendingRef.current = false;
     }
-  }, [flushPendingSetWrites, mirrorExecutionState, toastRef, trRef]);
+  }, [flushPendingSetWrites, isExecutionMutationBlocked, mirrorExecutionState, persistSetDrafts, toastRef, trRef]);
+
+  const minimizeWorkout = preserveWorkoutForNavigation;
 
   useRegisterActiveWorkoutMinimize(minimizeWorkout);
 
   function handleSetDetailsOpenChange(open: boolean) {
     setActionsOpen(open);
-    if (!open) void flushPendingSetWrites();
+    if (!open && !isExecutionMutationBlocked()) void flushPendingSetWrites();
   }
 
   useEffect(() => {
@@ -880,9 +965,24 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }, [exerciseStates]);
 
   useEffect(() => {
-    if (!sessionId || isStarting || !hasPendingValidSetWrites(exerciseStates)) return;
+    if (!sessionId || !userId || isStarting || !exerciseStates.length || isExecutionMutationBlocked()) return;
+    const timeout = window.setTimeout(() => { void persistSetDrafts(exerciseStates).catch(() => undefined); }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [exerciseStates, isExecutionMutationBlocked, isStarting, persistSetDrafts, sessionId, userId]);
+
+  useEffect(() => {
+    if (!setFeedback) return;
+    const timeout = window.setTimeout(
+      () => setSetFeedback(""),
+      transientFeedbackDuration(setFeedbackVariant === "error" ? "error" : "info")
+    );
+    return () => window.clearTimeout(timeout);
+  }, [setFeedback, setFeedbackVariant]);
+
+  useEffect(() => {
+    if (!sessionId || isStarting || isExecutionMutationBlocked() || !hasPendingValidSetWrites(exerciseStates)) return;
     autosaveCoordinatorRef.current?.scheduleFlush(650);
-  }, [exerciseStates, isStarting, sessionId]);
+  }, [exerciseStates, isExecutionMutationBlocked, isStarting, sessionId]);
 
   function restoreRestTimer(snapshot: {
     timerSeconds: number;
@@ -898,7 +998,19 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     else clearStoredValue(restTimerKey);
   }
 
+  function queueAfterPendingSetCompletion(action: () => void) {
+    const pendingCompletion = pendingSetCompletionPromiseRef.current;
+    if (!pendingCompletion) {
+      action();
+      return;
+    }
+    void pendingCompletion.then((acknowledged) => {
+      if (acknowledged) action();
+    });
+  }
+
   function startRestTimer(seconds: number) {
+    if (isExecutionMutationBlocked()) return;
     const safeSeconds = Math.max(0, seconds);
     if (!safeSeconds) return;
     const previous = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
@@ -909,30 +1021,37 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setIsTimerRunning(true);
     storeTimestamp(restTimerKey, deadline);
     if (userId && sessionId && executionHydratedRef.current) {
-      void dispatchExecutionBackground(
-        "start_rest",
-        { duration_seconds: safeSeconds, controller_device_id: controllerDeviceIdRef.current },
-        { rollback: () => restoreRestTimer(previous) }
-      );
+      queueAfterPendingSetCompletion(() => {
+        if (isExecutionMutationBlocked()) return;
+        void dispatchExecutionBackground(
+          "start_rest",
+          { duration_seconds: safeSeconds, controller_device_id: controllerDeviceIdRef.current },
+          { rollback: () => restoreRestTimer(previous) }
+        );
+      });
     }
   }
 
   function stopRestTimer() {
+    if (isExecutionMutationBlocked()) return;
     const previous = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     setTimerLeft(0);
     setTimerEndsAtMs(null);
     setIsTimerRunning(false);
     clearStoredValue(restTimerKey);
     if (userId && sessionId && executionHydratedRef.current) {
-      void dispatchExecutionBackground(
-        "clear_rest",
-        {
-          view_state: "set_entry",
-          completion_reason: "user_skipped",
-          controller_device_id: controllerDeviceIdRef.current
-        },
-        { rollback: () => restoreRestTimer(previous) }
-      );
+      queueAfterPendingSetCompletion(() => {
+        if (isExecutionMutationBlocked()) return;
+        void dispatchExecutionBackground(
+          "clear_rest",
+          {
+            view_state: "set_entry",
+            completion_reason: "user_skipped",
+            controller_device_id: controllerDeviceIdRef.current
+          },
+          { rollback: () => restoreRestTimer(previous) }
+        );
+      });
     }
   }
 
@@ -957,19 +1076,19 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   async function finishSet(exerciseIndex: number, setIndex: number) {
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
-    const storeSnapshot = activeSessionStoreRef.current?.getSnapshot();
+    const store = activeSessionStoreRef.current;
+    const storeSnapshot = store?.getSnapshot();
+    const snapshotItemId = executionCursorItems[exerciseIndex]?.id ?? null;
+    const setKey = `${sessionId ?? "no-session"}:${snapshotItemId ?? exerciseIndex}:${setIndex + 1}`;
     if (
-      !targetSet || targetSet.completedAt || isSaving || isStarting || !sessionId || !userId
-      || !executionHydratedRef.current || executionState?.session_state === "paused"
-      || storeSnapshot?.root?.status !== "started" || !executionCapability.supported
+      !targetSet || targetSet.completedAt || pendingSetCommandKeyRef.current === setKey || isStarting || !sessionId || !userId
+      || isExecutionMutationBlocked() || !executionHydratedRef.current || effectiveExecutionState?.session_state === "paused"
+      || storeSnapshot?.root?.status !== "started" || !executionCapability.supported || !store
     ) return;
 
     const setDraftValidation = validateActiveWorkoutSetDraft(targetSet.reps, targetSet.weightKg);
-    if (!setDraftValidation.complete) {
-      setSetFeedbackVariant("error");
-      setSetFeedback(tr("validation.requiredValues"));
-      return;
-    }
+    setValidationAttemptKey(setKey);
+    if (!setDraftValidation.complete) return;
     if (!setHasValidEffortInputs(targetSet)) {
       setActiveExerciseIndex(exerciseIndex);
       setActiveSetIndex(setIndex);
@@ -983,15 +1102,12 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     const previousTimer = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     const completedAt = new Date();
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: completedAt.toISOString() });
-    const store = activeSessionStoreRef.current;
-    if (!store) {
-      toastRef.current({ title: tr("completion.saveFailedTitle"), description: tr("offline.keepOpenRetry") });
-      return;
-    }
+    const canonical = store.getSnapshot();
+    const canonicalState = canonical.executionState;
+    if (!canonicalState) return;
 
     let transition;
     try {
-      const canonical = store.getSnapshot();
       const currentPrescriptionItem = canonical.prescription.find(
         (item) => item.id === executionCursorItems[exerciseIndex]?.id
       ) ?? canonical.prescription.find((item) => item.itemOrder === exerciseIndex + 1);
@@ -1005,83 +1121,135 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         restDurationSeconds: targetSet.plannedRestSeconds ?? timerSeconds,
         controllerDeviceId: controllerDeviceIdRef.current
       });
-    } catch (error) {
-      toastRef.current({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
+    } catch {
+      setSetFeedbackVariant("error");
+      setSetFeedback(tr("set.saveFailedValuesKept"));
       return;
     }
 
+    const commandId = createSessionCommandId();
+    const projectedExecutionState = projectOptimisticSetCompletion({
+      current: canonicalState,
+      transition,
+      context: {
+        userId,
+        workoutSessionId: sessionId,
+        rootStatus: "started",
+        prescription: canonical.prescription,
+        performedLogs: canonical.performedLogs
+      },
+      commandId,
+      nowMs: Date.now()
+    });
+
+    pendingSetCommandKeyRef.current = setKey;
     setIsSaving(true);
-    try {
-      const response = await store.completeCanonicalSet({
-        logs: buildCanonicalLogRows(nextStates, { pendingOnly: true }),
-        executionIntent: {
-          userId,
-          workoutSessionId: sessionId,
-          commandId: createSessionCommandId(),
-          commandType: "complete_set_transition",
-          payload: {
-            active_snapshot_item_id: transition.patch.active_snapshot_item_id,
-            active_item_order: transition.patch.active_item_order,
-            active_set_number: transition.patch.active_set_number,
-            view_state: transition.patch.view_state,
-            rest_duration_seconds: transition.patch.rest_duration_seconds,
-            controller_device_id: transition.patch.controller_device_id
+    setValidationAttemptKey(null);
+    setExerciseStates(nextStates);
+    exerciseStatesRef.current = nextStates;
+    setActiveExerciseIndex(transition.nextExerciseIndex);
+    setActiveSetIndex(transition.nextSetIndex);
+    setOptimisticCompletion({ commandId, setKey, projectedExecutionState });
+    if (projectedExecutionState.view_state === "rest" && projectedExecutionState.rest_ends_at) {
+      const optimisticRestEnd = Date.parse(projectedExecutionState.rest_ends_at);
+      const optimisticRestLeft = executionRestSecondsLeft(projectedExecutionState, Date.now());
+      setTimerSeconds(projectedExecutionState.rest_duration_seconds ?? targetSet.plannedRestSeconds ?? timerSeconds);
+      setTimerLeft(optimisticRestLeft);
+      setTimerEndsAtMs(Number.isFinite(optimisticRestEnd) ? optimisticRestEnd : null);
+      setIsTimerRunning(optimisticRestLeft > 0);
+    } else {
+      setTimerLeft(0);
+      setTimerEndsAtMs(null);
+      setIsTimerRunning(false);
+    }
+    setCompleted();
+
+    const operation = (async (): Promise<boolean> => {
+      try {
+        const response = await store.completeCanonicalSet({
+          logs: buildCanonicalLogRows(nextStates, { pendingOnly: true }),
+          executionIntent: {
+            userId,
+            workoutSessionId: sessionId,
+            commandId,
+            commandType: "complete_set_transition",
+            payload: {
+              active_snapshot_item_id: transition.patch.active_snapshot_item_id,
+              active_item_order: transition.patch.active_item_order,
+              active_set_number: transition.patch.active_set_number,
+              view_state: transition.patch.view_state,
+              rest_duration_seconds: transition.patch.rest_duration_seconds,
+              controller_device_id: transition.patch.controller_device_id
+            }
           }
-        }
-      });
-      mirrorExecutionState(response.state);
-      const acknowledgedStates = acknowledgeSetWrites(nextStates, nextStates);
-      setExerciseStates(acknowledgedStates);
-      exerciseStatesRef.current = acknowledgedStates;
-      bumpMuscleLoadRefreshRevision();
-      setActiveExerciseIndex(transition.nextExerciseIndex);
-      setActiveSetIndex(transition.nextSetIndex);
-      if (!transition.hasNextSet || transition.patch.view_state !== "rest") {
-        setTimerLeft(0);
-        setTimerEndsAtMs(null);
-        setIsTimerRunning(false);
-        clearStoredValue(restTimerKey);
-      }
-      if (transition.nextExerciseIndex !== exerciseIndex && transition.patch.view_state !== "rest") {
-        setTimerSeconds(nextStates[transition.nextExerciseIndex]?.sets[transition.nextSetIndex]?.plannedRestSeconds ?? 75);
-      }
-      setSetFeedbackVariant("info");
-      setSetFeedback(tr("set.savedDetails", {
-        set: formatters.integer(targetSet.setNumber),
-        reps: formatPlannedReps(targetSet.reps, formatters, "-"),
-        weight: formatters.measurement(toNumberOrNull(targetSet.weightKg) ?? 0, "kg")
-      }));
-    } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "canonical_set_saved_execution_sync_failed") {
+        });
         const acknowledgedStates = acknowledgeSetWrites(nextStates, nextStates);
         setExerciseStates(acknowledgedStates);
         exerciseStatesRef.current = acknowledgedStates;
+        mirrorExecutionState(response.state);
+        const acknowledgedCursor = executionCursorToIndexes(
+          response.state,
+          executionCursorItems,
+          acknowledgedStates.map((item) => item.exercise)
+        );
+        setActiveExerciseIndex(acknowledgedCursor.exerciseIndex);
+        setActiveSetIndex(acknowledgedCursor.setIndex);
+        setOptimisticCompletion(null);
+        await clearActiveWorkoutSetDraft(
+          userId,
+          sessionId,
+          exerciseStates[exerciseIndex]?.prescriptionItem.id ?? snapshotItemId ?? "",
+          targetSet.setNumber
+        ).catch(() => undefined);
         bumpMuscleLoadRefreshRevision();
-        setSetFeedbackVariant("error");
-        setSetFeedback(`${tr("set.saved")} ${tr("offline.keepOpenRetry")}`);
-        toastRef.current({ title: tr("set.saved"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
-        try {
-          await reconcileSavedSetAfterExecutionFailure(nextStates);
-        } catch (reconcileError) {
-          console.warn("Plaivra saved the completed set but could not reconcile the workout position.", reconcileError);
+        return true;
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "canonical_set_saved_execution_sync_failed") {
+          const acknowledgedStates = acknowledgeSetWrites(nextStates, nextStates);
+          setExerciseStates(acknowledgedStates);
+          exerciseStatesRef.current = acknowledgedStates;
+          setOptimisticCompletion(null);
+          await clearActiveWorkoutSetDraft(
+            userId,
+            sessionId,
+            exerciseStates[exerciseIndex]?.prescriptionItem.id ?? snapshotItemId ?? "",
+            targetSet.setNumber
+          ).catch(() => undefined);
+          bumpMuscleLoadRefreshRevision();
+          setSetFeedbackVariant("error");
+          setSetFeedback(tr("set.savedResyncing"));
+          try {
+            await reconcileSavedSetAfterExecutionFailure(nextStates);
+          } catch (reconcileError) {
+            console.warn("Plaivra saved the completed set but could not reconcile the workout position.", reconcileError);
+          }
+        } else {
+          setExerciseStates(previousStates);
+          exerciseStatesRef.current = previousStates;
+          setActiveExerciseIndex(previousActiveExerciseIndex);
+          setActiveSetIndex(previousActiveSetIndex);
+          restoreRestTimer(previousTimer);
+          setOptimisticCompletion(null);
+          setSetFeedbackVariant("error");
+          setSetFeedback(tr("set.saveFailedValuesKept"));
+          feedbackError();
         }
-      } else {
-        setExerciseStates(previousStates);
-        exerciseStatesRef.current = previousStates;
-        setActiveExerciseIndex(previousActiveExerciseIndex);
-        setActiveSetIndex(previousActiveSetIndex);
-        restoreRestTimer(previousTimer);
-        setSetFeedbackVariant("error");
-        setSetFeedback(tr("offline.setSaveCombined"));
-        toastRef.current({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
+        return false;
+      } finally {
+        if (pendingSetCommandKeyRef.current === setKey) pendingSetCommandKeyRef.current = null;
+        setIsSaving(false);
       }
+    })();
+    pendingSetCompletionPromiseRef.current = operation;
+    try {
+      await operation;
     } finally {
-      setIsSaving(false);
+      if (pendingSetCompletionPromiseRef.current === operation) pendingSetCompletionPromiseRef.current = null;
     }
   }
 
   async function restartSet(exerciseIndex: number, setIndex: number) {
-    if (isSaving) return false;
+    if (isSaving || isExecutionMutationBlocked()) return false;
     const previousStates = exerciseStates;
     setIsSaving(true);
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: null });
@@ -1112,8 +1280,40 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     return { snapshotItemId: item?.id ?? null, itemOrder: item?.itemOrder ?? exerciseIndex + 1, setNumber: setIndex + 1 };
   }
 
+  async function navigateToSessionSet(exerciseIndex: number, setIndex: number) {
+    if (
+      isSaving || isStarting || !sessionId || !userId || !executionHydratedRef.current
+      || isExecutionMutationBlocked() || effectiveExecutionState?.session_state === "paused" || !tabLeader || controllerConflictDeviceId
+    ) return;
+    const cursor = executionCursorFor(exerciseIndex, setIndex);
+    setIsSaving(true);
+    try {
+      await flushPendingSetWrites();
+      await dispatchExecutionAwaited("move_cursor", {
+        active_snapshot_item_id: cursor.snapshotItemId,
+        active_item_order: cursor.itemOrder,
+        active_set_number: cursor.setNumber,
+        ...(effectiveExecutionState?.view_state === "rest" ? { view_state: "set_entry" as const } : {}),
+        controller_device_id: controllerDeviceIdRef.current
+      });
+      setActiveExerciseIndex(exerciseIndex);
+      setActiveSetIndex(setIndex);
+      if (effectiveExecutionState?.view_state === "rest") {
+        setTimerLeft(0);
+        setTimerEndsAtMs(null);
+        setIsTimerRunning(false);
+        clearStoredValue(restTimerKey);
+      }
+      setExerciseNavigatorOpen(false);
+    } catch {
+      // The serialized dispatcher owns reconciliation and localized failure reporting.
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function openSessionReview() {
-    if (isStarting || isSaving || !sessionId || !userId || !executionHydratedRef.current || !executionCapability.supported) return;
+    if (isStarting || isSaving || isExecutionMutationBlocked() || !sessionId || !userId || !executionHydratedRef.current || !executionCapability.supported) return;
     const invalidLocation = exerciseStates.flatMap((item, exerciseIndex) =>
       item.sets.map((set, setIndex) => ({ set, exerciseIndex, setIndex }))
     ).find(({ set }) => {
@@ -1149,7 +1349,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function leaveReviewAtSet(exerciseIndex: number, setIndex: number, reopen: boolean) {
-    if (isSaving || !userId || !sessionId || !executionHydratedRef.current) return;
+    if (isSaving || isExecutionMutationBlocked() || !userId || !sessionId || !executionHydratedRef.current) return;
     if (reopen) {
       const reopened = await restartSet(exerciseIndex, setIndex);
       if (!reopened) return;
@@ -1186,6 +1386,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   function finalizeVerifiedCompletion(summary: ActiveWorkoutSummary) {
     if (userId) clearActiveWorkoutState(userId);
+    if (userId && sessionId) void clearActiveWorkoutSessionDrafts(userId, sessionId).catch(() => undefined);
     clearStoredValue(workoutTimerKey);
     clearStoredValue(restTimerKey);
     setFinishOpen(false);
@@ -1200,6 +1401,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function restoreReviewAfterCompletionFailure() {
+    if (isExecutionMutationBlocked()) throw new Error("Workout execution is blocked by an unresolved data conflict.");
     const store = activeSessionStoreRef.current;
     if (!store) throw new Error("The workout execution store is unavailable.");
     await store.hydrate({ force: true });
@@ -1224,7 +1426,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function completeSession() {
-    if (!sessionId || isSaving || isStarting || !executionHydratedRef.current || !executionCapability.supported) return;
+    if (!sessionId || isSaving || isStarting || isExecutionMutationBlocked() || !executionHydratedRef.current || !executionCapability.supported) return;
     const invalidLocation = exerciseStates.flatMap((item, exerciseIndex) =>
       item.sets.map((set, setIndex) => ({ set, exerciseIndex, setIndex }))
     ).find(({ set }) => Boolean(set.completedAt || set.hasPersistedLog) && !setHasValidEffortInputs(set));
@@ -1298,7 +1500,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
 
   async function cancelCurrentSession() {
     const store = activeSessionStoreRef.current;
-    if (!userId || !sessionId || !store || isSaving || isStarting) return;
+    if (!userId || !sessionId || !store || isSaving || isStarting || isExecutionMutationBlocked()) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       toastRef.current({ title: tr("minimized.cancelFailedTitle"), description: tr("minimized.cancelFailedDescription") });
       return;
@@ -1306,6 +1508,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     setIsSaving(true);
     try {
       await store.cancelSession();
+      await clearActiveWorkoutSessionDrafts(userId, sessionId).catch(() => undefined);
       clearActiveWorkoutState(userId);
       clearStoredValue(workoutTimerKey);
       clearStoredValue(restTimerKey);
@@ -1325,6 +1528,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function takeOverWorkout() {
+    if (isExecutionMutationBlocked()) return;
     const store = activeSessionStoreRef.current;
     const localDeviceId = controllerDeviceIdRef.current;
     const latest = store?.getSnapshot().executionState;
@@ -1376,7 +1580,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function togglePause() {
-    if (!executionState || isSaving || isStarting) return;
+    if (!executionState || isSaving || isStarting || isExecutionMutationBlocked()) return;
     setIsSaving(true);
     try {
       await dispatchExecutionAwaited(
@@ -1391,6 +1595,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   function resetWorkoutTimer() {
+    if (isExecutionMutationBlocked()) return;
     const previousStartedAt = startedAtMs;
     const previousElapsed = elapsedSeconds;
     const nextStartedAt = Date.now();
@@ -1413,7 +1618,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   }
 
   async function skipCurrentExercise() {
-    if (sourceKind !== "plan-day" || isSaving || isStarting || !activeExercise) return;
+    if (sourceKind !== "plan-day" || isSaving || isStarting || isExecutionMutationBlocked() || !activeExercise) return;
     const store = activeSessionStoreRef.current;
     const snapshotItemId = executionCursorItems[activeExerciseIndex]?.id;
     if (!store || !snapshotItemId) return;
@@ -1447,10 +1652,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     }
   }
 
-  async function applyStableReplacement(replacement: Workout) {
-    if (sourceKind !== "plan-day" || !userId || !sessionId || !activeExercise) return;
+  async function applyStableReplacement(replacement: Workout): Promise<boolean> {
+    if (sourceKind !== "plan-day" || !userId || !sessionId || !activeExercise || isExecutionMutationBlocked()) return false;
     const store = activeSessionStoreRef.current;
-    if (!store) return;
+    if (!store) return false;
     const originalName = activeExercise.exercise.exercise_name;
     setIsSavingAlternative(true);
     try {
@@ -1489,17 +1694,22 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       }).catch((error) => {
         console.warn("Plaivra recorded the workout replacement but could not save the optional alternative shortcut.", error);
       });
+      return true;
     } catch (error) {
+      setSetFeedbackVariant("error");
+      setSetFeedback(tr("replacement.unavailable"));
       toastRef.current({ title: tr("exercise.replacementFailed"), description: userSafeError(error) });
+      return false;
     } finally {
       setIsSavingAlternative(false);
     }
   }
 
   function applyPreviousSet(exerciseIndex: number, setIndex: number) {
+    if (isExecutionMutationBlocked()) return;
     const item = exerciseStates[exerciseIndex];
     const targetSet = item?.sets[setIndex];
-    if (!item || !targetSet || exerciseIndex !== activeExerciseIndex || setIndex !== activeSetIndex || !previousPerformanceRead) {
+    if (!item || !targetSet || exerciseIndex !== activeExerciseIndex || setIndex !== activeSetIndex || !previousPerformanceReadForCurrentKey) {
       toastRef.current({
         title: tr("exercise.noPreviousPerformance"),
         description: tr("exercise.noPreviousSetDescription")
@@ -1507,8 +1717,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       return;
     }
     updateSet(exerciseIndex, setIndex, {
-      reps: previousPerformanceRead.reps === null ? targetSet.reps : String(previousPerformanceRead.reps),
-      weightKg: previousPerformanceRead.weightKg === null ? targetSet.weightKg : String(previousPerformanceRead.weightKg)
+      reps: previousPerformanceReadForCurrentKey.reps === null ? targetSet.reps : String(previousPerformanceReadForCurrentKey.reps),
+      weightKg: previousPerformanceReadForCurrentKey.weightKg === null ? targetSet.weightKg : String(previousPerformanceReadForCurrentKey.weightKg)
     });
   }
 
@@ -1593,10 +1803,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const activeRpeValidation = validateWorkoutSetEffortInput(activeSet.rpe, "rpe");
   const activeRirValidation = validateWorkoutSetEffortInput(activeSet.rir, "rir");
   const activeSetValidation = validateActiveWorkoutSetDraft(activeSet.reps, activeSet.weightKg);
-  const isPaused = executionState?.session_state === "paused";
-  const restActive = executionState?.view_state === "rest" && timerLeft > 0;
+  const isPaused = effectiveExecutionState?.session_state === "paused";
+  const restActive = effectiveExecutionState?.view_state === "rest" && timerLeft > 0;
   const reviewOpen = Boolean(
-    finishOpen || executionState?.session_state === "review" || executionState?.view_state === "session_review"
+    finishOpen || effectiveExecutionState?.session_state === "review" || effectiveExecutionState?.view_state === "session_review"
   );
   const primaryActionKind = isPaused ? "resume" : restActive ? "skip-rest" : isFinished ? "finish" : "complete-set";
   const primaryActionLabel = isPaused
@@ -1606,51 +1816,48 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
       : isFinished
         ? tr("common.finish")
         : tr("set.finishNumbered", { count: formatters.integer(activeSet.setNumber) });
+  const optimisticRestInteraction = Boolean(restActive && optimisticCompletion && isSaving);
   const primaryActionDisabled = Boolean(
-    completedSummary || isSaving || isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId
-    || (!isPaused && !restActive && !isFinished && (
-      Boolean(activeSet.completedAt) || !activeSetValidation.complete || Boolean(activeRpeValidation.error) || Boolean(activeRirValidation.error)
-    ))
+    executionBlocked || completedSummary || (isSaving && !optimisticRestInteraction) || isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId
+    || (!isPaused && !restActive && !isFinished && Boolean(activeSet.completedAt))
+  );
+  const restControlsDisabled = Boolean(
+    executionBlocked || isStarting || !tabLeader || controllerConflictDeviceId !== null || !sessionId || (isSaving && !optimisticCompletion)
   );
   const activeSetPath = buildActiveWorkoutSetPath(
     activeExercise.sets.map((set) => ({ setNumber: set.setNumber, completed: Boolean(set.completedAt) })),
     activeSet.setNumber
   );
   const handlePrimaryAction = () => {
+    if (isExecutionMutationBlocked()) return;
     if (isPaused) void togglePause();
     else if (restActive) stopRestTimer();
     else if (isFinished) void openSessionReview();
     else void finishSet(activeExerciseIndex, activeSetIndex);
   };
-  const busy = isSaving || isStarting || controllerConflictDeviceId !== null || !tabLeader;
-  const syncNotice = syncState === "online_synced" || controllerConflictDeviceId ? null : (
-    <section data-aw9-sync-state={syncState} role="status" className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] mx-auto max-w-xl rounded-[16px] border border-border/70 bg-background/95 px-4 py-3 shadow-lg backdrop-blur lg:bottom-4">
-      <p className="text-sm font-semibold">{tr(`sync.${syncState}`)}</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{tr("sync.pendingCount", { count: pendingOperationCount })}</p>
-      {syncState === "data_conflict" ? (
-        <>
-          {dataConflict ? (
-            <div className="mt-2 rounded-xl bg-muted/55 p-3 text-sm">
-              <p className="font-semibold">{tr("sync.setConflict", { set: formatters.integer(dataConflict.local.setNumber), exercise: isolateBidiText(dataConflict.local.exerciseName) })}</p>
-              <p className="mt-1 text-muted-foreground">{tr("sync.thisDevice")}: {tr("sync.setValues", { weight: formatters.decimal(dataConflict.local.weightKg ?? 0), reps: formatters.integer(dataConflict.local.reps ?? 0) })}</p>
-              <p className="text-muted-foreground">{tr("sync.server")}: {dataConflict.server ? tr("sync.setValues", { weight: formatters.decimal(dataConflict.server.weight_kg ?? 0), reps: formatters.integer(dataConflict.server.reps ?? 0) }) : tr("completion.metricUnavailable")}</p>
-            </div>
-          ) : null}
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <Button type="button" variant="outline" className="min-h-10" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("server").catch(() => undefined); }}>{tr("sync.keepServer")}</Button>
-            <Button type="button" className="min-h-10" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("local").catch(() => undefined); }}>{tr("sync.useLocal")}</Button>
-          </div>
-        </>
-      ) : null}
-      {syncState === "retry_needed" || syncState === "device_conflict" ? (
-        <Button type="button" variant="outline" className="mt-2 min-h-10 w-full" onClick={() => { void activeSessionStoreRef.current?.retryPendingTransport().catch(() => undefined); }}>{tr("common.retry")}</Button>
-      ) : null}
+  const busy = executionBlocked || isSaving || isStarting || controllerConflictDeviceId !== null || !tabLeader;
+  const syncNotice = reliabilityPresentation.showStandaloneSyncStatus && reliabilityPresentation.nonBlockingSyncState ? (
+    <section
+      data-aw9-sync-state={reliabilityPresentation.nonBlockingSyncState}
+      data-aw9-reliability-sync-status
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] mx-auto max-w-xl rounded-[14px] border border-border/70 bg-background/95 px-3 py-2 shadow-md backdrop-blur lg:bottom-4"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{tr(`sync.${reliabilityPresentation.nonBlockingSyncState}`)}</p>
+          <p className="text-xs text-muted-foreground">{tr("sync.pendingCount", { count: pendingOperationCount })}</p>
+        </div>
+        {reliabilityPresentation.nonBlockingSyncState === "retry_needed" ? (
+          <Button type="button" variant="outline" size="sm" className="min-h-9 shrink-0" onClick={() => { void activeSessionStoreRef.current?.retryPendingTransport().catch(() => undefined); }}>{tr("common.retry")}</Button>
+        ) : null}
+      </div>
     </section>
-  );
+  ) : null;
 
   const allQuickActions = buildActiveWorkoutQuickActions({
     sourceKind,
-    hasGuideOrVideo: Boolean(currentGuideUrl || currentCustomVideoUrl),
     busy,
     paused: Boolean(isPaused),
     activeSetCompleted: Boolean(activeSet.completedAt),
@@ -1662,33 +1869,99 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
     labels: {
       "previous-set": tr("exercise.previousSet"),
       "set-details": tr("actions.setDetails"),
-      "guide-video": tr("actions.guideVideo"),
       "replace-today": tr("actions.replaceToday"),
       "skip-today": tr("actions.skipToday"),
       "ask-plaivra": tr("chatGPT.ask")
     }
   });
-  const mobileQuickActions = projectActiveWorkoutQuickActions(allQuickActions, "mobile");
   const desktopQuickActions = projectActiveWorkoutQuickActions(allQuickActions, "desktop");
-  const openDetails = (
-    section: ActiveWorkoutDetailsSection,
-    trigger: HTMLButtonElement,
-    focusTarget: "guide-video" | null = null
-  ) => {
+  const openDetails = (section: ActiveWorkoutDetailsSection, trigger: HTMLButtonElement) => {
     setDetailsTriggerRef.current = trigger;
-    setDetailsRequest({ section, focusTarget });
+    setDetailsRequest({ section });
     setActionsOpen(true);
   };
   const deviceConflictBackHref = userId
     ? readPreviousActiveWorkoutRoute(userId) ?? (sourceKind === "plan-day" ? "/my-workout/plans" : "/workouts")
     : "/workouts";
+  const blockingReliabilityNotice = reliabilityPresentation.blockingState ? (
+    <section
+      data-aw9-reliability-blocking={reliabilityPresentation.blockingState}
+      data-aw9-tab-conflict={reliabilityPresentation.blockingState === "tab_conflict" ? "true" : undefined}
+      data-aw9-device-conflict={reliabilityPresentation.blockingState === "device_conflict" ? "true" : undefined}
+      data-aw9-data-conflict={reliabilityPresentation.blockingState === "data_conflict" ? "true" : undefined}
+      data-aw9-sync-state={syncState !== "online_synced" ? syncState : undefined}
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[70] mx-auto max-h-[calc(100dvh-7.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] max-w-xl overflow-y-auto rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur"
+    >
+      {reliabilityPresentation.blockingState === "data_conflict" ? (
+        <>
+          <h2 className="font-semibold">{tr("sync.data_conflict")}</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{tr("sync.pendingCount", { count: pendingOperationCount })}</p>
+          {dataConflict ? (
+            <div className="mt-3 rounded-xl bg-muted/55 p-3 text-sm">
+              <p className="font-semibold">{tr("sync.setConflict", { set: formatters.integer(dataConflict.local.setNumber), exercise: isolateBidiText(dataConflict.local.exerciseName) })}</p>
+              <p className="mt-1 text-muted-foreground">{tr("sync.thisDevice")}: {tr("sync.setValues", { weight: formatters.decimal(dataConflict.local.weightKg ?? 0), reps: formatters.integer(dataConflict.local.reps ?? 0) })}</p>
+              <p className="text-muted-foreground">{tr("sync.server")}: {dataConflict.server ? tr("sync.setValues", { weight: formatters.decimal(dataConflict.server.weight_kg ?? 0), reps: formatters.integer(dataConflict.server.reps ?? 0) }) : tr("completion.metricUnavailable")}</p>
+            </div>
+          ) : null}
+          <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("server").catch(() => undefined); }}>{tr("sync.keepServer")}</Button>
+            <Button type="button" className="min-h-11" onClick={() => { void activeSessionStoreRef.current?.resolveDataConflict("local").catch(() => undefined); }}>{tr("sync.useLocal")}</Button>
+          </div>
+        </>
+      ) : reliabilityPresentation.blockingState === "device_conflict" ? (
+        <>
+          <h2 className="font-semibold">{controllerConflictDeviceId ? tr("multiDevice.activeElsewhere") : tr("sync.device_conflict")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{controllerConflictDeviceId ? tr("multiDevice.viewOnly") : tr("sync.pendingCount", { count: pendingOperationCount })}</p>
+          {reliabilityPresentation.nonBlockingSyncState ? (
+            <p data-aw9-reliability-sync-substatus className="mt-1 text-xs text-muted-foreground">{tr(`sync.${reliabilityPresentation.nonBlockingSyncState}`)}</p>
+          ) : null}
+          <div className="mt-3 grid gap-2">
+            {controllerConflictDeviceId ? (
+              <>
+                <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => { document.querySelector("[data-aw5-execution-shell]")?.scrollIntoView({ block: "start" }); }}>{tr("multiDevice.viewCurrent")}</Button>
+                <Button type="button" className="min-h-11 w-full" onClick={() => setTakeoverConfirmationOpen(true)} disabled={isSaving || (typeof navigator !== "undefined" && !navigator.onLine)}>{tr("multiDevice.takeOver")}</Button>
+                <Button asChild variant="ghost" className="min-h-11 w-full"><Link href={deviceConflictBackHref} prefetch={false}>{tr("multiDevice.goBack")}</Link></Button>
+              </>
+            ) : (
+              <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => { void activeSessionStoreRef.current?.retryPendingTransport().catch(() => undefined); }}>{tr("common.retry")}</Button>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{tr("multiDevice.viewOnly")}</p>
+          {reliabilityPresentation.nonBlockingSyncState ? (
+            <p data-aw9-reliability-sync-substatus className="mt-1 text-xs text-muted-foreground">{tr(`sync.${reliabilityPresentation.nonBlockingSyncState}`)} · {tr("sync.pendingCount", { count: pendingOperationCount })}</p>
+          ) : null}
+          <Button type="button" variant="outline" className="mt-3 min-h-11 w-full" onClick={() => { const leadership = tabLeadershipRef.current; if (!leadership) return; void leadership.acquire(true).then(setTabLeader); }}>{tr("multiDevice.continueThisTab")}</Button>
+        </>
+      )}
+    </section>
+  ) : null;
+  const takeoverConfirmationDialog = (
+    <Dialog open={takeoverConfirmationOpen} onOpenChange={setTakeoverConfirmationOpen}>
+      <DialogContent data-aw9-takeover-confirmation className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{tr("multiDevice.takeoverConfirmTitle")}</DialogTitle>
+          <DialogDescription>{tr("multiDevice.takeoverConfirmDescription")}</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" className="min-h-12" onClick={() => setTakeoverConfirmationOpen(false)} disabled={isSaving}>{tr("common.back")}</Button>
+          <Button type="button" className="min-h-12" onClick={() => { setTakeoverConfirmationOpen(false); void takeOverWorkout(); }} disabled={isSaving}>{tr("multiDevice.confirmTakeover")}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
   const handleQuickAction = (action: ActiveWorkoutQuickAction, trigger: HTMLButtonElement) => {
     if (action.disabled) return;
     if (action.intent === "apply-previous-set") {
       applyPreviousSet(activeExerciseIndex, activeSetIndex);
       return;
     }
-    openDetails(action.destination ?? "overview", trigger, action.id === "guide-video" ? "guide-video" : null);
+    openDetails(action.destination ?? "current-set", trigger);
   };
   const miniHeatMap = (
     <ActiveWorkoutMiniHeatMap controller={muscleLoadController} onOpen={(trigger) => openDetails("muscle-load", trigger)} />
@@ -1699,17 +1972,48 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   const previousPerformanceDate = activePreviousPerformance?.lastPerformedAt
     ? formatters.date(activePreviousPerformance.lastPerformedAt)
     : null;
+  const activeSetKey = `${sessionId ?? "no-session"}:${activeExercise.prescriptionItem.id}:${activeSet.setNumber}`;
+  const showCurrentValidation = validationAttemptKey === activeSetKey;
+  const progressionTargetValue = activeProgressionTarget
+    ? [
+        activeProgressionTarget.next_target_weight_kg === null ? null : formatters.measurement(activeProgressionTarget.next_target_weight_kg, "kg"),
+        activeProgressionTarget.next_target_reps === null ? null : `${formatters.integer(Number(activeProgressionTarget.next_target_reps))} ${tr("units.reps")}`
+      ].filter((value): value is string => Boolean(value)).join(" × ") || null
+    : null;
+  const navigatorRows = buildActiveWorkoutExerciseNavigatorRows({
+    exercises: exerciseStates,
+    activeExerciseIndex,
+    originalNamesByPlanExerciseId: new Map(day.exercises.map((exercise) => [exercise.id, exercise.exercise_name]))
+  });
+  const nextExecutionExercise = exerciseStates[activeExerciseIndex] ?? null;
+  const nextExecutionSet = nextExecutionExercise?.sets[activeSetIndex] ?? null;
+  const nextExecutionSetLabel = nextExecutionExercise && nextExecutionSet
+    ? tr("header.setProgress", { current: formatters.integer(nextExecutionSet.setNumber), total: formatters.integer(nextExecutionExercise.sets.length) })
+    : tr("navigation.allDone");
+  const nextExecutionTarget = nextExecutionSet?.plannedReps ? `${nextExecutionSet.plannedReps} ${tr("units.reps")}` : null;
+  const exerciseDetailId = resolveActiveWorkoutExerciseDetailId({
+    sourceWorkoutId: activeExercise.exercise.source_workout_id,
+    workoutId: activeExercise.exercise.workout_id,
+    sourcePlanActivityId: activeExercise.prescriptionItem.sourcePlanActivityId
+  });
+
+  async function openCanonicalExerciseDetail() {
+    if (!exerciseDetailId) {
+      setSetFeedbackVariant("error");
+      setSetFeedback(tr("exercise.detailsUnavailable"));
+      return;
+    }
+    const preserved = await preserveWorkoutForNavigation();
+    if (!preserved) return;
+    window.location.assign(activeWorkoutExerciseDetailHref(exerciseDetailId, sessionRoute));
+  }
 
   if (completedSummary || reviewOpen) {
     return (
       <div data-active-workout-controller className="contents">
         {syncNotice}
-        {!tabLeader ? (
-          <section data-aw9-tab-conflict role="status" className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur">
-            <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
-            <Button type="button" variant="outline" className="mt-3 min-h-11 w-full" onClick={() => { const leadership = tabLeadershipRef.current; if (!leadership) return; void leadership.acquire(true).then(setTabLeader); }}>{tr("multiDevice.continueThisTab")}</Button>
-          </section>
-        ) : null}
+        {blockingReliabilityNotice}
+        {takeoverConfirmationDialog}
         <ActiveWorkoutReviewBridge
           open={reviewOpen}
           busy={busy}
@@ -1739,37 +2043,8 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
   return (
     <div data-active-workout-controller className="contents">
       {syncNotice}
-      {!tabLeader ? (
-        <section data-aw9-tab-conflict role="status" className="fixed inset-x-3 top-3 z-[64] mx-auto max-w-xl rounded-[18px] border border-border/70 bg-background/95 p-4 shadow-lg backdrop-blur">
-          <h2 className="font-semibold">{tr("multiDevice.sameDeviceTab")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{tr("multiDevice.viewOnly")}</p>
-          <Button type="button" variant="outline" className="mt-3 min-h-11 w-full" onClick={() => { const leadership = tabLeadershipRef.current; if (!leadership) return; void leadership.acquire(true).then(setTabLeader); }}>{tr("multiDevice.continueThisTab")}</Button>
-        </section>
-      ) : null}
-      {controllerConflictDeviceId ? (
-        <section data-aw9-device-conflict role="status" className="fixed inset-x-3 top-3 z-[65] mx-auto max-w-xl rounded-[18px] border border-warning/40 bg-background/95 p-4 shadow-lg backdrop-blur">
-          <h2 className="font-semibold">{tr("multiDevice.activeElsewhere")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{tr("multiDevice.viewOnly")}</p>
-          <div className="mt-3 grid gap-2">
-            <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => { document.querySelector("[data-aw5-execution-shell]")?.scrollIntoView({ block: "start" }); }}>{tr("multiDevice.viewCurrent")}</Button>
-            <Button type="button" className="min-h-11 w-full" onClick={() => setTakeoverConfirmationOpen(true)} disabled={isSaving || (typeof navigator !== "undefined" && !navigator.onLine)}>{tr("multiDevice.takeOver")}</Button>
-            <Button asChild variant="ghost" className="min-h-11 w-full"><Link href={deviceConflictBackHref} prefetch={false}>{tr("multiDevice.goBack")}</Link></Button>
-          </div>
-        </section>
-      ) : null}
-
-      <Dialog open={takeoverConfirmationOpen} onOpenChange={setTakeoverConfirmationOpen}>
-        <DialogContent data-aw9-takeover-confirmation className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{tr("multiDevice.takeoverConfirmTitle")}</DialogTitle>
-            <DialogDescription>{tr("multiDevice.takeoverConfirmDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" className="min-h-12" onClick={() => setTakeoverConfirmationOpen(false)} disabled={isSaving}>{tr("common.back")}</Button>
-            <Button type="button" className="min-h-12" onClick={() => { setTakeoverConfirmationOpen(false); void takeOverWorkout(); }} disabled={isSaving}>{tr("multiDevice.confirmTakeover")}</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {blockingReliabilityNotice}
+      {takeoverConfirmationDialog}
 
       <Dialog open={cancelConfirmationOpen} onOpenChange={setCancelConfirmationOpen}>
         <DialogContent data-aw10-cancel-confirmation className="sm:max-w-md">
@@ -1792,28 +2067,34 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         setPositionLabel={tr("header.setProgress", { current: formatters.integer(activeSetIndex + 1), total: formatters.integer(activeExercise.sets.length) })}
         targetLabel={executionTargetLabel(language)}
         targetValue={activeSet.plannedReps ? `${activeSet.plannedReps} ${tr("units.reps")}` : null}
+        progressionTargetLabel={tr("exercise.nextTarget")}
+        progressionTargetValue={progressionTargetValue}
         completedSetsLabel={tr("header.completedSetsProgress", { completed: formatters.integer(completedSets), total: formatters.integer(totalSets) })}
         elapsedLabel={formatters.timer(elapsedSeconds)}
         progress={clampWorkoutProgress(completedSets, totalSets)}
         miniHeatMap={miniHeatMap}
         desktopMiniHeatMap={desktopMiniHeatMap}
         muscleLoadStatusLabel={tr("heatMap.currentSessionMuscleLoad")}
-        mobileQuickActions={mobileQuickActions}
         desktopQuickActions={desktopQuickActions}
         paused={Boolean(isPaused)}
         busy={busy}
         restActive={restActive}
+        restControlsDisabled={restControlsDisabled}
         restLabel={formatters.timer(timerLeft)}
         nextContextLabel={nextSetLabel}
+        nextLabel={tr("rest.next")}
+        nextExerciseName={nextExecutionExercise?.exercise.exercise_name ?? null}
+        nextSetLabel={nextExecutionSetLabel}
+        nextTargetValue={nextExecutionTarget}
         currentSetLabel={tr("set.label", { count: formatters.integer(activeSet.setNumber) })}
         repsLabel={tr("set.reps")}
         weightLabel={tr("set.weightKg")}
         repsDraft={activeSet.reps}
         weightDraft={activeSet.weightKg}
-        repsError={activeSet.reps.trim() && activeSetValidation.repsError ? activeSetValidation.repsError === "invalid" ? tr("validation.wholeReps") : tr("validation.requiredValues") : null}
-        weightError={activeSet.weightKg.trim() && activeSetValidation.weightError ? tr("validation.nonNegative") : null}
-        inputHint={!activeSet.reps.trim() || !activeSet.weightKg.trim() ? tr("validation.requiredValues") : null}
-        setPathLabel={tr("set.path")}
+        repsError={(showCurrentValidation || activeSet.reps.trim()) && activeSetValidation.repsError ? activeSetValidation.repsError === "invalid" ? tr("validation.wholeReps") : tr("validation.repsRequired") : null}
+        weightError={(showCurrentValidation || activeSet.weightKg.trim()) && activeSetValidation.weightError ? activeSetValidation.weightError === "required" ? tr("validation.weightRequired") : tr("validation.nonNegative") : null}
+        inputHint={null}
+        setPathLabel={tr("set.labelPlural")}
         setPath={activeSetPath}
         setPathStateLabels={{ completed: tr("navigation.completed"), active: tr("common.active"), available: tr("navigation.notStarted") }}
         formatSetNumber={formatters.integer}
@@ -1826,6 +2107,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         primaryActionDisabled={primaryActionDisabled}
         moreLabel={tr("common.more")}
         pauseLabel={tr("common.pause")}
+        pausedStateLabel={tr("common.paused")}
         resumeLabel={tr("common.resume")}
         finishLabel={tr("minimized.finishWorkout")}
         cancelLabel={tr("minimized.cancelWorkout")}
@@ -1833,10 +2115,10 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         previousPerformanceLabel={tr("exercise.previousPerformance")}
         previousPerformanceValue={previousPerformanceValue}
         previousPerformanceDate={previousPerformanceDate}
-        previousPerformanceLoading={previousPerformanceLoading}
+        previousPerformanceLoading={previousPerformanceLoading && previousPerformanceResolvedKey !== previousPerformanceLookupKey}
         usePreviousLabel={tr("exercise.useValues")}
         addThirtySecondsLabel={tr("rest.addThirtySeconds")}
-        restPresetSectionLabel={tr("actions.timerControls")}
+        restPresetSectionLabel={tr("rest.label")}
         restPresetLabels={[30, 60, 90, 180].map((seconds) => ({ seconds, label: restPresetLabel(seconds, tr) }))}
         feedback={(
           <InlineFeedback message={setFeedback} variant={setFeedbackVariant} onClose={() => setSetFeedback("")} />
@@ -1846,37 +2128,51 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
         onSelectSet={(setNumber) => {
           const setIndex = activeExercise.sets.findIndex((set) => set.setNumber === setNumber);
           if (setIndex < 0) return;
-          void flushPendingSetWrites();
-          setActiveSetIndex(setIndex);
+          void navigateToSessionSet(activeExerciseIndex, setIndex);
         }}
         onPrimaryAction={handlePrimaryAction}
         onPauseResume={() => { void togglePause(); }}
         onFinish={() => { void openSessionReview(); }}
         onCancel={() => setCancelConfirmationOpen(true)}
-        onOpenDetails={(trigger) => openDetails("overview", trigger)}
+        onOpenDetails={() => { void openCanonicalExerciseDetail(); }}
+        onOpenExerciseNavigator={() => {
+          setActionsOpen(false);
+          setReplacementPickerOpen(false);
+          setExerciseNavigatorOpen(true);
+        }}
         onQuickAction={handleQuickAction}
-        onUsePrevious={previousPerformanceRead ? () => applyPreviousSet(activeExerciseIndex, activeSetIndex) : undefined}
+        onUsePrevious={previousPerformanceReadForCurrentKey ? () => applyPreviousSet(activeExerciseIndex, activeSetIndex) : undefined}
         onAddThirtySeconds={() => startRestTimer(timerLeft + 30)}
         onStartRest={startRestTimer}
+        exerciseNavigatorContent={(
+          <ActiveWorkoutExerciseNavigator
+            open={exerciseNavigatorOpen}
+            onOpenChange={setExerciseNavigatorOpen}
+            rows={navigatorRows}
+            readOnly={executionBlocked || !tabLeader || controllerConflictDeviceId !== null}
+            paused={Boolean(isPaused)}
+            busy={isSaving}
+            onSelect={(exerciseIndex, setIndex) => { void navigateToSessionSet(exerciseIndex, setIndex); }}
+            tr={tr}
+            formatInteger={formatters.integer}
+          />
+        )}
         detailsContent={(
           <ActiveWorkoutDetailsBridge
             open={actionsOpen}
             onOpenChange={handleSetDetailsOpenChange}
             returnFocusRef={setDetailsTriggerRef}
             requestedSection={detailsRequest.section}
-            requestedFocusTarget={detailsRequest.focusTarget}
             sourceKind={sourceKind}
+            userId={userId}
+            locale={language}
+            sessionExerciseIds={new Set(exerciseStates.map((item) => item.exercise.source_workout_id ?? item.exercise.workout_id).filter((value): value is string => Boolean(value)))}
             activeExercise={activeExercise}
             activeSet={activeSet}
-            previousPerformance={activePreviousPerformance}
-            currentInstructions={currentInstructions}
-            currentGuideUrl={currentGuideUrl}
-            currentCustomVideoUrl={currentCustomVideoUrl}
             busy={busy}
             tr={tr}
             formatters={formatters}
             legacyReopenSetLabel={legacyReopenSetLabel}
-            onApplyPreviousSet={() => applyPreviousSet(activeExerciseIndex, activeSetIndex)}
             onRestartSet={() => { void restartSet(activeExerciseIndex, activeSetIndex); }}
             onUpdateSet={(patch) => updateSet(activeExerciseIndex, activeSetIndex, patch)}
             muscleLoadController={muscleLoadController}
@@ -1892,7 +2188,7 @@ export function ActiveWorkoutCoreSession({ source }: { source: ActiveWorkoutSour
             replacementPickerOpen={replacementPickerOpen}
             onReplacementPickerOpenChange={setReplacementPickerOpen}
             dayName={day.day_name}
-            onAddReplacement={(replacement) => { void applyStableReplacement(replacement); }}
+            onAddReplacement={applyStableReplacement}
           />
         )}
       />

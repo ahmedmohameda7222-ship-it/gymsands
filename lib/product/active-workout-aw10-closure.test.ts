@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const runner = readFileSync("scripts/run-aw10-active-workout-closure-qa.mjs", "utf8");
 const entry = readFileSync("scripts/run-aw10-active-workout-closure-qa-entry.mjs", "utf8");
+const fullAuthorityRunner = readFileSync("scripts/run-active-workout-full-authority-qa.mjs", "utf8");
 const fixture = readFileSync("scripts/train-layout-qa-fixture.mjs", "utf8");
 const workflow = readFileSync(".github/workflows/pr-quality.yml", "utf8");
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
@@ -23,7 +24,8 @@ describe("AW-10 canonical Active Workout closure", () => {
   });
 
   it("uses durable fixture authority instead of DOM-only simulation", () => {
-    expect(runner).toContain("indexedDB.open(\"plaivra-active-workout-v1\", 1)");
+    expect(runner).toContain("indexedDB.open(\"plaivra-active-workout-v1\", 2)");
+    expect(runner).toContain("set_drafts");
     expect(runner).toContain("mutateFirstOperation");
     expect(runner).toContain("mutateCachedController");
     expect(runner).toContain("fixture.setServerRootStatus(\"completed\")");
@@ -80,6 +82,32 @@ describe("AW-10 canonical Active Workout closure", () => {
     expect(entry).toContain('result.checks?.resolution === "local"');
     expect(entry).toContain("throw underlyingFailure");
     expect(entry).not.toContain("if (!originalFailure)");
+  });
+
+  it("runs the supplemental full-product authority only after canonical AW-10 closure", () => {
+    expect(entry).toContain('await import("./run-active-workout-full-authority-qa.mjs")');
+    expect(fullAuthorityRunner).toContain("QA_HEAD_SHA is required for exact-head full Active Workout authority evidence");
+    expect(fullAuthorityRunner).toContain("Full Active Workout authority QA requires production mode");
+    for (const required of [
+      "input-blank-zero-field-validation-390x844",
+      "transient-menu-mutual-exclusion-390x844",
+      "canonical-exercise-detail-draft-return-390x844",
+      "exercise-navigator-canonical-cursor-pause-rest-430x932",
+      "replacement-intelligence-reason-aware-390x844",
+      "replacement-exercise-detail-identity-390x844",
+      "optimistic-complete-network-delay-390x844",
+      "optimistic-hard-failure-rollback-auto-dismiss-390x844",
+      "natural-rest-expiry-next-context-390x844",
+      "long-exercise-title-chevron-mobile-320x568",
+      "canonicalSetFailure",
+      "performedLogsSnapshot",
+      "data-aw5-feedback",
+      "data-aw-exercise-navigator",
+      "data-aw-replacement-recommendations",
+    ]) expect(fullAuthorityRunner).toContain(required);
+    expect(fullAuthorityRunner).toContain("active-workout-full-authority-results.json");
+    expect(fullAuthorityRunner).toContain("page.screenshot");
+    expect(fullAuthorityRunner).toContain("if (failures.length) throw new Error");
   });
 
   it("keeps the canonical npm runner stable while scoped PR Quality adds strict classification", () => {
