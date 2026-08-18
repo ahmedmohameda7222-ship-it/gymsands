@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CATALOG_LOCALES, type CatalogLocale } from "@/lib/activity-catalog/catalog-locale";
 import { requireEligibleUser, serverEnv } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { CATALOG_REQUEST_GROUP_ID_HEADER, REQUEST_ID_HEADER, resolveOperationalCorrelationId } from "@/lib/observability/correlation-id";
@@ -10,7 +11,7 @@ import { parseCatalogProviderMode } from "@/services/activity-catalog/server/sel
 import type { LibraryActivityProvider } from "@/services/activity-catalog/server/library-provider";
 
 export const PRIVATE_LIBRARY_HEADERS = { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache", Vary: "Authorization" };
-export const LIBRARY_LOCALES = new Set(["en", "de", "ar"]);
+export const LIBRARY_LOCALES = new Set<CatalogLocale>(CATALOG_LOCALES);
 export const LIBRARY_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -18,9 +19,9 @@ export function libraryJson(data: unknown, status = 200) {
   return NextResponse.json(data, { status, headers: PRIVATE_LIBRARY_HEADERS });
 }
 
-export function parseLocale(url: URL) {
+export function parseLocale(url: URL): CatalogLocale | null {
   const locale = (url.searchParams.get("locale") || "en").toLowerCase();
-  return LIBRARY_LOCALES.has(locale) ? locale : null;
+  return LIBRARY_LOCALES.has(locale as CatalogLocale) ? locale as CatalogLocale : null;
 }
 
 export function validIdentifier(value: string) { return UUID.test(value) || LIBRARY_SLUG.test(value); }
