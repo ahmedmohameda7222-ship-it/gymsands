@@ -72,6 +72,10 @@ describe("PR #144 focused correction authority", () => {
     expect(core).toContain('function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<ActiveWorkoutSetState>) {\n    if (isExecutionMutationBlocked()) return;');
     expect(core).toContain('async function restartSet(exerciseIndex: number, setIndex: number) {\n    if (isSaving || isExecutionMutationBlocked()) return false;');
     expect(core).toContain('async function completeSession() {\n    if (!sessionId || isSaving || isStarting || isExecutionMutationBlocked()');
+    expect(core).toContain('async function cancelCurrentSession() {\n    const store = activeSessionStoreRef.current;\n    if (!userId || !sessionId || !store || isSaving || isStarting || isExecutionMutationBlocked()) return;');
+    expect(core).toContain('async function togglePause() {\n    if (!executionState || isSaving || isStarting || isExecutionMutationBlocked()) return;');
+    expect(core).toContain('function startRestTimer(seconds: number) {\n    if (isExecutionMutationBlocked()) return;');
+    expect(core).toContain('function stopRestTimer() {\n    if (isExecutionMutationBlocked()) return;');
     expect(core).toContain('async function skipCurrentExercise() {\n    if (sourceKind !== "plan-day" || isSaving || isStarting || isExecutionMutationBlocked()');
     expect(core).toContain('async function applyStableReplacement(replacement: Workout): Promise<boolean> {\n    if (sourceKind !== "plan-day" || !userId || !sessionId || !activeExercise || isExecutionMutationBlocked()) return false;');
     expect(core).toContain('resolveDataConflict("server")');
@@ -80,5 +84,4 @@ describe("PR #144 focused correction authority", () => {
     expect(shell).toContain('disabled={busy || item.state === "active"}');
     expect(details).toContain('disabled={busy}');
   });
-
 });
