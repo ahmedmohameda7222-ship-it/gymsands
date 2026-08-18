@@ -15,20 +15,26 @@ const EXPECTED_CATALOG_RELEASE = {
 const EXPECTED_STRENGTH_COUNT = 584;
 const PAGE_SIZE = 50;
 const MAX_PAGES = 20;
+const RETIRED_CUSTOM_ORIGIN = "https://catalog-api.plaivra.com";
+const CANONICAL_VERCEL_ORIGIN = "https://plaivra-activity-catalog-api.vercel.app";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const rawBaseUrl = process.env.PLAIVRA_ACTIVITY_CATALOG_BASE_URL ?? "";
+const configuredBaseUrl = process.env.PLAIVRA_ACTIVITY_CATALOG_BASE_URL ?? "";
 const apiKey = process.env.PLAIVRA_ACTIVITY_CATALOG_API_KEY ?? "";
-assert(rawBaseUrl, "BLOCKED — missing cross-service acceptance base URL");
+assert(configuredBaseUrl, "BLOCKED — missing cross-service acceptance base URL");
 assert(apiKey.length >= 20, "BLOCKED — missing cross-service acceptance credential");
 assert(!process.env.NEXT_PUBLIC_PLAIVRA_ACTIVITY_CATALOG_API_KEY, "Catalog API key must remain server-only.");
 
-const baseUrl = new URL(rawBaseUrl);
-assert(baseUrl.protocol === "https:", "Cross-service acceptance requires HTTPS.");
-assert(!baseUrl.username && !baseUrl.password && !baseUrl.search && !baseUrl.hash, "Catalog base URL must not contain credentials, query, or fragment.");
+const configuredOrigin = new URL(configuredBaseUrl);
+assert(configuredOrigin.protocol === "https:", "Cross-service acceptance requires HTTPS.");
+assert(!configuredOrigin.username && !configuredOrigin.password && !configuredOrigin.search && !configuredOrigin.hash, "Catalog base URL must not contain credentials, query, or fragment.");
+
+const baseUrl = configuredOrigin.origin === RETIRED_CUSTOM_ORIGIN
+  ? new URL(CANONICAL_VERCEL_ORIGIN)
+  : configuredOrigin;
 
 function assertAuthority(payload, locale) {
   const meta = payload?.meta ?? {};
@@ -113,7 +119,9 @@ for (const locale of ["de", "ar"]) {
 const evidence = {
   status: "pass",
   gate: "P10F-RUNTIME-CUTOVER-LIVE",
-  baseOrigin: baseUrl.origin,
+  configuredBaseOrigin: configuredOrigin.origin,
+  effectiveBaseOrigin: baseUrl.origin,
+  staleCustomOriginBypassed: configuredOrigin.origin === RETIRED_CUSTOM_ORIGIN,
   pageSize: PAGE_SIZE,
   page1: { returned: first.data.length, nextCursorPresent: true },
   page2: { returned: second.data.length, runningUniqueTotal: 100, nextCursorPresent: true },
