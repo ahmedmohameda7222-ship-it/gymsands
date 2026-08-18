@@ -3,12 +3,22 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const origin = new URL(process.env.PLAIVRA_PRODUCTION_URL || "https://app.plaivra.com");
-const email = process.env.PLAIVRA_SMOKE_POPULATED_EMAIL;
-const password = process.env.PLAIVRA_SMOKE_POPULATED_PASSWORD;
+const accounts = [
+  {
+    label: "populated",
+    email: process.env.PLAIVRA_SMOKE_POPULATED_EMAIL,
+    password: process.env.PLAIVRA_SMOKE_POPULATED_PASSWORD
+  },
+  {
+    label: "empty",
+    email: process.env.PLAIVRA_SMOKE_EMPTY_EMAIL,
+    password: process.env.PLAIVRA_SMOKE_EMPTY_PASSWORD
+  }
+].filter((account) => account.email && account.password);
 const output = resolve(process.env.PLAIVRA_P10F_DIAGNOSTIC_OUTPUT || "p10f-current-production-library.json");
 
 if (origin.protocol !== "https:") throw new Error("Production diagnostic requires HTTPS.");
-if (!email || !password) throw new Error("BLOCKED — Production smoke credential unavailable for current-provider diagnostic.");
+if (!accounts.length) throw new Error("BLOCKED — Production smoke credential unavailable for current-provider diagnostic.");
 mkdirSync(resolve(output, ".."), { recursive: true });
 
 function safeMeta(payload) {
@@ -32,12 +42,15 @@ function safeMeta(payload) {
 }
 
 async function login(page) {
-  await page.goto(new URL("/login", origin).toString(), { waitUntil: "domcontentloaded", timeout: 30_000 });
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((url) => url.pathname !== "/login", { timeout: 30_000 });
-  if (new URL(page.url()).pathname === "/login") throw new Error("Production smoke login did not complete.");
+  for (const account of accounts) {
+    await page.goto(new URL("/login", origin).toString(), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.locator('input[type="email"]').fill(account.email);
+    await page.locator('input[type="password"]').fill(account.password);
+    await page.locator('button[type="submit"]').click();
+    const completed = await page.waitForURL((url) => url.pathname !== "/login", { timeout: 15_000 }).then(() => true).catch(() => false);
+    if (completed && new URL(page.url()).pathname !== "/login") return account.label;
+  }
+  throw new Error("BLOCKED — configured Production smoke accounts could not authenticate.");
 }
 
 const browser = await chromium.launch({ headless: true });
@@ -45,7 +58,7 @@ try {
   const context = await browser.newContext({ locale: "en-GB", timezoneId: "Europe/Berlin" });
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
-  await login(page);
+  const authenticatedAccountClass = await login(page);
 
   const captures = [];
   page.on("response", async (response) => {
@@ -67,7 +80,7 @@ try {
     }
   });
 
-  const navigation = await page.goto(new URL("/workouts?all=1", origin).toString(), { waitUntil: "networkidle", timeout: 45_000 });
+  const navigation = await page.goto(new URL("/workouts?all=1", origin).toString(), { waitUntil: "domcontentloaded", timeout: 45_000 });
   if (!navigation?.ok()) throw new Error(`Production /workouts returned ${navigation?.status() ?? "no response"}.`);
 
   const deadline = Date.now() + 20_000;
@@ -97,6 +110,7 @@ try {
     status: "pass",
     gate: "P10F-CURRENT-PRODUCTION-PROVIDER-DIAGNOSTIC",
     productionOrigin: origin.origin,
+    authenticatedAccountClass,
     classification,
     firstPage: first,
     secondPage: second,
