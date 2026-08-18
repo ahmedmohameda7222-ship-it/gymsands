@@ -2,14 +2,37 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CatalogProviderMode } from "@/lib/activity-catalog/types";
+import type { LibraryFallbackReason } from "@/lib/activity-catalog/library-types";
 import { serverEnv } from "@/lib/integrations/env";
 import { HttpLibraryActivityProvider } from "./library-http-provider";
 import { LegacyLibraryActivityProvider } from "./library-legacy-provider";
-import { asLibraryProviderError } from "./library-errors";
+import { asLibraryProviderError, type LibraryProviderError } from "./library-errors";
 import type { LibraryActivityProvider } from "./library-provider";
 
-function degraded<T extends { meta: Record<string, unknown> }>(result: T): T {
-  return { ...result, meta: { ...result.meta, degraded: true } };
+function boundedFallbackReason(error: LibraryProviderError): LibraryFallbackReason {
+  switch (error.code) {
+    case "catalog_timeout":
+    case "catalog_network_error":
+    case "catalog_rate_limited":
+    case "catalog_upstream_error":
+    case "catalog_not_found":
+      return error.code;
+    default:
+      return "catalog_upstream_error";
+  }
+}
+
+function degraded<T extends { meta: Record<string, unknown> }>(result: T, reason: LibraryFallbackReason): T {
+  return {
+    ...result,
+    meta: {
+      ...result.meta,
+      primarySource: "library_v2",
+      fallbackUsed: true,
+      fallbackReason: reason,
+      degraded: true
+    }
+  };
 }
 
 export class FallbackLibraryActivityProvider implements LibraryActivityProvider {
@@ -45,7 +68,7 @@ export class FallbackLibraryActivityProvider implements LibraryActivityProvider 
       if (provenOldIdentifier) {
         try { await proveLegacyIdentifier(); } catch { throw safe; }
       }
-      try { return degraded(await legacy()); } catch { throw safe; }
+      try { return degraded(await legacy(), boundedFallbackReason(safe)); } catch { throw safe; }
     }
   }
 }
