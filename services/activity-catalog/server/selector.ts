@@ -10,8 +10,7 @@ import type { ActivityCatalogExecutionObserver } from "./observability";
 import type { ActivityCatalogProvider } from "./provider";
 
 export function parseCatalogProviderMode(value: string | undefined): CatalogProviderMode {
-  if (!value) throw new CatalogError("catalog_not_configured", { failureStage: "provider_request" });
-  if (value === "legacy") return "legacy";
+  if (!value || value === "legacy") return "legacy";
   if (
     value === "external" || value === "external_with_legacy_fallback" ||
     value === "library_v2" || value === "library_v2_with_legacy_fallback"
