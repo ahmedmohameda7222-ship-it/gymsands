@@ -10,7 +10,8 @@ import type { Workout } from "@/types";
 const mocks = vi.hoisted(() => ({
   createGroup: vi.fn(),
   getFilters: vi.fn(),
-  getWorkouts: vi.fn()
+  getWorkouts: vi.fn(),
+  language: "en" as "en" | "de" | "ar"
 }));
 
 vi.mock("@/components/auth/auth-provider", () => ({
@@ -36,9 +37,9 @@ vi.mock("@/services/database/workout-library", () => {
 
 vi.mock("@/lib/i18n/train", () => ({
   useTrainTranslation: () => ({
-    language: "en",
-    dir: "ltr",
-    locale: "en",
+    language: mocks.language,
+    dir: mocks.language === "ar" ? "rtl" : "ltr",
+    locale: mocks.language === "en" ? "en-US" : mocks.language === "de" ? "de-DE" : "ar",
     tr: (key: string, variables?: Record<string, unknown>) => variables?.count !== undefined ? `${key}:${variables.count}` : key
   })
 }));
@@ -146,6 +147,7 @@ describe("ExercisePickerDialog request generations", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    mocks.language = "en";
     mocks.createGroup.mockReset();
     mocks.getFilters.mockReset();
     mocks.getWorkouts.mockReset();
@@ -163,6 +165,32 @@ describe("ExercisePickerDialog request generations", () => {
     container.remove();
     vi.clearAllTimers();
     vi.useRealTimers();
+  });
+
+  it.each([
+    ["en", "en"],
+    ["de", "de"],
+    ["ar", "ar"]
+  ] as const)("maps %s UI language to %s Catalog locale before loading picker exercises", async (language, expectedLocale) => {
+    mocks.language = language;
+    mocks.getWorkouts.mockResolvedValue({ data: [workout(`${language}-one`, `${language} exercise`)], pagination: { hasMore: false, nextCursor: null } });
+
+    await act(async () => {
+      root.render(React.createElement(ExercisePickerDialog, {
+        open: true,
+        onOpenChange: () => undefined,
+        dayName: "Push",
+        existingKeys: [],
+        onAdd: () => undefined
+      }));
+    });
+    await act(async () => { vi.advanceTimersByTime(180); });
+    await flush();
+
+    expect(mocks.getFilters).toHaveBeenCalledWith(expectedLocale, expect.objectContaining({ requestGroupId: "group-initial" }));
+    expect(mocks.getWorkouts).toHaveBeenCalledWith("", expect.any(Object), null, expectedLocale, expect.objectContaining({ requestGroupId: "group-initial" }));
+    expect(container.textContent).toContain(`${language} exercise`);
+    if (language === "ar") expect(container.querySelector("section")?.getAttribute("dir")).toBe("rtl");
   });
 
   it("shares the initial group, loads one page, appends one cursor page, deduplicates, and preserves selection", async () => {
