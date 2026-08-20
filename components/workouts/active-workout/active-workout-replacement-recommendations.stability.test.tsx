@@ -19,6 +19,12 @@ vi.mock(
   }),
 );
 
+vi.mock("@/lib/i18n/exercise-detail", () => ({
+  useExerciseDetailTranslation: () => ({
+    ed: (key: string) => key,
+  }),
+}));
+
 import { ActiveWorkoutReplacementRecommendations } from "./active-workout-replacement-recommendations";
 
 const userId = "11111111-1111-4111-8111-111111111111";

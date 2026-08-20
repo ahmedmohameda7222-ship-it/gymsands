@@ -159,7 +159,8 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(sessions).toContain("source_workout_id: log.plan_exercise_id");
     expect(detail).toContain('.eq("source_workout_id", globalId)');
     expect(detail).toContain('.eq("workout_sessions.status", "completed")');
-    expect(model).toContain("stablePerformanceIdentity: `global:${detail.id}`");
+    expect(model).toContain("performance: resolveExerciseIdentity({ source, activityId: detail.id })");
+    expect(model).not.toContain("stablePerformanceIdentity: `global:${detail.id}`");
     expect(model).not.toMatch(/normalizeExerciseName|150/);
   });
 

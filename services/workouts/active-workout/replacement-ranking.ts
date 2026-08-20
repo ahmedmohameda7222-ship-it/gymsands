@@ -4,8 +4,10 @@ import type {
   Workout,
 } from "@/types";
 import type { ReplacementEligibility } from "@/services/database/workout-replacement-eligibility";
+import type { RankedExerciseAlternative } from "@/lib/exercise-detail/alternatives";
 
 export const ACTIVE_WORKOUT_REPLACEMENT_RANKING_VERSION = "v1" as const;
+export const ACTIVE_WORKOUT_REPLACEMENT_RANKING_VERSION_V2 = "v2" as const;
 
 export type ReplacementReasonCode =
   | "same_primary_muscles"
@@ -32,7 +34,7 @@ export type RankedReplacement = {
   workout: Workout;
   score: number;
   reasons: ReplacementReasonCode[];
-  rankingVersion: typeof ACTIVE_WORKOUT_REPLACEMENT_RANKING_VERSION;
+  rankingVersion: typeof ACTIVE_WORKOUT_REPLACEMENT_RANKING_VERSION | typeof ACTIVE_WORKOUT_REPLACEMENT_RANKING_VERSION_V2;
 };
 
 type RankingSignal = {
@@ -217,4 +219,40 @@ export function rankActiveWorkoutReplacements(input: {
       } satisfies RankedReplacement;
     })
     .sort((left, right) => right.score - left.score || left.workout.id.localeCompare(right.workout.id));
+}
+
+/**
+ * Active Workout adapter for the shared V2 relationship authority. It never
+ * re-ranks semantic relationships through v1 heuristics. Eligibility and current
+ * session duplication remain execution-context constraints after Catalog ranking.
+ */
+export function rankAuthorityBackedActiveWorkoutReplacementsV2(input: {
+  ranked: readonly RankedExerciseAlternative[];
+  workoutsById: ReadonlyMap<string, Workout>;
+  eligibility: ReadonlyMap<string, ReplacementEligibility>;
+  sessionExerciseIds?: ReadonlySet<string>;
+  savedAlternatives?: readonly UserExerciseAlternative[];
+}): RankedReplacement[] {
+  const sessionExerciseIds = input.sessionExerciseIds ?? new Set<string>();
+  const historicalNames = new Set((input.savedAlternatives ?? []).map((item) => normalized(item.alternative_exercise_name)).filter(Boolean));
+  return input.ranked.flatMap((candidate) => {
+    const workout = input.workoutsById.get(candidate.activity.id);
+    if (!workout || input.eligibility.get(workout.id)?.eligible !== true || sessionExerciseIds.has(workout.id)) return [];
+    // Historical replacement rows only stored display names. Keep this bounded
+    // compatibility hint while all new canonical identity/ranking uses stable IDs.
+    const legacyUsed = historicalNames.has(normalized(workout.name));
+    const reasons: ReplacementReasonCode[] = [];
+    if (candidate.relationshipType === "equipment_substitution") reasons.push("different_equipment");
+    if (candidate.relationshipType === "easier_variation") reasons.push("easier_variation");
+    if (candidate.relationshipType === "same_movement_pattern" || candidate.relationshipType === "same_training_purpose") reasons.push("similar_movement");
+    if (candidate.relationshipType === "same_primary_muscle") reasons.push("same_primary_muscles");
+    if (legacyUsed) reasons.push("used_before");
+    reasons.push("strong_identity");
+    return [{
+      workout,
+      score: candidate.rank + (legacyUsed ? 1 : 0),
+      reasons: [...new Set(reasons)].slice(0, 3),
+      rankingVersion: ACTIVE_WORKOUT_REPLACEMENT_RANKING_VERSION_V2
+    }];
+  });
 }

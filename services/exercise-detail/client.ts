@@ -6,52 +6,48 @@ import { catalogActivityDetailModel, customExerciseDetailModel } from "@/lib/exe
 import type { AddToPlanActivityPayload, ExerciseDetailViewModel } from "@/lib/exercise-detail/contracts";
 import { supabase } from "@/lib/supabase/client";
 import {
-  getLibraryDomainActivity,
-  getLibraryDomainActivityAlternatives,
-  listLibraryDomains
+  getLibraryActivity,
+  getLibraryDomainActivityAlternatives
 } from "@/services/activity-catalog/client";
 import { getUserWorkoutPlans } from "@/services/database/workout-plans";
-import { getCustomExercisesWithStatus } from "@/services/workouts/exercise-library-store";
-import { getUserExerciseVideo } from "@/services/database/workout-library";
+import { getOwnedCustomExerciseDirect } from "./custom-exercise";
 import type { UserWorkoutPlan } from "@/types";
 
 export type ResolvedExerciseDetail = {
   core: ExerciseDetailViewModel;
   catalog: { detail: LibraryActivityDetail; meta: LibraryProviderMeta; domain: string } | null;
-  initialCustomVideoUrl: string | null;
 };
 
 export async function resolveExerciseDetail(
   identifier: string,
   userId: string | undefined,
   intlLocale: string,
-  catalogLocale: CatalogLocale
+  catalogLocale: CatalogLocale,
+  signal?: AbortSignal
 ): Promise<ResolvedExerciseDetail> {
-  const customResult = await getCustomExercisesWithStatus(userId);
-  const custom = customResult.data.find((item) => item.id === identifier);
-  if (custom) return { core: customExerciseDetailModel(custom, intlLocale), catalog: null, initialCustomVideoUrl: custom.custom_video_url ?? null };
+  const custom = await getOwnedCustomExerciseDirect(userId, identifier, signal);
+  if (custom) return { core: customExerciseDetailModel(custom, intlLocale), catalog: null };
 
-  const domainsResult = await listLibraryDomains(catalogLocale);
-  const domains = Array.from(new Set(["strength", ...domainsResult.data.map((domain) => domain.key)]));
-  let lastError: unknown = null;
-  for (const domain of domains) {
-    try {
-      const result = await getLibraryDomainActivity(domain, identifier, catalogLocale);
-      const customVideo = userId ? await getUserExerciseVideo(userId, result.data.id).catch(() => null) : null;
-      return { core: catalogActivityDetailModel(result.data, result.meta, domain), catalog: { detail: result.data, meta: result.meta, domain }, initialCustomVideoUrl: customVideo?.custom_video_url ?? null };
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError ?? new Error("Exercise not found.");
+  const result = await getLibraryActivity(identifier, catalogLocale, { signal });
+  const domain = result.data.domain;
+  if (!domain) throw new Error("The exercise catalog returned detail without a canonical domain.");
+  return {
+    core: catalogActivityDetailModel(result.data, result.meta, domain),
+    catalog: { detail: result.data, meta: result.meta, domain }
+  };
 }
 
-export async function loadExerciseAlternatives(resolved: ResolvedExerciseDetail, catalogLocale: CatalogLocale) {
+export async function loadExerciseAlternatives(
+  resolved: ResolvedExerciseDetail,
+  catalogLocale: CatalogLocale,
+  signal?: AbortSignal
+) {
   if (!resolved.catalog) return [] as LibraryAlternative[];
   return (await getLibraryDomainActivityAlternatives(
     resolved.catalog.domain,
     resolved.catalog.detail.id,
-    { limit: 10, locale: catalogLocale }
+    { limit: 10, locale: catalogLocale },
+    { signal }
   )).data;
 }
 

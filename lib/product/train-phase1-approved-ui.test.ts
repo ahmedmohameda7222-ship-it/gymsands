@@ -68,9 +68,10 @@ describe("approved Train Phase 1 UI contracts", () => {
       expect(activeWorkout).toContain(`tr("set.${key}"`);
     }
     expect(controller).toContain("useActiveWorkoutTranslation");
-    expect(replacement).toContain('"machine_taken"');
-    expect(replacement).toContain('machine_taken: "replacement.reasonMachineTaken"');
-    expect(replacement).toContain('tr(reasonTranslationKey[candidateReason])');
+    expect(replacement).toContain("EXERCISE_ALTERNATIVE_REASONS.map");
+    expect(replacement).toContain('if (value === "machine_taken") return ed("reasonMachineTaken")');
+    expect(replacement).toContain('if (value === "want_harder") return ed("reasonWantHarder")');
+    expect(replacement).toContain('return ed("reasonVariation")');
     expect(controller).toContain('moreLabel={tr("common.more")}');
     expect(shell).toContain("aria-label={label}");
     expect(shell).toContain("label={moreLabel}");
@@ -79,6 +80,7 @@ describe("approved Train Phase 1 UI contracts", () => {
 
   it("localizes detail, history filters, direct-session failures, and the active workout controller", () => {
     const detail = source("app/(private)/workouts/[id]/page.tsx");
+    const detailFrame = source("components/exercise-detail/detail-ui.tsx");
     const history = source("components/workouts/history/workout-history-period-control.tsx");
     const directSession = source("app/(private)/workouts/session/[id]/page.tsx");
     const activeWorkout = source("components/workouts/active-workout-indicator.tsx");
@@ -91,8 +93,9 @@ describe("approved Train Phase 1 UI contracts", () => {
     ];
     for (const key of keys) expect(translations.match(new RegExp(`${key}:`, "g"))?.length).toBe(3);
     expect(detail).toContain("useExerciseDetailTranslation");
-    expect(detail).toContain("mediaUrl ? <ExerciseMedia");
-    expect(detail).toContain("exercise.equipment.join");
+    expect(detail).not.toContain("ExerciseMedia");
+    expect(detail).toContain("resolved.core.equipment.map");
+    expect(detailFrame).toContain("ExerciseMoreDialog");
     expect(history).toContain('week: tr("historyPeriodWeek")');
     expect(history).toContain('month: tr("historyPeriodMonth")');
     expect(history).toContain('aria-label={tr("historyPreviousPeriod")}');

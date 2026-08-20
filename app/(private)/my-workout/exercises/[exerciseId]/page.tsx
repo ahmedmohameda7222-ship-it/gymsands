@@ -39,7 +39,7 @@ export default function PlanExerciseDetailsPage() {
     return <TrainPageContainer className="max-w-[1040px] py-4" dir={dir}><div className="mx-auto max-w-lg py-20 text-center"><h1 className="text-2xl font-semibold">{state === "not_found" ? ed("notFound") : ed("coreFailed")}</h1><p className="mt-3 text-muted-foreground">{ed("notFoundDescription")}</p><Button asChild variant="outline" className="mt-6"><Link href="/my-workout/plans">{ed("backPlan")}</Link></Button></div></TrainPageContainer>;
   }
 
-  const stableIdentity = detail.sourceWorkoutId ? `global:${detail.sourceWorkoutId}` : null;
+  const stableIdentity = detail.performanceIdentity?.canonical ?? null;
   return <TrainPageContainer className="max-w-[1040px] py-2 sm:py-4" dir={dir}>
     <Button asChild variant="ghost" className="min-h-11 px-0 hover:bg-transparent"><Link href={`/my-workout/plans/${detail.planId}?day=${encodeURIComponent(detail.dayId)}`}><ArrowLeft className="h-4 w-4 rtl:rotate-180" />{ed("backPlan")}</Link></Button>
     <header className="mt-5 border-b pb-7"><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{detail.name}</h1>{[detail.category, detail.equipment].filter(Boolean).length ? <p className="mt-3 text-sm text-muted-foreground">{[detail.category, detail.equipment].filter(Boolean).join(" · ")}</p> : null}</header>

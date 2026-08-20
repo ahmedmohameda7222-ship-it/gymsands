@@ -14,6 +14,7 @@ function meta(locale?: string): LibraryProviderMeta {
 function mapActivity(activity: TrainingActivity): LibraryActivityDetail {
   return {
     id: activity.id,
+    domain: "strength",
     revisionId: activity.id,
     revisionNumber: activity.version ?? 0,
     revisionLifecycle: "legacy_compatibility",
@@ -91,6 +92,10 @@ export class LegacyLibraryActivityProvider implements LibraryActivityProvider {
       pagination: { limit, returned: activities.length, nextCursor: nextOffset === null ? null : encodeCursor({ offset: nextOffset, domain: params.domain, query: params.query ?? "" }) },
       meta: meta(params.locale)
     };
+  }
+
+  async getActivityByIdentifier(identifier: string, options: LibraryRequestOptions = {}) {
+    return this.getActivity("strength", identifier, options);
   }
 
   async getActivity(domain: string, identifier: string, options: LibraryRequestOptions = {}) {

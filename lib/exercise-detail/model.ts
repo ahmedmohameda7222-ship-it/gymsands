@@ -1,8 +1,21 @@
 import { buildCatalogAuthoritySnapshot } from "@/lib/activity-catalog/snapshot";
-import type { LibraryActivityDetail, LibraryProviderMeta } from "@/lib/activity-catalog/library-types";
+import type { CatalogSchemaField, LibraryActivityDetail, LibraryProviderMeta } from "@/lib/activity-catalog/library-types";
 import type { Workout } from "@/types";
-import { formatExerciseDisplayList, formatExerciseDisplayValue, resolveExerciseDisplayLanguage } from "@/lib/train/exercise-display";
-import type { AddToPlanActivityPayload, ExerciseDetailViewModel, ExercisePrescriptionField, PlanExerciseDetailViewModel } from "./contracts";
+import {
+  CURATED_EXERCISE_DISPLAY_VOCABULARY,
+  formatExerciseDisplayList,
+  formatExerciseDisplayValue,
+  resolveExerciseDisplayLanguage,
+  type ExerciseDisplayDomain,
+} from "@/lib/train/exercise-display";
+import { resolveExerciseIdentity, resolveFrozenPlanExerciseIdentity } from "./identity";
+import type {
+  AddToPlanActivityPayload,
+  ExerciseDetailViewModel,
+  ExerciseEquipmentView,
+  ExercisePrescriptionField,
+  PlanExerciseDetailViewModel
+} from "./contracts";
 
 function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -16,9 +29,66 @@ function unique(values: Array<string | null>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
+function canonicalDisplayKey(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .trim()
+    .toLocaleLowerCase("en")
+    .replace(/[^\p{L}\p{N}]+/gu, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+type ReviewedDomain = "muscle" | "equipment" | "difficulty" | "mechanics" | "movement" | "force";
+const reviewedVocabulary: Record<ReviewedDomain, ReadonlySet<string>> = {
+  muscle: new Set(CURATED_EXERCISE_DISPLAY_VOCABULARY.muscles),
+  equipment: new Set(CURATED_EXERCISE_DISPLAY_VOCABULARY.equipment),
+  difficulty: new Set(CURATED_EXERCISE_DISPLAY_VOCABULARY.difficulty),
+  mechanics: new Set(CURATED_EXERCISE_DISPLAY_VOCABULARY.mechanics),
+  movement: new Set(CURATED_EXERCISE_DISPLAY_VOCABULARY.movement),
+  force: new Set(CURATED_EXERCISE_DISPLAY_VOCABULARY.force),
+};
+
+function reviewedCatalogDisplay(
+  values: Array<string | null>,
+  language: ReturnType<typeof resolveExerciseDisplayLanguage>,
+  domain: ReviewedDomain,
+) {
+  for (const value of values) {
+    if (!value) continue;
+    const key = canonicalDisplayKey(value);
+    if (reviewedVocabulary[domain].has(key)) return formatExerciseDisplayValue(key, language, domain);
+  }
+  // English Catalog values are already the requested-locale authority. For DE/AR,
+  // unknown machine vocabulary stays hidden rather than leaking an English slug.
+  if (language === "en") {
+    const fallback = values.find(Boolean);
+    return fallback ? formatExerciseDisplayValue(fallback, language, domain as ExerciseDisplayDomain) : null;
+  }
+  return null;
+}
+
+const activityTypeLabels = {
+  strength_exercise: { en: "Strength exercise", de: "Kraftübung", ar: "تمرين قوة" },
+  strength: { en: "Strength Training", de: "Krafttraining", ar: "تمارين مقاومة" },
+  resistance: { en: "Strength Training", de: "Krafttraining", ar: "تمارين مقاومة" },
+  bodyweight: { en: "Bodyweight", de: "Körpergewicht", ar: "وزن الجسم" },
+  mobility: { en: "Mobility", de: "Mobilität", ar: "مرونة وحركة" },
+  cardio: { en: "Cardio", de: "Ausdauer", ar: "كارديو" },
+} as const;
+
+function catalogActivityType(detail: LibraryActivityDetail, language: ReturnType<typeof resolveExerciseDisplayLanguage>) {
+  const slug = text(detail.activityType?.slug);
+  if (slug) {
+    const reviewed = activityTypeLabels[canonicalDisplayKey(slug) as keyof typeof activityTypeLabels];
+    if (reviewed) return reviewed[language];
+  }
+  return language === "en" ? text(detail.activityType?.name) : null;
+}
+
 function prescriptionField(value: unknown): ExercisePrescriptionField | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const field = value as Record<string, unknown>;
+  const field = value as CatalogSchemaField;
   const key = text(field.key) ?? text(field.slug);
   if (!key) return null;
   const rawType = text(field.type);
@@ -42,39 +112,71 @@ function prescriptionField(value: unknown): ExercisePrescriptionField | null {
   };
 }
 
-function catalogTargets(detail: LibraryActivityDetail) {
+function catalogTargets(detail: LibraryActivityDetail, language: ReturnType<typeof resolveExerciseDisplayLanguage>) {
   const primary: string[] = [];
   const secondary: string[] = [];
+  const stabilizer: string[] = [];
   const focus: string[] = [];
-  for (const item of detail.coverage) {
-    const name = text(item.name) ?? text(item.muscleName) ?? text(item.label);
-    const role = text(item.role);
-    if (!name) continue;
+  const classify = (name: string | null, role: string | null) => {
+    if (!name) return;
     if (role === "primary") primary.push(name);
-    else if (role === "secondary" || role === "stabilizer") secondary.push(name);
+    else if (role === "secondary") secondary.push(name);
+    else if (role === "stabilizer") stabilizer.push(name);
     else focus.push(name);
+  };
+  for (const item of detail.coverage) {
+    classify(reviewedCatalogDisplay([
+      text(item.slug), text(item.name), text(item.muscleName), text(item.label),
+    ], language, "muscle"), text(item.role));
   }
-  const heatMapping = detail.heatMap && Array.isArray(detail.heatMap.mapping)
-    ? detail.heatMap.mapping as Array<Record<string, unknown>>
-    : [];
+  const heatMapping = detail.heatMap && Array.isArray(detail.heatMap.mapping) ? detail.heatMap.mapping : [];
   for (const item of heatMapping) {
-    const name = text(item.muscleName) ?? text(item.name);
-    const role = text(item.role);
-    if (!name) continue;
-    if (role === "primary") primary.push(name);
-    else secondary.push(name);
+    classify(reviewedCatalogDisplay([text(item.muscleName), text(item.name)], language, "muscle"), text(item.role));
   }
-  return { primary: unique(primary), secondary: unique(secondary), focus: unique(focus), anatomyAvailable: heatMapping.length > 0 };
+  return {
+    primary: unique(primary),
+    secondary: unique(secondary),
+    stabilizer: unique(stabilizer),
+    focus: unique(focus),
+    anatomyAvailable: heatMapping.length > 0 || detail.coverage.some((item) => Boolean(text(item.targetId) ?? text(item.atlasTargetId)))
+  };
+}
+
+function catalogEquipment(detail: LibraryActivityDetail, language: ReturnType<typeof resolveExerciseDisplayLanguage>): ExerciseEquipmentView[] {
+  const seen = new Set<string>();
+  return detail.equipment.flatMap((item) => {
+    const slug = text(item.slug);
+    const name = reviewedCatalogDisplay([slug, text(item.name)], language, "equipment");
+    if (!name) return [];
+    const key = `${slug ?? ""}:${name}:${text(item.requirement) ?? ""}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ slug, name, requirement: text(item.requirement) }];
+  });
+}
+
+function executionCapability(source: ExerciseDetailViewModel["identity"]["source"], domain: string, activityId: string) {
+  if (source === "catalog_v2") {
+    return { executable: false, contract: null, reason: "unsupported_execution_contract", startHref: null } as const;
+  }
+  if ((source === "catalog_legacy" && domain === "strength") || source === "custom") {
+    return { executable: true, contract: "strength_reps_weight_v1", reason: "supported", startHref: `/workouts/session/${encodeURIComponent(activityId)}` } as const;
+  }
+  return { executable: false, contract: null, reason: "unsupported_execution_contract", startHref: null } as const;
 }
 
 export function catalogActivityDetailModel(
   detail: LibraryActivityDetail,
   meta: LibraryProviderMeta,
-  domain: string
+  domainInput?: string
 ): ExerciseDetailViewModel {
-  const targets = catalogTargets(detail);
-  const muscleRelevant = targets.primary.length > 0 || targets.secondary.length > 0;
+  const domain = detail.domain ?? domainInput;
+  if (!domain) throw new Error("Library activity detail is missing canonical domain authority.");
+  const language = resolveExerciseDisplayLanguage(meta.locale);
+  const targets = catalogTargets(detail, language);
+  const muscleRelevant = targets.primary.length > 0 || targets.secondary.length > 0 || targets.stabilizer.length > 0;
   const isNativeV2 = meta.source === "library_v2" && Boolean(detail.authority);
+  const source = isNativeV2 ? "catalog_v2" as const : "catalog_legacy" as const;
   const snapshot = isNativeV2 ? buildCatalogAuthoritySnapshot(detail) : null;
   const fields = (detail.prescriptionSchema?.fields ?? []).map(prescriptionField).filter((field): field is ExercisePrescriptionField => Boolean(field));
   return {
@@ -84,15 +186,19 @@ export function catalogActivityDetailModel(
       revisionNumber: detail.revisionNumber || null,
       slug: detail.slug || null,
       domain,
-      source: isNativeV2 ? "catalog_v2" : "catalog_legacy"
+      source,
+      performance: resolveExerciseIdentity({ source, activityId: detail.id })
     },
+    // Prose comes directly from the requested-locale Catalog resolver. Do not
+    // synthesize or client-translate editorial content here.
     name: detail.name,
     shortDescription: detail.shortDescription,
-    activityType: detail.activityType?.name ?? null,
-    equipment: unique(detail.equipment.map((item) => text(item.name) ?? text(item.slug))),
-    difficulty: detail.difficulty,
-    movementPattern: detail.movementPattern,
-    forceType: null,
+    activityType: catalogActivityType(detail, language),
+    difficulty: reviewedCatalogDisplay([text(detail.difficulty)], language, "difficulty"),
+    movementPattern: reviewedCatalogDisplay([text(detail.movementPattern)], language, "movement"),
+    mechanics: reviewedCatalogDisplay([text(detail.mechanics)], language, "mechanics"),
+    forceType: reviewedCatalogDisplay([text(detail.forceType)], language, "force"),
+    equipment: catalogEquipment(detail, language),
     instructions: [...detail.instructions].filter((step) => text(step.text)).sort((left, right) => left.order - right.order),
     instructionProse: null,
     guideUrl: null,
@@ -101,13 +207,13 @@ export function catalogActivityDetailModel(
       kind: muscleRelevant ? "muscle" : targets.focus.length ? "focus" : "none",
       ...targets
     },
+    anatomyAuthority: { source: isNativeV2 ? "catalog_v2" : "legacy_registry", coverage: structuredClone(detail.coverage), heatMap: detail.heatMap ? structuredClone(detail.heatMap) : null },
+    formAuthority: { setup: [], techniqueCues: [], commonMistakes: [], safety: [] },
     prescription: detail.prescriptionSchema ? { key: detail.prescriptionSchema.key, version: detail.prescriptionSchema.version, fields } : null,
-    performedMetricSchema: detail.performedMetricSchema ? { ...detail.performedMetricSchema } : null,
+    performedMetricSchema: detail.performedMetricSchema ? { key: detail.performedMetricSchema.key, version: detail.performedMetricSchema.version, fields: structuredClone(detail.performedMetricSchema.fields ?? []) } : null,
     recordDefinitions: structuredClone(detail.recordDefinitions ?? []),
     catalogAuthoritySnapshot: snapshot,
-    // The legacy Strength route is the only direct execution path proven by the current runtime.
-    startHref: meta.source === "legacy" && domain === "strength" ? `/workouts/session/${encodeURIComponent(detail.id)}` : null,
-    stablePerformanceIdentity: `global:${detail.id}`
+    execution: executionCapability(source, domain, detail.id)
   };
 }
 
@@ -117,26 +223,30 @@ export function customExerciseDetailModel(workout: Workout, locale = "en"): Exer
   const primary = unique(primarySource.split(",").map(text)).map((value) => formatExerciseDisplayValue(value, language, "muscle"));
   const secondary = unique((workout.secondary_muscles ?? []).map(text)).map((value) => formatExerciseDisplayValue(value, language, "muscle"));
   const prose = text(workout.instructions);
+  const equipmentNames = formatExerciseDisplayList(workout.equipment, language, "equipment").split(", ").filter(Boolean);
+  const source = "custom" as const;
   return {
-    identity: { activityId: workout.id, revisionId: null, revisionNumber: null, slug: null, domain: "strength", source: "custom" },
+    identity: { activityId: workout.id, revisionId: null, revisionNumber: null, slug: null, domain: "strength", source, performance: resolveExerciseIdentity({ source, activityId: workout.id }) },
     name: workout.name,
     shortDescription: null,
     activityType: text(workout.category) ? formatExerciseDisplayValue(workout.category!, language, "category") : null,
-    equipment: formatExerciseDisplayList(workout.equipment, language, "equipment").split(", ").filter(Boolean),
     difficulty: text(workout.difficulty) ? formatExerciseDisplayValue(workout.difficulty!, language, "difficulty") : null,
     movementPattern: text(workout.movement_pattern ?? workout.mechanics) ? formatExerciseDisplayValue((workout.movement_pattern ?? workout.mechanics)!, language, "movement") : null,
+    mechanics: text(workout.mechanics) ? formatExerciseDisplayValue(workout.mechanics!, language, "mechanics") : null,
     forceType: text(workout.force_type) ? formatExerciseDisplayValue(workout.force_type!, language, "force") : null,
+    equipment: equipmentNames.map((name) => ({ slug: null, name, requirement: null })),
     instructions: [],
     instructionProse: prose,
     guideUrl: text(workout.exercise_url),
     sourceVideoUrl: null,
-    target: { kind: primary.length || secondary.length ? "muscle" : "none", primary, secondary, focus: [], anatomyAvailable: false },
+    target: { kind: primary.length || secondary.length ? "muscle" : "none", primary, secondary, stabilizer: [], focus: [], anatomyAvailable: false },
+    anatomyAuthority: { source: "text_only", coverage: [], heatMap: null },
+    formAuthority: { setup: [], techniqueCues: [], commonMistakes: [], safety: [] },
     prescription: null,
     performedMetricSchema: null,
     recordDefinitions: [],
     catalogAuthoritySnapshot: null,
-    startHref: `/workouts/session/${encodeURIComponent(workout.id)}`,
-    stablePerformanceIdentity: null
+    execution: executionCapability(source, "strength", workout.id)
   };
 }
 
@@ -153,6 +263,7 @@ export function planExerciseDetailModel(input: {
   if (exercise.sets !== null) prescription.push({ label: "sets", value: String(exercise.sets) });
   if (text(exercise.reps)) prescription.push({ label: "reps", value: exercise.reps! });
   if (exercise.rest_seconds !== null) prescription.push({ label: "rest", value: String(exercise.rest_seconds) });
+  const sourceWorkoutId = exercise.id !== (exercise.plan_exercise_id ?? exercise.id) ? exercise.id : null;
   return {
     planExerciseId: exercise.plan_exercise_id ?? exercise.id,
     planId: input.planId,
@@ -160,8 +271,9 @@ export function planExerciseDetailModel(input: {
     dayId: input.dayId,
     dayName: input.dayName,
     name: exercise.name,
-    sourceWorkoutId: exercise.id !== (exercise.plan_exercise_id ?? exercise.id) ? exercise.id : null,
-    canonicalHref: exercise.id !== (exercise.plan_exercise_id ?? exercise.id) ? `/workouts/${encodeURIComponent(exercise.id)}` : null,
+    sourceWorkoutId,
+    performanceIdentity: resolveFrozenPlanExerciseIdentity({ activityId: sourceWorkoutId, catalogSource: exercise.catalog_source, isGlobal: exercise.is_global }),
+    canonicalHref: sourceWorkoutId ? `/workouts/${encodeURIComponent(sourceWorkoutId)}` : null,
     category: text(exercise.category) ? formatExerciseDisplayValue(exercise.category!, language, "category") : null,
     targetMuscle: text(exercise.target_muscle || exercise.muscle_category)
       ? formatExerciseDisplayList(exercise.target_muscle || exercise.muscle_category, language, "muscle")
@@ -191,7 +303,7 @@ export function addToPlanActivityPayload(resolved: {
     shortDescription: core.shortDescription,
     instructions: core.instructions.length ? core.instructions : core.instructionProse ? [{ order: 1, text: core.instructionProse }] : [],
     targetText: core.target.primary.join(", ") || null,
-    equipmentText: core.equipment.join(", ") || null,
+    equipmentText: core.equipment.map((item) => item.name).join(", ") || null,
     prescriptionSchema: catalog?.detail.prescriptionSchema ? structuredClone(catalog.detail.prescriptionSchema) : null,
     equipment: catalog ? structuredClone(catalog.detail.equipment) : [],
     taxonomy: { domain: core.identity.domain, coverage: catalog ? structuredClone(catalog.detail.coverage) : [] },

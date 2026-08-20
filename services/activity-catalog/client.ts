@@ -112,6 +112,11 @@ export function listLibraryDomains(locale?: CatalogLocale, context?: CatalogClie
   return catalogRequest<LibraryEnvelope<LibraryDomain[]>>(`/api/activity-catalog/library-domains${queryString({ locale })}`, context);
 }
 
+/** One semantic Library V2 detail request; no client-side domain discovery. */
+export function getLibraryActivity(identifier: string, locale?: CatalogLocale, context?: CatalogClientRequestContext) {
+  return catalogRequest<LibraryEnvelope<LibraryActivityDetail>>(`/api/activity-catalog/library-activities/${encodeURIComponent(identifier)}${queryString({ locale })}`, context);
+}
+
 export function getLibraryDomain(domain: string, locale?: CatalogLocale, context?: CatalogClientRequestContext) {
   return catalogRequest<LibraryEnvelope<LibraryDomain>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}${queryString({ locale })}`, context);
 }

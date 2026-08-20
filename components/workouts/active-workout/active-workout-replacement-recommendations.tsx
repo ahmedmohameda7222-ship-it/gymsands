@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useExerciseDetailTranslation } from "@/lib/i18n/exercise-detail";
 import type { ActiveWorkoutTranslator } from "@/lib/i18n/active-workout";
 import { getActiveWorkoutReplacementRecommendations } from "@/services/workouts/active-workout/replacement-recommendations-client";
 import type {
@@ -11,34 +12,15 @@ import type {
   ReplacementExerciseProfile,
   ReplacementReasonCode,
 } from "@/services/workouts/active-workout/replacement-ranking";
+import {
+  EXERCISE_ALTERNATIVE_REASONS,
+  type ExerciseAlternativeReasonV2,
+} from "@/types/exercise-alternative";
 import type {
   ExerciseAlternativeReason,
   UserExerciseAlternative,
   Workout,
 } from "@/types";
-
-type SupportedReplacementReason =
-  | "machine_taken"
-  | "no_equipment"
-  | "pain_or_discomfort"
-  | "too_hard"
-  | "other";
-
-const SUPPORTED_REASONS: readonly SupportedReplacementReason[] = [
-  "machine_taken",
-  "no_equipment",
-  "pain_or_discomfort",
-  "too_hard",
-  "other",
-];
-
-const reasonTranslationKey: Record<SupportedReplacementReason, string> = {
-  machine_taken: "replacement.reasonMachineTaken",
-  no_equipment: "replacement.reasonEquipmentUnavailable",
-  pain_or_discomfort: "replacement.reasonPainDiscomfort",
-  too_hard: "replacement.reasonTooHard",
-  other: "replacement.reasonOther",
-};
 
 const explanationTranslationKey: Record<ReplacementReasonCode, string> = {
   same_primary_muscles: "replacement.samePrimaryMuscles",
@@ -115,6 +97,7 @@ export function ActiveWorkoutReplacementRecommendations({
   onBrowseAll: () => void;
   tr: ActiveWorkoutTranslator;
 }) {
+  const { ed } = useExerciseDetailTranslation();
   const [recommendations, setRecommendations] = useState<RankedReplacement[]>([]);
   const [loading, setLoading] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
@@ -126,6 +109,17 @@ export function ActiveWorkoutReplacementRecommendations({
     savedAlternatives,
     sessionExerciseIds,
   });
+
+  const reasonLabel = (value: ExerciseAlternativeReasonV2) => {
+    if (value === "machine_taken") return ed("reasonMachineTaken");
+    if (value === "no_equipment") return ed("reasonEquipmentUnavailable");
+    if (value === "too_hard") return ed("reasonTooHard");
+    if (value === "want_harder") return ed("reasonWantHarder");
+    if (value === "pain_discomfort") return ed("reasonPain");
+    if (value === "no_spotter") return ed("reasonNoSpotter");
+    if (value === "technique_confidence") return ed("reasonTechniqueConfidence");
+    return ed("reasonVariation");
+  };
 
   useEffect(() => {
     latestRecommendationInputsRef.current = {
@@ -173,7 +167,7 @@ export function ActiveWorkoutReplacementRecommendations({
       <fieldset disabled={busy}>
         <legend className="text-sm font-semibold text-foreground">{tr("replacement.whyReplace")}</legend>
         <div className="mt-2 flex flex-wrap gap-2">
-          {SUPPORTED_REASONS.map((candidateReason) => (
+          {EXERCISE_ALTERNATIVE_REASONS.map((candidateReason) => (
             <button
               key={candidateReason}
               type="button"
@@ -181,13 +175,13 @@ export function ActiveWorkoutReplacementRecommendations({
               onClick={() => onReasonChange(candidateReason)}
               className="min-h-11 rounded-full border border-border px-3 text-sm font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-primary aria-pressed:bg-primary/10"
             >
-              {tr(reasonTranslationKey[candidateReason])}
+              {reasonLabel(candidateReason)}
             </button>
           ))}
         </div>
       </fieldset>
 
-      {reason === "pain_or_discomfort" ? (
+      {reason === "pain_discomfort" ? (
         <p className="text-xs leading-relaxed text-muted-foreground">{tr("replacement.painCaution")}</p>
       ) : null}
 
