@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { CanonicalExerciseIdentity } from "@/lib/exercise-detail/identity";
+import { drainLatestSetupNoteValue } from "@/lib/exercise-detail/setup-note-save-queue";
 import { useExerciseDetailTranslation } from "@/lib/i18n/exercise-detail";
 import { EXERCISE_SETUP_NOTE_MAX_LENGTH, getExerciseSetupNote, persistExerciseSetupNote } from "@/services/exercise-detail/setup-note";
 
@@ -17,7 +18,7 @@ export function ExerciseSetupNoteEditor({ userId, identity }: { userId: string; 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const desiredRef = useRef("");
   const persistedRef = useRef("");
-  const workerRef = useRef<Promise<void> | null>(null);
+  const workerRef = useRef<Promise<boolean> | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -39,20 +40,13 @@ export function ExerciseSetupNoteEditor({ userId, identity }: { userId: string; 
 
   const drain = useCallback(() => {
     if (workerRef.current) return workerRef.current;
-    workerRef.current = (async () => {
-      while (persistedRef.current !== desiredRef.current) {
-        const value = desiredRef.current;
-        if (mountedRef.current) setSaveState("saving");
-        try {
-          const saved = await persistExerciseSetupNote(userId, identity.canonical, value);
-          persistedRef.current = saved?.note_body ?? "";
-          if (persistedRef.current === desiredRef.current && mountedRef.current) setSaveState("saved");
-        } catch {
-          if (mountedRef.current) setSaveState("failed");
-          break;
-        }
-      }
-    })().finally(() => { workerRef.current = null; });
+    workerRef.current = drainLatestSetupNoteValue({
+      getDesired: () => desiredRef.current,
+      getPersisted: () => persistedRef.current,
+      setPersisted: (value) => { persistedRef.current = value; },
+      save: async (value) => (await persistExerciseSetupNote(userId, identity.canonical, value))?.note_body ?? "",
+      onState: (next) => { if (mountedRef.current) setSaveState(next); }
+    }).finally(() => { workerRef.current = null; });
     return workerRef.current;
   }, [identity.canonical, userId]);
 
