@@ -68,9 +68,10 @@ describe("approved Train Phase 1 UI contracts", () => {
       expect(activeWorkout).toContain(`tr("set.${key}"`);
     }
     expect(controller).toContain("useActiveWorkoutTranslation");
-    expect(replacement).toContain('"machine_taken"');
-    expect(replacement).toContain('machine_taken: "replacement.reasonMachineTaken"');
-    expect(replacement).toContain('tr(reasonTranslationKey[candidateReason])');
+    expect(replacement).toContain("EXERCISE_ALTERNATIVE_REASONS.map");
+    expect(replacement).toContain('if (value === "machine_taken") return ed("reasonMachineTaken")');
+    expect(replacement).toContain('if (value === "want_harder") return ed("reasonWantHarder")');
+    expect(replacement).toContain('return ed("reasonVariation")');
     expect(controller).toContain('moreLabel={tr("common.more")}');
     expect(shell).toContain("aria-label={label}");
     expect(shell).toContain("label={moreLabel}");
