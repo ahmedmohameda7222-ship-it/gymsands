@@ -1,4 +1,5 @@
 export * from "./database";
+export * from "./exercise-alternative";
 export * from "./workout-history";
 export * from "./nutrition-targets";
 
