@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { useExerciseDetail } from "./exercise-detail-provider";
 
 export function DetailSurface({ children, className, ariaLabelledby }: { children: ReactNode; className?: string; ariaLabelledby?: string }) {
-  return <section aria-labelledby={ariaLabelledby} className={cn("rounded-2xl border bg-card px-4 py-5 shadow-none sm:px-5 sm:py-6 lg:px-6", className)}>{children}</section>;
+  return <section data-detail-surface aria-labelledby={ariaLabelledby} className={cn("rounded-2xl border bg-card px-4 py-5 shadow-none sm:px-5 sm:py-6 lg:px-6", className)}>{children}</section>;
 }
 
 export function DetailGroupTitle({ id, children }: { id?: string; children: ReactNode }) {
@@ -28,7 +28,7 @@ export function DetailRowLink({ href, title, supporting }: { href: string; title
 }
 
 export function DetailMetric({ label, value }: { label: string; value: ReactNode }) {
-  return <div><dt className="text-sm text-muted-foreground">{label}</dt><dd className="mt-1 font-medium">{value}</dd></div>;
+  return <div data-detail-metric><dt className="text-sm text-muted-foreground">{label}</dt><dd className="mt-1 font-medium">{value}</dd></div>;
 }
 
 export function ExerciseDetailPageFrame({ children, child, title, description }: {
@@ -51,7 +51,7 @@ export function ExerciseDetailPageFrame({ children, child, title, description }:
   const exercise = resolved.core;
   const topBackHref = child ? childHref() : backHref;
   return <TrainPageContainer className="max-w-[1080px] pb-24 pt-2 sm:py-5" dir={dir} data-detail-platform={platform}>
-    <nav aria-label={ed("backShort")} className={cn("sticky top-0 z-20 -mx-2 flex min-h-14 items-center justify-between gap-2 bg-background/95 px-2 supports-[backdrop-filter]:bg-background/90 sm:static sm:mx-0 sm:bg-transparent sm:px-0", platform === "android" && "rounded-b-xl", platform === "ios" && "rounded-b-2xl")}>
+    <nav aria-label={ed("backShort")} data-exercise-detail-topbar className={cn("sticky top-0 z-20 -mx-2 flex min-h-14 items-center justify-between gap-2 bg-background/95 px-2 supports-[backdrop-filter]:bg-background/90 sm:static sm:mx-0 sm:bg-transparent sm:px-0", platform === "android" && "rounded-b-xl", platform === "ios" && "rounded-b-2xl")}>
       <Button asChild variant="ghost" className="min-h-11 px-2"><Link href={topBackHref}><ArrowLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" /><span>{child ? ed("overviewTitle") : ed("backShort")}</span></Link></Button>
       {userId ? <div className="flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={favorite ? ed("saved") : ed("favorite")} aria-pressed={favorite} aria-busy={favoritePending} disabled={favoritePending} onClick={() => void toggleFavorite()}><Heart className={cn("h-5 w-5", favorite && "fill-current")} /></Button><Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={ed("more")} onClick={() => setMoreOpen(true)}><MoreHorizontal className="h-5 w-5" /></Button></div> : null}
     </nav>
