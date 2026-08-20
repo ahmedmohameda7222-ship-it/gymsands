@@ -17,6 +17,8 @@ export interface LibraryActivityProvider {
   getFilters(domain: string, options?: LibraryRequestOptions): Promise<LibraryResult<LibraryDomainFilters>>;
   getArchetypes(domain: string, options?: LibraryRequestOptions): Promise<LibraryResult<unknown[]>>;
   searchActivities(params: LibrarySearchParams): Promise<LibrarySearchResult>;
+  /** Resolve a semantic Library activity without requiring the caller to discover its domain. */
+  getActivityByIdentifier(identifier: string, options?: LibraryRequestOptions): Promise<LibraryResult<LibraryActivityDetail>>;
   getActivity(domain: string, identifier: string, options?: LibraryRequestOptions): Promise<LibraryResult<LibraryActivityDetail>>;
   getActivityAlternatives(domain: string, identifier: string, options?: LibraryRequestOptions & { limit?: number }): Promise<LibraryResult<LibraryAlternative[]>>;
 }
