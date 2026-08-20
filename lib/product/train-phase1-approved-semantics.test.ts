@@ -6,7 +6,7 @@ import { buildTrainWeek } from "@/lib/workouts/train-week";
 const source = (path: string) => readFileSync(path, "utf8");
 
 describe("approved Train Phase 1 semantic contracts", () => {
-  it("keeps Activity Catalog configuration server-only and validates external modes fail-closed", () => {
+  it("keeps Activity Catalog configuration server-only and requires explicit V2 Production authority", () => {
     const example = source(".env.example");
     const environment = source("lib/integrations/env.ts");
     const validator = source("scripts/validate-production-env.mjs");
@@ -19,8 +19,13 @@ describe("approved Train Phase 1 semantic contracts", () => {
       expect(combined).toContain(key);
       expect(combined).not.toContain(`NEXT_PUBLIC_${key}`);
     }
+    expect(validator).toContain('"library_v2"');
+    expect(validator).toContain('"library_v2_with_legacy_fallback"');
     expect(validator).toContain(
-      '["legacy", "external", "external_with_legacy_fallback"]',
+      "must be explicitly configured as library_v2 or library_v2_with_legacy_fallback",
+    );
+    expect(validator).toContain(
+      "https://plaivra-activity-catalog-api.vercel.app",
     );
     expect(validator).toContain(
       "validHttpsUrl(environment.PLAIVRA_ACTIVITY_CATALOG_BASE_URL)",

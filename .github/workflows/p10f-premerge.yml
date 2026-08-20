@@ -51,6 +51,7 @@ jobs:
         run: >-
           npx vitest run --config vitest.unit.config.mjs
           services/activity-catalog/server/library-v2-boundaries.test.ts
+          services/activity-catalog/server/runtime-cutover-diagnostic.test.ts
           lib/activity-catalog/snapshot.test.ts
           lib/product/p10f-catalog-authority-snapshot.test.ts
       - name: Production environment mode contract
@@ -89,6 +90,8 @@ jobs:
           test ! -e .github/workflows/p10f-aw5-native-library-fixture.yml
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' vercel.json
           grep -q '"feat/p10f-activity-catalog-v2-cutover": true' scripts/provider-release-gates.test.mjs
+          grep -q 'PLAIVRA_ACTIVITY_CATALOG_MODE=library_v2_with_legacy_fallback' .env.example
+          grep -q 'PLAIVRA_ACTIVITY_CATALOG_BASE_URL=https://plaivra-activity-catalog-api.vercel.app' .env.example
           node - <<'NODE'
           const fs = require('node:fs');
           const ledger = JSON.parse(fs.readFileSync('supabase/migration-ledger.json', 'utf8'));
@@ -118,6 +121,8 @@ jobs:
             semanticSnapshotMaterializer: 'lib/activity-catalog/snapshot.ts',
             historicalRewrite: false,
             browserDirectCatalogCalls: 0,
+            productionProviderPolicy: 'explicit_library_v2_primary',
+            productionFallbackPolicy: 'bounded_observable_legacy_only',
             previewBranchAllowlist: 'feat/p10f-activity-catalog-v2-cutover'
           }, null, 2) + '\n');
           NODE
@@ -126,5 +131,38 @@ jobs:
         with:
           name: p10f-main-premerge-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/p10f-main-premerge.json
+          if-no-files-found: error
+          retention-days: 30
+
+  p10f-runtime-cutover-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact P10F head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Dedicated Catalog live read-only acceptance
+        env:
+          PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
+          PLAIVRA_ACTIVITY_CATALOG_API_KEY: ${{ secrets.PLAIVRA_ACTIVITY_CATALOG_API_KEY }}
+        run: node scripts/verify-p10f-runtime-cutover-live.mjs
+      - name: Verify exact head remains clean
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git diff --check
+          test -z "$(git status --porcelain --untracked-files=no)"
+      - name: Upload P10F runtime cutover live evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p10f-runtime-cutover-live-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/p10f-runtime-cutover-live.json
           if-no-files-found: error
           retention-days: 30

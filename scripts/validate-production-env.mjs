@@ -6,10 +6,8 @@ const { loadEnvConfig } = nextEnv;
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const SAFE_IDENTIFIER = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const BASE64_32_BYTES = /^[A-Za-z0-9+/]{43}=$/;
-const ACTIVITY_CATALOG_PRODUCTION_ORIGIN = "https://catalog-api.plaivra.com";
-const ACTIVITY_CATALOG_LEGACY_MODES = ["legacy", "external", "external_with_legacy_fallback"];
-const ACTIVITY_CATALOG_MODES = new Set([
-  ...ACTIVITY_CATALOG_LEGACY_MODES,
+const ACTIVITY_CATALOG_PRODUCTION_ORIGIN = "https://plaivra-activity-catalog-api.vercel.app";
+const ACTIVITY_CATALOG_PRODUCTION_MODES = new Set([
   "library_v2",
   "library_v2_with_legacy_fallback"
 ]);
@@ -98,13 +96,14 @@ export function validateProductionEnvironment(environment = process.env) {
   requireValue("CRON_SECRET", nonEmpty(environment.CRON_SECRET, 32), "must be configured because Vercel cron routes are enabled");
   requireValue("NEXT_PUBLIC_USE_MOCK_AUTH", environment.NEXT_PUBLIC_USE_MOCK_AUTH !== "true", "must be false in production");
 
-  const catalogMode = environment.PLAIVRA_ACTIVITY_CATALOG_MODE || "legacy";
+  const catalogMode = (environment.PLAIVRA_ACTIVITY_CATALOG_MODE ?? "").trim();
+  const validProductionCatalogMode = ACTIVITY_CATALOG_PRODUCTION_MODES.has(catalogMode);
   requireValue(
     "PLAIVRA_ACTIVITY_CATALOG_MODE",
-    ACTIVITY_CATALOG_MODES.has(catalogMode),
-    "must be legacy, external, external_with_legacy_fallback, library_v2, or library_v2_with_legacy_fallback"
+    validProductionCatalogMode,
+    "must be explicitly configured as library_v2 or library_v2_with_legacy_fallback"
   );
-  if (catalogMode !== "legacy") {
+  if (validProductionCatalogMode) {
     requireValue(
       "PLAIVRA_ACTIVITY_CATALOG_BASE_URL",
       validHttpsUrl(environment.PLAIVRA_ACTIVITY_CATALOG_BASE_URL)

@@ -84,6 +84,10 @@ jobs:
         env:
           QA_EXERCISE_LIBRARY_EVIDENCE_DIR: ci-reports/exercise-library-locale-evidence
         run: node scripts/run-exercise-library-locale-qa.mjs
+      - name: P10F Exercise Library rendered pagination QA
+        env:
+          QA_P10F_LIBRARY_EVIDENCE_DIR: ci-reports/p10f-library-pagination-evidence
+        run: node scripts/run-p10f-library-pagination-qa.mjs
       - name: Existing Train rendered authority
         env:
           QA_TRAIN_EVIDENCE_DIR: ci-reports/train-qa-evidence
@@ -109,6 +113,7 @@ jobs:
           name: exercise-library-locale-runtime-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             ci-reports/exercise-library-locale-evidence/
+            ci-reports/p10f-library-pagination-evidence/
             ci-reports/train-qa-evidence/
             ci-reports/exercise-library-qa-server.log
           if-no-files-found: warn

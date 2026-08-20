@@ -22,9 +22,18 @@ export type LibraryResponseMeta = {
 };
 
 export type LibraryProviderSource = "library_v2" | "legacy" | "external";
+export type LibraryFallbackReason =
+  | "catalog_timeout"
+  | "catalog_network_error"
+  | "catalog_rate_limited"
+  | "catalog_upstream_error"
+  | "catalog_not_found";
 export type LibraryProviderMeta = LibraryResponseMeta & {
   source: LibraryProviderSource;
   degraded: boolean;
+  primarySource?: LibraryProviderSource;
+  fallbackUsed?: boolean;
+  fallbackReason?: LibraryFallbackReason | null;
 };
 
 export type LibraryDomain = {

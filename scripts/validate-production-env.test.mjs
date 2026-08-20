@@ -11,7 +11,10 @@ const valid = {
   SUPABASE_SERVICE_ROLE_KEY: "server-service-role-key-with-enough-length",
   NEXT_PUBLIC_APP_URL: "https://app.plaivra.com",
   NEXT_PUBLIC_USE_MOCK_AUTH: "false",
-  CRON_SECRET: "cron-secret-that-is-at-least-thirty-two-characters"
+  CRON_SECRET: "cron-secret-that-is-at-least-thirty-two-characters",
+  PLAIVRA_ACTIVITY_CATALOG_MODE: "library_v2_with_legacy_fallback",
+  PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "https://plaivra-activity-catalog-api.vercel.app",
+  PLAIVRA_ACTIVITY_CATALOG_API_KEY: "server-only-catalog-key-with-enough-length"
 };
 
 test("does not enforce provider configuration for ordinary local builds", () => {
@@ -35,6 +38,7 @@ test("rejects missing and malformed core production configuration without values
   assert.ok(result.errors.some((error) => error.startsWith("NEXT_PUBLIC_SUPABASE_URL:")));
   assert.ok(result.errors.some((error) => error.includes("exact 40-character")));
   assert.ok(result.errors.some((error) => error.startsWith("CRON_SECRET:")));
+  assert.ok(result.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_MODE:")));
   const formatted = formatEnvironmentValidationFailure(result.errors);
   assert.doesNotMatch(formatted, /localhost:54321/);
   assert.doesNotMatch(formatted, /abcdef1/);
@@ -53,29 +57,37 @@ test("validates Stripe configuration only when checkout is enabled", () => {
   assert.ok(result.errors.some((error) => error.startsWith("STRIPE_WEBHOOK_SECRET:")));
 });
 
-test("validates Activity Catalog configuration only for external modes", () => {
-  assert.deepEqual(validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: "legacy" }).errors, []);
-  const missing = validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: "external" });
-  assert.ok(missing.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_BASE_URL:")));
-  assert.ok(missing.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_API_KEY:")));
-  assert.deepEqual(validateProductionEnvironment({
+test("requires explicit canonical Activity Catalog V2 production configuration", () => {
+  const missingMode = { ...valid };
+  delete missingMode.PLAIVRA_ACTIVITY_CATALOG_MODE;
+  assert.ok(validateProductionEnvironment(missingMode).errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_MODE:")));
+
+  for (const legacyMode of ["legacy", "external", "external_with_legacy_fallback"]) {
+    const result = validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: legacyMode });
+    assert.ok(result.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_MODE:")), legacyMode);
+  }
+
+  assert.deepEqual(validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: "library_v2" }).errors, []);
+  assert.deepEqual(validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: "library_v2_with_legacy_fallback" }).errors, []);
+
+  const missingKey = validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_API_KEY: "" });
+  assert.ok(missingKey.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_API_KEY:")));
+
+  const staleCustomOrigin = validateProductionEnvironment({
     ...valid,
-    PLAIVRA_ACTIVITY_CATALOG_MODE: "external_with_legacy_fallback",
-    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "https://catalog-api.plaivra.com",
-    PLAIVRA_ACTIVITY_CATALOG_API_KEY: "server-only-catalog-key-with-enough-length"
-  }).errors, []);
+    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "https://catalog-api.plaivra.com"
+  });
+  assert.ok(staleCustomOrigin.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_BASE_URL:")));
+
   const unsafe = validateProductionEnvironment({
     ...valid,
-    PLAIVRA_ACTIVITY_CATALOG_MODE: "external",
-    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "http://localhost:3000",
-    PLAIVRA_ACTIVITY_CATALOG_API_KEY: "server-only-catalog-key-with-enough-length"
+    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "http://localhost:3000"
   });
   assert.ok(unsafe.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_BASE_URL:")));
+
   const nonCanonical = validateProductionEnvironment({
     ...valid,
-    PLAIVRA_ACTIVITY_CATALOG_MODE: "external",
-    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "https://catalog-preview.example.com",
-    PLAIVRA_ACTIVITY_CATALOG_API_KEY: "server-only-catalog-key-with-enough-length"
+    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "https://catalog-preview.example.com"
   });
   assert.ok(nonCanonical.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_BASE_URL:")));
 });
