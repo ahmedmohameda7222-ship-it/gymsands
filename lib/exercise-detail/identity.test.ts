@@ -8,6 +8,11 @@ import {
   resolveFrozenPlanExerciseIdentity,
   workoutHistoryHrefForExercise,
 } from "./identity";
+import { parseWorkoutHistoryNavigationState } from "@/lib/workouts/history/navigation-state";
+import {
+  parseWorkoutHistoryListRequest,
+  workoutHistoryRequestSearchParams,
+} from "@/lib/workouts/history/request";
 
 describe("canonical Exercise Detail identity", () => {
   it("uses provider identity for Library V2 with only the explicit historical alias", () => {
@@ -32,11 +37,36 @@ describe("canonical Exercise Detail identity", () => {
       .toBe("custom:activity-2");
   });
 
-  it("navigates All Sessions with the canonical Workout History exercise filter", () => {
+  it("navigates All Sessions through the public Workout History exercise filter while preserving the API exerciseId contract", () => {
     const identity = catalogProviderIdentity("activity-3");
-    expect(workoutHistoryHrefForExercise(identity)).toBe(
-      "/workout-history?exerciseId=provider%3Aplaivra_activity_catalog%3Aactivity-3",
+    const href = workoutHistoryHrefForExercise(identity);
+    expect(href).toBe(
+      "/workout-history?exercise=provider%3Aplaivra_activity_catalog%3Aactivity-3",
     );
-    expect(workoutHistoryHrefForExercise(identity)).not.toBe("/workout-history");
+    expect(href).not.toContain("exerciseId=");
+
+    const navigationUrl = new URL(href, "https://plaivra.test");
+    const navigation = parseWorkoutHistoryNavigationState(
+      navigationUrl.searchParams,
+      new Date("2026-08-20T08:00:00.000Z"),
+      "UTC",
+    );
+    expect(navigation.exercise).toBe(identity.canonical);
+
+    const requestParams = workoutHistoryRequestSearchParams({
+      ...navigation.range,
+      limit: 20,
+      exerciseIds: [navigation.exercise],
+      statuses: navigation.statuses,
+      sort: navigation.sort,
+    });
+    expect(requestParams.getAll("exerciseId")).toEqual([identity.canonical]);
+    expect(requestParams.has("exercise")).toBe(false);
+
+    const parsedRequest = parseWorkoutHistoryListRequest(
+      new URL(`/api/workouts/history?${requestParams.toString()}`, "https://plaivra.test"),
+      new Date("2026-08-20T08:00:00.000Z"),
+    );
+    expect(parsedRequest.exerciseIds).toEqual([identity.canonical]);
   });
 });

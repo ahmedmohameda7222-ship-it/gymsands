@@ -354,9 +354,13 @@ async function assertLocalizedOverview(page, profile, scenario) {
 async function assertRouteContracts(page, profile, route, scenario) {
   if (route === "overview") await assertLocalizedOverview(page, profile, scenario);
   if (route === "performance") {
+    const canonical = `provider:plaivra_activity_catalog:${activityId}`;
     const href = await page.getByRole("link", { name: languages[profile.languageKey].allSessions }).getAttribute("href");
-    const expected = `/workout-history?exerciseId=provider%3Aplaivra_activity_catalog%3A${activityId}`;
-    if (href !== expected) throw new Error(`${scenario}: All Sessions lost exercise context (${href ?? "missing"})`);
+    const expected = `/workout-history?exercise=${encodeURIComponent(canonical)}`;
+    if (href !== expected) throw new Error(`${scenario}: All Sessions lost public Workout History exercise context (${href ?? "missing"})`);
+    const parsed = new URL(href, baseUrl);
+    if (parsed.searchParams.get("exercise") !== canonical) throw new Error(`${scenario}: All Sessions exercise navigation value did not round-trip`);
+    if (parsed.searchParams.has("exerciseId")) throw new Error(`${scenario}: All Sessions leaked the API exerciseId key into browser navigation`);
   }
   if (route === "alternatives") {
     const trigger = page.locator("#exercise-alternative-reason");

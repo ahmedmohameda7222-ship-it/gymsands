@@ -43,13 +43,15 @@ export function resolveExerciseIdentity(input: {
 }
 
 /**
- * Workout History's public navigation contract accepts one canonical exerciseId.
- * Keep aliases for server-side history compatibility only; navigation identifies
- * the exact Exercise Detail subject rather than widening to an unfiltered list.
+ * Workout History's public browser navigation contract accepts one canonical
+ * exercise value. Keep aliases for server-side history compatibility only;
+ * navigation identifies the exact Exercise Detail subject rather than widening
+ * to an unfiltered list. The API/request layer separately serializes this value
+ * through its existing exerciseId contract.
  */
 export function workoutHistoryHrefForExercise(identity: CanonicalExerciseIdentity) {
   const params = new URLSearchParams();
-  params.set("exerciseId", identity.canonical);
+  params.set("exercise", identity.canonical);
   return `/workout-history?${params.toString()}`;
 }
 
