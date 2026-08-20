@@ -8,31 +8,67 @@ const activityId = "ead598db-a7db-5cdd-9b10-512f0d353fc7";
 const alternativeId = "11111111-1111-4111-8111-111111111111";
 const mockUserId = "10000000-0000-4000-8000-000000000001";
 const routes = ["overview", "anatomy", "technique", "performance", "alternatives", "details"];
-const viewports = [
-  [390, 844],
-  [393, 852],
-  [430, 932],
-  [412, 915],
-  [768, 1024],
-  [1024, 768],
-  [1280, 800],
-  [1440, 900],
-];
-const languages = {
-  en: { locale: "en-GB", dir: "ltr", exercise: "Barbell back squat", anatomy: "Anatomy & Target", technique: "Technique & Setup", performance: "Performance", alternatives: "Alternatives", details: "Exercise Details" },
-  de: { locale: "de-DE", dir: "ltr", exercise: "Langhantel-Kniebeuge", anatomy: "Anatomie & Ziel", technique: "Technik & Einstellung", performance: "Leistung", alternatives: "Alternativen", details: "Übungsdetails" },
-  ar: { locale: "ar-EG", dir: "rtl", exercise: "قرفصاء خلفية بالبار", anatomy: "التشريح والعضلات المستهدفة", technique: "الأسلوب والإعداد", performance: "الأداء", alternatives: "البدائل", details: "تفاصيل التمرين" },
-};
 const themes = [{ key: "light", id: "olive" }, { key: "dark", id: "elite-noir" }];
-const viewportProfiles = [
-  { languageKey: "en", theme: themes[0], motion: "no-preference" },
-  { languageKey: "de", theme: themes[1], motion: "reduce" },
-  { languageKey: "ar", theme: themes[0], motion: "no-preference" },
-  { languageKey: "en", theme: themes[1], motion: "reduce" },
-  { languageKey: "de", theme: themes[0], motion: "no-preference" },
-  { languageKey: "ar", theme: themes[1], motion: "reduce" },
-  { languageKey: "en", theme: themes[0], motion: "reduce" },
-  { languageKey: "de", theme: themes[1], motion: "no-preference" },
+
+const languages = {
+  en: {
+    locale: "en-GB", dir: "ltr", exercise: "Barbell back squat",
+    description: "A controlled compound squat using a barbell across the upper back.",
+    instructions: ["Set your stance and brace your trunk.", "Descend under control, then drive through the floor."],
+    activityType: "Strength exercise", difficulty: "Intermediate",
+    equipment: ["Barbell", "Squat Rack"], muscles: ["Quadriceps", "Glutes", "Hamstrings"],
+    anatomy: "Anatomy & Target", technique: "Technique & Setup", performance: "Performance", alternatives: "Alternatives", details: "Exercise Details",
+    allSessions: "All Sessions", view: "View", replace: "Replace",
+    reasons: ["Machine taken", "Equipment unavailable", "Too hard", "Want harder", "Pain / discomfort", "No spotter / support", "Not confident with technique", "Want variation"],
+  },
+  de: {
+    locale: "de-DE", dir: "ltr", exercise: "Langhantel-Kniebeuge",
+    description: "Eine kontrollierte mehrgelenkige Kniebeuge mit der Langhantel auf dem oberen Rücken.",
+    instructions: ["Stelle deinen Stand ein und spanne den Rumpf an.", "Gehe kontrolliert nach unten und drücke dich über den Boden wieder hoch."],
+    activityType: "Kraftübung", difficulty: "Fortgeschritten",
+    equipment: ["Langhantel", "Kniebeugenständer"], muscles: ["Quadrizeps", "Gesäß", "Beinbeuger"],
+    anatomy: "Anatomie & Ziel", technique: "Technik & Einstellung", performance: "Leistung", alternatives: "Alternativen", details: "Übungsdetails",
+    allSessions: "Alle Einheiten", view: "Anzeigen", replace: "Ersetzen",
+    reasons: ["Gerät belegt", "Ausrüstung nicht verfügbar", "Zu schwer", "Schwieriger gewünscht", "Schmerz / Beschwerden", "Keine Sicherung / Unterstützung", "Unsicher bei der Technik", "Variation gewünscht"],
+  },
+  ar: {
+    locale: "ar-EG", dir: "rtl", exercise: "قرفصاء خلفية بالبار",
+    description: "قرفصاء مركبة بتحكم باستخدام البار على أعلى الظهر.",
+    instructions: ["اضبط وقفتك وثبّت عضلات الجذع.", "انزل بتحكم ثم ادفع عبر الأرض للعودة للأعلى."],
+    activityType: "تمرين قوة", difficulty: "متوسط",
+    equipment: ["بار حديد", "حامل السكوات"], muscles: ["عضلات الفخذ الأمامية", "عضلات المؤخرة", "عضلات الفخذ الخلفية"],
+    anatomy: "التشريح والعضلات المستهدفة", technique: "الأسلوب والإعداد", performance: "الأداء", alternatives: "البدائل", details: "تفاصيل التمرين",
+    allSessions: "كل الجلسات", view: "عرض", replace: "استبدال",
+    reasons: ["الجهاز مشغول", "المعدات غير متاحة", "صعب جدًا", "أريد أصعب", "ألم / انزعاج", "لا يوجد مساعدة / دعم", "غير واثق من الأسلوب", "أريد تنويعًا"],
+  },
+};
+
+const iphoneUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1";
+const androidUserAgent = "Mozilla/5.0 (Linux; Android 16; Pixel 9 Build/BP2A.250705.008) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36";
+
+const profiles = [
+  { key: "ios-en", platform: "ios", viewport: [390, 844], languageKey: "en", theme: themes[0], motion: "no-preference", userAgent: iphoneUserAgent, isMobile: true, hasTouch: true, deviceScaleFactor: 3 },
+  { key: "ios-de-dark-reduced", platform: "ios", viewport: [393, 852], languageKey: "de", theme: themes[1], motion: "reduce", userAgent: iphoneUserAgent, isMobile: true, hasTouch: true, deviceScaleFactor: 3 },
+  { key: "ios-ar-rtl", platform: "ios", viewport: [430, 932], languageKey: "ar", theme: themes[0], motion: "no-preference", userAgent: iphoneUserAgent, isMobile: true, hasTouch: true, deviceScaleFactor: 3 },
+  { key: "android-en-dark-reduced", platform: "android", viewport: [412, 915], languageKey: "en", theme: themes[1], motion: "reduce", userAgent: androidUserAgent, isMobile: true, hasTouch: true, deviceScaleFactor: 2.75 },
+  { key: "android-de", platform: "android", viewport: [430, 932], languageKey: "de", theme: themes[0], motion: "no-preference", userAgent: androidUserAgent, isMobile: true, hasTouch: true, deviceScaleFactor: 2.75 },
+  { key: "web-ar-tablet", platform: "web", viewport: [768, 1024], languageKey: "ar", theme: themes[1], motion: "reduce" },
+  { key: "web-en-desktop", platform: "web", viewport: [1280, 800], languageKey: "en", theme: themes[0], motion: "reduce" },
+  { key: "web-de-desktop", platform: "web", viewport: [1440, 900], languageKey: "de", theme: themes[1], motion: "no-preference" },
+];
+
+const englishCatalogLeakValues = [
+  "Barbell back squat",
+  "A controlled compound squat using a barbell across the upper back.",
+  "Set your stance and brace your trunk.",
+  "Descend under control, then drive through the floor.",
+  "Strength exercise",
+  "Intermediate",
+  "Barbell",
+  "Squat Rack",
+  "Quadriceps",
+  "Glutes",
+  "Hamstrings",
 ];
 
 function activityName(languageKey, alternative = false) {
@@ -42,8 +78,15 @@ function activityName(languageKey, alternative = false) {
   return "Dumbbell squat";
 }
 
+function alternativeDescription(languageKey) {
+  if (languageKey === "de") return "Eine Kniebeugenvariante mit Kurzhanteln.";
+  if (languageKey === "ar") return "تنويع للقرفصاء باستخدام الدمبل.";
+  return "A squat variation using dumbbells.";
+}
+
 function catalogActivity(languageKey, id = activityId) {
   const alternative = id === alternativeId;
+  const language = languages[languageKey];
   return {
     id,
     domain: "strength",
@@ -53,22 +96,24 @@ function catalogActivity(languageKey, id = activityId) {
     revisionChecksum: alternative ? "alt-revision-checksum" : "revision-checksum",
     slug: alternative ? "dumbbell-squat" : "barbell-back-squat",
     name: activityName(languageKey, alternative),
-    shortDescription: alternative ? "A squat variation using dumbbells." : "A controlled compound squat using a barbell across the upper back.",
-    instructions: [{ order: 1, text: "Set your stance and brace your trunk." }, { order: 2, text: "Descend under control, then drive through the floor." }],
+    shortDescription: alternative ? alternativeDescription(languageKey) : language.description,
+    instructions: language.instructions.map((step, index) => ({ order: index + 1, text: step })),
     difficulty: alternative ? "beginner" : "intermediate",
     movementPattern: "squat",
     mechanics: "compound",
     forceType: "push",
+    // Semantic names stay canonical/English in the fixture on purpose; the Main
+    // view-model must present them through reviewed locale mappings.
     activityType: { slug: "strength_exercise", name: "Strength exercise" },
     membership: { kind: "owned", visibility: "default", domainPriority: 1, primaryDomain: true },
     aliases: [],
     equipment: alternative
       ? [{ slug: "dumbbell", name: "Dumbbell", requirement: "required" }]
-      : [{ slug: "barbell", name: "Barbell", requirement: "required" }, { slug: "rack", name: "Squat rack", requirement: "optional" }],
+      : [{ slug: "barbell", name: "Barbell", requirement: "required" }, { slug: "squat_rack", name: "Squat rack", requirement: "optional" }],
     coverage: [
-      { name: "Chest", muscleName: "Chest", role: "primary", atlasTargetId: "pectoralis.middle" },
-      { name: "Triceps", muscleName: "Triceps", role: "secondary", atlasTargetId: "triceps.lateral_head" },
-      { name: "Serratus", muscleName: "Serratus", role: "stabilizer", atlasTargetId: "serratus.anterior" },
+      { slug: "quadriceps", name: "Quadriceps", muscleName: "Quadriceps", role: "primary", atlasTargetId: "quadriceps.vastus_lateralis" },
+      { slug: "gluteus_maximus", name: "Gluteus maximus", muscleName: "Gluteus maximus", role: "secondary", atlasTargetId: "gluteus_maximus.middle" },
+      { slug: "hamstrings", name: "Hamstrings", muscleName: "Hamstrings", role: "stabilizer", atlasTargetId: "hamstrings.biceps_femoris_long_head" },
     ],
     executionProfiles: [],
     bodyEffects: [],
@@ -99,9 +144,9 @@ function catalogActivity(languageKey, id = activityId) {
       { id: "session-volume-v1", recordKey: "exercise_session_volume", comparisonDirection: "higher_better", canonicalUnit: "kg_repetitions" },
     ],
     heatMap: { mapping: [
-      { muscleName: "Chest", atlasTargetId: "pectoralis.middle", role: "primary" },
-      { muscleName: "Triceps", atlasTargetId: "triceps.lateral_head", role: "secondary" },
-      { muscleName: "Serratus", atlasTargetId: "serratus.anterior", role: "stabilizer" },
+      { muscleName: "Quadriceps", atlasTargetId: "quadriceps.vastus_lateralis", role: "primary" },
+      { muscleName: "Gluteus maximus", atlasTargetId: "gluteus_maximus.middle", role: "secondary" },
+      { muscleName: "Hamstrings", atlasTargetId: "hamstrings.biceps_femoris_long_head", role: "stabilizer" },
     ] },
     publicationPolicy: { id: "publication-v1", key: "member_visible", version: 1, checksum: "publication-checksum" },
     capabilityContract: { id: "capability-v1", version: "1", compatibleCatalogApiVersion: "v2", checksum: "capability-checksum" },
@@ -168,13 +213,17 @@ function expectedHeading(languageKey, route) {
   return route === "overview" ? languages[languageKey].exercise : languages[languageKey][route];
 }
 
-async function makeContext(browser, viewport, profile) {
+async function makeContext(browser, profile) {
   const language = languages[profile.languageKey];
   const context = await browser.newContext({
-    viewport: { width: viewport[0], height: viewport[1] },
+    viewport: { width: profile.viewport[0], height: profile.viewport[1] },
     locale: language.locale,
     colorScheme: profile.theme.key === "dark" ? "dark" : "light",
     reducedMotion: profile.motion,
+    ...(profile.userAgent ? { userAgent: profile.userAgent } : {}),
+    ...(profile.isMobile ? { isMobile: true } : {}),
+    ...(profile.hasTouch ? { hasTouch: true } : {}),
+    ...(profile.deviceScaleFactor ? { deviceScaleFactor: profile.deviceScaleFactor } : {}),
   });
   await context.addInitScript(({ languageKey, themeId, userId }) => {
     localStorage.setItem("plaivra.language.v1", languageKey);
@@ -199,7 +248,7 @@ async function makeContext(browser, viewport, profile) {
   return { context, requests };
 }
 
-async function inspect(page, profile, viewport, route, zoom = 1) {
+async function inspect(page, profile, route, zoom = 1) {
   await page.getByRole("heading", { level: 1, name: expectedHeading(profile.languageKey, route) }).waitFor({ timeout: 20_000 });
   if (zoom !== 1) await page.evaluate((value) => { document.documentElement.style.zoom = String(value); }, zoom);
   await page.keyboard.press("Tab");
@@ -224,12 +273,16 @@ async function inspect(page, profile, viewport, route, zoom = 1) {
       focusVisible: Boolean(document.activeElement && document.activeElement !== document.body && document.activeElement.matches(":focus-visible")),
       dir: detailRoot?.getAttribute("dir") || detailRoot?.closest("[dir]")?.getAttribute("dir") || null,
       expectedDir,
+      platform: detailRoot?.getAttribute("data-detail-platform") ?? null,
+      userAgent: navigator.userAgent,
+      maxTouchPoints: navigator.maxTouchPoints,
       focused: appShell?.getAttribute("data-focused-exercise-detail") === "true",
       headerVisible: visible(header),
       sidebarVisible: visible(aside),
       floatingNav: document.querySelectorAll("[data-mobile-floating-nav]").length,
       topbars: document.querySelectorAll("[data-exercise-detail-topbar]").length,
       surfaces: document.querySelectorAll("[data-detail-surface]").length,
+      surfacePlatforms: [...new Set([...document.querySelectorAll("[data-detail-surface-platform]")].map((node) => node.getAttribute("data-detail-surface-platform")))],
       emptyMetrics: [...document.querySelectorAll("[data-detail-metric] dd")].filter((node) => !node.textContent?.trim()).length,
       emptyDefinitions: [...document.querySelectorAll("main dd")].filter((node) => !node.textContent?.trim()).length,
       forbidden: ["Demo Video", "Explore More", "revision-squat-v7", "library-release", "catalog-release", "prescription-checksum", "metrics-checksum"].filter((value) => bodyText.includes(value)),
@@ -240,13 +293,19 @@ async function inspect(page, profile, viewport, route, zoom = 1) {
   }, { expectedDir: languages[profile.languageKey].dir, expectedReduced: profile.motion === "reduce" });
 }
 
-function assertMetrics(metrics, viewport, scenario) {
+function assertMetrics(metrics, profile, scenario) {
+  const viewport = profile.viewport;
   if (metrics.h1Count !== 1) throw new Error(`${scenario}: expected one H1, got ${metrics.h1Count}`);
   if (!metrics.hasMain) throw new Error(`${scenario}: main landmark missing`);
   if (metrics.overflow > 0) throw new Error(`${scenario}: ${metrics.overflow}px horizontal overflow`);
   if (metrics.unnamed) throw new Error(`${scenario}: ${metrics.unnamed} unnamed controls`);
   if (!metrics.focusVisible) throw new Error(`${scenario}: focus-visible proof failed`);
   if (metrics.dir !== metrics.expectedDir) throw new Error(`${scenario}: expected ${metrics.expectedDir}, got ${metrics.dir}`);
+  if (metrics.platform !== profile.platform) throw new Error(`${scenario}: expected platform ${profile.platform}, got ${metrics.platform}`);
+  if (metrics.surfacePlatforms.some((value) => value !== profile.platform)) throw new Error(`${scenario}: Detail surface platform drift: ${metrics.surfacePlatforms.join(",")}`);
+  if (profile.platform === "ios" && !/iPhone|iPad|iPod/i.test(metrics.userAgent)) throw new Error(`${scenario}: iOS user agent emulation missing`);
+  if (profile.platform === "android" && !/Android/i.test(metrics.userAgent)) throw new Error(`${scenario}: Android user agent emulation missing`);
+  if ((profile.platform === "ios" || profile.platform === "android") && metrics.maxTouchPoints < 1) throw new Error(`${scenario}: mobile touch context missing`);
   if (!metrics.focused) throw new Error(`${scenario}: focused Detail shell missing`);
   if (metrics.topbars !== 1) throw new Error(`${scenario}: expected one Detail topbar, got ${metrics.topbars}`);
   if (metrics.floatingNav) throw new Error(`${scenario}: competing floating nav rendered`);
@@ -273,30 +332,81 @@ function assertRequests(requests, route, scenario) {
   if (performanceCalls > 0 && route !== "overview" && route !== "performance") throw new Error(`${scenario}: Performance request escaped Overview/Performance`);
 }
 
+async function assertLocalizedOverview(page, profile, scenario) {
+  if (profile.languageKey === "en") return;
+  const language = languages[profile.languageKey];
+  const bodyText = await page.locator("main").innerText();
+  const required = [
+    language.exercise,
+    language.description,
+    ...language.instructions,
+    language.activityType,
+    language.difficulty,
+    ...language.equipment,
+    ...language.muscles,
+  ];
+  const missing = required.filter((value) => !bodyText.includes(value));
+  if (missing.length) throw new Error(`${scenario}: localized Catalog content missing: ${missing.join(" | ")}`);
+  const leaked = englishCatalogLeakValues.filter((value) => bodyText.includes(value));
+  if (leaked.length) throw new Error(`${scenario}: English Catalog fixture leaked into ${profile.languageKey}: ${leaked.join(" | ")}`);
+}
+
+async function assertRouteContracts(page, profile, route, scenario) {
+  if (route === "overview") await assertLocalizedOverview(page, profile, scenario);
+  if (route === "performance") {
+    const href = await page.getByRole("link", { name: languages[profile.languageKey].allSessions }).getAttribute("href");
+    const expected = `/workout-history?exerciseId=provider%3Aplaivra_activity_catalog%3A${activityId}`;
+    if (href !== expected) throw new Error(`${scenario}: All Sessions lost exercise context (${href ?? "missing"})`);
+  }
+  if (route === "alternatives") {
+    const trigger = page.locator("#exercise-alternative-reason");
+    await trigger.click();
+    const optionText = (await page.locator('[role="option"]').allTextContents()).map((value) => value.trim());
+    for (const label of languages[profile.languageKey].reasons) {
+      if (!optionText.includes(label)) throw new Error(`${scenario}: replacement reason missing: ${label}`);
+    }
+    if (optionText.some((value) => /^Other$|^Sonstiges$|^أخرى$/i.test(value))) throw new Error(`${scenario}: legacy Other reason exposed`);
+    await page.keyboard.press("Escape");
+    if (await page.getByRole("link", { name: languages[profile.languageKey].view }).count() < 1) throw new Error(`${scenario}: Detail alternative View action missing`);
+    if (await page.getByRole("button", { name: languages[profile.languageKey].replace }).count() > 0) throw new Error(`${scenario}: Detail alternatives exposed a mutation action`);
+  }
+}
+
+function shouldScreenshot(profile, route) {
+  if (profile.key === "ios-en" && ["overview", "anatomy", "technique", "performance", "alternatives"].includes(route)) return true;
+  if (profile.key === "android-en-dark-reduced" && ["overview", "alternatives"].includes(route)) return true;
+  if (profile.key === "web-en-desktop" && ["overview", "performance"].includes(route)) return true;
+  if ((profile.key === "ios-de-dark-reduced" || profile.key === "ios-ar-rtl") && route === "overview") return true;
+  return false;
+}
+
 await mkdir(outputDir, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const results = [];
 const failures = [];
+const screenshotFiles = [];
 
-for (let index = 0; index < viewports.length; index += 1) {
-  const viewport = viewports[index];
-  const profile = viewportProfiles[index];
+for (const profile of profiles) {
   for (const route of routes) {
-    const scenario = `${route}-${profile.languageKey}-${profile.theme.key}-${profile.motion}-${viewport[0]}x${viewport[1]}`;
-    const { context, requests } = await makeContext(browser, viewport, profile);
+    const scenario = `${profile.platform}-${route}-${profile.languageKey}-${profile.theme.key}-${profile.motion}-${profile.viewport[0]}x${profile.viewport[1]}`;
+    const { context, requests } = await makeContext(browser, profile);
     const page = await context.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
     try {
       const response = await page.goto(`${baseUrl}${routePath(route)}`, { waitUntil: "networkidle", timeout: 45_000 });
       if (!response?.ok()) throw new Error(`${scenario}: navigation returned ${response?.status() ?? "no response"}`);
-      const metrics = await inspect(page, profile, viewport, route);
-      assertMetrics(metrics, viewport, scenario);
+      const metrics = await inspect(page, profile, route);
+      assertMetrics(metrics, profile, scenario);
       assertRequests(requests, route, scenario);
+      await assertRouteContracts(page, profile, route, scenario);
       if (pageErrors.length) throw new Error(`${scenario}: page errors: ${pageErrors.join(" | ")}`);
-      const screenshot = (viewport[0] === 390 || viewport[0] === 412 || viewport[0] === 1440) && ["overview", "anatomy", "technique", "performance", "alternatives"].includes(route);
-      if (screenshot) await page.screenshot({ path: path.join(outputDir, `${scenario}.png`), fullPage: true });
-      results.push({ scenario, route, viewport, ...profile, metrics, requestCount: requests.length });
+      if (shouldScreenshot(profile, route)) {
+        const fileName = `${scenario}.png`;
+        await page.screenshot({ path: path.join(outputDir, fileName), fullPage: true });
+        screenshotFiles.push(fileName);
+      }
+      results.push({ scenario, route, platform: profile.platform, viewport: profile.viewport, languageKey: profile.languageKey, theme: profile.theme, motion: profile.motion, metrics, requestCount: requests.length });
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
     } finally {
@@ -305,19 +415,24 @@ for (let index = 0; index < viewports.length; index += 1) {
   }
 }
 
-// Explicit 200% scaling proof across all six routes.
+// Explicit 200% scaling proof across all six routes, still with a Web UA/context.
 for (const route of routes) {
-  const viewport = [768, 1024];
-  const profile = { languageKey: "ar", theme: themes[0], motion: "reduce" };
-  const scenario = `zoom200-${route}-ar-light-768x1024`;
-  const { context, requests } = await makeContext(browser, viewport, profile);
+  const profile = { key: "web-ar-zoom200", platform: "web", viewport: [768, 1024], languageKey: "ar", theme: themes[0], motion: "reduce" };
+  const scenario = `web-zoom200-${route}-ar-light-768x1024`;
+  const { context, requests } = await makeContext(browser, profile);
   const page = await context.newPage();
   try {
     await page.goto(`${baseUrl}${routePath(route)}`, { waitUntil: "networkidle", timeout: 45_000 });
-    const metrics = await inspect(page, profile, viewport, route, 2);
-    assertMetrics(metrics, viewport, scenario);
+    const metrics = await inspect(page, profile, route, 2);
+    assertMetrics(metrics, profile, scenario);
     assertRequests(requests, route, scenario);
-    results.push({ scenario, route, viewport, ...profile, zoom: 2, metrics, requestCount: requests.length });
+    await assertRouteContracts(page, profile, route, scenario);
+    if (["overview", "anatomy"].includes(route)) {
+      const fileName = `${scenario}.png`;
+      await page.screenshot({ path: path.join(outputDir, fileName), fullPage: true });
+      screenshotFiles.push(fileName);
+    }
+    results.push({ scenario, route, platform: profile.platform, viewport: profile.viewport, languageKey: profile.languageKey, theme: profile.theme, motion: profile.motion, zoom: 2, metrics, requestCount: requests.length });
   } catch (error) {
     failures.push(error instanceof Error ? error.message : String(error));
   } finally {
@@ -327,30 +442,32 @@ for (const route of routes) {
 
 // Client-navigation proof: the shared [id] provider must persist and core detail must not refetch.
 for (const navCase of [
-  { key: "mobile", viewport: [390, 844], profile: { languageKey: "en", theme: themes[0], motion: "no-preference" } },
-  { key: "desktop-rtl", viewport: [1440, 900], profile: { languageKey: "ar", theme: themes[1], motion: "reduce" } },
+  { key: "ios-mobile", profile: profiles.find((item) => item.key === "ios-en") },
+  { key: "desktop-rtl", profile: { key: "web-ar-nav", platform: "web", viewport: [1440, 900], languageKey: "ar", theme: themes[1], motion: "reduce" } },
 ]) {
-  const { context, requests } = await makeContext(browser, navCase.viewport, navCase.profile);
+  const profile = navCase.profile;
+  const { context, requests } = await makeContext(browser, profile);
   const page = await context.newPage();
   try {
     await page.goto(`${baseUrl}${routePath("overview")}`, { waitUntil: "networkidle", timeout: 45_000 });
-    await page.getByRole("heading", { level: 1, name: expectedHeading(navCase.profile.languageKey, "overview") }).waitFor();
+    await page.getByRole("heading", { level: 1, name: expectedHeading(profile.languageKey, "overview") }).waitFor();
     for (const route of routes.slice(1)) {
       const start = requests.length;
       await page.locator(`a[href="${routePath(route)}"]`).first().click();
       await page.waitForURL(new RegExp(`${routePath(route)}(?:\\?.*)?$`));
       await page.waitForLoadState("networkidle");
-      const metrics = await inspect(page, navCase.profile, navCase.viewport, route);
-      assertMetrics(metrics, navCase.viewport, `${navCase.key}-nav-${route}`);
+      const metrics = await inspect(page, profile, route);
+      assertMetrics(metrics, profile, `${navCase.key}-nav-${route}`);
+      await assertRouteContracts(page, profile, route, `${navCase.key}-nav-${route}`);
       const delta = requests.slice(start);
       if (delta.some((url) => url.includes(`/api/activity-catalog/library-activities/${activityId}`))) throw new Error(`${navCase.key}-nav-${route}: shared provider refetched core detail`);
       await page.locator(`a[href="${routePath("overview")}"]`).first().click();
       await page.waitForURL(new RegExp(`${routePath("overview")}(?:\\?.*)?$`));
-      await page.getByRole("heading", { level: 1, name: expectedHeading(navCase.profile.languageKey, "overview") }).waitFor();
+      await page.getByRole("heading", { level: 1, name: expectedHeading(profile.languageKey, "overview") }).waitFor();
     }
     const totalCore = requests.filter((url) => url.includes(`/api/activity-catalog/library-activities/${activityId}`)).length;
     if (totalCore !== 1) throw new Error(`${navCase.key}: expected one core request across nested navigation, got ${totalCore}`);
-    results.push({ scenario: `${navCase.key}-persistent-provider`, route: "navigation", viewport: navCase.viewport, ...navCase.profile, totalCore });
+    results.push({ scenario: `${navCase.key}-persistent-provider`, route: "navigation", platform: profile.platform, viewport: profile.viewport, languageKey: profile.languageKey, theme: profile.theme, motion: profile.motion, totalCore });
   } catch (error) {
     failures.push(error instanceof Error ? error.message : String(error));
   } finally {
@@ -365,11 +482,13 @@ const report = {
   headSha: process.env.QA_HEAD_SHA || null,
   workflowRunId: process.env.QA_WORKFLOW_RUN_ID || null,
   routes,
-  viewports,
+  profiles: profiles.map(({ userAgent, ...profile }) => ({ ...profile, userAgentClass: profile.platform === "ios" ? "iPhone/iOS" : profile.platform === "android" ? "Android" : "Chromium Web" })),
   localeCoverage: Object.keys(languages),
+  platformCoverage: [...new Set(profiles.map((profile) => profile.platform))],
   themeCoverage: themes.map((theme) => theme.key),
   motionCoverage: ["no-preference", "reduce"],
   scalingCoverage: [1, 2],
+  screenshotFiles,
   scenarioCount: results.length,
   failures,
   results,
@@ -379,5 +498,5 @@ if (failures.length) {
   console.error(JSON.stringify({ authority: report.authority, scenarioCount: report.scenarioCount, failures }, null, 2));
   process.exitCode = 1;
 } else {
-  console.log(JSON.stringify({ authority: report.authority, scenarioCount: report.scenarioCount, routes, viewports, localeCoverage: report.localeCoverage, themeCoverage: report.themeCoverage, motionCoverage: report.motionCoverage, scalingCoverage: report.scalingCoverage }, null, 2));
+  console.log(JSON.stringify({ authority: report.authority, scenarioCount: report.scenarioCount, routes, platformCoverage: report.platformCoverage, localeCoverage: report.localeCoverage, themeCoverage: report.themeCoverage, motionCoverage: report.motionCoverage, scalingCoverage: report.scalingCoverage, screenshotCount: screenshotFiles.length }, null, 2));
 }
