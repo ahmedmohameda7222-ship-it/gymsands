@@ -12,10 +12,7 @@ create table public.exercise_setup_notes (
     and exercise_identity !~ '[[:cntrl:]]'
     and exercise_identity ~ '^(provider:[a-z0-9_]+:[A-Za-z0-9_-]{1,128}|custom:[A-Za-z0-9_-]{1,128}|global:[A-Za-z0-9_-]{1,128})$'
   ),
-  constraint exercise_setup_notes_body_check check (
-    char_length(note_body) between 1 and 1000
-    and note_body !~ '[\u0000]'
-  ),
+  constraint exercise_setup_notes_body_check check (char_length(note_body) between 1 and 1000),
   constraint exercise_setup_notes_owner_identity_key unique (user_id, exercise_identity)
 );
 
@@ -93,6 +90,8 @@ $$;
 revoke all on function private.exercise_detail_v2_core_purge_account_application_data_atomic(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.purge_account_application_data_atomic(uuid) from public, anon, authenticated;
 grant execute on function public.purge_account_application_data_atomic(uuid) to service_role;
+comment on function public.purge_account_application_data_atomic(uuid) is
+  'Service-role account deletion authority. Deletes exercise setup notes before delegating to the previously reviewed application-data purge implementation.';
 
 notify pgrst, 'reload schema';
 commit;
