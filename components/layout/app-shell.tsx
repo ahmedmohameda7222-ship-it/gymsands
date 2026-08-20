@@ -226,7 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="hidden lg:block">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Plaivra</p>
-            <h1 className="text-base font-semibold text-foreground">{t("nav.tagline")}</h1>
+            {focusedDetail ? <p className="text-base font-semibold text-foreground">{t("nav.tagline")}</p> : <h1 className="text-base font-semibold text-foreground">{t("nav.tagline")}</h1>}
           </div>
         </div>
       </header>
