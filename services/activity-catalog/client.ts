@@ -20,6 +20,7 @@ import type {
   LibraryActivityDetail,
   LibraryAlternative,
   LibraryDomain,
+  LibraryDomainFilters,
   LibraryProviderMeta,
   LibrarySearchParams,
   LibrarySearchResult
@@ -116,7 +117,7 @@ export function getLibraryDomain(domain: string, locale?: CatalogLocale, context
 }
 
 export function getLibraryDomainFilters(domain: string, locale?: CatalogLocale, context?: CatalogClientRequestContext) {
-  return catalogRequest<LibraryEnvelope<unknown[]>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/filters${queryString({ locale })}`, context);
+  return catalogRequest<LibraryEnvelope<LibraryDomainFilters>>(`/api/activity-catalog/library-domains/${encodeURIComponent(domain)}/filters${queryString({ locale })}`, context);
 }
 
 export function getLibraryDomainArchetypes(domain: string, locale?: CatalogLocale, context?: CatalogClientRequestContext) {
