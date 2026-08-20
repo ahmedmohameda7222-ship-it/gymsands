@@ -60,7 +60,8 @@ Tests enforce source code, schema, SQL verification, structured manifests, and o
 - Workout History redesign migration `20260813071926_workout_history_redesign_read_contract.sql` remains **pending, repository-only** and absent from Production.
 - Active Workout feedback preferences introduce repository migration `20260816044500_active_workout_feedback_preferences.sql` as a **pending, repository-only** additive settings migration. It has not been applied to Production and has no Production identity.
 - Exercise Detail V2 setup notes introduce repository migration `20260820060000_exercise_detail_setup_notes.sql` as a **pending, repository-only** additive privacy authority. It has not been applied to Production and has no Production identity.
-- While these five migrations are pending, the canonical ledger records `pendingCount = 5`, `unresolvedCount = 5`, and `historyRepair.state = pending`; the previously applied Production history remains reconciled and unchanged.
+- Exercise Detail V2 replacement reasons introduce repository migration `20260820070000_exercise_alternative_reason_v2.sql` as a **pending, repository-only** additive compatibility migration. It preserves every historical replacement reason and adds the explicit V2 reason vocabulary without rewriting rows; it has not been applied to Production and has no Production identity.
+- While these six migrations are pending, the canonical ledger records `pendingCount = 6`, `unresolvedCount = 6`, and `historyRepair.state = pending`; the previously applied Production history remains reconciled and unchanged.
 - The released compatibility marker remains `20260724232734`. Physical migration advancement and application-release promotion remain separate operations.
 - No application deployment accompanied the PCS-2 or P0 migration applications.
 - Repository state alone does not authorize merge, manual deployment, migration application, or compatibility-marker promotion.
@@ -116,5 +117,11 @@ Applied migrations must never be renamed, rewritten, reordered, deleted, or repl
 ## Exercise Detail V2 setup-note pending migration
 
 - `20260820060000_exercise_detail_setup_notes.sql` adds owner-scoped durable setup-note authority for canonical Exercise Detail identities and its privacy lifecycle.
+- It is repository-only and classified `pending`; it has **not** been applied to Plaivra Production and intentionally has no Production migration identity.
+- Do not replay or apply it before explicit Planner approval of the Exercise Detail V2 merge/release sequence.
+
+## Exercise Detail V2 replacement-reason pending migration
+
+- `20260820070000_exercise_alternative_reason_v2.sql` additively extends the existing replacement-reason CHECK with the explicit V2 user intents while preserving all historical values and rows.
 - It is repository-only and classified `pending`; it has **not** been applied to Plaivra Production and intentionally has no Production migration identity.
 - Do not replay or apply it before explicit Planner approval of the Exercise Detail V2 merge/release sequence.
