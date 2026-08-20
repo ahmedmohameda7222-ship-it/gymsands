@@ -34,10 +34,10 @@ export function performanceBestsFromProjection(input: {
   sameLoadMaxRepetitions?: CanonicalPersonalRecordEvent | null;
   exerciseSessionVolume?: CanonicalPersonalRecordEvent | null;
 }): ExercisePerformanceBest[] {
-  return [
-    ["highest_load", input.highestLoad],
-    ["estimated_one_rep_max", input.estimatedOneRepMax],
-    ["same_load_max_repetitions", input.sameLoadMaxRepetitions ?? null],
-    ["exercise_session_volume", input.exerciseSessionVolume ?? null],
-  ].flatMap(([key, event]) => event ? [{ key: key as StrengthDetailRecordKey, event }] : []);
+  const bests: ExercisePerformanceBest[] = [];
+  if (input.highestLoad) bests.push({ key: "highest_load", event: input.highestLoad });
+  if (input.estimatedOneRepMax) bests.push({ key: "estimated_one_rep_max", event: input.estimatedOneRepMax });
+  if (input.sameLoadMaxRepetitions) bests.push({ key: "same_load_max_repetitions", event: input.sameLoadMaxRepetitions });
+  if (input.exerciseSessionVolume) bests.push({ key: "exercise_session_volume", event: input.exerciseSessionVolume });
+  return bests;
 }
