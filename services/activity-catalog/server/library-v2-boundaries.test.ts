@@ -18,6 +18,7 @@ const catalogRelease = {
   checksum: "a3f4707871d41efa50de8e56d7760dc06c45765aa35ac4c42f179186176c5271"
 };
 const meta = { apiVersion: "v2" as const, locale: "en", libraryRelease, catalogRelease, source: "library_v2" as const, degraded: false };
+const emptyDomainFilters = { domain: "strength", filters: [], environmentCapabilities: [], availableTodayPrimaryControl: false };
 
 function response(data: unknown, status = 200, pagination?: unknown) {
   return new Response(JSON.stringify({ data, meta: { apiVersion: "v2", locale: "en", libraryRelease, catalogRelease }, ...(pagination ? { pagination } : {}) }), {
@@ -31,7 +32,7 @@ function provider(overrides: Partial<LibraryActivityProvider> = {}): LibraryActi
   return {
     listDomains: vi.fn(async () => ({ data: [], meta })),
     getDomain: vi.fn(notFound),
-    getFilters: vi.fn(async () => ({ data: [], meta })),
+    getFilters: vi.fn(async () => ({ data: emptyDomainFilters, meta })),
     getArchetypes: vi.fn(async () => ({ data: [], meta })),
     searchActivities: vi.fn(async () => ({ data: [], pagination: { limit: 50, returned: 0, nextCursor: null }, meta })),
     getActivity: vi.fn(notFound),
@@ -61,6 +62,83 @@ describe("P10F Library V2 HTTP provider", () => {
     expect(JSON.stringify({ url: url.toString(), init })).not.toContain("user_id");
     expect(JSON.stringify(result)).not.toContain(catalogKey);
     expect(result.pagination.nextCursor).toBe("opaque-next");
+  });
+
+  it("accepts the canonical object-shaped V2 filter payload and future published definitions", async () => {
+    const publishedFilters = {
+      domain: "strength",
+      filters: [
+        { slug: "difficulty", kind: "enum", options: ["beginner", "intermediate", "advanced", "all_levels"], displayOrder: 1 },
+        { slug: "equipment", kind: "capability", options: [], displayOrder: 2 }
+      ],
+      environmentCapabilities: [
+        {
+          key: "floor_work_available",
+          valueKind: "boolean",
+          allowedValues: [true, false],
+          temporaryOverrideAllowed: true,
+          precedence: "available_today_over_saved_setup"
+        }
+      ],
+      availableTodayPrimaryControl: false
+    };
+    const http = new HttpLibraryActivityProvider({
+      baseUrl: "https://catalog-api.plaivra.com",
+      apiKey: catalogKey,
+      fetchImpl: vi.fn(async () => response(publishedFilters)) as unknown as typeof fetch
+    });
+
+    await expect(http.getFilters("strength")).resolves.toMatchObject({ data: publishedFilters });
+  });
+
+  it("accepts an empty published filters array as a valid V2 response", async () => {
+    const http = new HttpLibraryActivityProvider({
+      baseUrl: "https://catalog-api.plaivra.com",
+      apiKey: catalogKey,
+      fetchImpl: vi.fn(async () => response(emptyDomainFilters)) as unknown as typeof fetch
+    });
+
+    const result = await http.getFilters("strength");
+    expect(result.data).toEqual(emptyDomainFilters);
+    expect(result.data.filters).toHaveLength(0);
+  });
+
+  it.each([
+    [],
+    { domain: "strength", filters: {}, environmentCapabilities: [], availableTodayPrimaryControl: false },
+    { domain: "strength", filters: [{ slug: "difficulty", kind: "legacy", options: [], displayOrder: 1 }], environmentCapabilities: [], availableTodayPrimaryControl: false },
+    { domain: "strength", filters: [], environmentCapabilities: [{ key: "space", valueKind: "enum", allowedValues: [], temporaryOverrideAllowed: "yes", precedence: "context_only" }], availableTodayPrimaryControl: false },
+    { domain: "running", filters: [], environmentCapabilities: [], availableTodayPrimaryControl: false }
+  ])("rejects malformed V2 domain filter payload %#", async (payload) => {
+    const http = new HttpLibraryActivityProvider({
+      baseUrl: "https://catalog-api.plaivra.com",
+      apiKey: catalogKey,
+      fetchImpl: vi.fn(async () => response(payload)) as unknown as typeof fetch
+    });
+
+    await expect(http.getFilters("strength")).rejects.toMatchObject({ code: "catalog_invalid_response" });
+  });
+
+  it("keeps V2 cursor pagination beyond 60 independent of the filter contract", async () => {
+    const firstPage = Array.from({ length: 50 }, (_, index) => ({ id: `activity-${index + 1}` }));
+    const secondPage = Array.from({ length: 11 }, (_, index) => ({ id: `activity-${index + 51}` }));
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(response(firstPage, 200, { limit: 50, returned: 50, nextCursor: "page-2" }))
+      .mockResolvedValueOnce(response(secondPage, 200, { limit: 50, returned: 11, nextCursor: null }));
+    const http = new HttpLibraryActivityProvider({
+      baseUrl: "https://catalog-api.plaivra.com",
+      apiKey: catalogKey,
+      fetchImpl: fetchSpy as unknown as typeof fetch
+    });
+
+    const first = await http.searchActivities({ domain: "strength", limit: 50 });
+    const second = await http.searchActivities({ domain: "strength", limit: 50, cursor: first.pagination.nextCursor ?? undefined });
+
+    expect(first.data).toHaveLength(50);
+    expect(first.pagination.nextCursor).toBe("page-2");
+    expect(second.data).toHaveLength(11);
+    expect(second.pagination.nextCursor).toBeNull();
+    expect(first.data.length + second.data.length).toBe(61);
   });
 
   it.each([
@@ -103,6 +181,17 @@ describe("P10F Library V2 fallback matrix", () => {
     expect(result.meta.source).toBe("legacy");
     expect(result.meta.degraded).toBe(true);
     expect(legacySearch).toHaveBeenCalledOnce();
+  });
+
+  it("keeps domain filters on Activity Catalog V2 and never fabricates a legacy fallback", async () => {
+    const legacyFilters = vi.fn(async () => ({ data: emptyDomainFilters, meta: { ...meta, apiVersion: "v1-compat" as const, source: "legacy" as const, libraryRelease: null, catalogRelease: null } }));
+    const composite = new FallbackLibraryActivityProvider(
+      provider({ getFilters: vi.fn(async () => { throw new LibraryProviderError("catalog_network_error", { allowLegacyFallback: true }); }) }),
+      provider({ getFilters: legacyFilters })
+    );
+
+    await expect(composite.getFilters("strength")).rejects.toMatchObject({ code: "catalog_network_error" });
+    expect(legacyFilters).not.toHaveBeenCalled();
   });
 
   it.each(["catalog_bad_request", "catalog_unauthorized", "catalog_forbidden", "catalog_incompatible_cursor", "catalog_invalid_response", "catalog_not_configured"] as const)("fails closed for %s", async (code) => {
