@@ -4,6 +4,10 @@ import type {
   LibraryActivityDetail,
   LibraryAlternative,
   LibraryDomain,
+  LibraryDomainFilterDefinition,
+  LibraryDomainFilters,
+  LibraryEnvironmentCapabilityDefinition,
+  LibraryJsonValue,
   LibraryProviderMeta,
   LibraryResponseMeta,
   LibrarySearchParams
@@ -13,46 +17,82 @@ import type { LibraryActivityProvider, LibraryRequestOptions } from "./library-p
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const LIBRARY_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 
 type HttpLibraryProviderOptions = { baseUrl: string; apiKey: string; timeoutMs?: number; fetchImpl?: typeof fetch };
-
 type V2Envelope<T> = { data: T; meta: LibraryResponseMeta; pagination?: { limit: number; returned: number; nextCursor: string | null } };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+function invalidResponse(): never { throw new LibraryProviderError("catalog_invalid_response"); }
+function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+
+function parseLibraryJsonValue(value: unknown): LibraryJsonValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (Array.isArray(value)) return value.map(parseLibraryJsonValue);
+  if (isRecord(value)) {
+    const parsed: { [key: string]: LibraryJsonValue } = {};
+    for (const [key, entry] of Object.entries(value)) parsed[key] = parseLibraryJsonValue(entry);
+    return parsed;
+  }
+  return invalidResponse();
+}
+function parseLibraryJsonArray(value: unknown): LibraryJsonValue[] { if (!Array.isArray(value)) return invalidResponse(); return value.map(parseLibraryJsonValue); }
+function parseLibrarySlug(value: unknown) { if (typeof value !== "string" || !LIBRARY_SLUG.test(value)) return invalidResponse(); return value; }
+function parseFilterKind(value: unknown): LibraryDomainFilterDefinition["kind"] {
+  switch (value) { case "enum": case "multi_enum": case "range": case "capability": return value; default: return invalidResponse(); }
+}
+function parseEnvironmentValueKind(value: unknown): LibraryEnvironmentCapabilityDefinition["valueKind"] {
+  switch (value) { case "enum": case "boolean": case "equipment_set": return value; default: return invalidResponse(); }
+}
+function parseEnvironmentPrecedence(value: unknown): LibraryEnvironmentCapabilityDefinition["precedence"] {
+  switch (value) { case "available_today_over_saved_setup": case "saved_setup_only": case "context_only": return value; default: return invalidResponse(); }
+}
+function parseDisplayOrder(value: unknown) { if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) return invalidResponse(); return value; }
+function parseLibraryDomainFilterDefinition(value: unknown): LibraryDomainFilterDefinition {
+  if (!isRecord(value)) return invalidResponse();
+  return { slug: parseLibrarySlug(value.slug), kind: parseFilterKind(value.kind), options: parseLibraryJsonArray(value.options), displayOrder: parseDisplayOrder(value.displayOrder) };
+}
+function parseLibraryEnvironmentCapability(value: unknown): LibraryEnvironmentCapabilityDefinition {
+  if (!isRecord(value) || typeof value.temporaryOverrideAllowed !== "boolean") return invalidResponse();
+  return {
+    key: parseLibrarySlug(value.key),
+    valueKind: parseEnvironmentValueKind(value.valueKind),
+    allowedValues: parseLibraryJsonArray(value.allowedValues),
+    temporaryOverrideAllowed: value.temporaryOverrideAllowed,
+    precedence: parseEnvironmentPrecedence(value.precedence)
+  };
+}
+function parseLibraryDomainFilters(value: unknown, expectedDomain: string): LibraryDomainFilters {
+  if (!isRecord(value) || !Array.isArray(value.filters) || !Array.isArray(value.environmentCapabilities) || typeof value.availableTodayPrimaryControl !== "boolean") return invalidResponse();
+  const domain = parseLibrarySlug(value.domain);
+  if (domain !== expectedDomain) return invalidResponse();
+  return {
+    domain,
+    filters: value.filters.map(parseLibraryDomainFilterDefinition),
+    environmentCapabilities: value.environmentCapabilities.map(parseLibraryEnvironmentCapability),
+    availableTodayPrimaryControl: value.availableTodayPrimaryControl
+  };
 }
 
 function parseEnvelope<T>(value: unknown, requirePagination = false): V2Envelope<T> {
-  if (!isRecord(value) || !("data" in value) || !isRecord(value.meta)) {
-    throw new LibraryProviderError("catalog_invalid_response");
-  }
+  if (!isRecord(value) || !("data" in value) || !isRecord(value.meta)) throw new LibraryProviderError("catalog_invalid_response");
   const meta = value.meta as Record<string, unknown>;
-  if (meta.apiVersion !== "v2" || typeof meta.locale !== "string" || !isRecord(meta.libraryRelease) || !isRecord(meta.catalogRelease)) {
-    throw new LibraryProviderError("catalog_invalid_response");
-  }
+  if (meta.apiVersion !== "v2" || typeof meta.locale !== "string" || !isRecord(meta.libraryRelease) || !isRecord(meta.catalogRelease)) throw new LibraryProviderError("catalog_invalid_response");
   const libraryRelease = meta.libraryRelease as Record<string, unknown>;
   const catalogRelease = meta.catalogRelease as Record<string, unknown>;
-  for (const key of ["id", "version", "checksum"] as const) {
-    if (typeof libraryRelease[key] !== "string" || typeof catalogRelease[key] !== "string") throw new LibraryProviderError("catalog_invalid_response");
-  }
-  if (typeof libraryRelease.publishedAt !== "string" || typeof libraryRelease.strengthSemanticFingerprint !== "string") {
-    throw new LibraryProviderError("catalog_invalid_response");
-  }
+  for (const key of ["id", "version", "checksum"] as const) if (typeof libraryRelease[key] !== "string" || typeof catalogRelease[key] !== "string") throw new LibraryProviderError("catalog_invalid_response");
+  if (typeof libraryRelease.publishedAt !== "string" || typeof libraryRelease.strengthSemanticFingerprint !== "string") throw new LibraryProviderError("catalog_invalid_response");
   let pagination: V2Envelope<T>["pagination"];
   if (requirePagination) {
     if (!isRecord(value.pagination)) throw new LibraryProviderError("catalog_invalid_response");
     const page = value.pagination as Record<string, unknown>;
-    if (!Number.isInteger(page.limit) || !Number.isInteger(page.returned) || !(page.nextCursor === null || typeof page.nextCursor === "string")) {
-      throw new LibraryProviderError("catalog_invalid_response");
-    }
+    if (!Number.isInteger(page.limit) || !Number.isInteger(page.returned) || !(page.nextCursor === null || typeof page.nextCursor === "string")) throw new LibraryProviderError("catalog_invalid_response");
     pagination = page as V2Envelope<T>["pagination"];
   }
   return { data: value.data as T, meta: meta as unknown as LibraryResponseMeta, ...(pagination ? { pagination } : {}) };
 }
 
-function providerMeta(meta: LibraryResponseMeta): LibraryProviderMeta {
-  return { ...meta, source: "library_v2", degraded: false };
-}
+function providerMeta(meta: LibraryResponseMeta): LibraryProviderMeta { return { ...meta, source: "library_v2", degraded: false }; }
 
 export class HttpLibraryActivityProvider implements LibraryActivityProvider {
   private readonly baseUrl: URL;
@@ -67,9 +107,7 @@ export class HttpLibraryActivityProvider implements LibraryActivityProvider {
       const localHttp = baseUrl.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname);
       if ((baseUrl.protocol !== "https:" && !localHttp) || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash) throw new Error("invalid base url");
       this.baseUrl = baseUrl;
-    } catch (error) {
-      throw new LibraryProviderError("catalog_not_configured", { cause: error });
-    }
+    } catch (error) { throw new LibraryProviderError("catalog_not_configured", { cause: error }); }
     this.apiKey = options.apiKey;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchImpl = options.fetchImpl ?? fetch;
@@ -80,25 +118,20 @@ export class HttpLibraryActivityProvider implements LibraryActivityProvider {
     if (!Array.isArray(payload.data)) throw new LibraryProviderError("catalog_invalid_response");
     return { data: payload.data, meta: providerMeta(payload.meta) };
   }
-
   async getDomain(domain: string, options: LibraryRequestOptions = {}) {
     const payload = parseEnvelope<LibraryDomain>(await this.request(`/v2/library-domains/${encodeURIComponent(domain)}`, localeQuery(options)));
     if (!isRecord(payload.data)) throw new LibraryProviderError("catalog_invalid_response");
     return { data: payload.data, meta: providerMeta(payload.meta) };
   }
-
   async getFilters(domain: string, options: LibraryRequestOptions = {}) {
-    const payload = parseEnvelope<unknown[]>(await this.request(`/v2/library-domains/${encodeURIComponent(domain)}/filters`, localeQuery(options)));
-    if (!Array.isArray(payload.data)) throw new LibraryProviderError("catalog_invalid_response");
-    return { data: payload.data, meta: providerMeta(payload.meta) };
+    const payload = parseEnvelope<unknown>(await this.request(`/v2/library-domains/${encodeURIComponent(domain)}/filters`, localeQuery(options)));
+    return { data: parseLibraryDomainFilters(payload.data, domain), meta: providerMeta(payload.meta) };
   }
-
   async getArchetypes(domain: string, options: LibraryRequestOptions = {}) {
     const payload = parseEnvelope<unknown[]>(await this.request(`/v2/library-domains/${encodeURIComponent(domain)}/archetypes`, localeQuery(options)));
     if (!Array.isArray(payload.data)) throw new LibraryProviderError("catalog_invalid_response");
     return { data: payload.data, meta: providerMeta(payload.meta) };
   }
-
   async searchActivities(params: LibrarySearchParams) {
     const query = localeQuery(params);
     if (params.query) query.set("query", params.query);
@@ -109,13 +142,11 @@ export class HttpLibraryActivityProvider implements LibraryActivityProvider {
     if (!Array.isArray(payload.data) || !payload.pagination) throw new LibraryProviderError("catalog_invalid_response");
     return { data: payload.data as any, pagination: payload.pagination, meta: providerMeta(payload.meta) };
   }
-
   async getActivity(domain: string, identifier: string, options: LibraryRequestOptions = {}) {
     const payload = parseEnvelope<LibraryActivityDetail>(await this.request(`/v2/library-domains/${encodeURIComponent(domain)}/activities/${encodeURIComponent(identifier)}`, localeQuery(options)));
     if (!isRecord(payload.data)) throw new LibraryProviderError("catalog_invalid_response");
     return { data: payload.data, meta: providerMeta(payload.meta) };
   }
-
   async getActivityAlternatives(domain: string, identifier: string, options: LibraryRequestOptions & { limit?: number } = {}) {
     const query = localeQuery(options);
     if (options.limit !== undefined) query.set("limit", String(options.limit));
@@ -125,17 +156,10 @@ export class HttpLibraryActivityProvider implements LibraryActivityProvider {
   }
 
   private async request(path: string, query: URLSearchParams): Promise<unknown> {
-    const url = new URL(path, this.baseUrl);
-    url.search = query.toString();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const url = new URL(path, this.baseUrl); url.search = query.toString();
+    const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await this.fetchImpl(url, {
-        method: "GET",
-        cache: "no-store",
-        signal: controller.signal,
-        headers: { Accept: "application/json", Authorization: `Bearer ${this.apiKey}` }
-      });
+      const response = await this.fetchImpl(url, { method: "GET", cache: "no-store", signal: controller.signal, headers: { Accept: "application/json", Authorization: `Bearer ${this.apiKey}` } });
       const declaredLength = Number(response.headers.get("content-length") ?? 0);
       if (declaredLength > MAX_RESPONSE_BYTES) throw new LibraryProviderError("catalog_invalid_response");
       const body = await response.text();
@@ -148,22 +172,12 @@ export class HttpLibraryActivityProvider implements LibraryActivityProvider {
       if (error instanceof LibraryProviderError) throw error;
       if (controller.signal.aborted) throw new LibraryProviderError("catalog_timeout", { allowLegacyFallback: true, cause: error });
       throw new LibraryProviderError("catalog_network_error", { allowLegacyFallback: true, cause: error });
-    } finally {
-      clearTimeout(timeout);
-    }
+    } finally { clearTimeout(timeout); }
   }
 }
 
-function localeQuery(options: LibraryRequestOptions) {
-  const query = new URLSearchParams();
-  if (options.locale) query.set("locale", options.locale);
-  return query;
-}
-
-function upstreamCode(payload: unknown) {
-  return isRecord(payload) && isRecord(payload.error) && typeof payload.error.code === "string" ? payload.error.code : undefined;
-}
-
+function localeQuery(options: LibraryRequestOptions) { const query = new URLSearchParams(); if (options.locale) query.set("locale", options.locale); return query; }
+function upstreamCode(payload: unknown) { return isRecord(payload) && isRecord(payload.error) && typeof payload.error.code === "string" ? payload.error.code : undefined; }
 function statusError(status: number, payload: unknown) {
   const code = upstreamCode(payload);
   if (status === 401) return new LibraryProviderError("catalog_unauthorized", { upstreamCode: code });

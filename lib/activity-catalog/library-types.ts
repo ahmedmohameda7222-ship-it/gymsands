@@ -48,6 +48,36 @@ export type LibraryDomain = {
   tabs: unknown[];
 };
 
+export type LibraryJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | LibraryJsonValue[]
+  | { [key: string]: LibraryJsonValue };
+
+export type LibraryDomainFilterDefinition = {
+  slug: string;
+  kind: "enum" | "multi_enum" | "range" | "capability";
+  options: LibraryJsonValue[];
+  displayOrder: number;
+};
+
+export type LibraryEnvironmentCapabilityDefinition = {
+  key: string;
+  valueKind: "enum" | "boolean" | "equipment_set";
+  allowedValues: LibraryJsonValue[];
+  temporaryOverrideAllowed: boolean;
+  precedence: "available_today_over_saved_setup" | "saved_setup_only" | "context_only";
+};
+
+export type LibraryDomainFilters = {
+  domain: string;
+  filters: LibraryDomainFilterDefinition[];
+  environmentCapabilities: LibraryEnvironmentCapabilityDefinition[];
+  availableTodayPrimaryControl: boolean;
+};
+
 export type LibraryInstruction = { order: number; text: string };
 export type LibraryEquipment = { slug: string | null; name: string | null; requirement: string | null };
 

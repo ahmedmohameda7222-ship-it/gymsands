@@ -3,6 +3,7 @@ import type {
   LibraryActivityDetail,
   LibraryAlternative,
   LibraryDomain,
+  LibraryDomainFilters,
   LibraryResult,
   LibrarySearchParams,
   LibrarySearchResult
@@ -13,7 +14,7 @@ export type LibraryRequestOptions = { locale?: CatalogLocale };
 export interface LibraryActivityProvider {
   listDomains(options?: LibraryRequestOptions): Promise<LibraryResult<LibraryDomain[]>>;
   getDomain(domain: string, options?: LibraryRequestOptions): Promise<LibraryResult<LibraryDomain>>;
-  getFilters(domain: string, options?: LibraryRequestOptions): Promise<LibraryResult<unknown[]>>;
+  getFilters(domain: string, options?: LibraryRequestOptions): Promise<LibraryResult<LibraryDomainFilters>>;
   getArchetypes(domain: string, options?: LibraryRequestOptions): Promise<LibraryResult<unknown[]>>;
   searchActivities(params: LibrarySearchParams): Promise<LibrarySearchResult>;
   getActivity(domain: string, identifier: string, options?: LibraryRequestOptions): Promise<LibraryResult<LibraryActivityDetail>>;

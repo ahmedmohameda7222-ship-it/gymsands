@@ -9,6 +9,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ doma
   if (!locale) return libraryJson({ error: "The catalog request is invalid.", code: "catalog_bad_request" }, 400);
   return withLibraryRoute(request, "library_domain_filters", async (provider) => {
     const result = await provider.getFilters(domain, { locale });
-    return { body: { data: result.data, meta: result.meta }, meta: result.meta, count: result.data.length };
+    return { body: { data: result.data, meta: result.meta }, meta: result.meta, count: result.data.filters.length };
   });
 }
