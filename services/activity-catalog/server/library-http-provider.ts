@@ -3,10 +3,14 @@ import "server-only";
 import type {
   LibraryActivityDetail,
   LibraryAlternative,
+  LibraryCoverage,
   LibraryDomain,
   LibraryDomainFilterDefinition,
   LibraryDomainFilters,
   LibraryEnvironmentCapabilityDefinition,
+  LibraryEquipment,
+  LibraryExecutionProfile,
+  LibraryInstruction,
   LibraryJsonValue,
   LibraryProviderMeta,
   LibraryResponseMeta,
@@ -24,6 +28,10 @@ type V2Envelope<T> = { data: T; meta: LibraryResponseMeta; pagination?: { limit:
 
 function invalidResponse(): never { throw new LibraryProviderError("catalog_invalid_response"); }
 function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+function nullableString(value: unknown) { return value === null || value === undefined ? null : typeof value === "string" ? value : invalidResponse(); }
+function stringValue(value: unknown) { return typeof value === "string" && value.length > 0 ? value : invalidResponse(); }
+function integerValue(value: unknown) { return typeof value === "number" && Number.isInteger(value) ? value : invalidResponse(); }
+function recordArray(value: unknown) { return Array.isArray(value) && value.every(isRecord) ? value : invalidResponse(); }
 
 function parseLibraryJsonValue(value: unknown): LibraryJsonValue {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
@@ -71,6 +79,104 @@ function parseLibraryDomainFilters(value: unknown, expectedDomain: string): Libr
     filters: value.filters.map(parseLibraryDomainFilterDefinition),
     environmentCapabilities: value.environmentCapabilities.map(parseLibraryEnvironmentCapability),
     availableTodayPrimaryControl: value.availableTodayPrimaryControl
+  };
+}
+
+function parseInstruction(value: unknown): LibraryInstruction {
+  if (!isRecord(value)) return invalidResponse();
+  return { order: integerValue(value.order), text: stringValue(value.text) };
+}
+function parseEquipment(value: unknown): LibraryEquipment {
+  if (!isRecord(value)) return invalidResponse();
+  return { slug: nullableString(value.slug), name: nullableString(value.name), requirement: nullableString(value.requirement) };
+}
+function parseCoverage(value: unknown): LibraryCoverage {
+  if (!isRecord(value)) return invalidResponse();
+  return {
+    ...value,
+    slug: nullableString(value.slug),
+    name: nullableString(value.name),
+    muscleName: nullableString(value.muscleName),
+    label: nullableString(value.label),
+    role: nullableString(value.role),
+    bodyRegion: nullableString(value.bodyRegion),
+    targetId: nullableString(value.targetId),
+    atlasTargetId: nullableString(value.atlasTargetId),
+    side: nullableString(value.side)
+  };
+}
+function parseExecutionProfile(value: unknown): LibraryExecutionProfile {
+  if (!isRecord(value)) return invalidResponse();
+  const metrics = value.metrics === undefined ? undefined : Array.isArray(value.metrics) && value.metrics.every((entry) => typeof entry === "string") ? value.metrics as string[] : invalidResponse();
+  return { ...value, ...(metrics ? { metrics } : {}) };
+}
+function parseSchema(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value) || typeof value.key !== "string" || !Number.isInteger(value.version)) return invalidResponse();
+  if (value.fields !== undefined && !Array.isArray(value.fields)) return invalidResponse();
+  return value as LibraryActivityDetail["prescriptionSchema"];
+}
+function parseActivityType(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value) || typeof value.slug !== "string" || typeof value.name !== "string") return invalidResponse();
+  return { slug: value.slug, name: value.name };
+}
+function parseMembership(value: unknown): LibraryActivityDetail["membership"] {
+  if (!isRecord(value) || typeof value.kind !== "string" || typeof value.visibility !== "string" || !Number.isFinite(value.domainPriority) || typeof value.primaryDomain !== "boolean") return invalidResponse();
+  return { kind: value.kind, visibility: value.visibility, domainPriority: Number(value.domainPriority), primaryDomain: value.primaryDomain, ...(typeof value.checksum === "string" ? { checksum: value.checksum } : {}) };
+}
+function parseAuthority(value: unknown): LibraryActivityDetail["authority"] {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || !isRecord(value.libraryRelease) || !isRecord(value.catalogRelease)) return invalidResponse();
+  const libraryRelease = value.libraryRelease;
+  const catalogRelease = value.catalogRelease;
+  if (![libraryRelease.id, libraryRelease.version, libraryRelease.checksum, catalogRelease.id, catalogRelease.version, catalogRelease.checksum, value.activityId, value.revisionId].every((entry) => typeof entry === "string") || !Number.isInteger(value.revisionNumber)) return invalidResponse();
+  return {
+    libraryRelease: { id: String(libraryRelease.id), version: String(libraryRelease.version), checksum: String(libraryRelease.checksum) },
+    catalogRelease: { id: String(catalogRelease.id), version: String(catalogRelease.version), checksum: String(catalogRelease.checksum) },
+    activityId: String(value.activityId), revisionId: String(value.revisionId), revisionNumber: Number(value.revisionNumber),
+    ...(typeof value.releaseItemChecksum === "string" ? { releaseItemChecksum: value.releaseItemChecksum } : {})
+  };
+}
+
+function parseLibraryActivityDetail(value: unknown, expectedDomain?: string): LibraryActivityDetail {
+  if (!isRecord(value)) return invalidResponse();
+  const domain = value.domain === undefined ? expectedDomain : parseLibrarySlug(value.domain);
+  if (expectedDomain && domain !== expectedDomain) return invalidResponse();
+  if (domain !== undefined && !LIBRARY_SLUG.test(domain)) return invalidResponse();
+  if (!Array.isArray(value.instructions) || !Array.isArray(value.equipment) || !Array.isArray(value.coverage) || !Array.isArray(value.executionProfiles) || !Array.isArray(value.aliases) || !Array.isArray(value.bodyEffects)) return invalidResponse();
+  const authority = parseAuthority(value.authority);
+  const recordDefinitions = value.recordDefinitions === undefined ? [] : recordArray(value.recordDefinitions);
+  const heatMap = value.heatMap === null || value.heatMap === undefined ? null : isRecord(value.heatMap) ? value.heatMap : invalidResponse();
+  return {
+    id: stringValue(value.id),
+    ...(domain ? { domain } : {}),
+    revisionId: stringValue(value.revisionId),
+    revisionNumber: integerValue(value.revisionNumber),
+    revisionLifecycle: stringValue(value.revisionLifecycle),
+    ...(value.revisionChecksum === undefined ? {} : { revisionChecksum: nullableString(value.revisionChecksum) }),
+    slug: stringValue(value.slug),
+    name: stringValue(value.name),
+    shortDescription: nullableString(value.shortDescription),
+    instructions: value.instructions.map(parseInstruction),
+    difficulty: nullableString(value.difficulty),
+    movementPattern: nullableString(value.movementPattern),
+    mechanics: nullableString(value.mechanics),
+    forceType: nullableString(value.forceType),
+    activityType: parseActivityType(value.activityType),
+    membership: parseMembership(value.membership),
+    aliases: recordArray(value.aliases),
+    equipment: value.equipment.map(parseEquipment),
+    coverage: value.coverage.map(parseCoverage),
+    executionProfiles: value.executionProfiles.map(parseExecutionProfile),
+    bodyEffects: recordArray(value.bodyEffects),
+    prescriptionSchema: parseSchema(value.prescriptionSchema),
+    performedMetricSchema: parseSchema(value.performedMetricSchema),
+    recordDefinitions,
+    heatMap,
+    publicationPolicy: value.publicationPolicy === null || value.publicationPolicy === undefined ? null : isRecord(value.publicationPolicy) ? value.publicationPolicy as LibraryActivityDetail["publicationPolicy"] : invalidResponse(),
+    capabilityContract: value.capabilityContract === null || value.capabilityContract === undefined ? null : isRecord(value.capabilityContract) ? value.capabilityContract as LibraryActivityDetail["capabilityContract"] : invalidResponse(),
+    ...(authority ? { authority } : {})
   };
 }
 
@@ -140,19 +246,34 @@ export class HttpLibraryActivityProvider implements LibraryActivityProvider {
     if (params.cursor) query.set("cursor", params.cursor);
     const payload = parseEnvelope<unknown[]>(await this.request(`/v2/library-domains/${encodeURIComponent(params.domain)}/activities`, query), true);
     if (!Array.isArray(payload.data) || !payload.pagination) throw new LibraryProviderError("catalog_invalid_response");
-    return { data: payload.data as any, pagination: payload.pagination, meta: providerMeta(payload.meta) };
+    return { data: payload.data.map((item) => parseLibraryActivityDetail(item, params.domain)), pagination: payload.pagination, meta: providerMeta(payload.meta) };
+  }
+  async getActivityByIdentifier(identifier: string, options: LibraryRequestOptions = {}) {
+    const payload = parseEnvelope<unknown>(await this.request(`/v2/library-activities/${encodeURIComponent(identifier)}`, localeQuery(options)));
+    const detail = parseLibraryActivityDetail(payload.data);
+    if (!detail.domain) throw new LibraryProviderError("catalog_invalid_response");
+    return { data: detail, meta: providerMeta(payload.meta) };
   }
   async getActivity(domain: string, identifier: string, options: LibraryRequestOptions = {}) {
-    const payload = parseEnvelope<LibraryActivityDetail>(await this.request(`/v2/library-domains/${encodeURIComponent(domain)}/activities/${encodeURIComponent(identifier)}`, localeQuery(options)));
-    if (!isRecord(payload.data)) throw new LibraryProviderError("catalog_invalid_response");
-    return { data: payload.data, meta: providerMeta(payload.meta) };
+    const payload = parseEnvelope<unknown>(await this.request(`/v2/library-domains/${encodeURIComponent(domain)}/activities/${encodeURIComponent(identifier)}`, localeQuery(options)));
+    return { data: parseLibraryActivityDetail(payload.data, domain), meta: providerMeta(payload.meta) };
   }
   async getActivityAlternatives(domain: string, identifier: string, options: LibraryRequestOptions & { limit?: number } = {}) {
     const query = localeQuery(options);
     if (options.limit !== undefined) query.set("limit", String(options.limit));
-    const payload = parseEnvelope<LibraryAlternative[]>(await this.request(`/v2/library-domains/${encodeURIComponent(domain)}/activities/${encodeURIComponent(identifier)}/alternatives`, query));
+    const payload = parseEnvelope<unknown[]>(await this.request(`/v2/library-domains/${encodeURIComponent(domain)}/activities/${encodeURIComponent(identifier)}/alternatives`, query));
     if (!Array.isArray(payload.data)) throw new LibraryProviderError("catalog_invalid_response");
-    return { data: payload.data, meta: providerMeta(payload.meta) };
+    const data = payload.data.map((value): LibraryAlternative => {
+      if (!isRecord(value) || typeof value.relationshipType !== "string" || !isRecord(value.activity)) return invalidResponse();
+      return {
+        relationshipType: value.relationshipType,
+        rationale: nullableString(value.rationale),
+        prescriptionTransfer: value.prescriptionTransfer ?? null,
+        ...(typeof value.relationshipChecksum === "string" ? { relationshipChecksum: value.relationshipChecksum } : {}),
+        activity: parseLibraryActivityDetail(value.activity, domain)
+      };
+    });
+    return { data, meta: providerMeta(payload.meta) };
   }
 
   private async request(path: string, query: URLSearchParams): Promise<unknown> {
