@@ -6,6 +6,7 @@ import { STRENGTH_DETAIL_RECORD_KEYS } from "./performance";
 const serverSource = readFileSync(new URL("../../services/exercise-detail/performance-server.ts", import.meta.url), "utf8");
 const clientSource = readFileSync(new URL("../../services/exercise-detail/performance-client.ts", import.meta.url), "utf8");
 const viewSource = readFileSync(new URL("../../components/exercise-detail/exercise-performance-v2.tsx", import.meta.url), "utf8");
+const clientFormulaPattern = /\b(?:epley|brzycki)\b|(?:load|weight)\s*[*\/+\-]\s*(?:reps|repetitions)|1\s*\+\s*(?:reps|repetitions)\s*\/\s*30/i;
 
 describe("Exercise Performance authority", () => {
   it("uses all four current Strength record definitions", () => {
@@ -20,8 +21,9 @@ describe("Exercise Performance authority", () => {
   it("projects record events on the server and never recalculates strength formulas in the client", () => {
     expect(serverSource).toContain("canonicalizePersonalRecordRows");
     expect(serverSource).toContain("STRENGTH_DETAIL_RECORD_KEYS");
-    expect(clientSource).not.toMatch(/epley|brzycki|one.?rep.?max|weight\s*\*\s*reps/i);
-    expect(viewSource).not.toMatch(/epley|brzycki|one.?rep.?max|weight\s*\*\s*reps/i);
+    expect(clientSource).not.toMatch(clientFormulaPattern);
+    expect(viewSource).not.toMatch(clientFormulaPattern);
+    expect(viewSource).toContain('key === "estimated_one_rep_max"');
   });
 
   it("gets recent sessions from Workout History occurrence semantics with bounded stable identities", () => {
