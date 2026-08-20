@@ -45,6 +45,7 @@ const languages = {
 
 const iphoneUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1";
 const androidUserAgent = "Mozilla/5.0 (Linux; Android 16; Pixel 9 Build/BP2A.250705.008) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36";
+const compactDesktopViewport = [1024, 768];
 
 const profiles = [
   { key: "ios-en", platform: "ios", viewport: [390, 844], languageKey: "en", theme: themes[0], motion: "no-preference", userAgent: iphoneUserAgent, isMobile: true, hasTouch: true, deviceScaleFactor: 3 },
@@ -53,6 +54,7 @@ const profiles = [
   { key: "android-en-dark-reduced", platform: "android", viewport: [412, 915], languageKey: "en", theme: themes[1], motion: "reduce", userAgent: androidUserAgent, isMobile: true, hasTouch: true, deviceScaleFactor: 2.75 },
   { key: "android-de", platform: "android", viewport: [430, 932], languageKey: "de", theme: themes[0], motion: "no-preference", userAgent: androidUserAgent, isMobile: true, hasTouch: true, deviceScaleFactor: 2.75 },
   { key: "web-ar-tablet", platform: "web", viewport: [768, 1024], languageKey: "ar", theme: themes[1], motion: "reduce" },
+  { key: "web-en-compact-desktop", platform: "web", viewport: compactDesktopViewport, languageKey: "en", theme: themes[1], motion: "no-preference" },
   { key: "web-en-desktop", platform: "web", viewport: [1280, 800], languageKey: "en", theme: themes[0], motion: "reduce" },
   { key: "web-de-desktop", platform: "web", viewport: [1440, 900], languageKey: "de", theme: themes[1], motion: "no-preference" },
 ];
@@ -102,8 +104,6 @@ function catalogActivity(languageKey, id = activityId) {
     movementPattern: "squat",
     mechanics: "compound",
     forceType: "push",
-    // Semantic names stay canonical/English in the fixture on purpose; the Main
-    // view-model must present them through reviewed locale mappings.
     activityType: { slug: "strength_exercise", name: "Strength exercise" },
     membership: { kind: "owned", visibility: "default", domainPriority: 1, primaryDomain: true },
     aliases: [],
@@ -415,7 +415,6 @@ for (const profile of profiles) {
   }
 }
 
-// Explicit 200% scaling proof across all six routes, still with a Web UA/context.
 for (const route of routes) {
   const profile = { key: "web-ar-zoom200", platform: "web", viewport: [768, 1024], languageKey: "ar", theme: themes[0], motion: "reduce" };
   const scenario = `web-zoom200-${route}-ar-light-768x1024`;
@@ -440,7 +439,6 @@ for (const route of routes) {
   }
 }
 
-// Client-navigation proof: the shared [id] provider must persist and core detail must not refetch.
 for (const navCase of [
   { key: "ios-mobile", profile: profiles.find((item) => item.key === "ios-en") },
   { key: "desktop-rtl", profile: { key: "web-ar-nav", platform: "web", viewport: [1440, 900], languageKey: "ar", theme: themes[1], motion: "reduce" } },
