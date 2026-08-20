@@ -5,9 +5,12 @@ import { isUuid } from "@/lib/utils";
 import { getCustomExercise } from "@/services/workouts/exercise-library-store";
 import type { Workout } from "@/types";
 
+const detailCustomSelect = "id,name,category,target_muscle,equipment,difficulty,sets,reps,rest_seconds,instructions,notes,muscle_category,equipment_required,mechanics,force_type,experience_level,secondary_muscles,exercise_url,is_global";
+
 /**
  * Account-backed custom Detail lookup is a bounded owner+identifier query. The
  * local collection scan remains only as the offline/anonymous compatibility path.
+ * Video columns are deliberately excluded from core Detail resolution.
  */
 export async function getOwnedCustomExerciseDirect(
   userId: string | null | undefined,
@@ -15,13 +18,12 @@ export async function getOwnedCustomExerciseDirect(
   signal?: AbortSignal
 ): Promise<Workout | null> {
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-  if (!supabase || !isUuid(userId) || !isUuid(exerciseId)) {
-    return getCustomExercise(userId, exerciseId);
-  }
+  if (!supabase || !isUuid(userId)) return getCustomExercise(userId, exerciseId);
+  if (!isUuid(exerciseId)) return null;
 
   const query = supabase
     .from("user_custom_exercises")
-    .select("*")
+    .select(detailCustomSelect)
     .eq("user_id", userId)
     .eq("id", exerciseId)
     .limit(1);
@@ -29,5 +31,5 @@ export async function getOwnedCustomExerciseDirect(
     ? await query.abortSignal(signal).maybeSingle()
     : await query.maybeSingle();
   if (result.error) throw new Error(result.error.message);
-  return (result.data as Workout | null) ?? null;
+  return (result.data as unknown as Workout | null) ?? null;
 }
