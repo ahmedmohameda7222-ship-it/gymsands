@@ -43,6 +43,17 @@ export function resolveExerciseIdentity(input: {
 }
 
 /**
+ * Workout History's public navigation contract accepts one canonical exerciseId.
+ * Keep aliases for server-side history compatibility only; navigation identifies
+ * the exact Exercise Detail subject rather than widening to an unfiltered list.
+ */
+export function workoutHistoryHrefForExercise(identity: CanonicalExerciseIdentity) {
+  const params = new URLSearchParams();
+  params.set("exerciseId", identity.canonical);
+  return `/workout-history?${params.toString()}`;
+}
+
+/**
  * Frozen plan snapshots may carry provider provenance even when their source ID is
  * historical. Prefer that frozen provenance; never infer provider identity from a
  * display name.
