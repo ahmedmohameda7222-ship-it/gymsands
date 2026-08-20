@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { ExerciseMusclePreview } from "@/lib/exercise-detail/anatomy";
 import {
   ADVANCED_MUSCLE_TARGETS,
   getAdvancedMuscleTarget,
@@ -28,7 +29,7 @@ export type MuscleHeatMapProps = {
   mode: MuscleHeatMapMode;
   view: MuscleHeatMapView;
   state: MuscleHeatMapState;
-  analysis: AdvancedExposureResult | BroadCompatibilityResult | null;
+  analysis: AdvancedExposureResult | BroadCompatibilityResult | ExerciseMusclePreview | null;
   selectedTargetId?: MuscleHeatMapTargetId | null;
   onSelectedTargetChange?: (targetId: MuscleHeatMapTargetId | null) => void;
   showLegend?: boolean;
@@ -59,17 +60,40 @@ function buildPresentation(analysis: MuscleHeatMapProps["analysis"], labels: Mus
   const presentation = new Map<AdvancedMuscleTargetId, { heatLevel: AdvancedHeatLevel; interactiveTargetId: string; ariaLabel: string; interactive: boolean }>();
   const details = new Map<string, TargetDetail>();
   const visualTargets = new Map<string, ReadonlySet<AdvancedMuscleTargetId>>();
+  const exactExercisePreview = analysis?.kind === "exercise_authority_preview";
   for (const target of ADVANCED_MUSCLE_TARGETS) {
     const name = labels.targetName(target.nameKey);
     presentation.set(target.id, {
       heatLevel: "none",
       interactiveTargetId: target.id,
       ariaLabel: `${name}, ${labels.heat.none}`,
-      interactive: analysis?.kind === "advanced"
+      interactive: analysis?.kind === "advanced" || exactExercisePreview
     });
     visualTargets.set(target.id, new Set([target.id]));
   }
   if (!analysis) return { presentation, details, visualTargets };
+
+  if (analysis.kind === "exercise_authority_preview") {
+    for (const targetResult of analysis.targets) {
+      const target = getAdvancedMuscleTarget(targetResult.targetId);
+      const name = labels.targetName(target.nameKey);
+      const status = labels.previewRole[targetResult.role];
+      presentation.set(target.id, {
+        heatLevel: targetResult.heatLevel,
+        interactiveTargetId: target.id,
+        ariaLabel: `${name}, ${status}`,
+        interactive: true
+      });
+      details.set(target.id, {
+        id: target.id,
+        name,
+        subtitle: labels.targetSubtitle(target.subtitleKey),
+        status,
+        compatibilityDisclosure: null
+      });
+    }
+    return { presentation, details, visualTargets };
+  }
 
   const advancedHeat = new Map<AdvancedMuscleTargetId, AdvancedHeatLevel>();
   if (analysis.kind === "advanced") {
@@ -192,20 +216,13 @@ export function MuscleHeatMap({
   const alignmentDebugEnabled = process.env.NODE_ENV !== "production" && alignmentDebug;
   const legendVisible = showLegend ?? mode !== "compact";
   const safeData = useMemo(() => {
-    try {
-      return buildPresentation(renderedAnalysis, labels);
-    } catch {
-      return buildPresentation(null, labels);
-    }
+    try { return buildPresentation(renderedAnalysis, labels); }
+    catch { return buildPresentation(null, labels); }
   }, [labels, renderedAnalysis]);
 
   const activeTargetId = renderedAnalysis ? lockedTargetId ?? hoveredTargetId : null;
-  const selectedVisualTargets = activeTargetId
-    ? safeData.visualTargets.get(activeTargetId) ?? new Set<AdvancedMuscleTargetId>()
-    : new Set<AdvancedMuscleTargetId>();
-  const lockedVisualTargets = renderedAnalysis && lockedTargetId
-    ? safeData.visualTargets.get(lockedTargetId) ?? new Set<AdvancedMuscleTargetId>()
-    : new Set<AdvancedMuscleTargetId>();
+  const selectedVisualTargets = activeTargetId ? safeData.visualTargets.get(activeTargetId) ?? new Set<AdvancedMuscleTargetId>() : new Set<AdvancedMuscleTargetId>();
+  const lockedVisualTargets = renderedAnalysis && lockedTargetId ? safeData.visualTargets.get(lockedTargetId) ?? new Set<AdvancedMuscleTargetId>() : new Set<AdvancedMuscleTargetId>();
   const detail = activeTargetId ? safeData.details.get(activeTargetId) ?? null : null;
 
   const clearSelection = useCallback(() => {
@@ -224,25 +241,16 @@ export function MuscleHeatMap({
 
   const hoverTarget = useCallback((targetId: string | null) => {
     if (!interactive || lockedTargetId) return;
-    if (targetId === null || isAdvancedMuscleTargetId(targetId) || isBroadCompatibilityTargetId(targetId)) {
-      setHoveredTargetId(targetId);
-    }
+    if (targetId === null || isAdvancedMuscleTargetId(targetId) || isBroadCompatibilityTargetId(targetId)) setHoveredTargetId(targetId);
   }, [interactive, lockedTargetId]);
 
   useEffect(() => {
     if (!interactive) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) clearSelection();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") clearSelection();
-    };
+    const onPointerDown = (event: PointerEvent) => { if (rootRef.current && !rootRef.current.contains(event.target as Node)) clearSelection(); };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") clearSelection(); };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
+    return () => { document.removeEventListener("pointerdown", onPointerDown); document.removeEventListener("keydown", onKeyDown); };
   }, [clearSelection, interactive]);
 
   const stateMessage = state === "loading" ? labels.loading
@@ -251,91 +259,16 @@ export function MuscleHeatMap({
         : state === "unavailable" ? labels.unavailable
           : state === "error" ? labels.error
             : null;
-  const bodyProps = {
-    interactive,
-    presentation: safeData.presentation,
-    selectedVisualTargets,
-    lockedVisualTargets,
-    alignmentDebug: alignmentDebugEnabled,
-    onHoverTarget: hoverTarget,
-    onActivateTarget: activateTarget
-  };
+  const bodyProps = { interactive, presentation: safeData.presentation, selectedVisualTargets, lockedVisualTargets, alignmentDebug: alignmentDebugEnabled, onHoverTarget: hoverTarget, onActivateTarget: activateTarget };
 
-  return (
-    <div
-      ref={rootRef}
-      className={cn(mode === "compact" ? "space-y-0" : "space-y-4", className)}
-      data-muscle-heat-map-mode={mode}
-      data-state={state}
-    >
-      <div
-        className={cn(
-          "grid",
-          mode === "compact" ? "gap-1" : "gap-4",
-          view === "both" && (mode === "compact" ? "grid-cols-2" : "sm:grid-cols-2")
-        )}
-        aria-busy={state === "loading"}
-      >
-        {view === "front" || view === "both" ? (
-          <div>
-            {showViewLabels ? (
-              <p className="mb-2 text-center text-sm font-medium text-muted-foreground">
-                {labels.frontView}
-              </p>
-            ) : null}
-            <FrontMuscleBody {...bodyProps} viewLabel={labels.frontView} />
-          </div>
-        ) : null}
-        {view === "back" || view === "both" ? (
-          <div>
-            {showViewLabels ? (
-              <p className="mb-2 text-center text-sm font-medium text-muted-foreground">
-                {labels.backView}
-              </p>
-            ) : null}
-            <BackMuscleBody {...bodyProps} viewLabel={labels.backView} />
-          </div>
-        ) : null}
-      </div>
-
-      {stateMessage && showStateMessage ? (
-        <div className={cn(
-          "rounded-2xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground",
-          state === "error" && "border-destructive/40 text-destructive"
-        )} role={state === "error" ? "alert" : "status"}>
-          <p>{stateMessage}</p>
-          {statusDetails ? <div className="mt-2">{statusDetails}</div> : null}
-        </div>
-      ) : null}
-
-      {mode !== "compact" ? (
-        <MuscleDetailsPanel
-          name={detail?.name ?? null}
-          subtitle={detail?.subtitle ?? null}
-          status={detail?.status ?? null}
-          compatibilityDisclosure={detail?.compatibilityDisclosure ?? null}
-          onClose={clearSelection}
-          labels={labels}
-        />
-      ) : null}
-
-      {disclosure && mode !== "compact" ? <div className="text-xs leading-relaxed text-muted-foreground">{disclosure}</div> : null}
-
-      {legendVisible ? (
-        <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground" aria-label="Muscle heat legend">
-          {(["none", "light", "moderate", "high"] as const).map((level) => (
-            <li key={level} className="flex items-center gap-2">
-              <span className={cn(
-                "size-2.5 rounded-full border border-border",
-                level === "light" && "bg-sky-400",
-                level === "moderate" && "bg-teal-500",
-                level === "high" && "bg-amber-500"
-              )} aria-hidden="true" />
-              {labels.heat[level]}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+  return <div ref={rootRef} className={cn(mode === "compact" ? "space-y-0" : "space-y-4", className)} data-muscle-heat-map-mode={mode} data-state={state}>
+    <div className={cn("grid", mode === "compact" ? "gap-1" : "gap-4", view === "both" && (mode === "compact" ? "grid-cols-2" : "sm:grid-cols-2"))} aria-busy={state === "loading"}>
+      {view === "front" || view === "both" ? <div>{showViewLabels ? <p className="mb-2 text-center text-sm font-medium text-muted-foreground">{labels.frontView}</p> : null}<FrontMuscleBody {...bodyProps} viewLabel={labels.frontView} /></div> : null}
+      {view === "back" || view === "both" ? <div>{showViewLabels ? <p className="mb-2 text-center text-sm font-medium text-muted-foreground">{labels.backView}</p> : null}<BackMuscleBody {...bodyProps} viewLabel={labels.backView} /></div> : null}
     </div>
-  );
+    {stateMessage && showStateMessage ? <div className={cn("rounded-2xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground", state === "error" && "border-destructive/40 text-destructive")} role={state === "error" ? "alert" : "status"}><p>{stateMessage}</p>{statusDetails ? <div className="mt-2">{statusDetails}</div> : null}</div> : null}
+    {mode !== "compact" ? <MuscleDetailsPanel name={detail?.name ?? null} subtitle={detail?.subtitle ?? null} status={detail?.status ?? null} compatibilityDisclosure={detail?.compatibilityDisclosure ?? null} onClose={clearSelection} labels={labels} /> : null}
+    {disclosure && mode !== "compact" ? <div className="text-xs leading-relaxed text-muted-foreground">{disclosure}</div> : null}
+    {legendVisible ? <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground" aria-label="Muscle heat legend">{(["none", "light", "moderate", "high"] as const).map((level) => <li key={level} className="flex items-center gap-2"><span className={cn("size-2.5 rounded-full border border-border", level === "light" && "bg-sky-400", level === "moderate" && "bg-teal-500", level === "high" && "bg-amber-500")} aria-hidden="true" />{labels.heat[level]}</li>)}</ul> : null}
+  </div>;
 }
