@@ -6,6 +6,7 @@ import {
   globalExerciseIdentity,
   identityCandidates,
   resolveFrozenPlanExerciseIdentity,
+  workoutHistoryHrefForExercise,
 } from "./identity";
 
 describe("canonical Exercise Detail identity", () => {
@@ -29,5 +30,13 @@ describe("canonical Exercise Detail identity", () => {
       .toBe("provider:plaivra_activity_catalog:activity-2");
     expect(resolveFrozenPlanExerciseIdentity({ activityId: "activity-2", catalogSource: "custom", isGlobal: false })?.canonical)
       .toBe("custom:activity-2");
+  });
+
+  it("navigates All Sessions with the canonical Workout History exercise filter", () => {
+    const identity = catalogProviderIdentity("activity-3");
+    expect(workoutHistoryHrefForExercise(identity)).toBe(
+      "/workout-history?exerciseId=provider%3Aplaivra_activity_catalog%3Aactivity-3",
+    );
+    expect(workoutHistoryHrefForExercise(identity)).not.toBe("/workout-history");
   });
 });
