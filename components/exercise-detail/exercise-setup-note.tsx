@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import type { CanonicalExerciseIdentity } from "@/lib/exercise-detail/identity";
 import { drainLatestSetupNoteValue } from "@/lib/exercise-detail/setup-note-save-queue";
 import { useExerciseDetailTranslation } from "@/lib/i18n/exercise-detail";
+import { cn } from "@/lib/utils";
 import { EXERCISE_SETUP_NOTE_MAX_LENGTH, getExerciseSetupNote, persistExerciseSetupNote } from "@/services/exercise-detail/setup-note";
 
 type SaveState = "idle" | "saving" | "saved" | "failed";
@@ -64,13 +64,13 @@ export function ExerciseSetupNoteEditor({ userId, identity }: { userId: string; 
   }
 
   return <div className="space-y-3">
-    <Textarea
+    <textarea
       value={draft}
       onChange={(event) => change(event.target.value)}
       placeholder={ed("setupNotePlaceholder")}
       disabled={!loaded}
       maxLength={EXERCISE_SETUP_NOTE_MAX_LENGTH}
-      className="min-h-28 resize-y"
+      className={cn("min-h-28 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-none outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50")}
       aria-describedby="exercise-setup-note-status exercise-setup-note-hint"
     />
     <div className="flex min-h-6 items-center justify-between gap-3 text-sm">
