@@ -8,6 +8,7 @@ import { useExerciseDetail } from "@/components/exercise-detail/exercise-detail-
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toCatalogLocale } from "@/lib/activity-catalog/catalog-locale";
+import type { LibraryAlternative } from "@/lib/activity-catalog/library-types";
 import {
   EXERCISE_ALTERNATIVE_REASONS,
   isAlternativeReasonSupportedForRelationships,
@@ -15,8 +16,12 @@ import {
   type ExerciseAlternativeReasonV2
 } from "@/lib/exercise-detail/alternatives";
 import { useExerciseDetailTranslation } from "@/lib/i18n/exercise-detail";
+import {
+  CURATED_EXERCISE_DISPLAY_VOCABULARY,
+  formatExerciseDisplayValue,
+  resolveExerciseDisplayLanguage,
+} from "@/lib/train/exercise-display";
 import { loadExerciseAlternatives } from "@/services/exercise-detail/client";
-import type { LibraryAlternative } from "@/lib/activity-catalog/library-types";
 
 function reasonLabel(reason: ExerciseAlternativeReasonV2, ed: ReturnType<typeof useExerciseDetailTranslation>["ed"]) {
   if (reason === "machine_taken") return ed("reasonMachineTaken");
@@ -27,6 +32,35 @@ function reasonLabel(reason: ExerciseAlternativeReasonV2, ed: ReturnType<typeof 
   if (reason === "no_spotter") return ed("reasonNoSpotter");
   if (reason === "technique_confidence") return ed("reasonTechniqueConfidence");
   return ed("reasonVariation");
+}
+
+function canonicalDisplayKey(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .trim()
+    .toLocaleLowerCase("en")
+    .replace(/[^\p{L}\p{N}]+/gu, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function alternativeSupportingText(alternative: LibraryAlternative, locale: string) {
+  const language = resolveExerciseDisplayLanguage(locale);
+  const equipmentVocabulary = new Set<string>(CURATED_EXERCISE_DISPLAY_VOCABULARY.equipment);
+  const difficultyVocabulary = new Set<string>(CURATED_EXERCISE_DISPLAY_VOCABULARY.difficulty);
+  const equipment = alternative.activity.equipment.flatMap((item) => {
+    const raw = item.slug ?? item.name;
+    if (!raw) return [];
+    const key = canonicalDisplayKey(raw);
+    if (language !== "en" && !equipmentVocabulary.has(key)) return [];
+    return [formatExerciseDisplayValue(key, language, "equipment")];
+  });
+  const difficultyRaw = alternative.activity.difficulty;
+  const difficultyKey = difficultyRaw ? canonicalDisplayKey(difficultyRaw) : null;
+  const difficulty = difficultyKey && (language === "en" || difficultyVocabulary.has(difficultyKey))
+    ? formatExerciseDisplayValue(difficultyKey, language, "difficulty")
+    : null;
+  return [...equipment, difficulty].filter(Boolean).join(" · ");
 }
 
 export default function ExerciseAlternativesPage() {
@@ -72,7 +106,10 @@ export default function ExerciseAlternativesPage() {
           <DetailGroupTitle id="alternatives-results">{ed("alternatives")}</DetailGroupTitle>
           {loadState === "failed" ? <Button type="button" variant="ghost" size="sm" onClick={() => setRetryGeneration((value) => value + 1)}>{ed("retry")}</Button> : null}
         </div>
-        {loadState === "loading" || loadState === "idle" ? <div className="mt-4 space-y-3" role="status" aria-label={ed("loading")}><div className="h-16 animate-pulse rounded-xl bg-muted" /><div className="h-16 animate-pulse rounded-xl bg-muted" /></div> : loadState === "failed" ? <p className="mt-4 text-sm text-muted-foreground">{ed("alternativesUnavailable")}</p> : !supported ? <p className="mt-4 text-sm text-muted-foreground" role="status">{ed("unsupportedReason")}</p> : ranked.length ? <div className="mt-3 divide-y">{ranked.map((item) => <article key={`${item.relationshipType}-${item.activity.id}`} className="flex min-h-20 items-center justify-between gap-4 py-4 first:pt-1 last:pb-0"><div className="min-w-0"><h3 className="font-medium">{item.activity.name}</h3><p className="mt-1 text-sm text-muted-foreground">{[item.activity.equipment.map((equipment) => equipment.name ?? equipment.slug).filter(Boolean).join(", "), item.activity.difficulty].filter(Boolean).join(" · ")}</p></div><Button asChild variant="outline" size="sm" className="min-h-11 shrink-0"><Link href={`/workouts/${encodeURIComponent(item.activity.id)}`}>{ed("view")}</Link></Button></article>)}</div> : <p className="mt-4 text-sm text-muted-foreground">{ed("unsupportedReason")}</p>}
+        {loadState === "loading" || loadState === "idle" ? <div className="mt-4 space-y-3" role="status" aria-label={ed("loading")}><div className="h-16 animate-pulse rounded-xl bg-muted" /><div className="h-16 animate-pulse rounded-xl bg-muted" /></div> : loadState === "failed" ? <p className="mt-4 text-sm text-muted-foreground">{ed("alternativesUnavailable")}</p> : !supported ? <p className="mt-4 text-sm text-muted-foreground" role="status">{ed("unsupportedReason")}</p> : ranked.length ? <div className="mt-3 divide-y">{ranked.map((item) => {
+          const supporting = alternativeSupportingText(item, language);
+          return <article key={item.identity} className="flex min-h-20 items-center justify-between gap-4 py-4 first:pt-1 last:pb-0"><div className="min-w-0"><h3 className="font-medium">{item.activity.name}</h3>{supporting ? <p className="mt-1 text-sm text-muted-foreground">{supporting}</p> : null}</div><Button asChild variant="outline" size="sm" className="min-h-11 shrink-0"><Link href={`/workouts/${encodeURIComponent(item.activity.id)}`}>{ed("view")}</Link></Button></article>;
+        })}</div> : <p className="mt-4 text-sm text-muted-foreground">{ed("unsupportedReason")}</p>}
       </DetailSurface>
     </div> : null}
   </ExerciseDetailPageFrame>;
