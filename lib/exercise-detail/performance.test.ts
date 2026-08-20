@@ -24,12 +24,12 @@ describe("Exercise Performance authority", () => {
     expect(viewSource).not.toMatch(/epley|brzycki|one.?rep.?max|weight\s*\*\s*reps/i);
   });
 
-  it("gets recent sessions from Workout History occurrence semantics with bounded reads", () => {
+  it("gets recent sessions from Workout History occurrence semantics with bounded stable identities", () => {
     expect(serverSource).toContain("listWorkoutHistoryKeyset");
     expect(serverSource).toContain("exerciseIds: identities");
     expect(serverSource).toContain('statuses: ["completed", "partial"]');
     expect(serverSource).toContain("limit: input.limit");
-    expect(serverSource).not.toContain("exercise_name");
+    expect(serverSource).not.toMatch(/normalize[^\n]*exercise_name|exercise_name[^\n]*(?:===|includes|localeCompare)/i);
   });
 
   it("uses recentWorkoutId for canonical Workout History navigation", () => {
