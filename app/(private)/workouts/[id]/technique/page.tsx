@@ -14,7 +14,7 @@ export default function ExerciseTechniquePage() {
   const { state, resolved, userId } = useExerciseDetail();
   const { ed } = useExerciseDetailTranslation();
   const exercise = state === "ready" ? resolved?.core ?? null : null;
-  if (!exercise) return <ExerciseDetailPageFrame child="technique" title={ed("techniqueTitle")} />;
+  if (!exercise) return <ExerciseDetailPageFrame child="technique" title={ed("techniqueTitle")}>{null}</ExerciseDetailPageFrame>;
   const form = exercise.formAuthority;
   const hasForm = form.setup.length || form.techniqueCues.length || form.commonMistakes.length || form.safety.length;
   return <ExerciseDetailPageFrame child="technique" title={ed("techniqueTitle")}>
