@@ -9,7 +9,8 @@ export const SelectValue = SelectPrimitive.Value;
 
 export function SelectTrigger({
   className,
-  children
+  children,
+  ...props
 }: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>) {
   return (
     <SelectPrimitive.Trigger
@@ -17,6 +18,7 @@ export function SelectTrigger({
         "flex h-11 w-full items-center justify-between rounded-[14px] border border-border bg-card px-3 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring",
         className
       )}
+      {...props}
     >
       {children}
       <SelectPrimitive.Icon asChild>
