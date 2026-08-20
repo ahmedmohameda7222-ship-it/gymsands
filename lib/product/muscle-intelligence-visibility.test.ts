@@ -38,20 +38,25 @@ describe("Muscle Intelligence visibility correction", () => {
     expect(panel).toContain("descriptionOverride");
   });
 
-  it("adds one focused mapped preview to Exercise Details without blocking the page", () => {
+  it("adds one focused authoritative preview to Exercise Detail without blocking the page", () => {
     const layout = text("app/(private)/workouts/[id]/layout.tsx");
     const detail = text("app/(private)/workouts/[id]/page.tsx");
     const preview = text("components/exercise-detail/exercise-anatomy.tsx");
+    const authority = text("lib/exercise-detail/anatomy.ts");
 
     expect(layout).not.toMatch(
       /ExerciseDetailMusclePreview|getWorkout|useParams/,
     );
     expect(detail).toContain(
-      "exercise.target.anatomyAvailable ? exerciseAnatomyAnalysis(exercise) : null",
+      "<ExerciseAnatomyVisualization exercise={resolved.core} compact />",
     );
-    expect(detail).toContain("<ExerciseAnatomy");
+    expect(detail).not.toContain("exerciseAnatomyAnalysis(");
+    expect(preview).toContain("projectAuthoritativeExercisePreview(exercise)");
+    expect(preview).toContain('exercise.identity.source !== "catalog_legacy"');
     expect(preview).toContain("MuscleHeatMap");
-    expect(preview).toContain("return null");
+    expect(preview).toContain("if (!analysis) return null");
+    expect(authority).toContain("atlasTargetId");
+    expect(authority).toContain("KNOWN_V2_ATLAS_TARGETS");
     expect(preview).not.toMatch(
       /insert|update|publish|snapshot|compatibility/i,
     );
