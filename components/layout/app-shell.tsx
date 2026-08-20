@@ -35,6 +35,7 @@ import { MobileFloatingNav } from "@/components/layout/mobile-floating-nav";
 import { getTrainNavigationTarget } from "@/lib/navigation/mobile-nav";
 import { rememberPreviousActiveWorkoutRoute } from "@/lib/active-workout";
 import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
+import { isCanonicalExerciseDetailRoute } from "@/lib/exercise-detail/presentation";
 
 type NavItem = {
   href: string;
@@ -101,6 +102,14 @@ const appShellBottomLayout = {
   "--desktop-train-sticky-footer-bottom": "calc(var(--desktop-active-workout-controller-bottom) + var(--active-workout-controller-height, 0px) + 0.5rem)"
 } as CSSProperties;
 
+const focusedDetailBottomLayout = {
+  ...appShellBottomLayout,
+  "--active-workout-controller-bottom": "calc(env(safe-area-inset-bottom) + 0.75rem)",
+  "--app-bottom-overlay-stack": "calc(var(--active-workout-controller-bottom) + var(--active-workout-controller-height, 0px))",
+  "--app-bottom-reserved-space": "calc(var(--app-bottom-overlay-stack) + 1.5rem)",
+  "--train-sticky-footer-bottom": "calc(var(--app-bottom-overlay-stack) + 0.5rem)"
+} as CSSProperties;
+
 function isActivePath(pathname: string, item: NavItem) {
   const trainTarget = getTrainNavigationTarget(pathname);
   if (item.href === "/my-workout/plans") return trainTarget === "train";
@@ -109,6 +118,11 @@ function isActivePath(pathname: string, item: NavItem) {
   const paths = item.activePaths ?? [item.href];
   if (item.exact) return paths.some((path) => pathname === path);
   return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+function detailSubtreeAnimationKey(pathname: string) {
+  if (!isCanonicalExerciseDetailRoute(pathname)) return pathname;
+  return pathname.split("/").slice(0, 3).join("/");
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -161,10 +175,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
+  const focusedDetail = isCanonicalExerciseDetailRoute(pathname);
+
   return (
-    <div className="premium-page-bg min-h-screen text-foreground" data-app-shell style={appShellBottomLayout}>
+    <div className="premium-page-bg min-h-screen text-foreground" data-app-shell data-focused-exercise-detail={focusedDetail ? "true" : undefined} style={focusedDetail ? focusedDetailBottomLayout : appShellBottomLayout}>
       {isOffline ? (
-        <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72" role="status">
+        <div className={cn("fixed inset-x-3 z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72", focusedDetail ? "top-[calc(env(safe-area-inset-top)+0.75rem)] lg:top-[calc(env(safe-area-inset-top)+4.75rem)]" : "top-[calc(env(safe-area-inset-top)+4.75rem)]")} role="status">
           <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> {activeWorkoutT("offline.banner")}</p>
         </div>
       ) : null}
@@ -202,7 +218,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </aside>
-      <header className="glass-shell sticky top-0 z-30 border-x-0 border-t-0 lg:ml-72">
+      <header className={cn("glass-shell sticky top-0 z-30 border-x-0 border-t-0 lg:ml-72", focusedDetail && "hidden lg:block")}>
         <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:h-[72px] lg:px-8">
           <div className="flex min-w-0 items-center gap-3 lg:hidden">
             <MobileMenu pathname={pathname} isAdmin={isAdmin} signOut={signOut} />
@@ -216,17 +232,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <main id="main-content" className="pb-[var(--app-bottom-reserved-space)] lg:ml-72 lg:pb-[var(--desktop-app-bottom-reserved-space)]">
         <motion.div
-          key={pathname}
+          key={detailSubtreeAnimationKey(pathname)}
           initial={settings.reduceAnimations ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={settings.reduceAnimations ? { duration: 0 } : { duration: 0.22, ease: "easeOut" }}
-          className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8"
+          className={cn("mx-auto w-full max-w-7xl", focusedDetail ? "px-3 py-0 sm:px-5 sm:py-0 lg:px-8 lg:py-7" : "px-4 py-5 sm:px-6 sm:py-7 lg:px-8")}
         >
           {children}
         </motion.div>
       </main>
       <ActiveWorkoutIndicator />
-      <MobileFloatingNav pathname={pathname} />
+      {!focusedDetail ? <MobileFloatingNav pathname={pathname} /> : null}
     </div>
   );
 }
