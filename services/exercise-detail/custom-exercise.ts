@@ -33,3 +33,17 @@ export async function getOwnedCustomExerciseDirect(
   if (result.error) throw new Error(result.error.message);
   return (result.data as unknown as Workout | null) ?? null;
 }
+
+export async function getOwnedCustomExerciseVideoDirect(userId: string, exerciseId: string): Promise<string | null> {
+  if (!supabase || !isUuid(userId) || !isUuid(exerciseId)) return null;
+  const { data, error } = await supabase
+    .from("user_custom_exercises")
+    .select("custom_video_url,video_url")
+    .eq("user_id", userId)
+    .eq("id", exerciseId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const row = data as { custom_video_url?: string | null; video_url?: string | null } | null;
+  return row?.custom_video_url ?? row?.video_url ?? null;
+}
