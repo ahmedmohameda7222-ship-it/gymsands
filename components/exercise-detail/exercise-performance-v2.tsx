@@ -25,8 +25,8 @@ function formatBest(best: ExercisePerformanceBest, locale: string) {
   const value = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(best.event.value);
   const unit = best.event.definition.canonicalUnit;
   if (unit === "kg") return `${value} kg`;
-  if (unit === "repetitions") return `${value} reps`;
-  if (unit === "kg_repetitions") return `${value} kg·reps`;
+  if (unit === "repetitions") return value;
+  if (unit === "kg_repetitions") return `${value} kg·rep`;
   if (unit === "seconds") return `${value} s`;
   if (unit === "meters") return `${value} m`;
   return value;
@@ -44,7 +44,7 @@ function usePerformance(identity: CanonicalExerciseIdentity, limit: number) {
       setData(next); setState("ready");
     }).catch(() => { if (!controller.signal.aborted) setState("failed"); });
     return () => controller.abort();
-  }, [identity.canonical, limit, generation]);
+  }, [identity, limit, generation]);
   return { data, state, retry: () => setGeneration((value) => value + 1) };
 }
 
@@ -67,7 +67,7 @@ export function ExercisePerformancePageContent({ identity }: { identity: Canonic
   const last = data?.recentSessions[0] ?? null;
   return <div className="space-y-5">
     <DetailSurface ariaLabelledby="performance-last-workout"><DetailGroupTitle id="performance-last-workout">{ed("lastWorkout")}</DetailGroupTitle>{last ? <div className="mt-4 space-y-2"><p className="font-medium">{formatDate(last.effectiveAt, locale)}</p><p className="text-sm text-muted-foreground">{last.title}{last.completedSetCount !== null ? ` · ${new Intl.NumberFormat(locale).format(last.completedSetCount)} ${ed("sets")}` : ""}</p>{data?.recentWorkoutId ? <Button asChild variant="outline" className="mt-2 min-h-11"><Link href={`/workout-history/${encodeURIComponent(data.recentWorkoutId)}`}>{ed("viewSession")}</Link></Button> : null}</div> : <p className="mt-3 text-sm text-muted-foreground">{ed("noPerformance")}</p>}</DetailSurface>
-    <DetailSurface ariaLabelledby="performance-bests"><DetailGroupTitle id="performance-bests">{ed("personalBests")}</DetailGroupTitle>{bests.length ? <dl className="mt-4 divide-y">{bests.map((best) => <div key={best.event.lineageId} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"><dt><span className="font-medium">{labelForBest(best.key, ed)}</span>{best.event.context.length ? <span className="mt-1 block text-xs text-muted-foreground">{best.event.context.map((item) => `${item.key.replaceAll("_", " ")}: ${item.value}${item.unit === "kg" ? " kg" : ""}`).join(" · ")}</span> : null}</dt><dd className="text-xl font-semibold tabular-nums">{formatBest(best, locale)}</dd></div>)}</dl> : <p className="mt-3 text-sm text-muted-foreground">{ed("noPerformance")}</p>}</DetailSurface>
+    <DetailSurface ariaLabelledby="performance-bests"><DetailGroupTitle id="performance-bests">{ed("personalBests")}</DetailGroupTitle>{bests.length ? <dl className="mt-4 divide-y">{bests.map((best) => <div key={best.event.lineageId} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"><dt className="font-medium">{labelForBest(best.key, ed)}</dt><dd className="text-xl font-semibold tabular-nums">{formatBest(best, locale)}</dd></div>)}</dl> : <p className="mt-3 text-sm text-muted-foreground">{ed("noPerformance")}</p>}</DetailSurface>
     <DetailSurface ariaLabelledby="performance-recent-sessions"><DetailGroupTitle id="performance-recent-sessions">{ed("recentSessions")}</DetailGroupTitle>{data?.recentSessions.length ? <div className="mt-3 divide-y">{data.recentSessions.map((session) => <Link key={session.activityId} href={`/workout-history/${encodeURIComponent(session.canonicalSessionId ?? session.activityId)}`} className="flex min-h-14 items-center justify-between gap-4 py-3 focus-visible:ring-2 focus-visible:ring-ring"><span><span className="font-medium">{session.title}</span><span className="mt-0.5 block text-sm text-muted-foreground">{formatDate(session.effectiveAt, locale)}</span></span><span aria-hidden="true">›</span></Link>)}</div> : <p className="mt-3 text-sm text-muted-foreground">{ed("noPerformance")}</p>}<div className="mt-3 grid gap-1 border-t pt-2"><DetailRowLink href="/workout-history" title={ed("allSessions")} /><DetailRowLink href="/personal-records" title={ed("personalRecords")} /></div></DetailSurface>
   </div>;
 }
