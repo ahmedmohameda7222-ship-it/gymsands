@@ -59,6 +59,7 @@ export function ExerciseDetailProvider({ children }: { children: ReactNode }) {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const { toast } = useToast();
   const { language, locale, ed } = useExerciseDetailTranslation();
   const catalogLocale = toCatalogLocale(language);
@@ -80,7 +81,7 @@ export function ExerciseDetailProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     setState("loading");
     setResolved(null);
-    void resolveExerciseDetail(params.id, user?.id, locale, catalogLocale, controller.signal)
+    void resolveExerciseDetail(params.id, userId ?? undefined, locale, catalogLocale, controller.signal)
       .then((next) => {
         if (controller.signal.aborted || generation !== coreGeneration.current) return;
         setResolved(next);
@@ -91,22 +92,22 @@ export function ExerciseDetailProvider({ children }: { children: ReactNode }) {
         setState(error instanceof CatalogClientError && error.status === 404 ? "not_found" : "failed");
       });
     return () => controller.abort();
-  }, [catalogLocale, locale, params.id, retryGeneration, user?.id]);
+  }, [catalogLocale, locale, params.id, retryGeneration, userId]);
 
   useEffect(() => {
-    if (!user?.id) { setFavorites([]); return; }
+    if (!userId) { setFavorites([]); return; }
     let current = true;
-    void getFavoriteExerciseIdsWithStatus(user.id)
+    void getFavoriteExerciseIdsWithStatus(userId)
       .then((result) => { if (current) setFavorites(result.data); })
       .catch(() => { if (current) setFavorites([]); });
     return () => { current = false; };
-  }, [user?.id]);
+  }, [userId]);
 
   useEffect(() => {
     setPlanContext(null);
-    if (activeReturnTo || !user?.id || !requestedPlanId || !requestedPlanExerciseId || !resolved) return;
+    if (activeReturnTo || !userId || !requestedPlanId || !requestedPlanExerciseId || !resolved) return;
     let current = true;
-    void getWorkoutPlanById(user.id, requestedPlanId).then((plan) => {
+    void getWorkoutPlanById(userId, requestedPlanId).then((plan) => {
       if (!current || !plan) return;
       for (const day of plan.days) {
         const exercise = day.exercises.find((candidate) => candidate.id === requestedPlanExerciseId);
@@ -129,25 +130,25 @@ export function ExerciseDetailProvider({ children }: { children: ReactNode }) {
       }
     }).catch(() => undefined);
     return () => { current = false; };
-  }, [activeReturnTo, requestedPlanExerciseId, requestedPlanId, resolved, user?.id]);
+  }, [activeReturnTo, requestedPlanExerciseId, requestedPlanId, resolved, userId]);
 
   const favorite = Boolean(resolved && favorites.includes(resolved.core.identity.activityId));
   const toggleFavorite = useCallback(async () => {
-    if (!resolved || !user?.id || favoritePending) return;
+    if (!resolved || !userId || favoritePending) return;
     const id = resolved.core.identity.activityId;
     const previous = favorites;
     const next = favorite ? previous.filter((value) => value !== id) : [...previous, id];
     setFavoritePending(true);
     setFavorites(next);
     try {
-      setFavorites(await setFavoriteExercise(user.id, id, !favorite));
+      setFavorites(await setFavoriteExercise(userId, id, !favorite));
     } catch {
       setFavorites(previous);
       toast({ title: ed("favoriteFailed") });
     } finally {
       setFavoritePending(false);
     }
-  }, [ed, favorite, favoritePending, favorites, resolved, toast, user?.id]);
+  }, [ed, favorite, favoritePending, favorites, resolved, toast, userId]);
 
   const childHref = useCallback((child?: "anatomy" | "technique" | "performance" | "alternatives" | "details") => {
     const base = `/workouts/${encodeURIComponent(params.id)}${child ? `/${child}` : ""}`;
@@ -166,8 +167,8 @@ export function ExerciseDetailProvider({ children }: { children: ReactNode }) {
     childHref,
     backHref,
     planContext,
-    userId: user?.id ?? null
-  }), [backHref, childHref, favorite, favoritePending, navigationQuery, planContext, resolved, state, toggleFavorite, user?.id]);
+    userId
+  }), [backHref, childHref, favorite, favoritePending, navigationQuery, planContext, resolved, state, toggleFavorite, userId]);
 
   return <ExerciseDetailContext.Provider value={value}>{children}</ExerciseDetailContext.Provider>;
 }
