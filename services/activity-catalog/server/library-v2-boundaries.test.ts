@@ -27,6 +27,37 @@ function response(data: unknown, status = 200, pagination?: unknown) {
   });
 }
 
+function semanticActivity(index: number, domain = "strength") {
+  return {
+    id: `activity-${index}`,
+    domain,
+    revisionId: `revision-${index}`,
+    revisionNumber: 1,
+    revisionLifecycle: "published",
+    slug: `activity_${index}`,
+    name: `Activity ${index}`,
+    shortDescription: null,
+    instructions: [],
+    difficulty: null,
+    movementPattern: null,
+    mechanics: null,
+    forceType: null,
+    activityType: { slug: "strength", name: "Strength" },
+    membership: { kind: "owned", visibility: "default", domainPriority: 1, primaryDomain: true },
+    aliases: [],
+    equipment: [],
+    coverage: [],
+    executionProfiles: [],
+    bodyEffects: [],
+    prescriptionSchema: null,
+    performedMetricSchema: null,
+    recordDefinitions: [],
+    heatMap: null,
+    publicationPolicy: null,
+    capabilityContract: null
+  };
+}
+
 function provider(overrides: Partial<LibraryActivityProvider> = {}): LibraryActivityProvider {
   const notFound = async () => { throw new LibraryProviderError("catalog_not_found"); };
   return {
@@ -35,6 +66,7 @@ function provider(overrides: Partial<LibraryActivityProvider> = {}): LibraryActi
     getFilters: vi.fn(async () => ({ data: emptyDomainFilters, meta })),
     getArchetypes: vi.fn(async () => ({ data: [], meta })),
     searchActivities: vi.fn(async () => ({ data: [], pagination: { limit: 50, returned: 0, nextCursor: null }, meta })),
+    getActivityByIdentifier: vi.fn(notFound),
     getActivity: vi.fn(notFound),
     getActivityAlternatives: vi.fn(async () => ({ data: [], meta })),
     ...overrides
@@ -62,6 +94,23 @@ describe("P10F Library V2 HTTP provider", () => {
     expect(JSON.stringify({ url: url.toString(), init })).not.toContain("user_id");
     expect(JSON.stringify(result)).not.toContain(catalogKey);
     expect(result.pagination.nextCursor).toBe("opaque-next");
+  });
+
+  it("resolves one semantic Library V2 detail without a caller-side domain scan", async () => {
+    const fetchSpy = vi.fn(async () => response(semanticActivity(1)));
+    const http = new HttpLibraryActivityProvider({
+      baseUrl: "https://catalog-api.plaivra.com",
+      apiKey: catalogKey,
+      fetchImpl: fetchSpy as unknown as typeof fetch
+    });
+
+    const result = await http.getActivityByIdentifier("activity-1", { locale: "ar" });
+    const [requestUrl] = fetchSpy.mock.calls[0] as unknown as [URL];
+    const url = new URL(requestUrl);
+    expect(url.pathname).toBe("/v2/library-activities/activity-1");
+    expect(url.searchParams.get("locale")).toBe("ar");
+    expect(result.data.domain).toBe("strength");
+    expect(result.data.revisionId).toBe("revision-1");
   });
 
   it("accepts the canonical object-shaped V2 filter payload and future published definitions", async () => {
@@ -120,8 +169,8 @@ describe("P10F Library V2 HTTP provider", () => {
   });
 
   it("keeps V2 cursor pagination beyond 60 independent of the filter contract", async () => {
-    const firstPage = Array.from({ length: 50 }, (_, index) => ({ id: `activity-${index + 1}` }));
-    const secondPage = Array.from({ length: 11 }, (_, index) => ({ id: `activity-${index + 51}` }));
+    const firstPage = Array.from({ length: 50 }, (_, index) => semanticActivity(index + 1));
+    const secondPage = Array.from({ length: 11 }, (_, index) => semanticActivity(index + 51));
     const fetchSpy = vi.fn()
       .mockResolvedValueOnce(response(firstPage, 200, { limit: 50, returned: 50, nextCursor: "page-2" }))
       .mockResolvedValueOnce(response(secondPage, 200, { limit: 50, returned: 11, nextCursor: null }));
@@ -216,7 +265,7 @@ describe("P10F Library V2 fallback matrix", () => {
   });
 
   it("allows detail 404 compatibility only after the old identifier is proven in legacy", async () => {
-    const legacyDetail = { data: { id: "11111111-1111-4111-8111-111111111111" } as never, meta: { ...meta, apiVersion: "v1-compat" as const, source: "legacy" as const, libraryRelease: null, catalogRelease: null } };
+    const legacyDetail = { data: semanticActivity(1) as never, meta: { ...meta, apiVersion: "v1-compat" as const, source: "legacy" as const, libraryRelease: null, catalogRelease: null } };
     const external = provider({ getActivity: vi.fn(async () => { throw new LibraryProviderError("catalog_not_found"); }) });
     const missingLegacy = provider({ getActivity: vi.fn(async () => { throw new LibraryProviderError("catalog_not_found"); }) });
     await expect(new FallbackLibraryActivityProvider(external, missingLegacy).getActivity("strength", "new-v2-id")).rejects.toMatchObject({ code: "catalog_not_found" });
@@ -226,5 +275,16 @@ describe("P10F Library V2 fallback matrix", () => {
     expect(result.meta.source).toBe("legacy");
     expect(result.meta.degraded).toBe(true);
     expect(provenLegacyLookup).toHaveBeenCalledTimes(2);
+  });
+
+  it("applies the same bounded compatibility proof to one-call global detail", async () => {
+    const external = provider({ getActivityByIdentifier: vi.fn(async () => { throw new LibraryProviderError("catalog_not_found"); }) });
+    const legacyDetail = { data: semanticActivity(2) as never, meta: { ...meta, apiVersion: "v1-compat" as const, source: "legacy" as const, libraryRelease: null, catalogRelease: null } };
+    const legacyLookup = vi.fn(async () => legacyDetail);
+    const composite = new FallbackLibraryActivityProvider(external, provider({ getActivityByIdentifier: legacyLookup as LibraryActivityProvider["getActivityByIdentifier"] }));
+    const result = await composite.getActivityByIdentifier("old-legacy-id");
+    expect(result.meta.source).toBe("legacy");
+    expect(result.meta.degraded).toBe(true);
+    expect(legacyLookup).toHaveBeenCalledTimes(2);
   });
 });
