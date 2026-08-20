@@ -71,6 +71,7 @@ export type LibraryEnvironmentCapabilityDefinition = {
   precedence: "available_today_over_saved_setup" | "saved_setup_only" | "context_only";
 };
 
+/** Canonical object returned by the Activity Catalog V2 domain filter endpoint. */
 export type LibraryDomainFilters = {
   domain: string;
   filters: LibraryDomainFilterDefinition[];
@@ -79,7 +80,35 @@ export type LibraryDomainFilters = {
 };
 
 export type LibraryInstruction = { order: number; text: string };
-export type LibraryEquipment = { slug: string | null; name: string | null; requirement: string | null };
+export type LibraryEquipmentRequirement = "required" | "optional" | string;
+export type LibraryEquipment = {
+  slug: string | null;
+  name: string | null;
+  requirement: LibraryEquipmentRequirement | null;
+};
+
+export type LibraryCoverageRole = "primary" | "secondary" | "stabilizer" | "focus" | string;
+export type LibraryCoverage = {
+  slug?: string | null;
+  name?: string | null;
+  muscleName?: string | null;
+  label?: string | null;
+  role?: LibraryCoverageRole | null;
+  bodyRegion?: string | null;
+  targetId?: string | null;
+  atlasTargetId?: string | null;
+  side?: string | null;
+  [key: string]: unknown;
+};
+
+export type LibraryExecutionProfile = {
+  key?: string | null;
+  slug?: string | null;
+  version?: number | null;
+  executionContract?: string | null;
+  metrics?: string[];
+  [key: string]: unknown;
+};
 
 export type LibraryActivity = {
   id: string;
@@ -93,13 +122,30 @@ export type LibraryActivity = {
   instructions: LibraryInstruction[];
   difficulty: string | null;
   movementPattern: string | null;
+  mechanics?: string | null;
+  forceType?: string | null;
   activityType?: { slug: string; name: string } | null;
   membership: { kind: string; visibility: string; domainPriority: number; primaryDomain: boolean; checksum?: string };
   aliases: Array<Record<string, unknown>>;
   equipment: LibraryEquipment[];
-  coverage: Array<Record<string, unknown>>;
-  executionProfiles: Array<Record<string, unknown>>;
+  coverage: LibraryCoverage[];
+  executionProfiles: LibraryExecutionProfile[];
   bodyEffects: Array<Record<string, unknown>>;
+};
+
+export type CatalogSchemaField = {
+  key?: string;
+  slug?: string;
+  label?: string;
+  type?: string;
+  unit?: string | null;
+  required?: boolean;
+  minimum?: number | null;
+  maximum?: number | null;
+  min?: number | null;
+  max?: number | null;
+  options?: unknown[];
+  [key: string]: unknown;
 };
 
 export type CatalogSchemaAuthority = {
@@ -109,11 +155,36 @@ export type CatalogSchemaAuthority = {
   checksum?: string | null;
 };
 
+export type LibraryRecordDefinition = {
+  id?: string | null;
+  recordKey?: string | null;
+  key?: string | null;
+  version?: number | null;
+  comparisonDirection?: string | null;
+  canonicalUnit?: string | null;
+  [key: string]: unknown;
+};
+
+export type LibraryHeatMapMapping = {
+  role?: LibraryCoverageRole | null;
+  targetId?: string | null;
+  atlasTargetId?: string | null;
+  muscleName?: string | null;
+  name?: string | null;
+  side?: string | null;
+  [key: string]: unknown;
+};
+
+export type LibraryHeatMap = {
+  mapping?: LibraryHeatMapMapping[];
+  [key: string]: unknown;
+};
+
 export type LibrarySemanticAuthority = {
-  prescriptionSchema?: CatalogSchemaAuthority & { fields?: unknown[] } | null;
-  performedMetricSchema?: CatalogSchemaAuthority & { fields?: unknown[]; contextDimensions?: unknown[] } | null;
-  recordDefinitions?: Array<Record<string, unknown>>;
-  heatMap?: Record<string, unknown> | null;
+  prescriptionSchema?: CatalogSchemaAuthority & { fields?: CatalogSchemaField[] } | null;
+  performedMetricSchema?: CatalogSchemaAuthority & { fields?: CatalogSchemaField[]; contextDimensions?: unknown[] } | null;
+  recordDefinitions?: LibraryRecordDefinition[];
+  heatMap?: LibraryHeatMap | null;
   publicationPolicy?: { id?: string | null; key: string; version: number; checksum: string } | null;
   capabilityContract?: { id?: string | null; version: string; compatibleCatalogApiVersion: string; checksum: string } | null;
   authority?: {
@@ -122,10 +193,12 @@ export type LibrarySemanticAuthority = {
     activityId: string;
     revisionId: string;
     revisionNumber: number;
+    releaseItemChecksum?: string;
   };
 };
 
-export type LibraryActivityDetail = LibraryActivity & LibrarySemanticAuthority;
+/** Full semantic Library authority. `domain` is supplied by domain and global detail routes. */
+export type LibraryActivityDetail = LibraryActivity & LibrarySemanticAuthority & { domain?: string };
 export type LibraryCursorPage = { limit: number; returned: number; nextCursor: string | null };
 export type LibrarySearchParams = {
   domain: string;
@@ -139,6 +212,7 @@ export type LibraryAlternative = {
   relationshipType: string;
   rationale: string | null;
   prescriptionTransfer: unknown;
+  relationshipChecksum?: string | null;
   activity: LibraryActivityDetail;
 };
 export type LibraryResult<T> = { data: T; meta: LibraryProviderMeta };
@@ -152,7 +226,7 @@ export type CatalogAuthoritySnapshot = {
   revisionNumber: number;
   prescriptionSchema: CatalogSchemaAuthority | null;
   performedMetricSchema: CatalogSchemaAuthority | null;
-  recordDefinitions: Array<Record<string, unknown>>;
+  recordDefinitions: LibraryRecordDefinition[];
   mappingAuthority: Record<string, unknown> | null;
   publicationPolicy: Record<string, unknown> | null;
   capabilityContract: Record<string, unknown> | null;
