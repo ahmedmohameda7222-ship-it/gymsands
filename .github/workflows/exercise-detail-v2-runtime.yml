@@ -1,0 +1,115 @@
+name: Exercise Detail V2 Runtime QA
+run-name: Exercise Detail V2 Runtime QA / pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exercise-detail-v2-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+  SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+  PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+  PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+  PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+  PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+  PLAIVRA_RELEASE_ENVIRONMENT: ci
+  PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+  PLAIVRA_ACTIVITY_CATALOG_MODE: library_v2_with_legacy_fallback
+  PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
+  PLAIVRA_ACTIVITY_CATALOG_API_KEY: ci-placeholder-catalog-key-long-enough
+  SUPABASE_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+
+jobs:
+  rendered-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Deterministic dependency install
+        run: npm ci
+      - name: Focused Exercise Detail authority tests
+        run: >-
+          npx vitest run --config vitest.unit.config.mjs
+          lib/exercise-detail/model.test.ts
+          lib/exercise-detail/identity.test.ts
+          services/exercise-detail/client.locale.test.ts
+          lib/exercise-detail/anatomy.test.ts
+          lib/exercise-detail/alternatives.test.ts
+          services/exercise-detail/setup-note.test.ts
+          lib/exercise-detail/performance.test.ts
+          lib/exercise-detail/presentation.test.ts
+          lib/workouts/active-workout-detail-navigation.test.ts
+      - name: Typecheck Exercise Detail boundaries
+        run: npm run typecheck
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build mock-auth QA application
+        run: NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build
+      - name: Start production QA server
+        run: |
+          set -euo pipefail
+          mkdir -p ci-reports
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start > ci-reports/exercise-detail-v2-qa-server.log 2>&1 &
+          echo "$!" > /tmp/exercise-detail-v2-qa-server.pid
+      - name: Wait for production QA server
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat ci-reports/exercise-detail-v2-qa-server.log
+          exit 1
+      - name: Exercise Detail V2 six-route rendered matrix
+        env:
+          QA_EXERCISE_DETAIL_V2_EVIDENCE_DIR: ci-reports/exercise-detail-v2-evidence
+          QA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          QA_WORKFLOW_RUN_ID: ${{ github.run_id }}
+        run: node scripts/run-exercise-detail-v2-matrix-qa.mjs
+      - name: Exact-head integrity
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git diff --check
+          test -z "$(git status --porcelain --untracked-files=no)"
+      - name: Stop production QA server
+        if: always()
+        run: |
+          if [ -f /tmp/exercise-detail-v2-qa-server.pid ]; then
+            kill "$(cat /tmp/exercise-detail-v2-qa-server.pid)" 2>/dev/null || true
+          fi
+      - name: Upload Exercise Detail V2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exercise-detail-v2-runtime-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ci-reports/exercise-detail-v2-evidence/
+            ci-reports/exercise-detail-v2-qa-server.log
+          if-no-files-found: warn
+          retention-days: 30
