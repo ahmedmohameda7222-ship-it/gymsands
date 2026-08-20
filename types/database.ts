@@ -1,16 +1,29 @@
 export * from "./database-legacy";
 
 import type {
+  ExerciseAlternativeReason as LegacyExerciseAlternativeReason,
   ExerciseLog as LegacyExerciseLog,
+  UserExerciseAlternative as LegacyUserExerciseAlternative,
   WorkoutSession as LegacyWorkoutSession,
   WorkoutSessionSummary as LegacyWorkoutSessionSummary
 } from "./database-legacy";
+import type { ExerciseAlternativeReasonV2 } from "./exercise-alternative";
 import type { SavedWorkoutPerformanceMetricValue } from "./workout-performance";
 import type {
   WorkoutSetDetailsRow,
   WorkoutSetSegmentRow,
   WorkoutSetType
 } from "./workout-set-details";
+
+/**
+ * Additive persistence contract. Historical V1 values remain readable while new
+ * V2 product intents are stored without collapsing them into legacy aliases.
+ */
+export type ExerciseAlternativeReason = LegacyExerciseAlternativeReason | ExerciseAlternativeReasonV2;
+
+export type UserExerciseAlternative = Omit<LegacyUserExerciseAlternative, "reason"> & {
+  reason: ExerciseAlternativeReason;
+};
 
 export type WorkoutSessionStatus = "started" | "completed" | "skipped" | "cancelled";
 
