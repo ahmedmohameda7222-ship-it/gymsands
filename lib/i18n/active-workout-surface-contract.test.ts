@@ -67,8 +67,10 @@ describe("AW-1B Active Workout surface contract", () => {
     }
     expect(activeWorkoutSurface).not.toContain('tr("set.newBest"');
     expect(details).toContain("<ActiveWorkoutReplacementRecommendations");
-    expect(replacement).toContain("SUPPORTED_REASONS");
-    expect(replacement).toContain("replacement.reasonMachineTaken");
+    expect(replacement).toContain("EXERCISE_ALTERNATIVE_REASONS.map");
+    expect(replacement).toContain('ed("reasonMachineTaken")');
+    expect(replacement).toContain('ed("reasonVariation")');
+    expect(replacement).not.toContain("SUPPORTED_REASONS");
     expect(shell).toContain("data-active-set-details-trigger");
     expect(controller).toContain('moreLabel={tr("common.more")}');
     expect(controller).toContain("legacyReopenSetLabel");
