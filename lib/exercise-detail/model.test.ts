@@ -25,9 +25,9 @@ const activity: LibraryActivityDetail = {
     { slug: "bench", name: "Bench", requirement: "optional" },
   ],
   coverage: [
-    { name: "Chest", role: "primary", atlasTargetId: "pectoralis.middle" },
-    { name: "Triceps", role: "secondary", atlasTargetId: "triceps.lateral_head" },
-    { name: "Serratus", role: "stabilizer", atlasTargetId: "serratus.anterior" },
+    { slug: "pectoralis_major", name: "Chest", role: "primary", atlasTargetId: "pectoralis.middle" },
+    { slug: "triceps_brachii", name: "Triceps", role: "secondary", atlasTargetId: "triceps.lateral_head" },
+    { slug: "serratus_anterior", name: "Serratus", role: "stabilizer", atlasTargetId: "serratus.anterior" },
   ],
   executionProfiles: [],
   bodyEffects: [],
@@ -93,6 +93,61 @@ describe("Exercise Detail canonical model", () => {
     expect(model.recordDefinitions[0]?.recordKey).toBe("highest_load");
     expect(model.execution).toMatchObject({ executable: false, startHref: null, reason: "unsupported_execution_contract" });
     expect(model.catalogAuthoritySnapshot?.revisionId).toBe(activity.revisionId);
+  });
+
+  it("keeps Catalog prose locale-authoritative and localizes reviewed DE/AR semantic display values", () => {
+    const deModel = catalogActivityDetailModel({
+      ...activity,
+      name: "Langhantel-Bankdrücken",
+      shortDescription: "Kontrolliertes horizontales Drücken.",
+      instructions: [{ order: 1, text: "Position einrichten." }, { order: 2, text: "Kontrolliert drücken." }],
+    }, { ...nativeMeta, locale: "de" }, "strength");
+    expect(deModel).toMatchObject({
+      name: "Langhantel-Bankdrücken",
+      shortDescription: "Kontrolliertes horizontales Drücken.",
+      activityType: "Krafttraining",
+      difficulty: "Fortgeschritten",
+      movementPattern: "Horizontales Drücken",
+      mechanics: "Mehrgelenkig",
+      forceType: "Drücken",
+    });
+    expect(deModel.instructions.map((item) => item.text)).toEqual(["Position einrichten.", "Kontrolliert drücken."]);
+    expect(deModel.equipment.map((item) => item.name)).toEqual(["Langhantel", "Bank"]);
+    expect(deModel.target).toMatchObject({ primary: ["Brust"], secondary: ["Trizeps"], stabilizer: ["Sägemuskel"] });
+
+    const arModel = catalogActivityDetailModel({
+      ...activity,
+      name: "ضغط صدر بالبار",
+      shortDescription: "دفع أفقي بتحكم.",
+      instructions: [{ order: 1, text: "اضبط وضع الجسم." }, { order: 2, text: "ادفع بتحكم." }],
+    }, { ...nativeMeta, locale: "ar" }, "strength");
+    expect(arModel).toMatchObject({
+      name: "ضغط صدر بالبار",
+      shortDescription: "دفع أفقي بتحكم.",
+      activityType: "تمارين مقاومة",
+      difficulty: "متوسط",
+      movementPattern: "دفع أفقي",
+      mechanics: "تمرين مركب",
+      forceType: "دفع",
+    });
+    expect(arModel.instructions.map((item) => item.text)).toEqual(["اضبط وضع الجسم.", "ادفع بتحكم."]);
+    expect(arModel.equipment.map((item) => item.name)).toEqual(["بار حديد", "مقعد"]);
+    expect(arModel.target).toMatchObject({ primary: ["الصدر"], secondary: ["الترايسبس"], stabilizer: ["العضلة المنشارية"] });
+  });
+
+  it("bounds unknown DE/AR machine vocabulary instead of leaking raw values", () => {
+    const model = catalogActivityDetailModel({
+      ...activity,
+      difficulty: "catalog_internal_level_7",
+      movementPattern: "catalog_internal_motion",
+      equipment: [{ slug: "catalog_machine_42", name: "Internal machine", requirement: "required" }],
+      coverage: [{ slug: "catalog_muscle_42", name: "Internal muscle", role: "primary" }],
+      heatMap: null,
+    }, { ...nativeMeta, locale: "de" }, "strength");
+    expect(model.difficulty).toBeNull();
+    expect(model.movementPattern).toBeNull();
+    expect(model.equipment).toEqual([]);
+    expect(model.target.primary).toEqual([]);
   });
 
   it("restricts Start to the proven legacy Strength runtime", () => {
