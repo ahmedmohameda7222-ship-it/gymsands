@@ -43,6 +43,11 @@ export class FallbackLibraryActivityProvider implements LibraryActivityProvider 
   getFilters: LibraryActivityProvider["getFilters"] = (domain, options) => this.external.getFilters(domain, options);
   getArchetypes: LibraryActivityProvider["getArchetypes"] = (domain, options) => this.withFallback(() => this.external.getArchetypes(domain, options), () => this.legacy.getArchetypes(domain, options));
   searchActivities: LibraryActivityProvider["searchActivities"] = (params) => this.withFallback(() => this.external.searchActivities(params), () => this.legacy.searchActivities(params));
+  getActivityByIdentifier: LibraryActivityProvider["getActivityByIdentifier"] = (identifier, options) => this.withFallback(
+    () => this.external.getActivityByIdentifier(identifier, options),
+    () => this.legacy.getActivityByIdentifier(identifier, options),
+    async () => { await this.legacy.getActivityByIdentifier(identifier, options); }
+  );
   getActivity: LibraryActivityProvider["getActivity"] = (domain, identifier, options) => this.withFallback(
     () => this.external.getActivity(domain, identifier, options),
     () => this.legacy.getActivity(domain, identifier, options),
