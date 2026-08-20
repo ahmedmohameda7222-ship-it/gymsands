@@ -69,10 +69,9 @@ export class LegacyLibraryActivityProvider implements LibraryActivityProvider {
     return { data: (await this.listDomains(options)).data[0], meta: meta(options.locale) };
   }
 
-  async getFilters(domain: string, options: LibraryRequestOptions = {}) {
+  async getFilters(domain: string, _options: LibraryRequestOptions = {}): Promise<never> {
     if (domain !== "strength") throw new LibraryProviderError("catalog_not_found");
-    const result = await this.legacy.getFilters();
-    return { data: [result.data], meta: meta(options.locale) };
+    throw new LibraryProviderError("catalog_not_configured");
   }
 
   async getArchetypes(domain: string, options: LibraryRequestOptions = {}) {
@@ -107,8 +106,6 @@ export class LegacyLibraryActivityProvider implements LibraryActivityProvider {
   async getActivityAlternatives(domain: string, identifier: string, options: LibraryRequestOptions & { limit?: number } = {}) {
     if (domain !== "strength") throw new LibraryProviderError("catalog_not_found");
     try {
-      // The historical provider has no authoritative alternatives. Prove the
-      // identifier is genuinely old, then preserve that valid empty result.
       await this.legacy.getActivity(identifier);
       await this.legacy.getActivityAlternatives();
       return { data: [], meta: meta(options.locale) };
