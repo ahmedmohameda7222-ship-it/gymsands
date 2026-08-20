@@ -132,6 +132,10 @@ describe("member-facing exercise terminology", () => {
       );
     }
     const model = readFileSync("lib/exercise-detail/model.ts", "utf8");
+    const provider = readFileSync(
+      "components/exercise-detail/exercise-detail-provider.tsx",
+      "utf8",
+    );
     const canonical = readFileSync(
       "app/(private)/workouts/[id]/page.tsx",
       "utf8",
@@ -141,7 +145,9 @@ describe("member-facing exercise terminology", () => {
       "utf8",
     );
     expect(model).toContain("formatExerciseDisplay");
-    expect(canonical).toContain("resolveExerciseDetail");
+    expect(provider).toContain("resolveExerciseDetail");
+    expect(canonical).toContain("useExerciseDetail");
+    expect(canonical).not.toContain("resolveExerciseDetail");
     expect(plan).toContain("planExerciseDetailModel(raw, locale)");
   });
 
