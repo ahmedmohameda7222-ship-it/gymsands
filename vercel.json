@@ -1,12 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["fra1"],
-  "buildCommand": "npm run build && node scripts/verify-p10f-preview-link.mjs",
+  "buildCommand": "npm run build",
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "main": true,
-      "feat/p10f-activity-catalog-v2-cutover": true
+      "main": true
     }
   },
   "crons": [
