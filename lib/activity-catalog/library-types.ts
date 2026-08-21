@@ -165,20 +165,34 @@ export type LibraryRecordDefinition = {
   [key: string]: unknown;
 };
 
+export type LibraryHeatMapRole = "primary" | "secondary" | "stabilizer";
+
+/** Exact Catalog V2 anatomy identity. Display names never authorize geometry. */
 export type LibraryHeatMapMapping = {
-  role?: LibraryCoverageRole | null;
-  targetId?: string | null;
-  atlasTargetId?: string | null;
-  muscleName?: string | null;
-  name?: string | null;
-  side?: string | null;
-  [key: string]: unknown;
+  muscleId: string;
+  role: LibraryHeatMapRole;
+  contribution: number;
+  sideScope: string;
+  sortOrder?: number;
 };
 
-export type LibraryHeatMap = {
-  mapping?: LibraryHeatMapMapping[];
-  [key: string]: unknown;
+export type LibraryRequiredHeatMap = {
+  policy: "required";
+  mappingProfileId: string;
+  mappingSchemaVersion: string;
+  mappingProfileVersion: number;
+  mappingChecksum: string;
+  taxonomy: { key: string; version: string };
+  workloadModel: { key: string; version: string };
+  mapping: LibraryHeatMapMapping[];
 };
+
+export type LibraryNotApplicableHeatMap = {
+  policy: "not_applicable";
+  reason?: string | null;
+};
+
+export type LibraryHeatMap = LibraryRequiredHeatMap | LibraryNotApplicableHeatMap;
 
 export type LibrarySemanticAuthority = {
   prescriptionSchema?: CatalogSchemaAuthority & { fields?: CatalogSchemaField[] } | null;

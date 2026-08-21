@@ -1,6 +1,7 @@
 import type { ExerciseDetailViewModel, ExerciseTargetRole } from "./contracts";
 import { isAdvancedMuscleTargetId, type AdvancedMuscleTargetId } from "@/lib/train/muscle-intelligence/advanced-atlas";
 import type { AdvancedHeatLevel } from "@/lib/train/muscle-intelligence/advanced-exposure";
+import { isCompatibleExerciseHeatMap } from "./anatomy-contract";
 
 export type ExerciseMusclePreviewTarget = {
   targetId: AdvancedMuscleTargetId;
@@ -21,6 +22,8 @@ const ROLE_HEAT: Record<ExerciseMusclePreviewTarget["role"], AdvancedHeatLevel> 
 
 export function projectAuthoritativeExercisePreview(exercise: ExerciseDetailViewModel): ExerciseMusclePreview | null {
   if (exercise.identity.source !== "catalog_v2") return null;
+  const heatMap = exercise.anatomyAuthority.heatMap;
+  if (!isCompatibleExerciseHeatMap(heatMap)) return null;
   const targets = new Map<AdvancedMuscleTargetId, ExerciseMusclePreviewTarget>();
   const add = (candidate: unknown, role: unknown) => {
     if (!isAdvancedMuscleTargetId(candidate) || (role !== "primary" && role !== "secondary" && role !== "stabilizer")) return;
@@ -29,7 +32,6 @@ export function projectAuthoritativeExercisePreview(exercise: ExerciseDetailView
     const rank = { light: 1, moderate: 2, high: 3, none: 0 } as const;
     if (!current || rank[next.heatLevel] > rank[current.heatLevel]) targets.set(candidate, next);
   };
-  for (const item of exercise.anatomyAuthority.coverage) add(item.atlasTargetId ?? item.targetId, item.role);
-  for (const item of exercise.anatomyAuthority.heatMap?.mapping ?? []) add(item.atlasTargetId ?? item.targetId, item.role);
+  for (const item of heatMap.mapping) add(item.muscleId, item.role);
   return targets.size ? { kind: "exercise_authority_preview", targets: [...targets.values()] } : null;
 }

@@ -46,7 +46,16 @@ const activity: LibraryActivityDetail = {
     fields: [{ key: "external_load_kg", label: "Load", type: "number", unit: "kg" }],
   },
   recordDefinitions: [{ id: "55555555-5555-4555-8555-555555555555", recordKey: "highest_load", key: "highest_load", comparisonDirection: "higher_better", canonicalUnit: "kg" }],
-  heatMap: { mapping: [{ muscleName: "Chest", atlasTargetId: "pectoralis.middle", role: "primary" }] },
+  heatMap: {
+    policy: "required",
+    mappingProfileId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    mappingSchemaVersion: "exercise_muscle_mapping_v2",
+    mappingProfileVersion: 1,
+    mappingChecksum: "a".repeat(64),
+    taxonomy: { key: "main_muscle_intelligence", version: "advanced_visible_v1" },
+    workloadModel: { key: "resistance_sets", version: "v1" },
+    mapping: [{ muscleId: "pectoralis.middle", role: "primary", contribution: 1, sideScope: "bilateral", sortOrder: 1 }]
+  },
   publicationPolicy: { id: "66666666-6666-4666-8666-666666666666", key: "public", version: 1, checksum: "e".repeat(64) },
   capabilityContract: { id: "77777777-7777-4777-8777-777777777777", version: "1", compatibleCatalogApiVersion: "v2", checksum: "f".repeat(64) },
   authority: {
@@ -150,6 +159,35 @@ describe("Exercise Detail canonical model", () => {
     expect(model.movementPattern).toBeNull();
     expect(model.equipment).toEqual([]);
     expect(model.target.primary).toEqual([]);
+  });
+
+  it("blocks implementation and release prose at the shared six-route model boundary", () => {
+    const model = catalogActivityDetailModel({
+      ...activity,
+      name: "P10E canonical identity",
+      shortDescription: "Internal release provenance checksum 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      instructions: [
+        { order: 1, text: "Perform the movement under control." },
+        { order: 2, text: "Implementation schema phase label." },
+      ],
+    }, nativeMeta, "strength");
+
+    expect(model.name).toBe("Exercise");
+    expect(model.shortDescription).toBeNull();
+    expect(model.instructions).toEqual([{ order: 1, text: "Perform the movement under control." }]);
+    const visibleCopy = JSON.stringify({
+      name: model.name,
+      shortDescription: model.shortDescription,
+      instructions: model.instructions,
+      activityType: model.activityType,
+      difficulty: model.difficulty,
+      movementPattern: model.movementPattern,
+      mechanics: model.mechanics,
+      forceType: model.forceType,
+      equipment: model.equipment,
+      target: model.target,
+    });
+    expect(visibleCopy).not.toMatch(/P10E|canonical identity|provenance|checksum|implementation schema|0123456789abcdef/i);
   });
 
   it("restricts Start to the proven legacy Strength runtime", () => {

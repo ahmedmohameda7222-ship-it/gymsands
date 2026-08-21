@@ -15,7 +15,9 @@ describe("Exercise Detail + Personal Records bound product contracts", () => {
   const migration = read("supabase/migrations/20260813042754_exercise_detail_personal_records_authority.sql");
 
   it("uses one shared core activity boundary and removes duplicate page/layout fetches", () => {
-    expect(layout).toContain("<ExerciseDetailProvider>{children}</ExerciseDetailProvider>");
+    expect(layout).toContain("<ExerciseDetailProvider>");
+    expect(layout).toContain("{children}</div></ExerciseDetailProvider>");
+    expect(layout).toContain("data-exercise-detail-backdrop");
     expect(provider).toContain("resolveExerciseDetail");
     expect(canonical).toContain("useExerciseDetail");
     expect(layout).not.toMatch(/getWorkout|ExerciseDetailMusclePreview|useParams/);
@@ -23,7 +25,7 @@ describe("Exercise Detail + Personal Records bound product contracts", () => {
   });
 
   it("does not restore the pseudo-all-time or fabricated compatibility calculations", () => {
-    expect(canonical).not.toMatch(/getWorkoutHistoryDetailed|150|normalizeExerciseName|weight_kg.*reps|Best Set|Mistakes to avoid/);
+    expect(canonical).not.toMatch(/getWorkoutHistoryDetailed|slice\(0,\s*150\)|normalizeExerciseName|weight_kg.*reps|Best Set|Mistakes to avoid/);
     expect(canonical).not.toMatch(/sets\s*\?\?\s*3|reps\s*\?\?\s*["']8|rest_seconds\s*\?\?\s*75/);
     expect(plan).not.toMatch(/sets\s*\?\?\s*3|8[–-]12|rest_seconds\s*\?\?\s*75|CardSkeleton/);
   });

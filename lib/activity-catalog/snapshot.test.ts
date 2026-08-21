@@ -24,7 +24,16 @@ const detail: LibraryActivityDetail = {
   prescriptionSchema: { id: "33333333-3333-4333-8333-333333333333", key: "strength_repetition", version: "v1", fields: [], checksum: "c".repeat(64) },
   performedMetricSchema: { id: "44444444-4444-4444-8444-444444444444", key: "strength_repetition", version: "v1", fields: [], contextDimensions: [], checksum: "d".repeat(64) },
   recordDefinitions: [{ id: "55555555-5555-4555-8555-555555555555", record_key: "load" }],
-  heatMap: { policy: "required", taxonomy: { id: "66666666-6666-4666-8666-666666666666" }, workloadModel: { key: "strength", version: 1 } },
+  heatMap: {
+    policy: "required",
+    mappingProfileId: "66666666-6666-4666-8666-666666666666",
+    mappingSchemaVersion: "exercise_muscle_mapping_v2",
+    mappingProfileVersion: 1,
+    mappingChecksum: "9".repeat(64),
+    taxonomy: { key: "main_muscle_intelligence", version: "advanced_visible_v1" },
+    workloadModel: { key: "resistance_sets", version: "v1" },
+    mapping: [{ muscleId: "pectoralis.middle", role: "primary", contribution: 1, sideScope: "bilateral", sortOrder: 1 }]
+  },
   publicationPolicy: { id: "77777777-7777-4777-8777-777777777777", key: "default", version: 1, checksum: "e".repeat(64) },
   capabilityContract: { id: "88888888-8888-4888-8888-888888888888", version: "v2", compatibleCatalogApiVersion: "v2", checksum: "f".repeat(64) },
   authority: {

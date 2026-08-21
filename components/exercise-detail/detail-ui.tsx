@@ -19,10 +19,10 @@ export function DetailSurface({ children, className, ariaLabelledby }: { childre
     data-detail-surface-platform={platform}
     aria-labelledby={ariaLabelledby}
     className={cn(
-      "shadow-none",
-      platform === "ios" && "rounded-[18px] border border-border/55 bg-card px-4 py-4 sm:px-5 sm:py-5",
-      platform === "android" && "rounded-xl border border-border/75 bg-card px-4 py-5 sm:px-5 sm:py-5",
-      platform === "web" && "rounded-2xl border bg-card px-4 py-5 sm:px-5 sm:py-6 lg:px-6",
+      "border border-black/[0.065] bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_rgba(15,23,42,0.055)] dark:border-white/10 dark:shadow-black/25",
+      platform === "ios" && "rounded-[20px] px-4 py-4 sm:px-5 sm:py-5",
+      platform === "android" && "rounded-2xl px-4 py-5 sm:px-5 sm:py-5",
+      platform === "web" && "rounded-[22px] px-4 py-5 sm:px-6 sm:py-6 lg:px-7",
       className,
     )}
   >{children}</section>;
@@ -72,12 +72,12 @@ export function ExerciseDetailPageFrame({ children, child, title, description }:
 
   const exercise = resolved.core;
   const topBackHref = child ? childHref() : backHref;
-  return <TrainPageContainer className="max-w-[1080px] pb-24 pt-2 sm:py-5" dir={dir} data-detail-platform={platform}>
+  return <TrainPageContainer className="max-w-[1180px] pb-24 pt-2 sm:py-5" dir={dir} data-detail-platform={platform}>
     <nav aria-label={ed("backShort")} data-exercise-detail-topbar className={cn(
-      "sticky top-0 z-20 -mx-2 flex items-center justify-between gap-2 px-2 supports-[backdrop-filter]:bg-background/90 sm:static sm:mx-0 sm:bg-transparent sm:px-0",
-      platform === "ios" && "min-h-12 border-b border-border/60 bg-background/95",
-      platform === "android" && "min-h-16 border-b border-border/70 bg-background/95",
-      platform === "web" && "min-h-14 bg-background/95",
+      "sticky top-0 z-20 -mx-2 flex items-center justify-between gap-2 bg-[#f5f6f4]/95 px-2 backdrop-blur-md dark:bg-[#11130f]/95 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:backdrop-blur-none",
+      platform === "ios" && "min-h-12 border-b border-border/50 sm:border-b-0",
+      platform === "android" && "min-h-16 border-b border-border/60 sm:border-b-0",
+      platform === "web" && "min-h-14",
     )}>
       <Button asChild variant="ghost" className={cn(
         "min-h-11",
@@ -87,7 +87,7 @@ export function ExerciseDetailPageFrame({ children, child, title, description }:
       )}><Link href={topBackHref}><ArrowLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" /><span>{child ? ed("overviewTitle") : ed("backShort")}</span></Link></Button>
       {userId ? <div className="flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className={cn("min-h-11 min-w-11", platform === "android" && "rounded-full")} aria-label={favorite ? ed("saved") : ed("favorite")} aria-pressed={favorite} aria-busy={favoritePending} disabled={favoritePending} onClick={() => void toggleFavorite()}><Heart className={cn("h-5 w-5", favorite && "fill-current")} /></Button><Button type="button" variant="ghost" size="icon" className={cn("min-h-11 min-w-11", platform === "android" && "rounded-full")} aria-label={ed("more")} onClick={() => setMoreOpen(true)}><MoreHorizontal className="h-5 w-5" /></Button></div> : null}
     </nav>
-    {title ? <header className={cn("pb-6 pt-4", platform === "ios" && "px-1")}><p className="text-sm text-muted-foreground">{exercise.name}</p><h1 className={cn("mt-1 font-semibold leading-tight tracking-tight", platform === "ios" ? "text-[28px] sm:text-[32px]" : "text-[30px] sm:text-[32px]")}>{title}</h1>{description ? <p className="mt-2 max-w-2xl text-[15px] leading-6 text-muted-foreground sm:text-base">{description}</p> : null}</header> : null}
+    {title ? <header className={cn("pb-7 pt-4 sm:pt-6", platform === "ios" && "px-1")}><p className="text-sm font-medium text-muted-foreground">{exercise.name}</p><h1 className={cn("mt-1.5 font-semibold leading-[1.08] tracking-[-0.025em]", platform === "ios" ? "text-[30px] sm:text-[36px]" : "text-[32px] sm:text-[38px]")}>{title}</h1>{description ? <p className="mt-3 max-w-2xl text-[15px] leading-6 text-muted-foreground sm:text-base">{description}</p> : null}</header> : null}
     <div>{children}</div>
     {userId ? <ExerciseMoreDialog open={moreOpen} onOpenChange={setMoreOpen} userId={userId} exerciseId={exercise.identity.activityId} exerciseName={exercise.name} customExercise={exercise.identity.source === "custom"} /> : null}
   </TrainPageContainer>;

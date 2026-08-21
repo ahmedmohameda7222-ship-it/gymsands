@@ -120,7 +120,7 @@ function catalogActivity(languageKey, id = activityId) {
     prescriptionSchema: {
       id: "prescription-v1",
       key: "strength_sets_reps",
-      version: 1,
+      version: "v1",
       checksum: "prescription-checksum",
       fields: [
         { key: "sets", label: "Sets", type: "integer", required: true, minimum: 1, maximum: 20 },
@@ -130,7 +130,7 @@ function catalogActivity(languageKey, id = activityId) {
     performedMetricSchema: {
       id: "metrics-v1",
       key: "strength_metrics",
-      version: 1,
+      version: "v1",
       checksum: "metrics-checksum",
       fields: [
         { key: "external_load_kg", label: "Load", type: "number", unit: "kg" },
@@ -143,11 +143,20 @@ function catalogActivity(languageKey, id = activityId) {
       { id: "same-load-reps-v1", recordKey: "same_load_max_repetitions", comparisonDirection: "higher_better", canonicalUnit: "repetitions" },
       { id: "session-volume-v1", recordKey: "exercise_session_volume", comparisonDirection: "higher_better", canonicalUnit: "kg_repetitions" },
     ],
-    heatMap: { mapping: [
-      { muscleName: "Quadriceps", atlasTargetId: "quadriceps.vastus_lateralis", role: "primary" },
-      { muscleName: "Gluteus maximus", atlasTargetId: "gluteus_maximus.middle", role: "secondary" },
-      { muscleName: "Hamstrings", atlasTargetId: "hamstrings.biceps_femoris_long_head", role: "stabilizer" },
-    ] },
+    heatMap: {
+      policy: "required",
+      mappingProfileId: "33333333-3333-4333-8333-333333333333",
+      mappingSchemaVersion: "exercise_muscle_mapping_v2",
+      mappingProfileVersion: 1,
+      mappingChecksum: "a".repeat(64),
+      taxonomy: { key: "main_muscle_intelligence", version: "advanced_visible_v1" },
+      workloadModel: { key: "resistance_sets", version: "v1" },
+      mapping: [
+        { muscleId: "quadriceps.vastus_lateralis", role: "primary", contribution: 1, sideScope: "bilateral" },
+        { muscleId: "gluteus_maximus.middle", role: "secondary", contribution: 0.5, sideScope: "bilateral" },
+        { muscleId: "hamstrings.biceps_femoris_long_head", role: "stabilizer", contribution: 0.25, sideScope: "bilateral" },
+      ]
+    },
     publicationPolicy: { id: "publication-v1", key: "member_visible", version: 1, checksum: "publication-checksum" },
     capabilityContract: { id: "capability-v1", version: "1", compatibleCatalogApiVersion: "v2", checksum: "capability-checksum" },
     authority: {
@@ -250,6 +259,11 @@ async function makeContext(browser, profile) {
 
 async function inspect(page, profile, route, zoom = 1) {
   await page.getByRole("heading", { level: 1, name: expectedHeading(profile.languageKey, route) }).waitFor({ timeout: 20_000 });
+  await page.waitForFunction((expectedPlatform) => {
+    const surfaces = [...document.querySelectorAll("[data-detail-surface-platform]")];
+    return surfaces.length > 0 && surfaces.every((node) => node.getAttribute("data-detail-surface-platform") === expectedPlatform);
+  }, profile.platform, { timeout: 5_000 });
+  await page.waitForFunction(() => [...document.images].every((image) => image.complete && image.naturalWidth > 0), null, { timeout: 10_000 });
   if (zoom !== 1) await page.evaluate((value) => { document.documentElement.style.zoom = String(value); }, zoom);
   await page.keyboard.press("Tab");
   return page.evaluate(({ expectedDir, expectedReduced }) => {
@@ -282,10 +296,16 @@ async function inspect(page, profile, route, zoom = 1) {
       floatingNav: document.querySelectorAll("[data-mobile-floating-nav]").length,
       topbars: document.querySelectorAll("[data-exercise-detail-topbar]").length,
       surfaces: document.querySelectorAll("[data-detail-surface]").length,
+      detailBackdrops: document.querySelectorAll("[data-exercise-detail-backdrop]").length,
+      overviewHeroes: document.querySelectorAll("[data-exercise-detail-hero]").length,
+      overviewAnatomy: document.querySelectorAll("[data-overview-anatomy]").length,
+      anatomyWorkspaces: document.querySelectorAll("[data-anatomy-workspace]").length,
+      readyHeatMaps: document.querySelectorAll('[data-muscle-heat-map-mode][data-state="ready"]').length,
+      mappedAnatomyTargets: document.querySelectorAll('[data-canonical-id][data-heat-level]:not([data-heat-level="none"])').length,
       surfacePlatforms: [...new Set([...document.querySelectorAll("[data-detail-surface-platform]")].map((node) => node.getAttribute("data-detail-surface-platform")))],
       emptyMetrics: [...document.querySelectorAll("[data-detail-metric] dd")].filter((node) => !node.textContent?.trim()).length,
       emptyDefinitions: [...document.querySelectorAll("main dd")].filter((node) => !node.textContent?.trim()).length,
-      forbidden: ["Demo Video", "Explore More", "revision-squat-v7", "library-release", "catalog-release", "prescription-checksum", "metrics-checksum"].filter((value) => bodyText.includes(value)),
+      forbidden: ["Demo Video", "Explore More", "revision-squat-v7", "library-release", "catalog-release", "prescription-checksum", "metrics-checksum", "P10E", "canonical identity", "canonical content", "release provenance", "schema implementation"].filter((value) => bodyText.includes(value)),
       startVisible: [...document.querySelectorAll("a,button")].some((node) => /Start Workout|Training starten|بدء التمرين/.test(node.textContent || "")),
       reducedMedia: matchMedia("(prefers-reduced-motion: reduce)").matches,
       expectedReduced,
@@ -308,6 +328,10 @@ function assertMetrics(metrics, profile, scenario) {
   if ((profile.platform === "ios" || profile.platform === "android") && metrics.maxTouchPoints < 1) throw new Error(`${scenario}: mobile touch context missing`);
   if (!metrics.focused) throw new Error(`${scenario}: focused Detail shell missing`);
   if (metrics.topbars !== 1) throw new Error(`${scenario}: expected one Detail topbar, got ${metrics.topbars}`);
+  if (metrics.detailBackdrops !== 1) throw new Error(`${scenario}: detail-only neutral backdrop missing`);
+  if (scenario.includes("-overview-") && (metrics.overviewHeroes !== 1 || metrics.overviewAnatomy !== 1)) throw new Error(`${scenario}: Overview hierarchy contract missing`);
+  if (scenario.includes("-anatomy-") && metrics.anatomyWorkspaces !== 1) throw new Error(`${scenario}: Anatomy workspace contract missing`);
+  if ((scenario.includes("-overview-") || scenario.includes("-anatomy-")) && (!metrics.readyHeatMaps || !metrics.mappedAnatomyTargets)) throw new Error(`${scenario}: production-shaped muscleId mapping did not render`);
   if (metrics.floatingNav) throw new Error(`${scenario}: competing floating nav rendered`);
   if (viewport[0] < 1024 && metrics.headerVisible) throw new Error(`${scenario}: mobile global masthead is visible`);
   if (viewport[0] >= 1024 && !metrics.sidebarVisible) throw new Error(`${scenario}: desktop sidebar is not visible`);

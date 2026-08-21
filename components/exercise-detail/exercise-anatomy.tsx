@@ -36,5 +36,24 @@ export function ExerciseAnatomyVisualization({ exercise, compact = false }: { ex
     showLegend={!compact}
     showViewLabels={!compact}
     showStateMessage={false}
+    className={compact ? "" : "[&>div:first-child]:grid-cols-2"}
   />;
+}
+
+export function ExerciseAnatomyRoleList({ exercise, compact = false }: { exercise: ExerciseDetailViewModel; compact?: boolean }) {
+  const { ed } = useExerciseDetailTranslation();
+  const roles = [
+    { key: "primary", label: ed("primary"), values: exercise.target.primary, dot: "bg-amber-500" },
+    { key: "secondary", label: ed("secondary"), values: exercise.target.secondary, dot: "bg-teal-500" },
+    { key: "stabilizer", label: ed("stabilizers"), values: exercise.target.stabilizer, dot: "bg-sky-400" },
+  ].filter((role) => role.values.length);
+  if (!roles.length && exercise.target.focus.length) {
+    roles.push({ key: "focus", label: ed("focus"), values: exercise.target.focus, dot: "bg-slate-400" });
+  }
+  return <div className={compact ? "space-y-2.5" : "space-y-3.5"} aria-label={ed("target")}>
+    {roles.map((role) => <section key={role.key} className={compact ? "" : "rounded-2xl border border-border/65 bg-muted/20 p-4"}>
+      <h3 className="flex items-center gap-2 text-sm font-semibold"><span className={`size-2.5 shrink-0 rounded-full ${role.dot}`} aria-hidden="true" />{role.label}</h3>
+      <p className={compact ? "mt-1 text-sm leading-5 text-muted-foreground" : "mt-2 text-[15px] leading-6 text-muted-foreground"}>{role.values.join(", ")}</p>
+    </section>)}
+  </div>;
 }
