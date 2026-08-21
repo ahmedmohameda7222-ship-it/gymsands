@@ -20,23 +20,15 @@ test("dedicated Workout History commands remain explicit", () => {
   ]) {
     assert.equal(typeof packageJson.scripts[command], "string", command);
   }
-  assert.match(
-    packageJson.scripts["qa:workout-history"],
-    /run-workout-history-qa\.mjs/u,
-  );
-  assert.match(
-    packageJson.scripts["measure:workout-history"],
-    /measure-workout-history-performance\.mjs/u,
-  );
+  assert.match(packageJson.scripts["qa:workout-history"], /run-workout-history-qa\.mjs/u);
+  assert.match(packageJson.scripts["measure:workout-history"], /measure-workout-history-performance\.mjs/u);
 });
 
-test("PR Quality retains existing QA and adds focused History evidence", () => {
+test("PR Quality retains current rendered authorities and focused History evidence", () => {
   assert.match(prQuality, /npm run qa:rendered/u);
+  assert.match(prQuality, /Train and Active Workout rendered QA/u);
   assert.match(prQuality, /npm run qa:train/u);
-  assert.match(
-    prQuality,
-    /node scripts\/run-aw10-active-workout-closure-qa-entry\.mjs/u,
-  );
+  assert.doesNotMatch(prQuality, /run-aw10-active-workout-closure-qa-entry\.mjs/u);
   assert.match(prQuality, /npm run qa:workout-history/u);
   assert.match(prQuality, /workout-history-qa-evidence\//u);
   assert.match(prQuality, /npm run test:workout-history:integration/u);
@@ -44,28 +36,12 @@ test("PR Quality retains existing QA and adds focused History evidence", () => {
 });
 
 test("canonical Quality records History tests, database, performance, render inspection, and acceptance", () => {
+  assert.equal(REQUIRED_QUALITY_GATES.workoutHistoryTests, "workout-history-tests");
+  assert.equal(REQUIRED_QUALITY_GATES.workoutHistoryIntegration, "workout-history-integration");
+  assert.equal(REQUIRED_QUALITY_GATES.workoutHistoryPerformance, "workout-history-performance");
+  assert.equal(REQUIRED_CANONICAL_FILES.includes("workout-history-performance/report.json"), true);
   assert.equal(
-    REQUIRED_QUALITY_GATES.workoutHistoryTests,
-    "workout-history-tests",
-  );
-  assert.equal(
-    REQUIRED_QUALITY_GATES.workoutHistoryIntegration,
-    "workout-history-integration",
-  );
-  assert.equal(
-    REQUIRED_QUALITY_GATES.workoutHistoryPerformance,
-    "workout-history-performance",
-  );
-  assert.equal(
-    REQUIRED_CANONICAL_FILES.includes(
-      "workout-history-performance/report.json",
-    ),
-    true,
-  );
-  assert.equal(
-    REQUIRED_CANONICAL_FILES.includes(
-      "workout-history-qa-evidence/workout-history-qa-results.json",
-    ),
+    REQUIRED_CANONICAL_FILES.includes("workout-history-qa-evidence/workout-history-qa-results.json"),
     true,
   );
   for (const command of [
@@ -73,8 +49,6 @@ test("canonical Quality records History tests, database, performance, render ins
     "npm run test:workout-history:integration",
     "npm run measure:workout-history",
     "npm run qa:workout-history",
-  ]) {
-    assert.match(quality, new RegExp(command.replaceAll(":", "\\:")));
-  }
+  ]) assert.match(quality, new RegExp(command.replaceAll(":", "\\:")));
   assert.match(quality, /quality-reports\/workout-history-integration\.log/u);
 });
