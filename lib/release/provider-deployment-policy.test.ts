@@ -26,6 +26,7 @@ function runNetlify(overrides: EnvironmentOverrides = {}) {
 describe("provider deployment policy", () => {
   it("keeps Vercel fail-closed except main", () => {
     const vercelConfig = JSON.parse(readFileSync(`${repositoryRoot}/vercel.json`, "utf8")) as {
+      buildCommand?: string;
       ignoreCommand?: string;
       git?: { deploymentEnabled?: Record<string, boolean> };
       crons?: Array<{ path: string; schedule: string }>;
@@ -36,7 +37,7 @@ describe("provider deployment policy", () => {
       "**": false,
       main: true
     });
-    expect(vercelConfig.buildCommand).toBeUndefined();
+    expect(vercelConfig.buildCommand).toBe("npm run build");
     expect(vercelConfig.ignoreCommand).toBeUndefined();
     expect(vercelConfig.crons).toEqual([
       { path: "/api/internal/maintenance/oauth-cleanup", schedule: "17 3 * * *" },
