@@ -112,7 +112,7 @@ export class LegacyLibraryActivityProvider implements LibraryActivityProvider {
     if (domain !== "strength") throw new LibraryProviderError("catalog_not_found");
     try {
       await this.legacy.getActivity(identifier);
-      await this.legacy.getActivityAlternatives(identifier);
+      await this.legacy.getActivityAlternatives();
       return { data: [], meta: meta(options.locale) };
     } catch (error) {
       throw new LibraryProviderError("catalog_not_found", { cause: error });
