@@ -1,5 +1,5 @@
 {
-  "asset_set": "Plaivra Muscle Intelligence Phase 4A approved source assets",
+  "asset_set": "Plaivra Muscle Intelligence current geometry source assets",
   "canvas": "2:3 portrait",
   "normalized_target_canvas": "1024x1536",
   "files": [
@@ -14,22 +14,6 @@
       "sha256": "f7f59e9f4f843a43f9d02743160092967321a324f1cfd6079015c26100584d67",
       "bytes": 1460332,
       "role": "grayscale_geometry_authority"
-    },
-    {
-      "name": "muscle-mask-front.svg",
-      "sha256": "b132a503fab5d0d8193c68564092de1c8a038f614ca4e421a69b7fe61d848c89",
-      "bytes": 86771,
-      "role": "rejected_painter_provenance_only",
-      "used_for_generation": false,
-      "used_at_runtime": false
-    },
-    {
-      "name": "muscle-mask-back.svg",
-      "sha256": "4f6b51441d7a3262f6be28863878c5d51aee33c54519cfd1810f67bf11d01e07",
-      "bytes": 67348,
-      "role": "rejected_painter_provenance_only",
-      "used_for_generation": false,
-      "used_at_runtime": false
     }
   ],
   "semantic_geometry_files": [
