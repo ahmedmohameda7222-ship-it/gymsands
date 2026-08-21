@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import { extname, join, relative } from "node:path";
 import test from "node:test";
 import ts from "typescript";
 
@@ -42,9 +42,7 @@ function collectConstInitializers(sourceFile) {
 }
 
 function staticPathFragments(node, bindings, seen = new Set()) {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    return [node.text];
-  }
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return [node.text];
   if (ts.isTemplateExpression(node)) {
     const fragments = [node.head.text];
     for (const span of node.templateSpans) {
@@ -60,9 +58,7 @@ function staticPathFragments(node, bindings, seen = new Set()) {
   }
 
   const fragments = [];
-  ts.forEachChild(node, (child) => {
-    fragments.push(...staticPathFragments(child, bindings, seen));
-  });
+  ts.forEachChild(node, (child) => fragments.push(...staticPathFragments(child, bindings, seen)));
   return fragments;
 }
 
@@ -90,8 +86,7 @@ function readsMarkdownProse(source, path = "fixture.mjs") {
           ? expression.name.text
           : null;
       if (callee && readCallees.has(callee) && node.arguments[0]) {
-        const fragments = staticPathFragments(node.arguments[0], bindings);
-        if (isMarkdownDocumentationPath(fragments)) {
+        if (isMarkdownDocumentationPath(staticPathFragments(node.arguments[0], bindings))) {
           coupled = true;
           return;
         }
@@ -105,62 +100,78 @@ function readsMarkdownProse(source, path = "fixture.mjs") {
 }
 
 test("Markdown prose detector covers direct, template, resolve, and const-bound reads", () => {
-  const coupledSources = [
+  for (const source of [
     'readFileSync("docs/release/README.md", "utf8");',
     'readFileSync(`${root}/docs/release/README.md`, "utf8");',
     'readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8");',
     'const authority = join(root, "docs", "release", "README.md"); readFileSync(authority, "utf8");',
     'fs.readFile(resolve(root, "docs", "release", "README.md"));'
-  ];
-  for (const source of coupledSources) {
+  ]) {
     assert.equal(readsMarkdownProse(source), true, source);
   }
   assert.equal(readsMarkdownProse('readFileSync(resolve(root, file), "utf8");'), false);
 });
 
-test("completed implementation evidence stays out of the active source tree", () => {
-  const requiredCurrentPhaseReport = "plaivra_aw7_minimize_review_completion_implementation_report.md";
-  const preservedDirectPredecessorReport = "plaivra_aw6_details_actions_heatmaps_implementation_report.md";
+test("historical evidence and local agent tooling stay out of the active repository", () => {
+  const forbiddenPaths = [
+    ".agents",
+    ".codex",
+    "CHATGPT_CODEX_PROMPT_RULES.md",
+    "docs/architecture/decisions",
+    "docs/architecture/p8a-single-workout-pdf.md",
+    "docs/ci",
+    "docs/implementation",
+    "docs/performance",
+    "docs/platform-roadmap",
+    "docs/privacy",
+    "docs/ux-constitution",
+    "docs/p10-batch2-main-capabilities.md",
+    "docs/p10a3-main-dormant-v2-contract.md",
+    "docs/persistence-notes.md",
+    "docs/operations/pcs5a-production-deployment-convergence.md",
+    "docs/operations/pcs5b-owner-alert-routing.md",
+    "docs/chatgpt-app/public-tool-catalog.md",
+    ".github/workflows/p10f-premerge.yml",
+    "plaivra_aw6_details_actions_heatmaps_implementation_report.md",
+    "plaivra_aw7_minimize_review_completion_implementation_report.md"
+  ];
+  for (const path of forbiddenPaths) {
+    assert.equal(existsSync(join(root, path)), false, `${path} must remain absent from the active tree`);
+  }
+
   const topLevelReports = readdirSync(root)
     .filter((entry) => /^plaivra_.*(?:implementation|qaqc|quality|audit|reconciliation).*\.(?:md|json)$/i.test(entry))
-    .filter((entry) => ![requiredCurrentPhaseReport, preservedDirectPredecessorReport].includes(entry))
     .sort();
   assert.deepEqual(topLevelReports, []);
-  assert.equal(
-    existsSync(join(root, requiredCurrentPhaseReport)),
-    true,
-    `${requiredCurrentPhaseReport} is required by the binding AW-6 phase contract`
-  );
-  assert.equal(
-    existsSync(join(root, preservedDirectPredecessorReport)),
-    true,
-    `${preservedDirectPredecessorReport} remains the direct predecessor handoff`
-  );
 
   const committedReportSnapshots = filesUnder(join(root, "docs", "reports"))
+    .map((path) => relative(root, path).replaceAll("\\", "/"))
     .filter((path) => /\.(?:md|json)$/i.test(path))
     .sort();
   assert.deepEqual(committedReportSnapshots, []);
-
-  for (const obsoletePointer of [
-    "docs/architecture.md",
-    "docs/privacy/active-workout-command-receipts.md",
-    "release/prelaunch-handoff-manifest.json",
-    "plaivra_production_migration_reconciliation_plan.md",
-    ".github/workflows/aw3c-repository-cleanup.yml",
-  ]) {
-    assert.equal(existsSync(join(root, obsoletePointer)), false, `${obsoletePointer} must remain absent`);
-  }
 });
 
-test("current authority remains present after evidence cleanup", () => {
+test("current product, control, architecture, native, release and machine authorities remain present", () => {
   for (const authority of [
     "README.md",
+    "AGENTS.md",
+    "docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md",
+    "docs/product/PLAIVRA_LONG_TERM_PRODUCT_AND_PLATFORM_PLAN.md",
+    "docs/product/ai-first-tracker-model.md",
+    "docs/control/README.md",
+    "docs/control/PLAIVRA_CURRENT_STATE.md",
+    "docs/control/PLAIVRA_MASTER_PLAN.md",
+    "docs/control/PLAIVRA_ARCHITECTURE_AUTHORITIES.md",
+    "docs/control/PLAIVRA_DECISIONS.md",
+    "docs/control/PLAIVRA_DELIVERY_RULES.md",
+    "docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md",
     "docs/architecture/canonical-domain-model.md",
     "docs/architecture/migration-ledger-reconciliation.md",
-    "docs/platform-roadmap/README.md",
+    "docs/chatgpt-app/README.md",
+    "docs/chatgpt-app/public-tool-catalog.json",
+    "docs/native-readiness/README.md",
     "docs/release/README.md",
-    "supabase/migration-ledger.json",
+    "supabase/migration-ledger.json"
   ]) {
     assert.equal(existsSync(join(root, authority)), true, `${authority} is required authority`);
   }
@@ -172,6 +183,5 @@ test("tests enforce code and structured contracts instead of Markdown prose", ()
     .filter((path) => /(?:^|\/)[^/]+\.(?:test|spec)\.(?:ts|tsx|js|mjs|cjs)$/i.test(path));
 
   const proseCoupling = testSources.filter((path) => readsMarkdownProse(readFileSync(path, "utf8"), path));
-
   assert.deepEqual(proseCoupling, []);
 });
