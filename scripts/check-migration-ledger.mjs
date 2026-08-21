@@ -61,8 +61,6 @@ export function deriveMigrationLedgerState(ledger) {
     : ledger.historyRepair?.state === "pending"
       ? "pending"
       : "unknown";
-  // The release target is the newest reconciled physical production record,
-  // including generated production aliases whose immutable repository filename differs.
   const latestAppliedMigrationVersion = entries
     .filter((entry) => RESOLVED_STATES.has(entry.state) && typeof entry.productionVersion === "string")
     .map((entry) => entry.productionVersion)
@@ -225,9 +223,6 @@ export async function validateMigrationLedgerGitEvidence({
     return errors;
   }
 
-  // Squash merges intentionally do not preserve the implementation branch as
-  // an ancestor. Evidence is therefore bound to immutable commit bytes/blob
-  // plus the identical blob and bytes at the currently reviewed HEAD.
   const evidenceEntries = (ledger.entries ?? []).filter(
     (entry) => entry.evidenceCommit || entry.repositorySha256 || entry.repositoryGitBlob
   );
@@ -301,7 +296,6 @@ async function main() {
   const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
   const files = (await readdir(migrationsDir)).filter((file) => file.endsWith(".sql")).sort();
   const documentation = {
-    "README.md": await readFile(path.join(root, "README.md"), "utf8"),
     "docs/architecture/migration-ledger-reconciliation.md": await readFile(
       path.join(root, "docs", "architecture", "migration-ledger-reconciliation.md"),
       "utf8"
