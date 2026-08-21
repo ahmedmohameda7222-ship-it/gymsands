@@ -69,17 +69,11 @@ const BROAD_CI_AUTHORITY_PATTERNS = [
   /^scripts\/(?:ci-change-scope|run-ci-check)\.mjs$/,
 ];
 
-const BOUNDED_SCRIPT_AUTHORITY_PATTERNS = [
-  /^scripts\/measure-pcs3-production\.mjs$/,
-];
-
 const CI_SELECTION_PATTERNS = [
   /^\.github\/workflows\//,
   /^\.gitignore$/,
   /^scripts\//,
   /^AGENTS\.md$/,
-  /^CHATGPT_CODEX_PROMPT_RULES\.md$/,
-  /^\.agents\//,
   /^(?:package|tsconfig|vitest|eslint|next|postcss|tailwind)[^/]*\.(?:json|js|mjs|cjs|ts)$/,
   ...PERFORMANCE_BUILD_PATTERNS,
   /^\.nvmrc$/,
@@ -90,11 +84,8 @@ const RECOGNIZED_CI_PATTERNS = [
   /^\.github\/workflows\//,
   /^\.gitignore$/,
   /^AGENTS\.md$/,
-  /^CHATGPT_CODEX_PROMPT_RULES\.md$/,
-  /^\.agents\//,
   /^(?:package|tsconfig|vitest|eslint|next|postcss|tailwind)[^/]*\.(?:json|js|mjs|cjs|ts)$/,
   ...PERFORMANCE_BUILD_PATTERNS,
-  ...BOUNDED_SCRIPT_AUTHORITY_PATTERNS,
   /^\.nvmrc$/,
   /^\.node-version$/,
 ];
@@ -129,7 +120,6 @@ const ACTIVE_WORKOUT_RENDERED_PATTERNS = [
   /^services\/database\/active-session-[^/]+$/,
   /^services\/database\/workout-session-execution[^/]*$/,
   /^app\/.*\/active-workout(?:\/|$)/,
-  /^scripts\/run-aw10-active-workout-closure-qa\.mjs$/,
 ];
 
 const TRAIN_RENDERED_PATTERNS = [
