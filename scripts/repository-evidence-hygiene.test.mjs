@@ -56,19 +56,11 @@ function staticPathFragments(node, bindings, seen = new Set()) {
     nextSeen.add(node.text);
     return staticPathFragments(bindings.get(node.text), bindings, nextSeen);
   }
-
   const fragments = [];
-  ts.forEachChild(node, (child) => fragments.push(...staticPathFragments(child, bindings, seen)));
+  ts.forEachChild(node, (child) => {
+    fragments.push(...staticPathFragments(child, bindings, seen));
+  });
   return fragments;
-}
-
-function isMarkdownDocumentationPath(fragments) {
-  const normalized = fragments
-    .map((fragment) => String(fragment).replaceAll("\\", "/").trim())
-    .filter(Boolean);
-  const direct = normalized.some((fragment) => /(?:^|\/)docs\/[^?#]*\.md(?:$|[?#])/i.test(fragment));
-  const segmented = /(?:^|\/)docs(?:\/[^/]+)*\/[^/]+\.md(?:$|[?#])/i.test(normalized.join("/"));
-  return direct || segmented;
 }
 
 function readsMarkdownProse(source, path = "fixture.mjs") {
@@ -86,10 +78,14 @@ function readsMarkdownProse(source, path = "fixture.mjs") {
           ? expression.name.text
           : null;
       if (callee && readCallees.has(callee) && node.arguments[0]) {
-        if (isMarkdownDocumentationPath(staticPathFragments(node.arguments[0], bindings))) {
-          coupled = true;
-          return;
-        }
+        const fragments = staticPathFragments(node.arguments[0], bindings)
+          .map((fragment) => String(fragment).replaceAll("\\", "/").trim())
+          .filter(Boolean);
+        const candidate = fragments.join("/");
+        if (
+          fragments.some((fragment) => /(?:^|\/)docs\/[^?#]*\.md(?:$|[?#])/i.test(fragment))
+          || /(?:^|\/)docs(?:\/[^/]+)*\/[^/]+\.md(?:$|[?#])/i.test(candidate)
+        ) coupled = true;
       }
     }
     ts.forEachChild(node, visit);
@@ -106,14 +102,12 @@ test("Markdown prose detector covers direct, template, resolve, and const-bound 
     'readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8");',
     'const authority = join(root, "docs", "release", "README.md"); readFileSync(authority, "utf8");',
     'fs.readFile(resolve(root, "docs", "release", "README.md"));'
-  ]) {
-    assert.equal(readsMarkdownProse(source), true, source);
-  }
+  ]) assert.equal(readsMarkdownProse(source), true, source);
   assert.equal(readsMarkdownProse('readFileSync(resolve(root, file), "utf8");'), false);
 });
 
 test("historical evidence and local agent tooling stay out of the active repository", () => {
-  const forbiddenPaths = [
+  for (const path of [
     ".agents",
     ".codex",
     "CHATGPT_CODEX_PROMPT_RULES.md",
@@ -134,10 +128,7 @@ test("historical evidence and local agent tooling stay out of the active reposit
     ".github/workflows/p10f-premerge.yml",
     "plaivra_aw6_details_actions_heatmaps_implementation_report.md",
     "plaivra_aw7_minimize_review_completion_implementation_report.md"
-  ];
-  for (const path of forbiddenPaths) {
-    assert.equal(existsSync(join(root, path)), false, `${path} must remain absent from the active tree`);
-  }
+  ]) assert.equal(existsSync(join(root, path)), false, `${path} must remain absent from the active tree`);
 
   const topLevelReports = readdirSync(root)
     .filter((entry) => /^plaivra_.*(?:implementation|qaqc|quality|audit|reconciliation).*\.(?:md|json)$/i.test(entry))
@@ -172,16 +163,13 @@ test("current product, control, architecture, native, release and machine author
     "docs/native-readiness/README.md",
     "docs/release/README.md",
     "supabase/migration-ledger.json"
-  ]) {
-    assert.equal(existsSync(join(root, authority)), true, `${authority} is required authority`);
-  }
+  ]) assert.equal(existsSync(join(root, authority)), true, `${authority} is required authority`);
 });
 
 test("tests enforce code and structured contracts instead of Markdown prose", () => {
   const testSources = ["app", "components", "lib", "services", "scripts"]
     .flatMap((directory) => filesUnder(join(root, directory)))
     .filter((path) => /(?:^|\/)[^/]+\.(?:test|spec)\.(?:ts|tsx|js|mjs|cjs)$/i.test(path));
-
   const proseCoupling = testSources.filter((path) => readsMarkdownProse(readFileSync(path, "utf8"), path));
   assert.deepEqual(proseCoupling, []);
 });
