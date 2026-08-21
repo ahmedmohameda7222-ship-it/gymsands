@@ -12,6 +12,8 @@ import type {
   LibraryExecutionProfile,
   LibraryInstruction,
   LibraryJsonValue,
+  LibraryHeatMap,
+  LibraryHeatMapMapping,
   LibraryProviderMeta,
   LibraryResponseMeta,
   LibrarySearchParams
@@ -105,6 +107,41 @@ function parseCoverage(value: unknown): LibraryCoverage {
     side: nullableString(value.side)
   };
 }
+function parseHeatMapRole(value: unknown): LibraryHeatMapMapping["role"] {
+  switch (value) { case "primary": case "secondary": case "stabilizer": return value; default: return invalidResponse(); }
+}
+function parseHeatMapMapping(value: unknown): LibraryHeatMapMapping {
+  if (!isRecord(value) || typeof value.contribution !== "number" || !Number.isFinite(value.contribution)) return invalidResponse();
+  return {
+    muscleId: stringValue(value.muscleId),
+    role: parseHeatMapRole(value.role),
+    contribution: value.contribution,
+    sideScope: stringValue(value.sideScope),
+    ...(value.sortOrder === undefined ? {} : { sortOrder: integerValue(value.sortOrder) })
+  };
+}
+function parseHeatMapAuthority(value: unknown) {
+  if (!isRecord(value)) return invalidResponse();
+  return { key: stringValue(value.key), version: stringValue(value.version) } satisfies { key: string; version: string };
+}
+function parseHeatMap(value: unknown): LibraryHeatMap | null {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) return invalidResponse();
+  if (value.policy === "not_applicable") {
+    return { policy: "not_applicable", ...(value.reason === undefined ? {} : { reason: nullableString(value.reason) }) };
+  }
+  if (value.policy !== "required" || !Array.isArray(value.mapping)) return invalidResponse();
+  return {
+    policy: "required",
+    mappingProfileId: stringValue(value.mappingProfileId),
+    mappingSchemaVersion: stringValue(value.mappingSchemaVersion),
+    mappingProfileVersion: integerValue(value.mappingProfileVersion),
+    mappingChecksum: stringValue(value.mappingChecksum),
+    taxonomy: parseHeatMapAuthority(value.taxonomy),
+    workloadModel: parseHeatMapAuthority(value.workloadModel),
+    mapping: value.mapping.map(parseHeatMapMapping)
+  };
+}
 function parseExecutionProfile(value: unknown): LibraryExecutionProfile {
   if (!isRecord(value)) return invalidResponse();
   const metrics = value.metrics === undefined ? undefined : Array.isArray(value.metrics) && value.metrics.every((entry) => typeof entry === "string") ? value.metrics as string[] : invalidResponse();
@@ -147,7 +184,7 @@ function parseLibraryActivityDetail(value: unknown, expectedDomain?: string): Li
   if (!Array.isArray(value.instructions) || !Array.isArray(value.equipment) || !Array.isArray(value.coverage) || !Array.isArray(value.executionProfiles) || !Array.isArray(value.aliases) || !Array.isArray(value.bodyEffects)) return invalidResponse();
   const authority = parseAuthority(value.authority);
   const recordDefinitions = value.recordDefinitions === undefined ? [] : recordArray(value.recordDefinitions);
-  const heatMap = value.heatMap === null || value.heatMap === undefined ? null : isRecord(value.heatMap) ? value.heatMap : invalidResponse();
+  const heatMap = parseHeatMap(value.heatMap);
   return {
     id: stringValue(value.id),
     ...(domain ? { domain } : {}),

@@ -60,7 +60,18 @@ function productionShapeActivity() {
       contextDimensions: ["resistance_mode", "side", "set_type"]
     },
     recordDefinitions: [],
-    heatMap: null,
+    heatMap: {
+      policy: "required",
+      mappingProfileId: "33333333-3333-4333-8333-333333333333",
+      mappingSchemaVersion: "exercise_muscle_mapping_v2",
+      mappingProfileVersion: 1,
+      mappingChecksum: "a".repeat(64),
+      taxonomy: { key: "main_muscle_intelligence", version: "advanced_visible_v1" },
+      workloadModel: { key: "resistance_sets", version: "v1" },
+      mapping: [
+        { muscleId: "erector_spinae", role: "primary", contribution: 1, sideScope: "bilateral" }
+      ]
+    },
     publicationPolicy: null,
     capabilityContract: null
   };
@@ -78,5 +89,23 @@ describe("Activity Catalog V2 schema version contract", () => {
 
     expect(result.data.prescriptionSchema?.version).toBe("v1");
     expect(result.data.performedMetricSchema?.version).toBe("v1");
+    expect(result.data.heatMap).toMatchObject({
+      policy: "required",
+      mappingSchemaVersion: "exercise_muscle_mapping_v2",
+      taxonomy: { key: "main_muscle_intelligence", version: "advanced_visible_v1" },
+      mapping: [{ muscleId: "erector_spinae", role: "primary" }]
+    });
+  });
+
+  it("rejects a malformed required Heat Map before it reaches the product model", async () => {
+    const malformed = productionShapeActivity();
+    malformed.heatMap.mapping[0] = { ...malformed.heatMap.mapping[0], muscleId: null } as never;
+    const http = new HttpLibraryActivityProvider({
+      baseUrl: "https://catalog-api.plaivra.com",
+      apiKey: catalogKey,
+      fetchImpl: vi.fn(async () => response(malformed)) as unknown as typeof fetch
+    });
+
+    await expect(http.getActivityByIdentifier(malformed.id)).rejects.toMatchObject({ code: "catalog_invalid_response" });
   });
 });

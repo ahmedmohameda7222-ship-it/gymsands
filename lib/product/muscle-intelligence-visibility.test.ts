@@ -55,7 +55,8 @@ describe("Muscle Intelligence visibility correction", () => {
     expect(preview).toContain('exercise.identity.source !== "catalog_legacy"');
     expect(preview).toContain("MuscleHeatMap");
     expect(preview).toContain("if (!analysis) return null");
-    expect(authority).toContain("atlasTargetId");
+    expect(authority).toContain("item.muscleId");
+    expect(authority).not.toContain("atlasTargetId");
     expect(authority).toContain("isAdvancedMuscleTargetId(candidate)");
     expect(authority).toContain('exercise.identity.source !== "catalog_v2"');
     expect(preview).not.toMatch(

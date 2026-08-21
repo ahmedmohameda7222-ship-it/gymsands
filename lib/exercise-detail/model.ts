@@ -9,6 +9,8 @@ import {
   type ExerciseDisplayDomain,
 } from "@/lib/train/exercise-display";
 import { resolveExerciseIdentity, resolveFrozenPlanExerciseIdentity } from "./identity";
+import { isCompatibleExerciseHeatMap } from "./anatomy-contract";
+import { fallbackExerciseName, userFacingCatalogText } from "./user-facing-content";
 import type {
   AddToPlanActivityPayload,
   ExerciseDetailViewModel,
@@ -129,16 +131,13 @@ function catalogTargets(detail: LibraryActivityDetail, language: ReturnType<type
       text(item.slug), text(item.name), text(item.muscleName), text(item.label),
     ], language, "muscle"), text(item.role));
   }
-  const heatMapping = detail.heatMap && Array.isArray(detail.heatMap.mapping) ? detail.heatMap.mapping : [];
-  for (const item of heatMapping) {
-    classify(reviewedCatalogDisplay([text(item.muscleName), text(item.name)], language, "muscle"), text(item.role));
-  }
+  const heatMapping = isCompatibleExerciseHeatMap(detail.heatMap) ? detail.heatMap.mapping : [];
   return {
     primary: unique(primary),
     secondary: unique(secondary),
     stabilizer: unique(stabilizer),
     focus: unique(focus),
-    anatomyAvailable: heatMapping.length > 0 || detail.coverage.some((item) => Boolean(text(item.targetId) ?? text(item.atlasTargetId)))
+    anatomyAvailable: heatMapping.length > 0
   };
 }
 
@@ -191,15 +190,20 @@ export function catalogActivityDetailModel(
     },
     // Prose comes directly from the requested-locale Catalog resolver. Do not
     // synthesize or client-translate editorial content here.
-    name: detail.name,
-    shortDescription: detail.shortDescription,
+    name: userFacingCatalogText(detail.name) ?? fallbackExerciseName(meta.locale),
+    shortDescription: userFacingCatalogText(detail.shortDescription),
     activityType: catalogActivityType(detail, language),
     difficulty: reviewedCatalogDisplay([text(detail.difficulty)], language, "difficulty"),
     movementPattern: reviewedCatalogDisplay([text(detail.movementPattern)], language, "movement"),
     mechanics: reviewedCatalogDisplay([text(detail.mechanics)], language, "mechanics"),
     forceType: reviewedCatalogDisplay([text(detail.forceType)], language, "force"),
     equipment: catalogEquipment(detail, language),
-    instructions: [...detail.instructions].filter((step) => text(step.text)).sort((left, right) => left.order - right.order),
+    instructions: [...detail.instructions]
+      .flatMap((step) => {
+        const safeText = userFacingCatalogText(step.text);
+        return safeText ? [{ order: step.order, text: safeText }] : [];
+      })
+      .sort((left, right) => left.order - right.order),
     instructionProse: null,
     guideUrl: null,
     sourceVideoUrl: null,
