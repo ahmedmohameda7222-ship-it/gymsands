@@ -31,8 +31,8 @@ function mapActivity(activity: TrainingActivity): LibraryActivityDetail {
     coverage: activity.muscles.map((muscle) => ({ slug: muscle.slug, name: muscle.name, role: muscle.role, bodyRegion: muscle.bodyRegion ?? null })),
     executionProfiles: [],
     bodyEffects: [],
-    prescriptionSchema: activity.metricSchema ? { key: activity.metricSchema.slug ?? "legacy", version: 1, fields: activity.metricSchema.fields ?? [] } : null,
-    performedMetricSchema: activity.metricSchema ? { key: activity.metricSchema.slug ?? "legacy", version: 1, fields: activity.metricSchema.fields ?? [] } : null,
+    prescriptionSchema: activity.metricSchema ? { key: activity.metricSchema.slug ?? "legacy", version: "v1", fields: activity.metricSchema.fields ?? [] } : null,
+    performedMetricSchema: activity.metricSchema ? { key: activity.metricSchema.slug ?? "legacy", version: "v1", fields: activity.metricSchema.fields ?? [] } : null,
     recordDefinitions: [],
     heatMap: null,
     publicationPolicy: null,
@@ -112,7 +112,7 @@ export class LegacyLibraryActivityProvider implements LibraryActivityProvider {
     if (domain !== "strength") throw new LibraryProviderError("catalog_not_found");
     try {
       await this.legacy.getActivity(identifier);
-      await this.legacy.getActivityAlternatives();
+      await this.legacy.getActivityAlternatives(identifier);
       return { data: [], meta: meta(options.locale) };
     } catch (error) {
       throw new LibraryProviderError("catalog_not_found", { cause: error });
