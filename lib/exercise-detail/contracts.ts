@@ -29,7 +29,7 @@ export type ExerciseEquipmentView = {
 
 export type ExerciseTrackingSchema = {
   key: string;
-  version: number;
+  version: string;
   fields: CatalogSchemaField[];
 };
 
@@ -87,7 +87,7 @@ export type ExerciseDetailViewModel = {
   formAuthority: ExerciseFormAuthority;
   prescription: {
     key: string;
-    version: number;
+    version: string;
     fields: ExercisePrescriptionField[];
   } | null;
   performedMetricSchema: ExerciseTrackingSchema | null;

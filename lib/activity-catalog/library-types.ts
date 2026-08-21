@@ -151,7 +151,7 @@ export type CatalogSchemaField = {
 export type CatalogSchemaAuthority = {
   id?: string | null;
   key: string;
-  version: number;
+  version: string;
   checksum?: string | null;
 };
 

@@ -112,7 +112,7 @@ function parseExecutionProfile(value: unknown): LibraryExecutionProfile {
 }
 function parseSchema(value: unknown) {
   if (value === null || value === undefined) return null;
-  if (!isRecord(value) || typeof value.key !== "string" || !Number.isInteger(value.version)) return invalidResponse();
+  if (!isRecord(value) || typeof value.key !== "string" || typeof value.version !== "string" || value.version.length === 0) return invalidResponse();
   if (value.fields !== undefined && !Array.isArray(value.fields)) return invalidResponse();
   return value as LibraryActivityDetail["prescriptionSchema"];
 }

@@ -34,14 +34,14 @@ const activity: LibraryActivityDetail = {
   prescriptionSchema: {
     id: "33333333-3333-4333-8333-333333333333",
     key: "strength_sets_reps",
-    version: 1,
+    version: "v1",
     checksum: "c".repeat(64),
     fields: [{ key: "sets", label: "Sets", type: "integer", required: true, min: 1, max: 20 }],
   },
   performedMetricSchema: {
     id: "44444444-4444-4444-8444-444444444444",
     key: "strength_performed",
-    version: 1,
+    version: "v1",
     checksum: "d".repeat(64),
     fields: [{ key: "external_load_kg", label: "Load", type: "number", unit: "kg" }],
   },
@@ -88,7 +88,9 @@ describe("Exercise Detail canonical model", () => {
       { slug: "barbell", name: "Barbell", requirement: "required" },
       { slug: "bench", name: "Bench", requirement: "optional" },
     ]);
+    expect(model.prescription?.version).toBe("v1");
     expect(model.prescription?.fields[0]).toMatchObject({ key: "sets", required: true, minimum: 1, maximum: 20 });
+    expect(model.performedMetricSchema?.version).toBe("v1");
     expect(model.performedMetricSchema?.fields[0]?.key).toBe("external_load_kg");
     expect(model.recordDefinitions[0]?.recordKey).toBe("highest_load");
     expect(model.execution).toMatchObject({ executable: false, startHref: null, reason: "unsupported_execution_contract" });
