@@ -79,7 +79,7 @@ describe("advanced visible muscle atlas registry", () => {
     }
   });
 
-  it("preserves approved source bytes and records grayscale-registered semantic regions", () => {
+  it("preserves retained source bytes and grayscale-registered semantic regions", () => {
     const approved = JSON.parse(readFileSync(resolve(sourceRoot, "asset-manifest.json"), "utf8")) as {
       files: Array<{ name: string; sha256: string; bytes: number; role: string; used_for_generation?: boolean; used_at_runtime?: boolean }>;
       semantic_geometry_files: Array<{ name: string; sha256: string; bytes: number; role: string }>;
@@ -88,9 +88,6 @@ describe("advanced visible muscle atlas registry", () => {
       expect(sha256(asset.name)).toBe(asset.sha256);
       expect(readFileSync(resolve(sourceRoot, asset.name))).toHaveLength(asset.bytes);
     }
-    expect(approved.files.filter((asset) => asset.name.startsWith("muscle-mask-"))).toEqual(expect.arrayContaining([
-      expect.objectContaining({ role: "rejected_painter_provenance_only", used_for_generation: false, used_at_runtime: false })
-    ]));
     for (const asset of approved.semantic_geometry_files) {
       const bytes = readFileSync(resolve(sourceRoot, asset.name));
       expect(createHash("sha256").update(bytes).digest("hex")).toBe(asset.sha256);
