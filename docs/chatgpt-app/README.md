@@ -69,6 +69,8 @@ Every public tool must define:
 - safe error behavior;
 - positive, negative, authorization, and retry tests.
 
+The machine-readable public catalog is [`public-tool-catalog.json`](public-tool-catalog.json). It is the repository catalog authority for the current allowlist, replacements, and retired tools.
+
 ## 5. Context architecture
 
 Public context tools return task-specific projections, not the full account.
@@ -95,7 +97,7 @@ CIMD is the target ChatGPT client-identification architecture. See `cimd-authent
 
 The MCP server validates token signature, issuer, audience/resource, expiry, scope, active connection, current saved permissions, user ownership, and revocation on every request.
 
-## CIMD launch implementation
+### CIMD launch implementation
 
 Plaivra advertises OAuth 2.1 authorization-code + PKCE S256 and `client_id_metadata_document_supported: true`. ChatGPT supplies an HTTPS Client ID Metadata Document URL as `client_id`; Plaivra fetches that exact URL without redirects, restricts metadata/JWKS origins through `PLAIVRA_CIMD_ALLOWED_ORIGINS`, requires an exact registered redirect URI, and intersects the advertised token authentication methods. `private_key_jwt` is preferred over `none` when both sides support it.
 
@@ -104,8 +106,6 @@ Signed client assertions are verified against a same-origin JWKS with bounded al
 This follows the current [OpenAI Apps SDK authentication guidance](https://developers.openai.com/apps-sdk/build/auth). The implementation does not advertise DCR or OIDC and does not honor `id_token_hint`; those capabilities must not be claimed until separately implemented and tested.
 
 Manual UUID/client-secret setup is retired. The connection begins in ChatGPT, and Plaivra creates the user-owned connection only after signed continuation validation, Plaivra authentication, eligibility checks, permission minimization, and explicit OAuth consent. Repository implementation does not prove OpenAI Platform configuration or a successful production connection.
-
-The versioned 35-tool launch allowlist, replacements, schemas, replay behavior, and concurrency rules are documented in [`public-tool-catalog.md`](public-tool-catalog.md).
 
 ## 8. Execution rules
 
