@@ -1,9 +1,10 @@
 # Nutrition Native Visual Contract Design
 
 **Date:** 2026-08-23  
-**Status:** Direction A approved in principle; corrections incorporated; pending final Planner lock  
+**Status:** Planner-approved shared visual authority  
 **Branch:** `design/nutrition-diary-v1`  
 **Scope:** Shared visual-system authority for Nutrition → Diary, Meal Plan, Food Library, My Recipes, and Summary  
+**Change control:** Future changes to this shared visual authority require an explicit Planner-approved amendment.  
 
 ## 1. Authority and boundary
 
