@@ -21,6 +21,12 @@ Existing nutrition, food-log, meal-plan, hydration, and saved-meal authorities r
 
 This document defines **Nutrition → Diary V1** product behavior, UX semantics, architecture boundaries, native portability, and acceptance criteria. It does not define the complete Meal Plan, Food Library, My Recipes, Nutrition Summary, Today, billing, dynamic bottom-navigation, or future embedded-AI implementation.
 
+### 1.1 Shared Nutrition visual authority
+
+Visual presentation for Diary is governed by `docs/superpowers/specs/2026-08-23-nutrition-native-visual-contract-design.md`, the shared visual-system authority for all five Nutrition destinations.
+
+This Diary spec remains authoritative for Diary product behavior, UX semantics, state transitions, domain boundaries, and acceptance criteria. The shared visual contract must not duplicate, reinterpret, or override those product rules. It supplies presentation rules only, and any later page-specific visual decisions must remain consistent with both authorities.
+
 ## 2. Product classification
 
 This is an **Architectural** redesign because it changes nutrition information architecture, logging flow, state ownership, server/client boundaries, and future native-platform semantics.
