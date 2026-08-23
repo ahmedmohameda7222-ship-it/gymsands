@@ -626,7 +626,7 @@ Use a subtle completeness signal such as:
 
 ## 21. Ask ChatGPT in Diary
 
-Every Plaivra page may have a page-specific `Ask ChatGPT` experience while a global ChatGPT affordance remains available at the application level.
+Every Plaivra page must have a page-specific `Ask ChatGPT` experience, while a global ChatGPT affordance remains available at the application level.
 
 In Diary, the value is **real-time course correction when reality diverges from the existing nutrition plan**, not rebuilding a meal plan from scratch.
 
@@ -846,7 +846,7 @@ Diary V1 is not product-ready until all of the following hold:
 - repeat a visible recent food in one intentional tap where the shortcut is already surfaced;
 - mark a planned meal eaten in one intentional action with atomic plan/log consistency;
 - add multiple foods during one logging session without reopening Add Food;
-- one-tap quick-add from a known search result after the query is entered;
+- one-tap add from a known search result after the query is entered;
 - barcode flow reaches verified add with a short deterministic path;
 - personal barcode/catalog correction survives reload and future catalog refreshes;
 - Quick Add accepts incomplete nutrition without invented macros;
