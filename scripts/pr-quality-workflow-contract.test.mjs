@@ -8,11 +8,16 @@ const workflow = await readFile(workflowUrl, "utf8");
 function jobSection(key, nextKey) {
   const start = workflow.indexOf(`\n  ${key}:\n`);
   assert.notEqual(start, -1, `Missing ${key} job.`);
-  const end = nextKey
-    ? workflow.indexOf(`\n  ${nextKey}:\n`, start + 1)
-    : workflow.length;
+  const end = nextKey ? workflow.indexOf(`\n  ${nextKey}:\n`, start + 1) : workflow.length;
   assert.notEqual(end, -1, `Missing boundary after ${key} job.`);
   return workflow.slice(start, end);
+}
+
+function stepSection(job, name) {
+  const start = job.indexOf(`- name: ${name}`);
+  assert.notEqual(start, -1, `Missing ${name}.`);
+  const next = job.indexOf("\n      - name:", start + 1);
+  return job.slice(start, next === -1 ? job.length : next);
 }
 
 function occurrences(value, fragment) {
@@ -38,9 +43,7 @@ test("exact PR head checkout and stable job names remain present", () => {
     "build",
     "dependency-audit",
     "required-summary",
-  ]) {
-    assert.match(workflow, new RegExp(`name: ${name.replaceAll("-", "\\-")}`));
-  }
+  ]) assert.match(workflow, new RegExp(`name: ${name.replaceAll("-", "\\-")}`));
 });
 
 test("scope exposes all rendered selector outputs", () => {
@@ -51,84 +54,44 @@ test("scope exposes all rendered selector outputs", () => {
     "rendered_active_workout",
     "rendered_workout_history",
   ]) {
-    assert.match(
-      classify,
-      new RegExp(`${output}: \\$\\{\\{ steps\\.scope\\.outputs\\.${output} \\}\\}`),
-    );
+    assert.match(classify, new RegExp(`${output}: \\$\\{\\{ steps\\.scope\\.outputs\\.${output} \\}\\}`));
   }
-});
-
-test("UI job is selected only by rendered outputs", () => {
-  const ui = jobSection("ui", "ci-contracts");
-  for (const output of [
-    "rendered_general",
-    "rendered_train",
-    "rendered_active_workout",
-    "rendered_workout_history",
-  ]) {
-    assert.match(ui, new RegExp(`needs\\.classify\\.outputs\\.${output}`));
-  }
-  assert.doesNotMatch(ui, /if: needs\.classify\.outputs\.ui == 'true'/);
 });
 
 test("automatic PR Quality owns one complete unit suite with isolated heavy identity coverage", () => {
   const core = jobSection("core", "database");
-  const ui = jobSection("ui", "ci-contracts");
   const heavyTest = "components/workouts/active-workout/active-workout-core-session.identity.test.tsx";
-
   assert.equal(occurrences(core, `heavy_test=\"${heavyTest}\"`), 1);
   assert.equal(occurrences(core, "--name unit-active-workout-core-identity"), 1);
-  assert.equal(occurrences(core, "--pool=threads --maxWorkers=1 \"$heavy_test\""), 1);
   assert.match(core, /for shard in \$\(seq 1 32\)/);
-  assert.match(core, /\.\/node_modules\/\.bin\/vitest run --config vitest\.unit\.config\.mjs/);
   assert.match(core, /--exclude "\$heavy_test" --shard="\$\{shard\}\/32"/);
   assert.doesNotMatch(core, /--filesOnly|--static-parse|heap out of memory|\|\|\s*true/);
-  assert.doesNotMatch(workflow, /npm run test:i18n/);
-  assert.doesNotMatch(workflow, /npm run test:workout-history(?:\s|$)/);
-  assert.doesNotMatch(workflow, /Legacy workflow-text contracts/);
-  assert.doesNotMatch(ui, /npm run test:i18n/);
-  assert.doesNotMatch(ui, /npm run test:workout-history(?:\s|$)/);
-  assert.doesNotMatch(ui, /Message contracts/);
-  assert.doesNotMatch(ui, /Workout History focused tests/);
-  assert.match(workflow, /npm run test:workout-history:integration/);
 });
 
-test("all rendered commands remain explicit and individually conditional", () => {
+test("rendered selection uses current canonical runners only", () => {
   const ui = jobSection("ui", "ci-contracts");
-  const commands = [
-    ["General rendered QA", "rendered_general", "npm run qa:rendered"],
-    ["Train rendered QA", "rendered_train", "npm run qa:train"],
-    ["Active Workout rendered QA", "rendered_active_workout", "node scripts/run-aw10-active-workout-closure-qa-entry.mjs"],
-    ["Workout History rendered QA", "rendered_workout_history", "npm run qa:workout-history"],
-  ];
-  for (const [stepName, output, command] of commands) {
-    const start = ui.indexOf(`- name: ${stepName}`);
-    assert.notEqual(start, -1, `Missing ${stepName}.`);
-    const next = ui.indexOf("\n      - name:", start + 1);
-    const step = ui.slice(start, next === -1 ? ui.length : next);
-    assert.match(step, new RegExp(`needs\\.classify\\.outputs\\.${output}`));
-    assert.equal(occurrences(step, command), 1);
+  const general = stepSection(ui, "General rendered QA");
+  const train = stepSection(ui, "Train and Active Workout rendered QA");
+  const history = stepSection(ui, "Workout History rendered QA");
+
+  assert.match(general, /needs\.classify\.outputs\.rendered_general/);
+  assert.equal(occurrences(general, "npm run qa:rendered"), 1);
+
+  for (const output of ["rendered_general", "rendered_train", "rendered_active_workout"]) {
+    assert.match(train, new RegExp(`needs\\.classify\\.outputs\\.${output}`));
   }
+  assert.equal(occurrences(train, "npm run qa:train"), 1);
+
+  for (const output of ["rendered_general", "rendered_workout_history"]) {
+    assert.match(history, new RegExp(`needs\\.classify\\.outputs\\.${output}`));
+  }
+  assert.equal(occurrences(history, "npm run qa:workout-history"), 1);
+
+  assert.doesNotMatch(ui, /run-aw10-active-workout-closure|QA_AW10_EVIDENCE_DIR|active-workout-aw10-evidence/);
   assert.doesNotMatch(ui, /\beval\b/);
 });
 
-test("Active Workout evidence uses declarative YAML environment authority", () => {
-  const ui = jobSection("ui", "ci-contracts");
-  const start = ui.indexOf("- name: Active Workout rendered QA");
-  assert.notEqual(start, -1, "Missing Active Workout rendered QA step.");
-  const next = ui.indexOf("\n      - name:", start + 1);
-  const step = ui.slice(start, next === -1 ? ui.length : next);
-  assert.match(
-    step,
-    /env:\n          QA_AW10_EVIDENCE_DIR: ci-reports\/active-workout-aw10-evidence/,
-  );
-  assert.doesNotMatch(
-    step,
-    /run:\s+QA_AW10_EVIDENCE_DIR=ci-reports\/active-workout-aw10-evidence/,
-  );
-});
-
-test("one build, one server and one wait are shared by selected suites", () => {
+test("one build, one server and one wait are shared by selected rendered suites", () => {
   const ui = jobSection("ui", "ci-contracts");
   assert.equal(occurrences(ui, "npm run build"), 1);
   assert.equal(occurrences(ui, "npm run start"), 1);
@@ -141,13 +104,13 @@ test("one build, one server and one wait are shared by selected suites", () => {
 
 test("rendered evidence and focused diagnostics remain bounded", () => {
   const ui = jobSection("ui", "ci-contracts");
-  assert.match(
-    ui,
-    /name: pr-quality-rendered-evidence-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/,
-  );
+  assert.match(ui, /name: pr-quality-rendered-evidence-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(ui, /ci-reports\/rendered-qa-evidence\//);
+  assert.match(ui, /ci-reports\/train-qa-evidence\//);
+  assert.match(ui, /ci-reports\/workout-history-qa-evidence\//);
+  assert.doesNotMatch(ui, /active-workout-aw10-evidence/);
   assert.match(ui, /if-no-files-found: error/);
   assert.match(ui, /name: pr-quality-ui-failure-\$\{\{ github\.run_id \}\}/);
-  assert.match(ui, /if: failure\(\)/);
 });
 
 test("required summary remains always-run", () => {

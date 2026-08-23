@@ -24,8 +24,9 @@ function runNetlify(overrides: EnvironmentOverrides = {}) {
 }
 
 describe("provider deployment policy", () => {
-  it("keeps Vercel fail-closed except main and the bounded P10F Preview branch", () => {
+  it("keeps Vercel fail-closed except main", () => {
     const vercelConfig = JSON.parse(readFileSync(`${repositoryRoot}/vercel.json`, "utf8")) as {
+      buildCommand?: string;
       ignoreCommand?: string;
       git?: { deploymentEnabled?: Record<string, boolean> };
       crons?: Array<{ path: string; schedule: string }>;
@@ -34,9 +35,9 @@ describe("provider deployment policy", () => {
 
     expect(vercelConfig.git?.deploymentEnabled).toEqual({
       "**": false,
-      main: true,
-      "feat/p10f-activity-catalog-v2-cutover": true
+      main: true
     });
+    expect(vercelConfig.buildCommand).toBe("npm run build");
     expect(vercelConfig.ignoreCommand).toBeUndefined();
     expect(vercelConfig.crons).toEqual([
       { path: "/api/internal/maintenance/oauth-cleanup", schedule: "17 3 * * *" },

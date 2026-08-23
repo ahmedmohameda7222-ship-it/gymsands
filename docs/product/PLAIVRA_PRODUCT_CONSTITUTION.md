@@ -252,11 +252,10 @@ When documents conflict, use this order:
 5. `docs/chatgpt-app/README.md`
 6. `docs/chatgpt-app/cimd-authentication-architecture.md`
 7. `docs/architecture/canonical-domain-model.md`
-8. `docs/platform-roadmap/README.md`
-9. current implementation documentation
-10. code and migration history as evidence of current implementation, not product authority
+8. current control and implementation documentation
+9. code and migration history as evidence of current implementation, not product authority
 
-Audit reports, completed prompts, progress trackers, and historical status reports are not product authority.
+Audit reports, completed prompts, progress trackers, compatibility entry points, and historical status reports are not product authority and must not be retained as active repository documentation after their durable rules are represented by current authorities.
 
 ## 17. Non-negotiable rules
 

@@ -10,10 +10,6 @@ describe("AW-3B draft-context effort isolation", () => {
       source("components/workouts/active-workout/active-workout-runtime-model.ts"),
       source("components/workouts/active-workout/active-workout-runtime-model-core.ts")
     ].join("\n");
-    const renderedQa = [
-      source("scripts/run-train-layout-qa-base.mjs"),
-      source("scripts/run-aw5-correction-layout-qa.mjs")
-    ].join("\n");
 
     expect(details).toContain("export function workoutSetEffortInputForContext(");
     expect(details).toContain("return result.error ? null : result.value");
@@ -28,12 +24,5 @@ describe("AW-3B draft-context effort isolation", () => {
     expect(runtimeModel).toContain(": parseWorkoutSetEffortInput");
     expect(runtimeModel).not.toContain('parseWorkoutSetEffortInput(set.rpe');
     expect(runtimeModel).not.toContain('parseWorkoutSetEffortInput(set.rir');
-
-    expect(renderedQa).toContain('await rpe.fill("8.25")');
-    expect(renderedQa).toContain('await rir.fill("20.1")');
-    expect(renderedQa).toContain('await rpe.fill("8.5")');
-    expect(renderedQa).toContain('await rir.fill("2.5")');
-    expect(renderedQa).toContain("invalidEffortBlocked");
-    expect(renderedQa).toContain("validCorrectionCleared");
   });
 });

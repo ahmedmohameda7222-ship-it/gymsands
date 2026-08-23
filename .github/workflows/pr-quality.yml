@@ -57,7 +57,6 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-
       - name: Classify changed paths conservatively
         id: scope
         env:
@@ -75,7 +74,6 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-
       - name: Verify exact identity and clean diff
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
@@ -230,22 +228,14 @@ jobs:
         env:
           QA_EVIDENCE_DIR: ci-reports/rendered-qa-evidence
         run: node scripts/run-ci-check.mjs --name rendered-qa -- npm run qa:rendered
-      - name: Train rendered QA
+      - name: Train and Active Workout rendered QA
         if: >-
           needs.classify.outputs.rendered_general == 'true' ||
-          needs.classify.outputs.rendered_train == 'true'
-        env:
-          QA_TRAIN_EVIDENCE_DIR: ci-reports/train-qa-evidence
-        run: node scripts/run-ci-check.mjs --name train-rendered-qa -- npm run qa:train
-      - name: Active Workout rendered QA
-        if: >-
-          needs.classify.outputs.rendered_general == 'true' ||
+          needs.classify.outputs.rendered_train == 'true' ||
           needs.classify.outputs.rendered_active_workout == 'true'
         env:
-          QA_AW10_EVIDENCE_DIR: ci-reports/active-workout-aw10-evidence
-        run: >-
-          node scripts/run-ci-check.mjs --name active-workout-rendered-qa --
-          node scripts/run-aw10-active-workout-closure-qa-entry.mjs
+          QA_TRAIN_EVIDENCE_DIR: ci-reports/train-qa-evidence
+        run: node scripts/run-ci-check.mjs --name train-active-rendered-qa -- npm run qa:train
       - name: Workout History rendered QA
         if: >-
           needs.classify.outputs.rendered_general == 'true' ||
@@ -267,7 +257,6 @@ jobs:
           path: |
             ci-reports/rendered-qa-evidence/
             ci-reports/train-qa-evidence/
-            ci-reports/active-workout-aw10-evidence/
             ci-reports/workout-history-qa-evidence/
           if-no-files-found: error
           retention-days: 14

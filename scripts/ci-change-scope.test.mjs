@@ -223,28 +223,6 @@ test("script test files remain lightweight and do not trigger broad fallback", (
   assertRendered(scope, { general: false, train: false, active: false, history: false });
 });
 
-test("PCS-3 measurement script and script-only package metadata stay bounded", () => {
-  const scope = classifyChangedPaths(
-    [
-      "scripts/measure-pcs3-production.mjs",
-      "scripts/measure-pcs3-production.test.mjs",
-      "package.json",
-    ],
-    {
-      dependencyManifestChanged: false,
-      qaValidationScriptsChanged: false,
-    },
-  );
-  assert.equal(scope.core, true);
-  assert.equal(scope.ci, true);
-  assert.equal(scope.dependencies, false);
-  assert.equal(scope.database, false);
-  assert.equal(scope.ui, false);
-  assert.equal(scope.build, false);
-  assert.equal(scope.fallback, false);
-  assertRendered(scope, { general: false, train: false, active: false, history: false });
-});
-
 test("package manifest comparison distinguishes scripts from dependencies", () => {
   const base = JSON.stringify({
     scripts: { test: "node --test", "qa:rendered": "node old.mjs" },
@@ -373,7 +351,6 @@ test("Active Workout implementation paths select only Active Workout rendered QA
     "services/database/active-session-reader.ts",
     "services/database/workout-session-execution.ts",
     "app/(private)/active-workout/page.tsx",
-    "scripts/run-aw10-active-workout-closure-qa.mjs",
   ]) {
     assertRendered(classifyChangedPaths([path]), {
       general: false,

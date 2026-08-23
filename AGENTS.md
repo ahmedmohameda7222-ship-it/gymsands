@@ -6,7 +6,7 @@ These rules apply to Codex and every coding agent working in this repository.
 
 For broad product or architecture work, use the authority order in `README.md`. For a scoped implementation, read only the minimum authority and direct contracts named by the approved prompt.
 
-Historical reports, old prompts, branch handoffs, generated QA evidence, and Git history are evidence, not current authority.
+Historical reports, old prompts, branch handoffs, generated QA evidence, and Git history are evidence, not current authority. Do not recreate completed implementation reports or local agent-framework documentation in the active source tree.
 
 ## Execution model
 
@@ -16,7 +16,7 @@ Plaivra planning and implementation are separate responsibilities:
 - the executor implements one approved phase or correction;
 - independent quality control inspects the actual branch, diff, tests, CI, database evidence, and PR state.
 
-Use one branch, one pull request, and one completion report per phase. Do not start a later phase automatically.
+Use one executor, one branch, and one pull request per approved scope. Do not start a later phase automatically.
 
 ## Bounded inspection
 
@@ -29,7 +29,7 @@ Every implementation prompt must distinguish:
 5. **Do not read** — unrelated modules, old prompts, historical reports, and later phases.
 6. **Validation** — run real relevant checks; never claim an unrun check passed.
 
-Repository-wide remediation is an explicit exception and must still preserve domain boundaries and record deletion proof.
+Repository-wide remediation is an explicit exception and must still preserve domain boundaries and record deletion proof in the pull request or review record rather than permanent evidence files.
 
 ## Scope and safety
 
@@ -37,7 +37,7 @@ Repository-wide remediation is an explicit exception and must still preserve dom
 - preserve authentication, authorization, ownership, data integrity, privacy, consent, accessibility, and rollback;
 - remove obsolete behavior only after dependency proof;
 - do not add abstractions without a concrete repeated need;
-- do not commit generated screenshots, logs, manifests, or historical branch evidence to the active tree;
+- do not commit generated screenshots, logs, reports, manifests, local agent frameworks, or historical branch evidence to the active tree;
 - never rewrite an applied Supabase migration;
 - use new named migrations for DDL;
 - prove route, service, MCP, export, deletion, test, RLS, grant, and foreign-key dependencies before data-model removal.
@@ -57,12 +57,6 @@ Do not build a normal copy/import queue or second approval workflow after succes
 - destructive actions require explicit confirmation;
 - do not report success before tool-confirmed success;
 - use domain services, never arbitrary client table access.
-
-## Agents, Ruflo, and Graphify
-
-Agents and Ruflo are off by default. Use one executor unless genuinely independent workstreams justify bounded parallelism. Do not use swarms or autopilot merely because the repository is large.
-
-Graphify is a dependency-discovery and context-reduction aid. It never replaces source inspection, tests, SQL verification, runtime evidence, or security review. Regenerate it from clean `main` after major merged architecture phases.
 
 ## CI execution and repair
 
@@ -85,4 +79,6 @@ Canonical full release Quality runs once at phase closure. Exact Release consume
 
 ## Completion
 
-Report changed files, implemented decision, database/migration impact, checks actually run, security/privacy impact, remaining risk, and rollback/follow-up boundary. Do not merge, deploy, mutate production, or begin a later phase without explicit authorization.
+Record the completion summary in the pull request or review handoff, not as a new permanent repository report. Include changed files, implemented decision, database/migration impact, checks actually run, security/privacy impact, remaining risk, and rollback/follow-up boundary.
+
+Do not merge, deploy, mutate Production, or begin a later phase without explicit authorization.
