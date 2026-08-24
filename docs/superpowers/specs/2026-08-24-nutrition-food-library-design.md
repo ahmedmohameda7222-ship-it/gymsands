@@ -1,7 +1,7 @@
 # Nutrition Food Library V1 Design
 
-**Date:** 2026-08-24  
-**Status:** Planner-approved architectural design, pending written-spec review  
+**Date:** 2026-08-25  
+**Status:** Final reconciled Planner design, pending user written-spec review  
 **Branch:** `design/nutrition-food-library-v1`  
 **Base design branch:** `design/nutrition-meal-plan-v1`
 
@@ -26,33 +26,27 @@ Sibling Nutrition contracts remain authoritative for their own domains:
 - `docs/superpowers/specs/2026-08-23-nutrition-diary-design.md`
 - `docs/superpowers/specs/2026-08-24-nutrition-meal-plan-design.md`
 
-This document defines **Nutrition → Food Library V1** product responsibility, catalog architecture, identity rules, serving and nutrition semantics, search and ranking, browse taxonomy, personalization, verification, duplicate handling, custom-food behavior, ingestion/curation boundaries, Food Library page information architecture, Food Card and Food Detail behavior, Add To handoff semantics, filters, nutrition discovery presets/tags, loading/offline/error behavior, localization/RTL, responsive behavior, accessibility, and acceptance criteria.
+This document defines **Nutrition → Food Library V1** product responsibility, catalog architecture, food identity, serving and nutrition semantics, search/ranking, taxonomy, personalization, verification, duplicate handling, user-owned food behavior, ingestion/curation boundaries, page information architecture, Food Row and Food Detail behavior, Add To handoff, live filters, nutrition discovery labels, loading/offline/error behavior, localization/RTL, responsive behavior, accessibility, performance/security boundaries, and acceptance criteria.
 
-It does not define the complete My Recipes page, Nutrition Summary, complete Saved Meal authoring UX, Diary logging-session UX, Meal Plan destination UX, Shopping List behavior, billing, future Pantry inventory, a general catalog-management CMS, or implementation sequencing.
+It does not define the complete My Recipes page, Nutrition Summary, complete Saved Meal authoring UX, Diary logging-session UX, Meal Plan destination UX, Shopping List behavior, billing, future Pantry inventory, or a general multi-admin CMS.
 
-No Nutrition implementation plan is authorized by this document. Implementation planning remains intentionally deferred until all five canonical Nutrition destinations have completed design and Nutrition-wide reconciliation.
+No Nutrition implementation plan is authorized by this document. Implementation planning remains deferred until all five canonical Nutrition destinations complete design and Nutrition-wide reconciliation.
 
-## 2. Product classification
+## 2. Product classification and intent
 
-This is an **Architectural** redesign.
+Food Library V1 is an **Architectural** redesign.
 
-The current food browser mixes global foods, custom foods, saved meals, favorites, logging, Meal Plan actions, kitchen/subcategory browsing, and fallback data in one surface. V1 establishes Food Library as a distinct reusable-Food domain and user destination while preserving explicit handoff contracts to Diary, Meal Plan, Recipes, and Saved Meals.
+The current browser mixes global foods, custom foods, saved meals, favorites, logging, Meal Plan actions, kitchen/subcategory browsing, fallback data, and direct destination mutations. V1 establishes Food Library as the reusable **Food** domain and user destination, with explicit handoff boundaries to Diary, Meal Plan, Recipes, and Saved Meals.
 
-## 3. Product intent
-
-Food Library is Plaivra's user-facing destination for **discovering, inspecting, favoriting, and managing reusable single Foods**.
-
-Its primary user question is:
+The primary user question is:
 
 > Can I quickly find the right food, understand its basic nutrition immediately, inspect it precisely when needed, and reuse it anywhere in Plaivra without duplicating or corrupting food identity?
 
-Food Library is not a Diary logger, Meal Plan workspace, recipe authoring page, saved-meal collection, or external-provider browser.
-
-The governing product principle is:
+Governing product principle:
 
 > **Fast discovery on the surface. Strong food identity and nutrition authority underneath.**
 
-## 4. Canonical Nutrition information architecture
+## 3. Canonical Nutrition information architecture
 
 ```text
 Nutrition
@@ -68,46 +62,26 @@ Rules:
 
 - Food Library is an independent Nutrition destination.
 - `My Foods` is a personal view inside Food Library, not a sixth Nutrition destination.
-- Barcode scan is an access method, not a separate destination.
-- Recipes remain owned by My Recipes.
-- Saved Meals remain owned by the Meal/Saved Meal domain.
+- Barcode Scan is an action/access method, not a destination.
+- My Recipes owns Recipes.
+- Meal/Saved Meal domain owns Saved Meals.
 - Diary owns actual intake.
 - Meal Plan owns intended intake.
-- Unified add/search experiences in Diary or Meal Plan may federate Food, Recipe, Saved Meal, Recent, and Favorite results without collapsing the underlying domain boundaries.
+- Unified add/search surfaces may federate Food, Recipe, Saved Meal, Recent, and Favorite results without collapsing domain ownership.
 
-## 5. Core semantic model: Food, Recipe, Meal
+## 4. Core semantic model
 
-### 5.1 Food
+### 4.1 Food
 
-A Food is one reusable consumable identity.
+A Food is one reusable consumable identity, for example chicken breast, rice, banana, milk, or a branded yogurt. Food Library owns this semantic type.
 
-Examples:
+### 4.2 Recipe
 
-- chicken breast;
-- rice;
-- banana;
-- milk;
-- a branded yogurt.
+A Recipe describes how something is made and may contain ingredient Foods, quantities, yield/servings, preparation steps, and nutrition per serving. Recipe creation and management belong to My Recipes.
 
-Food Library owns this semantic type.
-
-### 5.2 Recipe
-
-A Recipe describes how something is made and may contain:
-
-- ingredient Foods;
-- ingredient quantities;
-- yield/servings;
-- preparation/cooking instructions;
-- nutrition per serving.
-
-Recipe creation and management belong to My Recipes.
-
-### 5.3 Saved Meal
+### 4.3 Saved Meal
 
 A Saved Meal is a reusable combination eaten together and may contain Foods and/or Recipes.
-
-Example:
 
 ```text
 My Lunch
@@ -119,45 +93,32 @@ My Lunch
 
 Food is not Recipe. Recipe is not Saved Meal. Saved Meal is not Food.
 
-### 5.4 Cross-domain creation boundary
+### 4.4 Inline Recipe creation boundary
 
-A Food selected from Food Library may be handed into Recipe or Saved Meal authoring. Food Library owns only the resolved Food selection and quantity/serving handoff. The destination domain owns the remaining authoring workflow.
+Where a Meal authoring flow permits `Create Recipe inline`, saving that Recipe creates a normal independent My Recipes object immediately. The Meal draft references it. Cancelling the Meal does not delete the saved Recipe.
 
-No Food Library flow may create a second Recipe or Saved Meal authority.
+Food Library itself does not own inline Recipe authoring.
 
-## 6. Catalog hosting and runtime authority
+## 5. Catalog hosting and runtime authority
 
-### 6.1 Main Plaivra database authority
-
-The canonical Food Catalog lives inside the **same Plaivra Main Supabase project** as the application nutrition domain.
+The canonical Food Catalog lives in the **same Plaivra Main Supabase project** as the Nutrition domain.
 
 Do not create:
 
 - a separate runtime Food Catalog Supabase project;
-- a cross-service runtime dependency before useful Food Library content can appear;
+- a cross-service runtime dependency before useful Food Library content appears;
 - a second nutrition fact store;
-- a full international catalog bundled into the client application.
+- a full international catalog bundled into the client.
 
-The separate Activity Catalog project remains inactive and non-authoritative unless a future Lead-approved migration decision explicitly changes that authority.
+The separate Activity Catalog remains inactive and non-authoritative unless a future Lead-approved authority change explicitly says otherwise.
 
-### 6.2 External providers
+External food APIs/datasets may support ingestion, enrichment, barcode fallback, or research/curation. They are not the normal runtime authority for canonical text search.
 
-External food APIs and datasets may support:
+A normal Food Library page load must remain useful if all external food providers are unavailable.
 
-- ingestion;
-- enrichment;
-- barcode fallback;
-- research/curation.
+### 5.1 Initial projection
 
-They are not the normal runtime authority for canonical text search.
-
-A normal Food Library page load must remain useful if every external food provider is unavailable.
-
-### 6.3 Initial projection
-
-Initial Food Library loading should converge through one bounded page/bootstrap projection rather than browser read fan-out.
-
-Conceptually:
+Initial page loading should converge through one bounded page/bootstrap projection rather than browser read fan-out:
 
 ```text
 Food Library open
@@ -171,161 +132,85 @@ bounded default/browse seed data when needed
 Browse/filter metadata
 ```
 
-The projection may carry a small default/browse seed so empty-personal states and browse entry points can become useful immediately, but it does **not** require a separate visible `Recommended Foods` section.
+This is a read projection over canonical authorities, not a new fact store.
 
-This projection is not a new fact store. It is a read projection over canonical authorities.
+## 6. Canonical Food identity
 
-## 7. Canonical Food identity architecture
+Food identity is language-neutral. Names, translations, transliterations, aliases, cuisine relevance, and country relevance are metadata around a stable Food identity.
 
-### 7.1 Language-neutral identity
-
-Food identity is language-neutral.
-
-Names, translations, transliterations, aliases, cuisine relevance, and country relevance are metadata around a stable Food identity.
-
-For example, these may represent one Food:
+One identity may have:
 
 - Chicken Breast;
 - Hähnchenbrust;
 - صدر دجاج;
-- curated Arabizi aliases.
+- quality-reviewed Arabizi aliases.
 
-Language difference does not create a new Food.
+Language or country difference alone does not create a new Food.
 
-Country difference alone does not create a new Food.
+A distinct Food/Variant may be required when composition, preparation, cooking method, skin/bone state, fat level, physical form, formulation, brand/product identity, barcode/GTIN, ingredients, or nutrition is materially different.
 
-A distinct Food/Variant exists when composition, preparation, formulation, brand identity, or another material semantic property differs.
+Plaivra uses **Canonical Food Identity + Source Records**. External records retain original source identity and provenance and do not automatically become additional search-visible Foods.
 
-### 7.2 Variant-worthy differences
+## 7. International catalog strategy
 
-Variant or distinct-identity decisions may depend on:
-
-- raw versus cooked;
-- cooking method where composition meaningfully differs;
-- skin/bone state;
-- fat level;
-- physical form;
-- formulation;
-- brand/product identity;
-- barcode/GTIN;
-- materially different ingredients;
-- materially different nutrition.
-
-### 7.3 Canonical Food plus source records
-
-Plaivra uses **Canonical Food Identity + Source Records**.
-
-A canonical Food owns the user-facing identity and current approved canonical representation. Supporting external records remain attributed source records and do not automatically become additional search-visible Foods.
-
-Logical model:
-
-```text
-Canonical Food
-├── stable food identity
-├── localized names and aliases
-├── category/subcategory
-├── cuisine/country relevance
-├── brand/barcode identity where applicable
-├── canonical nutrition
-├── serving definitions
-├── lifecycle
-├── verification state
-└── linked source records / provenance
-```
-
-External source records retain their original identity and provenance even when attached to one canonical Food.
-
-## 8. International catalog strategy
-
-### 8.1 Priority markets
+### 7.1 Priority markets
 
 Primary launch-depth markets:
 
-- USA;
-- Germany;
-- UK;
-- Egypt;
-- Saudi Arabia;
-- UAE.
+- USA
+- Germany
+- UK
+- Egypt
+- Saudi Arabia
+- UAE
 
 Tier B:
 
-- Canada;
-- Australia;
-- Austria;
-- Switzerland;
-- Netherlands;
-- Kuwait;
-- Qatar.
+- Canada
+- Australia
+- Austria
+- Switzerland
+- Netherlands
+- Kuwait
+- Qatar
 
-Broad but shallower support may include France, Spain, Italy, Belgium, Nordic markets, Bahrain, Oman, Ireland, and New Zealand.
+Broad but shallower support may include France, Spain, Italy, Belgium, Sweden, Norway, Denmark, Finland, Bahrain, Oman, Ireland, and New Zealand.
 
-Catalog coverage may be broader than go-to-market depth.
+Initial first-class search/localization languages:
 
-Initial first-class search/localization languages are:
+- English
+- German
+- Arabic
 
-- English;
-- German;
-- Arabic.
+GCC priority is Saudi Arabia → UAE → Kuwait → Qatar → Bahrain → Oman.
 
-### 8.2 Coverage contract
+### 7.2 Coverage contract
 
-V1 catalog quality is governed by **coverage and quality gates**, not an arbitrary total-record target.
+V1 catalog success is governed by **coverage and quality gates**, not an arbitrary total-record count.
 
-International Core should cover daily-use categories including:
+International Core should cover staple carbs, meats/poultry/fish, eggs, dairy/alternatives, fruits, vegetables, legumes, oils/fats, nuts/seeds, drinks, common snacks, and everyday prepared foods.
 
-- staple carbohydrates;
-- meats/poultry/fish;
-- eggs;
-- dairy and alternatives;
-- fruits;
-- vegetables;
-- legumes;
-- oils/fats;
-- nuts/seeds;
-- drinks;
-- common snacks.
+Priority-country packs should cover common local foods and daily-use traditional items. Success means an ordinary priority-market user can log most everyday foods without repeatedly creating Custom Foods.
 
-Priority-country packs should cover common local and traditional foods. Egypt, for example, should include staples, traditional dishes, bakery, breakfast foods, street foods, desserts, drinks, and common home-cooked foods.
+## 8. Data acquisition, provenance, and licensing
 
-Success means an ordinary priority-market user can log most everyday foods without repeatedly creating Custom Foods.
+### 8.1 Generic/traditional foods
 
-## 9. Data acquisition and provenance
-
-### 9.1 Generic/traditional foods
-
-Generic and traditional foods may be curated from authoritative or otherwise explicitly approved composition sources.
-
-ChatGPT may act as a research/curation assistant, but never as nutrient authority by itself.
-
-The curation flow is:
-
-```text
-Define candidate food
-→ research approved source evidence
-→ record preparation state and nutrition basis
-→ reconcile conflicts
-→ define canonical representation
-→ verify provenance/license
-→ QA
-→ import/publish
-```
+Generic/traditional foods may be curated from authoritative or explicitly approved composition sources. ChatGPT may assist research/curation but is never nutrient authority by itself.
 
 Every curated source record retains, where applicable:
 
-- source/provider;
-- source record identifier;
+- provider/source;
+- source record ID;
 - source reference/version;
 - license/provenance;
 - retrieved-at time;
-- source nutrition and serving evidence;
+- source nutrition/serving evidence;
 - confidence/review metadata.
 
-### 9.2 Branded/barcode foods
+### 8.2 Branded/barcode foods
 
-Barcode/GTIN is an identity signal, not a complete nutrition authority.
-
-Branded nutrition should prefer manufacturer/label evidence where available.
+Barcode/GTIN is an identity signal, not complete nutrition authority. Branded nutrition should prefer manufacturer/label evidence where available.
 
 Unknown barcode flow:
 
@@ -339,70 +224,48 @@ Found?
 └── No → permitted attributed external fallback
 ```
 
-An external fallback result is not silently promoted into the shared canonical catalog or marked verified.
+External fallback does not silently promote into the shared canonical catalog or become Verified.
 
-The user may use the attributed result for the immediate workflow where allowed, and may create a user-owned branded Custom Food if needed.
+### 8.3 Preferred source boundaries
 
-### 9.3 Licensing boundary
+- USDA FoodData Central is preferred where its public-domain/CC0-style terms fit the intended use.
+- Open Food Facts may serve attributed fallback/enrichment only behind a license-compliant boundary; it is not blindly merged into the proprietary canonical catalog.
+- GS1 may support product identity/verification but is not nutrition authority.
+- National food databases require license compatibility review before production use.
 
-Bulk ingestion is permitted only from sources whose license explicitly supports Plaivra's intended storage and reuse.
+Commercial release requires source-specific legal/Terms review. This design does not claim zero legal risk.
 
-Public-domain/CC0-style datasets are preferred for proprietary canonical ingestion.
+## 9. Serving and measurement model
 
-Provider datasets whose licensing requires attribution/share-alike/database obligations must remain behind an explicitly compliant boundary and may require a separate architecture/legal decision before caching or canonical bulk ingestion.
+### 9.1 Canonical basis
 
-Commercial release requires license/Terms review for every production source boundary. This design does not claim zero legal risk.
-
-## 10. Serving and measurement model
-
-### 10.1 Canonical nutrition basis
-
-Every reusable Food should have a measurable canonical nutrition basis where its evidence supports one:
+Every reusable Food should have a measurable canonical nutrition basis where evidence supports one:
 
 - solids: normally per 100 g;
 - liquids: normally per 100 ml.
 
-A source-provided per-serving basis may be normalized only when a measurable conversion is known.
+Do not infer `100 ml = 100 g` without food-specific density evidence.
 
-Plaivra must not infer 100 ml = 100 g without a food-specific density relationship.
+### 9.2 Serving definitions
 
-### 10.2 Serving definitions
-
-Human-friendly servings are Food-specific definitions that resolve to a measurable amount when known.
-
-Logical serving definition:
-
-```text
-ServingDefinition
-├── stable serving identity
-├── label
-├── measurement type
-├── measurable amount when known
-├── source/provenance
-├── confidence/review state
-└── default/relevance metadata
-```
+Human servings are Food-specific definitions that resolve to a measurable amount when known.
 
 Examples:
 
-- `1 slice = 32 g`;
-- `1 bar = 50 g`;
-- `1 bottle = 330 ml`;
-- `1 oz = 28.35 g`.
+- `1 slice = 32 g`
+- `1 bar = 50 g`
+- `1 bottle = 330 ml`
+- `1 oz = 28.35 g`
 
-`piece`, `slice`, `bowl`, `plate`, and `cup` are not universal nutrient units. Their conversions are Food-specific and must not be guessed.
+`piece`, `slice`, `bowl`, `plate`, and `cup` are not universal nutrient units. Their conversions must not be guessed.
 
-### 10.3 Historical snapshots
+### 9.3 Historical snapshots
 
-Diary logs and Meal Plan planned occurrences store enough frozen resolved serving/nutrition data that later Food Catalog changes do not silently mutate history or previously committed planning snapshots.
-
-The governing rule is:
+Diary logs and committed Meal Plan occurrences store frozen resolved serving/nutrition data so later catalog changes do not silently mutate history.
 
 > **The database calculates from measurable amounts; the user interacts with natural servings.**
 
-## 11. Nutrition data model
-
-### 11.1 Core nutrients
+## 10. Nutrition data model
 
 Core canonical nutrition supports:
 
@@ -415,99 +278,32 @@ Core canonical nutrition supports:
 - sugars;
 - sodium.
 
-Most reusable Foods should at minimum have energy, protein, carbohydrates, and fat when reliable evidence exists.
+Extensible facts may include potassium, calcium, iron, magnesium, zinc, vitamin D, vitamin B12, cholesterol, added sugar, trans fat, and other supported nutrients.
 
-### 11.2 Extensible nutrients
+Most reusable Foods should at minimum have energy + P/C/F when reliable evidence exists.
 
-Additional nutrient facts may include:
+**Missing is not zero.** This rule applies to Food Rows, Food Detail, filters, discovery presets/tags, summaries, custom-food input, and imported provider data.
 
-- potassium;
-- calcium;
-- iron;
-- magnesium;
-- zinc;
-- vitamin D;
-- vitamin B12;
-- cholesterol;
-- added sugars;
-- trans fat;
-- other supported nutrients.
+## 11. Source trust and verification
 
-### 11.3 Missing is not zero
+Internal classes may include Verified/Curated, Manufacturer/Label, Government/Authoritative Dataset, Imported Provider, User Created, Personal Override, and Estimated.
 
-Missing nutrient data is unknown, not zero.
+Normal Food Rows do not show source names, confidence wording, trust levels, or negative `Unverified` badges.
 
-This rule applies to:
+The user-facing verification indicator is positive-only:
 
-- Food Card calculation;
-- Food Detail;
-- filters;
-- discovery presets/tags;
-- summaries;
-- custom-food input;
-- imported-provider data.
+- Web: Lucide `shield-check`;
+- iOS/iPadOS: platform-native shield/check equivalent;
+- Android: platform-native shield/check equivalent;
+- accessible label: `Plaivra Verified`.
 
-## 12. Source trust and verification
+Absence of the shield is neutral.
 
-### 12.1 Internal source classes
+Verification requires, as applicable, identity clarity, duplicate resolution, known nutrition basis, coherent core nutrition, reliable claimed servings, provenance/license, localized identity quality, branded/barcode evidence, and no unresolved material source contradiction.
 
-Plaivra may internally distinguish source/review classes such as:
+Users cannot self-verify. Verification is independent of lifecycle and can be revoked.
 
-- Verified/Curated;
-- Manufacturer/Label;
-- Government/Authoritative Dataset;
-- Imported Provider;
-- User Created;
-- Personal Override;
-- Estimated.
-
-These are contextual authority classes, not one universal quality ranking.
-
-Generic foods should generally prefer authoritative composition/curated evidence. Branded foods should generally prefer manufacturer/label evidence.
-
-### 12.2 User-facing verification
-
-Normal Food Cards do **not** show source names, confidence wording, trust levels, or `unverified` badges.
-
-They show only a positive Plaivra verification indicator when the canonical shared Food passes the complete verification gate.
-
-Canonical icon:
-
-- `lucide:shield-check` on the current web renderer;
-- platform-equivalent semantic shield-check symbol on native renderers.
-
-The verification indicator is:
-
-- green/positive semantic treatment;
-- compact but visible;
-- icon-only by default;
-- accessibility-labeled;
-- absent when verification is not currently valid.
-
-The shield represents Plaivra's verified **shared canonical Food identity/data authority**. It does not transform user-entered personal corrections into verified source data.
-
-### 12.3 Verification gate
-
-Verification requires, as applicable:
-
-- identity clarity;
-- duplicate resolution;
-- known nutrition basis;
-- coherent core nutrition;
-- reliable serving conversions where claimed;
-- source provenance;
-- license acceptability;
-- localized identity quality for published locales;
-- branded identity/barcode evidence where applicable;
-- no unresolved material source contradiction.
-
-Users cannot self-assign the shared verification indicator.
-
-Verification is independent of lifecycle.
-
-## 13. Duplicate and merge architecture
-
-### 13.1 Classification
+## 12. Duplicate and merge architecture
 
 Duplicate evaluation produces:
 
@@ -517,95 +313,55 @@ POSSIBLE_DUPLICATE
 DISTINCT
 ```
 
-Matching may consider concept, preparation state, cooking method, skin/bone state, fat level, brand, barcode, ingredients, physical form, and nutrition compatibility.
+Matching considers preparation, form, brand/barcode, nutrition compatibility, and other semantic evidence. Language similarity alone is never enough.
 
-Language or translation similarity alone is never enough to merge identities.
+No destructive AI auto-merge is permitted.
 
-### 13.2 No destructive AI auto-merge
-
-AI/machine similarity may identify candidates, but it may not independently perform destructive merge decisions.
-
-### 13.3 Merge semantics
-
-When shared canonical Foods are proven duplicates:
+When proven shared duplicates merge:
 
 - one survivor remains canonical;
 - the duplicate gets a durable redirect such as `merged_into`;
 - future references resolve the survivor;
-- favorites survive through canonical resolution;
-- provenance from both identities remains preserved;
-- historical frozen snapshots remain unchanged;
-- merge lineage is auditable;
-- reversible remediation remains possible before destructive cleanup.
+- Favorites survive redirect resolution;
+- provenance and lineage are preserved;
+- historical snapshots remain unchanged;
+- remediation remains auditable.
 
-User-created Foods are not silently merged into shared catalog Foods.
+User-created Foods are never silently merged into shared catalog Foods.
 
-## 14. Food lifecycle and lightweight revisioning
+## 13. Lifecycle and revisioning
 
-### 14.1 Lifecycle
-
-```text
-DRAFT
-↓
-ACTIVE
-↓
-DEPRECATED / WITHDRAWN
-or
-MERGED → canonical replacement
-```
-
-- `DRAFT`: internal, unpublished, not user-searchable.
-- `ACTIVE`: usable; may be verified or unverified.
-- `DEPRECATED/WITHDRAWN`: excluded from ordinary new discovery while history/references remain recoverable.
-- `MERGED`: resolves through the canonical survivor.
-
-### 14.2 Verification state
-
-Verification is separate:
+Lifecycle:
 
 ```text
-UNVERIFIED
-VERIFIED
+DRAFT → ACTIVE → DEPRECATED/WITHDRAWN
+              ↘ MERGED → canonical replacement
 ```
 
-A meaningful source conflict may revoke verification without deleting or deactivating the Food.
+Verification state is separate:
 
-### 14.3 Lightweight revision policy
+```text
+UNVERIFIED / VERIFIED
+```
 
-Do not create user-visible `Food v1/v2/v3` records for ordinary source corrections.
+Minor factual correction/source refresh remains the same stable Food identity with lightweight audit/revision history. A materially distinct preparation/formulation may require a new Food Variant or branded formulation identity.
 
-Maintain current canonical values, lightweight prior revision/audit information, and source/version/update reason where relevant.
+History never silently mutates.
 
-Minor factual correction or source refresh remains the same stable Food identity.
+## 14. Personal correction versus Custom Food
 
-A materially distinct preparation/formulation may require a new Food Variant or branded formulation identity.
+### 14.1 Personal Correction
 
-Historical Diary/Meal Plan snapshots do not retroactively change.
-
-## 15. Personal correction versus Custom Food
-
-### 15.1 Personal Correction
-
-A Personal Correction changes the user's calculation/view of an existing canonical Food without creating a duplicate shared identity.
-
-Example:
+A Personal Correction changes one user's calculation/view of an existing canonical Food without changing global identity.
 
 ```text
 Canonical: 165 kcal / 100 g
 User correction: 150 kcal / 100 g
 ```
 
-A personal correction:
+It is user-scoped, reversible, applies consistently to that user's future Food Library/Diary/Meal Plan/Recipe/Saved Meal use, and does not certify user-entered values.
 
-- is user-scoped;
-- does not mutate the global canonical Food;
-- applies consistently to that user's future Food Library, Diary, Meal Plan, Recipe, and Saved Meal use where the Food is resolved;
-- can be reverted;
-- persists across later canonical updates until explicitly reviewed/reverted.
-
-### 15.2 Effective nutrition
-
-For user-facing calculation, Plaivra resolves an **effective nutrition view**:
+### 14.2 Effective nutrition
 
 ```text
 Effective nutrition for user
@@ -613,145 +369,59 @@ Effective nutrition for user
 + canonical values for nutrients/basis not overridden
 ```
 
-Rules:
+Food Row, Food Detail, numeric filtering, and future-use snapshot resolution use the same effective nutrition view. Verification remains canonical.
 
-- Food Card and Food Detail values use effective nutrition for that user.
-- numeric nutrition filters use effective normalized nutrition for that user.
-- future Diary/Meal Plan/Recipe/Saved Meal resolution uses effective nutrition at the point the new snapshot/reference is created.
-- historical frozen snapshots remain unchanged.
-- verification state remains attached to the canonical shared Food and does not certify personal override values.
+Food Detail exposes a subtle `Using your values` state while a correction is active.
 
-Food Detail must expose a subtle `Using your values` / Manage correction state when a correction is active. Food Cards must not add a noisy negative/unverified badge merely because a personal correction exists.
+### 14.3 Custom Food
 
-### 15.3 Custom Food
+A Custom Food is a genuinely distinct/unavailable user-owned Food. It is private to the user, appears in My Foods, is searchable/reusable for that user, and is not automatically shared or Verified.
 
-A Custom Food is a genuinely distinct or unavailable user-owned Food.
+Strong create-time duplicate match offers:
 
-Examples include homemade granola, a local bakery item, or an unknown local branded product.
+- Use Existing
+- Correct for Me
+- Create Separately
 
-A Custom Food:
+Never silently block or merge.
 
-- belongs to the creating user;
-- appears in My Foods;
-- is searchable/reusable for that user;
-- is not automatically shared globally;
-- is not automatically verified;
-- may later support a separate moderated promotion path without deleting or mutating the personal identity.
+## 15. Favorites, Recent, and Frequency
 
-## 16. Favorites, recents, and frequency personalization
+- Favorite is explicit user intent only and survives canonical redirects.
+- Recent is derived from authoritative actual `food_logs` or successor authority.
+- Frequency is derived from actual logs with recency/time decay.
+- Meal-context frequency may lightly boost ranking.
+- No global popularity mining from private logs in V1.
 
-Plaivra distinguishes three signals:
+Derived optimization projections must remain rebuildable and non-authoritative.
 
-1. explicit Favorite;
-2. Recent Usage;
-3. Usage Frequency.
+## 16. Search architecture
 
-### 16.1 Favorite
+V1 uses a **Supabase/Postgres-native indexed multilingual search projection in Main DB**. No external search provider is introduced in V1.
 
-Favorite is explicit user intent only.
+Searchable identity fields may include canonical names, localized names, aliases, curated transliterations/Arabizi aliases, brands, barcodes, and user-owned Foods where appropriate.
 
-- no auto-favorite;
-- tied to stable canonical identity/resolution;
-- survives canonical merges through redirect resolution;
-- separate from taxonomy.
+English, German, and Arabic are first-class V1 search locales. Arabic normalization must preserve Arabic meaning; German alternate spellings remain searchable. Do not rely on live AI translation for every query.
 
-### 16.2 Recent
+Ranking hierarchy:
 
-Recent is derived from authoritative actual `food_logs` or the canonical successor of that authority.
+1. exact canonical/localized name;
+2. exact alias;
+3. prefix;
+4. fuzzy/typo candidate;
+5. personal relevance among relevant candidates;
+6. quality/locale/catalog relevance;
+7. contextual brand intent.
 
-Do not create a second truth table merely to represent recency.
+Verification is a mild quality signal, never strong enough to override exact intent. Locale is a boost, not a hard filter.
 
-### 16.3 Frequency
+Generic/local foods dominate broad generic queries. Explicit brand/product wording boosts branded products. Barcode-like input routes to exact local barcode lookup before provider fallback.
 
-Usage Frequency is a derived ranking signal over actual user logging, with recency/time decay so old lifetime behavior does not dominate indefinitely.
+Results are bounded, deduplicated, server-authoritative, approximately 20 useful first-page results with cursor/page continuation. Do not fetch the whole catalog or fake pagination by client slicing.
 
-Light meal-context frequency may boost relevant Foods for contexts such as Breakfast without intrusive recommendation messaging.
+## 17. Taxonomy and browse model
 
-### 16.4 Privacy boundary
-
-V1 personalization is user-scoped.
-
-Do not mine private logs into global popularity rankings in V1.
-
-Any performance projection/cache for personalization must be rebuildable derived data, not a new fact authority.
-
-## 17. Search architecture
-
-### 17.1 Main-DB indexed search projection
-
-V1 uses a **Supabase/Postgres-native indexed multilingual search projection inside the Main Plaivra database**.
-
-Do not introduce an external search provider in V1.
-
-The current `ILIKE`-style search and ASCII-only normalization are transitional implementation evidence, not the target search authority.
-
-### 17.2 Searchable identity fields
-
-Search projection may cover:
-
-- canonical names;
-- localized translations;
-- aliases;
-- curated transliterations/Arabizi aliases;
-- brands;
-- barcodes;
-- user-owned Foods where appropriate.
-
-English, German, and Arabic are first-class V1 search locales.
-
-Examples of curated Arabizi aliases may include forms such as `fara5`, `roz`, `3eish`, `laban`, or `gebna` when quality-reviewed.
-
-Do not depend on live AI translation for every search request.
-
-Arabic normalization must be language-aware and cautious rather than deleting all non-Latin characters. German alternate spellings/aliases must remain searchable.
-
-### 17.3 Search ranking
-
-Base ranking hierarchy:
-
-1. query relevance;
-2. personal relevance among relevant candidates;
-3. catalog quality/locale relevance;
-4. contextual brand intent.
-
-Query relevance prefers roughly:
-
-```text
-exact canonical/localized name
-→ exact alias
-→ prefix
-→ typo/fuzzy candidate
-```
-
-Personal relevance may include My Foods, Favorites, Recent, Frequency, and meal context.
-
-Verification is a mild catalog-quality signal, never strong enough to override exact user intent.
-
-Locale is a boost, not a hard filter.
-
-### 17.4 Branded search behavior
-
-Generic/local foods should dominate broad generic queries.
-
-Explicit brand/product wording boosts branded products.
-
-Barcode-like input routes to exact barcode lookup before any external fallback.
-
-### 17.5 Bounded results
-
-Food Library must not fetch the full catalog into the client.
-
-Search returns a bounded first page, approximately 20 useful deduplicated results, with server-authoritative cursor/page continuation.
-
-Do not use browser-side slicing as fake pagination.
-
-Search misses should not be filled with unrelated fuzzy results merely to avoid an empty state.
-
-## 18. Taxonomy and browse model
-
-V1 replaces Kitchen-first hierarchy with orthogonal faceted metadata.
-
-A Food may have:
+Orthogonal facets:
 
 - one Primary Category;
 - optional Subcategory;
@@ -761,98 +431,65 @@ A Food may have:
 - discovery/search tags;
 - separate personal signals.
 
-Suggested Primary Categories include:
+V1 Primary Categories:
 
-- Protein;
-- Dairy & Alternatives;
-- Grains & Starches;
-- Bread & Bakery;
-- Fruit;
-- Vegetables;
-- Legumes;
-- Nuts & Seeds;
-- Fats & Oils;
-- Drinks;
-- Snacks;
-- Desserts & Sweets;
-- Sauces & Condiments;
-- Prepared Dishes.
+- Protein
+- Dairy & Alternatives
+- Grains & Starches
+- Bread & Bakery
+- Fruit
+- Vegetables
+- Legumes
+- Nuts & Seeds
+- Fats & Oils
+- Drinks
+- Snacks
+- Desserts & Sweets
+- Sauces & Condiments
+- Prepared Dishes
 
 Cuisine is not the same as country relevance.
 
-Example:
+Browse top level is Categories + Cuisines. Brands remain primarily search-driven. Countries, providers, kitchens, Favorites, Recent, and Frequency are not top-level taxonomy facets.
+
+Priority-market cuisine examples may include Egyptian, German, Gulf, American, British, and Mediterranean, with locale-aware ordering. `Asian` is not a prominent default V1 shortcut.
+
+## 18. Internal owner-only catalog curation
+
+Plaivra V1 has one owner-controlled internal `/admin/food-catalog` console. No V1 multi-admin hierarchy or general-purpose CMS.
+
+Owner may review incoming candidates, edit/normalize canonical Foods, publish, verify/unverify, merge, deprecate, restore, and inspect provenance.
+
+Publish is not Verify.
+
+Bulk ingestion pipeline:
 
 ```text
-Koshari
-Primary Category: Prepared Dishes
-Cuisine: Egyptian
-Country relevance: Egypt
+External source
+→ Raw Source Record
+→ Normalize
+→ Identity/Duplicate check
+→ Nutrition/Serving validation
+→ License/Provenance validation
+→ Verification Gate
+→ Canonical Food
+→ Publish Search
 ```
 
-Favorites, Recent, My Foods, and Frequency are personal projections, not taxonomy categories.
+Routine safe records may auto-clear validation. Exceptions are manually reviewed. Sensitive actions are auditable.
 
-## 19. Internal owner-only catalog curation
+## 19. Food Library responsibility and top-level IA
 
-Plaivra V1 has one owner-controlled internal Food Catalog curation console.
-
-There is no V1 multi-admin role hierarchy, Curator/Reviewer team workflow, or general-purpose CMS.
-
-The sole owner/admin may review and perform sensitive catalog operations such as:
-
-- review incoming source candidates;
-- edit/normalize canonical Foods;
-- publish;
-- verify/unverify;
-- merge;
-- deprecate;
-- restore;
-- inspect source/provenance records.
-
-Authorization must be enforced server-side through existing Plaivra identity/security authority. Do not rely on a hidden URL or client-only check as protection.
-
-### 19.1 Publish is not Verify
-
-A Food may be ACTIVE and usable without being VERIFIED.
-
-The user-facing verification indicator appears only after the verification gate passes and the owner explicitly approves verification.
-
-### 19.2 Bulk ingestion
-
-```text
-Import Batch
-→ normalize
-→ identity/duplicate classification
-→ nutrition and serving validation
-→ license/provenance validation
-→ auto-clear safe records
-→ manual exception review
-→ publish/verify decision
-```
-
-Routine valid records should not require repetitive manual row-by-row review.
-
-Manual exceptions may include duplicate conflicts, missing nutrition basis, unsupported serving conversion, license/provenance problems, identity ambiguity, or material nutrient contradiction.
-
-### 19.3 Audit
-
-Sensitive operations are auditable, especially verification changes, canonical nutrition changes, merge, and deprecation/restoration.
-
-Audit captures who, what, when, previous state, new state, and reason where appropriate.
-
-## 20. Food Library page responsibility and top-level IA
-
-Food Library owns Food discovery, Food search, Food inspection, Favorite state, My Foods management, browse entry points, and reusable Food handoff.
+Food Library owns Food discovery, Food search, Food inspection, Favorite state, My Foods management, Category/Cuisine browse entry, and reusable Food handoff.
 
 It does not own Recipe authoring, Saved Meal authoring, Diary ledger state, or Meal Plan state.
-
-Top-level hierarchy:
 
 ```text
 Food Library
 ↓
 Search
 ↓
-Personal quick access
+Quick Access
 ├── Recent
 ├── Favorites
 └── My Foods
@@ -862,16 +499,15 @@ Browse
 └── Cuisines
 ```
 
-Search is primary. Personal access is second. Discovery browse is third.
+Search is first. Personal access is second. Browse is third.
 
-## 21. Default page hierarchy and native shell
+## 20. Default page and native shell
 
-Semantic default screen:
+Semantic default:
 
 ```text
 Food Library                                 +
-
-Search foods, brands…                 [Scan]
+Search foods, brands, barcode…        [Scan]
 
 Quick Access
 [ Recent ] [ Favorites ] [ My Foods ]
@@ -879,130 +515,84 @@ Quick Access
 <small bounded set of Foods>
 
 Browse by Category
-<category entries>
+...
 
 Browse by Cuisine
-<cuisine entries>
+...
 ```
 
-This diagram describes **information hierarchy**, not a requirement to manually draw a custom navigation bar.
+No marketing hero, giant welcome copy, embedded nutrition dashboard, or second Nutrition tab strip.
 
-Native/platform rules:
+Recent is default when useful personal data exists. Empty personal sections collapse. If all Quick Access projections are empty, Browse moves up naturally.
 
-- iPhone/iPad use the shared Nutrition native title/toolbar/search authority where appropriate;
-- page-level `+` Create Food belongs in the native toolbar/action placement when that platform provides it;
-- web/desktop uses the established Plaivra page shell rather than imitating SwiftUI chrome;
-- Search may become sticky/collapsing through platform-appropriate behavior, but Food Library must not create a fake stacked custom header that conflicts with native navigation.
+Active text search replaces the discovery body. Clearing the query restores the prior default/Quick Access state.
 
-Content rules:
+Search within an explicit Recent/Favorites/My Foods view remains scoped and shows a removable scope token.
 
-- no marketing hero;
-- no giant welcome copy;
-- no nutrition dashboard inside Food Library;
-- no second Nutrition tab strip;
-- `Recent` is the default Quick Access view when available;
-- Quick Access shows a small useful set plus a route/view-all affordance where needed;
-- empty personal sections collapse when they would only consume space;
-- when all personal views are empty, Browse moves up naturally.
+Native/platform shell rules:
 
-When active text search begins, the discovery body yields to Search Results. Clearing the query restores the prior default/Quick Access state.
+- iPhone/iPad use shared native Nutrition title/toolbar/search behavior;
+- page-level `+` Create Food belongs in native toolbar/action placement where applicable;
+- web/desktop uses established Plaivra shell rather than imitating SwiftUI chrome;
+- ordinary content does not use Liquid Glass.
 
-### 21.1 Search within personal Quick Access views
+## 21. Global symbol convention
 
-If the user explicitly enters Recent, Favorites, or My Foods and then searches, Search remains scoped to that personal view and exposes the scope clearly, for example:
+Stable semantics:
 
-```text
-Search My Foods…
-[ My Foods × ]
-```
-
-Removing the scope returns to global Food search.
-
-Favorites/Recent remain personal views rather than permanent facets in the main filter panel.
-
-## 22. Global symbol convention
-
-When a conventional symbol is unambiguous, Plaivra prefers the symbol over redundant text while preserving accessible labels.
-
-Stable semantic meanings:
-
-- `×` = close/cancel/dismiss without completing;
-- `✓` = confirm/save/finish;
+- `×` = close/dismiss; in transactional editors it means cancel/discard uncommitted edits;
+- `✓` = confirm/save/finish where a commit exists;
 - `+` = add/insert/attach;
-- `♡ / ♥` = favorite state;
-- pencil = edit;
-- trash = delete/destructive intent;
-- scan symbol = barcode scan;
+- `♡ / ♥` = Favorite;
+- pencil = Edit;
+- trash = Delete/destructive intent;
+- scan symbol = Barcode Scan;
 - back chevron = navigation back only;
-- retry/refresh symbol = retry where context is unambiguous.
+- retry/refresh symbol = Retry where context is clear.
 
-This convention does **not** require every action to become icon-only. Text remains appropriate when the symbol alone would be ambiguous, uncommon, destructive, or unsafe.
+A live surface with no uncommitted draft must not label `×` as Cancel. In the live Filter surface, `×` means **Close Filters** and preserves the current already-applied state.
 
-Icon-only controls require platform-appropriate accessible names and touch/pointer targets.
+Icon-only controls require platform-appropriate accessible names and effective touch/pointer targets.
 
-## 23. Food Card contract
+## 22. Food Row contract
 
-Food Cards are compact, decision-ready representations.
+Food Library uses flat index/list rows with separators, not ecommerce cards.
 
-Canonical information hierarchy:
+Canonical hierarchy:
 
 ```text
-<optional nutrition discovery tag(s)>
+[optional nutrition tag] [optional second tag]
 
-Chicken Breast        [shield-check]           ♡   +
+Chicken Breast [shield-check]               ♡   +
 165 kcal / 100 g
-
-P 31 g     C 0 g     F 3.6 g
+P 31 g      C 0 g      F 3.6 g
 ```
 
-Card content includes:
+A branded row may add a secondary brand line. A user-owned Food may show a subtle `My Food` marker.
+
+Every normal row shows, when known:
 
 - Food name;
-- optional secondary brand line for branded products;
-- verification shield when applicable;
-- Favorite control;
-- Add `+` control;
-- calories with explicit serving/basis;
-- Protein;
-- Carbohydrates;
-- Fat.
+- optional Brand;
+- positive Verified shield where applicable;
+- Favorite heart;
+- Add `+`;
+- calories + explicit serving/basis;
+- Protein, Carbs, Fat with explicit units at every viewport size.
 
-Basic P/C/F must be visible on the Card. The user must not need to open Food Detail merely to see basic macros.
+Never collapse production macros to unitless shorthand such as `P31 C0 F3.6`.
 
-For a user with an active personal correction, displayed Card nutrition uses that user's effective nutrition as defined in §15.2. The shared verification shield continues to represent the canonical Food authority, not the user-entered correction.
+Interactions:
 
-Do not add to ordinary Food Cards:
+- row body → Food Detail;
+- heart → Favorite only;
+- `+` → Add To only.
 
-- source name;
-- trust/confidence wording;
-- full micronutrient list;
-- category/cuisine metadata by default;
-- multiple destination buttons;
-- large verification text badges.
+No source/trust/confidence/category/cuisine/micronutrient clutter on normal rows.
 
-### 23.1 Tap/click behavior
+Nutrition discovery labels are capped at two per row. They are computed functional labels with restrained micro-depth, not a badge wall.
 
-- Card body → Food Detail.
-- Heart → Favorite toggle only.
-- `+` → Add To handoff.
-
-Food Card body never immediately logs Food.
-
-### 23.2 Custom Food distinction
-
-A user-owned Food may show a subtle `My Food` identity marker where needed, but it must not compete visually with the verified shield.
-
-### 23.3 Nutrition discovery tags
-
-A Food Card may show up to **two** compact nutrition-discovery tags above the identity row.
-
-These tags are functional decision aids, not decorative badge clusters.
-
-Their visual treatment may be subtly raised/contained to read as compact tags, but must remain consistent with the shared Nutrition visual contract: no badge wall, no routine floating shadow, no skeuomorphic 3D decoration, and no card-wall effect.
-
-## 24. Food Detail contract
-
-Food Detail is the precision surface for one Food.
+## 23. Food Detail contract
 
 Information/action order:
 
@@ -1015,963 +605,544 @@ Calories + P/C/F
 ↓
 More Nutrition
 ↓
-Other Serving Definitions
+Other Servings
 ↓
 Personal correction or user-owned management
 ```
 
-### 24.1 Identity
+Food Detail allows reliable serving selection and quantity adjustment. Nutrition recalculates live using the user's effective nutrition view without mutating canonical Food data.
 
-Examples:
+Known deeper nutrients are progressively disclosed. Missing values are omitted or shown as `Not available`, never inferred zero.
+
+Canonical Food offers `Correct for me`; user-owned Food offers Edit/Delete.
+
+Mobile uses full-screen/detail navigation. Wide layouts may use a reusable contextual side/detail panel approximately 420–480 px while retaining route-equivalent content.
+
+## 24. Add To handoff
+
+The canonical reusable Food action is `+`.
+
+### 24.1 Standalone Food Library row
+
+When `+` is invoked from a Food Row in standalone Food Library, the Add To surface resolves serving and quantity **before destination handoff**:
 
 ```text
-Chicken Breast        [shield-check]        ♡   +
+Chicken Breast
+
+Serving
+[ 100 g ▾ ]
+
+Quantity
+[ − ] 1 [ + ]
+
+Add to
+Diary
+Meal Plan
+Saved Meal
+Recipe
 ```
 
-Branded:
+The chosen destination receives:
 
 ```text
-Alpro Protein Vanilla [shield-check]        ♡   +
-Alpro
+resolved Food identity
++ resolved serving
++ resolved quantity
 ```
 
-Custom:
+On iPhone this is a proper sheet/list presentation, not a `confirmationDialog`/traditional action sheet. Wide contexts may use a compact anchored popover.
+
+### 24.2 Food Detail `+`
+
+Food Detail already owns current serving/quantity state. Pressing `+` reuses those values and does not ask for them again before destination selection.
+
+### 24.3 Known destination context
+
+When Food Library/Food Detail is entered from an already-known destination context, `+` bypasses unnecessary destination selection and hands the resolved Food/serving/quantity back to that destination.
+
+Food Library owns only selection, canonical identity resolution, serving/quantity, and handoff. Destination domains own their own commit semantics.
+
+Not Add To destinations:
+
+- Favorites;
+- Shopping List;
+- Custom Food.
+
+## 25. Create Custom Food
+
+Create uses **Fast Core + Optional Details**.
 
 ```text
-Mama's Granola                              ♡   +
-My Food
-```
+×         Create Food         ✓
 
-### 24.2 Serving and quantity
-
-Food Detail allows reliable serving selection and quantity adjustment.
-
-Example:
-
-```text
-Serving: 100 g
-Quantity: 1.5
-```
-
-Nutrition recalculates live for the selected resolved amount using the user's effective nutrition view.
-
-This preview does not mutate canonical Food nutrition or the personal correction itself.
-
-### 24.3 Basic nutrition
-
-Calories and all three basic macros remain prominent:
-
-```text
-248 kcal
-Protein 46.5 g
-Carbs 0 g
-Fat 5.4 g
-```
-
-### 24.4 More Nutrition
-
-Additional known nutrients are progressively disclosed.
-
-Unknown values are omitted or explicitly shown as unavailable where context requires. They are never rendered as zero by default.
-
-### 24.5 Other servings
-
-Food Detail may expose trusted additional serving definitions such as:
-
-```text
-100 g
-1 oz = 28.35 g
-1 breast = 172 g
-```
-
-Only evidence-backed conversions may be shown as numeric conversions.
-
-### 24.6 Correction/management
-
-Canonical Food:
-
-- `Correct for me` / Manage correction;
-- when active, a subtle `Using your values` state.
-
-User-owned Custom Food:
-
-- Edit;
-- Delete.
-
-## 25. Add To handoff
-
-The generic `Use Food` text CTA is not used.
-
-The canonical reusable action is `+` on Food Cards and Food Detail.
-
-### 25.1 Standalone Food Library context
-
-`+` opens an Add To surface conceptually containing:
-
-- Diary;
-- Meal Plan;
-- Saved Meal;
-- Recipe.
-
-The surface resolves/retains the Food serving and quantity before handing control to the chosen destination.
-
-### 25.2 Context-aware behavior
-
-When Food Library/Food Detail is entered from an already-known destination context, the same `+` respects that context instead of asking the user to choose the destination again.
-
-Examples:
-
-- Diary Add Food context → hand back to Diary logging session;
-- Meal Plan Add context → hand back to Meal Plan planning session;
-- Recipe ingredient picker → hand back to Recipe authoring.
-
-### 25.3 Domain ownership boundary
-
-Food Library owns only the Food selection, canonical identity resolution, serving/quantity selection, and destination handoff.
-
-The destination domain owns all remaining state and commit semantics.
-
-Therefore:
-
-- Diary decides meal/date and creates actual logs;
-- Meal Plan decides week/day/slot and creates planned occurrences;
-- My Recipes owns recipe selection/creation and ingredient mutation;
-- Saved Meal domain owns saved-meal selection/creation and composition mutation.
-
-This Food Library spec does not authorize implementation of those destination workflows beyond the shared handoff contract.
-
-### 25.4 Not Add To destinations
-
-Do not expose the following in Add To:
-
-- Favorites — heart owns Favorite;
-- Shopping List — Shopping is derived/owned by Meal Plan rather than direct Food Library insertion;
-- Custom Food — not a destination.
-
-## 26. Create Custom Food
-
-Create Custom Food uses **Fast Core + Optional Details**.
-
-Top control convention:
-
-```text
-×                                      ✓
-Create Food
-```
-
-There is no redundant bottom `Save Food` button when the top commit control is clear and accessible.
-
-### 26.1 Required/primary fields
-
-Fast Core:
-
-- Name — required;
-- explicit nutrition basis — required;
-- Calories — required for the normal creation path;
-- Protein/Carbs/Fat — entered when known and strongly encouraged.
-
-Example:
-
-```text
 Name
-Mama's Granola
-
-Nutrition is for
-100 g
-
+Nutrition is for [basis]
 Calories
-420
-
-Protein     Carbs     Fat
-12          58        16
+Protein   Carbs   Fat
++ More nutrition details
++ Add another serving
 ```
 
-Missing macro fields remain unknown, not zero.
+Normal creation requires Name + explicit nutrition basis + Calories. P/C/F are strongly encouraged but may remain unknown; missing is not zero.
 
-### 26.2 Nutrition basis choices
+Basis may be 100 g, 100 ml, 1 serving, 1 piece, or a custom amount. Do not invent gram/ml conversions.
 
-May include:
+Category/Cuisine are not required first-screen blockers.
 
-- 100 g;
-- 100 ml;
-- 1 serving;
-- 1 piece;
-- custom amount.
+A saved Custom Food appears in My Foods and is reusable across Plaivra for that user. It does not receive the shared Verified shield.
 
-If a human serving has a measurable conversion, the user may provide it, for example `1 serving = 50 g`.
+## 26. Edit/Delete Custom Food
 
-If the measurable conversion is unknown, Plaivra may retain the user-defined serving without inventing grams/ml.
+Edit uses `×` to cancel uncommitted edits and `✓` to save. Trash opens an explicit destructive text confirmation.
 
-### 26.3 Progressive optional fields
+If a material edit affects reusable Recipes/Saved Meals referencing the Food, warn that future reuse resolves updated values while historical frozen Diary/Meal Plan snapshots remain unchanged.
 
-Optional progressive areas may include:
+Delete removes future discovery/new use while preserving history/reference identity as required. Hard delete is reserved for safely unreferenced unpublished/disposable data.
 
-- more nutrition details;
-- additional serving definitions;
-- Brand;
-- barcode/product identity where relevant;
-- additional metadata in later edit/detail surfaces.
-
-Primary Category/Cuisine are not required blockers for fast Custom Food creation.
-
-### 26.4 Create-time duplicate detection
-
-Strong existing match:
-
-```text
-Possible match
-<existing Food>
-
-Use Existing
-Correct for Me
-Create Separately
-```
-
-Detection must not silently merge or block the user.
-
-Weak/uncertain similarity should not interrupt the flow unnecessarily.
-
-### 26.5 Save result
-
-A created Custom Food:
-
-- appears in My Foods;
-- is user-searchable;
-- is reusable across Diary, Meal Plan, Recipes, and Saved Meals;
-- remains user-owned;
-- remains unverified unless a separate future shared-catalog workflow creates a distinct reviewed canonical identity.
-
-## 27. Edit and delete Custom Food
-
-Edit surface uses:
-
-- `×` to exit without commit;
-- `✓` to save;
-- pencil to enter edit;
-- trash to initiate delete.
-
-### 27.1 Post-save duplicate handling
-
-If editing an existing Custom Food creates a strong match to a canonical Food, duplicate handling is advisory only.
-
-Offer conceptually:
-
-- View Existing;
-- Keep My Food.
-
-Do not automatically merge, replace, or rewrite existing references.
-
-### 27.2 Material edits and references
-
-If a material edit affects reusable Recipes/Saved Meals that reference the Custom Food, Plaivra must warn before commit that those reusable objects will resolve the updated Food in future use, while historical frozen Diary/Meal Plan snapshots remain unchanged.
-
-Do not silently fork a new Food merely because an edit is large.
-
-### 27.3 Serving-basis edits
-
-Changing a serving definition does not automatically create a new Food identity.
-
-Future calculations use the new definition after commit. Historical frozen snapshots remain unchanged.
-
-### 27.4 Delete
-
-Trash opens an explicit destructive confirmation. Text such as `Delete` is required in the confirmation because the action is destructive and icon-only meaning is insufficient.
-
-Deletion semantics:
-
-- remove from My Foods/new search/new use;
-- preserve history and required reference/tombstone identity;
-- do not corrupt existing historical snapshots;
-- hard delete only where safely unreferenced unpublished/disposable data allows it.
-
-## 28. Search and browse refinement
-
-### 28.1 Explicit V1 facets
+## 27. Search and browse refinement
 
 Primary explicit facets:
 
-- one Category;
-- one Cuisine;
-- optional My Foods scope.
-
-Browse by Category or Cuisine enters the **same search-results architecture** with a pre-applied removable filter, not a separate catalog system.
-
-Example:
-
-```text
-Browse by Category → Protein
-↓
-Search Results
-[ Protein × ]
-```
-
-### 28.2 Selection semantics
-
-V1 uses:
-
-- Category: single selection;
-- Cuisine: single selection;
+- Category: single-select;
+- Cuisine: single-select;
 - My Foods: boolean scope.
 
-This avoids ambiguous multi-select AND/OR semantics for taxonomy facets.
+Browse by Category/Cuisine enters the same result architecture with a pre-applied removable chip.
 
-### 28.3 Ranking-only metadata
-
-The following remain primarily ranking/search metadata rather than top-level V1 facet controls:
+Ranking/search metadata rather than top-level filters:
 
 - Brand;
 - Country relevance;
 - Verification;
 - Favorite/Recent/Frequency.
 
-Favorites/Recent are personal views, not taxonomy filters.
+Active filters appear as removable chips under Search. Removing the final active filter with no query returns to default Food Library. No-result state preserves user intent and never silently broadens it.
 
-### 28.4 Active filters
+## 28. Numeric nutrition filters
 
-Active filters appear as removable chips under Search.
-
-Removing the final active filter with no query returns to the default Food Library home state.
-
-No-result state preserves the user's filters and suggests removal; Plaivra does not silently broaden user intent.
-
-## 29. Numeric nutrition filters
-
-V1 supports optional numeric filtering for:
+V1 supports optional numeric conditions for:
 
 - Calories;
 - Protein;
 - Carbohydrates;
 - Fat.
 
-The Nutrition section is progressive/collapsed by default rather than occupying primary filter space.
+Operators:
 
-### 29.1 Operators
+- `≥`
+- `≤`
+- `Between`
 
-Supported user-friendly operators include:
+Exact equality is not a primary V1 operator because source rounding makes it less useful.
 
-- `≥`;
-- `≤`;
-- `Between`.
+Numeric filtering compares the user's effective normalized nutrition:
 
-Exact equality is not a primary V1 operator because source rounding makes strict equality less useful for nutrition discovery.
+- foods/solids: per 100 g;
+- drinks/liquids: per 100 ml.
 
-### 29.2 Basis and effective values
+Protein, Carbohydrates, and Fat values themselves remain measured in grams; Calories remain kcal. The 100 g/100 ml value is the comparison basis, not the nutrient unit.
 
-Numeric nutrition filters compare the user's **effective normalized nutrition**:
+A Food without the required nutrient or measurable normalized basis does not qualify. Multiple numeric conditions combine with AND semantics.
 
-- solids: per 100 g;
-- liquids: per 100 ml.
+## 29. Nutrition Discovery Presets and labels
 
-For a canonical Food without a personal correction, this is canonical nutrition. When an active personal correction overrides relevant values, the user-specific effective values drive user-facing filtering.
-
-The UI must make the comparison basis clear.
-
-Do not compare arbitrary `per serving`, `per bottle`, `per slice`, and `per bowl` values as though they were directly equivalent.
-
-A Food without the required nutrient or measurable normalized basis does not satisfy that numeric filter. Missing data is not treated as zero.
-
-### 29.3 Multiple conditions
-
-Multiple nutrition constraints combine with **AND** semantics.
-
-Example:
-
-```text
-Protein ≥ 20 g / 100 g
-AND
-Fat ≤ 10 g / 100 g
-AND
-Calories ≤ 250 kcal / 100 g
-```
-
-## 30. Nutrition Discovery Presets and tags
-
-V1 adds computed nutrition discovery presets on top of manual numeric filters.
-
-Initial concepts include:
+Initial presets include:
 
 - High Protein;
-- Low Carb / market-appropriate factual carb-threshold equivalent.
+- Low Carb or market-appropriate factual carb-threshold equivalent.
 
-### 30.1 Preset combination
+Multiple selected presets combine with **AND** semantics.
 
-Multiple selected nutrition presets combine with **AND** semantics.
-
-Example:
-
-```text
-High Protein
-AND
-Low Carb
-```
-
-Only Foods satisfying both applicable rules qualify.
-
-### 30.2 Computed, not manually assigned
-
-Do not store nutrition-discovery tags as manually maintained Food truth such as `is_high_protein = true` unless it is a rebuildable projection/cache derived from nutrition data and rule version.
-
-Conceptually:
-
-```text
-Nutrition input
-↓
-Nutrition Qualification Rules
-↓
-Computed Discovery Match/Tags
-```
-
-Rule changes or nutrition changes recompute the derived classification.
-
-### 30.3 Shared claim qualification versus personal filtering
+Discovery qualification is computed from nutrition + versioned rules, not manually stored as permanent booleans unless a rebuildable projection/cache is used.
 
 Plaivra separates:
 
-1. **shared canonical claim qualification** — calculated from canonical reviewed nutrition and applicable market rules;
-2. **user-specific preset matching** — may use the user's effective nutrition so filter results remain consistent with the numbers that user sees.
+1. shared canonical claim qualification;
+2. user-specific preset matching using effective nutrition.
 
-A user-entered personal correction must never independently create a Plaivra-verified or regulated shared nutrition claim.
+A personal correction may cause a Food to match a user's filter but may not independently create a Plaivra-verified/regulatory shared claim. When public claim wording is not approved, use a factual threshold label such as `≤ X g carbs / 100 g` according to market rules.
 
-If a personal correction causes a Food to match a preset but the canonical shared Food does not independently qualify for the named public claim, the Food may still match the user's filter, but the Card should use a factual threshold/personal-values treatment rather than presenting an unsupported shared `High Protein`/other regulated claim.
+Maximum visible labels per Food Row: **2**.
 
-### 30.4 Market-aware public wording
+When High Protein + Low Carb are both active, qualifying results must prioritize those two active characteristics in the two available label positions. Active filter labels take precedence over unrelated computed labels.
 
-The underlying discovery rule and the public label are separate concerns.
+## 30. Live Filter surface
 
-Some nutrition wording may have regulated or market-specific meanings. Therefore:
+Filters are **live**. There is no Apply, Done, confirmation checkmark, or staged draft state.
 
-- shared claim evaluation is market-aware where required;
-- public wording is market-aware;
-- release requires applicable nutrition-claim/legal review;
-- an unsupported or unapproved public claim may fall back to a factual threshold label such as `≤ X g carbs / 100 g` while retaining useful filtering behavior.
-
-Do not globally hard-code one marketing definition for all markets.
-
-### 30.5 Card tag priority
-
-Normal browsing may show up to two strongest/relevant computed tags.
-
-During filtered search, tags corresponding to active nutrition presets receive presentation priority so the user can immediately understand why the Food matched.
-
-Example where market wording is approved:
+Conceptual mobile surface:
 
 ```text
-[ HIGH PROTEIN ] [ LOW CARB ]
-Chicken Breast ...
-```
-
-The Card still shows Calories/P/C/F beneath the identity, so labels are not a substitute for actual numbers.
-
-## 31. Filter surface
-
-Filter entry uses a familiar filter/sliders symbol rather than a large permanent `Filters` button when the icon is clear in context.
-
-Active filter count may be shown on/near the control.
-
-Conceptual surface:
-
-```text
-×                                  Filters
+×              Filters
 
 Category
-...
+[ Any ▾ ]
 
 Cuisine
-...
+[ Any ▾ ]
 
-My Foods
-...
+My Foods        [toggle]
 
-Nutrition
-Quick presets
-[ High Protein ] [ Low Carb* ]
+Nutrition                              ⓘ
+Quick filters
+[ High Protein ] [ Low Carb ]
 
 Advanced
-Calories    [≤] [value]
-Protein     [≥] [value] g
-Carbs       [≤] [value] g
-Fat         [≤] [value] g
+Calories   [operator] [value]
+Protein    [operator] [value] g
+Carbs      [operator] [value] g
+Fat        [operator] [value] g
 
-Reset                                  ✓
+Reset filters
 ```
 
-`*` Public label is market-aware as defined above.
+Behavior:
 
-`Reset` may remain text because an icon-only reset would be ambiguous.
+- every Category/Cuisine/My Foods/preset/numeric change updates results immediately;
+- closing/dismissing the Filter surface preserves current already-applied filters;
+- `×` accessible meaning is `Close Filters`, never Cancel/revert;
+- `Reset filters` clears all filters immediately;
+- numeric typing may use a short debounce before issuing the refreshed server query;
+- active chips under Search update with live state;
+- mobile uses a sheet/appropriate transient surface;
+- desktop uses a compact popover/panel when suitable.
 
-Mobile uses a bottom sheet/appropriate native transient surface. Desktop may use a compact popover/panel when complexity fits.
+## 31. Nutrition filter Info control
 
-## 32. Loading, empty, offline, and error states
+The normalized comparison explanation is not permanently displayed because it would add recurring vertical noise.
 
-Food Library uses **useful-first progressive loading**, not full-page blocking.
+Place a contextual Info control at the trailing side of the **Nutrition / Advanced Nutrition** section header, not in the global Filter header.
 
-### 32.1 Initial load
+Rendering:
 
-Immediately render static/navigation structure and Search.
+- Web: Lucide `info`;
+- iOS/iPadOS: platform-native Info equivalent;
+- Android: platform-native Info equivalent;
+- accessible label: `About nutrition filter values`.
 
-Use a small number of lightweight structural placeholders only for unresolved content.
+Content:
 
-Do not show a full-screen spinner merely because one projection is loading.
+**Nutrition filter basis**  
+`Values normalized per 100 g (foods) or 100 ml (drinks).`
 
-### 32.2 Search loading
+Interaction:
 
-When a new query is in flight, previously valid results may remain visible while a small updating indicator communicates refresh.
+- touch: tap opens a small anchored explanatory help surface;
+- mouse hover may expose the same explanation as a tooltip;
+- desktop click opens/pins the help surface for comfortable reading;
+- keyboard focus + Enter/Space opens it;
+- hover is convenience only and is never the sole access path.
 
-Avoid destructive flicker and blanking between keystrokes.
+This is explanatory metadata, not a warning, error, or primary action.
 
-### 32.3 Search empty
+## 32. Loading, empty, offline, and errors
 
-When no useful match exists:
+Food Library uses **useful-first progressive loading**.
 
-```text
-No matching foods found.
-Scan barcode
-+ Create Food
-```
-
-Do not return unrelated fuzzy content to avoid an empty state.
-
-### 32.4 Personal empty states
-
-- Default page: empty Quick Access sections collapse when they are not useful.
-- Explicit Favorites view: show a concise explanation of the heart action.
-- Explicit My Foods view: show a concise empty message plus `+` Create Food affordance.
-
-### 32.5 Offline
-
-Do not download the full international catalog for offline search in V1.
-
-Plaivra may expose safely cached/rebuildable recent personal content such as Recent, Favorites, My Foods, and recently viewed Foods.
-
-When broad catalog search cannot be truthfully satisfied offline, state that search is unavailable rather than returning incomplete results as complete.
-
-When connectivity returns, refresh quietly where safe.
-
-### 32.6 External barcode failure
-
-External barcode/provider failure is isolated from Food Library.
-
-If local DB misses and external fallback fails:
-
-```text
-Product not found right now.
-Retry
-+ Create Food
-```
-
-The rest of Food Library remains usable.
-
-### 32.7 Partial failure
-
-Sections fail/retry locally where possible. One failed Browse or personalization projection must not blank the whole page.
-
-### 32.8 Full failure
-
-Full-page failure is reserved for the case where Plaivra canonical data cannot load and no usable cached content can be shown.
-
-Raw Supabase/provider errors are never shown directly to the user.
-
-### 32.9 Mutation failure
-
-Do not claim success before persistence is confirmed.
-
-- Favorite may update optimistically only if it rolls back visibly on failure.
-- Create/Edit Food keeps entered data after persistence failure.
-- commit control remains retryable;
-- duplicate submits are prevented while a commit is unresolved.
+- Render navigation/search immediately.
+- Use lightweight local skeletons only for unresolved regions.
+- Do not blank useful results between search requests; show subtle updating state.
+- No-result state keeps active chips visible and offers Scan/Create Food.
+- Empty personal projections collapse on default view.
+- Explicit Favorites/My Foods views get concise local empty states.
+- Offline never pretends cached data is the complete international catalog.
+- Cached Recent/Favorites/My Foods/recently viewed Foods may remain available where truthful.
+- External barcode failure is isolated and offers Retry/Create Food.
+- Partial section failure gets local Retry and does not blank the page.
+- Favorite may update optimistically only with visible rollback on persistence failure.
+- Create/Edit keeps entered data on failure and prevents duplicate unresolved submits.
 
 ## 33. Responsive behavior
 
-Food Library preserves one semantic hierarchy across mobile, tablet, desktop, and native platforms. Density/presentation adapt; meaning does not.
+Food Library preserves one semantic hierarchy across mobile, tablet, desktop, RTL, and native platforms.
 
-### 33.1 Mobile
+### Mobile
 
-Semantic primary structure:
+- compact flat rows;
+- approximately 16 pt content inset;
+- standard row baseline roughly 88–96 pt, tagged row roughly 112–120 pt where content fits;
+- bottom sheets for compact transient flows;
+- Search may become sticky after scrolling when platform behavior supports it without stacked sticky clutter;
+- actions retain roughly platform-standard effective touch targets.
 
-```text
-Food Library                         +
-Search / Scan
-Quick Access
-Food rows
-Browse by Category
-Browse by Cuisine
-```
+### Tablet
 
-Platform renderers follow the native-shell rule from §21 rather than manually recreating this exact header geometry.
-
-Food Cards/rows remain compact and decision-ready.
-
-Macros remain in one row when legible and may wrap semantically at narrow widths instead of shrinking into unreadable text or causing horizontal overflow.
-
-Search becomes sticky after its original position scrolls away where platform behavior supports this without creating stacked sticky clutter.
-
-### 33.2 Tablet
-
-- same hierarchy;
-- increased density;
-- Food results may use an adaptive two-column arrangement where readability remains strong;
-- Browse grids may use more columns;
+- same hierarchy with more density;
+- adaptive one/two-column Food result layout where readable;
 - touch-oriented transient actions may remain sheets.
 
-### 33.3 Desktop
+### Desktop/regular width
 
-- bounded readable content width;
-- approximately 2–3 Food columns where the design benefits, rather than e-commerce-style extreme density;
-- filter/action popovers/dialogs where appropriate;
-- Food Detail may appear as a reusable side panel/drawer in Food Library context while retaining a standalone route for direct navigation.
+- bounded useful content width approximately 1040–1180 px;
+- **one or two Food result columns only by default**;
+- a third result column is rejected by default to avoid ecommerce/catalog drift and squeezed row content;
+- wide filters/Add To may use compact popovers;
+- Food Detail may use the reusable 420–480 px contextual panel.
 
-The same Food Detail content/semantics must be reusable across these presentations rather than implemented as independent product variants.
+Fall back to one column before squeezing actions, names, macro units, or Dynamic Type equivalents.
 
-## 34. Barcode interaction availability
+## 34. Barcode availability
 
-Barcode is a lookup method, not a mandatory UI control on every renderer.
+Barcode is a lookup method, not a mandatory control on every renderer.
 
-- show/enable camera scanning only where the platform/runtime supports an appropriate scanner/camera flow;
-- never leave a dead Scan control visible;
-- barcode-like text entered into Search still routes to exact local barcode lookup where supported by the search contract;
-- local canonical lookup always precedes external provider fallback.
+- show Scan only where platform/runtime camera scanning is supported;
+- never leave a dead Scan control;
+- barcode-like typed input routes to exact local barcode lookup;
+- Main DB lookup always precedes external fallback.
 
-## 35. RTL, localization, and bidirectional behavior
+## 35. RTL and localization
 
 Arabic RTL is first-class.
 
-Mirror directional presentation including:
+Mirror directional flow, logical start/end alignment, back direction, panel direction, and directional spacing where semantics require it.
 
-- navigation flow;
-- logical start/end alignment;
-- back-chevron direction;
-- drawer/panel direction;
-- directional spacing/order where semantics require it.
+Do not blindly mirror plus/heart/shield meaning, nutrient meaning, numeric quantities, or scientific units.
 
-Do not blindly mirror:
+`g`, `mg`, `ml`, and `kcal` may remain familiar scientific abbreviations. Macro labels localize; Arabic is not forced to use English P/C/F.
 
-- plus/heart/shield meaning;
-- nutrient meaning;
-- numeric quantities;
-- scientific unit semantics.
+Mixed Arabic/Latin branded names use proper bidi containers. Name, brand, numeric value, and unit should remain structurally distinct.
 
-Nutrition units such as `g`, `mg`, `ml`, and `kcal` may remain familiar scientific abbreviations in Arabic UI.
+Cuisine ordering is locale-aware.
 
-Macro labels are localized by locale rather than forcing English `P/C/F` globally.
+## 36. Long content, Dynamic Type, and accessibility
 
-Examples:
+Long Food names grow rows rather than collide with Favorite/Add. Less-important brand metadata may truncate where necessary; full identity remains available in Food Detail/accessibility text.
 
-- English: `P`, `C`, `F` or approved localized full labels;
-- German: localized Protein/KH/Fett treatment;
-- Arabic: localized Protein/Carbs/Fat labels.
+At large text sizes, layout recomposes vertically rather than clipping essential nutrition. Macro units remain explicit.
 
-Mixed Arabic/Latin branded names must use proper bidirectional containers rather than fragile concatenated strings.
+Accessibility requirements:
 
-Food name, brand, numeric nutrition, and units should be structured as separate semantic layout elements.
-
-## 36. Food name and density behavior
-
-Long Food/product names:
-
-- may wrap to a maximum appropriate number of lines on compact cards;
-- must not clip horizontally;
-- must not push Favorite/Add actions into overlap;
-- may truncate less-important brand metadata when required;
-- retain full identity in Food Detail/accessibility text.
-
-No required action may be hover-only.
-
-Desktop hover may enhance feedback but may not reveal the only way to Favorite/Add/Inspect.
-
-## 37. Keyboard and accessibility behavior
-
-Accessibility is binding.
-
-Required principles:
-
-- icon-only actions have accessible names such as `Add food`, `Favorite food`, `Close`, `Save food`, `Edit food`, `Delete food`;
-- effective touch targets follow platform conventions (Apple ~44 pt class, Android ~48 dp class; responsive web as appropriate);
-- visible keyboard focus on web/desktop;
+- icon-only controls have accessible names;
+- visible web/desktop focus;
 - logical tab order;
-- color is not the only state signal;
-- verification shield has an accessible label;
+- color is not the sole state signal;
+- Verification shield has an accessible label;
 - loading/error changes are announced appropriately;
-- Dynamic Type/large text grows rows rather than clipping essential nutrition;
-- RTL and bidirectional text work without special-case content corruption;
-- reduced motion/transparency/contrast platform settings remain usable.
+- reduced motion/transparency/contrast remain usable;
+- no required action or explanation is hover-only.
 
-Desktop Search may support `/` to focus Search when focus is not in an editable control. `Esc` may clear Search or dismiss the current transient surface according to context. Shortcuts must never intercept normal typing.
+Desktop `/` may focus Search where safe. `Esc` clears/dismisses according to context and must not intercept normal typing.
+
+## 37. Visual register and motion
+
+Food Library is the flattest, most index-like Nutrition destination.
+
+Use:
+
+- flat rows + separators;
+- native search and functional chrome;
+- quiet Category/Cuisine text links;
+- compact Quick Access segmented/scope-like control;
+- restrained micro-raised nutrition labels;
+- native press/favorite/sheet/popover transitions.
+
+Do not use:
+
+- ecommerce card wall;
+- food-row shadows;
+- ordinary-content Liquid Glass;
+- decorative gradients/glows;
+- nested cards;
+- taxonomy icon-tile wall;
+- card lift/hover zoom;
+- bouncing tags or staggered decorative entrances.
 
 ## 38. Performance and data-flow contract
 
-### 38.1 No full-catalog startup
-
 Normal page load must not fetch tens of thousands of Foods.
 
-Search/browse/filter requests are:
+Search/browse/filter requests are indexed, server-authoritative, bounded, deduplicated, cursor/page-based, and user-scoped where personal data is involved.
 
-- indexed;
-- server-authoritative;
-- bounded;
-- deduplicated;
-- cursor/page based;
-- owner-scoped where personal data is involved.
+A bounded request carries normalized query + active supported filters. Server authority applies multilingual search, canonical redirect resolution, personalization, taxonomy facets, user-effective numeric filters, applicable discovery preset rules, and stable pagination.
 
-### 38.2 Search request behavior
+Recent/Frequency/search/discovery projections may be optimized only as rebuildable derivatives of canonical truth.
 
-A bounded search request carries the normalized query and active supported filters.
-
-The server/search authority applies:
-
-- multilingual identity search;
-- canonical redirect resolution;
-- user-personal ranking;
-- taxonomy filters;
-- user-effective numeric nutrition filters;
-- applicable computed discovery preset rules;
-- stable pagination/cursor semantics.
-
-### 38.3 Derived projections
-
-Recent/Frequency/search projection/discovery-tag projections may be optimized for performance only when they remain rebuildable derivatives of canonical authorities.
-
-They may not become parallel truth stores.
-
-### 38.4 External provider isolation
-
-No normal text-search request waits on an external provider.
-
-Barcode fallback is a separately bounded path invoked only after canonical local lookup misses.
+No normal text-search request waits on an external provider. Barcode fallback is a separately bounded path after local miss.
 
 ## 39. Security and ownership
 
-User-owned data such as:
+User-owned data including Custom Foods, personal corrections, Favorites, and personal projections remains owner-scoped under existing Plaivra authentication/RLS/security authority.
 
-- Custom Foods;
-- personal corrections;
-- Favorites;
-- personal search/personalization projections;
+Shared canonical catalog content is read-only to normal users.
 
-must remain owner-scoped under existing Plaivra authentication/RLS/security authority.
-
-Shared canonical Food Catalog content is read-only to normal users.
-
-Owner-only catalog curation mutations require server-side owner authorization and auditable mutation authority.
-
-Do not expose service-role credentials to clients.
-
-Do not allow a user-supplied owner ID to become authorization authority.
+Owner-only curation mutations require server-side owner authorization and audit. Do not expose service-role credentials or trust user-supplied owner IDs.
 
 ## 40. Existing implementation reconciliation
 
-Existing implementation is evidence, not product truth.
+Existing code is evidence, not product truth.
 
-Current nutrition code includes concepts such as:
+Later implementation planning must explicitly reconcile current global foods, user foods, logs, favorites, recipes, saved/custom meals, kitchen/subcategory browsing, local Egyptian fallback data, imported-food compatibility, current `ILIKE`/ASCII normalization, and browser-side slicing/logging coupling.
 
-- global `food_items`;
-- `user_food_items`;
-- `food_logs`;
-- `user_food_favorites`;
-- kitchen/subcategory browsing;
-- saved/custom meal records;
-- recipes;
-- imported-food compatibility;
-- local Egyptian fallback data;
-- current `ILIKE`/client normalization search;
-- browser-side food browsing/logging coupling.
+Requirements:
 
-Later implementation planning must map these verified existing authorities into this design without creating a parallel nutrition fact model.
+1. Existing user data remains usable.
+2. Food/Recipe/Saved Meal distinctions are explicit.
+3. ASCII-only normalization/simple `ILIKE` are not final EN/DE/AR search architecture.
+4. Kitchen-first browsing does not override Category/Cuisine taxonomy.
+5. Browser-side slicing is not final pagination.
+6. Local Egyptian fallback may remain bounded resilience/compatibility data, not international catalog authority.
+7. No legacy retirement without verified coverage, migration strategy, rollback/forward-fix strategy, and Lead approval.
 
-Specific reconciliation requirements:
+## 41. Reconciliation decisions
 
-1. Existing user data must remain usable.
-2. Existing Food/Meal/Recipe distinctions must be migrated/reconciled explicitly rather than hidden by one browser component.
-3. Current ASCII-only normalization and simple `ILIKE` are insufficient for approved EN/DE/AR multilingual search and must not be treated as final architecture.
-4. Current Kitchen-first browsing is transitional and does not override the approved Category/Cuisine faceted taxonomy.
-5. Current browser-visible slicing is not acceptable as final large-catalog pagination.
-6. The local Egyptian dataset may remain a bounded resilience/compatibility asset where appropriate but must not become the complete international catalog authority.
-7. No legacy retirement is authorized without verified data coverage, migration strategy, rollback/forward-fix strategy, and Lead approval.
+- Add To is a reusable Food selection/handoff contract, not destination-domain authority.
+- Familiar icon-only controls are preferred only where semantics remain clear and accessible.
+- Nutrition discovery labels may have micro-depth but remain capped at two and never become badge clutter.
+- Numeric filters use factual effective normalized values; public claims remain canonical/market-aware.
+- Catalog corrections do not mutate historical frozen snapshots.
+- User Custom Foods are not silently replaced by canonical matches.
+- Food Row, Food Detail, filters, and future-use snapshots share one user-effective nutrition view.
+- Semantic diagrams do not override native shell behavior.
+- Live Filters have no commit step; Close never reverts already-applied filters.
+- Desktop result layout is one/two columns by default; third-column catalog density is rejected.
 
-## 41. Design reconciliation decisions
+## 42. Out of scope for Food Library V1
 
-### 41.1 Add To versus destination ownership
-
-The Food Library `+` action is a reusable selection/handoff contract. It does not grant Food Library authority over Diary logging, Meal Plan planning, Recipe authoring, or Saved Meal authoring.
-
-### 41.2 Symbol-first preference versus shared visual authority
-
-Food Library uses familiar icon-only controls where meaning is conventional and context is clear, but does not turn every meaningful action into an unlabeled icon. Ambiguous, destructive, or uncommon actions retain text. This is a page-specific application of the shared Nutrition visual contract, not a replacement for it.
-
-### 41.3 Raised nutrition tags versus badge-cluster prohibition
-
-Nutrition Discovery Tags may have a compact raised/contained visual treatment, but they remain functional data labels capped at two per Card. They must not become decorative floating badges or a shadow-heavy card wall.
-
-### 41.4 Numeric filters versus market-aware claims
-
-Manual numeric filters use factual normalized effective nutrition thresholds. Discovery preset matching may be user-specific, while shared public claim wording remains canonical/market-aware and cannot be granted by user-entered data alone.
-
-### 41.5 Catalog evolution versus historical truth
-
-Canonical Food nutrition/servings may be corrected over time, but historical Diary and committed Meal Plan snapshots do not silently mutate.
-
-### 41.6 User Custom Food versus canonical duplicate
-
-The system may suggest an existing canonical identity, but user-owned Foods are not silently merged or replaced after creation.
-
-### 41.7 Personal correction consistency
-
-Food Card, Food Detail, numeric filtering, and future-use snapshot resolution all use the same user-effective nutrition view. Verification remains canonical. This prevents the UI from displaying one set of values while filtering or calculating on another.
-
-### 41.8 Semantic page diagram versus native chrome
-
-Food Library diagrams describe information hierarchy only. Native title/search/toolbar behavior from the shared Nutrition visual contract remains authoritative on supported platforms.
-
-## 42. Out of scope for Food Library V1 design
-
-Unless separately approved, this design does not add:
+Unless separately approved, V1 does not add:
 
 - external search engine/provider;
 - separate runtime Food Catalog database;
-- global social/popularity ranking from private user logs;
+- global social/popularity ranking from private logs;
 - multi-admin catalog workflow;
-- full Food CMS;
 - arbitrary micronutrient filters;
-- unverified allergen/dietary exclusion filters;
+- unverified dietary/allergen exclusion filters;
 - direct Shopping List insertion from Food Library;
 - auto-merge of user Custom Foods;
-- destructive catalog cleanup that breaks history;
+- destructive cleanup that breaks history;
 - live AI translation on every search;
 - live external provider dependency for normal text search;
 - complete offline international catalog;
 - public user-submitted shared-food publishing;
-- exact visual styling for future My Recipes/Saved Meal destination workflows.
+- implementation of complete destination workflows owned by My Recipes/Saved Meals/Diary/Meal Plan.
 
 ## 43. Acceptance criteria
 
 ### 43.1 Page responsibility
 
-- Food Library contains Foods only as its canonical library entities.
-- Recipes and Saved Meals do not appear as masquerading Food results.
+- Food Library contains Foods only as canonical library entities.
+- Recipes and Saved Meals do not masquerade as Food results.
 - Diary/Meal Plan state is not owned by Food Library.
 
-### 43.2 Default page
+### 43.2 Default/Search
 
 - Search is immediately available.
 - Quick Access supports Recent, Favorites, My Foods.
 - Browse supports Category and Cuisine.
 - empty personal sections collapse appropriately.
-- active Search replaces rather than stacks on top of the default discovery body.
-- native renderers do not manually duplicate native navigation chrome.
+- active Search replaces the default discovery body.
+- scoped personal search keeps scope visible/removable.
 
-### 43.3 Food Cards
+### 43.3 Food Rows
 
-Every normal Food Card shows, when data is known:
+Every normal row shows, when known: Food name, calories + explicit serving/basis, Protein, Carbs, Fat with explicit units. Verified Food shows the positive shield; absence is neutral. Heart and `+` are independent. Row body opens Food Detail.
 
-- Food name;
-- calories + explicit basis/serving;
-- Protein;
-- Carbs;
-- Fat.
+### 43.4 Nutrition labels
 
-Verified Food shows shield-check. Unverified Food shows no negative badge.
+- maximum two labels;
+- computed/derived;
+- active preset labels receive priority;
+- shared public claim wording follows market-aware rules;
+- personal corrections cannot independently create a regulated/shared verified claim;
+- numeric macros remain visible.
 
-Heart and `+` are independent controls. Card body opens Food Detail.
+### 43.5 Food Detail and Add To
 
-An active personal correction changes the displayed effective nutrition without converting that correction into verified source data.
-
-### 43.4 Nutrition tags
-
-- no more than two Card tags;
-- tags are computed/derived;
-- selected preset tags are prioritized;
-- public shared-claim wording follows canonical market-aware rule configuration;
-- personal corrections cannot independently create a verified/regulatory shared claim;
-- actual numeric macros remain visible.
-
-### 43.5 Food Detail
-
-- serving/quantity changes recalculate effective nutrition live;
-- P/C/F remain above deeper nutrition;
-- missing nutrients are not rendered as zero;
-- canonical Food offers personal correction;
-- active correction exposes a subtle `Using your values` state;
+- serving/quantity recalculates live;
+- P/C/F remain prominent;
+- missing nutrients are not zero;
+- canonical Food offers correction;
+- active correction exposes `Using your values`;
 - user Food offers Edit/Delete;
-- `+` hands off resolved serving/quantity.
+- standalone Food Row `+` resolves Serving + Quantity before destination selection;
+- Food Detail `+` reuses the current selected Serving + Quantity;
+- known destination context bypasses unnecessary destination selection;
+- destination receives resolved Food + serving + quantity.
 
 ### 43.6 Custom Food
 
-- Create path can complete with Name + basis + Calories;
-- P/C/F may remain unknown rather than forced to zero;
+- creation can complete with Name + basis + Calories;
+- P/C/F may remain unknown;
 - duplicate suggestion is non-destructive;
-- saved Food appears in My Foods and user search;
+- saved Food appears in My Foods/user search;
 - edit failure preserves input;
-- deleting Custom Food does not corrupt history.
+- delete does not corrupt history.
 
-### 43.7 Search
+### 43.7 Search architecture
 
-- EN/DE/AR names/aliases are searchable under the approved multilingual architecture;
-- generic queries are not flooded with branded products;
-- exact brand wording can prioritize branded results;
-- barcode-like query uses barcode path;
-- no full catalog download occurs;
-- result pages are bounded/server-authoritative;
-- canonical duplicates resolve without duplicate search-visible identities;
-- searching within an explicit Quick Access view keeps that scope visible/removable.
+- EN/DE/AR names/aliases are searchable;
+- broad generic queries are not flooded with branded products;
+- explicit brand intent can prioritize products;
+- barcode-like query follows barcode path;
+- no full catalog download;
+- results are bounded/server-authoritative;
+- canonical duplicates do not appear as duplicate visible identities.
 
-### 43.8 Filters
+### 43.8 Live Filters
 
-- Category and Cuisine are single-select facets;
+- Category/Cuisine are single-select;
 - My Foods can scope results;
-- active filters are removable;
-- numeric Calories/P/C/F filters use user-effective normalized per-100 g/per-100 ml values;
-- missing required nutrient/basis excludes a Food from that nutrition-filter result;
-- multiple numeric/preset constraints use AND semantics;
+- active chips are removable;
+- all supported filter changes apply live;
+- there is no Apply/Done/confirmation control;
+- `×` means Close Filters and preserves live state;
+- Reset clears immediately;
+- numeric typing may debounce briefly;
+- Calories/P/C/F compare user-effective normalized per-100 g/per-100 ml values;
+- missing required nutrient/basis excludes a Food;
+- multiple numeric/preset conditions use AND semantics;
 - no-result state preserves user intent.
 
-### 43.9 Resilience
+### 43.9 Nutrition Info
+
+- Info control is contextual to Nutrition/Advanced Nutrition, not global Filters;
+- Web uses Lucide `info`; native platforms use semantic native equivalent;
+- accessible label is `About nutrition filter values`;
+- tap/click/keyboard exposes `Values normalized per 100 g (foods) or 100 ml (drinks).`;
+- hover may enhance but is never required.
+
+### 43.10 Resilience
 
 - external provider outage does not break normal Food Library;
-- partial section failure does not blank the page;
-- offline state never pretends cached data is the complete catalog;
+- partial failure does not blank the page;
+- offline never pretends cached data is the complete catalog;
 - mutation success is not shown before persistence authority confirms it.
 
-### 43.10 Responsive/RTL/accessibility
+### 43.11 Responsive/RTL/accessibility
 
-Acceptance must cover:
+Acceptance covers compact phone, tablet/regular width, desktop/fine pointer, Arabic RTL, mixed Arabic/Latin brand content, long names, Dynamic Type/large text, keyboard operation, icon accessible names, and no hover-only required behavior.
 
-- compact phone width;
-- tablet/regular width;
-- desktop/fine pointer;
-- Arabic RTL;
-- mixed Arabic/Latin branded content;
-- long Food names;
-- large text/Dynamic Type equivalent;
-- keyboard focus and operation;
-- icon accessible names;
-- no hover-only required actions.
+Desktop normal results use one/two columns only by default.
 
 ## 44. Screenshot-based visual acceptance scenarios
 
-Later implementation QA must capture and compare at minimum:
+Later implementation QA must capture at minimum:
 
-1. Mobile Food Library default state with Recent content.
+1. Mobile default Food Library with Recent content.
 2. Mobile new-user state with no personal content.
-3. Mobile active Search results showing verified and unverified Foods.
-4. Mobile Search with High Protein + carb-threshold/approved Low Carb preset active and two Card tags.
+3. Mobile active Search showing verified/unverified Foods.
+4. Mobile Search with High Protein + approved carb label active and both row labels visible.
 5. Mobile no-result Search with removable filters.
-6. Mobile Food Detail with serving recalculation.
-7. Mobile Food Detail with active personal correction and `Using your values` state.
-8. Mobile Add To sheet.
-9. Mobile Create Custom Food Fast Core.
-10. Mobile duplicate suggestion during Create Food.
-11. Mobile Custom Food Edit and destructive Delete confirmation.
-12. Mobile offline/cached state.
-13. Mobile external barcode fallback failure while library remains usable.
-14. Tablet Food Library adaptive density.
-15. Desktop Food Library with bounded 2–3 column result layout.
-16. Desktop Food Detail contextual side panel and direct standalone route equivalence.
-17. Arabic RTL Food Card with localized macro labels and mixed Latin brand case.
-18. Long branded Food name without action overlap.
-19. Large-text/accessibility layout without clipped macros.
+6. Mobile live Filter sheet with no Apply/Done/✓.
+7. Mobile Nutrition Info popover.
+8. Mobile Food Detail with serving recalculation.
+9. Mobile Food Detail with active personal correction.
+10. Mobile standalone Add To showing Serving + Quantity + destinations.
+11. Mobile Create Custom Food Fast Core.
+12. Mobile duplicate suggestion.
+13. Mobile Custom Food Edit/Delete confirmation.
+14. Mobile offline/cached state.
+15. Mobile barcode fallback failure while library remains usable.
+16. Tablet adaptive one/two-column density.
+17. Desktop Food Library with bounded one/two-column result layout.
+18. Desktop contextual Food Detail panel and route-equivalent detail.
+19. Desktop Nutrition Info hover enhancement and click-pinned help.
+20. Arabic RTL Food Row with localized macro labels and mixed Latin brand case.
+21. Long branded Food name without action overlap.
+22. Large-text/accessibility layout without clipped macros.
 
-Screenshots prove presentation only. Domain/data acceptance also requires functional tests and database/API verification in the later implementation plan.
+Screenshots prove presentation only. Domain/data acceptance also requires functional and database/API verification in the future implementation plan.
 
-## 45. Testing requirements for the future implementation plan
+## 45. Future implementation testing requirements
 
 The future plan must include tests for at least:
 
@@ -1979,17 +1150,21 @@ The future plan must include tests for at least:
 - duplicate classification boundaries;
 - multilingual normalization/search;
 - Arabic/Latin aliases;
-- brand intent ranking;
+- brand-intent ranking;
 - serving conversion math;
-- missing-is-not-zero behavior;
+- missing-is-not-zero;
 - personal correction/effective-nutrition resolution;
-- verification remaining canonical when personal corrections exist;
+- verification remaining canonical under personal correction;
 - Favorite merge survival;
-- Recent/Frequency derivation semantics;
-- normalized nutrient filtering using effective values;
+- Recent/Frequency derivation;
+- normalized nutrient filters using effective values;
+- live filter state and immediate Reset;
+- numeric-input debounce without staged commit;
 - AND composition of filters/presets;
-- canonical shared-claim versus personal preset-match behavior;
-- market-aware discovery-tag rule versioning;
+- canonical shared-claim versus personal preset matching;
+- market-aware label rule versioning;
+- Nutrition Info touch/click/keyboard accessibility;
+- Add To resolved serving/quantity handoff;
 - Custom Food ownership/RLS;
 - owner-only curation authorization;
 - Food Detail live recalculation;
@@ -1999,13 +1174,14 @@ The future plan must include tests for at least:
 - partial failure envelopes;
 - offline/cached truth labeling;
 - mutation retry/input preservation;
-- accessibility and RTL behavior.
+- responsive one/two-column behavior;
+- RTL/accessibility behavior.
 
 ## 46. Final product contract
 
-Food Library V1 is a **search-first, identity-safe, internationally extensible Food system** built inside the Main Plaivra nutrition authority.
+Food Library V1 is a **search-first, identity-safe, internationally extensible Food system** inside Plaivra Main Nutrition authority.
 
-The user sees a simple surface:
+The user-facing model is simple:
 
 ```text
 Search
@@ -2015,8 +1191,6 @@ Search
 → reuse everywhere
 ```
 
-Underneath, Plaivra maintains stable Food identity, measurable serving semantics, multilingual search, provenance, verification, duplicate resolution, user-scoped corrections/custom Foods, bounded search/filter architecture, and non-destructive lifecycle behavior.
-
-The governing summary is:
+Underneath, Plaivra maintains stable Food identity, measurable serving semantics, multilingual search, provenance, verification, duplicate resolution, user-scoped corrections/custom Foods, bounded live search/filter architecture, historical snapshots, and non-destructive lifecycle behavior.
 
 > **One Food identity, many ways to find it, one consistent effective nutrition view for current user actions, frozen snapshots for history, and no unnecessary friction on the surface.**
