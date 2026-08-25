@@ -146,6 +146,15 @@ This is an append-only decision log. Do not rewrite or delete an approved histor
 - Consequences: The routing workflow accepts only completed repository-owned `main` runs, executes trusted default-branch code, assigns the existing `bug`-labelled incident to the repository owner, preserves run-marker idempotency, ignores expected supersession cancellations, and fails visibly when issue routing cannot complete. PCS-5B does not add independent monitoring, broader runtime/OAuth/MCP/deletion/billing/retention signals, external delivery guarantees, Production backup, database dumps, Supabase plan changes, PITR, or restore rehearsal. Backup/restore remains deferred until provider or encrypted off-site storage, cost, and key-management decisions are approved.
 - Supersedes / Superseded by: Extends D-015's exact Production signal into owner-visible incident routing; supersedes neither D-015 nor later external-monitoring or backup decisions.
 
+## D-017 — Nutrition V1 reconciled product architecture
+
+- Date: 2026-08-25
+- Status: Approved
+- Decision: Nutrition V1 has exactly four peer destinations — Diary, Meal Plan, Food Library, and My Recipes — with Shopping List nested under Meal Plan. Nutrition Summary is removed; a future Global Summary is a separate top-level cross-domain product. Saved Meal is a shared contextual Nutrition utility. Recipe and Saved Meal deletion use a 30-day Recently Deleted recovery model; committed consumers retain version-specific/frozen snapshots; Diary and Meal Plan share effective-dated Nutrition Targets; and the active Nutrition authority chain is defined by `docs/control/PLAIVRA_NUTRITION_AUTHORITIES.md` plus the approved wide reconciliation and page amendments.
+- Reason: The independently approved Nutrition page designs exposed cross-domain ambiguity in Summary ownership, Saved Meal ownership, Recipe deletion, Recipe-version consumers, historical targets, and shared visual wording. One reconciled authority is required before implementation planning so implementation cannot encode mutually incompatible page assumptions.
+- Consequences: Stale five-destination, Archive-first, future-Recipe, non-version-specific Recipe consumer, and Nutrition-Summary dependency wording in earlier page specs is superseded by the reconciliation authority chain. No Nutrition implementation may introduce a fifth Summary route, embedded generic Nutrition chatbot, nested Recipe/Saved Meal composition, silent source-to-history mutation, or missing-as-zero nutrition. Implementation planning may begin only after fresh contradiction/placeholder/scope verification of the reconciled design branch.
+- Supersedes / Superseded by: Supersedes conflicting Nutrition design assumptions approved before 2026-08-25; does not supersede unchanged page-specific behavior or existing runtime/data authority before verified migration.
+
 ## Future entry format
 
 Every future entry must include:
