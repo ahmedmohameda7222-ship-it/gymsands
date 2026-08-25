@@ -57,7 +57,9 @@ begin
       and required.table_name = 'food_source_records'
       and required.column_name = names.column_name
     where required.column_name is null
-  ) then
+  ) or not has_table_privilege('service_role', 'public.food_source_records', 'INSERT')
+     or has_table_privilege('authenticated', 'public.food_source_records', 'INSERT')
+  then
     raise exception 'Nutrition V1 food provenance contract missing.';
   end if;
 
@@ -138,9 +140,8 @@ insert into auth.users (
     '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()
   );
 
-set local role service_role;
-select set_config('request.jwt.claim.role', 'service_role', true);
-
+-- Legacy canonical Food mutation is deliberately hardened. Disposable fixtures use
+-- the local database owner rather than broadening service_role privileges on food_items.
 insert into public.food_items (
   id, food_name, serving_size, calories, protein_g, carbs_g, fat_g,
   source_type, is_global, lifecycle_status
@@ -216,7 +217,6 @@ select pg_temp.nv1_food_assert(
   'Nutrition V1 food duplicate redirect invalid.'
 );
 
-reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'a2130000-0000-4000-8000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
