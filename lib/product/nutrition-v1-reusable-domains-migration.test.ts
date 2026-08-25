@@ -43,11 +43,11 @@ describe("Nutrition V1 reusable-domain migration contract", () => {
     expect(migration).not.toMatch(/drop\s+table\s+(if\s+exists\s+)?public\.(saved_recipes|custom_meals|custom_meal_items)/);
   });
 
-  it("keeps published Recipe versions immutable to direct authenticated mutation", () => {
+  it("keeps published Recipe versions immutable behind server publication authority", () => {
     expect(migration).toContain("create or replace function private.prevent_nutrition_recipe_version_update");
     expect(migration).toContain("before update on public.nutrition_recipe_versions");
-    expect(migration).toContain("revoke update, delete on public.nutrition_recipe_versions from authenticated");
-    expect(migration).toContain("grant select, insert on public.nutrition_recipe_versions to authenticated");
+    expect(migration).toContain("revoke insert, update, delete on public.nutrition_recipe_versions from authenticated");
+    expect(migration).toContain("grant select on public.nutrition_recipe_versions to authenticated");
   });
 
   it("models Saved Meal children as Food or frozen Recipe-version lineage without recursive meals", () => {
