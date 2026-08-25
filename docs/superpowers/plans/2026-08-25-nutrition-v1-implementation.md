@@ -448,6 +448,7 @@ it("requires Recipe version lineage", () => {
 - Modify: `lib/privacy/data-export.ts`
 - Modify: `lib/privacy/data-export-legacy.ts`
 - Modify: `lib/privacy/account-deletion-worker.ts`
+- Test: `lib/privacy/account-deletion-worker.test.ts`
 - Create: `supabase/migrations/20260825120400_nutrition_v1_privacy_purge_authority.sql`
 - Create: `supabase/verification/nutrition-v1-privacy-purge.sql`
 - Modify: `services/dashboard/today-projection-server.ts`
@@ -455,7 +456,7 @@ it("requires Recipe version lineage", () => {
 - Modify: `services/reports/reporting.ts`
 - Modify: `lib/mcp/context-projections.ts`
 - Modify: `lib/mcp/tool-executor-safe.ts`
-- Test: `lib/privacy/data-export.test.ts`, account deletion worker tests, Today projection tests, MCP coverage tests.
+- Test: `lib/privacy/data-export.test.ts` plus existing Today projection and MCP coverage tests.
 
 **Interfaces:**
 - Extend atomic `purge_account_application_data_atomic` in the new migration to delete every new owner Nutrition table in dependency-safe order before Auth deletion.
@@ -466,7 +467,7 @@ it("requires Recipe version lineage", () => {
 - [ ] **Step 1: Extend tests first: export includes new Nutrition sections; purge verification leaves zero owner rows; recipe cover objects are removed; MCP context is minimized; Today separates actual/planned.**
 - [ ] **Step 2: Run privacy/Today/MCP targeted tests; verify FAIL.**
 - [ ] **Step 3: Implement export + atomic purge migration + deletion-worker storage cleanup for `recipe-covers` + Today/reporting/MCP compatibility.**
-- [ ] **Step 4: Run privacy deletion lifecycle verification, privacy tests, Today tests, MCP coverage, typecheck; verify PASS.**
+- [ ] **Step 4: Run `npx vitest run --config vitest.unit.config.mjs lib/privacy/data-export.test.ts lib/privacy/account-deletion-worker.test.ts`, the existing Today projection tests, MCP public-tool/context tests, `npm run typecheck`, and privacy SQL verification; verify PASS.**
 - [ ] **Step 5: Commit `feat(nutrition): integrate privacy today reporting and mcp`.**
 
 ### Task 19: Legacy-data compatibility and convergence proof
@@ -476,7 +477,7 @@ it("requires Recipe version lineage", () => {
 - Test: `services/nutrition-v1/compatibility/legacy-nutrition.test.ts`
 - Create: `supabase/verification/nutrition-v1-legacy-reconciliation.sql`
 - Modify: `lib/architecture/canonical-convergence.test.ts`
-- Modify only when required for compatibility: `services/meals/food-logging-speed.ts`
+- Modify: `services/meals/food-logging-speed.ts` so legacy saved-recipe/custom-meal reads delegate to the explicit Nutrition V1 compatibility adapter rather than defining semantics locally.
 
 **Interfaces:**
 - Historical `saved_recipes(saved_item_type meal|recipe|template)`, `custom_meals`, flat `user_meal_plan_items`, and `food_logs` remain readable/mappable without becoming product authority.
@@ -484,7 +485,7 @@ it("requires Recipe version lineage", () => {
 
 - [ ] **Step 1: Write fixture tests with legacy recipe, custom meal, completed plan item, food log; assert each remains visible under correct compatibility projection or explicit unresolved classification.**
 - [ ] **Step 2: Run compatibility/convergence tests; verify FAIL.**
-- [ ] **Step 3: Implement adapters/backfill verification; no destructive dedupe/drop/delete.**
+- [ ] **Step 3: Implement adapters/backfill verification and route `food-logging-speed.ts` legacy reads through them; no destructive dedupe/drop/delete.**
 - [ ] **Step 4: Run convergence + compatibility + privacy tests and `npm run migration:ledger:check`; verify PASS.**
 - [ ] **Step 5: Commit `feat(nutrition): preserve legacy nutrition compatibility`.**
 
@@ -493,16 +494,16 @@ it("requires Recipe version lineage", () => {
 **Files:**
 - Create: `scripts/run-nutrition-v1-qa.mjs`
 - Test: `scripts/run-nutrition-v1-qa.test.mjs`
-- Modify: `scripts/run-rendered-qa.mjs` only to register the bounded Nutrition suite if needed by existing harness composition.
-- Add missing RTL/large-text/focus product tests under `lib/product/`.
+- Modify: `scripts/run-rendered-qa.mjs` to register and invoke the bounded Nutrition V1 rendered suite.
+- Create: `lib/product/nutrition-v1-responsive-contract.test.ts` for RTL, large-text, keyboard/focus, and touch-target product contracts.
 - Update after all evidence: `docs/control/PLAIVRA_CURRENT_STATE.md`.
 
 **Interfaces:**
 - QA matrix covers mobile Diary/Meal Plan/Food Library/My Recipes/editor/detail/Cooking, desktop Home/detail/Cooking/Meal Plan, RTL mobile My Recipes + Cooking, large-text stress, empty/error/offline/autosave failure, Recently Deleted, Shopping, and all locked visual rejection criteria.
 
-- [ ] **Step 1: Write failing QA harness test for route list, viewport matrix, RTL/large-text variants, console/runtime error capture, deterministic screenshot names.**
-- [ ] **Step 2: Run `node --test scripts/run-nutrition-v1-qa.test.mjs`; verify FAIL.**
-- [ ] **Step 3: Implement QA harness and correct only verified spec deviations; no redesign during QA.**
+- [ ] **Step 1: Write failing QA harness + responsive-contract tests for route list, viewport matrix, RTL/large-text variants, keyboard/focus, touch targets, console/runtime error capture, and deterministic screenshot names.**
+- [ ] **Step 2: Run `node --test scripts/run-nutrition-v1-qa.test.mjs` and `npx vitest run --config vitest.unit.config.mjs lib/product/nutrition-v1-responsive-contract.test.ts`; verify FAIL.**
+- [ ] **Step 3: Implement QA harness, register it in `run-rendered-qa.mjs`, and correct only verified spec deviations; no redesign during QA.**
 - [ ] **Step 4: Run exact local verification: `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:integration`, `npm run test:scripts`, `npm run migration:ledger:check`, and `node scripts/run-nutrition-v1-qa.mjs`. All must exit 0.**
 - [ ] **Step 5: Run repository canonical Quality workflow for the exact implementation head, then Exact Release/read-only release preflight according to current repository delivery rules; record exact run IDs and artifacts. No merge until those current authorities pass.**
 - [ ] **Step 6: Re-run Nutrition migration verification against exact head; verify no legacy-table retirement, no pending/untracked schema discrepancy, and Production migration application is not performed until separately approved release step.**
@@ -514,7 +515,7 @@ it("requires Recipe version lineage", () => {
 
 **Spec coverage:** Covered: canonical IA; Food authority/search/provenance/corrections/admin; effective targets; Diary/Plate/plan linkage/hydration compatibility; Meal Plan/Shopping/revisions/offline/ChatGPT proposals; Saved Meal contextual utility/deletion; Recipe drafts/versions/import/share/deletion; Cooking Mode deterministic engine/timers/voice/offline/resume/device behavior; external ChatGPT/MCP; privacy/deletion; legacy convergence; i18n/RTL/accessibility; rendered acceptance matrix.
 
-**Placeholder scan:** No `TBD`, `TODO`, “implement later”, unresolved alternative, or unnamed required file remains in the plan.
+**Placeholder scan:** No `TBD`, `TODO`, “implement later”, unresolved alternative, conditional required file, or unnamed required test remains in the plan.
 
 **Type/interface consistency:** Recipe consumers consistently use `recipe_id` + `recipe_version_id` + resolved serving + frozen facts; Saved Meal consumers use `SavedMealBundleSnapshot`; target readers use persisted effective periods; Diary grouped logging is definitively `nutrition_log_groups` + `nutrition_log_group_items`; Meal Plan uses one week revision authority; source-deletion lineage is retained without cascade FK dependency.
 
