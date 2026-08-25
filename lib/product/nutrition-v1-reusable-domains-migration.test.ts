@@ -11,6 +11,19 @@ const verification = readFileSync(
   "utf8",
 ).replaceAll("\r\n", "\n").toLowerCase();
 
+const databaseVerification = readFileSync(
+  "scripts/run-database-verification.mjs",
+  "utf8",
+).replaceAll("\r\n", "\n").toLowerCase();
+
+function tableDefinition(table: string) {
+  const match = migration.match(
+    new RegExp(`create table if not exists public\\.${table} \\([\\s\\S]*?\\n\\);`),
+  );
+  if (!match) throw new Error(`Missing ${table} table definition.`);
+  return match[0];
+}
+
 describe("Nutrition V1 reusable-domain migration contract", () => {
   it("creates the eight additive canonical Recipe and Saved Meal tables", () => {
     for (const table of [
@@ -38,19 +51,21 @@ describe("Nutrition V1 reusable-domain migration contract", () => {
   });
 
   it("models Saved Meal children as Food or frozen Recipe-version lineage without recursive meals", () => {
-    expect(migration).toContain("item_type text not null check (item_type in ('food', 'recipe'))");
-    expect(migration).toContain("recipe_id uuid");
-    expect(migration).toContain("recipe_version_id uuid");
-    expect(migration).toContain("frozen_snapshot jsonb not null");
-    expect(migration).not.toMatch(/saved_meal_item_id\s+uuid/);
-    expect(migration).not.toMatch(/recipe_id\s+uuid[^,;]*references\s+public\.nutrition_recipes/);
-    expect(migration).not.toMatch(/recipe_version_id\s+uuid[^,;]*references\s+public\.nutrition_recipe_versions/);
+    const items = tableDefinition("nutrition_saved_meal_items");
+    expect(items).toContain("item_type text not null check (item_type in ('food', 'recipe'))");
+    expect(items).toContain("recipe_id uuid");
+    expect(items).toContain("recipe_version_id uuid");
+    expect(items).toContain("frozen_snapshot jsonb not null");
+    expect(items).not.toMatch(/saved_meal_item_id\s+uuid/);
+    expect(items).not.toMatch(/recipe_id\s+uuid[^,;]*references\s+public\.nutrition_recipes/);
+    expect(items).not.toMatch(/recipe_version_id\s+uuid[^,;]*references\s+public\.nutrition_recipe_versions/);
   });
 
   it("implements the approved 30-day Recipe and Saved Meal recovery lifecycle", () => {
     for (const source of ["nutrition_recipes", "nutrition_saved_meals"]) {
-      expect(migration).toMatch(new RegExp(`create table if not exists public\\.${source}[\\s\\S]*deleted_at timestamptz`));
-      expect(migration).toMatch(new RegExp(`create table if not exists public\\.${source}[\\s\\S]*purge_after timestamptz`));
+      const definition = tableDefinition(source);
+      expect(definition).toContain("deleted_at timestamptz");
+      expect(definition).toContain("purge_after timestamptz");
     }
 
     for (const fn of [
@@ -95,5 +110,14 @@ describe("Nutrition V1 reusable-domain migration contract", () => {
     ]) {
       expect(verification).toContain(phrase);
     }
+
+    const nutritionVerification = databaseVerification.indexOf(
+      "nutrition-v1-reusable-domains.sql",
+    );
+    const releasePreflight = databaseVerification.indexOf(
+      "production-release-migration-preflight.sql",
+    );
+    expect(nutritionVerification).toBeGreaterThanOrEqual(0);
+    expect(releasePreflight).toBeGreaterThan(nutritionVerification);
   });
 });
