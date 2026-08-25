@@ -8,7 +8,7 @@ export type ActiveNutritionTarget = {
   values: SavedTargets;
   profile: UserNutritionTargetProfile | null;
   requestedType: NutritionTargetProfileType;
-  sourceType: NutritionTargetProfileType | "base" | "none" | "effective_period";
+  sourceType: NutritionTargetProfileType | "base" | "none";
   label: string;
   reason: string;
   hasTarget: boolean;
@@ -110,6 +110,20 @@ export function canonicalValuesFromLegacyTarget(
   return Object.values(values).some((value) => value !== null) ? values : null;
 }
 
+function compatibilitySourceType(
+  evidence: Record<string, unknown> | null,
+): ActiveNutritionTarget["sourceType"] {
+  const value = evidence?.legacy_source_type;
+  return value === "default_day"
+    || value === "training_day"
+    || value === "rest_day"
+    || value === "high_activity_day"
+    || value === "base"
+    || value === "none"
+    ? value
+    : "base";
+}
+
 export function activeNutritionTargetFromEffectiveTarget(
   target: EffectiveNutritionTarget,
 ): ActiveNutritionTarget {
@@ -126,7 +140,13 @@ export function activeNutritionTargetFromEffectiveTarget(
   }
 
   const { calories, protein_g, carbs_g, fat_g, water_ml } = target.values;
-  if ([calories, protein_g, carbs_g, fat_g, water_ml].some((value) => value === null)) {
+  if (
+    calories === null
+    || protein_g === null
+    || carbs_g === null
+    || fat_g === null
+    || water_ml === null
+  ) {
     // The legacy ActiveNutritionTarget shape cannot express unknown nutrients without
     // coercing them to zero. Keep the compatibility surface unconfigured instead;
     // canonical V1 readers consume EffectiveNutritionTarget directly and preserve nulls.
@@ -152,7 +172,7 @@ export function activeNutritionTargetFromEffectiveTarget(
     values,
     profile: null,
     requestedType: "default_day",
-    sourceType: "effective_period",
+    sourceType: compatibilitySourceType(target.source_evidence),
     label: "Nutrition target",
     reason: "Effective target stored for this date.",
     hasTarget: Object.values(values).some((value) => value > 0),
