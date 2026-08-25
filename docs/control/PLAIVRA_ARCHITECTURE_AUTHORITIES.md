@@ -32,8 +32,17 @@
 
 ### Nutrition
 
-- Existing nutrition, food-log, meal-plan, hydration, and saved-meal data remain current authority.
-- Multi-table mutations requiring all-or-nothing behavior must eventually converge behind transactional server/database authority.
+- Existing nutrition, food-log, meal-plan, hydration, and saved-meal data remain current runtime/data authorities until verified migration or transactional convergence replaces them.
+- Canonical Nutrition product/design authority is mapped in `docs/control/PLAIVRA_NUTRITION_AUTHORITIES.md` and reconciled by `docs/superpowers/specs/2026-08-25-nutrition-wide-reconciliation-design.md` plus the page-specific reconciliation amendments.
+- Canonical Nutrition IA has exactly four peer destinations: Diary, Meal Plan, Food Library, and My Recipes. Shopping List remains nested under Meal Plan. There is no Nutrition Summary destination; future Global Summary is a separate top-level cross-domain product.
+- Diary owns actual intake truth. Meal Plan owns intended intake truth. Food Library owns Food identity. My Recipes owns Recipe identity, immutable published Recipe versions, Working Drafts, and Cooking Mode. Saved Meal is a shared contextual Nutrition utility, not a peer destination.
+- Food, Recipe, and Saved Meal are distinct semantic types. Recipe-inside-Recipe and Saved-Meal-inside-Saved-Meal are excluded from V1.
+- Every committed Recipe consumer retains `recipe_id`, `recipe_version_id`, resolved serving/quantity, frozen nutrition, and sufficient frozen display facts. Committed Saved Meal uses retain frozen resolved bundle snapshots. Source edits or deletion must never silently rewrite committed history.
+- Recipe and Saved Meal deletion use `Delete → Recently Deleted → 30 days → Restore or Delete Now → permanent deletion`. Permanent live-source deletion never destroys already-frozen Diary/Meal Plan/Saved Meal consumer history.
+- Diary and Meal Plan share one effective-dated Nutrition Target authority. Historical dates compare against the target effective for that date; later target changes are not retroactive truth mutation.
+- Across Nutrition, missing nutrition is unknown, never zero.
+- Nutrition AI follows external ChatGPT prompt → user review → explicit approval → authorized Plaivra MCP write where applicable. ChatGPT is not canonical nutrition fact authority and no embedded generic Nutrition chatbot is authorized.
+- Multi-table mutations requiring all-or-nothing behavior must converge behind transactional server/database authority.
 - Do not add parallel nutrition fact stores.
 
 ### Progress
@@ -80,7 +89,7 @@
 | Domain | Current authority | Compatibility path | Retirement condition |
 |---|---|---|---|
 | Workouts | Canonical workout sessions, performed logs, Active Workout engine/store, atomic RPCs, and immutable snapshots | Existing bounded compatibility code may serve verified existing workout data; new work must use canonical authorities | Verified data coverage, approved migration strategy, rollback or forward-fix strategy, and Lead approval |
-| Nutrition | Existing nutrition, food-log, meal-plan, hydration, and saved-meal authorities | Existing compatibility paths may remain for current data but must not become new fact stores or receive unapproved feature expansion | Transactional convergence, verified data migration where required, rollback or forward-fix strategy, and Lead approval |
+| Nutrition | Existing nutrition, food-log, meal-plan, hydration, and saved-meal runtime/data authorities plus the reconciled Nutrition V1 product/design authority chain | Existing compatibility paths may remain for current data, but new work must map explicitly to Food, Recipe, Saved Meal, Diary actual usage, and Meal Plan intended usage; stale mixed `saved_recipe`/custom-meal semantics are not product authority | Transactional convergence, verified data migration where required, rollback or forward-fix strategy, and Lead approval |
 | Activity Catalog | Legacy Production provider | External Activity Catalog remains inactive and non-authoritative | Separate Lead-approved migration decision, verified data/provider readiness, migration strategy, rollback or forward-fix strategy, and Lead approval |
 
 Compatibility code may remain when required for existing data. New features must not extend legacy paths unless explicitly approved. No new parallel source of truth is allowed. Legacy retirement requires data verification, migration strategy, rollback or forward-fix strategy, and Lead approval.
