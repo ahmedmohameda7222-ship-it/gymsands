@@ -34,6 +34,7 @@ test("permanent verification chain covers the current Active Workout authority",
     "nutrition-v1-reusable-domains.sql",
     "nutrition-v1-plan-diary-targets.sql",
     "nutrition-v1-cooking-sessions.sql",
+    "nutrition-v1-food-search-and-curation.sql",
     "production-release-migration-preflight.sql",
   ]) {
     assert.equal(DATABASE_VERIFICATION_FILES.some((file) => file.endsWith(required)), true, required);

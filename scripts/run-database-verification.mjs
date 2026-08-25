@@ -27,6 +27,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/nutrition-v1-reusable-domains.sql",
   "supabase/verification/nutrition-v1-plan-diary-targets.sql",
   "supabase/verification/nutrition-v1-cooking-sessions.sql",
+  "supabase/verification/nutrition-v1-food-search-and-curation.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
