@@ -64,11 +64,32 @@ Editing a Saved Meal affects future use only. Every committed Diary or Meal Plan
 
 Recipe children retain `recipe_id`, `recipe_version_id`, resolved serving, and consumer-required frozen nutrition/display facts.
 
-## 5. Saved Meal deletion integrity
+## 5. Saved Meal deletion lifecycle
 
-Deleting a reusable Saved Meal source must never cascade into committed Diary or Meal Plan history. Permanent source removal may remove the live object, but already-frozen consumer snapshots survive.
+Saved Meal uses the same user-facing recovery model as Recipe deletion:
 
-Exact reusable-object retention UX may be aligned later with the approved deletion policy during implementation planning; history integrity is mandatory.
+```text
+ACTIVE
+  ↓ Delete
+RECENTLY DELETED
+  ↓ 30 days
+PERMANENTLY DELETED
+```
+
+Delete:
+- removes the Saved Meal from normal discovery and new-use selection;
+- moves it to Recently Deleted for 30 days;
+- preserves the same Saved Meal identity during retention.
+
+Restore within 30 days revives the same Saved Meal identity and contents.
+
+`Delete Now` permanently removes the live Saved Meal source after explicit destructive confirmation.
+
+Automatic permanent deletion occurs after 30 days if not restored.
+
+Permanent Saved Meal deletion never cascades into committed Diary or Meal Plan history. Already-frozen consumer bundle snapshots remain displayable and semantically intact after the live source no longer exists.
+
+Recently Deleted management is contextual/secondary and does not become a peer Nutrition destination.
 
 ## 6. Recipe deletion lifecycle — superseding Archive-first
 
@@ -318,7 +339,11 @@ Nutrition V1 is reconciled only if all are true:
 - Food + published Recipe-version children only;
 - no nested Saved Meal;
 - editing changes future use only;
-- committed use freezes a resolved bundle snapshot.
+- committed use freezes a resolved bundle snapshot;
+- Delete → Recently Deleted → 30 days → permanent deletion is canonical;
+- Restore preserves the same Saved Meal identity;
+- Delete Now is explicitly destructive;
+- permanent deletion never corrupts frozen Diary/Meal Plan consumers.
 
 ### Visual/system
 - shared contract scopes to four destinations;
