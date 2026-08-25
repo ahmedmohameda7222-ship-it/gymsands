@@ -1,7 +1,7 @@
 # Nutrition V1 — Wide Reconciliation Design
 
 **Date:** 2026-08-25
-**Status:** Final reconciled Planner design, pending user written-spec review
+**Status:** User-approved canonical reconciliation; mechanical authority reconciliation complete, pending final verification
 **Branch:** `design/nutrition-wide-reconciliation-v1`
 **Base:** `design/nutrition-my-recipes-v1`
 
@@ -271,7 +271,7 @@ The Nutrition Native Visual Contract now applies to four peer destinations only:
 - Food Library;
 - My Recipes.
 
-Summary-specific Nutrition references are stale and must be mechanically removed/superseded before implementation planning.
+Summary-specific Nutrition references are stale and are superseded by this reconciliation and the binding Native Visual Contract amendment.
 
 Touch wording is reconciled to:
 
@@ -347,22 +347,29 @@ Nutrition V1 is reconciled only if all are true:
 
 ### Visual/system
 - shared contract scopes to four destinations;
-- stale Summary references removed/superseded;
+- stale Summary references are explicitly superseded by binding amendments;
 - 44×44 described as Plaivra baseline, not Apple absolute minimum.
 
 ### AI
 - external ChatGPT + explicit approval + authorized MCP remains the pattern;
 - ChatGPT does not become nutrition authority.
 
-## 23. Post-approval mechanical reconciliation
+## 23. Mechanical reconciliation record
 
-After user written-spec approval:
-1. update Diary stale IA/future-Recipe/target wording;
-2. update Meal Plan IA, explicit Recipe version identity, and Summary wording;
-3. update Food Library IA/Summary wording;
-4. update My Recipes IA and deletion lifecycle/Archive/Summary wording;
-5. update Native Visual Contract from five destinations to four and correct touch-target wording;
-6. update repository control/decision authorities;
-7. run a fresh contradiction/placeholder/scope scan;
-8. present final reconciliation evidence;
-9. only then invoke `superpowers:writing-plans` for the comprehensive Nutrition implementation plan.
+User written-spec approval was received on 2026-08-25. The approved cross-domain corrections are now represented through binding amendments rather than destructive rewrites of the large page specs, preserving every unchanged approved page detail while removing ambiguity from the active authority chain.
+
+Binding amendments:
+
+1. `docs/superpowers/specs/2026-08-25-nutrition-diary-reconciliation-amendment.md`;
+2. `docs/superpowers/specs/2026-08-25-nutrition-meal-plan-reconciliation-amendment.md`;
+3. `docs/superpowers/specs/2026-08-25-nutrition-food-library-reconciliation-amendment.md`;
+4. `docs/superpowers/specs/2026-08-25-nutrition-my-recipes-reconciliation-amendment.md`;
+5. `docs/superpowers/specs/2026-08-25-nutrition-native-visual-contract-reconciliation-amendment.md`.
+
+Control-plane reconciliation:
+
+- `docs/control/PLAIVRA_NUTRITION_AUTHORITIES.md` defines the active Nutrition authority precedence;
+- `docs/control/PLAIVRA_ARCHITECTURE_AUTHORITIES.md` records the reconciled domain boundaries;
+- `docs/control/PLAIVRA_DECISIONS.md` records approved decision D-017.
+
+The next gate is fresh contradiction/placeholder/scope verification of the active authority chain. Only after that gate passes may `superpowers:writing-plans` be invoked for the comprehensive Nutrition implementation plan.
