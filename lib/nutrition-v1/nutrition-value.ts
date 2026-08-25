@@ -47,7 +47,7 @@ export function scaleNutritionFacts(value: NutritionFacts, scale: number): Nutri
   ) as NutritionFacts;
 }
 
-export function hasCompleteNutrition(value: NutritionFacts) {
+export function hasCompleteNutrition(value: NutritionFacts): boolean {
   return (["calories", "protein_g", "carbs_g", "fat_g"] as const).every(
     (key) => validateKnownNutritionValue(value[key], key) !== null,
   );
