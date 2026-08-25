@@ -4,7 +4,7 @@
 **Evidence captured:** 2026-08-03T18:10:27.000Z
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `92d936bc513af83fff41913477a8148a9ab5b845`
-**Status:** Applied Production history reconciled; seven repository migrations intentionally pending
+**Status:** Applied Production history reconciled; eight repository migrations intentionally pending
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
@@ -12,17 +12,17 @@ This document records migration identity and verification. It does not independe
 
 - Physical Production migration records: **87**
 - Exact applications (`state = applied`): **63**
-- Repository-only pending migrations: **7**
-- `pendingCount = 7`
+- Repository-only pending migrations: **8**
+- `pendingCount = 8`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 7`
+- `unresolvedCount = 8`
 - `historyRepair.state = pending`
 - `release_ready = false` while the repository migrations remain intentionally pending
 - Released compatibility marker: `20260724232734`
 - Latest physical Production record: `20260804180932_fix_profiles_update_policy_recursion`
 - Activity Catalog Production remains isolated from the Main migration ledger
 
-The previously applied Plaivra Production migration history remains reconciled through `20260804180932_fix_profiles_update_policy_recursion`. P10F migration `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql`, Exercise Detail + Personal Records migration `20260813042754_exercise_detail_personal_records_authority.sql`, Workout History redesign migration `20260813071926_workout_history_redesign_read_contract.sql`, Active Workout feedback-preference migration `20260816044500_active_workout_feedback_preferences.sql`, Exercise Detail V2 setup-note migration `20260820060000_exercise_detail_setup_notes.sql`, Exercise Detail V2 replacement-reason migration `20260820070000_exercise_alternative_reason_v2.sql`, and Nutrition V1 reusable-domain migration `20260825120000_nutrition_v1_reusable_domains.sql` are intentionally classified `pending`. None has been applied to Production, none claims a Production identity, and none may be replayed or applied before explicit Planner approval.
+The previously applied Plaivra Production migration history remains reconciled through `20260804180932_fix_profiles_update_policy_recursion`. P10F migration `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql`, Exercise Detail + Personal Records migration `20260813042754_exercise_detail_personal_records_authority.sql`, Workout History redesign migration `20260813071926_workout_history_redesign_read_contract.sql`, Active Workout feedback-preference migration `20260816044500_active_workout_feedback_preferences.sql`, Exercise Detail V2 setup-note migration `20260820060000_exercise_detail_setup_notes.sql`, Exercise Detail V2 replacement-reason migration `20260820070000_exercise_alternative_reason_v2.sql`, Nutrition V1 reusable-domain migration `20260825120000_nutrition_v1_reusable_domains.sql`, and Nutrition V1 plan/Diary/target migration `20260825120100_nutrition_v1_plan_diary_targets.sql` are intentionally classified `pending`. None has been applied to Production, none claims a Production identity, and none may be replayed or applied before explicit Planner approval.
 
 Physical schema advancement and compatibility-marker promotion remain separate release operations. The pending repository state does not authorize Production migration application, application deployment, or compatibility-marker promotion.
 
@@ -140,6 +140,13 @@ AW-9 remains represented by repository migration `20260731090000_active_workout_
 - `20260825120000_nutrition_v1_reusable_domains.sql` is the additive Recipe, immutable Recipe-version, Working Draft, Saved Meal, 30-day recovery, owner-RLS, and private Recipe-cover authority for Nutrition V1 Task 2.
 - Ledger state: `pending`; Production version/name: intentionally absent.
 - It preserves legacy Nutrition tables and frozen consumer lineage while adding canonical reusable-domain storage; it was not applied to Plaivra Production.
+- Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 merge/release sequence.
+
+## Nutrition V1 plan/Diary/target pending migration authority
+
+- `20260825120100_nutrition_v1_plan_diary_targets.sql` is the additive effective-target, canonical week-revision, frozen planned-occurrence, change-request, grouped actual-log, and atomic Plan-to-Diary execution authority for Nutrition V1 Task 3.
+- Ledger state: `pending`; Production version/name: intentionally absent.
+- It preserves the legacy target, plan, Saved Recipe, Custom Meal, and `food_logs` compatibility tables while adding the reconciled V1 authorities; it was not applied to Plaivra Production.
 - Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 merge/release sequence.
 
 ## Authority and verification
