@@ -121,11 +121,15 @@ export async function getEatTargetsForDates(userId: string, inputDates: string[]
   const dates = validatedDates(inputDates);
   if (!dates.length) return {};
 
+  const cutoverDate = todayIso();
+  if (dates.every((date) => date < cutoverDate)) {
+    return legacyTargetsForDates(userId, dates);
+  }
+
   if (!supabase || !isUuid(userId)) {
     return legacyTargetsForDates(userId, dates);
   }
 
-  const cutoverDate = todayIso();
   if (dates.some((date) => date >= cutoverDate)) {
     await ensureLegacyCutoverPeriod(userId, cutoverDate);
   }
