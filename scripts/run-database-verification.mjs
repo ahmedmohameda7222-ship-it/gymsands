@@ -24,6 +24,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/workout-history-keyset-read.sql",
   "supabase/verification/workout-history-repeat.sql",
   "supabase/verification/train-atomic-rpc-security.sql",
+  "supabase/verification/nutrition-v1-reusable-domains.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 

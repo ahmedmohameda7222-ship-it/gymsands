@@ -21,7 +21,8 @@ create table if not exists public.nutrition_recipes (
   check (
     (deleted_at is null and purge_after is null)
     or (deleted_at is not null and purge_after is not null and purge_after > deleted_at)
-  )
+  ),
+  unique (id, user_id)
 );
 
 create index if not exists nutrition_recipes_owner_active_idx
@@ -34,7 +35,7 @@ where deleted_at is not null;
 
 create table if not exists public.nutrition_recipe_versions (
   id uuid primary key default gen_random_uuid(),
-  recipe_id uuid not null references public.nutrition_recipes(id) on delete cascade,
+  recipe_id uuid not null,
   user_id uuid not null references public.profiles(id) on delete cascade,
   version_number integer not null check (version_number > 0),
   name text not null check (length(trim(name)) between 1 and 200),
@@ -45,7 +46,10 @@ create table if not exists public.nutrition_recipe_versions (
   metadata jsonb not null default '{}'::jsonb,
   published_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
-  unique(recipe_id, version_number)
+  unique(recipe_id, version_number),
+  unique (id, user_id),
+  unique (id, recipe_id, user_id),
+  foreign key (recipe_id, user_id) references public.nutrition_recipes(id, user_id) on delete cascade
 );
 
 create index if not exists nutrition_recipe_versions_owner_recipe_idx
@@ -53,9 +57,9 @@ on public.nutrition_recipe_versions(user_id, recipe_id, version_number desc);
 
 create table if not exists public.nutrition_recipe_drafts (
   id uuid primary key default gen_random_uuid(),
-  recipe_id uuid not null unique references public.nutrition_recipes(id) on delete cascade,
+  recipe_id uuid not null unique,
   user_id uuid not null references public.profiles(id) on delete cascade,
-  base_recipe_version_id uuid references public.nutrition_recipe_versions(id) on delete set null,
+  base_recipe_version_id uuid,
   name text,
   servings numeric(12,4) check (servings is null or servings > 0),
   total_cooked_weight_g numeric(12,3) check (total_cooked_weight_g is null or total_cooked_weight_g > 0),
@@ -63,11 +67,18 @@ create table if not exists public.nutrition_recipe_drafts (
   notes text,
   draft_metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (id, user_id),
+  foreign key (recipe_id, user_id) references public.nutrition_recipes(id, user_id) on delete cascade,
+  foreign key (base_recipe_version_id, recipe_id, user_id) references public.nutrition_recipe_versions(id, recipe_id, user_id) on delete set null (base_recipe_version_id)
 );
 
 create index if not exists nutrition_recipe_drafts_owner_updated_idx
 on public.nutrition_recipe_drafts(user_id, updated_at desc, id);
+
+create index if not exists nutrition_recipe_drafts_base_version_idx
+on public.nutrition_recipe_drafts(base_recipe_version_id)
+where base_recipe_version_id is not null;
 
 -- Ingredient/action/equipment rows can belong to either a frozen published
 -- version or the one mutable working draft. Direct authenticated mutation is
@@ -75,8 +86,8 @@ on public.nutrition_recipe_drafts(user_id, updated_at desc, id);
 create table if not exists public.nutrition_recipe_ingredients (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
-  recipe_version_id uuid references public.nutrition_recipe_versions(id) on delete cascade,
-  recipe_draft_id uuid references public.nutrition_recipe_drafts(id) on delete cascade,
+  recipe_version_id uuid,
+  recipe_draft_id uuid,
   position integer not null check (position >= 0),
   food_id uuid,
   ingredient_name text not null check (length(trim(ingredient_name)) between 1 and 300),
@@ -87,7 +98,9 @@ create table if not exists public.nutrition_recipe_ingredients (
   check (
     (recipe_version_id is not null and recipe_draft_id is null)
     or (recipe_version_id is null and recipe_draft_id is not null)
-  )
+  ),
+  foreign key (recipe_version_id, user_id) references public.nutrition_recipe_versions(id, user_id) on delete cascade,
+  foreign key (recipe_draft_id, user_id) references public.nutrition_recipe_drafts(id, user_id) on delete cascade
 );
 
 create index if not exists nutrition_recipe_ingredients_version_idx
@@ -101,8 +114,8 @@ where recipe_draft_id is not null;
 create table if not exists public.nutrition_recipe_actions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
-  recipe_version_id uuid references public.nutrition_recipe_versions(id) on delete cascade,
-  recipe_draft_id uuid references public.nutrition_recipe_drafts(id) on delete cascade,
+  recipe_version_id uuid,
+  recipe_draft_id uuid,
   position integer not null check (position >= 0),
   instruction text not null check (length(trim(instruction)) > 0),
   ingredient_refs jsonb not null default '[]'::jsonb,
@@ -119,7 +132,9 @@ create table if not exists public.nutrition_recipe_actions (
   check (
     (recipe_version_id is not null and recipe_draft_id is null)
     or (recipe_version_id is null and recipe_draft_id is not null)
-  )
+  ),
+  foreign key (recipe_version_id, user_id) references public.nutrition_recipe_versions(id, user_id) on delete cascade,
+  foreign key (recipe_draft_id, user_id) references public.nutrition_recipe_drafts(id, user_id) on delete cascade
 );
 
 create index if not exists nutrition_recipe_actions_version_idx
@@ -133,8 +148,8 @@ where recipe_draft_id is not null;
 create table if not exists public.nutrition_recipe_equipment (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
-  recipe_version_id uuid references public.nutrition_recipe_versions(id) on delete cascade,
-  recipe_draft_id uuid references public.nutrition_recipe_drafts(id) on delete cascade,
+  recipe_version_id uuid,
+  recipe_draft_id uuid,
   position integer not null check (position >= 0),
   name text not null check (length(trim(name)) between 1 and 200),
   quantity numeric(12,3) check (quantity is null or quantity > 0),
@@ -143,7 +158,9 @@ create table if not exists public.nutrition_recipe_equipment (
   check (
     (recipe_version_id is not null and recipe_draft_id is null)
     or (recipe_version_id is null and recipe_draft_id is not null)
-  )
+  ),
+  foreign key (recipe_version_id, user_id) references public.nutrition_recipe_versions(id, user_id) on delete cascade,
+  foreign key (recipe_draft_id, user_id) references public.nutrition_recipe_drafts(id, user_id) on delete cascade
 );
 
 create index if not exists nutrition_recipe_equipment_version_idx
@@ -173,7 +190,8 @@ create table if not exists public.nutrition_saved_meals (
   check (
     (deleted_at is null and purge_after is null)
     or (deleted_at is not null and purge_after is not null and purge_after > deleted_at)
-  )
+  ),
+  unique (id, user_id)
 );
 
 create index if not exists nutrition_saved_meals_owner_active_idx
@@ -186,7 +204,7 @@ where deleted_at is not null;
 
 create table if not exists public.nutrition_saved_meal_items (
   id uuid primary key default gen_random_uuid(),
-  saved_meal_id uuid not null references public.nutrition_saved_meals(id) on delete cascade,
+  saved_meal_id uuid not null,
   user_id uuid not null references public.profiles(id) on delete cascade,
   position integer not null check (position >= 0),
   item_type text not null check (item_type in ('food', 'recipe')),
@@ -203,7 +221,8 @@ create table if not exists public.nutrition_saved_meal_items (
     (item_type = 'food' and food_id is not null and recipe_id is null and recipe_version_id is null)
     or
     (item_type = 'recipe' and food_id is null and recipe_id is not null and recipe_version_id is not null)
-  )
+  ),
+  foreign key (saved_meal_id, user_id) references public.nutrition_saved_meals(id, user_id) on delete cascade
 );
 
 create index if not exists nutrition_saved_meal_items_parent_idx

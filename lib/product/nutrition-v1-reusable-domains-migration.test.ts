@@ -61,6 +61,36 @@ describe("Nutrition V1 reusable-domain migration contract", () => {
     expect(items).not.toMatch(/recipe_version_id\s+uuid[^,;]*references\s+public\.nutrition_recipe_versions/);
   });
 
+  it("enforces same-owner parentage for reusable-domain child rows", () => {
+    const versions = tableDefinition("nutrition_recipe_versions");
+    const drafts = tableDefinition("nutrition_recipe_drafts");
+    const ingredients = tableDefinition("nutrition_recipe_ingredients");
+    const actions = tableDefinition("nutrition_recipe_actions");
+    const equipment = tableDefinition("nutrition_recipe_equipment");
+    const savedMealItems = tableDefinition("nutrition_saved_meal_items");
+
+    expect(versions).toContain(
+      "foreign key (recipe_id, user_id) references public.nutrition_recipes(id, user_id)",
+    );
+    expect(drafts).toContain(
+      "foreign key (recipe_id, user_id) references public.nutrition_recipes(id, user_id)",
+    );
+    expect(drafts).toContain(
+      "foreign key (base_recipe_version_id, recipe_id, user_id) references public.nutrition_recipe_versions(id, recipe_id, user_id)",
+    );
+    for (const definition of [ingredients, actions, equipment]) {
+      expect(definition).toContain(
+        "foreign key (recipe_version_id, user_id) references public.nutrition_recipe_versions(id, user_id)",
+      );
+      expect(definition).toContain(
+        "foreign key (recipe_draft_id, user_id) references public.nutrition_recipe_drafts(id, user_id)",
+      );
+    }
+    expect(savedMealItems).toContain(
+      "foreign key (saved_meal_id, user_id) references public.nutrition_saved_meals(id, user_id)",
+    );
+  });
+
   it("implements the approved 30-day Recipe and Saved Meal recovery lifecycle", () => {
     for (const source of ["nutrition_recipes", "nutrition_saved_meals"]) {
       const definition = tableDefinition(source);
