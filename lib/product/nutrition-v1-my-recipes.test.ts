@@ -132,42 +132,39 @@ describe("Nutrition V1 My Recipes product surface", () => {
     expect(row).not.toMatch(/ingredient count|track count|equipment count/i);
   });
 
-  it("keeps the editor progressive, Food-first but manual-capable, and limited to one cover photo", () => {
+  it("keeps the editor progressive, Food-first but manual-capable, localized, and limited to one cover photo", () => {
     const editor = source("components/nutrition/recipes/recipe-editor.tsx");
-    expect(editor).toContain("Recipe name");
-    expect(editor).toContain("Servings");
-    expect(editor).toContain("Add ingredient");
-    expect(editor).toContain("Add as ingredient");
-    expect(editor).toContain("Add step");
-    expect(editor).toContain("More details");
-    expect(editor).toContain("Add cooking details");
+    const dictionaries = source("lib/i18n/nutrition-v1.ts");
+    expect(editor).toContain("useNutritionV1Translation");
+    for (const key of ["recipeName", "servings", "addIngredient", "addAsIngredient", "addStep", "moreDetails", "addCookingDetails", "replacePhoto", "removePhoto"]) {
+      expect(editor).toContain(`nt("${key}")`);
+    }
     expect(editor).toContain("coverPhotoUrl");
-    expect(editor).toContain("Replace photo");
-    expect(editor).toContain("Remove photo");
+    expect(dictionaries).toContain('recipeName: "Recipe name"');
+    expect(dictionaries).toContain('recipeName: "Rezeptname"');
+    expect(dictionaries).toContain('recipeName: "اسم الوصفة"');
     expect(editor).not.toMatch(/coverPhotos|gallery|step photo|recipe video/i);
   });
 
   it("uses only the approved external ChatGPT proposal + explicit approval model", () => {
     const editor = source("components/nutrition/recipes/recipe-editor.tsx");
-    expect(editor).toContain("Create with ChatGPT");
-    expect(editor).toContain("Import with ChatGPT");
-    expect(editor).toContain("Finish with ChatGPT");
-    expect(editor).toContain("Open in ChatGPT");
-    expect(editor).toMatch(/review.*approve|approve.*review/i);
+    for (const key of ["createWithChatGpt", "importWithChatGpt", "finishWithChatGpt", "openInChatGpt", "proposalApprovalDescription"]) {
+      expect(editor).toContain(`nt("${key}")`);
+    }
+    expect(editor).toContain("Use the authorized Plaivra Nutrition MCP Draft write only after I explicitly approve the proposal.");
+    expect(editor).toContain("Do not treat ChatGPT nutrient estimates as Plaivra nutrition authority.");
+    expect(editor).toContain("Do not publish the Recipe.");
     expect(editor).not.toMatch(/Ask your AI chef|chat field|chat bubble|messages\.map/i);
   });
 
   it("restricts finished-use actions to published Recipes and shares the frozen version", () => {
     const detail = source("components/nutrition/recipes/recipe-detail.tsx");
-    expect(detail).toContain("Start Cooking");
-    expect(detail).toContain("Add to…");
-    expect(detail).toContain("Edit");
-    expect(detail).toContain("Duplicate");
-    expect(detail).toContain("Share");
+    expect(detail).toContain("useNutritionV1Translation");
+    for (const key of ["startCooking", "addTo", "edit", "duplicate", "share", "nutritionPerServing", "moreNutrition"]) {
+      expect(detail).toContain(`nt("${key}")`);
+    }
     expect(detail).toContain("buildFrozenRecipeShareText");
     expect(detail).toMatch(/published|isPublished/);
-    expect(detail).toContain("Nutrition per serving");
-    expect(detail).toContain("More nutrition");
   });
 
   it("uses Recently Deleted recovery language instead of exposing Archive as the user lifecycle", () => {
