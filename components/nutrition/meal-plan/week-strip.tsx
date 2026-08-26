@@ -26,7 +26,7 @@ export function WeekStrip({ dates, selectedDate, today, onSelect }: {
             aria-current={selected ? "date" : undefined}
             aria-label={`${dayLabel(date)} ${dayNumber(date)}${isToday ? ", Today" : ""}`}
             onClick={() => onSelect(date)}
-            className={`min-h-14 rounded-xl border px-1 py-2 text-center transition-colors ${selected ? "border-foreground bg-foreground text-background" : "border-border bg-background hover:bg-muted"}`}
+            className={`min-h-14 min-w-11 rounded-xl border px-1 py-2 text-center transition-colors ${selected ? "border-foreground bg-foreground text-background" : "border-border bg-background hover:bg-muted"}`}
           >
             <span className="block text-[11px] font-medium uppercase tracking-wide opacity-70">{isToday ? "Today" : dayLabel(date)}</span>
             <span className="mt-0.5 block text-base font-semibold">{dayNumber(date)}</span>
