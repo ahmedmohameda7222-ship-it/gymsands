@@ -18,7 +18,7 @@ test("database verification remains local-only", () => {
   }
 });
 
-test("permanent verification chain covers the current Active Workout authority", () => {
+test("permanent verification chain covers current Active Workout and Nutrition authorities", () => {
   for (const required of [
     "active-workout-aw2a-execution-state.sql",
     "active-workout-aw3a-structured-metrics.sql",
@@ -35,6 +35,9 @@ test("permanent verification chain covers the current Active Workout authority",
     "nutrition-v1-plan-diary-targets.sql",
     "nutrition-v1-cooking-sessions.sql",
     "nutrition-v1-food-search-and-curation.sql",
+    "nutrition-v1-meal-plan-week-start.sql",
+    "nutrition-v1-privacy-purge.sql",
+    "nutrition-v1-legacy-reconciliation.sql",
     "production-release-migration-preflight.sql",
   ]) {
     assert.equal(DATABASE_VERIFICATION_FILES.some((file) => file.endsWith(required)), true, required);
