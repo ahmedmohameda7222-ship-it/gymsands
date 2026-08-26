@@ -20,3 +20,36 @@ export const NUTRITION_PROMPTS = [
   ["review-hydration", "nutrition", ["Review hydration", "Hydration prüfen", "راجع الترطيب"], "read", ["hydration"], ["get_water_summary"], "hydrationKnown", true, 54],
   ["meal-prep-plan", "nutrition", ["Create a meal-preparation plan", "Meal-Prep-Plan erstellen", "أنشئ خطة تحضير وجبات"], "read", ["nutrition", "meal_plans", "profile"], ["get_nutrition_planning_context", "get_meal_plan_for_week"], "mealPlan", false, 47]
 ] as const satisfies readonly RawPromptSpec[];
+
+// Recipe AI remains an external ChatGPT handoff, not a Plaivra-embedded chat or
+// a global quick-prompt surface. Authorized MCP may create/update Draft state;
+// the user-owned Plaivra Save Recipe action is the only publication boundary.
+export const NUTRITION_RECIPE_EXTERNAL_PROMPTS = {
+  create: {
+    id: "create-recipe-with-chatgpt",
+    surface: "external_chatgpt",
+    target: "new_draft",
+    requiresExplicitApproval: true,
+    permissionSection: "nutrition",
+    nutrientAuthority: "plaivra",
+    publish: false
+  },
+  import: {
+    id: "import-recipe-with-chatgpt",
+    surface: "external_chatgpt",
+    target: "new_draft",
+    requiresExplicitApproval: true,
+    permissionSection: "nutrition",
+    nutrientAuthority: "plaivra",
+    publish: false
+  },
+  finish: {
+    id: "finish-recipe-with-chatgpt",
+    surface: "external_chatgpt",
+    target: "working_draft",
+    requiresExplicitApproval: true,
+    permissionSection: "nutrition",
+    nutrientAuthority: "plaivra",
+    publish: false
+  }
+} as const;
