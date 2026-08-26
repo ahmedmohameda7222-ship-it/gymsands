@@ -643,7 +643,7 @@ export const trainingPlanningContextOutputSchema = projectionSchema("training_pl
 const effectiveNutritionTargetSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["date", "available"],
+  required: ["date", "available", "effective_from", "effective_to", "calories", "protein_g", "carbs_g", "fat_g", "water_ml", "source"],
   properties: {
     date: stringValue,
     available: booleanValue,
@@ -773,8 +773,8 @@ export const progressContextOutputSchema = projectionSchema("progress_review", {
 });
 
 const adjustmentExerciseSchema = { type: "object", additionalProperties: false, properties: { id: stringValue, exercise_name: storedTextSchema, block_type: storedTextSchema, sets: numberValue, reps: storedTextSchema, weight: storedTextSchema, rest_seconds: numberValue, tempo: storedTextSchema, order_index: numberValue } } as const;
-const adjustmentDaySchema = { type: "object", additionalProperties: false, properties: { id: stringValue, day_name: storedTextSchema, day_number: numberValue, focus: storedTextSchema, user_workout_plan_exercises: { type: "array", items: adjustmentExerciseSchema } } as const;
-const adjustmentPlanSchema = { type: "object", additionalProperties: false, properties: { id: stringValue, name: storedTextSchema, goal: storedTextSchema, is_active: booleanValue, updated_at: stringValue, user_workout_plan_days: { type: "array", items: adjustmentDaySchema } } as const;
+const adjustmentDaySchema = { type: "object", additionalProperties: false, properties: { id: stringValue, day_name: storedTextSchema, day_number: numberValue, focus: storedTextSchema, user_workout_plan_exercises: { type: "array", items: adjustmentExerciseSchema } } } as const;
+const adjustmentPlanSchema = { type: "object", additionalProperties: false, properties: { id: stringValue, name: storedTextSchema, goal: storedTextSchema, is_active: booleanValue, updated_at: stringValue, user_workout_plan_days: { type: "array", items: adjustmentDaySchema } } } as const;
 const performedSetSchema = { type: "object", additionalProperties: false, properties: { id: stringValue, plan_exercise_id: stringValue, exercise_name: storedTextSchema, set_number: numberValue, reps: numberValue, weight_kg: numberValue, completed_at: stringValue } } as const;
 const adjustmentSessionSchema = { type: "object", additionalProperties: false, properties: { id: stringValue, started_at: stringValue, completed_at: stringValue, status: stringValue, exercise_logs: { type: "array", items: performedSetSchema } } } as const;
 
