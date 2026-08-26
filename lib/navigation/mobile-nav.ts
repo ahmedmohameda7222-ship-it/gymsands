@@ -22,5 +22,5 @@ export function getTrainNavigationTarget(pathname: string): TrainNavigationTarge
 export function isMobileRouteActive(pathname: string, id: "today" | "train" | "eat") {
   if (id === "today") return pathname === "/dashboard";
   if (id === "train") return getTrainNavigationTarget(pathname) === "train";
-  return pathname.startsWith("/calories") || pathname.startsWith("/my-meal-plan");
+  return pathname.startsWith("/calories") || pathname.startsWith("/my-meal-plan") || pathname.startsWith("/my-recipes");
 }
