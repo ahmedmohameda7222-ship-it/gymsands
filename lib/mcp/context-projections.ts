@@ -643,7 +643,7 @@ export const trainingPlanningContextOutputSchema = projectionSchema("training_pl
 const effectiveNutritionTargetSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["date", "available", "effective_from", "effective_to", "calories", "protein_g", "carbs_g", "fat_g", "water_ml", "source"],
+  required: ["date", "available"],
   properties: {
     date: stringValue,
     available: booleanValue,
