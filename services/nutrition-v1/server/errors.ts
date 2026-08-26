@@ -3,6 +3,8 @@ import { nutritionJson } from "@/lib/nutrition-v1/http";
 const DEFAULT_INVALID_MESSAGE = "Nutrition request is invalid.";
 const MAX_PUBLIC_ERROR_LENGTH = 160;
 
+type NutritionRequestStatus = 400 | 404;
+
 function boundedPublicMessage(message: string) {
   const clean = message.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
   return (clean || DEFAULT_INVALID_MESSAGE).slice(0, MAX_PUBLIC_ERROR_LENGTH);
@@ -10,13 +12,14 @@ function boundedPublicMessage(message: string) {
 
 export class NutritionRequestError extends Error {
   readonly code = "nutrition_request_invalid" as const;
-  readonly status = 400 as const;
+  readonly status: NutritionRequestStatus;
   readonly publicMessage: string;
 
-  constructor(message = DEFAULT_INVALID_MESSAGE) {
+  constructor(message = DEFAULT_INVALID_MESSAGE, status: NutritionRequestStatus = 400) {
     const publicMessage = boundedPublicMessage(message);
     super(publicMessage);
     this.name = "NutritionRequestError";
+    this.status = status;
     this.publicMessage = publicMessage;
   }
 }
