@@ -508,6 +508,236 @@ using (
 );
 
 -- ---------------------------------------------------------------------------
+-- Transactional Recipe publication. The caller cannot choose an owner: auth.uid()
+-- is the sole ownership authority, and a Recipe-root row lock serializes version
+-- creation so two concurrent publishes cannot claim the same version number.
+-- ---------------------------------------------------------------------------
+
+create or replace function public.publish_nutrition_recipe_draft(p_recipe_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_draft_id uuid;
+  v_name text;
+  v_servings numeric(12,4);
+  v_total_cooked_weight_g numeric(12,3);
+  v_total_time_minutes integer;
+  v_notes text;
+  v_metadata jsonb;
+  v_version_id uuid := gen_random_uuid();
+  v_version_number integer;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required.' using errcode = '42501';
+  end if;
+
+  perform 1
+  from public.nutrition_recipes
+  where id = p_recipe_id
+    and user_id = v_user_id
+    and deleted_at is null
+  for update;
+
+  if not found then
+    raise exception 'Active Recipe not found.' using errcode = 'P0002';
+  end if;
+
+  select
+    draft.id,
+    draft.name,
+    draft.servings,
+    draft.total_cooked_weight_g,
+    draft.total_time_minutes,
+    draft.notes,
+    draft.draft_metadata
+  into
+    v_draft_id,
+    v_name,
+    v_servings,
+    v_total_cooked_weight_g,
+    v_total_time_minutes,
+    v_notes,
+    v_metadata
+  from public.nutrition_recipe_drafts draft
+  where draft.recipe_id = p_recipe_id
+    and draft.user_id = v_user_id
+  for update;
+
+  if v_draft_id is null then
+    raise exception 'Recipe Working Draft not found.' using errcode = 'P0002';
+  end if;
+
+  if v_name is null
+     or length(btrim(v_name)) = 0
+     or v_servings is null
+     or v_servings <= 0
+     or not exists (
+       select 1
+       from public.nutrition_recipe_ingredients ingredient
+       where ingredient.recipe_draft_id = v_draft_id
+         and ingredient.user_id = v_user_id
+     )
+     or not exists (
+       select 1
+       from public.nutrition_recipe_actions action
+       where action.recipe_draft_id = v_draft_id
+         and action.user_id = v_user_id
+     )
+  then
+    raise exception 'Recipe Working Draft is not ready to publish.' using errcode = '22023';
+  end if;
+
+  select coalesce(max(version_number), 0) + 1
+  into v_version_number
+  from public.nutrition_recipe_versions
+  where recipe_id = p_recipe_id
+    and user_id = v_user_id;
+
+  insert into public.nutrition_recipe_versions (
+    id,
+    recipe_id,
+    user_id,
+    version_number,
+    name,
+    servings,
+    total_cooked_weight_g,
+    total_time_minutes,
+    notes,
+    metadata
+  ) values (
+    v_version_id,
+    p_recipe_id,
+    v_user_id,
+    v_version_number,
+    btrim(v_name),
+    v_servings,
+    v_total_cooked_weight_g,
+    v_total_time_minutes,
+    v_notes,
+    coalesce(v_metadata, '{}'::jsonb)
+  );
+
+  insert into public.nutrition_recipe_ingredients (
+    user_id,
+    recipe_version_id,
+    recipe_draft_id,
+    position,
+    food_id,
+    ingredient_name,
+    quantity,
+    unit,
+    frozen_nutrition
+  )
+  select
+    ingredient.user_id,
+    v_version_id,
+    null,
+    ingredient.position,
+    ingredient.food_id,
+    ingredient.ingredient_name,
+    ingredient.quantity,
+    ingredient.unit,
+    ingredient.frozen_nutrition
+  from public.nutrition_recipe_ingredients ingredient
+  where ingredient.recipe_draft_id = v_draft_id
+    and ingredient.user_id = v_user_id
+  order by ingredient.position, ingredient.id;
+
+  insert into public.nutrition_recipe_actions (
+    user_id,
+    recipe_version_id,
+    recipe_draft_id,
+    position,
+    instruction,
+    ingredient_refs,
+    equipment_refs,
+    duration_seconds,
+    heat_or_temperature,
+    doneness_or_result_cue,
+    prep_ahead_cue,
+    track_key,
+    dependency_action_ids,
+    can_run_in_background,
+    metadata
+  )
+  select
+    action.user_id,
+    v_version_id,
+    null,
+    action.position,
+    action.instruction,
+    action.ingredient_refs,
+    action.equipment_refs,
+    action.duration_seconds,
+    action.heat_or_temperature,
+    action.doneness_or_result_cue,
+    action.prep_ahead_cue,
+    action.track_key,
+    action.dependency_action_ids,
+    action.can_run_in_background,
+    action.metadata
+  from public.nutrition_recipe_actions action
+  where action.recipe_draft_id = v_draft_id
+    and action.user_id = v_user_id
+  order by action.position, action.id;
+
+  insert into public.nutrition_recipe_equipment (
+    user_id,
+    recipe_version_id,
+    recipe_draft_id,
+    position,
+    name,
+    quantity,
+    note
+  )
+  select
+    equipment.user_id,
+    v_version_id,
+    null,
+    equipment.position,
+    equipment.name,
+    equipment.quantity,
+    equipment.note
+  from public.nutrition_recipe_equipment equipment
+  where equipment.recipe_draft_id = v_draft_id
+    and equipment.user_id = v_user_id
+  order by equipment.position, equipment.id;
+
+  delete from public.nutrition_recipe_drafts
+  where id = v_draft_id
+    and recipe_id = p_recipe_id
+    and user_id = v_user_id;
+
+  update public.nutrition_recipes
+  set name = btrim(v_name)
+  where id = p_recipe_id
+    and user_id = v_user_id;
+
+  return jsonb_build_object(
+    'recipeId', p_recipe_id,
+    'recipeVersionId', v_version_id,
+    'versionNumber', v_version_number,
+    'version', jsonb_build_object(
+      'id', v_version_id,
+      'recipe_id', p_recipe_id,
+      'user_id', v_user_id,
+      'version_number', v_version_number,
+      'name', btrim(v_name),
+      'servings', v_servings,
+      'total_cooked_weight_g', v_total_cooked_weight_g,
+      'total_time_minutes', v_total_time_minutes,
+      'notes', v_notes,
+      'metadata', coalesce(v_metadata, '{}'::jsonb)
+    )
+  );
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- Approved 30-day user recovery lifecycle. These commands derive owner identity
 -- from auth.uid(); callers cannot choose an owner.
 -- ---------------------------------------------------------------------------
@@ -723,6 +953,7 @@ begin
 end;
 $$;
 
+revoke all on function public.publish_nutrition_recipe_draft(uuid) from public, anon;
 revoke all on function public.soft_delete_nutrition_recipe(uuid) from public, anon;
 revoke all on function public.restore_nutrition_recipe(uuid) from public, anon;
 revoke all on function public.purge_nutrition_recipe_now(uuid) from public, anon;
@@ -731,6 +962,7 @@ revoke all on function public.restore_nutrition_saved_meal(uuid) from public, an
 revoke all on function public.purge_nutrition_saved_meal_now(uuid) from public, anon;
 revoke all on function public.purge_expired_nutrition_reusable_sources() from public, anon, authenticated;
 
+grant execute on function public.publish_nutrition_recipe_draft(uuid) to authenticated, service_role;
 grant execute on function public.soft_delete_nutrition_recipe(uuid) to authenticated, service_role;
 grant execute on function public.restore_nutrition_recipe(uuid) to authenticated, service_role;
 grant execute on function public.purge_nutrition_recipe_now(uuid) to authenticated, service_role;
