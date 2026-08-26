@@ -11,7 +11,7 @@ const source = (path: string) => readFileSync(path, "utf8");
 
 function nutritionPeerGroup() {
   const appShell = source("components/layout/app-shell.tsx");
-  const match = appShell.match(/labelKey: "nav\.eat",\s*items: \[(.*?)\]\s*\n\s*\}/s);
+  const match = appShell.match(/labelKey: "nav\.eat",\s*items: \[([\s\S]*?)\]\s*\n\s*\}/);
   if (!match) throw new Error("Nutrition navigation group was not found.");
   return match[1]!;
 }
