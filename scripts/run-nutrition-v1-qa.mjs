@@ -20,7 +20,7 @@ export const NUTRITION_V1_QA_VIEWPORTS = Object.freeze([
 
 const viewportByName = Object.fromEntries(NUTRITION_V1_QA_VIEWPORTS.map((viewport) => [viewport.name, viewport]));
 function scenario(name, route, viewport = "390x844", options = {}) {
-  return Object.freeze({ name, route, viewport: viewportByName[viewport], direction: "ltr", largeText: false, offline: false, ...options });
+  return Object.freeze({ name, route, viewport: viewportByName[viewport], direction: "ltr", language: "en", largeText: false, offline: false, ...options });
 }
 
 export const NUTRITION_V1_QA_SCENARIOS = Object.freeze([
@@ -46,7 +46,7 @@ export const NUTRITION_V1_QA_SCENARIOS = Object.freeze([
   scenario("meal-plan-populated-week", "/my-meal-plan"),
   scenario("meal-plan-add-workspace-keyboard", "/my-meal-plan", "430x932", { interaction: "open-plan-add" }),
   scenario("meal-plan-tablet", "/my-meal-plan", "768x1024"),
-  scenario("meal-plan-rtl-large-text", "/my-meal-plan", "430x932", { direction: "rtl", largeText: true }),
+  scenario("meal-plan-rtl-large-text", "/my-meal-plan", "430x932", { direction: "rtl", language: "ar", largeText: true }),
   scenario("shopping-list-three-states", "/my-meal-plan/shopping", "390x844"),
   scenario("meal-plan-skip-review-remove", "/my-meal-plan", "390x844"),
   scenario("meal-plan-chatgpt-review-stale", "/my-meal-plan", "1024x768"),
@@ -71,7 +71,7 @@ export const NUTRITION_V1_QA_SCENARIOS = Object.freeze([
   scenario("food-library-desktop-bounded-layout", "/calories/food-hub", "1280x800"),
   scenario("food-library-desktop-detail-panel-route", "/calories/food-hub", "1440x900", { interaction: "food-detail" }),
   scenario("food-library-desktop-nutrition-info-hover-pinned", "/calories/food-hub", "1280x800", { interaction: "food-nutrition-info" }),
-  scenario("food-library-rtl-mixed-brand", "/calories/food-hub", "430x932", { direction: "rtl" }),
+  scenario("food-library-rtl-mixed-brand", "/calories/food-hub", "430x932", { direction: "rtl", language: "ar" }),
   scenario("food-library-long-branded-name", "/calories/food-hub", "390x844"),
   scenario("food-library-large-text", "/calories/food-hub", "430x932", { largeText: true }),
 
@@ -94,8 +94,8 @@ export const NUTRITION_V1_QA_SCENARIOS = Object.freeze([
   scenario("recipes-desktop-home", "/my-recipes", "1280x800"),
   scenario("recipes-desktop-detail", `/my-recipes/${RECIPE_ID}`, "1440x900"),
   scenario("recipes-desktop-cooking", `/my-recipes/${RECIPE_ID}/cook`, "1440x900", { cookingState: "normal", interaction: "resume-cooking" }),
-  scenario("recipes-rtl-home-mobile", "/my-recipes", "390x844", { direction: "rtl" }),
-  scenario("recipes-rtl-cooking-mobile", `/my-recipes/${RECIPE_ID}/cook`, "390x844", { direction: "rtl", cookingState: "normal", interaction: "resume-cooking" }),
+  scenario("recipes-rtl-home-mobile", "/my-recipes", "390x844", { direction: "rtl", language: "ar" }),
+  scenario("recipes-rtl-cooking-mobile", `/my-recipes/${RECIPE_ID}/cook`, "390x844", { direction: "rtl", language: "ar", cookingState: "normal", interaction: "resume-cooking" }),
   scenario("recipes-large-text-cooking", `/my-recipes/${RECIPE_ID}/cook`, "430x932", { largeText: true, cookingState: "normal", interaction: "resume-cooking" }),
   scenario("recipes-long-name-action", `/my-recipes/${RECIPE_ID}`, "390x844"),
   scenario("recipes-recently-deleted", "/my-recipes", "1024x768"),
@@ -103,7 +103,8 @@ export const NUTRITION_V1_QA_SCENARIOS = Object.freeze([
 
 export function nutritionV1ScreenshotName(item) {
   const viewport = item.viewport?.name ?? "unknown";
-  return `${item.name}__${viewport}__${item.direction === "rtl" ? "rtl" : "ltr"}__${item.largeText ? "large" : "normal"}.png`;
+  const language = ["en", "de", "ar"].includes(item.language) ? item.language : "en";
+  return `${item.name}__${viewport}__${item.direction === "rtl" ? "rtl" : "ltr"}__${language}__${item.largeText ? "large" : "normal"}.png`;
 }
 
 function sanitizedText(value, limit = 1200) {
@@ -189,14 +190,14 @@ function foodFixtures(item) {
       name: long ? "Extra Long International Greek Style Strained Yogurt with Vanilla Bean and Mixed Forest Berries" : "Greek yogurt",
       brand: long ? "Molkerei Internationale Handelsgesellschaft" : "Plaivra Foods", category: "Dairy", cuisine: null,
       servingLabel: "170 g", verified: true, favorite: true, recentAt: "2026-08-26T06:00:00.000Z", frequency: 8,
-      locale: "en", aliases: ["yogurt"],
+      locale: item.language, aliases: ["yogurt"],
       nutrition: { calories: 130, protein_g: 18, carbs_g: 8, fat_g: 2, saturated_fat_g: 1, fiber_g: 0, sugars_g: 6, sodium_mg: 70, basis_amount: 170, basis_unit: "g" },
       tags: ["High Protein", "Low Carb"], usingPersonalValues: false,
     },
     {
-      id: "22222222-2222-4222-8222-222222222222", source: "my_food", name: "Homemade oat bowl", brand: null,
+      id: "22222222-2222-4222-8222-222222222222", source: "my_food", name: item.language === "ar" ? "وعاء شوفان Homemade" : "Homemade oat bowl", brand: null,
       category: "Breakfast", cuisine: null, servingLabel: "1 bowl", verified: false, favorite: false,
-      recentAt: "2026-08-25T07:00:00.000Z", frequency: 3, locale: "en", aliases: ["oats"],
+      recentAt: "2026-08-25T07:00:00.000Z", frequency: 3, locale: item.language, aliases: ["oats"],
       nutrition: { calories: 410, protein_g: 19, carbs_g: 58, fat_g: 12, saturated_fat_g: 2, fiber_g: 9, sugars_g: 11, sodium_mg: 180, basis_amount: 1, basis_unit: "serving" },
       tags: [], usingPersonalValues: item.name.includes("personal-correction"),
     },
@@ -209,8 +210,8 @@ function mealPlanFixture(item, date = "2026-08-26") {
     id: "33333333-3333-4333-8333-333333333333", week_id: "44444444-4444-4444-8444-444444444444",
     user_id: "00000000-0000-4000-8000-000000000001", plan_date: date, meal_slot_key: "Lunch", position: 0,
     source_type: "food", source_id: "11111111-1111-4111-8111-111111111111", source_version_id: null,
-    resolved_quantity: 1, resolved_serving_label: "1 bowl", frozen_name: "Chicken rice bowl",
-    frozen_snapshot: { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 }, shoppingIngredients: [{ foodId: "55555555-5555-4555-8555-555555555555", name: "Chicken breast", quantity: 400, unit: "g", qualifier: null }] },
+    resolved_quantity: 1, resolved_serving_label: "1 bowl", frozen_name: item.language === "ar" ? "وعاء أرز بالدجاج" : "Chicken rice bowl",
+    frozen_snapshot: { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 }, shoppingIngredients: [{ foodId: "55555555-5555-4555-8555-555555555555", name: item.language === "ar" ? "صدر دجاج" : "Chicken breast", quantity: 400, unit: "g", qualifier: null }] },
     status: item.name.includes("skip") ? "skipped" : "planned", completed_at: null, actual_log_group_id: null,
   };
   return {
@@ -218,23 +219,24 @@ function mealPlanFixture(item, date = "2026-08-26") {
     occurrences: [occurrence],
     target: { available: true, effective_from: weekStart, effective_to: null, values: { calories: 2200, protein_g: 160, carbs_g: 240, fat_g: 70, water_ml: 2500 }, source: "rendered_qa_fixture", source_evidence: { authority: "rendered_qa" }, reason: "effective_target" },
     pendingChangeRequests: item.name.includes("chatgpt") ? [{ id: "66666666-6666-4666-8666-666666666666", base_revision: 2, proposal_json: { summary: "Move lunch later" }, state: item.name.includes("stale") ? "stale" : "pending" }] : [],
-    shoppingNeeds: [{ foodId: "55555555-5555-4555-8555-555555555555", name: "Chicken breast", quantity: 400, unit: "g", qualifier: null, sourceOccurrenceIds: [occurrence.id] }],
+    shoppingNeeds: [{ foodId: "55555555-5555-4555-8555-555555555555", name: item.language === "ar" ? "صدر دجاج" : "Chicken breast", quantity: 400, unit: "g", qualifier: null, sourceOccurrenceIds: [occurrence.id] }],
   };
 }
 
 function recipeRows(item) {
   if (item.name === "recipes-mobile-home-empty") return [];
   return [
-    { recipeId: RECIPE_ID, latestVersionId: RECIPE_VERSION_ID, name: item.name === "recipes-long-name-action" ? "Roasted Mediterranean Vegetable and Lemon Herb Chicken Grain Bowl with Toasted Seeds" : "Chicken bowl", status: "published", favorite: true, totalTimeMinutes: 35, cuisine: "Mediterranean", lastUsedAt: "2026-08-26T06:30:00.000Z", nutritionPerServing: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 } },
+    { recipeId: RECIPE_ID, latestVersionId: RECIPE_VERSION_ID, name: item.language === "ar" ? "وعاء دجاج Chicken bowl" : item.name === "recipes-long-name-action" ? "Roasted Mediterranean Vegetable and Lemon Herb Chicken Grain Bowl with Toasted Seeds" : "Chicken bowl", status: "published", favorite: true, totalTimeMinutes: 35, cuisine: "Mediterranean", lastUsedAt: "2026-08-26T06:30:00.000Z", nutritionPerServing: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 } },
     { recipeId: "77777777-7777-4777-8777-777777777777", latestVersionId: null, name: "Working Draft soup", status: "draft", favorite: false, totalTimeMinutes: null, cuisine: null, lastUsedAt: null, nutritionPerServing: null },
   ];
 }
 
 function recipeDetail(item) {
   const long = item.name === "recipes-long-name-action";
+  const name = item.language === "ar" ? "وعاء دجاج Chicken bowl" : long ? "Roasted Mediterranean Vegetable and Lemon Herb Chicken Grain Bowl with Toasted Seeds" : "Chicken bowl";
   return {
-    root: { id: RECIPE_ID, name: long ? "Roasted Mediterranean Vegetable and Lemon Herb Chicken Grain Bowl with Toasted Seeds" : "Chicken bowl", is_favorite: true, cover_path: null },
-    latestVersion: { id: RECIPE_VERSION_ID, version_number: 4, name: long ? "Roasted Mediterranean Vegetable and Lemon Herb Chicken Grain Bowl with Toasted Seeds" : "Chicken bowl", servings: 4, total_time_minutes: 35, notes: "Serve immediately.", metadata: {} },
+    root: { id: RECIPE_ID, name, is_favorite: true, cover_path: null },
+    latestVersion: { id: RECIPE_VERSION_ID, version_number: 4, name, servings: 4, total_time_minutes: 35, notes: "Serve immediately.", metadata: {} },
     hasWorkingDraft: true,
     ingredients: [{ id: "88888888-8888-4888-8888-888888888888", ingredient_name: "Chicken breast", quantity: 400, unit: "g", food_id: "55555555-5555-4555-8555-555555555555", verified: true }],
     instructions: [
@@ -260,7 +262,7 @@ function cookingFixture(item) {
     schemaVersion: 1, sessionId: COOKING_SESSION_ID, recipeId: RECIPE_ID, recipeVersionId: RECIPE_VERSION_ID,
     frozenRecipeSnapshot: {
       schemaVersion: 1,
-      recipe: { id: RECIPE_VERSION_ID, recipe_id: RECIPE_ID, version_number: 4, name: "Chicken bowl", servings: 4 },
+      recipe: { id: RECIPE_VERSION_ID, recipe_id: RECIPE_ID, version_number: 4, name: item.language === "ar" ? "وعاء دجاج Chicken bowl" : "Chicken bowl", servings: 4 },
       ingredients: [{ id: "ingredient-one", name: "Chicken breast", quantity: 400, unit: "g" }],
       actions: [
         { id: ACTION_ONE_ID, position: 0, instruction: "Prepare the confirmed ingredients.", dependency_action_ids: [] },
@@ -283,12 +285,14 @@ async function fulfillJson(route, body, status = 200, fixture = "nutrition-v1") 
 }
 
 async function createContext(browser, item) {
-  const context = await browser.newContext({ viewport: { width: item.viewport.width, height: item.viewport.height }, reducedMotion: "reduce", colorScheme: "light", locale: item.direction === "rtl" ? "ar-EG" : "en-GB" });
-  await context.addInitScript(({ direction, largeText, offline, recipeId, cooking }) => {
+  const browserLocale = item.language === "ar" ? "ar-EG" : item.language === "de" ? "de-DE" : "en-GB";
+  const context = await browser.newContext({ viewport: { width: item.viewport.width, height: item.viewport.height }, reducedMotion: "reduce", colorScheme: "light", locale: browserLocale });
+  await context.addInitScript(({ direction, language, largeText, offline, recipeId, cooking }) => {
+    try { localStorage.setItem("plaivra.language.v1", language); } catch { /* origin may not be available yet */ }
     const applyDocumentPreferences = () => {
       if (!document.documentElement) return false;
       document.documentElement.dir = direction;
-      document.documentElement.lang = direction === "rtl" ? "ar" : "en";
+      document.documentElement.lang = language;
       if (largeText) document.documentElement.style.fontSize = "125%";
       return true;
     };
@@ -299,7 +303,7 @@ async function createContext(browser, item) {
     if (cooking) {
       try { localStorage.setItem(`plaivra:nutrition:cooking:${recipeId}:active`, JSON.stringify(cooking)); } catch { /* origin not available yet */ }
     }
-  }, { direction: item.direction, largeText: item.largeText, offline: item.offline, recipeId: RECIPE_ID, cooking: item.route.includes("/cook") ? cookingFixture(item) : null });
+  }, { direction: item.direction, language: item.language, largeText: item.largeText, offline: item.offline, recipeId: RECIPE_ID, cooking: item.route.includes("/cook") ? cookingFixture(item) : null });
 
   await context.route("**/api/billing/entitlements", (route) => fulfillJson(route, { entitlements: [] }, 200, "empty-entitlements-v1"));
   await context.route("**/api/nutrition/v1/**", async (route) => {
@@ -328,8 +332,8 @@ async function createContext(browser, item) {
       await fulfillJson(route, { ok: true, revision: 4 }, 200, `nutrition-${item.name}`);
       return;
     }
-    if (pathname.includes("/recipes/recently-deleted")) {
-      await fulfillJson(route, { recipes: [{ recipeId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", name: "Deleted lentil soup", deletedAt: "2026-08-20T08:00:00.000Z", purgeAt: "2026-09-19T08:00:00.000Z" }] }, 200, `nutrition-${item.name}`);
+    if (pathname === "/api/nutrition/v1/recipes" && method === "GET" && url.searchParams.get("deleted") === "true") {
+      await fulfillJson(route, { recipes: [{ id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", name: item.language === "ar" ? "شوربة عدس" : "Deleted lentil soup", cover_path: null, deleted_at: "2026-08-20T08:00:00.000Z", purge_after: "2026-09-19T08:00:00.000Z" }] }, 200, `nutrition-${item.name}`);
       return;
     }
     if (pathname === "/api/nutrition/v1/recipes" && method === "GET") {
@@ -417,12 +421,12 @@ async function prepareScenario(page, item) {
       await clickFirst(page, [/filters/i]);
       break;
     case "resume-cooking":
-      await clickFirst(page, [/resume/i]);
+      await clickFirst(page, [/resume/i, /استئناف/]);
       break;
     default:
       break;
   }
-  await page.waitForTimeout(120);
+  await page.waitForTimeout(180);
 }
 
 async function collectMetrics(page) {
@@ -454,8 +458,31 @@ async function collectMetrics(page) {
       interactiveElements: interactive.length,
       h1: document.querySelector("h1")?.textContent?.trim() || null,
       direction: document.documentElement.dir || getComputedStyle(document.documentElement).direction,
+      htmlLanguage: document.documentElement.lang || null,
+      bodyText: String(document.body?.innerText || "").slice(0, 12000),
     };
   });
+}
+
+function localizedAssertions(item, metrics) {
+  const failures = [];
+  const body = metrics.bodyText || "";
+  if (/Please sign in before using (?:Meal Plan|My Recipes)\./i.test(body)) failures.push("rendered authenticated state fell back to sign-in error");
+  if (item.language !== "ar") return failures;
+  if (metrics.htmlLanguage !== "ar") failures.push(`expected html lang ar, received ${metrics.htmlLanguage || "empty"}`);
+  if (metrics.direction !== "rtl") failures.push(`expected RTL direction, received ${metrics.direction || "empty"}`);
+  const required = item.name === "meal-plan-rtl-large-text"
+    ? ["خطة الوجبات", "بروتين", "كربوهيدرات", "دهون"]
+    : item.name === "food-library-rtl-mixed-brand"
+      ? ["مكتبة الأطعمة", "بروتين", "كربوهيدرات", "دهون"]
+      : item.name === "recipes-rtl-home-mobile"
+        ? ["وصفاتي", "المحذوفة مؤخرًا"]
+        : item.name === "recipes-rtl-cooking-mobile"
+          ? ["الآن", "تم"]
+          : [];
+  for (const text of required) if (!body.includes(text)) failures.push(`missing localized Arabic evidence: ${text}`);
+  if (item.name === "food-library-rtl-mixed-brand" && /\bP\s+\d|\bC\s+\d|\bF\s+\d/.test(body)) failures.push("Arabic Food Library still exposes Latin P/C/F macro abbreviations");
+  return failures;
 }
 
 async function checkFocusVisible(page) {
@@ -491,12 +518,13 @@ export async function runNutritionV1Qa(options = {}) {
       try {
         response = await page.goto(`${baseUrl}${item.route}`, { waitUntil: item.name === "diary-loading" ? "domcontentloaded" : "networkidle", timeout: 30_000 });
         if (item.name === "diary-loading") await page.waitForTimeout(120);
-        else await page.waitForTimeout(160);
+        else await page.waitForTimeout(520);
         await prepareScenario(page, item);
       } catch (error) {
         navigationError = sanitizedText(error instanceof Error ? error.message : String(error));
       }
       const metrics = await collectMetrics(page);
+      const localeFailures = localizedAssertions(item, metrics);
       const focusVisible = await checkFocusVisible(page);
       const screenshot = nutritionV1ScreenshotName(item);
       await page.screenshot({ path: path.join(evidenceDir, screenshot), fullPage: true });
@@ -509,7 +537,9 @@ export async function runNutritionV1Qa(options = {}) {
       if (pageErrors.length) failures.push(`${pageErrors.length} page errors`);
       if (consoleErrors.length) failures.push(`${consoleErrors.length} console errors`);
       if (metrics.interactiveElements > 0 && !focusVisible) failures.push("keyboard focus is not visibly styled");
-      results.push({ name: item.name, route: item.route, viewport: item.viewport.name, requestedDirection: item.direction, largeText: item.largeText, offline: item.offline, screenshot, status: response?.status() ?? null, focusVisible, pageErrors, consoleErrors, ...metrics, failures, passed: failures.length === 0 });
+      failures.push(...localeFailures);
+      const { bodyText: _bodyText, ...reportMetrics } = metrics;
+      results.push({ name: item.name, route: item.route, viewport: item.viewport.name, requestedDirection: item.direction, language: item.language, largeText: item.largeText, offline: item.offline, screenshot, status: response?.status() ?? null, focusVisible, localizedAssertions: { failures: localeFailures, passed: localeFailures.length === 0 }, pageErrors, consoleErrors, ...reportMetrics, failures, passed: failures.length === 0 });
       await context.close();
     }
   } finally {
@@ -524,8 +554,8 @@ export async function runNutritionV1Qa(options = {}) {
     baseUrl,
     evidenceDir,
     viewports: NUTRITION_V1_QA_VIEWPORTS,
-    scenarios: NUTRITION_V1_QA_SCENARIOS.map((item) => ({ name: item.name, route: item.route, viewport: item.viewport.name, direction: item.direction, largeText: item.largeText, offline: item.offline })),
-    checks: { horizontalOverflowPx: true, compactInteractiveTargets: true, unnamedInteractiveElements: true, pageErrors: true, consoleErrors: true, focusVisible: true, screenshots: true },
+    scenarios: NUTRITION_V1_QA_SCENARIOS.map((item) => ({ name: item.name, route: item.route, viewport: item.viewport.name, direction: item.direction, language: item.language, largeText: item.largeText, offline: item.offline })),
+    checks: { horizontalOverflowPx: true, compactInteractiveTargets: true, unnamedInteractiveElements: true, pageErrors: true, consoleErrors: true, focusVisible: true, localizedAssertions: true, screenshots: true },
     summary: { observations: results.length, failures: failed.length, passed: failed.length === 0 },
     failures: failed,
     observations: results,
