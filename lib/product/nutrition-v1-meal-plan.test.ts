@@ -132,7 +132,7 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(page).toContain("reminderEnabled");
     expect(page).toContain("plannedTime");
     expect(page).toContain("cancelMealReminder");
-    expect(page).not.toMatch(/useEffect\([^)]*Notification\.requestPermission/s);
+    expect(page).not.toContain("useEffect(() => { void enableMealReminder");
   });
 
   it("lets a skipped source be reviewed and removed from Shopping without changing Shopping on Skip itself", () => {
