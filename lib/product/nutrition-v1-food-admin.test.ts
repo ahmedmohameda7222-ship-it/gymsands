@@ -49,7 +49,7 @@ describe("Nutrition V1 owner Food Catalog product contract", () => {
     expect(curation).toContain("merged_into_food_id");
     expect(curation).toContain("food_favorites");
     expect(curation).not.toMatch(/from\(["']food_items["']\)\.delete/);
-    expect(curation).not.toMatch(/from\(["']food_logs["']\).*update/s);
+    expect(curation).not.toMatch(/from\(["']food_logs["']\)[\s\S]*update/);
     expect(curation).toContain("food_source_records");
     expect(curation).toMatch(/license_name|license_reference/);
   });
