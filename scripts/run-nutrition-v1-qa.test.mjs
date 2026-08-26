@@ -144,6 +144,20 @@ test("Nutrition V1 rendered QA captures runtime, layout, target, focus, and evid
   ]) assert.equal(source.includes(required), true, required);
 });
 
+test("Nutrition V1 QA applies locale preferences only after the document root exists", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /const applyDocumentPreferences = \(\) =>/);
+  assert.match(source, /if \(!document\.documentElement\) return false/);
+  assert.match(source, /DOMContentLoaded/);
+});
+
+test("Nutrition V1 touch-target audit excludes only currently clipped sr-only helpers", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /classList\.contains\("sr-only"\)/);
+  assert.match(source, /document\.activeElement !== element/);
+  assert.match(source, /const targetAuditedInteractive = interactive\.filter/);
+});
+
 test("canonical rendered QA invokes the bounded Nutrition V1 suite", async () => {
   const source = await readFile(new URL("./run-rendered-qa.mjs", import.meta.url), "utf8");
   assert.match(source, /run-nutrition-v1-qa\.mjs/);
