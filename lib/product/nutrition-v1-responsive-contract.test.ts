@@ -15,7 +15,7 @@ function doneButtonSource() {
   const marker = 'updateAction("completed")';
   const start = cooking.indexOf(marker);
   expect(start).toBeGreaterThanOrEqual(0);
-  return cooking.slice(start, start + 800);
+  return cooking.slice(start, start + 900);
 }
 
 describe("Nutrition V1 responsive, RTL, large-text and interaction contract", () => {
@@ -45,6 +45,24 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
     expect(foodLibrary).toMatch(/Browse by Cuisine[\s\S]*min-h-11/);
   });
 
+  it("binds approved Arabic RTL surfaces to the real EN/DE/AR language authority", () => {
+    for (const [name, source] of [
+      ["Meal Plan", mealPlan],
+      ["Food Library", foodLibrary],
+      ["Food Row", foodRow],
+      ["My Recipes", recipeHome],
+      ["Cooking Mode", cooking],
+    ] as const) {
+      expect(source, name).toContain("useNutritionV1Translation");
+    }
+    expect(foodRow).toContain("macroProtein");
+    expect(foodRow).toContain("macroCarbs");
+    expect(foodRow).toContain("macroFat");
+    expect(foodRow).not.toMatch(/>\s*P\s*\{/);
+    expect(cooking).toContain("cookingNow");
+    expect(cooking).toContain("cookingDone");
+  });
+
   it("keeps Cooking Mode direction-aware and long-content safe", () => {
     expect(cooking).toContain('dir={direction}');
     expect(cooking).toContain('document.documentElement.dir === "rtl"');
@@ -55,7 +73,7 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
   it("keeps the approved approximately 56pt visible primary Done action in Cooking Mode", () => {
     const done = doneButtonSource();
     expect(done).toContain("min-h-[56px]");
-    expect(done).toContain(">Done</button>");
+    expect(done).toContain("cookingDone");
   });
 
   it("keeps adaptive layouts instead of adding feature-dense desktop-only Nutrition modes", () => {
@@ -67,7 +85,7 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
 
   it("keeps text and semantics available without color-only status meaning", () => {
     expect(diary).toMatch(/role=\"(?:alert|status)\"|aria-live=/);
-    expect(mealPlan).toMatch(/Needs attention|Waiting to sync/);
+    expect(mealPlan).toMatch(/Needs attention|Waiting to sync|needsAttention|waitingToSync/);
     expect(foodLibrary).toMatch(/aria-(?:pressed|live|label)/);
     expect(recipeHome).toMatch(/aria-(?:pressed|expanded|label)/);
     expect(cooking).toMatch(/role=\"(?:alert|status)\"|aria-label=/);
