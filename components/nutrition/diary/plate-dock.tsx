@@ -11,6 +11,7 @@ export type DiaryPlateSource =
   | { type: "food"; id: string | null; frozenSnapshot: Record<string, unknown> }
   | { type: "recipe"; id: string; recipeVersionId: string; frozenSnapshot: Record<string, unknown> }
   | { type: "saved_meal"; id: string; frozenSnapshot: Record<string, unknown> }
+  | { type: "planned_occurrence"; id: string; frozenSnapshot: Record<string, unknown> }
   | { type: "quick_add"; frozenSnapshot: Record<string, unknown> };
 
 export type DiaryPlateItem = {
