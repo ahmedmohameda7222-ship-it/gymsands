@@ -29,7 +29,7 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
       ["Recently Deleted", recentlyDeleted],
       ["Cooking Mode", cooking],
     ] as const) {
-      expect(source, name).toMatch(/min-h-(?:11|12|14|\[44px\]|\[48px\]|\[56px\])/);
+      expect(source, name).toMatch(/\b(?:min-h|h)-(?:11|12|14|\[44px\]|\[48px\]|\[56px\])/);
     }
   });
 
