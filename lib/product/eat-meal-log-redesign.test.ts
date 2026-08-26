@@ -192,12 +192,15 @@ describe("Eat meal-log redesign contracts", () => {
     expect(model).toContain('value.includes("\\\\")');
   });
 
-  it("keeps verified Eat overrides and Today on the approved pure target precedence", () => {
+  it("keeps verified Eat overrides while Today uses canonical effective-dated targets", () => {
     const eatPage = source("components/meals/eat-page.tsx");
     const eatTargets = source("services/database/eat-targets.ts");
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     const projection = source(
       "services/dashboard/today-projection-server.ts",
+    );
+    const canonicalTargets = source(
+      "services/nutrition-v1/server/targets.ts",
     );
     const activeTarget = source("services/nutrition/active-target.ts");
 
@@ -207,10 +210,10 @@ describe("Eat meal-log redesign contracts", () => {
     );
     expect(eatTargets).toContain("resolveEatTargetForDate");
     expect(activeTarget).toContain("export function resolveEatTargetForDate");
-    expect(projection).toContain("resolveActiveNutritionTarget");
-    expect(projection).toContain(
-      "user_nutrition_target_date_overrides",
-    );
+    expect(projection).toContain("getEffectiveNutritionTarget");
+    expect(canonicalTargets).toContain('from("nutrition_target_periods")');
+    expect(projection).not.toContain("resolveActiveNutritionTarget");
+    expect(projection).not.toContain("user_nutrition_target_date_overrides");
     expect(dashboard).toContain(
       "subscribeToTodayNutritionTargetChanges",
     );
