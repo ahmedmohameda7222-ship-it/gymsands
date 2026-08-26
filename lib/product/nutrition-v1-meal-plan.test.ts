@@ -23,11 +23,14 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(strip).toContain("Today");
   });
 
-  it("opens one search-first Add workspace with explicit Recent and Favorites instead of a method picker", () => {
+  it("opens one search-first Add workspace with Recent Favorites More and secondary Barcode access", () => {
     const add = source("components/nutrition/meal-plan/add-to-plan-workspace.tsx");
     expect(add).toContain('placeholder="Search foods, recipes, meals…"');
     expect(add).toContain("Recent");
     expect(add).toContain("Favorites");
+    expect(add).toContain("More");
+    expect(add).toContain("Barcode");
+    expect(add).toContain("normalizeProductBarcode");
     expect(add).toContain("Add Placeholder");
     expect(add).toContain("selectedItems");
     expect(add).not.toContain("chooseMethod");
@@ -89,6 +92,8 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(page).toContain("deserializeMealPlanQueue");
     expect(page).toContain("serializeMealPlanQueue");
     expect(page).toContain("localStorage");
+    expect(page).toContain("Saving");
+    expect(page).toContain("Saved");
     expect(page).toContain("Waiting to sync");
     expect(page).toContain("Needs attention");
   });
@@ -98,5 +103,50 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(shopping).toContain("manual quantity");
     expect(shopping).toContain("notes");
     expect(shopping).toContain("Carry unchecked items to next week");
+  });
+
+  it("derives week start from locale with an optional owner-scoped override and preserves explicit historical starts", () => {
+    const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
+    const migration = source("supabase/migrations/20260825120100_nutrition_v1_plan_diary_targets.sql");
+    expect(page).toContain("localeWeekStartDay");
+    expect(page).toContain("weekStartOverrideKey");
+    expect(page).toContain("Week starts");
+    expect(page).not.toContain("function monday(");
+    expect(migration).not.toContain("extract(isodow from week_start_date) = 1");
+  });
+
+  it("offers bounded meal day and week copy operations that create new occurrence identities", () => {
+    const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
+    expect(page).toContain("copyPlannedOccurrences");
+    expect(page).toContain("Copy day");
+    expect(page).toContain("Copy week");
+    expect(page).toContain("crypto.randomUUID");
+    expect(page).not.toContain("recurrenceRule");
+  });
+
+  it("keeps reminders off by default and requests notification permission only from an explicit user action", () => {
+    const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
+    expect(page).toContain("Reminder off");
+    expect(page).toContain("Enable reminder");
+    expect(page).toContain("Notification.requestPermission");
+    expect(page).toContain("reminderEnabled");
+    expect(page).toContain("plannedTime");
+    expect(page).toContain("cancelMealReminder");
+    expect(page).not.toMatch(/useEffect\([^)]*Notification\.requestPermission/s);
+  });
+
+  it("lets a skipped source be reviewed and removed from Shopping without changing Shopping on Skip itself", () => {
+    const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
+    const shopping = source("components/nutrition/meal-plan/shopping-list.tsx");
+    expect(page).toContain("Review & Remove");
+    expect(page).toContain("shoppingExcludedOccurrenceIds");
+    expect(shopping).toContain("shoppingExcludedOccurrenceIds");
+    expect(shopping).toContain("sourceOccurrenceIds");
+  });
+
+  it("keeps the legacy grocery panel explicitly compatibility-only while canonical Shopping owns Nutrition V1", () => {
+    const grocery = source("components/meals/grocery-list-panel.tsx");
+    expect(grocery).toContain("Legacy Grocery compatibility surface");
+    expect(grocery).toContain("Nutrition V1 Shopping lives at /my-meal-plan/shopping");
   });
 });
