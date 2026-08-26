@@ -221,6 +221,7 @@ select set_config('request.jwt.claim.role', 'authenticated', true);
 -- ---------------------------------------------------------------------------
 -- Transactional publication: v1, new Working Draft, v2. The same authenticated
 -- owner can publish, but direct published-table INSERT remains forbidden.
+-- Draft child IDs are part of the authored graph and must survive publication.
 -- ---------------------------------------------------------------------------
 
 insert into public.nutrition_recipes (id, user_id, name)
@@ -255,15 +256,37 @@ insert into public.nutrition_recipe_ingredients (
   '{"calories":null}'::jsonb
 );
 
-insert into public.nutrition_recipe_actions (
-  id, user_id, recipe_draft_id, position, instruction
+insert into public.nutrition_recipe_equipment (
+  id, user_id, recipe_draft_id, position, name, quantity, note
 ) values (
-  'a2100000-0000-4000-8000-000000000033',
+  'a2100000-0000-4000-8000-000000000038',
   'a2100000-0000-4000-8000-000000000001',
   'a2100000-0000-4000-8000-000000000031',
   0,
-  'Follow the confirmed Recipe instruction.'
+  'Pan',
+  1,
+  'Use the Recipe-specified equipment.'
 );
+
+insert into public.nutrition_recipe_actions (
+  id, user_id, recipe_draft_id, position, instruction, dependency_action_ids
+) values
+  (
+    'a2100000-0000-4000-8000-000000000033',
+    'a2100000-0000-4000-8000-000000000001',
+    'a2100000-0000-4000-8000-000000000031',
+    0,
+    'Follow the first confirmed Recipe instruction.',
+    '{}'::uuid[]
+  ),
+  (
+    'a2100000-0000-4000-8000-000000000037',
+    'a2100000-0000-4000-8000-000000000001',
+    'a2100000-0000-4000-8000-000000000031',
+    1,
+    'Follow the dependent confirmed Recipe instruction.',
+    array['a2100000-0000-4000-8000-000000000033'::uuid]
+  );
 
 select public.publish_nutrition_recipe_draft(
   'a2100000-0000-4000-8000-000000000030'
@@ -288,21 +311,48 @@ select pg_temp.nv1_assert(
     from public.nutrition_recipe_ingredients ingredient
     join public.nutrition_recipe_versions version
       on version.id = ingredient.recipe_version_id
-    where version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
+    where ingredient.id = 'a2100000-0000-4000-8000-000000000032'
+      and version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
       and version.version_number = 1
       and ingredient.recipe_draft_id is null
       and ingredient.frozen_nutrition->>'calories' is null
   )
   and exists (
     select 1
+    from public.nutrition_recipe_equipment equipment
+    join public.nutrition_recipe_versions version
+      on version.id = equipment.recipe_version_id
+    where equipment.id = 'a2100000-0000-4000-8000-000000000038'
+      and version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and version.version_number = 1
+      and equipment.recipe_draft_id is null
+  ),
+  'Recipe publication did not create version 1.'
+);
+
+select pg_temp.nv1_assert(
+  exists (
+    select 1
     from public.nutrition_recipe_actions action
     join public.nutrition_recipe_versions version
       on version.id = action.recipe_version_id
-    where version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
+    where action.id = 'a2100000-0000-4000-8000-000000000033'
+      and version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
       and version.version_number = 1
       and action.recipe_draft_id is null
+  )
+  and exists (
+    select 1
+    from public.nutrition_recipe_actions action
+    join public.nutrition_recipe_versions version
+      on version.id = action.recipe_version_id
+    where action.id = 'a2100000-0000-4000-8000-000000000037'
+      and version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and version.version_number = 1
+      and action.recipe_draft_id is null
+      and action.dependency_action_ids = array['a2100000-0000-4000-8000-000000000033'::uuid]
   ),
-  'Recipe publication did not create version 1.'
+  'Recipe publication did not preserve action dependency identities.'
 );
 
 insert into public.nutrition_recipe_drafts (
@@ -383,6 +433,24 @@ select pg_temp.nv1_assert(
     from public.nutrition_recipes
     where id = 'a2100000-0000-4000-8000-000000000030'
       and name = 'Publication recipe v2'
+  )
+  and exists (
+    select 1
+    from public.nutrition_recipe_ingredients ingredient
+    join public.nutrition_recipe_versions version
+      on version.id = ingredient.recipe_version_id
+    where ingredient.id = 'a2100000-0000-4000-8000-000000000035'
+      and version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and version.version_number = 2
+  )
+  and exists (
+    select 1
+    from public.nutrition_recipe_actions action
+    join public.nutrition_recipe_versions version
+      on version.id = action.recipe_version_id
+    where action.id = 'a2100000-0000-4000-8000-000000000036'
+      and version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and version.version_number = 2
   ),
   'Recipe publication did not create version 2.'
 );
@@ -559,4 +627,4 @@ select pg_temp.nv1_rejected(
 
 rollback;
 
-\echo 'Nutrition V1 reusable-domain verification passed: additive tables, owner RLS, transactional Recipe publication, immutable versions, 30-day restore, frozen lineage, legacy preservation, lifecycle grants, and private Recipe covers.'
+\echo 'Nutrition V1 reusable-domain verification passed: additive tables, owner RLS, transactional Recipe publication with stable graph identity, immutable versions, 30-day restore, frozen lineage, legacy preservation, lifecycle grants, and private Recipe covers.'
