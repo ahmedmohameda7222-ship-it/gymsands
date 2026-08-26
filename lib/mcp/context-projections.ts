@@ -129,6 +129,48 @@ function throwQueryError(error: { message?: string } | null, section: string) {
   if (error) throw new ContextProjectionError("projection_failed", `${section} context could not be loaded.`);
 }
 
+function rawRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function nullableNonNegative(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+type ContextNutritionFacts = {
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+};
+
+function snapshotNutrition(value: unknown): ContextNutritionFacts {
+  const snapshot = rawRecord(value);
+  const nested = rawRecord(snapshot.frozen_nutrition ?? snapshot.nutrition ?? snapshot);
+  return {
+    calories: nullableNonNegative(nested.calories ?? nested.caloriesKcal ?? nested.calories_kcal),
+    protein_g: nullableNonNegative(nested.protein_g ?? nested.proteinG),
+    carbs_g: nullableNonNegative(nested.carbs_g ?? nested.carbsG),
+    fat_g: nullableNonNegative(nested.fat_g ?? nested.fatG)
+  };
+}
+
+function sumNullableNutrition(items: ContextNutritionFacts[]): ContextNutritionFacts {
+  if (!items.length) return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+  const keys = ["calories", "protein_g", "carbs_g", "fat_g"] as const;
+  const output: ContextNutritionFacts = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+  for (const key of keys) {
+    output[key] = items.some((item) => item[key] === null)
+      ? null
+      : items.reduce((total, item) => total + (item[key] as number), 0);
+  }
+  return output;
+}
+
 async function trainingPlanning(supabase: SupabaseClient, userId: string) {
   const [profile, constraints, plans] = await Promise.all([
     supabase.from("onboarding_answers")
@@ -191,30 +233,44 @@ async function trainingPlanning(supabase: SupabaseClient, userId: string) {
   };
 }
 
-async function nutritionPlanning(supabase: SupabaseClient, userId: string) {
-  const [profile, constraints, targets, preferences, targetProfiles] = await Promise.all([
+async function nutritionPlanning(
+  supabase: SupabaseClient,
+  userId: string,
+  input: Record<string, unknown>,
+  now: Date,
+) {
+  const date = safeDate(input.date, now.toISOString().slice(0, 10));
+  const [profile, constraints, preferences, targetResult] = await Promise.all([
     supabase.from("onboarding_answers")
       .select("goal,goals,primary_goal,nutrition_preferences,allergies_limitations")
       .eq("user_id", userId).maybeSingle(),
     supabase.from("user_fitness_constraints")
       .select("nutrition_restrictions")
       .eq("user_id", userId).maybeSingle(),
-    supabase.from("calorie_targets")
-      .select("daily_calories,protein_g,carbs_g,fat_g,water_ml,updated_at")
-      .eq("user_id", userId).maybeSingle(),
     supabase.from("user_nutrition_preference_profiles")
       .select("nutrition_goal,weekly_food_budget,budget_currency,max_cooking_time_minutes,meal_prep_days,meal_prep_preference,cooking_skill,kitchen_equipment,preferred_cuisines,liked_foods,disliked_foods,allergy_items,dietary_restrictions,allergies,repeat_tolerance,meals_per_day,ingredient_reuse_preference,grocery_style_preference,eating_schedule,supplements,tracks_calories_or_macros,updated_at")
       .eq("user_id", userId).maybeSingle(),
-    supabase.from("user_nutrition_target_profiles")
-      .select("id,target_type,calories,protein_g,carbs_g,fat_g,water_ml,updated_at")
-      .eq("user_id", userId).order("target_type")
+    supabase.from("nutrition_target_periods")
+      .select("id,effective_from,effective_to,calories,protein_g,carbs_g,fat_g,water_ml,source")
+      .eq("user_id", userId)
+      .lte("effective_from", date)
+      .order("effective_from", { ascending: false })
+      .limit(1)
   ]);
-  for (const [result, name] of [[profile, "Nutrition profile"], [constraints, "Nutrition constraint"], [targets, "Nutrition target"], [preferences, "Nutrition preference"], [targetProfiles, "Target profile"]] as const) {
+  for (const [result, name] of [[profile, "Nutrition profile"], [constraints, "Nutrition constraint"], [preferences, "Nutrition preference"], [targetResult, "Effective Nutrition target"]] as const) {
     throwQueryError(result.error, name);
   }
   const p = (profile.data ?? {}) as Record<string, unknown>;
   const c = (constraints.data ?? {}) as Record<string, unknown>;
   const pref = (preferences.data ?? {}) as Record<string, unknown>;
+  const targetRows = Array.isArray(targetResult.data)
+    ? targetResult.data as Array<Record<string, unknown>>
+    : targetResult.data
+      ? [targetResult.data as Record<string, unknown>]
+      : [];
+  const candidate = targetRows[0] ?? null;
+  const effectiveTo = candidate && typeof candidate.effective_to === "string" ? candidate.effective_to : null;
+  const targetAvailable = Boolean(candidate && (!effectiveTo || date < effectiveTo));
   const canonicalAllergies = Array.isArray(pref.allergy_items) && pref.allergy_items.length
     ? pref.allergy_items
     : typeof pref.allergies === "string" && pref.allergies.trim()
@@ -232,8 +288,31 @@ async function nutritionPlanning(supabase: SupabaseClient, userId: string) {
       legacy_planning_restrictions: storedUserText(c.nutrition_restrictions),
       medical_interpretation_allowed: false
     },
-    default_targets: targets.data ?? null,
-    target_profiles: targetProfiles.data ?? [],
+    effective_target: targetAvailable && candidate
+      ? {
+          date,
+          available: true,
+          effective_from: typeof candidate.effective_from === "string" ? candidate.effective_from : null,
+          effective_to: effectiveTo,
+          calories: nullableNonNegative(candidate.calories),
+          protein_g: nullableNonNegative(candidate.protein_g),
+          carbs_g: nullableNonNegative(candidate.carbs_g),
+          fat_g: nullableNonNegative(candidate.fat_g),
+          water_ml: nullableNonNegative(candidate.water_ml),
+          source: typeof candidate.source === "string" ? candidate.source : null
+        }
+      : {
+          date,
+          available: false,
+          effective_from: null,
+          effective_to: null,
+          calories: null,
+          protein_g: null,
+          carbs_g: null,
+          fat_g: null,
+          water_ml: null,
+          source: null
+        },
     planning_preferences: {
       meals_per_day: pref.meals_per_day ?? null,
       preferred_cuisines: storedUserTextArray(pref.preferred_cuisines),
@@ -274,31 +353,48 @@ async function dailyExecution(supabase: SupabaseClient, userId: string, scopes: 
   })());
 
   if (hasScope(scopes, MCP_SCOPES.nutritionRead)) queries.push((async () => {
-    const result = await supabase.from("food_logs")
-      .select("id,meal_type,food_name,quantity,calories,protein_g,carbs_g,fat_g")
-      .eq("user_id", userId).eq("log_date", date).limit(200);
-    throwQueryError(result.error, "Daily nutrition");
-    const rows = (result.data ?? []) as Array<Record<string, unknown>>;
+    const groupsResult = await supabase.from("nutrition_log_groups")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("log_date", date)
+      .order("created_at", { ascending: true })
+      .limit(200);
+    throwQueryError(groupsResult.error, "Daily nutrition groups");
+    const groups = (groupsResult.data ?? []) as Array<Record<string, unknown>>;
+    const groupIds = groups.map((row) => String(row.id ?? "")).filter(Boolean);
+    let items: Array<Record<string, unknown>> = [];
+    if (groupIds.length) {
+      const itemsResult = await supabase.from("nutrition_log_group_items")
+        .select("group_id,frozen_item_snapshot")
+        .eq("user_id", userId)
+        .in("group_id", groupIds)
+        .order("position", { ascending: true })
+        .limit(500);
+      throwQueryError(itemsResult.error, "Daily nutrition items");
+      items = (itemsResult.data ?? []) as Array<Record<string, unknown>>;
+    }
     sections.nutrition = {
-      item_count: rows.length,
-      totals: rows.reduce<{ calories: number; protein_g: number; carbs_g: number; fat_g: number }>((totals, row) => ({
-        calories: totals.calories + Number(row.calories ?? 0),
-        protein_g: totals.protein_g + Number(row.protein_g ?? 0),
-        carbs_g: totals.carbs_g + Number(row.carbs_g ?? 0),
-        fat_g: totals.fat_g + Number(row.fat_g ?? 0)
-      }), { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 })
+      group_count: groups.length,
+      item_count: items.length,
+      totals: sumNullableNutrition(items.map((row) => snapshotNutrition(row.frozen_item_snapshot)))
     };
   })());
 
   if (hasScope(scopes, MCP_SCOPES.mealPlansRead)) queries.push((async () => {
-    const result = await supabase.from("user_meal_plan_items")
-      .select("id,meal_type,food_name,serving_size,quantity,status,completed_at")
-      .eq("user_id", userId).eq("plan_date", date).order("created_at", { ascending: true }).limit(100);
+    const result = await supabase.from("nutrition_planned_occurrences")
+      .select("id,meal_slot_key,frozen_name,status,frozen_snapshot")
+      .eq("user_id", userId)
+      .eq("plan_date", date)
+      .order("meal_slot_key", { ascending: true })
+      .order("position", { ascending: true })
+      .limit(100);
     throwQueryError(result.error, "Daily meal plan");
     sections.meal_plan = ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-      ...row,
-      food_name: storedUserText(row.food_name, 200),
-      serving_size: storedUserText(row.serving_size, 100)
+      id: String(row.id ?? ""),
+      meal_slot_key: storedUserText(row.meal_slot_key, 80),
+      name: storedUserText(row.frozen_name, 200),
+      status: typeof row.status === "string" ? row.status : "planned",
+      nutrition: snapshotNutrition(row.frozen_snapshot)
     }));
   })());
 
@@ -417,7 +513,7 @@ export async function projectTaskContext({
   authorizeContextTask(task, scopes);
   let sections: Record<string, unknown>;
   if (task === "training_planning") sections = await trainingPlanning(supabase, userId);
-  else if (task === "nutrition_planning") sections = await nutritionPlanning(supabase, userId);
+  else if (task === "nutrition_planning") sections = await nutritionPlanning(supabase, userId, input, now);
   else if (task === "daily_execution") sections = await dailyExecution(supabase, userId, scopes, input);
   else if (task === "progress_review") sections = await progressReview(supabase, userId, input);
   else sections = await workoutAdjustment(supabase, userId, input);
@@ -435,6 +531,9 @@ export async function projectTaskContext({
 const stringValue = { type: "string" } as const;
 const numberValue = { type: "number" } as const;
 const booleanValue = { type: "boolean" } as const;
+const nullValue = { type: "null" } as const;
+const nullableNumberValue = { anyOf: [numberValue, nullValue] } as const;
+const nullableStringValue = { anyOf: [stringValue, nullValue] } as const;
 
 const storedTextSchema = {
   type: "object",
@@ -541,26 +640,28 @@ export const trainingPlanningContextOutputSchema = projectionSchema("training_pl
   }
 });
 
-const nutritionTargetsSchema = {
+const effectiveNutritionTargetSchema = {
   type: "object",
   additionalProperties: false,
+  required: ["date", "available", "effective_from", "effective_to", "calories", "protein_g", "carbs_g", "fat_g", "water_ml", "source"],
   properties: {
-    id: stringValue,
-    target_type: stringValue,
-    daily_calories: numberValue,
-    calories: numberValue,
-    protein_g: numberValue,
-    carbs_g: numberValue,
-    fat_g: numberValue,
-    water_ml: numberValue,
-    updated_at: stringValue
+    date: stringValue,
+    available: booleanValue,
+    effective_from: nullableStringValue,
+    effective_to: nullableStringValue,
+    calories: nullableNumberValue,
+    protein_g: nullableNumberValue,
+    carbs_g: nullableNumberValue,
+    fat_g: nullableNumberValue,
+    water_ml: nullableNumberValue,
+    source: nullableStringValue
   }
 } as const;
 
 export const nutritionPlanningContextOutputSchema = projectionSchema("nutrition_planning", {
   type: "object",
   additionalProperties: false,
-  required: ["nutrition_preferences", "user_confirmed_restrictions", "target_profiles", "planning_preferences"],
+  required: ["nutrition_preferences", "user_confirmed_restrictions", "effective_target", "planning_preferences"],
   properties: {
     goal: storedTextSchema,
     nutrition_goal: storedTextSchema,
@@ -578,8 +679,7 @@ export const nutritionPlanningContextOutputSchema = projectionSchema("nutrition_
         medical_interpretation_allowed: { type: "boolean", const: false }
       }
     },
-    default_targets: nutritionTargetsSchema,
-    target_profiles: { type: "array", items: nutritionTargetsSchema },
+    effective_target: effectiveNutritionTargetSchema,
     planning_preferences: {
       type: "object",
       additionalProperties: false,
@@ -612,6 +712,18 @@ const dailyNamedItemSchema = {
   properties: { id: stringValue, title: storedTextSchema, name: storedTextSchema, completed: booleanValue }
 } as const;
 
+const nullableNutritionFactsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["calories", "protein_g", "carbs_g", "fat_g"],
+  properties: {
+    calories: nullableNumberValue,
+    protein_g: nullableNumberValue,
+    carbs_g: nullableNumberValue,
+    fat_g: nullableNumberValue
+  }
+} as const;
+
 export const dailyExecutionContextOutputSchema = projectionSchema("daily_execution", {
   type: "object",
   additionalProperties: false,
@@ -619,8 +731,27 @@ export const dailyExecutionContextOutputSchema = projectionSchema("daily_executi
   properties: {
     date: stringValue,
     workouts: { type: "array", items: { type: "object", additionalProperties: false, properties: { id: stringValue, workout_name: storedTextSchema, status: stringValue, started_at: stringValue, completed_at: stringValue, skipped_at: stringValue, duration_minutes: numberValue, plan_id: stringValue, plan_day_id: stringValue } } },
-    nutrition: { type: "object", additionalProperties: false, required: ["item_count", "totals"], properties: { item_count: numberValue, totals: { type: "object", additionalProperties: false, required: ["calories", "protein_g", "carbs_g", "fat_g"], properties: { calories: numberValue, protein_g: numberValue, carbs_g: numberValue, fat_g: numberValue } } } },
-    meal_plan: { type: "array", items: { type: "object", additionalProperties: false, properties: { id: stringValue, meal_type: stringValue, food_name: storedTextSchema, serving_size: storedTextSchema, quantity: numberValue, status: stringValue, completed_at: stringValue } } },
+    nutrition: {
+      type: "object",
+      additionalProperties: false,
+      required: ["group_count", "item_count", "totals"],
+      properties: { group_count: numberValue, item_count: numberValue, totals: nullableNutritionFactsSchema }
+    },
+    meal_plan: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "meal_slot_key", "name", "status", "nutrition"],
+        properties: {
+          id: stringValue,
+          meal_slot_key: storedTextSchema,
+          name: storedTextSchema,
+          status: stringValue,
+          nutrition: nullableNutritionFactsSchema
+        }
+      }
+    },
     hydration: { type: "object", additionalProperties: false, required: ["total_ml"], properties: { total_ml: numberValue } },
     wellness: { type: "object", additionalProperties: false, required: ["tasks", "habits"], properties: { tasks: { type: "array", items: dailyNamedItemSchema }, habits: { type: "array", items: dailyNamedItemSchema }, recovery: { type: "object", additionalProperties: false, properties: { log_date: stringValue, hours_slept: numberValue, sleep_quality: stringValue, recovery_level: stringValue, fatigue_level: stringValue, soreness_level: stringValue, stress_level: stringValue } } } }
   }
