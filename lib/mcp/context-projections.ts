@@ -715,7 +715,6 @@ const dailyNamedItemSchema = {
 const nullableNutritionFactsSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["calories", "protein_g", "carbs_g", "fat_g"],
   properties: {
     calories: nullableNumberValue,
     protein_g: nullableNumberValue,
