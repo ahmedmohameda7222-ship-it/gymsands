@@ -18,7 +18,7 @@ export function WeekStrip({ dates, selectedDate, today, onSelect }: {
 }) {
   const { nt, language, dir, locale } = useNutritionV1Translation();
   return (
-    <div className="grid grid-cols-7 gap-1" aria-label={language === "ar" ? "أيام الأسبوع" : language === "de" ? "Wochentage" : "Week days"} dir={dir}>
+    <div className="grid grid-cols-[repeat(7,minmax(44px,1fr))] gap-1" aria-label={language === "ar" ? "أيام الأسبوع" : language === "de" ? "Wochentage" : "Week days"} dir={dir}>
       {dates.map((date) => {
         const selected = date === selectedDate;
         const isToday = date === today;
