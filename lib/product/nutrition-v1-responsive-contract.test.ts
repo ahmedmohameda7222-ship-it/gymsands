@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const diary = readFileSync("components/nutrition/diary/diary-page.tsx", "utf8");
 const loggingSession = readFileSync("components/nutrition/diary/logging-session.tsx", "utf8");
 const mealPlan = readFileSync("components/nutrition/meal-plan/meal-plan-page.tsx", "utf8");
+const weekStrip = readFileSync("components/nutrition/meal-plan/week-strip.tsx", "utf8");
 const foodLibrary = readFileSync("components/nutrition/food-library/food-library-page.tsx", "utf8");
 const foodRow = readFileSync("components/nutrition/food-library/food-row.tsx", "utf8");
 const recipeHome = readFileSync("components/nutrition/recipes/recipe-home.tsx", "utf8");
@@ -23,6 +24,7 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
       ["Diary", diary],
       ["Food Logging Session", loggingSession],
       ["Meal Plan", mealPlan],
+      ["Meal Plan week strip", weekStrip],
       ["Food Library", foodLibrary],
       ["Food Row", foodRow],
       ["My Recipes", recipeHome],
@@ -31,6 +33,16 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
     ] as const) {
       expect(source, name).toMatch(/\b(?:min-h|h)-(?:11|12|14|\[44px\]|\[48px\]|\[56px\])/);
     }
+  });
+
+  it("keeps all seven Meal Plan day selectors at least 44pt wide on compact phones", () => {
+    expect(weekStrip).toContain("min-w-11");
+    expect(weekStrip).toContain("min-h-14");
+  });
+
+  it("keeps Food Library browse controls on the shared 44pt custom-control baseline", () => {
+    expect(foodLibrary).toMatch(/Browse by Category[\s\S]*min-h-11/);
+    expect(foodLibrary).toMatch(/Browse by Cuisine[\s\S]*min-h-11/);
   });
 
   it("keeps Cooking Mode direction-aware and long-content safe", () => {
