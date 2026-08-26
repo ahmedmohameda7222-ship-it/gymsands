@@ -22,7 +22,7 @@ export type CookingSessionState = {
   skippedActionIds?: readonly string[];
   runningBackgroundActionIds?: readonly string[];
   waitingForConditionActionIds?: readonly string[];
-  timers?: readonly CookingTimerSessionFact[];
+  timers?: readonly unknown[];
 };
 
 export type CookingTimerFinishedAttention = {
@@ -82,6 +82,27 @@ function earlierTrackActionBlocks(
   );
 }
 
+function asTimerSessionFact(value: unknown): CookingTimerSessionFact | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== "string" || typeof row.actionId !== "string" || typeof row.name !== "string") return null;
+  if (
+    row.status !== "idle"
+    && row.status !== "running"
+    && row.status !== "paused"
+    && row.status !== "completed"
+    && row.status !== "cancelled"
+  ) return null;
+  if (row.completedAt !== undefined && row.completedAt !== null && typeof row.completedAt !== "string") return null;
+  return {
+    id: row.id,
+    actionId: row.actionId,
+    name: row.name,
+    status: row.status,
+    completedAt: typeof row.completedAt === "string" ? row.completedAt : null,
+  };
+}
+
 export function deriveCookingTimeline(
   recipeFacts: { actions: readonly CookingActionFact[] },
   sessionState: CookingSessionState,
@@ -93,8 +114,11 @@ export function deriveCookingTimeline(
   const terminalIds = new Set([...completedIds, ...skippedIds]);
   const deferredIds = new Set(sessionState.deferredActionIds ?? []);
   const runningBackgroundIds = new Set(sessionState.runningBackgroundActionIds ?? []);
+  const timers = (sessionState.timers ?? [])
+    .map(asTimerSessionFact)
+    .filter((timer): timer is CookingTimerSessionFact => timer !== null);
 
-  const attention: CookingTimerFinishedAttention[] = (sessionState.timers ?? [])
+  const attention: CookingTimerFinishedAttention[] = timers
     .filter((timer) => timer.status === "completed")
     .map((timer) => ({
       kind: "timer_finished" as const,
@@ -110,7 +134,7 @@ export function deriveCookingTimeline(
     if (!action || terminalIds.has(actionId)) continue;
     running.push({ kind: "action", actionId, instruction: action.instruction });
   }
-  for (const timer of sessionState.timers ?? []) {
+  for (const timer of timers) {
     if (timer.status !== "running" && timer.status !== "paused") continue;
     running.push({
       kind: "timer",
