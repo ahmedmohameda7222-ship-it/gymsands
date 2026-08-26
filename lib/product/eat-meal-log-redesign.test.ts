@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 const source = (path: string) => readFileSync(path, "utf8");
 
 describe("Eat meal-log redesign contracts", () => {
-  it("uses a focused Eat route with URL-backed day and week state", () => {
+  it("keeps the predecessor Eat route contract available after the canonical Diary cutover", () => {
     const route = source("components/meals/eat-page.tsx");
-    expect(source("app/(private)/calories/page.tsx")).toContain("<EatPage />");
+    expect(source("app/(private)/calories/page.tsx")).toContain("<DiaryPage />");
+    expect(source("app/(private)/calories/page.tsx")).not.toContain("<EatPage />");
     expect(route).toContain("parseEatView(rawView)");
     expect(route).toContain("parseEatDate(rawDate, today)");
     expect(route).toContain('view === "day"');
