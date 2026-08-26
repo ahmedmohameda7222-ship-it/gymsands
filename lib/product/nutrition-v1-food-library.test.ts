@@ -9,6 +9,11 @@ const pagePath = "components/nutrition/food-library/food-library-page.tsx";
 const rowPath = "components/nutrition/food-library/food-row.tsx";
 const detailPath = "components/nutrition/food-library/food-detail.tsx";
 const filtersPath = "components/nutrition/food-library/food-filters.tsx";
+const i18nPath = "lib/i18n/nutrition-v1.ts";
+
+function expectKeys(value: string, keys: string[]) {
+  for (const key of keys) expect(value, key).toContain(`nt("${key}")`);
+}
 
 describe("Nutrition V1 canonical Food Library product surface", () => {
   it("implements the complete planned reader/route/page/component surface", () => {
@@ -23,28 +28,25 @@ describe("Nutrition V1 canonical Food Library product surface", () => {
     ]) expect(existsSync(join(root, path)), path).toBe(true);
   });
 
-  it("replaces the normal Food Hub path with search-first Food Library, personal Quick Access, then Category/Cuisine browse", () => {
+  it("replaces the normal Food Hub path with localized search-first Food Library, personal Quick Access, then Category/Cuisine browse", () => {
     const routePage = source("app/(private)/calories/food-hub/page.tsx");
     const page = source(pagePath);
+    const i18n = source(i18nPath);
     expect(routePage).toContain("FoodLibraryPage");
-    expect(page).toContain("Food Library");
-    expect(page).toContain("Search foods");
-    expect(page).toContain("Quick Access");
-    expect(page).toContain("Recent");
-    expect(page).toContain("Favorites");
-    expect(page).toContain("My Foods");
-    expect(page).toContain("Browse by Category");
-    expect(page).toContain("Browse by Cuisine");
+    expect(page).toContain("useNutritionV1Translation");
+    expectKeys(page, ["foodLibrary", "searchFoods", "quickAccess", "recent", "favorites", "myFoods", "browseByCategory", "browseByCuisine"]);
+    expect(i18n).toContain('foodLibrary: "Food Library"');
+    expect(i18n).toContain('foodLibrary: "Lebensmittelbibliothek"');
+    expect(i18n).toContain('foodLibrary: "مكتبة الأطعمة"');
     expect(page).not.toMatch(/nutrition dashboard|marketing hero|grid-cols-3|grid-cols-4/i);
   });
 
-  it("uses flat decision rows with explicit macro units and positive-only Plaivra verification", () => {
+  it("uses flat decision rows with explicit localized macro labels and positive-only Plaivra verification", () => {
     const row = source(rowPath);
+    expect(row).toContain("useNutritionV1Translation");
     expect(row).toContain("ShieldCheck");
-    expect(row).toContain('aria-label="Plaivra Verified"');
-    expect(row).toContain("P ");
-    expect(row).toContain("C ");
-    expect(row).toContain("F ");
+    expect(row).toContain('aria-label={nt("plaivraVerified")}');
+    expectKeys(row, ["macroProtein", "macroCarbs", "macroFat"]);
     expect(row).toContain('"g"');
     expect(row).toContain("min-h-[88px]");
     expect(row).not.toMatch(/Unverified|confidence|source name|trust level|Saved Meal/i);
@@ -59,38 +61,29 @@ describe("Nutrition V1 canonical Food Library product surface", () => {
     expect(page).not.toMatch(/grid-cols-3|grid-cols-4/);
   });
 
-  it("uses live filters with close-preserves-state semantics, nutrition Info, presets, and no Apply/Done gate", () => {
+  it("uses localized live filters with close-preserves-state semantics, nutrition Info, presets, and no Apply/Done gate", () => {
     const filters = source(filtersPath);
-    expect(filters).toContain("Close Filters");
-    expect(filters).toContain("Reset filters");
-    expect(filters).toContain("High Protein");
-    expect(filters).toContain("Low Carb");
-    expect(filters).toContain("Info");
-    expect(filters).toContain("About nutrition filter values");
+    expect(filters).toContain("useNutritionV1Translation");
+    expectKeys(filters, ["foodFilters", "closeFilters", "highProtein", "lowCarb", "info", "nutritionFilterInfo", "resetFilters"]);
     expect(filters).toContain("≥");
     expect(filters).toContain("≤");
-    expect(filters).toContain("Between");
     expect(filters).not.toMatch(/>\s*Apply\s*</i);
     expect(filters).not.toMatch(/>\s*Done\s*</i);
   });
 
   it("resolves Serving then Quantity then Destination for standalone Add To and excludes Shopping List", () => {
     const detail = source(detailPath);
-    expect(detail.indexOf("Serving")).toBeGreaterThanOrEqual(0);
-    expect(detail.indexOf("Quantity")).toBeGreaterThan(detail.indexOf("Serving"));
-    expect(detail.indexOf("Add to")).toBeGreaterThan(detail.indexOf("Quantity"));
-    expect(detail).toContain("Diary");
-    expect(detail).toContain("Meal Plan");
-    expect(detail).toContain("Saved Meal");
-    expect(detail).toContain("Recipe");
-    expect(detail).not.toContain("Shopping List");
+    expect(detail).toContain("useNutritionV1Translation");
+    expect(detail.indexOf('nt("serving")')).toBeGreaterThanOrEqual(0);
+    expect(detail.indexOf('nt("quantity")')).toBeGreaterThan(detail.indexOf('nt("serving")'));
+    expect(detail.indexOf('nt("addTo")')).toBeGreaterThan(detail.indexOf('nt("quantity")'));
+    expectKeys(detail, ["diary", "mealPlan", "savedMeal", "recipe"]);
+    expect(detail).not.toContain("/my-meal-plan/shopping");
   });
 
   it("keeps Food Detail bounded and truthful about missing nutrition", () => {
     const detail = source(detailPath);
-    expect(detail).toContain("More Nutrition");
-    expect(detail).toContain("Not available");
-    expect(detail).toContain("Using your values");
+    expectKeys(detail, ["moreNutrition", "notAvailable", "usingYourValues"]);
     expect(detail).toMatch(/max-w-\[(420|440|460|480)px\]/);
   });
 
