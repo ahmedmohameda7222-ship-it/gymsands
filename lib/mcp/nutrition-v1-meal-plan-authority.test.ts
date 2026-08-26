@@ -134,9 +134,12 @@ function context(supabase: McpContext["supabase"]) {
 describe("Nutrition V1 MCP Meal Plan authority", () => {
   it("creates explicit MCP meal values as canonical Placeholder occurrences without inventing unknown macros", async () => {
     const fake = createCanonicalMealPlanSupabase();
-    const result = await executeMcpTool(context(fake.supabase), "create_day_meal_plan", {
-      date: "2026-08-26",
-      breakfast: [{ food_name: "Oats bowl", calories: 410, carbs: 61, fat: 11 }],
+    const result = await executeMcpTool(context(fake.supabase), "create_week_meal_plan", {
+      start_date: "2026-08-24",
+      days: [{
+        date: "2026-08-26",
+        meals: { breakfast: [{ food_name: "Oats bowl", calories: 410, carbs: 61, fat: 11 }] },
+      }],
     });
 
     expect(result.isError).not.toBe(true);
@@ -156,6 +159,19 @@ describe("Nutrition V1 MCP Meal Plan authority", () => {
     expect(mutation.upsertOccurrences[0]?.frozenSnapshot).toMatchObject({
       estimatedNutrition: { calories: 410, proteinG: null, carbsG: 61, fatG: 11 },
     });
+  });
+
+  it("does not invent a Monday week boundary for a day-only MCP write", async () => {
+    const fake = createCanonicalMealPlanSupabase();
+    const result = await executeMcpTool(context(fake.supabase), "create_day_meal_plan", {
+      date: "2026-08-26",
+      breakfast: [{ food_name: "Oats bowl", calories: 410 }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain("week");
+    expect(fake.tables.nutrition_meal_plan_weeks).toEqual([]);
+    expect(fake.rpcCalls.some((call) => call.name === "mutate_nutrition_meal_plan_week")).toBe(false);
   });
 
   it("reads intended meals only from canonical planned occurrences", async () => {
