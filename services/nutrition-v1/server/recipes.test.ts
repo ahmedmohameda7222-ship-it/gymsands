@@ -94,54 +94,59 @@ describe("Nutrition V1 Recipe server authority", () => {
     expect(db.from).not.toHaveBeenCalledWith("nutrition_recipe_versions");
   });
 
-  it("publishes v1 -> Working Draft -> v2 by inserting a new immutable version, never updating v1", async () => {
-    const root = query({ data: { id: recipeId, user_id: userId, name: "Chicken bowl", deleted_at: null }, error: null });
-    const draft = query({ data: { id: draftId, recipe_id: recipeId, user_id: userId, base_recipe_version_id: v1, name: completeDraft.name, servings: 4, total_cooked_weight_g: null, total_time_minutes: null, notes: null, draft_metadata: {} }, error: null });
-    const ingredients = query({ data: [{ id: "i1", user_id: userId, recipe_draft_id: draftId, recipe_version_id: null, position: 0, food_id: completeDraft.ingredients[0].food_id, ingredient_name: "Chicken", quantity: 500, unit: "g", frozen_nutrition: null }], error: null });
-    const actions = query({ data: [{ id: "a1", user_id: userId, recipe_draft_id: draftId, recipe_version_id: null, position: 0, instruction: completeDraft.instructions[0].instruction, ingredient_refs: [], equipment_refs: [], duration_seconds: null, heat_or_temperature: null, doneness_or_result_cue: null, prep_ahead_cue: null, track_key: null, dependency_action_ids: [], can_run_in_background: false, metadata: {} }], error: null });
-    const equipment = query({ data: [], error: null });
-    const versions = query({ data: [{ id: v1, version_number: 1, name: "Chicken bowl" }], error: null });
-    const versionInsert = query({ data: { id: v2, recipe_id: recipeId, user_id: userId, version_number: 2, name: completeDraft.name, servings: 4 }, error: null });
-    const versionIngredients = query({ data: null, error: null });
-    const versionActions = query({ data: null, error: null });
-    const draftDelete = query({ data: null, error: null });
-    const rootUpdate = query({ data: { id: recipeId, name: completeDraft.name }, error: null });
-    const db = fakeSupabase({
-      nutrition_recipes: [root, rootUpdate],
-      nutrition_recipe_drafts: [draft, draftDelete],
-      nutrition_recipe_ingredients: [ingredients, versionIngredients],
-      nutrition_recipe_actions: [actions, versionActions],
-      nutrition_recipe_equipment: [equipment],
-      nutrition_recipe_versions: [versions, versionInsert],
+  it("publishes v1 -> Working Draft -> v2 only through the owner-derived transactional RPC", async () => {
+    const db = fakeSupabase({}, {
+      data: {
+        recipeId,
+        recipeVersionId: v2,
+        versionNumber: 2,
+        version: {
+          id: v2,
+          recipe_id: recipeId,
+          user_id: userId,
+          version_number: 2,
+          name: completeDraft.name,
+          servings: 4,
+        },
+      },
+      error: null,
     });
 
     const published = await publishRecipeDraft(db.client, userId, recipeId);
 
-    expect(published.versionNumber).toBe(2);
-    expect(versionInsert.insert).toHaveBeenCalledWith(expect.objectContaining({ version_number: 2, recipe_id: recipeId, user_id: userId }));
-    expect(versionInsert.update).not.toHaveBeenCalled();
-    expect(versions.update).not.toHaveBeenCalled();
-    expect(versionIngredients.insert).toHaveBeenCalledWith([expect.objectContaining({ recipe_version_id: v2, recipe_draft_id: null })]);
-    expect(versionActions.insert).toHaveBeenCalledWith([expect.objectContaining({ recipe_version_id: v2, recipe_draft_id: null })]);
-    expect(draftDelete.delete).toHaveBeenCalled();
+    expect(published).toMatchObject({
+      recipeId,
+      recipeVersionId: v2,
+      versionNumber: 2,
+      version: { id: v2, version_number: 2 },
+    });
+    expect(db.rpc).toHaveBeenCalledWith("publish_nutrition_recipe_draft", {
+      p_recipe_id: recipeId,
+    });
+    expect(db.from).not.toHaveBeenCalled();
   });
 
-  it("rejects an incomplete Working Draft before inserting a published version", async () => {
-    const root = query({ data: { id: recipeId, user_id: userId, name: "Chicken bowl", deleted_at: null }, error: null });
-    const draft = query({ data: { id: draftId, recipe_id: recipeId, user_id: userId, base_recipe_version_id: v1, name: "Chicken bowl", servings: null, total_cooked_weight_g: null, total_time_minutes: null, notes: null, draft_metadata: {} }, error: null });
-    const ingredients = query({ data: [], error: null });
-    const actions = query({ data: [], error: null });
-    const equipment = query({ data: [], error: null });
-    const db = fakeSupabase({
-      nutrition_recipes: [root],
-      nutrition_recipe_drafts: [draft],
-      nutrition_recipe_ingredients: [ingredients],
-      nutrition_recipe_actions: [actions],
-      nutrition_recipe_equipment: [equipment],
+  it("propagates database-owned incomplete Working Draft rejection without direct published writes", async () => {
+    const db = fakeSupabase({}, {
+      data: null,
+      error: { message: "Recipe Working Draft is not ready to publish.", code: "22023" },
     });
 
-    await expect(publishRecipeDraft(db.client, userId, recipeId)).rejects.toThrow(/servings|ingredient|instruction/i);
-    expect(db.from).not.toHaveBeenCalledWith("nutrition_recipe_versions");
+    await expect(publishRecipeDraft(db.client, userId, recipeId)).rejects.toThrow(/working draft.*not ready/i);
+    expect(db.rpc).toHaveBeenCalledWith("publish_nutrition_recipe_draft", {
+      p_recipe_id: recipeId,
+    });
+    expect(db.from).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed publication RPC responses instead of accepting uncertain publication state", async () => {
+    const db = fakeSupabase({}, {
+      data: { recipeId, recipeVersionId: v1, versionNumber: 1, version: { id: "wrong-id" } },
+      error: null,
+    });
+
+    await expect(publishRecipeDraft(db.client, userId, recipeId)).rejects.toThrow(/invalid result/i);
+    expect(db.from).not.toHaveBeenCalled();
   });
 
   it("discards only the Working Draft", async () => {
