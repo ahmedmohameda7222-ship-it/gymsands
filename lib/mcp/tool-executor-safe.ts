@@ -19,6 +19,56 @@ function nonNegative(value: unknown, field: string) {
   return parsed;
 }
 
+export function normalizeRecipeMcpDraftMutation(rawInput: unknown) {
+  const input = asObject(rawInput);
+  const target = String(input.target ?? "").trim();
+  if (target !== "working_draft" && target !== "new_draft") {
+    throw new Error("Recipe MCP writes may target only a Working Draft or create a new Draft; published Recipe versions are immutable.");
+  }
+  if (input.recipe_version_id !== undefined) {
+    throw new Error("Recipe MCP writes cannot directly target a published Recipe version.");
+  }
+  const recipeId = typeof input.recipe_id === "string" && input.recipe_id.trim() ? input.recipe_id.trim() : undefined;
+  if (target === "working_draft" && !recipeId) throw new Error("recipe_id is required for a Working Draft mutation.");
+
+  const ingredients = getArray<JsonObject>(input, "ingredients").map((item) => ({
+    ...(typeof item.food_id === "string" && item.food_id.trim() ? { food_id: item.food_id.trim() } : {}),
+    ingredient_name: getString(item, "ingredient_name"),
+    ...(item.quantity === undefined ? {} : { quantity: positive(item.quantity) }),
+    ...(typeof item.unit === "string" && item.unit.trim() ? { unit: item.unit.trim() } : {}),
+  }));
+  const instructions = getArray<JsonObject>(input, "instructions").map((item) => ({
+    instruction: getString(item, "instruction"),
+    ...(Array.isArray(item.ingredient_refs) ? { ingredient_refs: item.ingredient_refs } : {}),
+    ...(Array.isArray(item.equipment_refs) ? { equipment_refs: item.equipment_refs } : {}),
+    ...(item.duration_seconds === undefined ? {} : { duration_seconds: nonNegative(item.duration_seconds, "duration_seconds") }),
+    ...(typeof item.heat_or_temperature === "string" && item.heat_or_temperature.trim() ? { heat_or_temperature: item.heat_or_temperature.trim() } : {}),
+    ...(typeof item.doneness_or_result_cue === "string" && item.doneness_or_result_cue.trim() ? { doneness_or_result_cue: item.doneness_or_result_cue.trim() } : {}),
+    ...(typeof item.prep_ahead_cue === "string" && item.prep_ahead_cue.trim() ? { prep_ahead_cue: item.prep_ahead_cue.trim() } : {}),
+    ...(typeof item.track_key === "string" && item.track_key.trim() ? { track_key: item.track_key.trim() } : {}),
+    ...(Array.isArray(item.dependency_action_ids) ? { dependency_action_ids: item.dependency_action_ids.map(String) } : {}),
+    ...(item.can_run_in_background === undefined ? {} : { can_run_in_background: Boolean(item.can_run_in_background) }),
+  }));
+  const equipment = getArray<JsonObject>(input, "equipment").map((item) => ({
+    name: getString(item, "name"),
+    ...(item.quantity === undefined ? {} : { quantity: positive(item.quantity) }),
+    ...(typeof item.note === "string" && item.note.trim() ? { note: item.note.trim() } : {}),
+  }));
+
+  return {
+    target: target as "working_draft" | "new_draft",
+    ...(recipeId ? { recipe_id: recipeId } : {}),
+    ...(typeof input.name === "string" ? { name: input.name.trim() } : {}),
+    ...(input.servings === undefined ? {} : { servings: positive(input.servings) }),
+    ...(input.total_cooked_weight_g === undefined ? {} : { total_cooked_weight_g: positive(input.total_cooked_weight_g) }),
+    ...(input.total_time_minutes === undefined ? {} : { total_time_minutes: nonNegative(input.total_time_minutes, "total_time_minutes") }),
+    ...(typeof input.notes === "string" ? { notes: input.notes.trim() } : {}),
+    ingredients,
+    instructions,
+    equipment,
+  };
+}
+
 function normalizeMealKey(value: unknown): MealKey {
   const clean = String(value ?? "").trim().toLowerCase();
   if (clean === "breakfast" || clean === "lunch" || clean === "dinner" || clean === "snack") return clean;
