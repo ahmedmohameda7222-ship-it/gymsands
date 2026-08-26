@@ -508,12 +508,27 @@ async function markMealPlanItemDone(ctx: McpContext, input: JsonObject) {
   if (occurrence.source_type === "placeholder") {
     return fail("placeholder_requires_confirmation", "Placeholder plan items require user confirmation or replacement with a canonical Food, Recipe, or Saved Meal before actual logging.");
   }
-  const result = await completeMealPlanOccurrence(ctx.supabase, {
+  const rawResult = await completeMealPlanOccurrence(ctx.supabase, {
     occurrenceId: id,
     operationId: randomUUID(),
     executionSnapshot: null,
   });
-  return ok({ ok: true, occurrence: result });
+  if (!rawResult || typeof rawResult !== "object" || Array.isArray(rawResult)) {
+    throw new Error("Meal Plan completion returned an invalid result.");
+  }
+  const completion = rawResult as JsonObject;
+  const completedOccurrence = completion.occurrence;
+  if (!completedOccurrence || typeof completedOccurrence !== "object" || Array.isArray(completedOccurrence)) {
+    throw new Error("Meal Plan completion returned no occurrence.");
+  }
+  const completedRow = completedOccurrence as DbRow;
+  const alreadyDone = completion.alreadyCompleted === true;
+  return ok({
+    ok: true,
+    item: canonicalOccurrenceAsMealItem(completedRow),
+    already_done: alreadyDone,
+    food_log_created: !alreadyDone && typeof completedRow.actual_log_group_id === "string",
+  });
 }
 
 async function addSleepRecoveryLog(ctx: McpContext, input: JsonObject) {
