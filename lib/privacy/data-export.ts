@@ -14,6 +14,52 @@ const prescriptionSetSelection = "id,snapshot_item_id,snapshot_id,workout_sessio
 const prescriptionTargetSelection = "id,prescription_set_id,snapshot_item_id,workout_session_id,user_id,metric_key,metric_version,side,target_value,minimum_value,maximum_value,target_mode,created_at";
 const setupNoteSelection = "id,user_id,exercise_identity,note_body,created_at,updated_at";
 
+const canonicalNutritionExportTables = [
+  "nutrition_recipes",
+  "nutrition_recipe_versions",
+  "nutrition_recipe_drafts",
+  "nutrition_recipe_ingredients",
+  "nutrition_recipe_actions",
+  "nutrition_recipe_equipment",
+  "nutrition_saved_meals",
+  "nutrition_saved_meal_items",
+  "nutrition_target_periods",
+  "nutrition_meal_plan_weeks",
+  "nutrition_planned_occurrences",
+  "nutrition_meal_plan_change_requests",
+  "nutrition_log_groups",
+  "nutrition_log_group_items",
+  "nutrition_cooking_sessions",
+  "nutrition_cooking_action_states",
+  "nutrition_cooking_timers",
+  "food_personal_corrections",
+  "food_favorites",
+] as const;
+
+type CanonicalNutritionExportTable = (typeof canonicalNutritionExportTables)[number];
+
+const canonicalNutritionExportKeys: Record<CanonicalNutritionExportTable, string> = {
+  nutrition_recipes: "recipes",
+  nutrition_recipe_versions: "recipe_versions",
+  nutrition_recipe_drafts: "recipe_drafts",
+  nutrition_recipe_ingredients: "recipe_ingredients",
+  nutrition_recipe_actions: "recipe_actions",
+  nutrition_recipe_equipment: "recipe_equipment",
+  nutrition_saved_meals: "saved_meals_v1",
+  nutrition_saved_meal_items: "saved_meal_items_v1",
+  nutrition_target_periods: "target_periods",
+  nutrition_meal_plan_weeks: "meal_plan_weeks",
+  nutrition_planned_occurrences: "planned_occurrences",
+  nutrition_meal_plan_change_requests: "meal_plan_change_requests",
+  nutrition_log_groups: "log_groups",
+  nutrition_log_group_items: "log_group_items",
+  nutrition_cooking_sessions: "cooking_sessions",
+  nutrition_cooking_action_states: "cooking_action_states",
+  nutrition_cooking_timers: "cooking_timers",
+  food_personal_corrections: "personal_food_corrections",
+  food_favorites: "food_favorites_v1",
+};
+
 async function loadAllTimelineRows(supabase: SupabaseClient, userId: string) {
   const rows: Record<string, unknown>[] = [];
   for (let from = 0; ; from += exportPageSize) {
@@ -69,12 +115,22 @@ async function loadAllOwnedRows(
   }
 }
 
+async function loadCanonicalNutritionExport(supabase: SupabaseClient, userId: string) {
+  const entries = await Promise.all(
+    canonicalNutritionExportTables.map(async (table) => {
+      const result = await loadAllOwnedRows(supabase, userId, table, "*", "id");
+      return [table, result] as const;
+    }),
+  );
+  return Object.fromEntries(entries) as Record<CanonicalNutritionExportTable, Awaited<ReturnType<typeof loadAllOwnedRows>>>;
+}
+
 export async function buildCurrentUserDataExport(
   supabase: SupabaseClient,
   user: Pick<User, "id" | "email" | "created_at">
 ) {
   const result = await buildLegacyCurrentUserDataExport(supabase, user);
-  const [timelineResult, performanceMetricResult, setDetailResult, setSegmentResult, setSegmentMetricResult, prescriptionSetResult, prescriptionTargetResult, setupNoteResult] = await Promise.all([
+  const [timelineResult, performanceMetricResult, setDetailResult, setSegmentResult, setSegmentMetricResult, prescriptionSetResult, prescriptionTargetResult, setupNoteResult, canonicalNutrition] = await Promise.all([
     loadAllTimelineRows(supabase, user.id),
     loadAllPerformanceMetricValues(supabase, user.id),
     loadAllOwnedRows(supabase, user.id, "exercise_log_set_details", setDetailSelection, "exercise_log_id"),
@@ -82,7 +138,8 @@ export async function buildCurrentUserDataExport(
     loadAllOwnedRows(supabase, user.id, "exercise_log_set_segment_metric_values", setSegmentMetricSelection, "id"),
     loadAllOwnedRows(supabase, user.id, "workout_session_prescription_sets", prescriptionSetSelection, ["workout_session_id", "snapshot_item_id", "set_order", "id"]),
     loadAllOwnedRows(supabase, user.id, "workout_session_prescription_metric_targets", prescriptionTargetSelection, ["workout_session_id", "snapshot_item_id", "prescription_set_id", "metric_key", "metric_version", "side", "id"]),
-    loadAllOwnedRows(supabase, user.id, "exercise_setup_notes", setupNoteSelection, ["created_at", "id"])
+    loadAllOwnedRows(supabase, user.id, "exercise_setup_notes", setupNoteSelection, ["created_at", "id"]),
+    loadCanonicalNutritionExport(supabase, user.id),
   ]);
 
   if (timelineResult.error) result.warnings.push("Workout session timeline events could not be included in this export.");
@@ -103,5 +160,16 @@ export async function buildCurrentUserDataExport(
   workouts.prescription_sets = prescriptionSetResult.data ?? [];
   workouts.prescription_metric_targets = prescriptionTargetResult.data ?? [];
   result.data.exercise_setup_notes = setupNoteResult.data ?? [];
+
+  const nutrition = result.data.nutrition as Record<string, unknown>;
+  for (const table of canonicalNutritionExportTables) {
+    const exportResult = canonicalNutrition[table];
+    if (exportResult.error) result.warnings.push(`${table} could not be included in this export.`);
+    nutrition[canonicalNutritionExportKeys[table]] = exportResult.data ?? [];
+  }
+
+  // Canonical consumer rows retain the exact frozen facts used historically.
+  // `frozen_snapshot`, `frozen_recipe_snapshot`, and `frozen_item_snapshot`
+  // are exported verbatim through the owner-scoped `*` selections above.
   return result;
 }
