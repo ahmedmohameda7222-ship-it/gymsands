@@ -138,6 +138,25 @@ begin
     raise exception 'Published Recipe immutability trigger is missing.';
   end if;
 
+  v_routine := to_regprocedure('public.publish_nutrition_recipe_draft(uuid)');
+  if v_routine is null then
+    raise exception 'Recipe publication RPC is not hardened: command missing.';
+  end if;
+
+  select prosecdef, proconfig
+    into v_is_definer, v_settings
+  from pg_proc
+  where oid = v_routine;
+
+  if not v_is_definer
+     or coalesce(array_to_string(v_settings, ','), '') not like '%search_path=pg_catalog, public%'
+     or has_function_privilege('anon', v_routine, 'execute')
+     or not has_function_privilege('authenticated', v_routine, 'execute')
+     or not has_function_privilege('service_role', v_routine, 'execute')
+  then
+    raise exception 'Recipe publication RPC is not hardened.';
+  end if;
+
   foreach v_signature in array array[
     'public.soft_delete_nutrition_recipe(uuid)',
     'public.restore_nutrition_recipe(uuid)',
@@ -199,6 +218,190 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', 'a2100000-0000-4000-8000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
+-- ---------------------------------------------------------------------------
+-- Transactional publication: v1, new Working Draft, v2. The same authenticated
+-- owner can publish, but direct published-table INSERT remains forbidden.
+-- ---------------------------------------------------------------------------
+
+insert into public.nutrition_recipes (id, user_id, name)
+values (
+  'a2100000-0000-4000-8000-000000000030',
+  'a2100000-0000-4000-8000-000000000001',
+  'Publication recipe v1'
+);
+
+insert into public.nutrition_recipe_drafts (
+  id, recipe_id, user_id, name, servings, draft_metadata
+) values (
+  'a2100000-0000-4000-8000-000000000031',
+  'a2100000-0000-4000-8000-000000000030',
+  'a2100000-0000-4000-8000-000000000001',
+  'Publication recipe v1',
+  2,
+  '{"nutritionComplete":false}'::jsonb
+);
+
+insert into public.nutrition_recipe_ingredients (
+  id, user_id, recipe_draft_id, position, ingredient_name, quantity, unit,
+  frozen_nutrition
+) values (
+  'a2100000-0000-4000-8000-000000000032',
+  'a2100000-0000-4000-8000-000000000001',
+  'a2100000-0000-4000-8000-000000000031',
+  0,
+  'Ingredient v1',
+  100,
+  'g',
+  '{"calories":null}'::jsonb
+);
+
+insert into public.nutrition_recipe_actions (
+  id, user_id, recipe_draft_id, position, instruction
+) values (
+  'a2100000-0000-4000-8000-000000000033',
+  'a2100000-0000-4000-8000-000000000001',
+  'a2100000-0000-4000-8000-000000000031',
+  0,
+  'Follow the confirmed Recipe instruction.'
+);
+
+select public.publish_nutrition_recipe_draft(
+  'a2100000-0000-4000-8000-000000000030'
+);
+
+select pg_temp.nv1_assert(
+  (
+    select count(*) = 1
+    from public.nutrition_recipe_versions
+    where recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and user_id = 'a2100000-0000-4000-8000-000000000001'
+      and version_number = 1
+      and name = 'Publication recipe v1'
+  )
+  and not exists (
+    select 1
+    from public.nutrition_recipe_drafts
+    where id = 'a2100000-0000-4000-8000-000000000031'
+  )
+  and exists (
+    select 1
+    from public.nutrition_recipe_ingredients ingredient
+    join public.nutrition_recipe_versions version
+      on version.id = ingredient.recipe_version_id
+    where version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and version.version_number = 1
+      and ingredient.recipe_draft_id is null
+      and ingredient.frozen_nutrition->>'calories' is null
+  )
+  and exists (
+    select 1
+    from public.nutrition_recipe_actions action
+    join public.nutrition_recipe_versions version
+      on version.id = action.recipe_version_id
+    where version.recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and version.version_number = 1
+      and action.recipe_draft_id is null
+  ),
+  'Recipe publication did not create version 1.'
+);
+
+insert into public.nutrition_recipe_drafts (
+  id, recipe_id, user_id, base_recipe_version_id, name, servings, draft_metadata
+) values (
+  'a2100000-0000-4000-8000-000000000034',
+  'a2100000-0000-4000-8000-000000000030',
+  'a2100000-0000-4000-8000-000000000001',
+  (
+    select id
+    from public.nutrition_recipe_versions
+    where recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and version_number = 1
+  ),
+  'Publication recipe v2',
+  3,
+  '{"nutritionComplete":false}'::jsonb
+);
+
+insert into public.nutrition_recipe_ingredients (
+  id, user_id, recipe_draft_id, position, ingredient_name, quantity, unit,
+  frozen_nutrition
+) values (
+  'a2100000-0000-4000-8000-000000000035',
+  'a2100000-0000-4000-8000-000000000001',
+  'a2100000-0000-4000-8000-000000000034',
+  0,
+  'Ingredient v2',
+  120,
+  'g',
+  '{"calories":null}'::jsonb
+);
+
+insert into public.nutrition_recipe_actions (
+  id, user_id, recipe_draft_id, position, instruction
+) values (
+  'a2100000-0000-4000-8000-000000000036',
+  'a2100000-0000-4000-8000-000000000001',
+  'a2100000-0000-4000-8000-000000000034',
+  0,
+  'Follow the confirmed updated Recipe instruction.'
+);
+
+select public.publish_nutrition_recipe_draft(
+  'a2100000-0000-4000-8000-000000000030'
+);
+
+select pg_temp.nv1_assert(
+  (
+    select count(*) = 2
+    from public.nutrition_recipe_versions
+    where recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and user_id = 'a2100000-0000-4000-8000-000000000001'
+  )
+  and exists (
+    select 1
+    from public.nutrition_recipe_versions
+    where recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and version_number = 1
+      and name = 'Publication recipe v1'
+      and servings = 2
+  )
+  and exists (
+    select 1
+    from public.nutrition_recipe_versions
+    where recipe_id = 'a2100000-0000-4000-8000-000000000030'
+      and version_number = 2
+      and name = 'Publication recipe v2'
+      and servings = 3
+  )
+  and not exists (
+    select 1
+    from public.nutrition_recipe_drafts
+    where id = 'a2100000-0000-4000-8000-000000000034'
+  )
+  and exists (
+    select 1
+    from public.nutrition_recipes
+    where id = 'a2100000-0000-4000-8000-000000000030'
+      and name = 'Publication recipe v2'
+  ),
+  'Recipe publication did not create version 2.'
+);
+
+select pg_temp.nv1_rejected(
+  $$insert into public.nutrition_recipe_versions (
+    recipe_id, user_id, version_number, name, servings
+  ) values (
+    'a2100000-0000-4000-8000-000000000030',
+    'a2100000-0000-4000-8000-000000000001',
+    3, 'Forged published version', 2
+  )$$,
+  'Authenticated client published a Recipe version directly.'
+);
+
+-- ---------------------------------------------------------------------------
+-- Frozen consumer lineage remains valid after source deletion.
+-- ---------------------------------------------------------------------------
+
 insert into public.nutrition_recipes (id, user_id, name)
 values (
   'a2100000-0000-4000-8000-000000000010',
@@ -213,17 +416,6 @@ values (
   'a2100000-0000-4000-8000-000000000001',
   'Frozen lineage recipe',
   2
-);
-
-select pg_temp.nv1_rejected(
-  $$insert into public.nutrition_recipe_versions (
-    recipe_id, user_id, version_number, name, servings
-  ) values (
-    'a2100000-0000-4000-8000-000000000010',
-    'a2100000-0000-4000-8000-000000000001',
-    1, 'Forged published version', 2
-  )$$,
-  'Authenticated client published a Recipe version directly.'
 );
 
 reset role;
@@ -358,7 +550,13 @@ select pg_temp.nv1_rejected(
   )$$,
   'Non-owner lifecycle command mutated a Saved Meal.'
 );
+select pg_temp.nv1_rejected(
+  $$select public.publish_nutrition_recipe_draft(
+    'a2100000-0000-4000-8000-000000000030'
+  )$$,
+  'Non-owner Recipe publication succeeded.'
+);
 
 rollback;
 
-\echo 'Nutrition V1 reusable-domain verification passed: additive tables, owner RLS, immutable versions, 30-day restore, frozen lineage, legacy preservation, lifecycle grants, and private Recipe covers.'
+\echo 'Nutrition V1 reusable-domain verification passed: additive tables, owner RLS, transactional Recipe publication, immutable versions, 30-day restore, frozen lineage, legacy preservation, lifecycle grants, and private Recipe covers.'
