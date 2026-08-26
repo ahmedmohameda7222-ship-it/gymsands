@@ -84,6 +84,18 @@ describe("Nutrition V1 authenticated HTTP foundation", () => {
     });
   });
 
+  it("allows bounded request failures to expose a deliberate HTTP status without leaking internals", async () => {
+    const response = nutritionErrorResponse(
+      new NutritionRequestError("Pending Meal Plan change request was not found.", 404),
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: "Pending Meal Plan change request was not found.",
+      code: "nutrition_request_invalid",
+    });
+  });
+
   it("sanitizes unexpected server failures without leaking implementation details", async () => {
     const response = nutritionErrorResponse(
       new Error("relation private_nutrition_secret token=do-not-leak"),
