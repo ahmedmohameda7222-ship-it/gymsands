@@ -28,26 +28,36 @@ describe("Nutrition V1 canonical Diary product contract", () => {
     expect(route).toContain("Suspense");
   });
 
-  it("keeps actual, target, planned context, and hydration visibly distinct", () => {
+  it("keeps localized actual, target, planned context, and hydration visibly distinct", () => {
     const page = source(diaryPage);
-    expect(page).toContain("Diary");
-    expect(page).toContain("remaining");
-    expect(page).toContain("Actual");
-    expect(page).toContain("Planned");
-    expect(page).toContain("Water");
-    expect(page).toContain("Other");
+    expect(page).toContain("useEatTranslation");
+    expect(page).toContain("useNutritionV1Translation");
+    expect(page).toContain('nt("diary")');
+    expect(page).toContain('et("remaining")');
+    expect(page).toContain('et("water")');
+    expect(page).toContain("copy.actual");
+    expect(page).toContain("copy.planned");
+    expect(page).toContain("historicalOther");
     expect(page).toContain("/api/nutrition/v1/diary");
+    expect(page).toContain("en:");
+    expect(page).toContain("de:");
+    expect(page).toContain("ar:");
     expect(page).not.toMatch(/planned[^\n]{0,100}(remaining|consumed)/i);
   });
 
-  it("uses one search-first Food Logging Session instead of a method-picker-first workflow", () => {
+  it("uses one localized search-first Food Logging Session instead of a method-picker-first workflow", () => {
     const logger = source(loggingSession);
-    expect(logger).toContain("Search foods");
-    expect(logger).toContain("Barcode");
-    expect(logger).toContain("Quick Add");
-    expect(logger).toContain("Saved Meals");
-    expect(logger).toContain("Recipes");
-    expect(logger).toContain("Plate");
+    expect(logger).toContain("useEatTranslation");
+    expect(logger).toContain('value: "search"');
+    expect(logger).toContain('value: "barcode"');
+    expect(logger).toContain('value: "quick-add"');
+    expect(logger).toContain('value: "saved-meals"');
+    expect(logger).toContain('value: "recipes"');
+    expect(logger).toContain('et("searchFoods")');
+    expect(logger).toContain('et("barcode")');
+    expect(logger).toContain("text.quickAdd");
+    expect(logger).toContain('et("savedMeals")');
+    expect(logger).toContain("text.recipes");
     expect(logger).not.toMatch(/Choose (a )?(logging )?method|Select method/i);
   });
 
@@ -73,9 +83,13 @@ describe("Nutrition V1 canonical Diary product contract", () => {
   it("keeps Plate items editable and submits the entire logical meal with one operation ID", () => {
     const logger = source(loggingSession);
     const dock = source(plateDock);
-    expect(dock).toContain("Plate");
-    expect(dock).toContain("Remove");
-    expect(dock).toContain("quantity");
+    expect(dock).toContain("useEatTranslation");
+    expect(dock).toContain("const copy =");
+    expect(dock).toContain("en:");
+    expect(dock).toContain("de:");
+    expect(dock).toContain("ar:");
+    expect(dock).toContain('et("quantity")');
+    expect(dock).toContain("onRemove");
     expect(logger).toContain("crypto.randomUUID");
     expect(logger).toContain("/api/nutrition/v1/log");
     expect(logger).toContain("operationId");
@@ -84,7 +98,8 @@ describe("Nutrition V1 canonical Diary product contract", () => {
 
   it("preserves compatibility Other only when actual data contains it", () => {
     const page = source(diaryPage);
-    expect(page).toMatch(/meal[^\n]{0,80}Other|Other[^\n]{0,80}meal/i);
+    expect(page).toContain('mealType.toLowerCase() === "other"');
+    expect(page).toContain("historicalOther");
     expect(page).not.toMatch(/\[\s*["']Breakfast["']\s*,\s*["']Lunch["']\s*,\s*["']Dinner["']\s*,\s*["']Snack[s]?["']\s*,\s*["']Other["']\s*\]/);
   });
 
