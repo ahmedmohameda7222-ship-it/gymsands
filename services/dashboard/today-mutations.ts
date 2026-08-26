@@ -9,13 +9,6 @@ import { isUuid } from "@/lib/utils";
 
 export type TodayMealCompletionResult = {
   item: TodayMealPlanItemProjection;
-  log: {
-    id: string;
-    calories: number;
-    proteinG: number;
-    carbsG: number;
-    fatG: number;
-  };
   alreadyDone: boolean;
 };
 
@@ -33,26 +26,54 @@ function nonNegative(value: unknown) {
   return parsed;
 }
 
+function nullableNonNegative(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  return nonNegative(value);
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function snapshotMetric(
+  snapshot: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+): number | null {
+  const frozen = record(snapshot.frozen_nutrition);
+  const nutrition = Object.keys(frozen).length ? frozen : record(snapshot.nutrition);
+  const source = Object.keys(nutrition).length ? nutrition : snapshot;
+  if (Object.prototype.hasOwnProperty.call(source, camelKey)) {
+    return nullableNonNegative(source[camelKey]);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, snakeKey)) {
+    return nullableNonNegative(source[snakeKey]);
+  }
+  return null;
+}
+
 function meal(row: Record<string, unknown>): TodayMealPlanItemProjection {
-  const mealType = row.meal_type;
   const status = row.status;
   if (
-    mealType !== "Breakfast" &&
-    mealType !== "Lunch" &&
-    mealType !== "Dinner" &&
-    mealType !== "Snack"
+    status !== "planned" &&
+    status !== "completed" &&
+    status !== "completed_changed" &&
+    status !== "skipped"
   ) {
-    throw new Error("The saved meal type is invalid.");
-  }
-  if (status !== "planned" && status !== "done" && status !== "skipped") {
     throw new Error("The saved meal status is invalid.");
   }
+  const mealSlotKey = typeof row.meal_slot_key === "string" ? row.meal_slot_key.trim() : "";
+  const name = typeof row.frozen_name === "string" ? row.frozen_name.trim() : "";
+  if (!mealSlotKey || !name) throw new Error("The saved meal is invalid.");
+  const snapshot = record(row.frozen_snapshot);
   return {
     id: String(row.id),
-    mealType,
-    name: String(row.food_name ?? ""),
-    calories: nonNegative(row.calories),
-    proteinG: nonNegative(row.protein_g),
+    mealSlotKey,
+    name,
+    calories: snapshotMetric(snapshot, "caloriesKcal", "calories"),
+    proteinG: snapshotMetric(snapshot, "proteinG", "protein_g"),
     status,
   };
 }
@@ -79,31 +100,26 @@ export async function markTodayMealDone(
   itemId: string,
 ): Promise<TodayMealCompletionResult> {
   requireIdentity(userId, itemId);
-  const { data, error } = await supabase!.rpc("complete_meal_plan_item", {
-    p_item_id: itemId,
+  const operationId = crypto.randomUUID();
+  const { data, error } = await supabase!.rpc("complete_nutrition_planned_occurrence", {
+    p_occurrence_id: itemId,
+    p_operation_id: operationId,
+    p_execution_snapshot: null,
   });
   if (error) throw error;
   const result = data as {
-    item?: Record<string, unknown>;
-    log?: Record<string, unknown>;
-    already_done?: boolean;
+    occurrence?: Record<string, unknown>;
+    alreadyCompleted?: boolean;
   } | null;
-  if (!result?.item || !result.log) {
+  if (!result?.occurrence) {
     throw new Error("Meal completion returned an invalid result.");
   }
-  if (String(result.item.user_id) !== userId || String(result.log.user_id) !== userId) {
+  if (String(result.occurrence.user_id) !== userId) {
     throw new Error("Meal completion ownership could not be verified.");
   }
   return {
-    item: meal(result.item),
-    log: {
-      id: String(result.log.id),
-      calories: nonNegative(result.log.calories),
-      proteinG: nonNegative(result.log.protein_g),
-      carbsG: nonNegative(result.log.carbs_g),
-      fatG: nonNegative(result.log.fat_g),
-    },
-    alreadyDone: Boolean(result.already_done),
+    item: meal(result.occurrence),
+    alreadyDone: Boolean(result.alreadyCompleted),
   };
 }
 
@@ -113,12 +129,12 @@ export async function markTodayMealSkipped(
 ): Promise<TodayMealPlanItemProjection> {
   requireIdentity(userId, itemId);
   const { data, error } = await supabase!
-    .from("user_meal_plan_items")
-    .update({ status: "skipped", completed_at: null, food_log_id: null })
+    .from("nutrition_planned_occurrences")
+    .update({ status: "skipped", completed_at: null, actual_log_group_id: null })
     .eq("id", itemId)
     .eq("user_id", userId)
     .eq("status", "planned")
-    .select("id,user_id,meal_type,food_name,calories,protein_g,status")
+    .select("id,user_id,meal_slot_key,frozen_name,frozen_snapshot,status")
     .single();
   if (error) throw error;
   return meal(data as Record<string, unknown>);
@@ -132,12 +148,12 @@ export async function markTodayMealsSkipped(
   if (!ids.length) return [];
   requireIdentity(userId);
   const { data, error } = await supabase!
-    .from("user_meal_plan_items")
-    .update({ status: "skipped", completed_at: null, food_log_id: null })
+    .from("nutrition_planned_occurrences")
+    .update({ status: "skipped", completed_at: null, actual_log_group_id: null })
     .eq("user_id", userId)
     .in("id", ids)
     .eq("status", "planned")
-    .select("id,user_id,meal_type,food_name,calories,protein_g,status");
+    .select("id,user_id,meal_slot_key,frozen_name,frozen_snapshot,status");
   if (error) throw error;
   return ((data ?? []) as Record<string, unknown>[]).map(meal);
 }
