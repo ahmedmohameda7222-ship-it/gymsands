@@ -10,6 +10,13 @@ const REQUIRED_SCENARIOS = [
   "recipes-mobile-home-populated","recipes-mobile-home-empty","recipes-mobile-all-search","recipes-mobile-active-filters","recipes-mobile-no-results","recipes-mobile-editor","recipes-mobile-add-ingredient-search","recipes-mobile-detail","recipes-mobile-before-you-start","recipes-mobile-cooking-normal","recipes-mobile-cooking-attention","recipes-mobile-cooking-parallel-timers","recipes-mobile-cooking-resume-start-over","recipes-mobile-cooking-complete","recipes-mobile-offline-partial-failure","recipes-mobile-autosave-failure","recipes-desktop-home","recipes-desktop-detail","recipes-desktop-cooking","recipes-rtl-home-mobile","recipes-rtl-cooking-mobile","recipes-large-text-cooking","recipes-long-name-action","recipes-recently-deleted",
 ];
 
+const REQUIRED_ARABIC_SCENARIOS = [
+  "meal-plan-rtl-large-text",
+  "food-library-rtl-mixed-brand",
+  "recipes-rtl-home-mobile",
+  "recipes-rtl-cooking-mobile",
+];
+
 test("Nutrition V1 rendered QA exports the complete approved scenario and viewport matrix", async () => {
   const qa = await import("./run-nutrition-v1-qa.mjs");
   assert.equal(Array.isArray(qa.NUTRITION_V1_QA_VIEWPORTS), true);
@@ -25,18 +32,28 @@ test("Nutrition V1 rendered QA exports the complete approved scenario and viewpo
   assert.equal(qa.NUTRITION_V1_QA_SCENARIOS.some((scenario) => scenario.offline === true), true);
 });
 
+test("approved RTL screenshot scenarios exercise the real Arabic product locale", async () => {
+  const qa = await import("./run-nutrition-v1-qa.mjs");
+  for (const name of REQUIRED_ARABIC_SCENARIOS) {
+    const scenario = qa.NUTRITION_V1_QA_SCENARIOS.find((item) => item.name === name);
+    assert.ok(scenario, name);
+    assert.equal(scenario.direction, "rtl", `${name} direction`);
+    assert.equal(scenario.language, "ar", `${name} language`);
+  }
+});
+
 test("Nutrition V1 screenshot names are deterministic, portable, and collision resistant", async () => {
   const qa = await import("./run-nutrition-v1-qa.mjs");
   const scenario = qa.NUTRITION_V1_QA_SCENARIOS.find((item) => item.name === "recipes-rtl-cooking-mobile");
   assert.ok(scenario);
   const first = qa.nutritionV1ScreenshotName(scenario);
   assert.equal(first, qa.nutritionV1ScreenshotName({ ...scenario }));
-  assert.match(first, /^[a-z0-9-]+__[0-9]+x[0-9]+__(?:ltr|rtl)__(?:normal|large)\.png$/);
+  assert.match(first, /^[a-z0-9-]+__[0-9]+x[0-9]+__(?:ltr|rtl)__(?:en|de|ar)__(?:normal|large)\.png$/);
 });
 
-test("Nutrition V1 rendered QA captures runtime, layout, target, focus, and evidence failures", async () => {
+test("Nutrition V1 rendered QA captures runtime, layout, target, locale, focus, and evidence failures", async () => {
   const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
-  for (const required of ["page.screenshot","horizontalOverflowPx","compactInteractiveTargets","unnamedInteractiveElements","pageErrors","consoleErrors","focusVisible","QA_HEAD_SHA","QA_SERVER_MODE","nutrition-v1-qa-results.json"]) assert.equal(source.includes(required), true, required);
+  for (const required of ["page.screenshot","horizontalOverflowPx","compactInteractiveTargets","unnamedInteractiveElements","pageErrors","consoleErrors","focusVisible","QA_HEAD_SHA","QA_SERVER_MODE","nutrition-v1-qa-results.json","plaivra.language.v1","document.documentElement.lang","localizedAssertions"]) assert.equal(source.includes(required), true, required);
 });
 
 test("Nutrition V1 QA applies locale preferences only after the document root exists", async () => {
