@@ -67,4 +67,36 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(route).toContain("applyMealPlanChangeRequest");
     expect(route).not.toMatch(/body\.userId|body\.user_id/);
   });
+
+  it("provides explicit non-drag planning and execution actions for each planned occurrence", () => {
+    const slot = source("components/nutrition/meal-plan/meal-slot-section.tsx");
+    expect(slot).toContain("Skip");
+    expect(slot).toContain("Edit");
+    expect(slot).toContain("Move");
+    expect(slot).toContain("Copy");
+    expect(slot).toContain("Log with changes");
+  });
+
+  it("persists empty custom slots independently of whether they already contain an item", () => {
+    const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
+    expect(page).toContain("customSlots");
+    expect(page).toContain("Add meal slot");
+    expect(page).toContain("weekOverride");
+  });
+
+  it("wires the platform-neutral offline queue into durable web cache and visible sync states", () => {
+    const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
+    expect(page).toContain("deserializeMealPlanQueue");
+    expect(page).toContain("serializeMealPlanQueue");
+    expect(page).toContain("localStorage");
+    expect(page).toContain("Waiting to sync");
+    expect(page).toContain("Needs attention");
+  });
+
+  it("protects Shopping manual quantity notes state and offers explicit carry-forward", () => {
+    const shopping = source("components/nutrition/meal-plan/shopping-list.tsx");
+    expect(shopping).toContain("manual quantity");
+    expect(shopping).toContain("notes");
+    expect(shopping).toContain("Carry unchecked items to next week");
+  });
 });
