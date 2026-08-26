@@ -1,6 +1,7 @@
 import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { runNutritionV1Qa } from "./run-nutrition-v1-qa.mjs";
 
 const baseUrl = process.env.QA_BASE_URL || "http://localhost:3000";
 const evidenceDir = path.resolve(
@@ -524,6 +525,15 @@ await zoomPage.screenshot({
 await zoomContext.close();
 await browser.close();
 
+const nutritionReport = await runNutritionV1Qa({
+  baseUrl,
+  evidenceDir: path.join(evidenceDir, "nutrition-v1"),
+  headSha,
+  serverMode,
+  workflowRunId,
+  throwOnFailure: false,
+});
+
 const failures = results.filter(
   (item) =>
     item.status !== 200 ||
@@ -555,19 +565,25 @@ const report = {
     zoomOverflowPx: zoomOverflow,
     longLocalizedTextLanguage: "ar",
     localizedOverflowPx: localizedOverflow,
+    nutritionV1: true,
   },
   summary: {
-    observations: results.length,
+    observations: results.length + nutritionReport.summary.observations,
     navigationRegressions: 1,
-    failures: failures.length + (navigationEvidence.passed ? 0 : 1),
+    failures:
+      failures.length +
+      (navigationEvidence.passed ? 0 : 1) +
+      nutritionReport.summary.failures,
     passed:
       failures.length === 0 &&
       navigationEvidence.passed &&
       zoomOverflow <= 1 &&
-      localizedOverflow <= 1,
+      localizedOverflow <= 1 &&
+      nutritionReport.summary.passed,
   },
   failures,
   navigationEvidence,
+  nutritionV1: nutritionReport.summary,
   observations: results,
 };
 await writeFile(
@@ -576,6 +592,6 @@ await writeFile(
   "utf8",
 );
 console.log(
-  `Rendered QA: ${report.summary.observations} observations, ${report.summary.failures} failures, zoom overflow ${zoomOverflow}px.`,
+  `Rendered QA: ${report.summary.observations} observations, ${report.summary.failures} failures, zoom overflow ${zoomOverflow}px; Nutrition V1 ${nutritionReport.summary.failures} failures.`,
 );
 if (!report.summary.passed) process.exitCode = 1;
