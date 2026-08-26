@@ -30,7 +30,7 @@ describe("focused Today dashboard", () => {
   it("preserves correct workout and meal-plan routes", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     expect(dashboard).toContain('href="/my-workout/plans"');
-    expect(dashboard).toContain("`/my-meal-plan?tab=day&date=${today}`");
+    expect(dashboard).toContain("`/my-meal-plan?date=${today}`");
     expect(dashboard).toContain("markTodayMealDone");
     expect(dashboard).toContain("markTodayMealSkipped");
   });
