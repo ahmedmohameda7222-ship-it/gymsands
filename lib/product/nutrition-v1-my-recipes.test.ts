@@ -73,6 +73,7 @@ describe("Nutrition V1 My Recipes product surface", () => {
     "components/nutrition/recipes/recipe-editor.tsx",
     "components/nutrition/recipes/recipe-detail.tsx",
     "components/nutrition/recipes/recently-deleted-recipes.tsx",
+    "lib/i18n/nutrition-v1.ts",
     "lib/nutrition-v1/recipe-cache.ts",
   ];
 
@@ -80,34 +81,54 @@ describe("Nutrition V1 My Recipes product surface", () => {
     for (const path of requiredFiles) expect(existsSync(join(root, path)), path).toBe(true);
   });
 
-  it("keeps Home bounded, search-first, flat, and free of organizational/ecommerce UI", () => {
+  it("keeps Home bounded, search-first, flat, localized, and free of organizational/ecommerce UI", () => {
     const home = source("components/nutrition/recipes/recipe-home.tsx");
-    expect(home).toContain("My Recipes");
-    expect(home).toContain("Search recipes");
-    expect(home).toContain("Continue");
-    expect(home).toContain("Recently Used");
-    expect(home).toContain("Favorites");
-    expect(home).toContain("All Recipes");
-    expect(home).toContain("Create manually");
-    expect(home).toContain("Create with ChatGPT");
-    expect(home).toContain("Import with ChatGPT");
-    expect(home).toContain("Favorites");
-    expect(home).toContain("Drafts");
-    expect(home).toContain("Filters");
-    expect(home).toContain("Ingredients");
-    expect(home).toContain("Total time");
-    expect(home).toContain("Cuisine");
-    expect(home).toContain("High Protein");
-    expect(home).toContain("Low Carb");
+    const dictionaries = source("lib/i18n/nutrition-v1.ts");
+
+    expect(home).toContain("useNutritionV1Translation");
+    for (const key of [
+      "myRecipes",
+      "searchRecipes",
+      "continue",
+      "recentlyUsed",
+      "favorites",
+      "allRecipes",
+      "createManually",
+      "createWithChatGpt",
+      "importWithChatGpt",
+      "drafts",
+      "filters",
+      "ingredients",
+      "totalTime",
+      "cuisine",
+      "highProtein",
+      "lowCarb",
+    ]) {
+      expect(home).toContain(`nt("${key}")`);
+    }
+    expect(dictionaries).toContain('myRecipes: "My Recipes"');
+    expect(dictionaries).toContain('searchRecipes: "Search recipes"');
+    expect(dictionaries).toContain('createWithChatGpt: "Create with ChatGPT"');
+    expect(dictionaries).toContain('myRecipes: "Meine Rezepte"');
+    expect(dictionaries).toContain('myRecipes: "وصفاتي"');
+    expect(dictionaries).not.toMatch(/Collections|Folders|ratings|marketplace/i);
     expect(home).not.toMatch(/Collections|Folders|grid-cols-3|grid-cols-4|ratings|marketplace/i);
   });
 
-  it("keeps Recipe rows decision-focused and uses positive-only shield-check verification", () => {
+  it("keeps Recipe rows decision-focused and uses localized positive-only shield-check verification", () => {
     const row = source("components/nutrition/recipes/recipe-row.tsx");
+    const dictionaries = source("lib/i18n/nutrition-v1.ts");
+
+    expect(row).toContain("useNutritionV1Translation");
     expect(row).toContain("ShieldCheck");
-    expect(row).toContain('aria-label="Plaivra Verified"');
-    expect(row).toContain("Draft");
-    expect(row).toContain("Continue");
+    expect(row).toContain('"Plaivra Verified"');
+    expect(row).toContain('"Von Plaivra verifiziert"');
+    expect(row).toContain('"موثّق من Plaivra"');
+    expect(row).toContain('"Draft"');
+    expect(row).toContain('"Continue"');
+    expect(dictionaries).toContain('plaivraVerified: "Plaivra Verified"');
+    expect(dictionaries).toContain('plaivraVerified: "Von Plaivra verifiziert"');
+    expect(dictionaries).toContain('plaivraVerified: "موثّق من Plaivra"');
     expect(row).not.toMatch(/ingredient count|track count|equipment count/i);
   });
 
