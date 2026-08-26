@@ -48,7 +48,7 @@ type NavItem = {
 const primaryNavItems: NavItem[] = [
   { href: "/dashboard", labelKey: "nav.today", icon: Home, activePaths: ["/dashboard"] },
   { href: "/my-workout/plans", labelKey: "nav.train", icon: Dumbbell },
-  { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories"] },
+  { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan", "/my-recipes"] },
   { href: "/progress", labelKey: "nav.progress", icon: BarChart3, activePaths: ["/progress", "/personal-records"] },
   { href: "/settings", labelKey: "nav.settings", icon: Settings, activePaths: ["/settings", "/profile"] }
 ];
@@ -64,9 +64,10 @@ const secondaryNavGroups: { labelKey: TranslationKey; items: NavItem[] }[] = [
   {
     labelKey: "nav.eat",
     items: [
-      { href: "/calories/food-hub", labelKey: "nav.foodHub", icon: ChefHat },
+      { href: "/calories", labelKey: "nav.diary", icon: Utensils, exact: true },
       { href: "/my-meal-plan", labelKey: "nav.mealPlan", icon: ClipboardList },
-      { href: "/calories/weekly-overview", labelKey: "nav.nutritionSummary", icon: Soup }
+      { href: "/calories/food-hub", labelKey: "nav.foodLibrary", icon: ChefHat },
+      { href: "/my-recipes", labelKey: "nav.myRecipes", icon: Soup }
     ]
   },
   {
