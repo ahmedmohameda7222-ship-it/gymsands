@@ -9,6 +9,8 @@ const CONNECTION_ID = "22222222-2222-4222-8222-222222222222";
 const FOOD_ID = "33333333-3333-4333-8333-333333333333";
 const LOG_ID = "44444444-4444-4444-8444-444444444444";
 const MEAL_ID = "55555555-5555-4555-8555-555555555555";
+const VERIFIED_MEAL_ID = "55555555-5555-4555-8555-555555555556";
+const WEEK_ID = "55555555-5555-4555-8555-555555555557";
 const PLAN_ID = "66666666-6666-4666-8666-666666666666";
 const DAY_ID = "77777777-7777-4777-8777-777777777777";
 const EXERCISE_ID = "88888888-8888-4888-8888-888888888888";
@@ -26,12 +28,59 @@ function initialTables(): Record<string, Row[]> {
     user_fitness_constraints: [],
     user_ai_permission_settings: [{ user_id: USER_ID, access_mode: "full", scopes: ["plaivra.full_access"] }],
     calorie_targets: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", user_id: USER_ID, daily_calories: 2000, protein_g: 160, carbs_g: 190, fat_g: 65, water_ml: 3000 }],
+    nutrition_target_periods: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc", user_id: USER_ID, effective_from: "2026-07-01", effective_to: null, calories: 2000, protein_g: 160, carbs_g: 190, fat_g: 65, water_ml: 3000, source: "runtime_fixture" }],
     food_items: [{ id: FOOD_ID, is_global: true, food_name: "sample", serving_size: "100 g", calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2 }],
     user_food_items: [],
     food_logs: [{ id: LOG_ID, user_id: USER_ID, food_name: "sample", serving_size: "100 g", quantity: 1, calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2, meal_type: "Breakfast", log_date: "2026-07-11", updated_at: UPDATED_AT }],
+    nutrition_log_groups: [],
+    nutrition_log_group_items: [],
     saved_recipes: [],
     saved_recipe_ingredients: [],
-    user_meal_plan_items: [{ id: MEAL_ID, user_id: USER_ID, plan_date: "2026-07-11", meal_type: "Breakfast", food_name: "sample", serving_size: "100 g", quantity: 1, calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2, status: "planned", food_log_id: null, completed_at: null, updated_at: UPDATED_AT }],
+    user_meal_plan_items: [{ id: MEAL_ID, user_id: USER_ID, plan_date: "2026-07-11", meal_type: "Breakfast", food_name: "legacy sample", serving_size: "100 g", quantity: 1, calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2, status: "planned", food_log_id: null, completed_at: null, updated_at: UPDATED_AT }],
+    nutrition_meal_plan_weeks: [{ id: WEEK_ID, user_id: USER_ID, week_start_date: "2026-07-11", revision: 0, week_override_json: {}, updated_at: UPDATED_AT }],
+    nutrition_planned_occurrences: [
+      {
+        id: MEAL_ID,
+        week_id: WEEK_ID,
+        user_id: USER_ID,
+        plan_date: "2026-07-11",
+        meal_slot_key: "Breakfast",
+        position: 0,
+        source_type: "placeholder",
+        source_id: null,
+        source_version_id: null,
+        resolved_quantity: 1,
+        resolved_serving_label: "100 g",
+        frozen_name: "sample placeholder",
+        frozen_snapshot: { placeholder: true, estimatedNutrition: { calories: 100, proteinG: 10, carbsG: 12, fatG: 2 } },
+        status: "planned",
+        completed_at: null,
+        actual_log_group_id: null,
+        updated_at: UPDATED_AT,
+      },
+      {
+        id: VERIFIED_MEAL_ID,
+        week_id: WEEK_ID,
+        user_id: USER_ID,
+        plan_date: "2026-07-11",
+        meal_slot_key: "Lunch",
+        position: 0,
+        source_type: "food",
+        source_id: FOOD_ID,
+        source_version_id: null,
+        resolved_quantity: 1,
+        resolved_serving_label: "100 g",
+        frozen_name: "sample",
+        frozen_snapshot: {
+          nutrition: { calories: 100, proteinG: 10, carbsG: 12, fatG: 2 },
+          shoppingIngredients: [{ foodId: FOOD_ID, name: "sample", quantity: 1, unit: "100 g" }],
+        },
+        status: "planned",
+        completed_at: null,
+        actual_log_group_id: null,
+        updated_at: UPDATED_AT,
+      },
+    ],
     water_logs: [{ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", user_id: USER_ID, amount_ml: 250, log_date: "2026-07-11", updated_at: UPDATED_AT }],
     user_workout_plans: [{ id: PLAN_ID, user_id: USER_ID, name: "Plan", goal: "Strength", is_active: true, is_default: true, updated_at: UPDATED_AT }],
     user_workout_plan_days: [{ id: DAY_ID, plan_id: PLAN_ID, day_number: 1, day_name: "Day 1", focus: "Full body" }],
@@ -132,6 +181,53 @@ function createInMemorySupabase() {
   }
 
   async function rpc(name: string, args: Record<string, unknown>) {
+    if (name === "mutate_nutrition_meal_plan_week") {
+      const weekId = String(args.p_week_id ?? "");
+      const week = tables.nutrition_meal_plan_weeks.find((row) => row.id === weekId && row.user_id === USER_ID) ?? null;
+      if (!week) return { data: null, error: { message: "week not found" } };
+      const mutation = (args.p_mutation ?? {}) as { upsertOccurrences?: Row[]; deleteOccurrenceIds?: string[] };
+      for (const id of mutation.deleteOccurrenceIds ?? []) {
+        tables.nutrition_planned_occurrences = tables.nutrition_planned_occurrences.filter((row) => row.id !== id || row.user_id !== USER_ID);
+      }
+      for (const occurrence of mutation.upsertOccurrences ?? []) {
+        const mapped: Row = {
+          id: typeof occurrence.id === "string" ? occurrence.id : nextId(),
+          week_id: weekId,
+          user_id: USER_ID,
+          plan_date: occurrence.planDate,
+          meal_slot_key: occurrence.mealSlotKey,
+          position: occurrence.position ?? 0,
+          source_type: occurrence.sourceType,
+          source_id: occurrence.sourceId ?? null,
+          source_version_id: occurrence.sourceVersionId ?? null,
+          resolved_quantity: occurrence.resolvedQuantity ?? null,
+          resolved_serving_label: occurrence.resolvedServingLabel ?? null,
+          frozen_name: occurrence.frozenName,
+          frozen_snapshot: occurrence.frozenSnapshot ?? {},
+          status: occurrence.status ?? "planned",
+          completed_at: null,
+          actual_log_group_id: null,
+          updated_at: UPDATED_AT,
+        };
+        const existingIndex = tables.nutrition_planned_occurrences.findIndex((row) => row.id === mapped.id && row.user_id === USER_ID);
+        if (existingIndex >= 0) tables.nutrition_planned_occurrences[existingIndex] = { ...tables.nutrition_planned_occurrences[existingIndex], ...mapped };
+        else tables.nutrition_planned_occurrences.push(mapped);
+      }
+      week.revision = Number(week.revision ?? 0) + 1;
+      week.updated_at = UPDATED_AT;
+      return { data: { weekId, revision: week.revision }, error: null };
+    }
+    if (name === "complete_nutrition_planned_occurrence") {
+      const occurrenceId = String(args.p_occurrence_id ?? "");
+      const occurrence = tables.nutrition_planned_occurrences.find((row) => row.id === occurrenceId && row.user_id === USER_ID) ?? null;
+      if (!occurrence) return { data: null, error: { message: "not found" } };
+      if (occurrence.status === "completed" || occurrence.status === "completed_changed") {
+        return { data: { occurrence, already_done: true }, error: null };
+      }
+      const groupId = nextId();
+      Object.assign(occurrence, { status: "completed", completed_at: UPDATED_AT, actual_log_group_id: groupId, updated_at: UPDATED_AT });
+      return { data: { occurrence, already_done: false, log_group_id: groupId }, error: null };
+    }
     if (name === "create_workout_plan_atomic") {
       const plan = { id: nextId(), user_id: USER_ID, name: String((args.p_plan as Row)?.name ?? "Plan"), is_active: args.p_activate !== false, updated_at: UPDATED_AT };
       tables.user_workout_plans.push(plan);
@@ -214,7 +310,7 @@ function inputFor(name: string): Record<string, unknown> {
     get_meal_plan_for_week: { start_date: "2026-07-11" },
     update_meal_plan_item: { meal_plan_item_id: MEAL_ID, expected_updated_at: UPDATED_AT, food_name: "sample updated" },
     delete_meal_plan_item: { meal_plan_item_id: MEAL_ID, confirm: true },
-    mark_meal_plan_item_done: { meal_plan_item_id: MEAL_ID, idempotency_key: key },
+    mark_meal_plan_item_done: { meal_plan_item_id: VERIFIED_MEAL_ID, idempotency_key: key },
     generate_shopping_list: { start_date: "2026-07-11", end_date: "2026-07-17" },
     add_water_log: { amount_ml: 250, date: "2026-07-11", idempotency_key: key },
     get_water_summary: { date: "2026-07-11" },
