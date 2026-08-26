@@ -5,7 +5,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Plus, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
+import { useAuth } from "@/components/auth/auth-provider";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
+import {
+  localeWeekStartDay,
+  parseMealPlanWeekStartOverride,
+  startOfMealPlanWeek,
+  weekStartOverrideKey,
+  type MealPlanWeekStartOverride,
+} from "@/lib/nutrition-v1/week-start";
 import type { ShoppingNeed, MealPlanWeekRow } from "@/services/nutrition-v1/server/meal-plan";
 import { mealPlanApi } from "./meal-plan-api";
 
@@ -20,12 +28,16 @@ type ShoppingOverride = {
 type ApiResponse = { week: MealPlanWeekRow | null; shoppingNeeds: ShoppingNeed[] };
 
 function shift(date: string, days: number) { const value = new Date(`${date}T12:00:00Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); }
-function monday(date: string) { const value = new Date(`${date}T12:00:00Z`); const day = value.getUTCDay(); value.setUTCDate(value.getUTCDate() - (day === 0 ? 6 : day - 1)); return value.toISOString().slice(0, 10); }
 function keyFor(need: ShoppingNeed) { return `${need.foodId}|${need.unit}|${need.qualifier ?? ""}`; }
 function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 
 function normalizeState(value: unknown): ShoppingState {
   return value === "Purchased" || value === "Don't need" ? value : "Needed";
+}
+
+function shoppingExcludedOccurrenceIds(week: MealPlanWeekRow | null) {
+  const raw = object(week?.week_override_json).shoppingExcludedOccurrenceIds;
+  return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string" && id.length > 0) : [];
 }
 
 function shoppingFromWeek(week: MealPlanWeekRow | null): ShoppingOverride {
@@ -61,8 +73,13 @@ function shoppingFromWeek(week: MealPlanWeekRow | null): ShoppingOverride {
 
 export function ShoppingList() {
   const params = useSearchParams();
+  const { user } = useAuth();
   const today = useTodayDate();
-  const weekStart = params.get("week") ?? monday(today);
+  const [locale, setLocale] = useState("en-GB");
+  const [weekStartOverride, setWeekStartOverride] = useState<MealPlanWeekStartOverride>("locale");
+  const localeFirstDay = localeWeekStartDay(locale);
+  const effectiveFirstDay = weekStartOverride === "locale" ? localeFirstDay : weekStartOverride;
+  const weekStart = params.get("week") ?? startOfMealPlanWeek(today, effectiveFirstDay);
   const selectedDate = params.get("date") ?? weekStart;
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState("");
@@ -70,6 +87,12 @@ export function ShoppingList() {
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState({ name: "", quantity: "1", unit: "item", notes: "" });
   const [editingDerived, setEditingDerived] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    setLocale(navigator.language || "en-GB");
+    setWeekStartOverride(parseMealPlanWeekStartOverride(window.localStorage.getItem(weekStartOverrideKey(user.id))));
+  }, [user?.id]);
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +103,7 @@ export function ShoppingList() {
   useEffect(() => { void load(); }, [load]);
 
   const shoppingOverride = useMemo(() => shoppingFromWeek(data?.week ?? null), [data]);
+  const excludedOccurrenceIds = useMemo(() => shoppingExcludedOccurrenceIds(data?.week ?? null), [data]);
 
   async function saveShopping(next: ShoppingOverride) {
     if (busy) return;
@@ -178,9 +202,10 @@ export function ShoppingList() {
 
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-5 sm:px-6">
-      <header className="border-b border-border pb-5"><Link href={`/my-meal-plan?date=${encodeURIComponent(selectedDate)}`} className="inline-flex min-h-11 items-center gap-1 rounded-xl text-sm font-medium"><ChevronLeft className="h-4 w-4" />Meal Plan</Link><h1 className="mt-2 text-2xl font-semibold tracking-tight">Shopping List</h1><p className="mt-1 text-sm text-muted-foreground">Derived from the frozen plan for {weekStart}–{shift(weekStart, 6)}. Manual items stay independent.</p></header>
+      <header className="border-b border-border pb-5"><Link href={`/my-meal-plan?date=${encodeURIComponent(selectedDate)}&week=${encodeURIComponent(weekStart)}`} className="inline-flex min-h-11 items-center gap-1 rounded-xl text-sm font-medium"><ChevronLeft className="h-4 w-4" />Meal Plan</Link><h1 className="mt-2 text-2xl font-semibold tracking-tight">Shopping List</h1><p className="mt-1 text-sm text-muted-foreground">Derived from the frozen plan for {weekStart}–{shift(weekStart, 6)}. Manual items stay independent.</p></header>
       {notice ? <p role="status" className="mt-4 rounded-xl bg-muted p-3 text-sm">{notice}</p> : null}
       {error ? <p role="alert" className="mt-4 text-sm text-destructive">{error}</p> : null}
+      {excludedOccurrenceIds.length ? <p role="status" className="mt-4 rounded-xl border border-border p-3 text-sm text-muted-foreground">{excludedOccurrenceIds.length} reviewed skipped source{excludedOccurrenceIds.length === 1 ? " is" : "s are"} excluded from derived Shopping. Remaining rows still show their active sourceOccurrenceIds contribution count.</p> : null}
 
       <section className="py-5" aria-labelledby="derived-shopping">
         <h2 id="derived-shopping" className="font-semibold">From this week</h2>
