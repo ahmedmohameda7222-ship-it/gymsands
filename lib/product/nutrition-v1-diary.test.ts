@@ -95,4 +95,31 @@ describe("Nutrition V1 canonical Diary product contract", () => {
     expect(logger).toContain("saved_meal");
     expect(logger).not.toMatch(/recipeVersionId\s*:\s*null/);
   });
+
+  it("opens Log with changes from the plannedOccurrence query and keeps the selected plan in the logging session", () => {
+    const page = source(diaryPage);
+    expect(page).toContain('searchParams.get("plannedOccurrence")');
+    expect(page).toContain("plannedOccurrenceId");
+    expect(page).toContain("plannedOccurrence={plannedOccurrence}");
+    expect(page).toContain("clearPlannedOccurrenceIntent");
+  });
+
+  it("seeds a resolvable planned occurrence into Plate while keeping Placeholder intent unverified", () => {
+    const logger = source(loggingSession);
+    const dock = source(plateDock);
+    expect(logger).toContain("plannedOccurrenceToPlate");
+    expect(logger).toContain("plannedOccurrence");
+    expect(logger).toContain("frozenSnapshot.items");
+    expect(logger).toContain('sourceType === "placeholder"');
+    expect(dock).toContain('type: "planned_occurrence"');
+  });
+
+  it("confirms Log with changes through the atomic planned completion command with an execution snapshot", () => {
+    const logger = source(loggingSession);
+    expect(logger).toContain('kind: "complete_planned"');
+    expect(logger).toContain("occurrenceId: plannedOccurrence.id");
+    expect(logger).toContain("executionSnapshot");
+    expect(logger).toContain("actualItems: plate");
+    expect(logger).toContain("actualSource: sourceForPlate(plate)");
+  });
 });
