@@ -15,6 +15,7 @@ export function MealSlotSection({
   items,
   allowExecution,
   markEatenLabel = "Mark eaten",
+  logWithChangesLabel = "Log with changes",
   onAdd,
   onMarkEaten,
   onLogWithChanges,
@@ -27,6 +28,7 @@ export function MealSlotSection({
   items: PlannedOccurrenceRow[];
   allowExecution: boolean;
   markEatenLabel?: string;
+  logWithChangesLabel?: string;
   onAdd: () => void;
   onMarkEaten: (item: PlannedOccurrenceRow) => void;
   onLogWithChanges: (item: PlannedOccurrenceRow) => void;
@@ -54,7 +56,7 @@ export function MealSlotSection({
               <div className="flex flex-wrap items-center gap-1">
                 {executable ? <button type="button" onClick={() => onMarkEaten(item)} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{markEatenLabel}</button> : null}
                 <ActionMenu label={`Actions for ${item.frozen_name}`} visibleLabel="More">
-                  {executable ? <ActionMenuItem onSelect={() => onLogWithChanges(item)}>Log with changes</ActionMenuItem> : null}
+                  {executable ? <ActionMenuItem onSelect={() => onLogWithChanges(item)}>{logWithChangesLabel}</ActionMenuItem> : null}
                   {executable ? <ActionMenuItem onSelect={() => onSkip(item)}>Skip</ActionMenuItem> : null}
                   <ActionMenuItem disabled={!mutable} onSelect={() => onEdit(item)}>Edit</ActionMenuItem>
                   <ActionMenuItem disabled={!mutable} onSelect={() => onMove(item)}>Move</ActionMenuItem>
