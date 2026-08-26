@@ -410,8 +410,21 @@ async function updateMealPlanItem(ctx: McpContext, input: JsonObject) {
   const week = weekId ? await readOwnedWeekById(ctx, weekId) : null;
   if (!week) throw new Error("Meal plan week not found.");
 
-  const frozen = occurrence.frozen_snapshot && typeof occurrence.frozen_snapshot === "object" && !Array.isArray(occurrence.frozen_snapshot)
-    ? { ...(occurrence.frozen_snapshot as JsonObject) }
+  const { data: guardedOccurrenceData, error: guardedOccurrenceError } = await ctx.supabase
+    .from("nutrition_planned_occurrences")
+    .select("id,week_id,user_id,plan_date,meal_slot_key,position,source_type,source_id,source_version_id,resolved_quantity,resolved_serving_label,frozen_name,frozen_snapshot,status,completed_at,actual_log_group_id,updated_at")
+    .eq("id", id)
+    .eq("user_id", ctx.userId)
+    .eq("updated_at", getString(input, "expected_updated_at"))
+    .maybeSingle();
+  if (guardedOccurrenceError) throw new Error(guardedOccurrenceError.message);
+  if (!guardedOccurrenceData) {
+    return fail("version_conflict", "This meal-plan item changed after it was read. Fetch it again before updating.");
+  }
+  const guardedOccurrence = guardedOccurrenceData as DbRow;
+
+  const frozen = guardedOccurrence.frozen_snapshot && typeof guardedOccurrence.frozen_snapshot === "object" && !Array.isArray(guardedOccurrence.frozen_snapshot)
+    ? { ...(guardedOccurrence.frozen_snapshot as JsonObject) }
     : {};
   const previousNutritionRaw = frozen.estimatedNutrition;
   const previousNutrition = previousNutritionRaw && typeof previousNutritionRaw === "object" && !Array.isArray(previousNutritionRaw)
@@ -424,20 +437,20 @@ async function updateMealPlanItem(ctx: McpContext, input: JsonObject) {
     fatG: input.fat === undefined && input.fat_g === undefined ? previousNutrition.fatG ?? previousNutrition.fat_g ?? null : nullableNonNegative(readNullableMacro(input, "fat"), "fat"),
   };
   const servingLabel = input.serving_info === undefined && input.serving_size === undefined
-    ? typeof occurrence.resolved_serving_label === "string" ? occurrence.resolved_serving_label : null
+    ? typeof guardedOccurrence.resolved_serving_label === "string" ? guardedOccurrence.resolved_serving_label : null
     : getOptionalString(input, "serving_info") ?? getOptionalString(input, "serving_size") ?? null;
-  const quantity = input.quantity === undefined ? Number(occurrence.resolved_quantity ?? 1) : positive(input.quantity);
+  const quantity = input.quantity === undefined ? Number(guardedOccurrence.resolved_quantity ?? 1) : positive(input.quantity);
   const mutation: MealPlanOccurrenceMutation = {
     id,
-    planDate: input.date ?? input.plan_date ?? input.planned_date ? cleanDate(input.date ?? input.plan_date ?? input.planned_date) : String(occurrence.plan_date),
-    mealSlotKey: input.meal_type === undefined ? String(occurrence.meal_slot_key) : dbMealType(input.meal_type),
-    position: Number(occurrence.position ?? 0),
+    planDate: input.date ?? input.plan_date ?? input.planned_date ? cleanDate(input.date ?? input.plan_date ?? input.planned_date) : String(guardedOccurrence.plan_date),
+    mealSlotKey: input.meal_type === undefined ? String(guardedOccurrence.meal_slot_key) : dbMealType(input.meal_type),
+    position: Number(guardedOccurrence.position ?? 0),
     sourceType: "placeholder",
     sourceId: null,
     sourceVersionId: null,
     resolvedQuantity: quantity,
     resolvedServingLabel: servingLabel,
-    frozenName: input.food_name === undefined ? String(occurrence.frozen_name) : getString(input, "food_name"),
+    frozenName: input.food_name === undefined ? String(guardedOccurrence.frozen_name) : getString(input, "food_name"),
     frozenSnapshot: {
       ...frozen,
       placeholder: true,
@@ -446,7 +459,7 @@ async function updateMealPlanItem(ctx: McpContext, input: JsonObject) {
       servingLabel,
       note: input.notes === undefined ? frozen.note ?? null : getOptionalString(input, "notes") ?? null,
     },
-    status: occurrence.status === "skipped" ? "skipped" : "planned",
+    status: guardedOccurrence.status === "skipped" ? "skipped" : "planned",
   };
   const result = await mutateMealPlanWeek(ctx.supabase, ctx.userId, {
     weekId,
@@ -455,7 +468,7 @@ async function updateMealPlanItem(ctx: McpContext, input: JsonObject) {
     operationId: randomUUID(),
     mutation: { upsertOccurrences: [mutation] },
   });
-  return ok({ ok: true, item: canonicalOccurrenceAsMealItem({ ...occurrence, ...{
+  return ok({ ok: true, item: canonicalOccurrenceAsMealItem({ ...guardedOccurrence, ...{
     plan_date: mutation.planDate,
     meal_slot_key: mutation.mealSlotKey,
     resolved_quantity: mutation.resolvedQuantity,
