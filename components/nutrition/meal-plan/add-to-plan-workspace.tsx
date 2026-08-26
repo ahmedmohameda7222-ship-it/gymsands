@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, ScanLine, X } from "lucide-react";
 
-import { mealPlanApi } from "./meal-plan-api";
-import type { MealPlanOccurrenceMutation } from "@/services/nutrition-v1/server/meal-plan";
-import type { FoodLibraryCandidate, FoodLibraryPage } from "@/services/nutrition-v1/server/food-library";
-import type { RecipeHomeRecord } from "@/services/nutrition-v1/server/recipe-workspace";
+import { normalizeProductBarcode } from "@/lib/barcodes";
 import type { DiaryProjection, DiarySavedMealChoice } from "@/services/nutrition-v1/server/diary";
+import type { FoodLibraryCandidate, FoodLibraryPage } from "@/services/nutrition-v1/server/food-library";
+import type { MealPlanOccurrenceMutation } from "@/services/nutrition-v1/server/meal-plan";
+import type { RecipeHomeRecord } from "@/services/nutrition-v1/server/recipe-workspace";
+import { mealPlanApi } from "./meal-plan-api";
 
 type SearchScope = "all" | "recent" | "favorites";
 type SearchResult =
   | { kind: "food"; id: string; name: string; detail: string; value: FoodLibraryCandidate }
   | { kind: "recipe"; id: string; name: string; detail: string; value: RecipeHomeRecord }
   | { kind: "saved_meal"; id: string; name: string; detail: string; value: DiarySavedMealChoice };
+type BarcodeFood = { name: string; brand?: string | null };
 
 function diaryNutrition(nutrition: { calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null } | null | undefined) {
   return {
@@ -87,6 +89,10 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const [barcode, setBarcode] = useState("");
+  const [barcodeBusy, setBarcodeBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -124,6 +130,27 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: {
   }, [date, query, scope]);
 
   const selectedNames = useMemo(() => selectedItems.map((item) => item.frozenName), [selectedItems]);
+
+  async function lookupBarcode() {
+    const clean = normalizeProductBarcode(barcode);
+    if (!clean) { setError("Enter a valid barcode."); return; }
+    setBarcodeBusy(true);
+    try {
+      const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}`);
+      const body = await response.json().catch(() => ({})) as { food?: BarcodeFood };
+      if (!response.ok || !body.food?.name?.trim()) throw new Error("Barcode product was not found.");
+      setQuery(body.food.name.trim());
+      setScope("all");
+      setBarcodeOpen(false);
+      setBarcode(clean);
+      setNotice(`Barcode matched ${body.food.name}${body.food.brand ? ` · ${body.food.brand}` : ""}. Review Plaivra Food results before adding.`);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Barcode lookup failed.");
+    } finally {
+      setBarcodeBusy(false);
+    }
+  }
 
   async function selectResult(result: SearchResult) {
     if (result.kind === "food") {
@@ -201,7 +228,9 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: {
   async function commit() {
     if (!selectedItems.length || saving) return;
     setSaving(true);
-    try { await onCommit(selectedItems); onClose(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Plan could not be saved."); } finally { setSaving(false); }
+    try { await onCommit(selectedItems); onClose(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Plan could not be saved."); }
+    finally { setSaving(false); }
   }
 
   return (
@@ -209,7 +238,14 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: {
       <div className="max-h-[92vh] w-full max-w-2xl overflow-auto rounded-t-3xl bg-background p-4 shadow-xl sm:rounded-3xl sm:p-6">
         <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Add to {mealSlotKey}</h2><p className="text-sm text-muted-foreground">{date} · Select multiple items, then add once.</p></div><button type="button" onClick={onClose} aria-label="Close" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl hover:bg-muted"><X className="h-5 w-5" /></button></div>
         <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search foods, recipes, meals…" className="mt-4 min-h-12 w-full rounded-xl border border-border bg-background px-4 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-        <div className="mt-2 flex gap-1" aria-label="Search scope"><button type="button" onClick={() => setScope("recent")} className={`min-h-11 rounded-xl px-3 text-sm font-medium ${scope === "recent" ? "bg-muted" : ""}`}>Recent</button><button type="button" onClick={() => setScope("favorites")} className={`min-h-11 rounded-xl px-3 text-sm font-medium ${scope === "favorites" ? "bg-muted" : ""}`}>Favorites</button><button type="button" onClick={() => setScope("all")} className={`min-h-11 rounded-xl px-3 text-sm font-medium ${scope === "all" ? "bg-muted" : ""}`}>All</button></div>
+        <div className="mt-2 flex flex-wrap gap-1" aria-label="Search scope">
+          <button type="button" onClick={() => setScope("recent")} className={`min-h-11 rounded-xl px-3 text-sm font-medium ${scope === "recent" ? "bg-muted" : ""}`}>Recent</button>
+          <button type="button" onClick={() => setScope("favorites")} className={`min-h-11 rounded-xl px-3 text-sm font-medium ${scope === "favorites" ? "bg-muted" : ""}`}>Favorites</button>
+          <button type="button" onClick={() => setScope("all")} className={`min-h-11 rounded-xl px-3 text-sm font-medium ${scope === "all" ? "bg-muted" : ""}`}>More</button>
+          <button type="button" aria-expanded={barcodeOpen} onClick={() => setBarcodeOpen((current) => !current)} className="inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-sm font-medium hover:bg-muted"><ScanLine className="h-4 w-4" />Barcode</button>
+        </div>
+        {barcodeOpen ? <div className="mt-3 rounded-xl border border-border p-3"><p className="text-sm font-medium">Barcode lookup</p><p className="mt-1 text-xs text-muted-foreground">Barcode is a secondary lookup only. A match seeds Plaivra search; you still choose the canonical Food result.</p><div className="mt-2 flex gap-2"><input inputMode="numeric" value={barcode} onChange={(event) => setBarcode(event.target.value.replace(/\D/g, ""))} placeholder="Enter barcode" className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><button type="button" disabled={barcodeBusy} onClick={() => void lookupBarcode()} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{barcodeBusy ? "Looking up…" : "Lookup"}</button></div></div> : null}
+        {notice ? <p role="status" className="mt-3 rounded-xl bg-muted p-3 text-sm">{notice}</p> : null}
         {error ? <p role="alert" className="mt-3 text-sm text-destructive">{error}</p> : null}
         <div className="mt-3 divide-y divide-border" aria-live="polite">{loading ? <p className="py-4 text-sm text-muted-foreground">Searching…</p> : results.map((result) => <button key={`${result.kind}:${result.id}`} type="button" onClick={() => void selectResult(result)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-left"><span className="min-w-0"><span className="block truncate text-sm font-medium">{result.name}</span><span className="block text-xs text-muted-foreground">{result.detail}</span></span><Plus className="h-4 w-4 shrink-0" /></button>)}</div>
         <div className="mt-4 border-t border-border pt-4"><label className="text-sm font-medium" htmlFor="meal-plan-placeholder">Plan something not resolved yet</label><div className="mt-2 flex gap-2"><input id="meal-plan-placeholder" value={placeholderName} onChange={(event) => setPlaceholderName(event.target.value)} placeholder="Restaurant meal or travel meal" className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><button type="button" onClick={addPlaceholder} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">Add Placeholder</button></div></div>
