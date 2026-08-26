@@ -463,8 +463,6 @@ function canonicalDataset(cardinality = 4): Dataset {
       { id: "progress-a-1", user_id: ownerA },
       { id: "progress-a-2", user_id: ownerA },
     ],
-    // Legacy Nutrition tables deliberately contain contradictory data. Today must
-    // not inspect them after the Nutrition V1 cutover.
     user_meal_plan_items: [
       {
         id: "legacy-meal-sentinel",
@@ -539,18 +537,21 @@ describe("Today server projection", () => {
       value: {
         itemCount: 4,
         plannedCount: 1,
-        items: [
-          {
-            id: "meal-0",
-            mealSlotKey: "Breakfast",
-            name: "Meal 0",
-            calories: 300,
-            proteinG: 25,
-            status: "planned",
-          },
-        ],
       },
     });
+    expect(result.response.meals.state).toBe("loaded");
+    if (result.response.meals.state === "loaded") {
+      expect(result.response.meals.value.items).toHaveLength(4);
+      expect(result.response.meals.value.items[0]).toEqual({
+        id: "meal-0",
+        mealSlotKey: "Breakfast",
+        name: "Meal 0",
+        calories: 300,
+        proteinG: 25,
+        status: "planned",
+      });
+      expect(result.response.meals.value.items.slice(1).every((item) => item.status === "completed")).toBe(true);
+    }
     expect(result.response.nutrition.logs).toMatchObject({
       state: "loaded",
       value: {
