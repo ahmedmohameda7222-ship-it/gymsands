@@ -1,8 +1,15 @@
+import { randomUUID } from "node:crypto";
 import type { McpContext } from "@/lib/mcp/auth";
 import { asObject, cleanDate, getArray, getOptionalNumber, getOptionalString, getString, requireConfirmation, type JsonObject } from "@/lib/mcp/schemas";
 import { executeMcpTool as executeOriginalMcpTool } from "@/lib/mcp/tool-executor";
 import { fail, num, ok, type DbRow, type McpToolResult } from "@/lib/mcp/tool-helpers";
 import { ContextProjectionError, projectTaskContext, type ContextTask } from "@/lib/mcp/context-projections";
+import {
+  completeMealPlanOccurrence,
+  deriveShoppingNeeds,
+  mutateMealPlanWeek,
+  type MealPlanOccurrenceMutation,
+} from "@/services/nutrition-v1/server/meal-plan";
 
 type MealKey = "breakfast" | "lunch" | "dinner" | "snack";
 const mealKeys: MealKey[] = ["breakfast", "lunch", "dinner", "snack"];
@@ -15,6 +22,13 @@ function positive(value: unknown, fallback = 1) {
 
 function nonNegative(value: unknown, field: string) {
   const parsed = num(value, 0);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${field} must be a number >= 0.`);
+  return parsed;
+}
+
+function nullableNonNegative(value: unknown, field: string) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${field} must be a number >= 0.`);
   return parsed;
 }
@@ -85,26 +99,48 @@ function readMacro(item: JsonObject, canonical: "protein" | "carbs" | "fat") {
   return item[canonical] ?? item[`${canonical}_g`] ?? 0;
 }
 
-function plannedMealRow(ctx: McpContext, input: JsonObject): DbRow {
+function readNullableMacro(item: JsonObject, canonical: "protein" | "carbs" | "fat") {
+  return item[canonical] ?? item[`${canonical}_g`] ?? null;
+}
+
+function isoWeekStart(dateInput: unknown) {
+  const date = cleanDate(dateInput ?? "today");
+  const value = new Date(`${date}T00:00:00.000Z`);
+  const day = value.getUTCDay();
+  const delta = day === 0 ? -6 : 1 - day;
+  value.setUTCDate(value.getUTCDate() + delta);
+  return value.toISOString().slice(0, 10);
+}
+
+function plannedPlaceholderMutation(input: JsonObject, position = 0): MealPlanOccurrenceMutation & { id: string } {
   const foodName = getString(input, "food_name");
   if (!foodName) throw new Error("food_name is required.");
+  const servingLabel = getOptionalString(input, "serving_info") ?? getOptionalString(input, "serving_size") ?? "1 serving";
+  const quantity = positive(input.quantity ?? 1);
   return {
-    user_id: ctx.userId,
-    plan_date: cleanDate(input.date ?? input.plan_date ?? input.planned_date),
-    meal_type: dbMealType(input.meal_type),
-    food_item_id: null,
-    user_food_item_id: null,
-    food_name: foodName,
-    serving_size: getOptionalString(input, "serving_info") ?? getOptionalString(input, "serving_size") ?? "1 serving",
-    quantity: positive(input.quantity ?? 1),
-    calories: nonNegative(input.calories, "calories"),
-    protein_g: nonNegative(readMacro(input, "protein"), "protein"),
-    carbs_g: nonNegative(readMacro(input, "carbs"), "carbs"),
-    fat_g: nonNegative(readMacro(input, "fat"), "fat"),
+    id: randomUUID(),
+    planDate: cleanDate(input.date ?? input.plan_date ?? input.planned_date),
+    mealSlotKey: dbMealType(input.meal_type),
+    position,
+    sourceType: "placeholder",
+    sourceId: null,
+    sourceVersionId: null,
+    resolvedQuantity: quantity,
+    resolvedServingLabel: servingLabel,
+    frozenName: foodName,
+    frozenSnapshot: {
+      placeholder: true,
+      estimatedNutrition: {
+        calories: nullableNonNegative(input.calories, "calories"),
+        proteinG: nullableNonNegative(readNullableMacro(input, "protein"), "protein"),
+        carbsG: nullableNonNegative(readNullableMacro(input, "carbs"), "carbs"),
+        fatG: nullableNonNegative(readNullableMacro(input, "fat"), "fat"),
+      },
+      quantity,
+      servingLabel,
+      note: getOptionalString(input, "notes") ?? null,
+    },
     status: "planned",
-    food_log_id: null,
-    completed_at: null,
-    notes: getOptionalString(input, "notes") ?? null
   };
 }
 
@@ -129,13 +165,87 @@ function weekMealItems(input: JsonObject): JsonObject[] {
   });
 }
 
-async function insertPlannedMeals(ctx: McpContext, items: JsonObject[], sourceTool: string): Promise<McpToolResult> {
-  if (!items.length) return fail("missing_required_input", "Provide at least one planned meal item.");
-  const { data, error } = await ctx.supabase.from("user_meal_plan_items").insert(items.map((item) => plannedMealRow(ctx, item))).select("*");
+async function readCanonicalWeek(ctx: McpContext, weekStartDate: string) {
+  const { data, error } = await ctx.supabase
+    .from("nutrition_meal_plan_weeks")
+    .select("id,user_id,week_start_date,revision,week_override_json,created_at,updated_at")
+    .eq("user_id", ctx.userId)
+    .eq("week_start_date", weekStartDate)
+    .maybeSingle();
   if (error) throw new Error(error.message);
-  const createdItems = (data ?? []) as unknown as DbRow[];
-  const createdIds = createdItems.map((item) => String(item.id));
-  return ok({ ok: true, source_tool: sourceTool, created_count: createdIds.length, created_meal_plan_item_ids: createdIds, planned_meal_ids: createdIds, items: createdItems });
+  return (data as DbRow | null) ?? null;
+}
+
+async function insertPlannedMeals(
+  ctx: McpContext,
+  items: JsonObject[],
+  sourceTool: string,
+  explicitWeekStart?: string,
+): Promise<McpToolResult> {
+  if (!items.length) return fail("missing_required_input", "Provide at least one planned meal item.");
+  const positioned = new Map<string, number>();
+  const occurrences = items.map((item) => {
+    const date = cleanDate(item.date ?? item.plan_date ?? item.planned_date);
+    const slot = dbMealType(item.meal_type);
+    const positionKey = `${date}\u0000${slot}`;
+    const position = positioned.get(positionKey) ?? 0;
+    positioned.set(positionKey, position + 1);
+    return plannedPlaceholderMutation({ ...item, date, meal_type: slot }, position);
+  });
+  const weekStartDate = explicitWeekStart ? cleanDate(explicitWeekStart) : isoWeekStart(occurrences[0]?.planDate);
+  const week = await readCanonicalWeek(ctx, weekStartDate);
+  const mutationResult = await mutateMealPlanWeek(ctx.supabase, ctx.userId, {
+    weekId: typeof week?.id === "string" ? week.id : null,
+    weekStartDate,
+    baseRevision: Number(week?.revision ?? 0),
+    operationId: randomUUID(),
+    mutation: { upsertOccurrences: occurrences },
+  });
+  const createdIds = occurrences.map((item) => item.id);
+  return ok({
+    ok: true,
+    source_tool: sourceTool,
+    week_id: mutationResult.weekId,
+    revision: mutationResult.revision,
+    created_count: createdIds.length,
+    created_meal_plan_item_ids: createdIds,
+    planned_meal_ids: createdIds,
+    items: occurrences,
+  });
+}
+
+function snapshotNutrition(row: DbRow) {
+  const frozen = row.frozen_snapshot && typeof row.frozen_snapshot === "object" && !Array.isArray(row.frozen_snapshot)
+    ? row.frozen_snapshot as JsonObject
+    : {};
+  const raw = frozen.estimatedNutrition ?? frozen.nutrition ?? frozen.nutritionSnapshot ?? {};
+  const nutrition = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as JsonObject : {};
+  return {
+    calories: nutrition.calories ?? null,
+    protein_g: nutrition.proteinG ?? nutrition.protein_g ?? null,
+    carbs_g: nutrition.carbsG ?? nutrition.carbs_g ?? null,
+    fat_g: nutrition.fatG ?? nutrition.fat_g ?? null,
+  };
+}
+
+function canonicalOccurrenceAsMealItem(row: DbRow): DbRow {
+  return {
+    id: row.id,
+    week_id: row.week_id,
+    plan_date: row.plan_date,
+    meal_type: row.meal_slot_key,
+    food_name: row.frozen_name,
+    serving_size: row.resolved_serving_label,
+    quantity: row.resolved_quantity,
+    ...snapshotNutrition(row),
+    status: row.status,
+    completed_at: row.completed_at ?? null,
+    actual_log_group_id: row.actual_log_group_id ?? null,
+    updated_at: row.updated_at ?? null,
+    source_type: row.source_type,
+    source_id: row.source_id ?? null,
+    source_version_id: row.source_version_id ?? null,
+  };
 }
 
 function groupMealPlanItems(items: DbRow[]) {
@@ -147,9 +257,16 @@ function groupMealPlanItems(items: DbRow[]) {
 
 async function getMealPlanForDate(ctx: McpContext, dateInput: unknown) {
   const date = cleanDate(dateInput ?? "today");
-  const { data, error } = await ctx.supabase.from("user_meal_plan_items").select("*").eq("user_id", ctx.userId).eq("plan_date", date).order("created_at", { ascending: true });
+  const { data, error } = await ctx.supabase
+    .from("nutrition_planned_occurrences")
+    .select("id,week_id,plan_date,meal_slot_key,position,source_type,source_id,source_version_id,resolved_quantity,resolved_serving_label,frozen_name,frozen_snapshot,status,completed_at,actual_log_group_id,updated_at")
+    .eq("user_id", ctx.userId)
+    .eq("plan_date", date)
+    .order("meal_slot_key")
+    .order("position")
+    .order("id");
   if (error) throw new Error(error.message);
-  const items = (data ?? []) as unknown as DbRow[];
+  const items = ((data ?? []) as unknown as DbRow[]).map(canonicalOccurrenceAsMealItem);
   return ok({ ok: true, date, items, meals: groupMealPlanItems(items) });
 }
 
@@ -159,9 +276,18 @@ async function getMealPlanForWeek(ctx: McpContext, input: JsonObject) {
   const end = new Date(start);
   end.setUTCDate(start.getUTCDate() + 6);
   const endDate = end.toISOString().slice(0, 10);
-  const { data, error } = await ctx.supabase.from("user_meal_plan_items").select("*").eq("user_id", ctx.userId).gte("plan_date", startDate).lte("plan_date", endDate).order("plan_date", { ascending: true }).order("created_at", { ascending: true });
+  const { data, error } = await ctx.supabase
+    .from("nutrition_planned_occurrences")
+    .select("id,week_id,plan_date,meal_slot_key,position,source_type,source_id,source_version_id,resolved_quantity,resolved_serving_label,frozen_name,frozen_snapshot,status,completed_at,actual_log_group_id,updated_at")
+    .eq("user_id", ctx.userId)
+    .gte("plan_date", startDate)
+    .lte("plan_date", endDate)
+    .order("plan_date")
+    .order("meal_slot_key")
+    .order("position")
+    .order("id");
   if (error) throw new Error(error.message);
-  const items = (data ?? []) as unknown as DbRow[];
+  const items = ((data ?? []) as unknown as DbRow[]).map(canonicalOccurrenceAsMealItem);
   const days = Array.from({ length: 7 }, (_, index) => {
     const day = new Date(start);
     day.setUTCDate(start.getUTCDate() + index);
@@ -174,25 +300,37 @@ async function getMealPlanForWeek(ctx: McpContext, input: JsonObject) {
 async function generateShoppingList(ctx: McpContext, input: JsonObject) {
   const startDate = cleanDate(input.start_date ?? "today");
   const endDate = cleanDate(input.end_date ?? startDate);
-  const { data, error } = await ctx.supabase.from("user_meal_plan_items").select("food_name,serving_size,quantity,calories,protein_g,carbs_g,fat_g,plan_date,meal_type").eq("user_id", ctx.userId).gte("plan_date", startDate).lte("plan_date", endDate).order("food_name", { ascending: true });
+  const { data, error } = await ctx.supabase
+    .from("nutrition_planned_occurrences")
+    .select("id,source_type,frozen_snapshot,plan_date,status")
+    .eq("user_id", ctx.userId)
+    .gte("plan_date", startDate)
+    .lte("plan_date", endDate)
+    .order("plan_date")
+    .order("id");
   if (error) throw new Error(error.message);
-  const grouped = new Map<string, DbRow & { dates: string[]; meals: string[] }>();
-  ((data ?? []) as DbRow[]).forEach((item) => {
-    const foodName = String(item.food_name ?? "Planned food").trim();
-    const servingSize = String(item.serving_size ?? "serving").trim();
-    const key = `${foodName.toLowerCase()}|${servingSize.toLowerCase()}`;
-    const current = grouped.get(key) ?? { food_name: foodName, serving_size: servingSize, quantity: 0, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, dates: [], meals: [] };
-    current.quantity = num(current.quantity) + num(item.quantity, 1);
-    current.calories = num(current.calories) + num(item.calories);
-    current.protein_g = num(current.protein_g) + num(item.protein_g);
-    current.carbs_g = num(current.carbs_g) + num(item.carbs_g);
-    current.fat_g = num(current.fat_g) + num(item.fat_g);
-    current.dates = Array.from(new Set([...current.dates, String(item.plan_date ?? "")].filter(Boolean)));
-    current.meals = Array.from(new Set([...current.meals, String(item.meal_type ?? "")].filter(Boolean)));
-    grouped.set(key, current);
+  const occurrences = ((data ?? []) as unknown as DbRow[]).filter((row) => row.status !== "skipped");
+  const needs = deriveShoppingNeeds(occurrences.map((row) => ({
+    id: String(row.id),
+    sourceType: String(row.source_type),
+    frozenSnapshot: row.frozen_snapshot && typeof row.frozen_snapshot === "object" && !Array.isArray(row.frozen_snapshot)
+      ? row.frozen_snapshot as JsonObject
+      : {},
+  })));
+  return ok({
+    ok: true,
+    start_date: startDate,
+    end_date: endDate,
+    item_count: needs.length,
+    shopping_list: needs.map((need) => ({
+      food_id: need.foodId,
+      food_name: need.name,
+      quantity: need.quantity,
+      unit: need.unit,
+      qualifier: need.qualifier,
+      source_occurrence_ids: need.sourceOccurrenceIds,
+    })),
   });
-  const items = Array.from(grouped.values()).map((item) => ({ ...item, quantity: Number(num(item.quantity).toFixed(2)), calories: Math.round(num(item.calories)), protein_g: Number(num(item.protein_g).toFixed(1)), carbs_g: Number(num(item.carbs_g).toFixed(1)), fat_g: Number(num(item.fat_g).toFixed(1)) }));
-  return ok({ ok: true, start_date: startDate, end_date: endDate, item_count: items.length, shopping_list: items });
 }
 
 async function createCustomMeal(ctx: McpContext, input: JsonObject) {
@@ -209,45 +347,134 @@ async function createCustomMeal(ctx: McpContext, input: JsonObject) {
   return ok({ ok: true, meal, items: mealItems ?? [] });
 }
 
+async function readOwnedOccurrence(ctx: McpContext, id: string) {
+  const { data, error } = await ctx.supabase
+    .from("nutrition_planned_occurrences")
+    .select("id,week_id,user_id,plan_date,meal_slot_key,position,source_type,source_id,source_version_id,resolved_quantity,resolved_serving_label,frozen_name,frozen_snapshot,status,completed_at,actual_log_group_id,updated_at")
+    .eq("id", id)
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as DbRow | null) ?? null;
+}
+
+async function readOwnedWeekById(ctx: McpContext, weekId: string) {
+  const { data, error } = await ctx.supabase
+    .from("nutrition_meal_plan_weeks")
+    .select("id,user_id,week_start_date,revision,week_override_json,updated_at")
+    .eq("id", weekId)
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as DbRow | null) ?? null;
+}
+
 async function updateMealPlanItem(ctx: McpContext, input: JsonObject) {
   const id = getString(input, "meal_plan_item_id");
-  const patch: DbRow = {};
-  if (input.date ?? input.plan_date ?? input.planned_date) patch.plan_date = cleanDate(input.date ?? input.plan_date ?? input.planned_date);
-  if (input.meal_type !== undefined) patch.meal_type = dbMealType(input.meal_type);
-  if (input.food_name !== undefined) patch.food_name = getString(input, "food_name");
-  if (input.quantity !== undefined) patch.quantity = positive(input.quantity);
-  if (input.serving_info !== undefined || input.serving_size !== undefined) patch.serving_size = getOptionalString(input, "serving_info") ?? getOptionalString(input, "serving_size") ?? "1 serving";
-  if (input.calories !== undefined) patch.calories = nonNegative(input.calories, "calories");
-  if (input.protein !== undefined || input.protein_g !== undefined) patch.protein_g = nonNegative(readMacro(input, "protein"), "protein");
-  if (input.carbs !== undefined || input.carbs_g !== undefined) patch.carbs_g = nonNegative(readMacro(input, "carbs"), "carbs");
-  if (input.fat !== undefined || input.fat_g !== undefined) patch.fat_g = nonNegative(readMacro(input, "fat"), "fat");
-  if (input.notes !== undefined) patch.notes = getOptionalString(input, "notes") ?? null;
-  if (!Object.keys(patch).length) throw new Error("No meal plan item changes provided.");
-  const { data, error } = await ctx.supabase.from("user_meal_plan_items").update(patch).eq("id", id).eq("user_id", ctx.userId).eq("updated_at", getString(input, "expected_updated_at")).select("*").maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) return fail("version_conflict", "This meal-plan item changed after it was read. Fetch it again before updating.");
-  return ok({ ok: true, item: data });
+  const occurrence = await readOwnedOccurrence(ctx, id);
+  if (!occurrence) throw new Error("Meal plan item not found.");
+  const expectedUpdatedAt = getString(input, "expected_updated_at");
+  if (String(occurrence.updated_at ?? "") !== expectedUpdatedAt) {
+    return fail("version_conflict", "This meal-plan item changed after it was read. Fetch it again before updating.");
+  }
+  if (occurrence.source_type !== "placeholder") {
+    return fail("canonical_source_requires_replacement", "Verified Food, Recipe, and Saved Meal occurrences must be replaced through their canonical source instead of rewriting frozen plan truth.");
+  }
+  const weekId = String(occurrence.week_id ?? "");
+  const week = weekId ? await readOwnedWeekById(ctx, weekId) : null;
+  if (!week) throw new Error("Meal plan week not found.");
+
+  const frozen = occurrence.frozen_snapshot && typeof occurrence.frozen_snapshot === "object" && !Array.isArray(occurrence.frozen_snapshot)
+    ? { ...(occurrence.frozen_snapshot as JsonObject) }
+    : {};
+  const previousNutritionRaw = frozen.estimatedNutrition;
+  const previousNutrition = previousNutritionRaw && typeof previousNutritionRaw === "object" && !Array.isArray(previousNutritionRaw)
+    ? previousNutritionRaw as JsonObject
+    : {};
+  const estimatedNutrition = {
+    calories: input.calories === undefined ? previousNutrition.calories ?? null : nullableNonNegative(input.calories, "calories"),
+    proteinG: input.protein === undefined && input.protein_g === undefined ? previousNutrition.proteinG ?? previousNutrition.protein_g ?? null : nullableNonNegative(readNullableMacro(input, "protein"), "protein"),
+    carbsG: input.carbs === undefined && input.carbs_g === undefined ? previousNutrition.carbsG ?? previousNutrition.carbs_g ?? null : nullableNonNegative(readNullableMacro(input, "carbs"), "carbs"),
+    fatG: input.fat === undefined && input.fat_g === undefined ? previousNutrition.fatG ?? previousNutrition.fat_g ?? null : nullableNonNegative(readNullableMacro(input, "fat"), "fat"),
+  };
+  const servingLabel = input.serving_info === undefined && input.serving_size === undefined
+    ? typeof occurrence.resolved_serving_label === "string" ? occurrence.resolved_serving_label : null
+    : getOptionalString(input, "serving_info") ?? getOptionalString(input, "serving_size") ?? null;
+  const quantity = input.quantity === undefined ? Number(occurrence.resolved_quantity ?? 1) : positive(input.quantity);
+  const mutation: MealPlanOccurrenceMutation = {
+    id,
+    planDate: input.date ?? input.plan_date ?? input.planned_date ? cleanDate(input.date ?? input.plan_date ?? input.planned_date) : String(occurrence.plan_date),
+    mealSlotKey: input.meal_type === undefined ? String(occurrence.meal_slot_key) : dbMealType(input.meal_type),
+    position: Number(occurrence.position ?? 0),
+    sourceType: "placeholder",
+    sourceId: null,
+    sourceVersionId: null,
+    resolvedQuantity: quantity,
+    resolvedServingLabel: servingLabel,
+    frozenName: input.food_name === undefined ? String(occurrence.frozen_name) : getString(input, "food_name"),
+    frozenSnapshot: {
+      ...frozen,
+      placeholder: true,
+      estimatedNutrition,
+      quantity,
+      servingLabel,
+      note: input.notes === undefined ? frozen.note ?? null : getOptionalString(input, "notes") ?? null,
+    },
+    status: occurrence.status === "skipped" ? "skipped" : "planned",
+  };
+  const result = await mutateMealPlanWeek(ctx.supabase, ctx.userId, {
+    weekId,
+    weekStartDate: String(week.week_start_date),
+    baseRevision: Number(week.revision ?? 0),
+    operationId: randomUUID(),
+    mutation: { upsertOccurrences: [mutation] },
+  });
+  return ok({ ok: true, item: canonicalOccurrenceAsMealItem({ ...occurrence, ...{
+    plan_date: mutation.planDate,
+    meal_slot_key: mutation.mealSlotKey,
+    resolved_quantity: mutation.resolvedQuantity,
+    resolved_serving_label: mutation.resolvedServingLabel,
+    frozen_name: mutation.frozenName,
+    frozen_snapshot: mutation.frozenSnapshot,
+    status: mutation.status,
+  } }), revision: result.revision });
 }
 
 async function deleteMealPlanItem(ctx: McpContext, input: JsonObject) {
   const confirmation = requireConfirmation(input);
   if (confirmation) return ok(confirmation);
   const id = getString(input, "meal_plan_item_id");
-  const read = await ctx.supabase.from("user_meal_plan_items").select("food_log_id").eq("id", id).eq("user_id", ctx.userId).maybeSingle();
-  if (read.error) throw new Error(read.error.message);
-  if (!read.data) throw new Error("Meal plan item not found.");
-  const deleted = await ctx.supabase.from("user_meal_plan_items").delete().eq("id", id).eq("user_id", ctx.userId);
-  if (deleted.error) throw new Error(deleted.error.message);
-  return ok({ ok: true, deleted_meal_plan_item_id: id, kept_linked_food_log: Boolean((read.data as DbRow).food_log_id) });
+  const occurrence = await readOwnedOccurrence(ctx, id);
+  if (!occurrence) throw new Error("Meal plan item not found.");
+  if (occurrence.status === "completed" || occurrence.status === "completed_changed" || occurrence.actual_log_group_id) {
+    return fail("completed_plan_history_retained", "Completed plan history cannot be destructively deleted through this tool.");
+  }
+  const weekId = String(occurrence.week_id ?? "");
+  const week = weekId ? await readOwnedWeekById(ctx, weekId) : null;
+  if (!week) throw new Error("Meal plan week not found.");
+  const result = await mutateMealPlanWeek(ctx.supabase, ctx.userId, {
+    weekId,
+    weekStartDate: String(week.week_start_date),
+    baseRevision: Number(week.revision ?? 0),
+    operationId: randomUUID(),
+    mutation: { deleteOccurrenceIds: [id] },
+  });
+  return ok({ ok: true, deleted_meal_plan_item_id: id, kept_linked_food_log: false, revision: result.revision });
 }
 
 async function markMealPlanItemDone(ctx: McpContext, input: JsonObject) {
   const id = getString(input, "meal_plan_item_id");
-  const { data, error } = await ctx.supabase.rpc("complete_meal_plan_item", { p_item_id: id });
-  if (error) throw new Error(error.message);
-  const result = data as { item?: DbRow; log?: DbRow; already_done?: boolean } | null;
-  if (!result?.item) throw new Error("Meal completion returned an invalid result.");
-  return ok({ ok: true, item: result.item, already_done: Boolean(result.already_done), food_log_created: !result.already_done && Boolean(result.log), ...(result.log ? { food_log: result.log } : {}) });
+  const occurrence = await readOwnedOccurrence(ctx, id);
+  if (!occurrence) throw new Error("Meal plan item not found.");
+  if (occurrence.source_type === "placeholder") {
+    return fail("placeholder_requires_confirmation", "Placeholder plan items require user confirmation or replacement with a canonical Food, Recipe, or Saved Meal before actual logging.");
+  }
+  const result = await completeMealPlanOccurrence(ctx.supabase, {
+    occurrenceId: id,
+    operationId: randomUUID(),
+    executionSnapshot: null,
+  });
+  return ok({ ok: true, occurrence: result });
 }
 
 async function addSleepRecoveryLog(ctx: McpContext, input: JsonObject) {
@@ -360,7 +587,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
   }
 
   if (toolName === "create_day_meal_plan") return insertPlannedMeals(ctx, dayMealItems(input), toolName);
-  if (toolName === "create_week_meal_plan") return insertPlannedMeals(ctx, weekMealItems(input), toolName);
+  if (toolName === "create_week_meal_plan") return insertPlannedMeals(ctx, weekMealItems(input), toolName, cleanDate(input.start_date ?? "today"));
   if (toolName === "get_meal_plan_for_date") return getMealPlanForDate(ctx, input.date ?? input.plan_date ?? input.planned_date ?? "today");
   if (toolName === "get_meal_plan_for_week") return getMealPlanForWeek(ctx, input);
   if (toolName === "generate_shopping_list") return generateShoppingList(ctx, input);
