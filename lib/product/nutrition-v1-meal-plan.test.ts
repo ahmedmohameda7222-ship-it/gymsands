@@ -11,7 +11,7 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(route).not.toContain("MyMealPlanBuilder");
   });
 
-  it("uses a week range and seven-day selection strip without Day Week Shopping peer tabs", () => {
+  it("uses a localized week range and seven-day selection strip without Day Week Shopping peer tabs", () => {
     const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
     const strip = source("components/nutrition/meal-plan/week-strip.tsx");
     expect(page).toContain("WeekStrip");
@@ -19,19 +19,21 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(page).toContain("MealSlotSection");
     expect(page).not.toContain("TabsTrigger");
     expect(page).not.toMatch(/Day\s*\|\s*Week\s*\|\s*Shopping/);
+    expect(strip).toContain("useNutritionV1Translation");
     expect(strip).toContain('aria-current={selected ? "date" : undefined}');
-    expect(strip).toContain("Today");
+    expect(strip).toContain('nt("today")');
   });
 
-  it("opens one search-first Add workspace with Recent Favorites More and secondary Barcode access", () => {
+  it("opens one localized search-first Add workspace with Recent Favorites More and secondary Barcode access", () => {
     const add = source("components/nutrition/meal-plan/add-to-plan-workspace.tsx");
-    expect(add).toContain('placeholder="Search foods, recipes, meals…"');
-    expect(add).toContain("Recent");
-    expect(add).toContain("Favorites");
-    expect(add).toContain("More");
-    expect(add).toContain("Barcode");
+    expect(add).toContain("useNutritionV1Translation");
+    expect(add).toContain('nt("searchFoodsRecipesMeals")');
+    expect(add).toContain('nt("recent")');
+    expect(add).toContain('nt("favorites")');
+    expect(add).toContain('nt("more")');
+    expect(add).toContain('nt("barcode")');
     expect(add).toContain("normalizeProductBarcode");
-    expect(add).toContain("Add Placeholder");
+    expect(add).toContain('nt("addPlaceholder")');
     expect(add).toContain("selectedItems");
     expect(add).not.toContain("chooseMethod");
     expect(add).not.toContain("method picker");
@@ -49,14 +51,15 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(shopping).toContain("sourceOccurrenceIds");
   });
 
-  it("keeps plan-to-actual explicit and exposes structured pending ChatGPT changes without chat UI", () => {
+  it("keeps plan-to-actual explicit and exposes localized structured pending ChatGPT changes without chat UI", () => {
     const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
     const pending = source("components/nutrition/meal-plan/pending-change-review.tsx");
-    expect(page).toContain("Mark eaten");
-    expect(page).toContain("Log with changes");
-    expect(pending).toContain("Approve all");
-    expect(pending).toContain("Cancel");
-    expect(pending).toContain("stale");
+    expect(page).toContain('const markEatenLabel = "Mark eaten"');
+    expect(page).toContain('const logWithChangesLabel = "Log with changes"');
+    expect(pending).toContain("useNutritionV1Translation");
+    expect(pending).toContain('nt("approveAll")');
+    expect(pending).toContain('nt("cancel")');
+    expect(pending).toContain('nt("staleProposal")');
     expect(pending).not.toContain("chat bubble");
     expect(pending).not.toContain("typing");
   });
@@ -100,9 +103,10 @@ describe("Nutrition V1 Meal Plan product contract", () => {
 
   it("protects Shopping manual quantity notes state and offers explicit carry-forward", () => {
     const shopping = source("components/nutrition/meal-plan/shopping-list.tsx");
+    expect(shopping).toContain("useNutritionV1Translation");
     expect(shopping).toContain("manual quantity");
     expect(shopping).toContain("notes");
-    expect(shopping).toContain("Carry unchecked items to next week");
+    expect(shopping).toContain('nt("carryUnchecked")');
   });
 
   it("derives week start from locale with an optional owner-scoped override and preserves explicit historical starts", () => {
@@ -111,7 +115,7 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     const verification = source("supabase/verification/nutrition-v1-meal-plan-week-start.sql");
     expect(page).toContain("localeWeekStartDay");
     expect(page).toContain("weekStartOverrideKey");
-    expect(page).toContain("Week starts");
+    expect(page).toContain('nt("weekStarts")');
     expect(page).not.toContain("function monday(");
     expect(correction).toContain("drop constraint");
     expect(correction).toContain("isodow");
@@ -122,7 +126,7 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
     expect(page).toContain("copyPlannedOccurrences");
     expect(page).toContain("Copy day");
-    expect(page).toContain("Copy week");
+    expect(page).toContain('nt("copyWeek")');
     expect(page).toContain("crypto.randomUUID");
     expect(page).not.toContain("recurrenceRule");
   });
