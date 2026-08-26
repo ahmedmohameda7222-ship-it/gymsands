@@ -11,7 +11,10 @@ describe("mobile navigation", () => {
   it("uses route-active state only for navigation destinations", () => {
     expect(isMobileRouteActive("/dashboard", "today")).toBe(true);
     expect(isMobileRouteActive("/workouts/session/1", "train")).toBe(true);
+    expect(isMobileRouteActive("/calories", "eat")).toBe(true);
+    expect(isMobileRouteActive("/calories/food-hub", "eat")).toBe(true);
     expect(isMobileRouteActive("/my-meal-plan", "eat")).toBe(true);
+    expect(isMobileRouteActive("/my-recipes", "eat")).toBe(true);
     expect(MOBILE_NAV_ITEMS.find((item) => item.id === "quick-log")?.kind).toBe("action");
     expect(MOBILE_NAV_ITEMS.find((item) => item.id === "chatgpt")?.kind).toBe("action");
   });
