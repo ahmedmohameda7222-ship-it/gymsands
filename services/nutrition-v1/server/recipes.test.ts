@@ -11,6 +11,9 @@ import {
   softDeleteRecipe,
 } from "@/services/nutrition-v1/server/recipes";
 import { normalizeRecipeMcpDraftMutation } from "@/lib/mcp/tool-executor-safe";
+import { MCP_RECIPE_SCOPES, MCP_SCOPES } from "@/lib/mcp/scopes";
+import { NUTRITION_RECIPE_EXTERNAL_PROMPTS } from "@/lib/ai/prompt-catalog/nutrition";
+import { NUTRITION_RECIPE_EXTERNAL_CONTRACTS } from "@/lib/ai/prompt-contracts/nutrition";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const recipeId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -187,5 +190,23 @@ describe("Nutrition V1 Recipe MCP write authority", () => {
     expect(result.target).toBe("working_draft");
     expect(result.ingredients[0]).not.toHaveProperty("calories");
     expect(result.ingredients[0]).not.toHaveProperty("protein_g");
+  });
+
+  it("reuses Nutrition permission for Draft writes and exposes no Recipe publish scope", () => {
+    expect(MCP_RECIPE_SCOPES).toEqual({ read: MCP_SCOPES.nutritionRead, writeDraft: MCP_SCOPES.nutritionWrite });
+    expect(MCP_RECIPE_SCOPES).not.toHaveProperty("publish");
+  });
+
+  it("keeps external ChatGPT Recipe flows Draft-only and Plaivra-authoritative", () => {
+    expect(NUTRITION_RECIPE_EXTERNAL_PROMPTS.create).toMatchObject({ surface: "external_chatgpt", target: "new_draft", requiresExplicitApproval: true, nutrientAuthority: "plaivra" });
+    expect(NUTRITION_RECIPE_EXTERNAL_PROMPTS.import).toMatchObject({ surface: "external_chatgpt", target: "new_draft", requiresExplicitApproval: true, nutrientAuthority: "plaivra" });
+    expect(NUTRITION_RECIPE_EXTERNAL_PROMPTS.finish).toMatchObject({ surface: "external_chatgpt", target: "working_draft", requiresExplicitApproval: true, nutrientAuthority: "plaivra" });
+    expect(Object.values(NUTRITION_RECIPE_EXTERNAL_PROMPTS).every((entry) => entry.publish === false)).toBe(true);
+
+    for (const contract of Object.values(NUTRITION_RECIPE_EXTERNAL_CONTRACTS)) {
+      expect(contract.constraints.map((item) => item.en).join(" ")).toMatch(/working draft/i);
+      expect(contract.constraints.map((item) => item.en).join(" ")).toMatch(/Plaivra/i);
+      expect(contract.output.length).toBeGreaterThanOrEqual(3);
+    }
   });
 });
