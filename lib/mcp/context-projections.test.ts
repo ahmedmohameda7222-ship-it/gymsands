@@ -80,10 +80,17 @@ describe("adaptive planning context", () => {
     expect(calls.every((call) => call.select !== "*" && call.filters.some(([field, value]) => field === "user_id" && value === userId))).toBe(true);
   });
 
-  it("projects canonical nutrition fields while keeping allergies separate from dietary restrictions", async () => {
-    const { client } = projectionClient({
+  it("projects canonical nutrition preferences and one effective-dated target without legacy target authorities", async () => {
+    const { client, calls } = projectionClient({
       onboarding_answers: { goal: "Build muscle", primary_goal: "build_muscle", nutrition_preferences: ["no_preference"], allergies_limitations: "legacy note" },
-      user_fitness_constraints: { nutrition_restrictions: "legacy planning note" }, calorie_targets: null, user_nutrition_target_profiles: [],
+      user_fitness_constraints: { nutrition_restrictions: "legacy planning note" },
+      nutrition_target_periods: [{
+        id: "target-period-1", effective_from: "2026-07-01", effective_to: null,
+        calories: 2450, protein_g: null, carbs_g: 270, fat_g: 80, water_ml: 3000,
+        source: "owner_edit", source_evidence: { authority: "canonical" }
+      }],
+      calorie_targets: { daily_calories: 9999 },
+      user_nutrition_target_profiles: [{ id: "legacy-target", calories: 9999 }],
       user_nutrition_preference_profiles: {
         nutrition_goal: "performance", meals_per_day: 4, preferred_cuisines: ["Egyptian"], liked_foods: ["rice"], disliked_foods: ["okra"],
         allergy_items: ["peanuts"], dietary_restrictions: ["vegetarian"], cooking_skill: "comfortable", max_cooking_time_minutes: 30,
@@ -91,7 +98,10 @@ describe("adaptive planning context", () => {
         supplements: ["creatine"], tracks_calories_or_macros: true, meal_prep_days: [], kitchen_equipment: []
       }
     });
-    const projection = await projectTaskContext({ supabase: client, userId, scopes: nutritionScopes, task: "nutrition_planning" });
+    const projection = await projectTaskContext({
+      supabase: client, userId, scopes: nutritionScopes, task: "nutrition_planning",
+      input: { date: "2026-07-10" }, now: new Date("2026-07-10T10:00:00.000Z")
+    });
     const restrictions = projection.sections.user_confirmed_restrictions as Record<string, unknown>;
     const preferences = projection.sections.planning_preferences as Record<string, unknown>;
     expect(JSON.stringify(projection.sections)).toContain("performance");
@@ -99,27 +109,89 @@ describe("adaptive planning context", () => {
     expect(JSON.stringify(restrictions.dietary_restrictions)).toContain("vegetarian");
     expect(JSON.stringify(restrictions.allergies)).not.toContain("vegetarian");
     expect(preferences).toMatchObject({ meals_per_day: 4, max_cooking_time_minutes: 30, weekly_food_budget: 70, tracks_calories_or_macros: true });
-    expect(JSON.stringify(preferences)).toContain("Egyptian");
-    expect(JSON.stringify(preferences)).toContain("rice");
-    expect(JSON.stringify(preferences)).toContain("okra");
-    expect(JSON.stringify(preferences)).toContain("batch_cooking");
-    expect(JSON.stringify(preferences)).toContain("three meals and a snack");
-    expect(JSON.stringify(preferences)).toContain("creatine");
+    expect(projection.sections.effective_target).toEqual({
+      date: "2026-07-10",
+      available: true,
+      effective_from: "2026-07-01",
+      effective_to: null,
+      calories: 2450,
+      protein_g: null,
+      carbs_g: 270,
+      fat_g: 80,
+      water_ml: 3000,
+      source: "owner_edit"
+    });
+    expect(calls.map((call) => call.table)).toContain("nutrition_target_periods");
+    expect(calls.map((call) => call.table)).not.toContain("calorie_targets");
+    expect(calls.map((call) => call.table)).not.toContain("user_nutrition_target_profiles");
+    expect(JSON.stringify(projection.sections)).not.toContain("9999");
   });
 
-  it("uses the legacy allergy text only as a fallback for existing rows", async () => {
+  it("uses the legacy allergy text only as a fallback for existing preference rows", async () => {
     const { client } = projectionClient({
-      onboarding_answers: { goal: "Maintain", nutrition_preferences: [], allergies_limitations: null }, user_fitness_constraints: { nutrition_restrictions: null }, calorie_targets: null, user_nutrition_target_profiles: [],
+      onboarding_answers: { goal: "Maintain", nutrition_preferences: [], allergies_limitations: null },
+      user_fitness_constraints: { nutrition_restrictions: null },
+      nutrition_target_periods: [],
       user_nutrition_preference_profiles: { allergy_items: [], allergies: "shellfish", dietary_restrictions: [] }
     });
-    const projection = await projectTaskContext({ supabase: client, userId, scopes: nutritionScopes, task: "nutrition_planning" });
+    const projection = await projectTaskContext({ supabase: client, userId, scopes: nutritionScopes, task: "nutrition_planning", input: { date: "2026-07-10" } });
     expect(JSON.stringify((projection.sections.user_confirmed_restrictions as Record<string, unknown>).allergies)).toContain("shellfish");
   });
 
-  it("preserves minimized daily execution behavior", async () => {
+  it("preserves minimized daily hydration behavior", async () => {
     const { client, calls } = projectionClient({ water_logs: [{ amount_ml: 500 }, { amount_ml: 250 }] });
     const projection = await projectTaskContext({ supabase: client, userId, scopes: [MCP_SCOPES.hydrationRead], task: "daily_execution", input: { date: "2026-07-10" } });
     expect(projection.sections).toMatchObject({ date: "2026-07-10", hydration: { total_ml: 750 } });
     expect(calls.map((call) => call.table)).toEqual(["water_logs"]);
+  });
+
+  it("projects canonical grouped actual Nutrition with per-nutrient unknown propagation", async () => {
+    const { client, calls } = projectionClient({
+      nutrition_log_groups: [
+        { id: "group-1", log_date: "2026-07-10" },
+        { id: "group-2", log_date: "2026-07-10" }
+      ],
+      nutrition_log_group_items: [
+        { group_id: "group-1", frozen_item_snapshot: { nutrition: { caloriesKcal: 500, proteinG: 40, carbsG: 50, fatG: 15 } } },
+        { group_id: "group-2", frozen_item_snapshot: { nutrition: { caloriesKcal: 200, proteinG: null, carbsG: 25, fatG: 8 } } }
+      ],
+      food_logs: [{ calories: 9999, protein_g: 9999, carbs_g: 9999, fat_g: 9999 }]
+    });
+    const projection = await projectTaskContext({
+      supabase: client, userId, scopes: [MCP_SCOPES.nutritionRead], task: "daily_execution", input: { date: "2026-07-10" }
+    });
+    expect(projection.sections.nutrition).toEqual({
+      group_count: 2,
+      item_count: 2,
+      totals: { calories: 700, protein_g: null, carbs_g: 75, fat_g: 23 }
+    });
+    expect(calls.map((call) => call.table)).toEqual(["nutrition_log_groups", "nutrition_log_group_items"]);
+    expect(JSON.stringify(projection.sections)).not.toContain("9999");
+  });
+
+  it("projects intended Meal Plan separately from actual Nutrition and never reads the flat legacy plan", async () => {
+    const { client, calls } = projectionClient({
+      nutrition_planned_occurrences: [
+        {
+          id: "occurrence-1", meal_slot_key: "Dinner", frozen_name: "Chicken bowl", status: "planned",
+          frozen_snapshot: { frozen_nutrition: { calories: 650, protein_g: null, carbs_g: 70, fat_g: 18 } }
+        }
+      ],
+      user_meal_plan_items: [{ id: "legacy-plan", food_name: "legacy 9999" }]
+    });
+    const projection = await projectTaskContext({
+      supabase: client, userId, scopes: [MCP_SCOPES.mealPlansRead], task: "daily_execution", input: { date: "2026-07-10" }
+    });
+    expect(projection.sections.meal_plan).toEqual([
+      {
+        id: "occurrence-1",
+        meal_slot_key: { value: "Dinner", provenance: "user_provided", interpretation: "data_only" },
+        name: { value: "Chicken bowl", provenance: "user_provided", interpretation: "data_only" },
+        status: "planned",
+        nutrition: { calories: 650, protein_g: null, carbs_g: 70, fat_g: 18 }
+      }
+    ]);
+    expect(calls.map((call) => call.table)).toEqual(["nutrition_planned_occurrences"]);
+    expect(JSON.stringify(projection.sections)).not.toContain("legacy 9999");
   });
 });
