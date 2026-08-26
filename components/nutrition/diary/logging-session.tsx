@@ -5,8 +5,8 @@ import { Search, X } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { normalizeProductBarcode } from "@/lib/barcodes";
-import { PlateDock, type DiaryPlateItem, type DiaryPlateNutrition, type DiaryPlateSource } from "@/components/nutrition/diary/plate-dock";
-import type { DiarySavedMealChoice } from "@/services/nutrition-v1/server/diary";
+import { PlateDock, type DiaryPlateItem, type DiaryPlateNutrition } from "@/components/nutrition/diary/plate-dock";
+import type { DiaryPlannedOccurrence, DiarySavedMealChoice } from "@/services/nutrition-v1/server/diary";
 import type { FoodLibraryCandidate, FoodLibraryPage } from "@/services/nutrition-v1/server/food-library";
 import type { RecipeHomeRecord } from "@/services/nutrition-v1/server/recipe-workspace";
 
@@ -14,9 +14,7 @@ export const DIARY_DRAFT_TTL_MS = 2 * 60 * 60 * 1000;
 
 type LoggerMode = "search" | "barcode" | "quick-add" | "saved-meals" | "recipes";
 type SubmitState = "editing" | "submitting" | "confirmed" | "failed";
-
 type DraftPayload = { savedAt: number; plate: DiaryPlateItem[] };
-
 type BarcodeFood = { name: string; brand?: string | null; servingSize?: string | null; calories?: number | null; protein?: number | null; carbs?: number | null; fat?: number | null };
 
 const nullFacts = (): DiaryPlateNutrition => ({ caloriesKcal: null, proteinG: null, carbsG: null, fatG: null });
@@ -28,14 +26,23 @@ function authHeaders(token?: string | null, json = false) {
   };
 }
 
-function draftKey(date: string, meal: string) {
-  return `plaivra:nutrition-v1:diary-draft:${date}:${meal}`;
+function draftKey(date: string, meal: string, plannedOccurrenceId?: string | null) {
+  return `plaivra:nutrition-v1:diary-draft:${date}:${meal}${plannedOccurrenceId ? `:planned:${plannedOccurrenceId}` : ""}`;
 }
 
 function known(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function positiveOr(value: unknown, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function scaleFacts(value: DiaryPlateNutrition, scale: number): DiaryPlateNutrition {
@@ -48,8 +55,41 @@ function scaleFacts(value: DiaryPlateNutrition, scale: number): DiaryPlateNutrit
 }
 
 function snakeFacts(value: unknown): DiaryPlateNutrition {
-  const row = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const row = record(value);
   return { caloriesKcal: known(row.calories), proteinG: known(row.protein_g), carbsG: known(row.carbs_g), fatG: known(row.fat_g) };
+}
+
+function plannedFacts(value: unknown): DiaryPlateNutrition {
+  const row = record(value);
+  return {
+    caloriesKcal: known(row.caloriesKcal ?? row.calories),
+    proteinG: known(row.proteinG ?? row.protein_g),
+    carbsG: known(row.carbsG ?? row.carbs_g),
+    fatG: known(row.fatG ?? row.fat_g),
+  };
+}
+
+export function plannedOccurrenceToPlate(plannedOccurrence: DiaryPlannedOccurrence): DiaryPlateItem[] {
+  if (plannedOccurrence.sourceType === "placeholder") return [];
+  const frozenSnapshot = plannedOccurrence.frozenSnapshot;
+  const rawItems = Array.isArray(frozenSnapshot.items) ? frozenSnapshot.items : [];
+  return rawItems.flatMap((raw, index) => {
+    const item = record(raw);
+    const foodName = typeof item.foodName === "string" && item.foodName.trim() ? item.foodName.trim() : plannedOccurrence.name;
+    const servingLabel = typeof item.servingLabel === "string" && item.servingLabel.trim() ? item.servingLabel.trim() : "1 serving";
+    const quantity = positiveOr(item.quantity, 1);
+    return [{
+      id: `planned:${plannedOccurrence.id}:${index}`,
+      foodName,
+      servingLabel,
+      quantity,
+      nutrition: plannedFacts(item.nutrition),
+      foodItemId: typeof item.foodItemId === "string" ? item.foodItemId : null,
+      userFoodItemId: typeof item.userFoodItemId === "string" ? item.userFoodItemId : null,
+      notes: typeof item.notes === "string" ? item.notes : null,
+      source: { type: "planned_occurrence" as const, id: plannedOccurrence.id, frozenSnapshot },
+    }];
+  });
 }
 
 function sourceForPlate(plate: DiaryPlateItem[]) {
@@ -68,16 +108,30 @@ function sourceForPlate(plate: DiaryPlateItem[]) {
   return { type: "food" as const, id: null, frozenSnapshot: { kind: "plate", items: plate.map((item) => ({ source: item.source, foodName: item.foodName, servingLabel: item.servingLabel, quantity: item.quantity, nutrition: item.nutrition })) } };
 }
 
+function executionItems(plate: DiaryPlateItem[]) {
+  return plate.map((item) => ({
+    foodName: item.foodName,
+    servingLabel: item.servingLabel,
+    quantity: item.quantity,
+    nutrition: item.nutrition,
+    foodItemId: item.foodItemId ?? null,
+    userFoodItemId: item.userFoodItemId ?? null,
+    notes: item.notes ?? null,
+  }));
+}
+
 export function LoggingSession({
   date,
   meal,
   savedMeals,
+  plannedOccurrence = null,
   onClose,
   onConfirmed,
 }: {
   date: string;
   meal: string;
   savedMeals: DiarySavedMealChoice[];
+  plannedOccurrence?: DiaryPlannedOccurrence | null;
   onClose: () => void;
   onConfirmed: () => void;
 }) {
@@ -99,7 +153,7 @@ export function LoggingSession({
   const [quickFat, setQuickFat] = useState("");
   const [quickName, setQuickName] = useState("");
 
-  const key = useMemo(() => draftKey(date, meal), [date, meal]);
+  const key = useMemo(() => draftKey(date, meal, plannedOccurrence?.id), [date, meal, plannedOccurrence?.id]);
 
   useEffect(() => {
     const stored = localStorage.getItem(key);
@@ -112,6 +166,21 @@ export function LoggingSession({
       localStorage.removeItem(key);
     }
   }, [key]);
+
+  useEffect(() => {
+    if (!plannedOccurrence) return;
+    if (plannedOccurrence.sourceType === "placeholder") {
+      setFeedback("This Placeholder is not verified food. Search, replace, or Quick Add what you actually ate before logging.");
+      return;
+    }
+    const seed = plannedOccurrenceToPlate(plannedOccurrence);
+    if (!seed.length) {
+      setFeedback("The planned item cannot be resolved automatically. Add what you actually ate before logging.");
+      return;
+    }
+    setPlate((current) => current.length ? current : seed);
+    setFeedback("Planned meal loaded into Plate. Adjust it to match what you actually ate.");
+  }, [plannedOccurrence]);
 
   useEffect(() => {
     if (!plate.length) return;
@@ -232,16 +301,25 @@ export function LoggingSession({
     setSubmitState("submitting");
     setFeedback("Logging Plate…");
     try {
+      const executionSnapshot = plannedOccurrence ? {
+        ...plannedOccurrence.frozenSnapshot,
+        items: executionItems(plate),
+        actualItems: plate,
+        actualSource: sourceForPlate(plate),
+      } : null;
+      const payload = plannedOccurrence
+        ? { kind: "complete_planned", occurrenceId: plannedOccurrence.id, operationId, executionSnapshot }
+        : { operationId, date, meal, source: sourceForPlate(plate), items: plate };
       const response = await fetch("/api/nutrition/v1/log", {
         method: "POST",
         headers: authHeaders(token, true),
-        body: JSON.stringify({ operationId, date, meal, source: sourceForPlate(plate), items: plate }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error();
       setSubmitState("confirmed");
       clearConfirmedDraft();
       setPlate([]);
-      setFeedback("Plate logged.");
+      setFeedback(plannedOccurrence ? "Planned meal logged with changes." : "Plate logged.");
       onConfirmed();
     } catch {
       setSubmitState("failed");
@@ -252,9 +330,9 @@ export function LoggingSession({
   const modes: Array<{ value: LoggerMode; label: string }> = [{ value: "search", label: "Search foods" }, { value: "barcode", label: "Barcode" }, { value: "quick-add", label: "Quick Add" }, { value: "saved-meals", label: "Saved Meals" }, { value: "recipes", label: "Recipes" }];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/45 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={`Add food to ${meal}`}>
+    <div className="fixed inset-0 z-50 bg-black/45 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={`${plannedOccurrence ? "Log changes for" : "Add food to"} ${meal}`}>
       <div className="mx-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-xl sm:max-h-[calc(100vh-3rem)]">
-        <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3"><div><h2 className="font-semibold">Add Food · {meal}</h2><p className="text-xs text-muted-foreground">Build one Plate, then log it when it matches what you ate.</p></div><button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl hover:bg-muted" aria-label="Close logger"><X className="h-5 w-5" /></button></header>
+        <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3"><div><h2 className="font-semibold">{plannedOccurrence ? "Log with changes" : "Add Food"} · {meal}</h2><p className="text-xs text-muted-foreground">{plannedOccurrence ? "Adjust this Plate to match what you actually ate, then confirm once." : "Build one Plate, then log it when it matches what you ate."}</p></div><button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl hover:bg-muted" aria-label="Close logger"><X className="h-5 w-5" /></button></header>
         <nav className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2" aria-label="Food logging tools">{modes.map((item) => <button key={item.value} type="button" aria-pressed={mode === item.value} onClick={() => setMode(item.value)} className="min-h-11 shrink-0 rounded-xl px-3 text-sm font-medium aria-pressed:bg-foreground aria-pressed:text-background">{item.label}</button>)}</nav>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {mode === "search" ? <section className="space-y-3"><label className="flex min-h-12 items-center gap-2 rounded-xl border border-border px-3"><Search className="h-4 w-4 text-muted-foreground" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search foods" className="w-full bg-transparent text-sm outline-none" /></label>{searching && !foods.length ? <p className="text-sm text-muted-foreground">Searching…</p> : <div className="divide-y divide-border">{foods.map((food) => <div key={`${food.source}:${food.id}`} className="flex min-h-[72px] items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{food.name}</p><p className="text-xs text-muted-foreground">{food.servingLabel} · {food.nutrition.calories ?? "—"} kcal · P {food.nutrition.protein_g ?? "—"} g</p></div><button type="button" onClick={() => addFood(food)} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">Add</button></div>)}</div>}</section> : null}
