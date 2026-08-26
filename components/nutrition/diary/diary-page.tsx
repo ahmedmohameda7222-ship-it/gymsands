@@ -37,6 +37,7 @@ export function DiaryPage() {
   const searchParams = useSearchParams();
   const today = useTodayDate();
   const rawDate = searchParams.get("date");
+  const plannedOccurrenceId = searchParams.get("plannedOccurrence");
   const date = rawDate && isIsoDate(rawDate) ? rawDate : today;
   const [projection, setProjection] = useState<DiaryProjection | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,11 +68,34 @@ export function DiaryPage() {
   const remaining = projection?.position.remaining ?? { caloriesKcal: null, proteinG: null, carbsG: null, fatG: null };
   const actual = projection?.position.actual ?? { caloriesKcal: null, proteinG: null, carbsG: null, fatG: null };
   const target = projection?.position.target ?? { caloriesKcal: null, proteinG: null, carbsG: null, fatG: null };
-  const planned = projection?.domains.planned.status === "ready" ? projection.domains.planned.data : [];
+  const planned = useMemo(() => projection?.domains.planned.status === "ready" ? projection.domains.planned.data : [], [projection]);
+  const plannedOccurrence = useMemo(() => plannedOccurrenceId ? planned.find((item) => item.id === plannedOccurrenceId && item.status === "planned") ?? null : null, [planned, plannedOccurrenceId]);
   const hydration = projection?.domains.hydration.status === "ready" ? projection.domains.hydration.data : null;
   const savedMeals = projection?.domains.savedMeals.status === "ready" ? projection.domains.savedMeals.data : [];
   const targetWater = projection?.domains.target.status === "ready" && projection.domains.target.data.available ? projection.domains.target.data.values?.water_ml ?? null : null;
   const otherMealLogs = logs.filter((log) => log.mealType.toLowerCase() === "other");
+
+  useEffect(() => {
+    if (!plannedOccurrenceId || !projection || loading) return;
+    if (!plannedOccurrence) {
+      setError("The planned item is no longer available for Log with changes.");
+      return;
+    }
+    setLoggingMeal(plannedOccurrence.mealType);
+  }, [loading, plannedOccurrence, plannedOccurrenceId, projection]);
+
+  function clearPlannedOccurrenceIntent() {
+    if (!plannedOccurrenceId) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("plannedOccurrence");
+    if (!next.get("date")) next.set("date", date);
+    router.replace(`/calories?${next.toString()}`, { scroll: false });
+  }
+
+  function closeLoggingSession() {
+    setLoggingMeal(null);
+    clearPlannedOccurrenceIntent();
+  }
 
   function selectDate(next: string) {
     router.push(`/calories?date=${encodeURIComponent(next)}`, { scroll: false });
@@ -131,7 +155,7 @@ export function DiaryPage() {
         </section>
       </> : null}
 
-      {loggingMeal ? <LoggingSession date={date} meal={loggingMeal} savedMeals={savedMeals} onClose={() => setLoggingMeal(null)} onConfirmed={() => { setLoggingMeal(null); void load(); }} /> : null}
+      {loggingMeal ? <LoggingSession date={date} meal={loggingMeal} savedMeals={savedMeals} plannedOccurrence={plannedOccurrence} onClose={closeLoggingSession} onConfirmed={() => { setLoggingMeal(null); clearPlannedOccurrenceIntent(); void load(); }} /> : null}
     </main>
   );
 }
