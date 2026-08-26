@@ -213,7 +213,7 @@ export async function normalizeFood(
   }
   if (input.serving_size !== undefined) update.serving_size = cleanOptionalText(input.serving_size) ?? "Serving";
   if (input.category !== undefined) update.category = cleanOptionalText(input.category) ?? "Other";
-  if (input.cuisine !== undefined) update.cuisine = cleanOptionalText(input.cuisine);
+  if (input.cuisine !== undefined) update.cuisine = cleanOptionalText(input.cuisine) ?? null;
   if (input.calories !== undefined) update.calories = cleanNutritionValue(input.calories, "Calories") ?? null;
   if (input.protein_g !== undefined) update.protein_g = cleanNutritionValue(input.protein_g, "Protein") ?? null;
   if (input.carbs_g !== undefined) update.carbs_g = cleanNutritionValue(input.carbs_g, "Carbs") ?? null;
