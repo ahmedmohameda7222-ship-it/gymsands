@@ -1,5 +1,5 @@
-import { MyMealPlanBuilder } from "@/components/meals/my-meal-plan-builder";
+import { MealPlanPage } from "@/components/nutrition/meal-plan/meal-plan-page";
 
 export default function MyMealPlanPage() {
-  return <MyMealPlanBuilder />;
+  return <MealPlanPage />;
 }
