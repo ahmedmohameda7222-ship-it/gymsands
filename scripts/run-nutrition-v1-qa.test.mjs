@@ -1,0 +1,151 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const REQUIRED_VIEWPORTS = [
+  "390x844",
+  "430x932",
+  "768x1024",
+  "1024x768",
+  "1280x800",
+  "1440x900",
+];
+
+const REQUIRED_SCENARIOS = [
+  // Diary + Food Logging Session / Plate.
+  "diary-empty",
+  "diary-logs-only",
+  "diary-plan-only",
+  "diary-plan-actual-matching",
+  "diary-plan-actual-different",
+  "diary-over-target",
+  "diary-missing-target",
+  "diary-incomplete-nutrition",
+  "diary-offline-pending-sync",
+  "diary-failed-sync",
+  "diary-loading",
+  "diary-partial-service-failure",
+  "diary-future-date",
+  "diary-historical-date",
+  "diary-many-foods",
+  "diary-other-logs",
+  "diary-plan-deviation-chatgpt",
+  "diary-logging-session-plate",
+
+  // Meal Plan + Shopping List.
+  "meal-plan-populated-week",
+  "meal-plan-add-workspace-keyboard",
+  "meal-plan-tablet",
+  "meal-plan-rtl-large-text",
+  "shopping-list-three-states",
+  "meal-plan-skip-review-remove",
+  "meal-plan-chatgpt-review-stale",
+  "meal-plan-offline-conflict-partial-estimated",
+
+  // Food Library exact approved minimum matrix.
+  "food-library-mobile-default-recent",
+  "food-library-mobile-new-user",
+  "food-library-mobile-search-verified-unverified",
+  "food-library-mobile-search-high-protein-low-carb",
+  "food-library-mobile-no-results-removable-filters",
+  "food-library-mobile-filter-sheet-live",
+  "food-library-mobile-nutrition-info",
+  "food-library-mobile-detail-serving-recalculation",
+  "food-library-mobile-detail-personal-correction",
+  "food-library-mobile-add-to-serving-quantity-destinations",
+  "food-library-mobile-create-custom-food-fast-core",
+  "food-library-mobile-duplicate-suggestion",
+  "food-library-mobile-custom-food-edit-delete",
+  "food-library-mobile-offline-cached",
+  "food-library-mobile-barcode-fallback",
+  "food-library-tablet-adaptive-density",
+  "food-library-desktop-bounded-layout",
+  "food-library-desktop-detail-panel-route",
+  "food-library-desktop-nutrition-info-hover-pinned",
+  "food-library-rtl-mixed-brand",
+  "food-library-long-branded-name",
+  "food-library-large-text",
+
+  // My Recipes + Cooking Mode exact approved minimum matrix, plus reconciled deletion lifecycle.
+  "recipes-mobile-home-populated",
+  "recipes-mobile-home-empty",
+  "recipes-mobile-all-search",
+  "recipes-mobile-active-filters",
+  "recipes-mobile-no-results",
+  "recipes-mobile-editor",
+  "recipes-mobile-add-ingredient-search",
+  "recipes-mobile-detail",
+  "recipes-mobile-before-you-start",
+  "recipes-mobile-cooking-normal",
+  "recipes-mobile-cooking-attention",
+  "recipes-mobile-cooking-parallel-timers",
+  "recipes-mobile-cooking-resume-start-over",
+  "recipes-mobile-cooking-complete",
+  "recipes-mobile-offline-partial-failure",
+  "recipes-mobile-autosave-failure",
+  "recipes-desktop-home",
+  "recipes-desktop-detail",
+  "recipes-desktop-cooking",
+  "recipes-rtl-home-mobile",
+  "recipes-rtl-cooking-mobile",
+  "recipes-large-text-cooking",
+  "recipes-long-name-action",
+  "recipes-recently-deleted",
+];
+
+test("Nutrition V1 rendered QA exports the complete approved scenario and viewport matrix", async () => {
+  const qa = await import("./run-nutrition-v1-qa.mjs");
+  assert.equal(Array.isArray(qa.NUTRITION_V1_QA_VIEWPORTS), true);
+  assert.equal(Array.isArray(qa.NUTRITION_V1_QA_SCENARIOS), true);
+
+  const viewportNames = new Set(qa.NUTRITION_V1_QA_VIEWPORTS.map((viewport) => viewport.name));
+  for (const viewport of REQUIRED_VIEWPORTS) assert.equal(viewportNames.has(viewport), true, viewport);
+
+  const scenarioNames = new Set(qa.NUTRITION_V1_QA_SCENARIOS.map((scenario) => scenario.name));
+  for (const scenario of REQUIRED_SCENARIOS) assert.equal(scenarioNames.has(scenario), true, scenario);
+
+  const routes = new Set(qa.NUTRITION_V1_QA_SCENARIOS.map((scenario) => scenario.route));
+  for (const route of [
+    "/calories",
+    "/my-meal-plan",
+    "/my-meal-plan/shopping",
+    "/calories/food-hub",
+    "/my-recipes",
+  ]) assert.equal(routes.has(route), true, route);
+
+  assert.equal(qa.NUTRITION_V1_QA_SCENARIOS.some((scenario) => scenario.direction === "rtl"), true);
+  assert.equal(qa.NUTRITION_V1_QA_SCENARIOS.some((scenario) => scenario.largeText === true), true);
+  assert.equal(qa.NUTRITION_V1_QA_SCENARIOS.some((scenario) => scenario.offline === true), true);
+});
+
+test("Nutrition V1 screenshot names are deterministic, portable, and collision resistant", async () => {
+  const qa = await import("./run-nutrition-v1-qa.mjs");
+  const scenario = qa.NUTRITION_V1_QA_SCENARIOS.find((item) => item.name === "recipes-rtl-cooking-mobile");
+  assert.ok(scenario);
+  const first = qa.nutritionV1ScreenshotName(scenario);
+  const second = qa.nutritionV1ScreenshotName({ ...scenario });
+  assert.equal(first, second);
+  assert.match(first, /^[a-z0-9-]+__[0-9]+x[0-9]+__(?:ltr|rtl)__(?:normal|large)\.png$/);
+});
+
+test("Nutrition V1 rendered QA captures runtime, layout, target, focus, and evidence failures", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  for (const required of [
+    "page.screenshot",
+    "horizontalOverflowPx",
+    "compactInteractiveTargets",
+    "unnamedInteractiveElements",
+    "pageErrors",
+    "consoleErrors",
+    "focusVisible",
+    "QA_HEAD_SHA",
+    "QA_SERVER_MODE",
+    "nutrition-v1-qa-results.json",
+  ]) assert.equal(source.includes(required), true, required);
+});
+
+test("canonical rendered QA invokes the bounded Nutrition V1 suite", async () => {
+  const source = await readFile(new URL("./run-rendered-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /run-nutrition-v1-qa\.mjs/);
+  assert.match(source, /nutrition-v1/);
+});
