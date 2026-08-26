@@ -5,6 +5,13 @@ export type RecipeNutritionPerServing = {
   fat_g: number | null;
 };
 
+type CompleteRecipeNutrition = {
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+};
+
 export type PublishedRecipeCacheIngredient = {
   ingredientName: string;
   quantity: number | null;
@@ -70,9 +77,16 @@ export function parsePublishedRecipeCache(value: string | null | undefined): Pub
   }
 }
 
-function completeNutrition(value: RecipeNutritionPerServing | null): value is Required<RecipeNutritionPerServing> {
+function completeNutrition(value: RecipeNutritionPerServing | null): value is CompleteRecipeNutrition {
   if (!value) return false;
-  return [value.calories, value.protein_g, value.carbs_g, value.fat_g].every(finiteNonNegative);
+  return value.calories !== null
+    && value.protein_g !== null
+    && value.carbs_g !== null
+    && value.fat_g !== null
+    && finiteNonNegative(value.calories)
+    && finiteNonNegative(value.protein_g)
+    && finiteNonNegative(value.carbs_g)
+    && finiteNonNegative(value.fat_g);
 }
 
 export function qualifiesForObjectiveRecipeFilter(filter: ObjectiveRecipeFilter, nutrition: RecipeNutritionPerServing | null) {
