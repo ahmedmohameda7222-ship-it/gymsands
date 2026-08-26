@@ -174,6 +174,28 @@ describe("Nutrition V1 MCP Meal Plan authority", () => {
     expect(fake.rpcCalls.some((call) => call.name === "mutate_nutrition_meal_plan_week")).toBe(false);
   });
 
+  it("reuses the existing authoritative week for a day-only MCP write", async () => {
+    const fake = createCanonicalMealPlanSupabase({
+      weeks: [{
+        id: WEEK_ID,
+        user_id: USER_ID,
+        week_start_date: "2026-08-22",
+        revision: 4,
+        week_override_json: {},
+      }],
+    });
+    const result = await executeMcpTool(context(fake.supabase), "create_day_meal_plan", {
+      date: "2026-08-26",
+      dinner: [{ food_name: "Rice bowl", calories: 520 }],
+    });
+
+    expect(result.isError).not.toBe(true);
+    const mutationCall = fake.rpcCalls.find((call) => call.name === "mutate_nutrition_meal_plan_week");
+    expect(mutationCall?.args).toMatchObject({ p_week_id: WEEK_ID, p_base_revision: 4 });
+    expect(fake.tables.nutrition_meal_plan_weeks).toHaveLength(1);
+    expect(fake.tables.nutrition_meal_plan_weeks[0]?.week_start_date).toBe("2026-08-22");
+  });
+
   it("reads intended meals only from canonical planned occurrences", async () => {
     const fake = createCanonicalMealPlanSupabase({
       occurrences: [{
