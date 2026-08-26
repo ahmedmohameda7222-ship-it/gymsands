@@ -1,7 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { assertRecipeDraftReady, nextRecipeVersionNumber } from "@/lib/nutrition-v1/recipe-versioning";
-
 type RecipeIngredientInput = {
   food_id?: string | null;
   ingredient_name: string;
@@ -43,7 +41,9 @@ export type RecipeDraftInput = {
 };
 
 function message(error: unknown) {
-  return error && typeof error === "object" && "message" in error ? String((error as { message?: unknown }).message) : "Nutrition Recipe operation failed.";
+  return error && typeof error === "object" && "message" in error
+    ? String((error as { message?: unknown }).message)
+    : "Nutrition Recipe operation failed.";
 }
 
 function throwDb(error: unknown) {
@@ -65,7 +65,11 @@ function draftPatch(input: RecipeDraftInput) {
   };
 }
 
-export async function createRecipeDraft(supabase: SupabaseClient, userId: string, input: RecipeDraftInput = {}) {
+export async function createRecipeDraft(
+  supabase: SupabaseClient,
+  userId: string,
+  input: RecipeDraftInput = {},
+) {
   const root = await supabase
     .from("nutrition_recipes")
     .insert({ user_id: userId, name: rootName(input.name) })
@@ -76,22 +80,57 @@ export async function createRecipeDraft(supabase: SupabaseClient, userId: string
 
   const draft = await supabase
     .from("nutrition_recipe_drafts")
-    .insert({ recipe_id: root.data.id, user_id: userId, base_recipe_version_id: null, ...draftPatch(input) })
+    .insert({
+      recipe_id: root.data.id,
+      user_id: userId,
+      base_recipe_version_id: null,
+      ...draftPatch(input),
+    })
     .select("*")
     .single();
   if (draft.error || !draft.data?.id) {
-    await supabase.from("nutrition_recipes").delete().eq("id", root.data.id).eq("user_id", userId);
-    throw new Error(draft.error ? message(draft.error) : "Recipe Working Draft was not created.");
+    await supabase
+      .from("nutrition_recipes")
+      .delete()
+      .eq("id", root.data.id)
+      .eq("user_id", userId);
+    throw new Error(
+      draft.error
+        ? message(draft.error)
+        : "Recipe Working Draft was not created.",
+    );
   }
-  return { recipeId: String(root.data.id), draftId: String(draft.data.id), recipe: root.data, draft: draft.data };
+  return {
+    recipeId: String(root.data.id),
+    draftId: String(draft.data.id),
+    recipe: root.data,
+    draft: draft.data,
+  };
 }
 
-async function replaceDraftChildren(supabase: SupabaseClient, userId: string, draftId: string, input: RecipeDraftInput) {
-  const ingredientDelete = await supabase.from("nutrition_recipe_ingredients").delete().eq("recipe_draft_id", draftId).eq("user_id", userId);
+async function replaceDraftChildren(
+  supabase: SupabaseClient,
+  userId: string,
+  draftId: string,
+  input: RecipeDraftInput,
+) {
+  const ingredientDelete = await supabase
+    .from("nutrition_recipe_ingredients")
+    .delete()
+    .eq("recipe_draft_id", draftId)
+    .eq("user_id", userId);
   throwDb(ingredientDelete.error);
-  const actionDelete = await supabase.from("nutrition_recipe_actions").delete().eq("recipe_draft_id", draftId).eq("user_id", userId);
+  const actionDelete = await supabase
+    .from("nutrition_recipe_actions")
+    .delete()
+    .eq("recipe_draft_id", draftId)
+    .eq("user_id", userId);
   throwDb(actionDelete.error);
-  const equipmentDelete = await supabase.from("nutrition_recipe_equipment").delete().eq("recipe_draft_id", draftId).eq("user_id", userId);
+  const equipmentDelete = await supabase
+    .from("nutrition_recipe_equipment")
+    .delete()
+    .eq("recipe_draft_id", draftId)
+    .eq("user_id", userId);
   throwDb(equipmentDelete.error);
 
   if (input.ingredients?.length) {
@@ -150,7 +189,12 @@ async function replaceDraftChildren(supabase: SupabaseClient, userId: string, dr
   }
 }
 
-export async function autosaveRecipeDraft(supabase: SupabaseClient, userId: string, recipeId: string, input: RecipeDraftInput) {
+export async function autosaveRecipeDraft(
+  supabase: SupabaseClient,
+  userId: string,
+  recipeId: string,
+  input: RecipeDraftInput,
+) {
   const draft = await supabase
     .from("nutrition_recipe_drafts")
     .update(draftPatch(input))
@@ -164,88 +208,64 @@ export async function autosaveRecipeDraft(supabase: SupabaseClient, userId: stri
   return draft.data;
 }
 
-export async function publishRecipeDraft(supabase: SupabaseClient, userId: string, recipeId: string) {
-  const root = await supabase.from("nutrition_recipes").select("*").eq("id", recipeId).eq("user_id", userId).maybeSingle();
-  throwDb(root.error);
-  if (!root.data || root.data.deleted_at) throw new Error("Active Recipe not found.");
+export async function publishRecipeDraft(
+  supabase: SupabaseClient,
+  _userId: string,
+  recipeId: string,
+) {
+  const result = await supabase.rpc("publish_nutrition_recipe_draft", {
+    p_recipe_id: recipeId,
+  });
+  throwDb(result.error);
 
-  const draft = await supabase.from("nutrition_recipe_drafts").select("*").eq("recipe_id", recipeId).eq("user_id", userId).single();
-  throwDb(draft.error);
-  if (!draft.data?.id) throw new Error("Recipe Working Draft not found.");
-  const draftId = String(draft.data.id);
+  const data = result.data as Record<string, unknown> | null;
+  const returnedRecipeId =
+    typeof data?.recipeId === "string" ? data.recipeId : null;
+  const recipeVersionId =
+    typeof data?.recipeVersionId === "string" ? data.recipeVersionId : null;
+  const versionNumber =
+    typeof data?.versionNumber === "number" ? data.versionNumber : null;
+  const version =
+    data?.version && typeof data.version === "object"
+      ? (data.version as Record<string, unknown>)
+      : null;
 
-  const ingredientResult = await supabase.from("nutrition_recipe_ingredients").select("*").eq("recipe_draft_id", draftId).eq("user_id", userId).order("position", { ascending: true });
-  const actionResult = await supabase.from("nutrition_recipe_actions").select("*").eq("recipe_draft_id", draftId).eq("user_id", userId).order("position", { ascending: true });
-  const equipmentResult = await supabase.from("nutrition_recipe_equipment").select("*").eq("recipe_draft_id", draftId).eq("user_id", userId).order("position", { ascending: true });
-  throwDb(ingredientResult.error);
-  throwDb(actionResult.error);
-  throwDb(equipmentResult.error);
-  const ingredients = ingredientResult.data ?? [];
-  const instructions = actionResult.data ?? [];
-  const equipment = equipmentResult.data ?? [];
-
-  assertRecipeDraftReady({ name: draft.data.name, servings: draft.data.servings, ingredients, instructions });
-
-  const versionsResult = await supabase.from("nutrition_recipe_versions").select("id,version_number,name").eq("recipe_id", recipeId).eq("user_id", userId).order("version_number", { ascending: true });
-  throwDb(versionsResult.error);
-  const versionNumber = nextRecipeVersionNumber(versionsResult.data ?? []);
-  const versionInsert = await supabase
-    .from("nutrition_recipe_versions")
-    .insert({
-      recipe_id: recipeId,
-      user_id: userId,
-      version_number: versionNumber,
-      name: String(draft.data.name).trim(),
-      servings: Number(draft.data.servings),
-      total_cooked_weight_g: draft.data.total_cooked_weight_g ?? null,
-      total_time_minutes: draft.data.total_time_minutes ?? null,
-      notes: draft.data.notes ?? null,
-      metadata: draft.data.draft_metadata ?? {},
-    })
-    .select("*")
-    .single();
-  throwDb(versionInsert.error);
-  if (!versionInsert.data?.id) throw new Error("Published Recipe version was not created.");
-  const versionId = String(versionInsert.data.id);
-
-  try {
-    if (ingredients.length) {
-      const copied = await supabase.from("nutrition_recipe_ingredients").insert(
-        ingredients.map(({ id: _id, created_at: _createdAt, recipe_draft_id: _draftId, ...item }: any) => ({ ...item, recipe_version_id: versionId, recipe_draft_id: null })),
-      );
-      throwDb(copied.error);
-    }
-    if (instructions.length) {
-      const copied = await supabase.from("nutrition_recipe_actions").insert(
-        instructions.map(({ id: _id, created_at: _createdAt, recipe_draft_id: _draftId, ...item }: any) => ({ ...item, recipe_version_id: versionId, recipe_draft_id: null })),
-      );
-      throwDb(copied.error);
-    }
-    if (equipment.length) {
-      const copied = await supabase.from("nutrition_recipe_equipment").insert(
-        equipment.map(({ id: _id, created_at: _createdAt, recipe_draft_id: _draftId, ...item }: any) => ({ ...item, recipe_version_id: versionId, recipe_draft_id: null })),
-      );
-      throwDb(copied.error);
-    }
-
-    const draftDelete = await supabase.from("nutrition_recipe_drafts").delete().eq("id", draftId).eq("user_id", userId);
-    throwDb(draftDelete.error);
-    const rootUpdate = await supabase.from("nutrition_recipes").update({ name: String(draft.data.name).trim() }).eq("id", recipeId).eq("user_id", userId);
-    throwDb(rootUpdate.error);
-  } catch (error) {
-    await supabase.from("nutrition_recipe_versions").delete().eq("id", versionId).eq("user_id", userId);
-    throw error;
+  if (
+    returnedRecipeId !== recipeId ||
+    !recipeVersionId ||
+    !Number.isInteger(versionNumber) ||
+    !version ||
+    version.id !== recipeVersionId
+  ) {
+    throw new Error("Recipe publication command returned an invalid result.");
   }
 
-  return { recipeId, recipeVersionId: versionId, versionNumber, version: versionInsert.data };
+  return {
+    recipeId: returnedRecipeId,
+    recipeVersionId,
+    versionNumber,
+    version,
+  };
 }
 
-export async function discardRecipeDraft(supabase: SupabaseClient, userId: string, recipeId: string) {
-  const result = await supabase.from("nutrition_recipe_drafts").delete().eq("recipe_id", recipeId).eq("user_id", userId);
+export async function discardRecipeDraft(
+  supabase: SupabaseClient,
+  userId: string,
+  recipeId: string,
+) {
+  const result = await supabase
+    .from("nutrition_recipe_drafts")
+    .delete()
+    .eq("recipe_id", recipeId)
+    .eq("user_id", userId);
   throwDb(result.error);
 }
 
-async function lifecycleRpc(supabase: SupabaseClient, name: string, recipeId: string) {
+async function lifecycleRpc(
+  supabase: SupabaseClient,
+  name: string,
+  recipeId: string,
+) {
   const result = await supabase.rpc(name, { p_recipe_id: recipeId });
   throwDb(result.error);
   const data = result.data as Record<string, unknown> | null;
