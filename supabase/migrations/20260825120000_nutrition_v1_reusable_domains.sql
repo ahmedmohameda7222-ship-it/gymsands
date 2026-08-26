@@ -82,7 +82,7 @@ where base_recipe_version_id is not null;
 
 -- Ingredient/action/equipment rows can belong to either a frozen published
 -- version or the one mutable working draft. Direct authenticated mutation is
--- permitted only for draft-owned rows; publication is a later transactional RPC.
+-- permitted only for draft-owned rows; publication is a transactional RPC.
 create table if not exists public.nutrition_recipe_ingredients (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -275,7 +275,7 @@ for each row execute function private.prevent_nutrition_recipe_version_update();
 
 -- ---------------------------------------------------------------------------
 -- RLS and grants. Published version/components are read-only to direct clients;
--- draft rows are directly mutable only by their owner. Publication later uses
+-- draft rows are directly mutable only by their owner. Publication uses
 -- a reviewed transactional server/database command.
 -- ---------------------------------------------------------------------------
 
@@ -510,7 +510,8 @@ using (
 -- ---------------------------------------------------------------------------
 -- Transactional Recipe publication. The caller cannot choose an owner: auth.uid()
 -- is the sole ownership authority, and a Recipe-root row lock serializes version
--- creation so two concurrent publishes cannot claim the same version number.
+-- creation. Existing Draft child IDs are promoted in place so dependency and
+-- ingredient/equipment references remain valid in the immutable published graph.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.publish_nutrition_recipe_draft(p_recipe_id uuid)
@@ -621,91 +622,23 @@ begin
     coalesce(v_metadata, '{}'::jsonb)
   );
 
-  insert into public.nutrition_recipe_ingredients (
-    user_id,
-    recipe_version_id,
-    recipe_draft_id,
-    position,
-    food_id,
-    ingredient_name,
-    quantity,
-    unit,
-    frozen_nutrition
-  )
-  select
-    ingredient.user_id,
-    v_version_id,
-    null,
-    ingredient.position,
-    ingredient.food_id,
-    ingredient.ingredient_name,
-    ingredient.quantity,
-    ingredient.unit,
-    ingredient.frozen_nutrition
-  from public.nutrition_recipe_ingredients ingredient
-  where ingredient.recipe_draft_id = v_draft_id
-    and ingredient.user_id = v_user_id
-  order by ingredient.position, ingredient.id;
+  update public.nutrition_recipe_ingredients
+  set recipe_version_id = v_version_id,
+      recipe_draft_id = null
+  where recipe_draft_id = v_draft_id
+    and user_id = v_user_id;
 
-  insert into public.nutrition_recipe_actions (
-    user_id,
-    recipe_version_id,
-    recipe_draft_id,
-    position,
-    instruction,
-    ingredient_refs,
-    equipment_refs,
-    duration_seconds,
-    heat_or_temperature,
-    doneness_or_result_cue,
-    prep_ahead_cue,
-    track_key,
-    dependency_action_ids,
-    can_run_in_background,
-    metadata
-  )
-  select
-    action.user_id,
-    v_version_id,
-    null,
-    action.position,
-    action.instruction,
-    action.ingredient_refs,
-    action.equipment_refs,
-    action.duration_seconds,
-    action.heat_or_temperature,
-    action.doneness_or_result_cue,
-    action.prep_ahead_cue,
-    action.track_key,
-    action.dependency_action_ids,
-    action.can_run_in_background,
-    action.metadata
-  from public.nutrition_recipe_actions action
-  where action.recipe_draft_id = v_draft_id
-    and action.user_id = v_user_id
-  order by action.position, action.id;
+  update public.nutrition_recipe_actions
+  set recipe_version_id = v_version_id,
+      recipe_draft_id = null
+  where recipe_draft_id = v_draft_id
+    and user_id = v_user_id;
 
-  insert into public.nutrition_recipe_equipment (
-    user_id,
-    recipe_version_id,
-    recipe_draft_id,
-    position,
-    name,
-    quantity,
-    note
-  )
-  select
-    equipment.user_id,
-    v_version_id,
-    null,
-    equipment.position,
-    equipment.name,
-    equipment.quantity,
-    equipment.note
-  from public.nutrition_recipe_equipment equipment
-  where equipment.recipe_draft_id = v_draft_id
-    and equipment.user_id = v_user_id
-  order by equipment.position, equipment.id;
+  update public.nutrition_recipe_equipment
+  set recipe_version_id = v_version_id,
+      recipe_draft_id = null
+  where recipe_draft_id = v_draft_id
+    and user_id = v_user_id;
 
   delete from public.nutrition_recipe_drafts
   where id = v_draft_id
