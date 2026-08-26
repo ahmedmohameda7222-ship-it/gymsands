@@ -43,11 +43,11 @@ export type TodayWorkoutProjection = {
 
 export type TodayMealPlanItemProjection = {
   id: string;
-  mealType: "Breakfast" | "Lunch" | "Dinner" | "Snack";
+  mealSlotKey: string;
   name: string;
-  calories: number;
-  proteinG: number;
-  status: "planned" | "done" | "skipped";
+  calories: number | null;
+  proteinG: number | null;
+  status: "planned" | "completed" | "completed_changed" | "skipped";
 };
 
 export type TodayMealsProjection = {
@@ -58,28 +58,22 @@ export type TodayMealsProjection = {
 
 export type TodayNutritionLogProjection = {
   totals: {
-    calories: number;
-    proteinG: number;
-    carbsG: number;
-    fatG: number;
+    calories: number | null;
+    proteinG: number | null;
+    carbsG: number | null;
+    fatG: number | null;
   };
   foodLogCount: number;
 };
 
 export type TodayNutritionTargetProjection = {
   hasTarget: boolean;
-  dailyCalories: number;
-  proteinG: number;
-  carbsG: number;
-  fatG: number;
-  waterMl: number;
-  sourceType:
-    | "default_day"
-    | "training_day"
-    | "rest_day"
-    | "high_activity_day"
-    | "base"
-    | "none";
+  dailyCalories: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+  waterMl: number | null;
+  sourceType: string;
 };
 
 export type TodayHydrationProjection = {
@@ -234,22 +228,18 @@ export class TodayProjectionContractError extends Error {
 }
 
 const errorCodes = new Set<string>(TODAY_PROJECTION_ERROR_CODES);
-const mealTypes = new Set(["Breakfast", "Lunch", "Dinner", "Snack"]);
-const mealStates = new Set(["planned", "done", "skipped"]);
+const mealStates = new Set([
+  "planned",
+  "completed",
+  "completed_changed",
+  "skipped",
+]);
 const workoutStates = new Set([
   "none",
   "scheduled",
   "active",
   "completed",
   "skipped",
-]);
-const targetSources = new Set([
-  "default_day",
-  "training_day",
-  "rest_day",
-  "high_activity_day",
-  "base",
-  "none",
 ]);
 
 function fail(): never {
@@ -296,6 +286,11 @@ function nonNegative(value: unknown): number {
 function nullableNumber(value: unknown): number | null {
   if (value === null) return null;
   return number(value);
+}
+
+function nullableNonNegative(value: unknown): number | null {
+  if (value === null) return null;
+  return nonNegative(value);
 }
 
 function boolean(value: unknown): boolean {
@@ -386,13 +381,13 @@ function parseMeals(value: unknown): TodayMealsProjection {
   if (!Array.isArray(row.items) || row.items.length > 100) fail();
   const items = row.items.map((entry) => {
     const item = object(entry);
-    exactKeys(item, ["id", "mealType", "name", "calories", "proteinG", "status"]);
+    exactKeys(item, ["id", "mealSlotKey", "name", "calories", "proteinG", "status"]);
     return {
       id: string(item.id),
-      mealType: oneOf<TodayMealPlanItemProjection["mealType"]>(item.mealType, mealTypes),
+      mealSlotKey: string(item.mealSlotKey),
       name: string(item.name),
-      calories: nonNegative(item.calories),
-      proteinG: nonNegative(item.proteinG),
+      calories: nullableNonNegative(item.calories),
+      proteinG: nullableNonNegative(item.proteinG),
       status: oneOf<TodayMealPlanItemProjection["status"]>(item.status, mealStates),
     };
   });
@@ -410,10 +405,10 @@ function parseNutritionLogs(value: unknown): TodayNutritionLogProjection {
   exactKeys(totals, ["calories", "proteinG", "carbsG", "fatG"]);
   return {
     totals: {
-      calories: nonNegative(totals.calories),
-      proteinG: nonNegative(totals.proteinG),
-      carbsG: nonNegative(totals.carbsG),
-      fatG: nonNegative(totals.fatG),
+      calories: nullableNonNegative(totals.calories),
+      proteinG: nullableNonNegative(totals.proteinG),
+      carbsG: nullableNonNegative(totals.carbsG),
+      fatG: nullableNonNegative(totals.fatG),
     },
     foodLogCount: nonNegative(row.foodLogCount),
   };
@@ -432,12 +427,12 @@ function parseNutritionTargets(value: unknown): TodayNutritionTargetProjection {
   ]);
   return {
     hasTarget: boolean(row.hasTarget),
-    dailyCalories: nonNegative(row.dailyCalories),
-    proteinG: nonNegative(row.proteinG),
-    carbsG: nonNegative(row.carbsG),
-    fatG: nonNegative(row.fatG),
-    waterMl: nonNegative(row.waterMl),
-    sourceType: oneOf<TodayNutritionTargetProjection["sourceType"]>(row.sourceType, targetSources),
+    dailyCalories: nullableNonNegative(row.dailyCalories),
+    proteinG: nullableNonNegative(row.proteinG),
+    carbsG: nullableNonNegative(row.carbsG),
+    fatG: nullableNonNegative(row.fatG),
+    waterMl: nullableNonNegative(row.waterMl),
+    sourceType: string(row.sourceType),
   };
 }
 
