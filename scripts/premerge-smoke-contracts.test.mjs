@@ -15,8 +15,13 @@ test("rendered QA preserves the 126-route matrix and isolates every observation"
   assert.match(qa, /x-plaivra-qa-fixture/);
   assert.match(qa, /\/api\/billing\/entitlements/);
   assert.match(qa, /\/api\/workouts\/history\/recently-deleted/);
+  assert.match(qa, /\/api\/nutrition\/v1\/diary/);
+  assert.match(qa, /nutrition-diary-v1/);
   assert.doesNotMatch(qa, /route\.abort/);
   assert.doesNotMatch(qa, /\[dashboard\\\.load\]/);
+
+  const diaryRoute = source("app/api/nutrition/v1/diary/route.ts");
+  assert.doesNotMatch(diaryRoute, /RENDERED_QA_ACCESS_TOKEN|QA_MOCK_AUTH_BUILD_VALUE/);
 });
 
 test("today-workout is redirected before the React route lifecycle", () => {
