@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Clock3, Mic, Pause, Play, RotateCcw, SkipForward, Square } from "lucide-react";
 
 import { CookingResume } from "@/components/nutrition/cooking/cooking-resume";
+import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 import {
   deriveCookingTimeline,
   type CookingActionFact,
@@ -103,6 +104,7 @@ function actionSyncRows(session: CookingLocalSession) {
 
 export function CookingMode({ recipeId }: { recipeId: string }) {
   const router = useRouter();
+  const { nt, language } = useNutritionV1Translation();
   const [userId, setUserId] = useState<string | null>(null);
   const [session, setSession] = useState<CookingLocalSession | null>(null);
   const [resumeCandidate, setResumeCandidate] = useState<CookingLocalSession | null>(null);
@@ -146,37 +148,37 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       return;
     }
     if (!supabase) {
-      setError("Cooking Mode is unavailable until the app connection is configured.");
+      setError(nt("cookingUnavailable"));
       setLoading(false);
       return;
     }
     try {
       const auth = await supabase.auth.getUser();
       if (auth.error) throw auth.error;
-      if (!auth.data.user) throw new Error("Sign in to start Cooking Mode.");
+      if (!auth.data.user) throw new Error(nt("cookingSignIn"));
       const ownerId = auth.data.user.id;
       setUserId(ownerId);
       const active = await getActiveCookingSession(supabase, ownerId, recipeId);
       if (active) {
         const local = materialize(active);
-        if (!local) throw new Error("Cooking Session could not be recovered.");
+        if (!local) throw new Error(nt("cookingRecoveryFailed"));
         writeLocal(local);
         setResumeCandidate(local);
         return;
       }
       const started = await startCookingSession(supabase, ownerId, { recipeId });
       const created = await getActiveCookingSession(supabase, ownerId, recipeId);
-      if (!created) throw new Error(`Cooking Session ${started.sessionId} could not be loaded.`);
+      if (!created) throw new Error(`${nt("cookingLoadFailed")} ${started.sessionId}`);
       const local = materialize(created);
-      if (!local) throw new Error("Cooking Session could not be materialized.");
+      if (!local) throw new Error(nt("cookingMaterializeFailed"));
       writeLocal(local);
       setSession(local);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Cooking Mode could not be started.");
+      setError(cause instanceof Error ? cause.message : nt("cookingStartFailed"));
     } finally {
       setLoading(false);
     }
-  }, [materialize, recipeId, storageKey, writeLocal]);
+  }, [materialize, nt, recipeId, storageKey, writeLocal]);
 
   useEffect(() => { void initialize(); }, [initialize]);
 
@@ -194,7 +196,6 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     }
     async function acquireWakeLock() {
       if (cancelled || document.visibilityState !== "visible" || wakeLockRef.current) return;
-      // navigator.wakeLock is optional; Cooking Mode remains fully usable without it.
       const manager = (navigator as Navigator & { wakeLock?: WakeLockManager }).wakeLock;
       if (!manager) return;
       try {
@@ -267,10 +268,10 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       setSession(acknowledged);
       return acknowledged;
     } catch {
-      setStatusMessage("Saved on this device · server sync will retry when available.");
+      setStatusMessage(language === "ar" ? "تم الحفظ على هذا الجهاز · ستتم إعادة محاولة مزامنة الخادم عند توفرها." : language === "de" ? "Auf diesem Gerät gespeichert · die Serversynchronisierung wird erneut versucht." : "Saved on this device · server sync will retry when available.");
       return queued;
     }
-  }, [userId, writeLocal]);
+  }, [language, userId, writeLocal]);
 
   useEffect(() => {
     if (!session || session.status !== "active") return;
@@ -331,7 +332,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   const onStartOver = useCallback(async () => {
     if (!resumeCandidate) return;
     if (!supabase || !navigator.onLine) {
-      setError("Start Over needs a connection so the previous session can be ended safely. You can still Resume offline.");
+      setError(language === "ar" ? "البدء من جديد يحتاج إلى اتصال لإنهاء الجلسة السابقة بأمان. يمكنك الاستئناف دون اتصال." : language === "de" ? "Neu starten benötigt eine Verbindung, damit die vorherige Sitzung sicher beendet werden kann. Offline kannst du weiterhin fortsetzen." : "Start Over needs a connection so the previous session can be ended safely. You can still Resume offline.");
       return;
     }
     setBusy(true);
@@ -342,23 +343,23 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
         const auth = await supabase.auth.getUser();
         if (auth.error) throw auth.error;
         ownerId = auth.data.user?.id ?? null;
-        if (!ownerId) throw new Error("Sign in to restart Cooking Mode.");
+        if (!ownerId) throw new Error(nt("cookingSignIn"));
         setUserId(ownerId);
       }
       const restarted = await startOverCookingSession(supabase, ownerId, resumeCandidate.sessionId);
       const active = await getActiveCookingSession(supabase, ownerId, recipeId);
-      if (!active) throw new Error("Restarted Cooking Session could not be loaded.");
+      if (!active) throw new Error(nt("cookingLoadFailed"));
       const fromServer = materialize(active);
       const fresh = fromServer ?? startOverLocalCookingSession(resumeCandidate, restarted.sessionId);
       writeLocal(fresh);
       setSession(fresh);
       setResumeCandidate(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Cooking Session could not be restarted.");
+      setError(cause instanceof Error ? cause.message : nt("cookingStartFailed"));
     } finally {
       setBusy(false);
     }
-  }, [materialize, recipeId, resumeCandidate, userId, writeLocal]);
+  }, [language, materialize, nt, recipeId, resumeCandidate, userId, writeLocal]);
 
   const updateAction = useCallback(async (state: CookingLocalActionStateValue) => {
     if (!session || !timeline?.now) return;
@@ -493,9 +494,9 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());
-      setStatusMessage("Voice permission is ready. Touch controls remain fully available.");
+      setStatusMessage(language === "ar" ? "إذن الصوت جاهز. تظل عناصر التحكم باللمس متاحة بالكامل." : language === "de" ? "Die Sprachberechtigung ist bereit. Die vollständige Touch-Steuerung bleibt verfügbar." : "Voice permission is ready. Touch controls remain fully available.");
     } catch {
-      setStatusMessage("Microphone unavailable. Continue with the complete touch controls.");
+      setStatusMessage(language === "ar" ? "الميكروفون غير متاح. تابع باستخدام عناصر التحكم الكاملة باللمس." : language === "de" ? "Mikrofon nicht verfügbar. Fahre mit der vollständigen Touch-Steuerung fort." : "Microphone unavailable. Continue with the complete touch controls.");
     }
   }
 
@@ -508,11 +509,11 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   }
 
   if (error || !session) {
-    return <main className="mx-auto max-w-[620px] px-4 py-8"><p className="rounded-xl border border-destructive/30 p-4 text-sm text-destructive" role="alert">{error ?? "Cooking Session unavailable."}</p><button type="button" onClick={() => void initialize()} className="mt-3 min-h-[44px] rounded-xl border border-border px-4 text-sm font-medium">Retry</button></main>;
+    return <main className="mx-auto max-w-[620px] px-4 py-8" dir={direction} lang={language}><p className="rounded-xl border border-destructive/30 p-4 text-sm text-destructive" role="alert">{error ?? nt("cookingRecoveryFailed")}</p><button type="button" onClick={() => void initialize()} className="mt-3 min-h-[44px] rounded-xl border border-border px-4 text-sm font-medium">{language === "ar" ? "إعادة المحاولة" : language === "de" ? "Erneut versuchen" : "Retry"}</button></main>;
   }
 
   if (session.status === "completed") {
-    return <main className="mx-auto max-w-[620px] px-4 py-8"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Cooking complete</p><h1 className="mt-2 text-2xl font-semibold">Session complete</h1><p className="mt-2 text-sm text-muted-foreground">Cooking completion is separate from adding anything to your Diary.</p><button type="button" onClick={onBack} className="mt-5 min-h-[44px] rounded-xl border border-border px-4 text-sm font-medium">Back</button></main>;
+    return <main className="mx-auto max-w-[620px] px-4 py-8" dir={direction} lang={language}><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{language === "ar" ? "اكتمل الطهي" : language === "de" ? "Kochen abgeschlossen" : "Cooking complete"}</p><h1 className="mt-2 text-2xl font-semibold">{language === "ar" ? "اكتملت الجلسة" : language === "de" ? "Sitzung abgeschlossen" : "Session complete"}</h1><p className="mt-2 text-sm text-muted-foreground">{language === "ar" ? "اكتمال الطهي منفصل عن إضافة أي شيء إلى اليوميات." : language === "de" ? "Der Abschluss des Kochens ist vom Eintragen in dein Tagebuch getrennt." : "Cooking completion is separate from adding anything to your Diary."}</p><button type="button" onClick={onBack} className="mt-5 min-h-[44px] rounded-xl border border-border px-4 text-sm font-medium">{nt("cookingBack")}</button></main>;
   }
 
   const rawNow = session.frozenRecipeSnapshot.actions.find((item) => item.id === timeline?.now?.id);
@@ -523,36 +524,36 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   const recipeName = asString(session.frozenRecipeSnapshot.recipe.name) ?? "Recipe";
 
   return (
-    <main dir={direction} className="mx-auto w-full max-w-[720px] space-y-5 px-4 py-4 sm:px-6 sm:py-6">
+    <main dir={direction} lang={language} className="mx-auto w-full max-w-[720px] space-y-5 px-4 py-4 sm:px-6 sm:py-6">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 pb-3">
-        <button type="button" onClick={onBack} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm font-medium hover:bg-muted"><ArrowLeft className="h-4 w-4" aria-hidden="true" />Back</button>
-        <p className="min-w-0 flex-1 break-words text-center text-sm font-semibold">{recipeName}</p>
-        <button type="button" onClick={onEndCooking} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground hover:bg-muted"><Square className="h-4 w-4" aria-hidden="true" />End Cooking</button>
+        <button type="button" onClick={onBack} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm font-medium hover:bg-muted"><ArrowLeft className="h-4 w-4" aria-hidden="true" />{nt("cookingBack")}</button>
+        <bdi className="min-w-0 flex-1 break-words text-center text-sm font-semibold" dir="auto">{recipeName}</bdi>
+        <button type="button" onClick={onEndCooking} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground hover:bg-muted"><Square className="h-4 w-4" aria-hidden="true" />{nt("cookingEnd")}</button>
       </header>
 
       <section aria-labelledby="attention-heading" className="border-b border-border/70 pb-4">
-        <h2 id="attention-heading" className="text-xs font-bold tracking-[0.16em] text-foreground">ATTENTION</h2>
-        {timeline?.attention.length ? <div className="mt-2 space-y-2">{timeline.attention.map((item) => <div key={item.timerId} className="rounded-xl border border-foreground/20 px-4 py-3"><p className="break-words text-sm font-semibold">{item.timerName} timer finished</p><p className="mt-1 text-xs text-muted-foreground">Timer finished. Confirm the Recipe condition yourself before marking the step Done.</p></div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">No timer needs attention.</p>}
+        <h2 id="attention-heading" className="text-xs font-bold tracking-[0.16em] text-foreground">{nt("cookingAttention")}</h2>
+        {timeline?.attention.length ? <div className="mt-2 space-y-2">{timeline.attention.map((item) => <div key={item.timerId} className="rounded-xl border border-foreground/20 px-4 py-3"><p className="break-words text-sm font-semibold"><bdi dir="auto">{item.timerName}</bdi> {language === "ar" ? "انتهى المؤقت" : language === "de" ? "Timer beendet" : "timer finished"}</p><p className="mt-1 text-xs text-muted-foreground">{language === "ar" ? "انتهى المؤقت. أكّد حالة الوصفة بنفسك قبل وضع علامة تم على الخطوة." : language === "de" ? "Der Timer ist abgelaufen. Bestätige den Rezeptzustand selbst, bevor du den Schritt als fertig markierst." : "Timer finished. Confirm the Recipe condition yourself before marking the step Done."}</p></div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">{nt("cookingNoTimerAttention")}</p>}
       </section>
 
       <section aria-labelledby="now-heading" className="border-b border-border/70 pb-5">
-        <h2 id="now-heading" className="text-xs font-bold tracking-[0.16em] text-foreground">NOW</h2>
-        {timeline?.now ? <div className="mt-3"><p className="break-words text-xl font-semibold leading-8">{timeline.now.instruction}</p>{timeline.now.conditionCue ? <p className="mt-2 break-words text-sm text-muted-foreground">Recipe cue: {timeline.now.conditionCue}</p> : null}<div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={() => setStatusMessage(`Repeat: ${timeline.now?.instruction ?? ""}`)} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium"><RotateCcw className="h-4 w-4" aria-hidden="true" />Repeat</button>{canStartTimer ? <button type="button" onClick={() => void startTimer()} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium"><Clock3 className="h-4 w-4" aria-hidden="true" />Start timer</button> : null}{canDefer ? <button type="button" onClick={() => void updateAction("deferred")} className="inline-flex min-h-[44px] items-center rounded-xl border border-border px-4 text-sm font-medium">Later</button> : null}<button type="button" onClick={() => void updateAction("completed")} className="inline-flex min-h-[56px] items-center rounded-xl bg-foreground px-5 text-sm font-semibold text-background">Done</button><button type="button" onClick={() => void updateAction("skipped")} className="inline-flex min-h-[44px] items-center gap-1 rounded-xl px-3 text-sm font-medium text-muted-foreground hover:bg-muted"><SkipForward className="h-4 w-4" aria-hidden="true" />Skip</button></div></div> : <p className="mt-2 text-sm text-muted-foreground">No step is ready right now.</p>}
+        <h2 id="now-heading" className="text-xs font-bold tracking-[0.16em] text-foreground">{nt("cookingNow")}</h2>
+        {timeline?.now ? <div className="mt-3"><bdi className="block break-words text-xl font-semibold leading-8" dir="auto">{timeline.now.instruction}</bdi>{timeline.now.conditionCue ? <p className="mt-2 break-words text-sm text-muted-foreground">{language === "ar" ? "إشارة الوصفة:" : language === "de" ? "Rezept-Hinweis:" : "Recipe cue:"} <bdi dir="auto">{timeline.now.conditionCue}</bdi></p> : null}<div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={() => setStatusMessage(`${nt("cookingRepeat")}: ${timeline.now?.instruction ?? ""}`)} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium"><RotateCcw className="h-4 w-4" aria-hidden="true" />{nt("cookingRepeat")}</button>{canStartTimer ? <button type="button" onClick={() => void startTimer()} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium"><Clock3 className="h-4 w-4" aria-hidden="true" />{language === "ar" ? "بدء المؤقت" : language === "de" ? "Timer starten" : "Start timer"}</button> : null}{canDefer ? <button type="button" onClick={() => void updateAction("deferred")} className="inline-flex min-h-[44px] items-center rounded-xl border border-border px-4 text-sm font-medium">{nt("cookingLater")}</button> : null}<button type="button" onClick={() => void updateAction("completed")} className="inline-flex min-h-[56px] items-center rounded-xl bg-foreground px-5 text-sm font-semibold text-background">{nt("cookingDone")}</button><button type="button" onClick={() => void updateAction("skipped")} className="inline-flex min-h-[44px] items-center gap-1 rounded-xl px-3 text-sm font-medium text-muted-foreground hover:bg-muted"><SkipForward className="h-4 w-4" aria-hidden="true" />{nt("cookingSkip")}</button></div></div> : <p className="mt-2 text-sm text-muted-foreground">{language === "ar" ? "لا توجد خطوة جاهزة الآن." : language === "de" ? "Im Moment ist kein Schritt bereit." : "No step is ready right now."}</p>}
       </section>
 
       <section aria-labelledby="running-heading" className="border-b border-border/70 pb-4">
-        <h2 id="running-heading" className="text-xs font-bold tracking-[0.16em] text-foreground">RUNNING</h2>
-        {timeline?.running.length || runningTimers.length ? <div className="mt-2 space-y-2">{timeline?.running.filter((item) => item.kind === "action").map((item) => <p key={`action-${item.actionId}`} className="break-words rounded-xl bg-muted px-4 py-3 text-sm">{item.kind === "action" ? item.instruction : ""}</p>)}{runningTimers.map((timer) => <div key={timer.id} className="flex min-h-[44px] items-center justify-between gap-3 rounded-xl bg-muted px-4 py-2"><div><p className="break-words text-sm font-medium">{timer.name}</p><p className="text-xs tabular-nums text-muted-foreground">{timer.status === "paused" ? "Paused" : `${timer.remainingSeconds}s remaining`}</p></div><button type="button" onClick={() => void toggleTimer(timer.id)} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg hover:bg-background" aria-label={timer.status === "paused" ? `Resume ${timer.name}` : `Pause ${timer.name}`}>{timer.status === "paused" ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}</button></div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">Nothing is running in the background.</p>}
+        <h2 id="running-heading" className="text-xs font-bold tracking-[0.16em] text-foreground">{nt("cookingRunning")}</h2>
+        {timeline?.running.length || runningTimers.length ? <div className="mt-2 space-y-2">{timeline?.running.filter((item) => item.kind === "action").map((item) => <p key={`action-${item.actionId}`} className="break-words rounded-xl bg-muted px-4 py-3 text-sm"><bdi dir="auto">{item.kind === "action" ? item.instruction : ""}</bdi></p>)}{runningTimers.map((timer) => <div key={timer.id} className="flex min-h-[44px] items-center justify-between gap-3 rounded-xl bg-muted px-4 py-2"><div><p className="break-words text-sm font-medium"><bdi dir="auto">{timer.name}</bdi></p><p className="text-xs tabular-nums text-muted-foreground" dir="auto">{timer.status === "paused" ? (language === "ar" ? "متوقف مؤقتًا" : language === "de" ? "Pausiert" : "Paused") : nt("cookingRemaining", { seconds: timer.remainingSeconds })}</p></div><button type="button" onClick={() => void toggleTimer(timer.id)} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg hover:bg-background" aria-label={`${timer.status === "paused" ? nt("cookingResume") : nt("cookingPause")} ${timer.name}`}>{timer.status === "paused" ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}</button></div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">{language === "ar" ? "لا شيء يعمل في الخلفية." : language === "de" ? "Im Hintergrund läuft nichts." : "Nothing is running in the background."}</p>}
       </section>
 
       <section aria-labelledby="up-next-heading" className="border-b border-border/70 pb-4">
-        <h2 id="up-next-heading" className="text-xs font-bold tracking-[0.16em] text-foreground">UP NEXT</h2>
-        <p className="mt-2 break-words text-sm leading-6 text-muted-foreground">{timeline?.upNext?.instruction ?? "No next step is available yet."}</p>
+        <h2 id="up-next-heading" className="text-xs font-bold tracking-[0.16em] text-foreground">{nt("cookingUpNext")}</h2>
+        <p className="mt-2 break-words text-sm leading-6 text-muted-foreground"><bdi dir="auto">{timeline?.upNext?.instruction ?? nt("cookingNoNextStep")}</bdi></p>
       </section>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 pb-6">
-        <p className="text-xs text-muted-foreground">{session.pendingMutations.length ? `Offline-safe · ${session.pendingMutations.length} change${session.pendingMutations.length === 1 ? "" : "s"} waiting to sync` : "Session saved"}</p>
-        <button type="button" onClick={requestMicrophone} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-border px-3 text-sm font-medium"><Mic className="h-4 w-4" aria-hidden="true" />Voice</button>
+        <p className="text-xs text-muted-foreground">{session.pendingMutations.length ? (language === "ar" ? `آمن دون اتصال · ${session.pendingMutations.length} تغييرات في انتظار المزامنة` : language === "de" ? `Offline-sicher · ${session.pendingMutations.length} Änderung(en) warten auf Synchronisierung` : `Offline-safe · ${session.pendingMutations.length} change${session.pendingMutations.length === 1 ? "" : "s"} waiting to sync`) : (language === "ar" ? "تم حفظ الجلسة" : language === "de" ? "Sitzung gespeichert" : "Session saved")}</p>
+        <button type="button" onClick={requestMicrophone} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-border px-3 text-sm font-medium"><Mic className="h-4 w-4" aria-hidden="true" />{language === "ar" ? "الصوت" : language === "de" ? "Sprache" : "Voice"}</button>
       </footer>
       {statusMessage ? <p className="sr-only" role="status">{statusMessage}</p> : null}
     </main>
