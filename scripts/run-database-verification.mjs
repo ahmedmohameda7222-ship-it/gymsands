@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -28,6 +27,9 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/nutrition-v1-plan-diary-targets.sql",
   "supabase/verification/nutrition-v1-cooking-sessions.sql",
   "supabase/verification/nutrition-v1-food-search-and-curation.sql",
+  "supabase/verification/nutrition-v1-meal-plan-week-start.sql",
+  "supabase/verification/nutrition-v1-privacy-purge.sql",
+  "supabase/verification/nutrition-v1-legacy-reconciliation.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
