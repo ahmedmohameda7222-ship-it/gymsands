@@ -107,12 +107,15 @@ describe("Nutrition V1 Meal Plan product contract", () => {
 
   it("derives week start from locale with an optional owner-scoped override and preserves explicit historical starts", () => {
     const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
-    const migration = source("supabase/migrations/20260825120100_nutrition_v1_plan_diary_targets.sql");
+    const correction = source("supabase/migrations/20260825120350_nutrition_v1_meal_plan_week_start_authority.sql");
+    const verification = source("supabase/verification/nutrition-v1-meal-plan-week-start.sql");
     expect(page).toContain("localeWeekStartDay");
     expect(page).toContain("weekStartOverrideKey");
     expect(page).toContain("Week starts");
     expect(page).not.toContain("function monday(");
-    expect(migration).not.toContain("extract(isodow from week_start_date) = 1");
+    expect(correction).toContain("drop constraint");
+    expect(correction).toContain("isodow");
+    expect(verification).toContain("still restricted to a fixed weekday");
   });
 
   it("offers bounded meal day and week copy operations that create new occurrence identities", () => {
