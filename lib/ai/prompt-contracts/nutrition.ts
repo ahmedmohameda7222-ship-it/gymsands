@@ -23,3 +23,30 @@ export const NUTRITION_CONTRACTS = {
   "review-hydration": task(["date", "hydration"], text("Recommend practical pacing and never instruct the user to consume the full remainder immediately.", "Empfehle eine praktische Verteilung und fordere nie dazu auf, die gesamte Restmenge sofort zu trinken.", "اقترح توزيعًا عمليًا ولا تطلب شرب الكمية المتبقية كلها فورًا."), [text("Known intake and target", "Bekannte Aufnahme und Ziel", "المدخول والهدف المعروفان"), text("Remaining amount and tracking gaps", "Restmenge und Tracking-Lücken", "الكمية المتبقية وفجوات التتبع"), text("Time-aware practical pacing", "Zeitgerechte praktische Verteilung", "توزيع عملي مناسب للوقت"), text("One next hydration action", "Eine nächste Hydrationsaktion", "خطوة ترطيب تالية واحدة")]),
   "meal-prep-plan": task(["date", "meal_plan", "profile_nutrition_preferences"], text("Base preparation only on saved planned meals and give general food-safety guidance without claiming shelf-life certainty.", "Stütze die Vorbereitung nur auf gespeicherte geplante Mahlzeiten und gib allgemeine Lebensmittelsicherheitshinweise ohne Haltbarkeitsgarantie.", "اعتمد في التحضير على الوجبات المخططة المحفوظة فقط وقدّم إرشادات عامة لسلامة الطعام دون الجزم بمدة الصلاحية."), [text("Batch-cooking sequence", "Ablauf für das Vorkochen", "تسلسل الطهي على دفعات"), text("Ingredients and quantities", "Zutaten und Mengen", "المكونات والكميات"), text("Storage, reheating, and preparation time", "Lagerung, Aufwärmen und Vorbereitungszeit", "التخزين وإعادة التسخين ووقت التحضير"), text("Connection to each planned meal", "Zuordnung zu jeder geplanten Mahlzeit", "الربط بكل وجبة مخططة")])
 } satisfies Partial<Record<PromptId, TaskContract>>;
+
+const recipeDraftConstraint = text(
+  "Use external ChatGPT only to propose Recipe authoring facts for a Plaivra Working Draft. Never publish a Recipe, never treat ChatGPT nutrient numbers as authority, and never invent cooking timing, doneness, physical-state, or safety facts. After explicit user approval, Plaivra may write only the new or existing Working Draft and resolves Food identity and nutrition itself.",
+  "Nutze externes ChatGPT nur, um Rezept-Autorenangaben für einen Plaivra-Arbeitsentwurf vorzuschlagen. Veröffentliche niemals ein Rezept, behandle ChatGPT-Nährwerte niemals als maßgeblich und erfinde keine Kochzeiten, Gargrad-, physische Zustands- oder Sicherheitsangaben. Erst nach ausdrücklicher Zustimmung darf Plaivra ausschließlich den neuen oder vorhandenen Arbeitsentwurf schreiben und löst Lebensmittelidentität sowie Nährwerte selbst auf.",
+  "استخدم ChatGPT الخارجي فقط لاقتراح بيانات تأليف الوصفة لمسودة عمل في Plaivra. لا تنشر وصفة أبدًا، ولا تعتبر أرقام التغذية من ChatGPT مرجعًا، ولا تخترع أوقات الطهي أو علامات النضج أو الحالة الفيزيائية أو حقائق السلامة. بعد موافقة المستخدم الصريحة فقط، يجوز لـ Plaivra كتابة مسودة العمل الجديدة أو الحالية فقط، بينما يحل Plaivra هوية الطعام وقيمه الغذائية بنفسه."
+);
+
+export const NUTRITION_RECIPE_EXTERNAL_CONTRACTS = {
+  create: task([], recipeDraftConstraint, [
+    text("Proposed Recipe name and servings or yield", "Vorgeschlagener Rezeptname und Portionen oder Ausbeute", "اسم الوصفة المقترح وعدد الحصص أو الناتج"),
+    text("Ingredients with quantities, units, and any unresolved Food matches", "Zutaten mit Mengen, Einheiten und noch ungeklärten Lebensmittelzuordnungen", "المكونات بالكميات والوحدات وأي مطابقة طعام غير محسومة"),
+    text("Only author-supported instructions and cooking facts", "Nur vom Autor gestützte Anweisungen und Kochangaben", "تعليمات وحقائق طهي مدعومة من المؤلف فقط"),
+    text("Uncertainty plus the explicit approval needed before the Working Draft is written", "Unsicherheit plus die ausdrückliche Zustimmung vor dem Schreiben des Arbeitsentwurfs", "عدم اليقين والموافقة الصريحة المطلوبة قبل كتابة مسودة العمل")
+  ]),
+  import: task([], recipeDraftConstraint, [
+    text("Parsed Recipe name and servings or yield", "Erkannter Rezeptname und Portionen oder Ausbeute", "اسم الوصفة المستخرج وعدد الحصص أو الناتج"),
+    text("Parsed ingredients with quantities, units, and unresolved Food matches", "Erkannte Zutaten mit Mengen, Einheiten und ungeklärten Lebensmittelzuordnungen", "المكونات المستخرجة بالكميات والوحدات ومطابقات الطعام غير المحسومة"),
+    text("Only instructions and cooking facts evidenced by the imported source", "Nur durch die importierte Quelle belegte Anweisungen und Kochangaben", "فقط التعليمات وحقائق الطهي المثبتة في المصدر المستورد"),
+    text("Ambiguities plus the explicit approval needed before the Working Draft is written", "Unklarheiten plus die ausdrückliche Zustimmung vor dem Schreiben des Arbeitsentwurfs", "أوجه الغموض والموافقة الصريحة المطلوبة قبل كتابة مسودة العمل")
+  ]),
+  finish: task([], recipeDraftConstraint, [
+    text("Proposed changes to the existing Plaivra Working Draft", "Vorgeschlagene Änderungen am bestehenden Plaivra-Arbeitsentwurf", "التغييرات المقترحة لمسودة العمل الحالية في Plaivra"),
+    text("Existing author facts that remain unchanged", "Bestehende Autorenangaben, die unverändert bleiben", "حقائق المؤلف الحالية التي ستبقى دون تغيير"),
+    text("Unresolved gaps without invented cooking or nutrition facts", "Offene Lücken ohne erfundene Koch- oder Nährwertangaben", "الفجوات غير المحسومة دون اختراع حقائق طهي أو تغذية"),
+    text("Explicit approval needed before updating the Working Draft; publication remains a separate Save Recipe action", "Ausdrückliche Zustimmung vor der Aktualisierung des Arbeitsentwurfs; Veröffentlichung bleibt eine separate Aktion „Rezept speichern“", "الموافقة الصريحة المطلوبة قبل تحديث مسودة العمل؛ ويظل النشر إجراءً منفصلًا عبر حفظ الوصفة")
+  ])
+} as const satisfies Record<"create" | "import" | "finish", TaskContract>;
