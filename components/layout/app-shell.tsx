@@ -48,7 +48,7 @@ type NavItem = {
 const primaryNavItems: NavItem[] = [
   { href: "/dashboard", labelKey: "nav.today", icon: Home, activePaths: ["/dashboard"] },
   { href: "/my-workout/plans", labelKey: "nav.train", icon: Dumbbell },
-  { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan", "/my-recipes"] },
+  { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories"] },
   { href: "/progress", labelKey: "nav.progress", icon: BarChart3, activePaths: ["/progress", "/personal-records"] },
   { href: "/settings", labelKey: "nav.settings", icon: Settings, activePaths: ["/settings", "/profile"] }
 ];
