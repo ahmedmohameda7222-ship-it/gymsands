@@ -39,7 +39,7 @@ describe("Nutrition V1 My Recipes offline and truthfulness authority", () => {
     expect(parsePublishedRecipeCache(raw)).toEqual(completePublished);
 
     expect(() =>
-      serializePublishedRecipeCache({ ...completePublished, status: "draft", recipeVersionId: "" } as PublishedRecipeCacheSnapshot),
+      serializePublishedRecipeCache({ ...completePublished, status: "draft", recipeVersionId: "" } as unknown as PublishedRecipeCacheSnapshot),
     ).toThrow(/published|version/i);
   });
 
