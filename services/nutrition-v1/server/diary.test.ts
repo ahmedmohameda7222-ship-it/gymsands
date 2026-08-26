@@ -163,7 +163,8 @@ describe("Nutrition V1 grouped Diary logging", () => {
       }],
     });
 
-    const args = db.rpc.mock.calls[0]?.[1] as Record<string, any>;
+    const calls = db.rpc.mock.calls as unknown as Array<[string, Record<string, any>]>;
+    const args = calls[0]?.[1];
     expect(args.p_items[0].nutrition).toEqual({
       caloriesKcal: 180,
       proteinG: null,
