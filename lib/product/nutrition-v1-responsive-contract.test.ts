@@ -10,6 +10,7 @@ const foodRow = readFileSync("components/nutrition/food-library/food-row.tsx", "
 const recipeHome = readFileSync("components/nutrition/recipes/recipe-home.tsx", "utf8");
 const recentlyDeleted = readFileSync("components/nutrition/recipes/recently-deleted-recipes.tsx", "utf8");
 const cooking = readFileSync("components/nutrition/cooking/cooking-mode.tsx", "utf8");
+const nutritionI18n = readFileSync("lib/i18n/nutrition-v1.ts", "utf8");
 
 function doneButtonSource() {
   const marker = 'updateAction("completed")';
@@ -40,9 +41,17 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
     expect(weekStrip).toContain("min-h-14");
   });
 
-  it("keeps Food Library browse controls on the shared 44pt custom-control baseline", () => {
-    expect(foodLibrary).toMatch(/Browse by Category[\s\S]*min-h-11/);
-    expect(foodLibrary).toMatch(/Browse by Cuisine[\s\S]*min-h-11/);
+  it("keeps localized Food Library browse controls on the shared 44pt custom-control baseline", () => {
+    expect(foodLibrary).toContain('nt("browseByCategory")');
+    expect(foodLibrary).toContain('nt("browseByCuisine")');
+    expect(foodLibrary).toMatch(/categories\.map[\s\S]*className="min-h-11/);
+    expect(foodLibrary).toMatch(/cuisines\.map[\s\S]*className="min-h-11/);
+    expect(nutritionI18n).toContain('browseByCategory: "Browse by Category"');
+    expect(nutritionI18n).toContain('browseByCategory: "Nach Kategorie durchsuchen"');
+    expect(nutritionI18n).toContain('browseByCategory: "تصفح حسب الفئة"');
+    expect(nutritionI18n).toContain('browseByCuisine: "Browse by Cuisine"');
+    expect(nutritionI18n).toContain('browseByCuisine: "Nach Küche durchsuchen"');
+    expect(nutritionI18n).toContain('browseByCuisine: "تصفح حسب المطبخ"');
   });
 
   it("binds approved Arabic RTL surfaces to the real EN/DE/AR language authority", () => {
