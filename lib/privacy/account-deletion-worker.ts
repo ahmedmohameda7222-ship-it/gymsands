@@ -87,24 +87,53 @@ async function disableAccount(admin: SupabaseClient, userId: string) {
   if (result.error || authDisable.error) throw new DeletionWorkerError("account_disable_failed");
 }
 
-async function deleteStorage(admin: SupabaseClient, userId: string) {
-  const photos = await admin
-    .from("progress_photos")
-    .select("storage_path")
-    .eq("user_id", userId)
-    .limit(5000);
-  if (photos.error) throw new DeletionWorkerError("storage_manifest_failed");
-  const paths = (photos.data ?? [])
-    .map((row) => row.storage_path)
-    .filter((path): path is string => typeof path === "string" && path.length > 0);
-  const storage = admin.storage.from("progress-photos");
-  const discovered = await listStoragePaths(storage, userId);
-  const allPaths = [...new Set([...paths, ...discovered])];
-  for (let index = 0; index < allPaths.length; index += 1000) {
-    const removed = await storage.remove(allPaths.slice(index, index + 1000));
+async function removeStorageObjects(
+  storage: ReturnType<SupabaseClient["storage"]["from"]>,
+  paths: string[],
+) {
+  for (let index = 0; index < paths.length; index += 1000) {
+    const removed = await storage.remove(paths.slice(index, index + 1000));
     if (removed.error) throw new DeletionWorkerError("storage_delete_failed");
   }
-  return { progress_photo_objects: allPaths.length };
+}
+
+async function deleteStorage(admin: SupabaseClient, userId: string) {
+  const [photos, recipes] = await Promise.all([
+    admin
+      .from("progress_photos")
+      .select("storage_path")
+      .eq("user_id", userId)
+      .limit(5000),
+    admin
+      .from("nutrition_recipes")
+      .select("cover_path")
+      .eq("user_id", userId)
+      .limit(5000),
+  ]);
+  if (photos.error || recipes.error) throw new DeletionWorkerError("storage_manifest_failed");
+
+  const photoPaths = (photos.data ?? [])
+    .map((row) => row.storage_path)
+    .filter((path): path is string => typeof path === "string" && path.length > 0);
+  const recipeCoverPaths = (recipes.data ?? [])
+    .map((row) => row.cover_path)
+    .filter((path): path is string => typeof path === "string" && path.length > 0);
+
+  const photoStorage = admin.storage.from("progress-photos");
+  const recipeCoverStorage = admin.storage.from("recipe-covers");
+  const [discoveredPhotos, discoveredRecipeCovers] = await Promise.all([
+    listStoragePaths(photoStorage, userId),
+    listStoragePaths(recipeCoverStorage, userId),
+  ]);
+  const allPhotoPaths = [...new Set([...photoPaths, ...discoveredPhotos])];
+  const allRecipeCoverPaths = [...new Set([...recipeCoverPaths, ...discoveredRecipeCovers])];
+  await removeStorageObjects(photoStorage, allPhotoPaths);
+  await removeStorageObjects(recipeCoverStorage, allRecipeCoverPaths);
+
+  return {
+    progress_photo_objects: allPhotoPaths.length,
+    recipe_cover_objects: allRecipeCoverPaths.length,
+  };
 }
 
 async function listStoragePaths(

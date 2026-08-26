@@ -50,10 +50,10 @@ const OWNED_EXPORT_TABLES = [
 type OwnedExportTable = (typeof OWNED_EXPORT_TABLES)[number];
 
 export type StorageManifestEntry = {
-  bucket: "progress-photos";
+  bucket: "progress-photos" | "recipe-covers";
   path: string;
   record_id: string | null;
-  kind: "progress_photo";
+  kind: "progress_photo" | "recipe_cover";
 };
 
 export type PlaivraDataExport = {
@@ -71,15 +71,20 @@ function ids(rows: JsonRow[], key = "id") {
   return rows.map((row) => row[key]).filter((value): value is string => typeof value === "string");
 }
 
-async function listUserStoragePaths(supabase: SupabaseClient, userId: string, warnings: string[]) {
+async function listUserStoragePaths(
+  supabase: SupabaseClient,
+  bucket: "progress-photos" | "recipe-covers",
+  userId: string,
+  warnings: string[],
+) {
   if (!supabase.storage?.from) return [] as string[];
-  const storage = supabase.storage.from("progress-photos");
+  const storage = supabase.storage.from(bucket);
   async function list(prefix: string): Promise<string[]> {
     const paths: string[] = [];
     for (let offset = 0; offset < 10_000; offset += 1000) {
       const result = await storage.list(prefix, { limit: 1000, offset, sortBy: { column: "name", order: "asc" } });
       if (result.error) {
-        warnings.push("The private storage manifest could not be fully enumerated.");
+        warnings.push(`The private ${bucket} storage manifest could not be fully enumerated.`);
         return paths;
       }
       const entries = result.data ?? [];
@@ -163,6 +168,13 @@ export async function buildCurrentUserDataExport(
     .maybeSingle();
   if (accountStateResult.error) warnings.push("Account lifecycle status could not be included in this export.");
 
+  const recipeCoverResult = await supabase
+    .from("nutrition_recipes")
+    .select("id,cover_path")
+    .eq("user_id", user.id)
+    .limit(5000);
+  if (recipeCoverResult.error) warnings.push("Recipe cover metadata could not be included in the storage manifest.");
+
   const tableEntries = await Promise.all(
     OWNED_EXPORT_TABLES.map(async (table) => [table, await ownedRows(table)] as const)
   );
@@ -200,7 +212,7 @@ export async function buildCurrentUserDataExport(
     warnings.push("Redacted ChatGPT activity could not be included in this export.");
   }
 
-  const metadataStorageManifest = owned.progress_photos.flatMap<StorageManifestEntry>((photo) => {
+  const photoMetadataManifest = owned.progress_photos.flatMap<StorageManifestEntry>((photo) => {
     if (typeof photo.storage_path !== "string" || !photo.storage_path) return [];
     return [{
       bucket: "progress-photos",
@@ -209,16 +221,37 @@ export async function buildCurrentUserDataExport(
       kind: "progress_photo"
     }];
   });
-  const discoveredStoragePaths = await listUserStoragePaths(supabase, user.id, warnings);
-  const knownPaths = new Set(metadataStorageManifest.map((item) => item.path));
-  const storageManifest = [
-    ...metadataStorageManifest,
-    ...discoveredStoragePaths.filter((path) => !knownPaths.has(path)).map<StorageManifestEntry>((path) => ({
-      bucket: "progress-photos",
+  const recipeCoverMetadataManifest = ((recipeCoverResult.data ?? []) as JsonRow[]).flatMap<StorageManifestEntry>((recipe) => {
+    if (typeof recipe.cover_path !== "string" || !recipe.cover_path) return [];
+    return [{
+      bucket: "recipe-covers",
+      path: recipe.cover_path,
+      record_id: typeof recipe.id === "string" ? recipe.id : null,
+      kind: "recipe_cover"
+    }];
+  });
+
+  const [discoveredPhotoPaths, discoveredRecipeCoverPaths] = await Promise.all([
+    listUserStoragePaths(supabase, "progress-photos", user.id, warnings),
+    listUserStoragePaths(supabase, "recipe-covers", user.id, warnings),
+  ]);
+  const knownPhotoPaths = new Set(photoMetadataManifest.map((item) => item.path));
+  const knownRecipeCoverPaths = new Set(recipeCoverMetadataManifest.map((item) => item.path));
+  const storageManifest: StorageManifestEntry[] = [
+    ...photoMetadataManifest,
+    ...discoveredPhotoPaths.filter((path) => !knownPhotoPaths.has(path)).map((path) => ({
+      bucket: "progress-photos" as const,
       path,
       record_id: null,
-      kind: "progress_photo"
-    }))
+      kind: "progress_photo" as const
+    })),
+    ...recipeCoverMetadataManifest,
+    ...discoveredRecipeCoverPaths.filter((path) => !knownRecipeCoverPaths.has(path)).map((path) => ({
+      bucket: "recipe-covers" as const,
+      path,
+      record_id: null,
+      kind: "recipe_cover" as const
+    })),
   ];
 
   return {
