@@ -43,6 +43,7 @@ type CopyDraft = { item: PlannedOccurrenceRow; dates: string[] };
 
 const coreSlots = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 const markEatenLabel = "Mark eaten";
+const logWithChangesLabel = "Log with changes";
 const CACHE_PREFIX = "plaivra:nutrition-v1:meal-plan:cache";
 const QUEUE_PREFIX = "plaivra:nutrition-v1:meal-plan:queue";
 
@@ -499,7 +500,7 @@ export function MealPlanPage() {
         <div className="py-5"><div className="flex flex-wrap items-baseline justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected day</p><h2 className="mt-1 text-xl font-semibold">{label(selectedDate, { weekday: "long", month: "long", day: "numeric" })}</h2></div><div className="flex gap-2">{selectedDate !== today ? <button type="button" onClick={() => selectDate(today)} className="min-h-11 rounded-xl px-3 text-sm font-medium hover:bg-muted">Today</button> : null}<button type="button" onClick={() => setAddingCustomSlot(true)} className="inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-sm font-medium hover:bg-muted"><Plus className="h-4 w-4" />Add meal slot</button></div></div></div>
         <PlannedNutritionSummary occurrences={selectedOccurrences} target={target} />
         <PendingChangeReview requests={data.pendingChangeRequests} stale={staleProposal} onApprove={(id) => void approve(id)} onCancel={(id) => void cancel(id)} />
-        <div aria-label="Selected day meals">{slots.map((slot) => <MealSlotSection key={slot} label={slot} items={selectedOccurrences.filter((item) => item.meal_slot_key === slot)} allowExecution={allowExecution} markEatenLabel={markEatenLabel} onAdd={() => setAddSlot(slot)} onMarkEaten={(item) => void markEaten(item)} onLogWithChanges={logWithChanges} onSkip={(item) => void skip(item)} onEdit={beginEdit} onMove={beginMove} onCopy={beginCopy} />)}</div>
+        <div aria-label="Selected day meals">{slots.map((slot) => <MealSlotSection key={slot} label={slot} items={selectedOccurrences.filter((item) => item.meal_slot_key === slot)} allowExecution={allowExecution} markEatenLabel={markEatenLabel} logWithChangesLabel={logWithChangesLabel} onAdd={() => setAddSlot(slot)} onMarkEaten={(item) => void markEaten(item)} onLogWithChanges={logWithChanges} onSkip={(item) => void skip(item)} onEdit={beginEdit} onMove={beginMove} onCopy={beginCopy} />)}</div>
         {!selectedOccurrences.length ? <div className="py-6 text-center"><p className="font-medium">Nothing planned for this day.</p><p className="mt-1 text-sm text-muted-foreground">Add manually or use ChatGPT as an external planning accelerator.</p><button type="button" onClick={() => setAddSlot("Breakfast")} className="mt-3 min-h-11 rounded-xl bg-foreground px-4 text-sm font-semibold text-background">Add to plan</button></div> : null}
       </> : null}
 
