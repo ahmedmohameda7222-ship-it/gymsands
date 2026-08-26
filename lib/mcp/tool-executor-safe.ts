@@ -4,6 +4,7 @@ import { asObject, cleanDate, getArray, getOptionalNumber, getOptionalString, ge
 import { executeMcpTool as executeOriginalMcpTool } from "@/lib/mcp/tool-executor";
 import { fail, num, ok, type DbRow, type McpToolResult } from "@/lib/mcp/tool-helpers";
 import { ContextProjectionError, projectTaskContext, type ContextTask } from "@/lib/mcp/context-projections";
+import { weekContainsDate } from "@/lib/nutrition-v1/week-start";
 import {
   completeMealPlanOccurrence,
   deriveShoppingNeeds,
@@ -103,12 +104,9 @@ function readNullableMacro(item: JsonObject, canonical: "protein" | "carbs" | "f
   return item[canonical] ?? item[`${canonical}_g`] ?? null;
 }
 
-function isoWeekStart(dateInput: unknown) {
-  const date = cleanDate(dateInput ?? "today");
-  const value = new Date(`${date}T00:00:00.000Z`);
-  const day = value.getUTCDay();
-  const delta = day === 0 ? -6 : 1 - day;
-  value.setUTCDate(value.getUTCDate() + delta);
+function shiftIsoDate(date: string, days: number) {
+  const value = new Date(`${date}T12:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
 }
 
@@ -176,6 +174,23 @@ async function readCanonicalWeek(ctx: McpContext, weekStartDate: string) {
   return (data as DbRow | null) ?? null;
 }
 
+async function readCanonicalWeekContainingDate(ctx: McpContext, date: string) {
+  const { data, error } = await ctx.supabase
+    .from("nutrition_meal_plan_weeks")
+    .select("id,user_id,week_start_date,revision,week_override_json,created_at,updated_at")
+    .eq("user_id", ctx.userId)
+    .gte("week_start_date", shiftIsoDate(date, -6))
+    .lte("week_start_date", date)
+    .order("week_start_date", { ascending: false })
+    .limit(7);
+  if (error) throw new Error(error.message);
+  const matches = ((data ?? []) as unknown as DbRow[]).filter((row) =>
+    typeof row.week_start_date === "string" && weekContainsDate(row.week_start_date, date)
+  );
+  if (matches.length > 1) throw new Error("Meal Plan week authority is ambiguous for this date.");
+  return matches[0] ?? null;
+}
+
 async function insertPlannedMeals(
   ctx: McpContext,
   items: JsonObject[],
@@ -192,8 +207,19 @@ async function insertPlannedMeals(
     positioned.set(positionKey, position + 1);
     return plannedPlaceholderMutation({ ...item, date, meal_type: slot }, position);
   });
-  const weekStartDate = explicitWeekStart ? cleanDate(explicitWeekStart) : isoWeekStart(occurrences[0]?.planDate);
-  const week = await readCanonicalWeek(ctx, weekStartDate);
+
+  const normalizedExplicitWeekStart = explicitWeekStart ? cleanDate(explicitWeekStart) : null;
+  const occurrenceDate = occurrences[0]?.planDate;
+  const week = normalizedExplicitWeekStart
+    ? await readCanonicalWeek(ctx, normalizedExplicitWeekStart)
+    : await readCanonicalWeekContainingDate(ctx, occurrenceDate);
+  if (!normalizedExplicitWeekStart && !week) {
+    return fail(
+      "week_start_required",
+      "A canonical Meal Plan week does not exist for this date. Create the week explicitly with create_week_meal_plan and start_date before adding a day plan.",
+    );
+  }
+  const weekStartDate = normalizedExplicitWeekStart ?? String(week?.week_start_date ?? "");
   const mutationResult = await mutateMealPlanWeek(ctx.supabase, ctx.userId, {
     weekId: typeof week?.id === "string" ? week.id : null,
     weekStartDate,
