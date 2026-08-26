@@ -29,7 +29,7 @@ describe("Nutrition V1 Recipe publication authority", () => {
     expect(migration).toContain("revoke all on function public.publish_nutrition_recipe_draft(uuid) from public, anon");
   });
 
-  it("creates a new immutable version from the Working Draft and removes that Draft in the same command", () => {
+  it("creates a new immutable version while preserving Draft child identities and internal references", () => {
     const start = migration.indexOf(
       "create or replace function public.publish_nutrition_recipe_draft(p_recipe_id uuid)",
     );
@@ -38,9 +38,14 @@ describe("Nutrition V1 Recipe publication authority", () => {
 
     expect(body).toContain("insert into public.nutrition_recipe_versions");
     expect(body).toContain("max(version_number)");
-    expect(body).toContain("insert into public.nutrition_recipe_ingredients");
-    expect(body).toContain("insert into public.nutrition_recipe_actions");
-    expect(body).toContain("insert into public.nutrition_recipe_equipment");
+    expect(body).toContain("update public.nutrition_recipe_ingredients");
+    expect(body).toContain("update public.nutrition_recipe_actions");
+    expect(body).toContain("update public.nutrition_recipe_equipment");
+    expect(body).toContain("set recipe_version_id = v_version_id");
+    expect(body).toContain("recipe_draft_id = null");
+    expect(body).not.toContain("insert into public.nutrition_recipe_ingredients");
+    expect(body).not.toContain("insert into public.nutrition_recipe_actions");
+    expect(body).not.toContain("insert into public.nutrition_recipe_equipment");
     expect(body).toContain("delete from public.nutrition_recipe_drafts");
     expect(body).toContain("update public.nutrition_recipes");
     expect(body).not.toContain("update public.nutrition_recipe_versions");
@@ -72,10 +77,11 @@ describe("Nutrition V1 Recipe publication authority", () => {
     expect(body).not.toContain('.from("nutrition_recipe_equipment")');
   });
 
-  it("executes verification for RPC hardening, owner isolation, immutable v1, and v1-to-v2 publication", () => {
+  it("executes verification for RPC hardening, owner isolation, immutable versions, and preserved dependency identities", () => {
     expect(verification).toContain("recipe publication rpc is not hardened");
     expect(verification).toContain("recipe publication did not create version 1");
     expect(verification).toContain("recipe publication did not create version 2");
+    expect(verification).toContain("recipe publication did not preserve action dependency identities");
     expect(verification).toContain("non-owner recipe publication succeeded");
     expect(verification).toContain("published recipe version was mutable");
   });
