@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { RecipeNutritionPerServing } from "@/lib/nutrition-v1/recipe-cache";
+import { clonePublishedRecipeGraphForDraft } from "@/lib/nutrition-v1/recipe-versioning";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -304,6 +305,65 @@ async function componentRows(supabase: SupabaseClient, userId: string, draftId: 
   return { ingredients, instructions, equipment };
 }
 
+async function insertDraftGraph(
+  supabase: SupabaseClient,
+  userId: string,
+  draftId: string,
+  graph: ReturnType<typeof clonePublishedRecipeGraphForDraft<RecipeWorkspaceIngredient, RecipeWorkspaceEquipment, RecipeWorkspaceInstruction>>,
+) {
+  if (graph.ingredients.length) {
+    const result = await supabase.from("nutrition_recipe_ingredients").insert(graph.ingredients.map((item) => ({
+      id: item.id,
+      user_id: userId,
+      recipe_version_id: null,
+      recipe_draft_id: draftId,
+      position: item.position,
+      food_id: item.food_id,
+      ingredient_name: item.ingredient_name,
+      quantity: item.quantity,
+      unit: item.unit,
+      frozen_nutrition: item.frozen_nutrition,
+    })));
+    dbError(result.error);
+  }
+
+  if (graph.instructions.length) {
+    const result = await supabase.from("nutrition_recipe_actions").insert(graph.instructions.map((item) => ({
+      id: item.id,
+      user_id: userId,
+      recipe_version_id: null,
+      recipe_draft_id: draftId,
+      position: item.position,
+      instruction: item.instruction,
+      ingredient_refs: item.ingredient_refs,
+      equipment_refs: item.equipment_refs,
+      duration_seconds: item.duration_seconds,
+      heat_or_temperature: item.heat_or_temperature,
+      doneness_or_result_cue: item.doneness_or_result_cue,
+      prep_ahead_cue: item.prep_ahead_cue,
+      track_key: item.track_key,
+      dependency_action_ids: item.dependency_action_ids,
+      can_run_in_background: item.can_run_in_background,
+      metadata: item.metadata,
+    })));
+    dbError(result.error);
+  }
+
+  if (graph.equipment.length) {
+    const result = await supabase.from("nutrition_recipe_equipment").insert(graph.equipment.map((item) => ({
+      id: item.id,
+      user_id: userId,
+      recipe_version_id: null,
+      recipe_draft_id: draftId,
+      position: item.position,
+      name: item.name,
+      quantity: item.quantity,
+      note: item.note,
+    })));
+    dbError(result.error);
+  }
+}
+
 export async function getRecipeWorkspace(
   supabase: SupabaseClient,
   userId: string,
@@ -342,6 +402,7 @@ export async function ensureRecipeWorkingDraft(supabase: SupabaseClient, userId:
   const version = current.latestVersion;
   if (!version) throw new Error("Published Recipe version not found.");
   const publishedComponents = await componentRows(supabase, userId, null, version.id);
+  const draftGraph = clonePublishedRecipeGraphForDraft(publishedComponents, () => crypto.randomUUID());
   const draftResult = await supabase.from("nutrition_recipe_drafts").insert({
     recipe_id: recipeId,
     user_id: userId,
@@ -356,52 +417,7 @@ export async function ensureRecipeWorkingDraft(supabase: SupabaseClient, userId:
   const draft = requiredData(draftResult.data as RecipeDraftRow | null, draftResult.error, "Working Draft could not be created.");
 
   try {
-    if (publishedComponents.ingredients.length) {
-      const result = await supabase.from("nutrition_recipe_ingredients").insert(publishedComponents.ingredients.map((item) => ({
-        user_id: userId,
-        recipe_version_id: null,
-        recipe_draft_id: draft.id,
-        position: item.position,
-        food_id: item.food_id,
-        ingredient_name: item.ingredient_name,
-        quantity: item.quantity,
-        unit: item.unit,
-        frozen_nutrition: item.frozen_nutrition,
-      })));
-      dbError(result.error);
-    }
-    if (publishedComponents.instructions.length) {
-      const result = await supabase.from("nutrition_recipe_actions").insert(publishedComponents.instructions.map((item) => ({
-        user_id: userId,
-        recipe_version_id: null,
-        recipe_draft_id: draft.id,
-        position: item.position,
-        instruction: item.instruction,
-        ingredient_refs: item.ingredient_refs,
-        equipment_refs: item.equipment_refs,
-        duration_seconds: item.duration_seconds,
-        heat_or_temperature: item.heat_or_temperature,
-        doneness_or_result_cue: item.doneness_or_result_cue,
-        prep_ahead_cue: item.prep_ahead_cue,
-        track_key: item.track_key,
-        dependency_action_ids: item.dependency_action_ids,
-        can_run_in_background: item.can_run_in_background,
-        metadata: item.metadata,
-      })));
-      dbError(result.error);
-    }
-    if (publishedComponents.equipment.length) {
-      const result = await supabase.from("nutrition_recipe_equipment").insert(publishedComponents.equipment.map((item) => ({
-        user_id: userId,
-        recipe_version_id: null,
-        recipe_draft_id: draft.id,
-        position: item.position,
-        name: item.name,
-        quantity: item.quantity,
-        note: item.note,
-      })));
-      dbError(result.error);
-    }
+    await insertDraftGraph(supabase, userId, draft.id, draftGraph);
   } catch (error) {
     await supabase.from("nutrition_recipe_drafts").delete().eq("id", draft.id).eq("user_id", userId);
     throw error;
@@ -429,6 +445,7 @@ export async function duplicatePublishedRecipe(supabase: SupabaseClient, userId:
   const version = source.latestVersion;
   if (!version) throw new Error("Only a published Recipe can be duplicated.");
   const sourceComponents = await componentRows(supabase, userId, null, version.id);
+  const draftGraph = clonePublishedRecipeGraphForDraft(sourceComponents, () => crypto.randomUUID());
 
   const rootResult = await supabase.from("nutrition_recipes").insert({
     user_id: userId,
@@ -458,32 +475,7 @@ export async function duplicatePublishedRecipe(supabase: SupabaseClient, userId:
   }
 
   try {
-    if (sourceComponents.ingredients.length) {
-      const result = await supabase.from("nutrition_recipe_ingredients").insert(sourceComponents.ingredients.map((item) => ({
-        user_id: userId, recipe_version_id: null, recipe_draft_id: draft.id, position: item.position,
-        food_id: item.food_id, ingredient_name: item.ingredient_name, quantity: item.quantity, unit: item.unit,
-        frozen_nutrition: item.frozen_nutrition,
-      })));
-      dbError(result.error);
-    }
-    if (sourceComponents.instructions.length) {
-      const result = await supabase.from("nutrition_recipe_actions").insert(sourceComponents.instructions.map((item) => ({
-        user_id: userId, recipe_version_id: null, recipe_draft_id: draft.id, position: item.position,
-        instruction: item.instruction, ingredient_refs: item.ingredient_refs, equipment_refs: item.equipment_refs,
-        duration_seconds: item.duration_seconds, heat_or_temperature: item.heat_or_temperature,
-        doneness_or_result_cue: item.doneness_or_result_cue, prep_ahead_cue: item.prep_ahead_cue,
-        track_key: item.track_key, dependency_action_ids: item.dependency_action_ids,
-        can_run_in_background: item.can_run_in_background, metadata: item.metadata,
-      })));
-      dbError(result.error);
-    }
-    if (sourceComponents.equipment.length) {
-      const result = await supabase.from("nutrition_recipe_equipment").insert(sourceComponents.equipment.map((item) => ({
-        user_id: userId, recipe_version_id: null, recipe_draft_id: draft.id, position: item.position,
-        name: item.name, quantity: item.quantity, note: item.note,
-      })));
-      dbError(result.error);
-    }
+    await insertDraftGraph(supabase, userId, draft.id, draftGraph);
   } catch (error) {
     await supabase.from("nutrition_recipe_drafts").delete().eq("id", draft.id).eq("user_id", userId);
     await supabase.from("nutrition_recipes").delete().eq("id", root.id).eq("user_id", userId);
