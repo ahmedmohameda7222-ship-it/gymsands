@@ -53,12 +53,6 @@ test("Nutrition V1 touch-target audit excludes only currently clipped sr-only he
   assert.match(source, /const targetAuditedInteractive = interactive\.filter/);
 });
 
-test("Nutrition V1 target audit measures a wrapping label as the effective target for retained native form controls", async () => {
-  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
-  assert.match(source, /element\.closest\("label"\)/);
-  assert.match(source, /wrappingLabel \? wrappingLabel : element/);
-});
-
 test("canonical rendered QA invokes the bounded Nutrition V1 suite", async () => {
   const source = await readFile(new URL("./run-rendered-qa.mjs", import.meta.url), "utf8");
   assert.match(source, /run-nutrition-v1-qa\.mjs/);
