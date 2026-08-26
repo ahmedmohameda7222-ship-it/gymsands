@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Check, FileDown, MoreHorizontal, Plus, RefreshCw, Share2, ShoppingCart, Trash2, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -317,6 +318,13 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
 
   return (
     <Card variant="glass">
+      <div className="mx-4 mt-4 rounded-[14px] border border-border/70 bg-muted/20 p-3 text-sm sm:mx-5">
+        <p className="font-semibold text-foreground">Legacy Grocery compatibility surface</p>
+        <p className="mt-1 text-muted-foreground">Nutrition V1 Shopping lives at /my-meal-plan/shopping. This legacy list remains available only for compatibility with older Meal Plan clients.</p>
+        <Link href={`/my-meal-plan/shopping?week=${encodeURIComponent(weekStart)}&date=${encodeURIComponent(weekStart)}`} className="mt-2 inline-flex min-h-11 items-center rounded-xl font-semibold text-primary underline-offset-4 hover:underline">
+          Open Nutrition V1 Shopping
+        </Link>
+      </div>
       {confirmDialog}
       <CardHeader className="p-4 sm:p-5">
         <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
