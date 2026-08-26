@@ -285,11 +285,20 @@ async function fulfillJson(route, body, status = 200, fixture = "nutrition-v1") 
 async function createContext(browser, item) {
   const context = await browser.newContext({ viewport: { width: item.viewport.width, height: item.viewport.height }, reducedMotion: "reduce", colorScheme: "light", locale: item.direction === "rtl" ? "ar-EG" : "en-GB" });
   await context.addInitScript(({ direction, largeText, offline, recipeId, cooking }) => {
-    document.documentElement.dir = direction;
-    document.documentElement.lang = direction === "rtl" ? "ar" : "en";
-    if (largeText) document.documentElement.style.fontSize = "125%";
+    const applyDocumentPreferences = () => {
+      if (!document.documentElement) return false;
+      document.documentElement.dir = direction;
+      document.documentElement.lang = direction === "rtl" ? "ar" : "en";
+      if (largeText) document.documentElement.style.fontSize = "125%";
+      return true;
+    };
+    if (!applyDocumentPreferences()) {
+      document.addEventListener("DOMContentLoaded", applyDocumentPreferences, { once: true });
+    }
     if (offline) Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
-    if (cooking) localStorage.setItem(`plaivra:nutrition:cooking:${recipeId}:active`, JSON.stringify(cooking));
+    if (cooking) {
+      try { localStorage.setItem(`plaivra:nutrition:cooking:${recipeId}:active`, JSON.stringify(cooking)); } catch { /* origin not available yet */ }
+    }
   }, { direction: item.direction, largeText: item.largeText, offline: item.offline, recipeId: RECIPE_ID, cooking: item.route.includes("/cook") ? cookingFixture(item) : null });
 
   await context.route("**/api/billing/entitlements", (route) => fulfillJson(route, { entitlements: [] }, 200, "empty-entitlements-v1"));
@@ -428,7 +437,11 @@ async function collectMetrics(page) {
       const label = element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent || element.getAttribute("placeholder") || element.getAttribute("value") || ("labels" in element && element.labels?.length ? "associated-label" : "");
       return !String(label || "").trim();
     }).length;
-    const compact = interactive.flatMap((element) => {
+    const targetAuditedInteractive = interactive.filter((element) => {
+      if (element.classList.contains("sr-only") && document.activeElement !== element) return false;
+      return true;
+    });
+    const compact = targetAuditedInteractive.flatMap((element) => {
       const target = element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type) && element.labels?.[0] ? element.labels[0] : element;
       const rect = target.getBoundingClientRect();
       return rect.width < 44 || rect.height < 44 ? [{ tag: element.tagName.toLowerCase(), text: String(element.textContent || element.getAttribute("aria-label") || "").trim().slice(0, 80), width: Math.round(rect.width), height: Math.round(rect.height) }] : [];
