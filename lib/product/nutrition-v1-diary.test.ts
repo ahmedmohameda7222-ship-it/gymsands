@@ -1,0 +1,98 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const root = process.cwd();
+const source = (path: string) => readFileSync(join(root, path), "utf8");
+
+const diaryPage = "components/nutrition/diary/diary-page.tsx";
+const loggingSession = "components/nutrition/diary/logging-session.tsx";
+const plateDock = "components/nutrition/diary/plate-dock.tsx";
+
+describe("Nutrition V1 canonical Diary product contract", () => {
+  it("creates the planned authenticated Diary projection/log routes and focused UI surface", () => {
+    for (const path of [
+      "services/nutrition-v1/server/diary.ts",
+      "app/api/nutrition/v1/diary/route.ts",
+      "app/api/nutrition/v1/log/route.ts",
+      diaryPage,
+      loggingSession,
+      plateDock,
+    ]) expect(existsSync(join(root, path)), path).toBe(true);
+  });
+
+  it("replaces the normal /calories path with DiaryPage only after the canonical surface exists", () => {
+    const route = source("app/(private)/calories/page.tsx");
+    expect(route).toContain("DiaryPage");
+    expect(route).not.toContain("EatPage");
+    expect(route).toContain("Suspense");
+  });
+
+  it("keeps actual, target, planned context, and hydration visibly distinct", () => {
+    const page = source(diaryPage);
+    expect(page).toContain("Diary");
+    expect(page).toContain("remaining");
+    expect(page).toContain("Actual");
+    expect(page).toContain("Planned");
+    expect(page).toContain("Water");
+    expect(page).toContain("Other");
+    expect(page).toContain("/api/nutrition/v1/diary");
+    expect(page).not.toMatch(/planned[^\n]{0,100}(remaining|consumed)/i);
+  });
+
+  it("uses one search-first Food Logging Session instead of a method-picker-first workflow", () => {
+    const logger = source(loggingSession);
+    expect(logger).toContain("Search foods");
+    expect(logger).toContain("Barcode");
+    expect(logger).toContain("Quick Add");
+    expect(logger).toContain("Saved Meals");
+    expect(logger).toContain("Recipes");
+    expect(logger).toContain("Plate");
+    expect(logger).not.toMatch(/Choose (a )?(logging )?method|Select method/i);
+  });
+
+  it("retains one Plate while switching Search, Barcode, Quick Add, Saved Meals, and Recipes", () => {
+    const logger = source(loggingSession);
+    expect(logger).toContain("const [plate");
+    expect(logger).toContain("setPlate");
+    for (const mode of ["search", "barcode", "quick-add", "saved-meals", "recipes"]) {
+      expect(logger).toContain(`\"${mode}\"`);
+    }
+    expect(logger).not.toMatch(/setPlate\(\[\]\)[\s\S]{0,160}(barcode|quick-add|saved-meals|recipes)/);
+  });
+
+  it("uses bounded short-lived draft recovery that clears only after confirmed logging", () => {
+    const logger = source(loggingSession);
+    expect(logger).toContain("DIARY_DRAFT_TTL_MS");
+    expect(logger).toContain("localStorage");
+    expect(logger).toContain("confirmed");
+    expect(logger).toContain("removeItem");
+    expect(logger).not.toMatch(/localStorage\.removeItem[\s\S]{0,120}(submitting|failed)/);
+  });
+
+  it("keeps Plate items editable and submits the entire logical meal with one operation ID", () => {
+    const logger = source(loggingSession);
+    const dock = source(plateDock);
+    expect(dock).toContain("Plate");
+    expect(dock).toContain("Remove");
+    expect(dock).toContain("quantity");
+    expect(logger).toContain("crypto.randomUUID");
+    expect(logger).toContain("/api/nutrition/v1/log");
+    expect(logger).toContain("operationId");
+    expect(logger).toContain("items: plate");
+  });
+
+  it("preserves compatibility Other only when actual data contains it", () => {
+    const page = source(diaryPage);
+    expect(page).toMatch(/meal[^\n]{0,80}Other|Other[^\n]{0,80}meal/i);
+    expect(page).not.toMatch(/\[\s*["']Breakfast["']\s*,\s*["']Lunch["']\s*,\s*["']Dinner["']\s*,\s*["']Snack[s]?["']\s*,\s*["']Other["']\s*\]/);
+  });
+
+  it("keeps Recipe and Saved Meal frozen lineage in the logger rather than flattening source authority", () => {
+    const logger = source(loggingSession);
+    expect(logger).toContain("recipeVersionId");
+    expect(logger).toContain("frozenSnapshot");
+    expect(logger).toContain("saved_meal");
+    expect(logger).not.toMatch(/recipeVersionId\s*:\s*null/);
+  });
+});
