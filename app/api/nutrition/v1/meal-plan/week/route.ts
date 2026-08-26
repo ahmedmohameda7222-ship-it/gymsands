@@ -23,6 +23,11 @@ function object(value: unknown, label: string) {
   return value as Record<string, unknown>;
 }
 
+function shoppingExcludedOccurrenceIds(weekOverride: Record<string, unknown> | null | undefined) {
+  const raw = weekOverride?.shoppingExcludedOccurrenceIds;
+  return new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string" && id.length > 0) : []);
+}
+
 export async function GET(request: Request) {
   const context = await requireNutritionUser(request);
   if (context instanceof NextResponse) return context;
@@ -44,11 +49,14 @@ export async function GET(request: Request) {
       if (result.error) throw result.error;
       pendingChangeRequests = (result.data ?? []) as Array<Record<string, unknown>>;
     }
-    const shoppingNeeds = deriveShoppingNeeds(projection.occurrences.map((item) => ({
-      id: item.id,
-      sourceType: item.source_type,
-      frozenSnapshot: item.frozen_snapshot,
-    })));
+    const excludedOccurrenceIds = shoppingExcludedOccurrenceIds(projection.week?.week_override_json);
+    const shoppingNeeds = deriveShoppingNeeds(projection.occurrences
+      .filter((item) => !excludedOccurrenceIds.has(item.id))
+      .map((item) => ({
+        id: item.id,
+        sourceType: item.source_type,
+        frozenSnapshot: item.frozen_snapshot,
+      })));
     return nutritionJson({ ...projection, target, pendingChangeRequests, shoppingNeeds });
   } catch (error) {
     return nutritionErrorResponse(error);
