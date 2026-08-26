@@ -78,10 +78,24 @@ describe("public MCP output contracts", () => {
         schema_version: "2026-07-1", task: "nutrition_planning", generated_at: "2026-07-11T12:00:00.000Z",
         data_minimization: "task_specific", interpretation_notice: "notice",
         sections: {
-          goal: null, nutrition_preferences: [],
-          user_confirmed_restrictions: { legacy_free_text: null, planning_restrictions: null, allergies: null, medical_interpretation_allowed: false },
-          default_targets: null, target_profiles: [],
-          planning_preferences: { weekly_food_budget: null, budget_currency: null, max_cooking_time_minutes: null, meal_prep_days: [], cooking_skill: null, kitchen_equipment: [], preferred_cuisines: [], disliked_foods: [], repeat_tolerance: null, meals_per_day: null, ingredient_reuse_preference: null, grocery_style_preference: null }
+          goal: null, nutrition_goal: null, nutrition_preferences: [],
+          user_confirmed_restrictions: {
+            allergies: [], dietary_restrictions: [], legacy_free_text: null,
+            planning_restrictions: null, legacy_planning_restrictions: null,
+            medical_interpretation_allowed: false
+          },
+          effective_target: {
+            date: "2026-07-11", available: false, effective_from: null, effective_to: null,
+            calories: null, protein_g: null, carbs_g: null, fat_g: null, water_ml: null, source: null
+          },
+          planning_preferences: {
+            meals_per_day: null, preferred_cuisines: [], liked_foods: [], disliked_foods: [],
+            cooking_skill: null, max_cooking_time_minutes: null, meal_prep_preference: null,
+            meal_prep_days: [], weekly_food_budget: null, budget_currency: null,
+            eating_schedule: null, supplements: [], tracks_calories_or_macros: null,
+            kitchen_equipment: [], repeat_tolerance: null, ingredient_reuse_preference: null,
+            grocery_style_preference: null
+          }
         }
       },
       get_workout_adjustment_context: {
