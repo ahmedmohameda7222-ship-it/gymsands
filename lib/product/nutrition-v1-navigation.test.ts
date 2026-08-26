@@ -44,7 +44,8 @@ describe("Nutrition V1 navigation and route compatibility", () => {
   it("keeps the retired weekly overview URL as a compatibility redirect to Diary", () => {
     const weeklyOverview = source("app/(private)/calories/weekly-overview/page.tsx");
     expect(weeklyOverview).toContain('redirect("/calories")');
-    expect(weeklyOverview).not.toContain("WeeklyOverviewPage");
+    expect(weeklyOverview).not.toContain('from "@/components/meals/weekly-overview"');
+    expect(weeklyOverview).not.toContain("<WeeklyOverviewPage");
     expect(weeklyOverview).not.toContain("Fitness Reports");
   });
 
