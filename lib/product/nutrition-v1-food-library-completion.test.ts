@@ -64,7 +64,7 @@ describe("Nutrition V1 Food Library completion contract", () => {
 
   it("routes owner-derived custom Food and personal-correction mutations through the authenticated V1 Food endpoint", () => {
     const route = source("app/api/nutrition/v1/foods/route.ts");
-    const server = source("services/nutrition-v1/server/food-library.ts");
+    const server = source("services/nutrition-v1/server/user-foods.ts");
     expect(route).toContain("requireNutritionUser(request)");
     for (const operation of ["custom_food_create", "custom_food_update", "custom_food_delete", "personal_correction"]) {
       expect(route).toContain(operation);
