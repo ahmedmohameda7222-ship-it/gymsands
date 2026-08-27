@@ -41,12 +41,12 @@ describe("Nutrition V1 canonical Food Library product surface", () => {
     expect(page).not.toMatch(/nutrition dashboard|marketing hero|grid-cols-3|grid-cols-4/i);
   });
 
-  it("uses flat decision rows with explicit localized macro labels and positive-only Plaivra verification", () => {
+  it("uses flat decision rows with explicit localized macro labels, objective tags, and positive-only Plaivra verification", () => {
     const row = source(rowPath);
     expect(row).toContain("useNutritionV1Translation");
     expect(row).toContain("ShieldCheck");
     expect(row).toContain('aria-label={nt("plaivraVerified")}');
-    expectKeys(row, ["macroProtein", "macroCarbs", "macroFat"]);
+    expectKeys(row, ["macroProtein", "macroCarbs", "macroFat", "highProtein", "lowCarb"]);
     expect(row).toContain('"g"');
     expect(row).toContain("min-h-[88px]");
     expect(row).not.toMatch(/Unverified|confidence|source name|trust level|Saved Meal/i);
