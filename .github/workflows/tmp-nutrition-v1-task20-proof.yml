@@ -20,7 +20,6 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       NEXT_PUBLIC_USE_MOCK_AUTH: "true"
-      NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA: "true"
       PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
       PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
       PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
@@ -30,8 +29,6 @@ jobs:
       PLAIVRA_ACTIVITY_CATALOG_MODE: library_v2_with_legacy_fallback
       PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
       PLAIVRA_ACTIVITY_CATALOG_API_KEY: ci-placeholder-catalog-key-long-enough
-      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-      PLAIVRA_AW2A_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
       SUPABASE_TELEMETRY_DISABLED: "1"
       DO_NOT_TRACK: "1"
       QA_BASE_URL: http://localhost:3000
@@ -72,15 +69,22 @@ jobs:
         run: npm test
 
       - name: Chronological disposable migration replay
+        env:
+          PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: node scripts/replay-local-migration-chain.mjs --log ci-reports/database-validation.log --prove-future-order
 
       - name: Database lint
         run: supabase db lint --local --schema public --level error --fail-on error
 
       - name: Database verification SQL
+        env:
+          PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: node scripts/run-database-verification.mjs
 
       - name: Integration tests
+        env:
+          PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          PLAIVRA_AW2A_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: npm run test:integration
 
       - name: Repository script contracts
@@ -93,6 +97,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Production mock-auth build
+        env:
+          NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA: "true"
         run: npm run build
 
       - name: Start QA server
@@ -108,6 +114,8 @@ jobs:
           exit 1
 
       - name: Nutrition V1 rendered QA matrix
+        env:
+          NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA: "true"
         run: node scripts/run-nutrition-v1-qa.mjs
 
       - name: Stop QA server
