@@ -27,6 +27,13 @@ describe("Nutrition V1 long-term architecture correction migration", () => {
     expect(verification).toContain("valid 81st catalog match");
   });
 
+  it("preserves the canonical between numeric-filter contract in database-authoritative search", () => {
+    expect(migration).toContain("v_max numeric");
+    expect(migration).toContain("p_filter->>'max'");
+    expect(migration).toContain("if v_operator = 'between'");
+    expect(verification).toContain("between nutrition filter");
+  });
+
   it("makes Cooking Start Over one idempotent transactional operation", () => {
     expect(migration).toContain("create or replace function public.start_over_nutrition_cooking_session");
     expect(migration).toContain("restart_parent_session_id");
