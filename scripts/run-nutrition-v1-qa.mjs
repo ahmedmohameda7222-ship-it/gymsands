@@ -243,7 +243,7 @@ async function createContext(browser, item) {
       try { localStorage.setItem(`plaivra:nutrition-v1:meal-plan:queue:${mockAuthUserId}:${mealPlanWeekStart}`, JSON.stringify(mealPlanQueue)); } catch { /* origin not available yet */ }
     }
     if (cooking) {
-      try { localStorage.setItem(`plaivra:nutrition:cooking:${recipeId}:active`, JSON.stringify(cooking)); } catch { /* origin not available yet */ }
+      try { localStorage.setItem(`plaivra:nutrition:cooking:${mockAuthUserId}:${recipeId}:active`, JSON.stringify(cooking)); } catch { /* origin not available yet */ }
     }
   }, { direction: item.direction, language: item.language, largeText: item.largeText, offline: item.offline, recipeId: RECIPE_ID, cooking: item.route.includes("/cook") ? cookingFixture(item) : null, mealPlanQueue, mockAuthUserId: MOCK_AUTH_USER_ID, mealPlanWeekStart: MEAL_PLAN_QA_WEEK_START });
 
