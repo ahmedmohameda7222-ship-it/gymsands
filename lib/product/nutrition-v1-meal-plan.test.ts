@@ -90,7 +90,7 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(page).toContain("weekOverride");
   });
 
-  it("wires the platform-neutral offline queue into durable web cache and visible sync states", () => {
+  it("wires the platform-neutral offline queue into durable web cache and distinct visible sync states", () => {
     const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
     expect(page).toContain("deserializeMealPlanQueue");
     expect(page).toContain("serializeMealPlanQueue");
@@ -99,6 +99,20 @@ describe("Nutrition V1 Meal Plan product contract", () => {
     expect(page).toContain("Saved");
     expect(page).toContain("Waiting to sync");
     expect(page).toContain("Needs attention");
+    expect(page).toContain("Conflict");
+    expect(page).toContain("navigator.onLine");
+    expect(page).toMatch(/!navigator\.onLine[\s\S]{0,220}queueState/);
+  });
+
+  it("distinguishes Complete, Partial, and Estimated planned nutrition without treating unknown values as zero", () => {
+    const summary = source("components/nutrition/meal-plan/planned-nutrition-summary.tsx");
+    expect(summary).toContain("estimatedNutrition");
+    expect(summary).toContain('"Complete"');
+    expect(summary).toContain('"Partial"');
+    expect(summary).toContain('"Estimated"');
+    expect(summary).toContain("incomplete");
+    expect(summary).toMatch(/difference[\s\S]{0,180}incomplete/);
+    expect(summary).not.toMatch(/numberOrNull\([^)]*\)\s*\?\?\s*0/);
   });
 
   it("protects Shopping manual quantity notes state and offers explicit carry-forward", () => {
