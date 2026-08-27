@@ -214,8 +214,19 @@ function mealPlanFixture(item, date = "2026-08-26") {
     frozen_snapshot: { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 }, shoppingIngredients: [{ foodId: "55555555-5555-4555-8555-555555555555", name: item.language === "ar" ? "صدر دجاج" : "Chicken breast", quantity: 400, unit: "g", qualifier: null }] },
     status: item.name.includes("skip") ? "skipped" : "planned", completed_at: null, actual_log_group_id: null,
   };
+  const weekOverride = item.name.includes("estimated") ? { estimated: true } : {};
+  if (item.name === "shopping-list-three-states") {
+    weekOverride.shopping = {
+      states: {},
+      derivedEdits: {},
+      manualItems: [
+        { id: "shopping-purchased", name: "Sparkling water", quantity: 2, unit: "bottles", state: "Purchased", notes: "" },
+        { id: "shopping-dont-need", name: "Napkins", quantity: 1, unit: "pack", state: "Don't need", notes: "Already at home" },
+      ],
+    };
+  }
   return {
-    week: { id: occurrence.week_id, user_id: occurrence.user_id, week_start_date: weekStart, revision: 3, week_override_json: item.name.includes("estimated") ? { estimated: true } : {} },
+    week: { id: occurrence.week_id, user_id: occurrence.user_id, week_start_date: weekStart, revision: 3, week_override_json: weekOverride },
     occurrences: [occurrence],
     target: { available: true, effective_from: weekStart, effective_to: null, values: { calories: 2200, protein_g: 160, carbs_g: 240, fat_g: 70, water_ml: 2500 }, source: "rendered_qa_fixture", source_evidence: { authority: "rendered_qa" }, reason: "effective_target" },
     pendingChangeRequests: item.name.includes("chatgpt") ? [{ id: "66666666-6666-4666-8666-666666666666", base_revision: 2, proposal_json: { summary: "Move lunch later" }, state: item.name.includes("stale") ? "stale" : "pending" }] : [],
@@ -474,7 +485,7 @@ function localizedAssertions(item, metrics) {
   const required = item.name === "meal-plan-rtl-large-text"
     ? ["خطة الوجبات", "بروتين", "كربوهيدرات", "دهون"]
     : item.name === "food-library-rtl-mixed-brand"
-      ? ["مكتبة الأطعمة", "بروتين", "كربوهيدرات", "دهون"]
+      ? ["مكتبة الأطعمة", "بروتين", "كربوهيدرات", "دهون", "غني بالبروتين", "قليل الكربوهيدرات"]
       : item.name === "recipes-rtl-home-mobile"
         ? ["وصفاتي", "المحذوفة مؤخرًا"]
         : item.name === "recipes-rtl-cooking-mobile"
@@ -482,6 +493,7 @@ function localizedAssertions(item, metrics) {
           : [];
   for (const text of required) if (!body.includes(text)) failures.push(`missing localized Arabic evidence: ${text}`);
   if (item.name === "food-library-rtl-mixed-brand" && /\bP\s+\d|\bC\s+\d|\bF\s+\d/.test(body)) failures.push("Arabic Food Library still exposes Latin P/C/F macro abbreviations");
+  if (item.name === "food-library-rtl-mixed-brand" && /\bHIGH PROTEIN\b|\bLOW CARB\b/i.test(body)) failures.push("Arabic Food Library still exposes English objective tags");
   return failures;
 }
 
