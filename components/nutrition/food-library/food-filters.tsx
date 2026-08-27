@@ -33,10 +33,10 @@ export function FoodFilters({ value, onChange, onClose }: { value: FoodLibraryFi
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-xs font-medium text-muted-foreground">{nt("proteinMinimum")}
-          <div className="mt-1 flex min-h-11 items-center rounded-xl border border-border px-3"><input inputMode="decimal" value={value.proteinMin} onChange={(event) => update({ proteinMin: event.target.value })} placeholder="g / 100" className="w-full bg-transparent text-sm outline-none" /></div>
+          <div className="mt-1 flex min-h-[45px] items-center rounded-xl border border-border px-3"><input inputMode="decimal" value={value.proteinMin} onChange={(event) => update({ proteinMin: event.target.value })} placeholder="g / 100" className="min-h-[45px] w-full bg-transparent text-sm outline-none" /></div>
         </label>
         <label className="text-xs font-medium text-muted-foreground">{nt("carbsMaximum")}
-          <div className="mt-1 flex min-h-11 items-center rounded-xl border border-border px-3"><input inputMode="decimal" value={value.carbsMax} onChange={(event) => update({ carbsMax: event.target.value })} placeholder="g / 100" className="w-full bg-transparent text-sm outline-none" /></div>
+          <div className="mt-1 flex min-h-[45px] items-center rounded-xl border border-border px-3"><input inputMode="decimal" value={value.carbsMax} onChange={(event) => update({ carbsMax: event.target.value })} placeholder="g / 100" className="min-h-[45px] w-full bg-transparent text-sm outline-none" /></div>
         </label>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">{nt("normalizedFilterHint")}</p>
