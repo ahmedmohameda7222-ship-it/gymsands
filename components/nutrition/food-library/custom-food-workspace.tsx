@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { foodLibraryText, type FoodLibraryTextKey } from "@/components/nutrition/food-library/food-library-copy";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
@@ -36,7 +36,7 @@ export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Pro
   const [carbs, setCarbs] = useState(food?.nutrition.carbs_g === null ? "" : String(food?.nutrition.carbs_g ?? ""));
   const [fat, setFat] = useState(food?.nutrition.fat_g === null ? "" : String(food?.nutrition.fat_g ?? ""));
   const [basisAmount, setBasisAmount] = useState(food?.nutrition.basis_amount === null ? "100" : String(food?.nutrition.basis_amount ?? 100));
-  const [basisUnit, setBasisUnit] = useState<"g" | "ml" | "serving" | "piece" | "custom">((food?.nutrition.basis_unit as "g" | "ml" | undefined) ?? "g");
+  const [basisUnit, setBasisUnit] = useState<"g" | "ml" | "serving" | "piece" | "custom">(food?.nutrition.basis_unit ?? "g");
   const [duplicate, setDuplicate] = useState<Duplicate | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, setPending] = useState(false);
@@ -131,14 +131,15 @@ export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Pro
   return (
     <div dir={dir} className="fixed inset-0 z-[60] flex justify-end bg-black/25" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section role="dialog" aria-modal="true" aria-label={title} className="h-full w-full max-w-[480px] overflow-y-auto border-s border-border bg-background p-5 shadow-xl">
-        <header className="flex items-center justify-between gap-3 border-b border-border/70 pb-4">
-          <div><p className="text-xs font-medium text-muted-foreground">{nt("foodManagement")}</p><h2 className="text-xl font-semibold">{title}</h2>{effectiveMode === "correction" && targetName ? <p className="mt-1 text-sm text-muted-foreground"><bdi dir="auto">{targetName}</bdi></p> : null}</div>
+        <header className="grid grid-cols-[44px_1fr_44px] items-center gap-2 border-b border-border/70 pb-4">
           <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted" onClick={onClose} aria-label={nt("close")}><X className="h-5 w-5" /></button>
+          <div className="min-w-0 text-center"><h2 className="truncate text-lg font-semibold">{title}</h2>{effectiveMode === "correction" && targetName ? <p className="mt-1 truncate text-xs text-muted-foreground"><bdi dir="auto">{targetName}</bdi></p> : null}</div>
+          {!duplicate ? <button form="custom-food-form" type="submit" disabled={!canSave} className="inline-flex h-11 w-11 items-center justify-center rounded-full text-foreground hover:bg-muted disabled:opacity-40" aria-label={effectiveMode === "correction" ? nt("saveCorrection") : nt("saveFood")}><Check className="h-5 w-5" /></button> : <span aria-hidden="true" />}
         </header>
 
         {duplicate ? <div className="mt-5 rounded-xl border border-border p-4" role="status"><p className="font-semibold">{nt("possibleDuplicate")}</p><p className="mt-1 text-sm text-muted-foreground"><bdi dir="auto">{duplicate.food_name}</bdi> · <bdi dir="auto">{duplicate.serving_size}</bdi></p><div className="mt-4 grid gap-2"><button type="button" className="min-h-11 rounded-xl bg-foreground px-4 text-sm font-semibold text-background" onClick={onClose}>{nt("useExisting")}</button>{duplicate.source === "catalog" ? <button type="button" className="min-h-11 rounded-xl border border-border px-4 text-sm font-medium" onClick={chooseCorrection}>{nt("correctForMe")}</button> : null}<button type="button" className="min-h-11 rounded-xl border border-border px-4 text-sm font-medium" onClick={() => void submit(true)}>{nt("createSeparately")}</button></div></div> : null}
 
-        {!duplicate ? <form className="mt-5 space-y-5" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        {!duplicate ? <form id="custom-food-form" className="mt-5 space-y-5" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
           {effectiveMode !== "correction" ? <>
             <label className="block text-sm font-medium">{nt("foodName")}<input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 font-normal" required /></label>
             <label className="block text-sm font-medium">{nt("servingBasis")}<input value={servingLabel} onChange={(event) => setServingLabel(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 font-normal" required /></label>
@@ -150,8 +151,8 @@ export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Pro
             <p className="text-xs text-muted-foreground">{nt("notAvailable")} values stay unknown; they are never saved as zero.</p>
           </fieldset>
 
+          {pending ? <p className="text-sm text-muted-foreground" role="status">{nt("saving")}</p> : null}
           {error ? <p role="alert" className="rounded-xl border border-destructive/30 p-3 text-sm text-destructive">{error}</p> : null}
-          <button type="submit" disabled={!canSave} className="min-h-12 w-full rounded-xl bg-foreground px-4 text-sm font-semibold text-background disabled:opacity-50">{pending ? nt("saving") : effectiveMode === "correction" ? nt("saveCorrection") : nt("saveFood")}</button>
 
           {effectiveMode === "edit" && food?.source === "my_food" ? <div className="border-t border-border/70 pt-5">{confirmDelete ? <div className="rounded-xl border border-destructive/30 p-4"><p className="text-sm">{nt("deleteFoodConfirmation")}</p><div className="mt-3 flex gap-2"><button type="button" disabled={pending} onClick={() => void removeFood()} className="min-h-11 rounded-xl bg-destructive px-4 text-sm font-semibold text-destructive-foreground">{nt("deleteFood")}</button><button type="button" onClick={() => setConfirmDelete(false)} className="min-h-11 rounded-xl border border-border px-4 text-sm font-medium">{nt("cancel")}</button></div></div> : <button type="button" onClick={() => setConfirmDelete(true)} className="min-h-11 rounded-xl px-3 text-sm font-medium text-destructive hover:bg-destructive/10">{nt("deleteFood")}</button>}</div> : null}
         </form> : null}
