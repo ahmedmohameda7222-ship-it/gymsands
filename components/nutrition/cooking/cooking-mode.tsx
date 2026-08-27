@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Clock3, Mic, Pause, Play, RotateCcw, SkipForward, Square } from "lucide-react";
 
+import { useAuth } from "@/components/auth/auth-provider";
 import { CookingResume } from "@/components/nutrition/cooking/cooking-resume";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 import {
@@ -104,6 +105,8 @@ function actionSyncRows(session: CookingLocalSession) {
 
 export function CookingMode({ recipeId }: { recipeId: string }) {
   const router = useRouter();
+  const { session: authSession, isLoading: authLoading } = useAuth();
+  const authOwnerId = authSession?.user.id ?? null;
   const { nt, language } = useNutritionV1Translation();
   const [userId, setUserId] = useState<string | null>(null);
   const [session, setSession] = useState<CookingLocalSession | null>(null);
@@ -188,7 +191,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     return next;
   }, [writeLocalForOwner]);
 
-  const initialize = useCallback(async () => {
+  const initialize = useCallback(async (authenticatedOwnerId: string | null) => {
     setLoading(true);
     setError(null);
     setDirection(document.documentElement.dir === "rtl" ? "rtl" : "ltr");
@@ -198,10 +201,13 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       return;
     }
     try {
-      const auth = await supabase.auth.getUser();
-      if (auth.error) throw auth.error;
-      if (!auth.data.user) throw new Error(nt("cookingSignIn"));
-      const ownerId = auth.data.user.id;
+      let ownerId = authenticatedOwnerId;
+      if (!ownerId) {
+        const auth = await supabase.auth.getUser();
+        if (auth.error) throw auth.error;
+        ownerId = auth.data.user?.id ?? null;
+      }
+      if (!ownerId) throw new Error(nt("cookingSignIn"));
       setUserId(ownerId);
       const ownerStorageKey = cookingLocalStorageKey(ownerId, recipeId);
       window.localStorage.removeItem(`plaivra:nutrition:cooking:${recipeId}:active`);
@@ -250,7 +256,10 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     }
   }, [flushPending, materialize, nt, recipeId, router, writeLocalForOwner]);
 
-  useEffect(() => { void initialize(); }, [initialize]);
+  useEffect(() => {
+    if (authLoading) return;
+    void initialize(authOwnerId);
+  }, [authLoading, authOwnerId, initialize]);
 
   useEffect(() => {
     const id = window.setInterval(() => setClock(Date.now()), 1000);
@@ -561,7 +570,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   }
 
   if (error || !session) {
-    return <main className="mx-auto max-w-[620px] px-4 py-8" dir={direction} lang={language}><p className="rounded-xl border border-destructive/30 p-4 text-sm text-destructive" role="alert">{error ?? nt("cookingRecoveryFailed")}</p><button type="button" onClick={() => void initialize()} className="mt-3 min-h-[44px] rounded-xl border border-border px-4 text-sm font-medium">{language === "ar" ? "إعادة المحاولة" : language === "de" ? "Erneut versuchen" : "Retry"}</button></main>;
+    return <main className="mx-auto max-w-[620px] px-4 py-8" dir={direction} lang={language}><p className="rounded-xl border border-destructive/30 p-4 text-sm text-destructive" role="alert">{error ?? nt("cookingRecoveryFailed")}</p><button type="button" onClick={() => void initialize(authOwnerId)} className="mt-3 min-h-[44px] rounded-xl border border-border px-4 text-sm font-medium">{language === "ar" ? "إعادة المحاولة" : language === "de" ? "Erneut versuchen" : "Retry"}</button></main>;
   }
 
   if (session.status === "completed") {
