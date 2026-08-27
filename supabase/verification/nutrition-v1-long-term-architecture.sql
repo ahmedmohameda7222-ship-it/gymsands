@@ -124,6 +124,15 @@ begin
     ),
     'Nutrition V1 Food Library could not discover/page the valid 81st catalog match.'
   );
+
+  v_page := public.search_nutrition_food_library(
+    '', 'en', null, 20, 'LT scalable', 'LT cuisine', 'all',
+    '{"protein":{"operator":"between","value":30,"max":20}}'::jsonb
+  );
+  perform pg_temp.nv1_long_term_assert(
+    jsonb_array_length(v_page->'items') = 20,
+    'Nutrition V1 Food Library between nutrition filter did not preserve inclusive endpoint-order-independent semantics.'
+  );
 end
 $food_paging$;
 
