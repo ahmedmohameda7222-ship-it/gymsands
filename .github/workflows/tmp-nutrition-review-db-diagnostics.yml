@@ -81,6 +81,7 @@ jobs:
           Path('/tmp/apply-green.sh').write_text(script)
           PY
           bash /tmp/apply-green.sh
+          printf '\n- `20260827060000_nutrition_v1_review_atomicity_corrections.sql` is the pending Nutrition V1 review atomicity correction migration.\n' >> docs/architecture/migration-ledger-reconciliation.md
           git diff --check
 
       - name: Migration ledger precheck
