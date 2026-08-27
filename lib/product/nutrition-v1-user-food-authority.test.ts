@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const migrationPath = "supabase/migrations/20260825120500_nutrition_v1_user_food_authority.sql";
+const migrationPath = "supabase/migrations/20260825120300_nutrition_v1_food_search_and_curation.sql";
 const verificationPath = "supabase/verification/nutrition-v1-user-food-authority.sql";
 
 describe("Nutrition V1 user Food authority correction", () => {
