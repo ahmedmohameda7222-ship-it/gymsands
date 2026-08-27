@@ -280,7 +280,7 @@ export async function listFoodLibrary(
   const locale = options.locale ?? "en";
   const pattern = safeSearchPattern(query);
 
-  let catalogQuery = supabase.from("food_items").select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,category,cuisine,tags,is_verified,saturated_fat_g,fiber_g,sugars_g,sodium_mg,nutrition_basis_amount,nutrition_basis_unit,lifecycle_status").eq("is_global", true).neq("lifecycle_status", "merged").order("food_name", { ascending: true }).limit(CANDIDATE_LIMIT);
+  let catalogQuery = supabase.from("food_items").select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,category,cuisine,tags,is_verified,saturated_fat_g,fiber_g,sugars_g,sodium_mg,nutrition_basis_amount,nutrition_basis_unit,lifecycle_status").eq("is_global", true).eq("lifecycle_status", "active").order("food_name", { ascending: true }).limit(CANDIDATE_LIMIT);
   if (pattern) catalogQuery = catalogQuery.ilike("food_name", `%${pattern}%`);
 
   let myFoodQuery = supabase.from("user_food_items").select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,category,tags,created_at,nutrition_basis_amount,nutrition_basis_unit,deleted_at").eq("user_id", userId).is("deleted_at", null).order("created_at", { ascending: false }).limit(CANDIDATE_LIMIT);
@@ -309,7 +309,7 @@ export async function listFoodLibrary(
   const presentCatalogIds = new Set(catalogRows.map((row) => String(row.id)));
   const missingAliasIds = aliasFoodIds.filter((id) => !presentCatalogIds.has(id));
   if (missingAliasIds.length) {
-    const extra = await supabase.from("food_items").select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,category,cuisine,tags,is_verified,saturated_fat_g,fiber_g,sugars_g,sodium_mg,nutrition_basis_amount,nutrition_basis_unit,lifecycle_status").in("id", missingAliasIds.slice(0, CANDIDATE_LIMIT)).eq("is_global", true).neq("lifecycle_status", "merged");
+    const extra = await supabase.from("food_items").select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,category,cuisine,tags,is_verified,saturated_fat_g,fiber_g,sugars_g,sodium_mg,nutrition_basis_amount,nutrition_basis_unit,lifecycle_status").in("id", missingAliasIds.slice(0, CANDIDATE_LIMIT)).eq("is_global", true).eq("lifecycle_status", "active");
     catalogRows.push(...(checked(extra, "Food Library alias identities read") as Array<Record<string, unknown>>));
   }
 

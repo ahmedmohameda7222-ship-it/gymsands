@@ -62,7 +62,8 @@ const loggerCopy = {
 function authHeaders(token?: string | null, json = false) {
   return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(json ? { "Content-Type": "application/json" } : {}) };
 }
-function draftKey(date: string, meal: string, plannedOccurrenceId?: string | null) { return `plaivra:nutrition-v1:diary-draft:${date}:${meal}${plannedOccurrenceId ? `:planned:${plannedOccurrenceId}` : ""}`; }
+function draftKey(userId: string, date: string, meal: string, plannedOccurrenceId?: string | null) { return `plaivra:nutrition-v1:diary-draft:${userId}:${date}:${meal}${plannedOccurrenceId ? `:planned:${plannedOccurrenceId}` : ""}`; }
+function legacyDraftKey(date: string, meal: string, plannedOccurrenceId?: string | null) { return `plaivra:nutrition-v1:diary-draft:${date}:${meal}${plannedOccurrenceId ? `:planned:${plannedOccurrenceId}` : ""}`; }
 function known(value: unknown) { if (value === null || value === undefined || value === "") return null; const number = Number(value); return Number.isFinite(number) && number >= 0 ? number : null; }
 function positiveOr(value: unknown, fallback: number) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : fallback; }
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
@@ -94,6 +95,7 @@ function executionItems(plate: DiaryPlateItem[]) { return plate.map((item) => ({
 
 export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = null, onClose, onConfirmed }: { date: string; meal: string; savedMeals: DiarySavedMealChoice[]; plannedOccurrence?: DiaryPlannedOccurrence | null; onClose: () => void; onConfirmed: () => void; }) {
   const { session } = useAuth();
+  const userId = session?.user.id;
   const token = session?.access_token;
   const { et, language, dir, mealLabel } = useEatTranslation();
   const text = loggerCopy[language];
@@ -113,9 +115,23 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
   const [quickCarbs, setQuickCarbs] = useState("");
   const [quickFat, setQuickFat] = useState("");
   const [quickName, setQuickName] = useState("");
-  const key = useMemo(() => draftKey(date, meal, plannedOccurrence?.id), [date, meal, plannedOccurrence?.id]);
+  const key = useMemo(() => userId ? draftKey(userId, date, meal, plannedOccurrence?.id) : null, [date, meal, plannedOccurrence?.id, userId]);
 
-  useEffect(() => { const stored = localStorage.getItem(key); if (!stored) return; try { const draft = JSON.parse(stored) as DraftPayload; if (Date.now() - draft.savedAt <= DIARY_DRAFT_TTL_MS && Array.isArray(draft.plate)) setPlate(draft.plate); else localStorage.removeItem(key); } catch { localStorage.removeItem(key); } }, [key]);
+  useEffect(() => {
+    if (!userId) return;
+    const scopedKey = draftKey(userId, date, meal, plannedOccurrence?.id);
+    localStorage.removeItem(legacyDraftKey(date, meal, plannedOccurrence?.id));
+    setPlate([]);
+    const stored = localStorage.getItem(scopedKey);
+    if (!stored) return;
+    try {
+      const draft = JSON.parse(stored) as DraftPayload;
+      if (Date.now() - draft.savedAt <= DIARY_DRAFT_TTL_MS && Array.isArray(draft.plate)) setPlate(draft.plate);
+      else localStorage.removeItem(scopedKey);
+    } catch {
+      localStorage.removeItem(scopedKey);
+    }
+  }, [date, meal, plannedOccurrence?.id, userId]);
   useEffect(() => {
     if (!plannedOccurrence) return;
     if (plannedOccurrence.sourceType === "placeholder") { setFeedback(text.placeholderUnverified); return; }
@@ -123,8 +139,11 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
     if (!seed.length) { setFeedback(text.plannedUnresolved); return; }
     setPlate((current) => current.length ? current : seed); setFeedback(text.plannedLoaded);
   }, [plannedOccurrence, text.placeholderUnverified, text.plannedLoaded, text.plannedUnresolved]);
-  useEffect(() => { if (plate.length) localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), plate } satisfies DraftPayload)); }, [key, plate]);
-  const clearConfirmedDraft = useCallback(() => { localStorage.removeItem(key); }, [key]);
+  useEffect(() => {
+    if (!userId) return;
+    if (plate.length) localStorage.setItem(draftKey(userId, date, meal, plannedOccurrence?.id), JSON.stringify({ savedAt: Date.now(), plate } satisfies DraftPayload));
+  }, [date, meal, plannedOccurrence?.id, plate, userId]);
+  const clearConfirmedDraft = useCallback(() => { if (key) localStorage.removeItem(key); }, [key]);
 
   useEffect(() => {
     if (mode !== "search") return;

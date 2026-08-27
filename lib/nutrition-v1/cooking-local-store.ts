@@ -67,8 +67,8 @@ export type RecoveredCookingLocalSession = {
   timers: Array<ReconstructedCookingTimer & { actionStateId: string; cancelledAt?: string | null }>;
 };
 
-export function cookingLocalStorageKey(recipeId: string) {
-  return `plaivra:nutrition:cooking:${recipeId}:active`;
+export function cookingLocalStorageKey(ownerId: string, recipeId: string) {
+  return `plaivra:nutrition:cooking:${ownerId}:${recipeId}:active`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

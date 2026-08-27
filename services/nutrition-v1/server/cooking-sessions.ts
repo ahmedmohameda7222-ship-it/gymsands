@@ -345,7 +345,7 @@ export async function getActiveCookingSession(
 
 export async function syncCookingSessionState(
   supabase: SupabaseClient,
-  userId: string,
+  _userId: string,
   sessionId: string,
   input: {
     expectedRevision: number;
@@ -356,29 +356,13 @@ export async function syncCookingSessionState(
   },
 ) {
   if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 0) throw new Error("Invalid Cooking Session revision.");
-  const nextRevision = input.expectedRevision + 1;
-  const lastActiveAt = input.lastActiveAt ?? new Date().toISOString();
-  const sessionResult = await supabase
-    .from("nutrition_cooking_sessions")
-    .update({
-      current_action_key: input.currentActionKey,
-      state_revision: nextRevision,
-      last_active_at: lastActiveAt,
-    })
-    .eq("id", sessionId)
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .eq("state_revision", input.expectedRevision)
-    .select("id,state_revision")
-    .maybeSingle();
-  dbError(sessionResult.error);
-  if (!sessionResult.data) throw new Error("Cooking Session revision conflict: local state is stale.");
-
-  if (input.actionStates.length) {
-    const rows = input.actionStates.map((item) => ({
+  const result = await supabase.rpc("sync_nutrition_cooking_session_state", {
+    p_session_id: sessionId,
+    p_expected_revision: input.expectedRevision,
+    p_current_action_key: input.currentActionKey,
+    p_last_active_at: input.lastActiveAt ?? new Date().toISOString(),
+    p_action_states: input.actionStates.map((item) => ({
       id: item.id,
-      session_id: sessionId,
-      user_id: userId,
       action_key: item.actionKey,
       state: item.state,
       state_revision: item.stateRevision,
@@ -386,16 +370,10 @@ export async function syncCookingSessionState(
       completed_at: item.completedAt ?? null,
       deferred_at: item.deferredAt ?? null,
       skipped_at: item.skippedAt ?? null,
-    }));
-    const result = await supabase.from("nutrition_cooking_action_states").upsert(rows, { onConflict: "id,user_id" });
-    dbError(result.error);
-  }
-
-  if (input.timers.length) {
-    const rows = input.timers.map((item) => ({
+    })),
+    p_timers: input.timers.map((item) => ({
       id: item.id,
       action_state_id: item.actionStateId,
-      user_id: userId,
       timer_name: item.timerName,
       duration_seconds: Math.max(1, Math.ceil(item.durationSeconds)),
       status: item.status,
@@ -405,12 +383,15 @@ export async function syncCookingSessionState(
       paused_remaining_seconds: item.pausedRemainingSeconds ?? null,
       completed_at: item.completedAt ?? null,
       cancelled_at: item.cancelledAt ?? null,
-    }));
-    const result = await supabase.from("nutrition_cooking_timers").upsert(rows, { onConflict: "id,user_id" });
-    dbError(result.error);
+    })),
+  });
+  dbError(result.error);
+  const data = result.data as Record<string, unknown> | null;
+  const stateRevision = Number(data?.stateRevision ?? data?.state_revision);
+  if (!Number.isInteger(stateRevision) || stateRevision !== input.expectedRevision + 1) {
+    throw new Error("Cooking Session synchronization returned an invalid revision.");
   }
-
-  return { stateRevision: asFiniteNumber((sessionResult.data as Record<string, unknown>).state_revision, nextRevision) };
+  return { stateRevision };
 }
 
 async function updateTerminalStatus(

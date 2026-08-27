@@ -74,24 +74,21 @@ describe("Nutrition V1 Recipe server authority", () => {
     expect(db.from).not.toHaveBeenCalledWith("nutrition_recipe_versions");
   });
 
-  it("autosaves only the Working Draft and never mutates a published Recipe version", async () => {
-    const draftUpdate = query({ data: { id: draftId, recipe_id: recipeId, user_id: userId, name: "Chicken bowl edited", servings: 4 }, error: null });
-    const oldIngredients = query({ data: [], error: null });
-    const oldActions = query({ data: [], error: null });
-    const oldEquipment = query({ data: [], error: null });
-    const newIngredients = query({ data: null, error: null });
-    const newActions = query({ data: null, error: null });
-    const db = fakeSupabase({
-      nutrition_recipe_drafts: [draftUpdate],
-      nutrition_recipe_ingredients: [oldIngredients, newIngredients],
-      nutrition_recipe_actions: [oldActions, newActions],
-      nutrition_recipe_equipment: [oldEquipment],
+  it("autosaves the Working Draft atomically and never mutates a published Recipe version", async () => {
+    const db = fakeSupabase({}, {
+      data: { id: draftId, recipe_id: recipeId, user_id: userId, name: "Chicken bowl edited", servings: 4 },
+      error: null,
     });
 
     await autosaveRecipeDraft(db.client, userId, recipeId, { ...completeDraft, name: "Chicken bowl edited" });
 
-    expect(draftUpdate.update).toHaveBeenCalled();
-    expect(db.from).not.toHaveBeenCalledWith("nutrition_recipe_versions");
+    expect(db.rpc).toHaveBeenCalledWith("autosave_nutrition_recipe_draft", expect.objectContaining({
+      p_recipe_id: recipeId,
+      p_ingredients: completeDraft.ingredients,
+      p_instructions: completeDraft.instructions,
+      p_equipment: completeDraft.equipment,
+    }));
+    expect(db.from).not.toHaveBeenCalled();
   });
 
   it("publishes v1 -> Working Draft -> v2 only through the owner-derived transactional RPC", async () => {

@@ -115,11 +115,16 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   const [direction, setDirection] = useState<"ltr" | "rtl">("ltr");
   const [clock, setClock] = useState(() => Date.now());
   const wakeLockRef = useRef<WakeLockHandle | null>(null);
-  const storageKey = useMemo(() => cookingLocalStorageKey(recipeId), [recipeId]);
+  const storageKey = useMemo(() => userId ? cookingLocalStorageKey(userId, recipeId) : null, [recipeId, userId]);
+
+  const writeLocalForOwner = useCallback((ownerId: string, next: CookingLocalSession) => {
+    window.localStorage.setItem(cookingLocalStorageKey(ownerId, recipeId), serializeCookingLocalSession(next));
+  }, [recipeId]);
 
   const writeLocal = useCallback((next: CookingLocalSession) => {
+    if (!userId || !storageKey) return;
     window.localStorage.setItem(storageKey, serializeCookingLocalSession(next));
-  }, [storageKey]);
+  }, [storageKey, userId]);
 
   const materialize = useCallback((bundle: Awaited<ReturnType<typeof getActiveCookingSession>>) => {
     if (!bundle) return null;
@@ -137,16 +142,56 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     return local;
   }, []);
 
+  const flushPending = useCallback(async (candidate: CookingLocalSession, ownerId: string) => {
+    if (!candidate.pendingMutations.length || !supabase || !navigator.onLine) return candidate;
+    let next = candidate;
+    const stateOperationIds = next.pendingMutations
+      .filter((item) => item.type === "action_state" || item.type === "timer")
+      .map((item) => item.operationId);
+    if (stateOperationIds.length) {
+      try {
+        const result = await syncCookingSessionState(supabase, ownerId, next.sessionId, {
+          expectedRevision: next.stateRevision,
+          currentActionKey: next.currentActionKey,
+          lastActiveAt: next.lastActiveAt,
+          actionStates: actionSyncRows(next),
+          timers: timerSyncRows(next),
+        });
+        next = acknowledgeCookingMutations({ ...next, stateRevision: result.stateRevision }, stateOperationIds);
+        writeLocalForOwner(ownerId, next);
+      } catch {
+        return next;
+      }
+    }
+
+    const completeOperation = next.pendingMutations.find((item) => item.type === "complete_session");
+    if (completeOperation) {
+      try {
+        await completeCookingSession(supabase, ownerId, next.sessionId, next.completedAt ?? next.lastActiveAt);
+        next = acknowledgeCookingMutations(next, [completeOperation.operationId]);
+        writeLocalForOwner(ownerId, next);
+      } catch {
+        return next;
+      }
+    }
+
+    const endOperation = next.pendingMutations.find((item) => item.type === "end_session");
+    if (endOperation) {
+      try {
+        await endCookingSession(supabase, ownerId, next.sessionId, next.endedAt ?? next.lastActiveAt);
+        next = acknowledgeCookingMutations(next, [endOperation.operationId]);
+        writeLocalForOwner(ownerId, next);
+      } catch {
+        return next;
+      }
+    }
+    return next;
+  }, [writeLocalForOwner]);
+
   const initialize = useCallback(async () => {
     setLoading(true);
     setError(null);
     setDirection(document.documentElement.dir === "rtl" ? "rtl" : "ltr");
-    const recovered = recoverCookingLocalSession(window.localStorage.getItem(storageKey), new Date());
-    if (recovered?.session.status === "active" && recovered.session.recipeId === recipeId) {
-      setResumeCandidate(recovered.session);
-      setLoading(false);
-      return;
-    }
     if (!supabase) {
       setError(nt("cookingUnavailable"));
       setLoading(false);
@@ -158,11 +203,35 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       if (!auth.data.user) throw new Error(nt("cookingSignIn"));
       const ownerId = auth.data.user.id;
       setUserId(ownerId);
+      const ownerStorageKey = cookingLocalStorageKey(ownerId, recipeId);
+      window.localStorage.removeItem(`plaivra:nutrition:cooking:${recipeId}:active`);
+      const recovered = recoverCookingLocalSession(window.localStorage.getItem(ownerStorageKey), new Date());
+      if (recovered?.session.recipeId === recipeId) {
+        const reconciled = recovered.session.pendingMutations.length
+          ? await flushPending(recovered.session, ownerId)
+          : recovered.session;
+        if (reconciled.status === "active") {
+          writeLocalForOwner(ownerId, reconciled);
+          setResumeCandidate(reconciled);
+          setLoading(false);
+          return;
+        }
+        if (reconciled.status === "completed") {
+          writeLocalForOwner(ownerId, reconciled);
+          setSession(reconciled);
+          setLoading(false);
+          return;
+        }
+        window.localStorage.removeItem(ownerStorageKey);
+        router.back();
+        setLoading(false);
+        return;
+      }
       const active = await getActiveCookingSession(supabase, ownerId, recipeId);
       if (active) {
         const local = materialize(active);
         if (!local) throw new Error(nt("cookingRecoveryFailed"));
-        writeLocal(local);
+        writeLocalForOwner(ownerId, local);
         setResumeCandidate(local);
         setLoading(false);
         return;
@@ -172,14 +241,14 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       if (!created) throw new Error(`${nt("cookingLoadFailed")} ${started.sessionId}`);
       const local = materialize(created);
       if (!local) throw new Error(nt("cookingMaterializeFailed"));
-      writeLocal(local);
+      writeLocalForOwner(ownerId, local);
       setSession(local);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : nt("cookingStartFailed"));
     } finally {
       setLoading(false);
     }
-  }, [materialize, nt, recipeId, storageKey, writeLocal]);
+  }, [flushPending, materialize, nt, recipeId, router, writeLocalForOwner]);
 
   useEffect(() => { void initialize(); }, [initialize]);
 
@@ -302,33 +371,13 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     setSession(next);
   }, [recoveredTimers, session, writeLocal]);
 
-  const flushPending = useCallback(async (candidate: CookingLocalSession) => {
-    if (!candidate.pendingMutations.length || !supabase || !userId || !navigator.onLine || candidate.status !== "active") return candidate;
-    try {
-      const result = await syncCookingSessionState(supabase, userId, candidate.sessionId, {
-        expectedRevision: candidate.stateRevision,
-        currentActionKey: candidate.currentActionKey,
-        lastActiveAt: candidate.lastActiveAt,
-        actionStates: actionSyncRows(candidate),
-        timers: timerSyncRows(candidate),
-      });
-      const acknowledged = acknowledgeCookingMutations(
-        { ...candidate, stateRevision: result.stateRevision },
-        candidate.pendingMutations.map((item) => item.operationId),
-      );
-      writeLocal(acknowledged);
-      return acknowledged;
-    } catch {
-      return candidate;
-    }
-  }, [userId, writeLocal]);
 
   const onResume = useCallback(() => {
-    if (!resumeCandidate) return;
+    if (!resumeCandidate || !userId) return;
     setSession(resumeCandidate);
     setResumeCandidate(null);
-    void flushPending(resumeCandidate).then((next) => setSession(next));
-  }, [flushPending, resumeCandidate]);
+    void flushPending(resumeCandidate, userId).then((next) => setSession(next));
+  }, [flushPending, resumeCandidate, userId]);
 
   const onStartOver = useCallback(async () => {
     if (!resumeCandidate) return;
@@ -405,11 +454,12 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       const completed = completeLocalCookingSession(persisted, now);
       writeLocal(completed);
       setSession(completed);
-      if (supabase && userId && navigator.onLine) {
-        try { await completeCookingSession(supabase, userId, completed.sessionId, now); } catch { /* local completion remains recoverable */ }
+      if (userId && navigator.onLine) {
+        const reconciled = await flushPending(completed, userId);
+        setSession(reconciled);
       }
     }
-  }, [facts, persistAndSync, recoveredTimers, session, timeline, userId, writeLocal]);
+  }, [facts, flushPending, persistAndSync, recoveredTimers, session, timeline, userId, writeLocal]);
 
   const startTimer = useCallback(async () => {
     if (!session || !timeline?.now) return;
@@ -484,11 +534,12 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     const ended = endLocalCookingSession(session, now);
     writeLocal(ended);
     setSession(ended);
-    if (supabase && userId && navigator.onLine) {
-      try { await endCookingSession(supabase, userId, session.sessionId, now); } catch { /* local End Cooking truth is retained */ }
+    if (userId && navigator.onLine) {
+      const reconciled = await flushPending(ended, userId);
+      setSession(reconciled);
     }
     router.back();
-  }, [router, session, userId, writeLocal]);
+  }, [flushPending, router, session, userId, writeLocal]);
 
   async function requestMicrophone() {
     setStatusMessage(null);

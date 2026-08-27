@@ -36,7 +36,7 @@ function query(result: Result) {
 
 type Query = ReturnType<typeof query>;
 
-function fakeSupabase(tableQueries: Record<string, Query[]> = {}) {
+function fakeSupabase(tableQueries: Record<string, Query[]> = {}, rpcResult: Result = { data: null, error: null }) {
   const queues = Object.fromEntries(Object.entries(tableQueries).map(([table, values]) => [table, [...values]])) as Record<string, Query[]>;
   const seen: Record<string, Query[]> = {};
   const from = vi.fn((table: string) => {
@@ -45,7 +45,8 @@ function fakeSupabase(tableQueries: Record<string, Query[]> = {}) {
     (seen[table] ??= []).push(next);
     return next;
   });
-  return { client: { from } as unknown as SupabaseClient, from, seen };
+  const rpc = vi.fn(async () => rpcResult);
+  return { client: { from, rpc } as unknown as SupabaseClient, from, rpc, seen };
 }
 
 const version = {
@@ -226,15 +227,8 @@ describe("Nutrition V1 Cooking Session server authority", () => {
     expect(timersRead.in).toHaveBeenCalledWith("action_state_id", [actionState1, actionState2]);
   });
 
-  it("syncs local state with optimistic session revision authority and owner-scoped child upserts", async () => {
-    const sessionUpdate = query({ data: { id: sessionId, state_revision: 5 }, error: null });
-    const actionUpsert = query({ data: null, error: null });
-    const timerUpsert = query({ data: null, error: null });
-    const db = fakeSupabase({
-      nutrition_cooking_sessions: [sessionUpdate],
-      nutrition_cooking_action_states: [actionUpsert],
-      nutrition_cooking_timers: [timerUpsert],
-    });
+  it("syncs local state with optimistic session revision authority through one owner-derived transactional RPC", async () => {
+    const db = fakeSupabase({}, { data: { stateRevision: 5 }, error: null });
 
     const synced = await syncCookingSessionState(db.client, userId, sessionId, {
       expectedRevision: 4,
@@ -250,26 +244,23 @@ describe("Nutrition V1 Cooking Session server authority", () => {
     });
 
     expect(synced.stateRevision).toBe(5);
-    expect(sessionUpdate.update).toHaveBeenCalledWith(expect.objectContaining({
-      current_action_key: action2,
-      state_revision: 5,
-      last_active_at: "2026-08-26T07:12:00.000Z",
+    expect(db.rpc).toHaveBeenCalledWith("sync_nutrition_cooking_session_state", expect.objectContaining({
+      p_session_id: sessionId,
+      p_expected_revision: 4,
+      p_current_action_key: action2,
+      p_action_states: expect.arrayContaining([
+        expect.objectContaining({ id: actionState1, action_key: action1 }),
+        expect.objectContaining({ id: actionState2, action_key: action2 }),
+      ]),
+      p_timers: expect.arrayContaining([
+        expect.objectContaining({ action_state_id: actionState2, timer_name: "Sauce" }),
+      ]),
     }));
-    expect(sessionUpdate.eq).toHaveBeenCalledWith("id", sessionId);
-    expect(sessionUpdate.eq).toHaveBeenCalledWith("user_id", userId);
-    expect(sessionUpdate.eq).toHaveBeenCalledWith("state_revision", 4);
-    expect(actionUpsert.upsert).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ session_id: sessionId, user_id: userId, action_key: action1 }),
-      expect.objectContaining({ session_id: sessionId, user_id: userId, action_key: action2 }),
-    ]), expect.any(Object));
-    expect(timerUpsert.upsert).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ user_id: userId, action_state_id: actionState2, timer_name: "Sauce" }),
-    ]), expect.any(Object));
+    expect(db.from).not.toHaveBeenCalled();
   });
 
   it("rejects a stale sync revision before child state is written", async () => {
-    const sessionUpdate = query({ data: null, error: null });
-    const db = fakeSupabase({ nutrition_cooking_sessions: [sessionUpdate] });
+    const db = fakeSupabase({}, { data: null, error: { message: "Cooking Session revision conflict: local state is stale.", code: "40001" } });
 
     await expect(syncCookingSessionState(db.client, userId, sessionId, {
       expectedRevision: 4,
@@ -278,8 +269,8 @@ describe("Nutrition V1 Cooking Session server authority", () => {
       timers: [],
     })).rejects.toThrow(/revision|conflict|stale/i);
 
-    expect(db.from).not.toHaveBeenCalledWith("nutrition_cooking_action_states");
-    expect(db.from).not.toHaveBeenCalledWith("nutrition_cooking_timers");
+    expect(db.rpc).toHaveBeenCalledWith("sync_nutrition_cooking_session_state", expect.any(Object));
+    expect(db.from).not.toHaveBeenCalled();
   });
 
   it("keeps completion and explicit End Cooking separate from food consumption", async () => {

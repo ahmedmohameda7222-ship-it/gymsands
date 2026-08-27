@@ -31,6 +31,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/nutrition-v1-privacy-purge.sql",
   "supabase/verification/nutrition-v1-user-food-authority.sql",
   "supabase/verification/nutrition-v1-legacy-reconciliation.sql",
+  "supabase/verification/nutrition-v1-review-atomicity.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
