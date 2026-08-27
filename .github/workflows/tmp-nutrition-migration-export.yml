@@ -1,0 +1,48 @@
+name: Temporary Nutrition Migration Export
+
+on:
+  push:
+    branches:
+      - feat/nutrition-v1-implementation
+    paths:
+      - .github/workflows/tmp-nutrition-migration-export.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0e6ba32527710b14e7e9a5f8b0ed6d9f7eeec012
+      - name: Assert exact reviewed migration set
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0e6ba32527710b14e7e9a5f8b0ed6d9f7eeec012"
+          sha256sum \
+            supabase/migrations/20260825120000_nutrition_v1_reusable_domains.sql \
+            supabase/migrations/20260825120100_nutrition_v1_plan_diary_targets.sql \
+            supabase/migrations/20260825120200_nutrition_v1_cooking_sessions.sql \
+            supabase/migrations/20260825120300_nutrition_v1_food_search_and_curation.sql \
+            supabase/migrations/20260825120350_nutrition_v1_meal_plan_week_start_authority.sql \
+            supabase/migrations/20260825120400_nutrition_v1_privacy_purge_authority.sql \
+            supabase/migrations/20260827060000_nutrition_v1_review_atomicity_corrections.sql \
+            > nutrition-migration-sha256.txt
+          cat nutrition-migration-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nutrition-v1-production-migrations-0e6ba325
+          path: |
+            supabase/migrations/20260825120000_nutrition_v1_reusable_domains.sql
+            supabase/migrations/20260825120100_nutrition_v1_plan_diary_targets.sql
+            supabase/migrations/20260825120200_nutrition_v1_cooking_sessions.sql
+            supabase/migrations/20260825120300_nutrition_v1_food_search_and_curation.sql
+            supabase/migrations/20260825120350_nutrition_v1_meal_plan_week_start_authority.sql
+            supabase/migrations/20260825120400_nutrition_v1_privacy_purge_authority.sql
+            supabase/migrations/20260827060000_nutrition_v1_review_atomicity_corrections.sql
+            nutrition-migration-sha256.txt
+          if-no-files-found: error
+          retention-days: 1
