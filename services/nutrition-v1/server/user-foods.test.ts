@@ -70,7 +70,7 @@ describe("Nutrition V1 owner Food write authority", () => {
       deleted_at: null,
     }));
     expect(result.duplicate).toBeNull();
-    expect(result.food.id).toBe(foodId);
+    expect(result.food?.id).toBe(foodId);
   });
 
   it("returns a possible duplicate without silently inserting or merging", async () => {
