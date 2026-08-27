@@ -21,17 +21,6 @@ function rpcOnlyClient(result: Result) {
   return { client: { rpc, from } as unknown as SupabaseClient, rpc, from };
 }
 
-function query(data: any[] = []) {
-  const result = { data, error: null };
-  const q: Record<string, any> = {};
-  for (const method of ["select", "eq", "neq", "is", "order", "limit", "ilike", "in"]) {
-    q[method] = vi.fn(() => q);
-  }
-  q.then = (resolve: (value: typeof result) => unknown, reject?: (reason: unknown) => unknown) =>
-    Promise.resolve(result).then(resolve, reject);
-  return q;
-}
-
 it("persists Cooking Session revision and child state through one transactional RPC", async () => {
   const db = rpcOnlyClient({ data: { stateRevision: 5 }, error: null });
 
@@ -86,33 +75,18 @@ it("replaces a Recipe Working Draft and all child rows through one transactional
   expect(db.from).not.toHaveBeenCalled();
 });
 
-it("limits normal member Food Catalog discovery to active canonical rows", async () => {
-  const catalog = query([]);
-  const personal = query([]);
-  const aliases = query([]);
-  const favorites = query([]);
-  const corrections = query([]);
-  const logs = query([]);
-  const queues: Record<string, ReturnType<typeof query>[]> = {
-    food_items: [catalog],
-    user_food_items: [personal],
-    food_aliases: [aliases],
-    food_favorites: [favorites],
-    food_personal_corrections: [corrections],
-    food_logs: [logs],
-  };
-  const from = vi.fn((table: string) => {
-    const next = queues[table]?.shift();
-    if (!next) throw new Error(`Unexpected table query: ${table}`);
-    return next;
-  });
-  const client = { from } as unknown as SupabaseClient;
+it("delegates normal member Food Catalog discovery to the owner-derived active-canonical RPC authority", async () => {
+  const db = rpcOnlyClient({ data: { items: [], nextCursor: null }, error: null });
 
-  await listFoodLibrary(client, userId, { query: "chicken", locale: "en" });
+  await listFoodLibrary(db.client, userId, { query: "chicken", locale: "en" });
 
-  expect(catalog.eq).toHaveBeenCalledWith("is_global", true);
-  expect(catalog.eq).toHaveBeenCalledWith("lifecycle_status", "active");
-  expect(catalog.neq).not.toHaveBeenCalledWith("lifecycle_status", "merged");
+  expect(db.rpc).toHaveBeenCalledTimes(1);
+  expect(db.rpc).toHaveBeenCalledWith("search_nutrition_food_library", expect.objectContaining({
+    p_query: "chicken",
+    p_locale: "en",
+    p_scope: "all",
+  }));
+  expect(db.from).not.toHaveBeenCalled();
 });
 
 describe("review-correction fixtures", () => {
