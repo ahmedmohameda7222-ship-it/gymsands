@@ -130,10 +130,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user, profile, isAdmin, signOut } = useAuth();
   const { settings } = useUserSettings();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { t: activeWorkoutT } = useActiveWorkoutTranslation();
   const hideProfileDetails = settings.hideProfileDetails || settings.privateProfileMode;
   const [isOffline, setIsOffline] = useState(false);
+  const offlineAppMessage = language === "ar"
+    ? "أنت غير متصل. قد لا تتوفر بعض الإجراءات، وستتم مزامنة التغييرات المدعومة عند عودة الاتصال."
+    : language === "de"
+      ? "Du bist offline. Einige Aktionen sind möglicherweise nicht verfügbar; unterstützte Änderungen werden nach Wiederherstellung der Verbindung synchronisiert."
+      : "You are offline. Some actions may be unavailable; supported changes will sync when the connection returns.";
 
   useEffect(() => {
     const update = () => setIsOffline(!navigator.onLine);
@@ -182,7 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="premium-page-bg min-h-screen text-foreground" data-app-shell data-focused-exercise-detail={focusedDetail ? "true" : undefined} style={focusedDetail ? focusedDetailBottomLayout : appShellBottomLayout}>
       {isOffline ? (
         <div className={cn("fixed inset-x-3 z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72", focusedDetail ? "top-[calc(env(safe-area-inset-top)+0.75rem)] lg:top-[calc(env(safe-area-inset-top)+4.75rem)]" : "top-[calc(env(safe-area-inset-top)+4.75rem)]")} role="status">
-          <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> {activeWorkoutT("offline.banner")}</p>
+          <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> {offlineAppMessage}</p>
         </div>
       ) : null}
       <aside className="glass-shell fixed inset-y-0 left-0 z-40 hidden w-72 border-y-0 border-l-0 lg:flex lg:flex-col">
