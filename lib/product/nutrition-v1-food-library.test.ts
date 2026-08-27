@@ -63,10 +63,13 @@ describe("Nutrition V1 canonical Food Library product surface", () => {
 
   it("uses localized live filters with close-preserves-state semantics, nutrition Info, presets, and no Apply/Done gate", () => {
     const filters = source(filtersPath);
+    const i18n = source(i18nPath);
     expect(filters).toContain("useNutritionV1Translation");
     expectKeys(filters, ["foodFilters", "closeFilters", "highProtein", "lowCarb", "info", "nutritionFilterInfo", "resetFilters"]);
-    expect(filters).toContain("≥");
-    expect(filters).toContain("≤");
+    expect(i18n).toContain('proteinMinimum: "Protein ≥"');
+    expect(i18n).toContain('carbsMaximum: "Carbs ≤"');
+    expect(i18n).toContain("≥");
+    expect(i18n).toContain("≤");
     expect(filters).not.toMatch(/>\s*Apply\s*</i);
     expect(filters).not.toMatch(/>\s*Done\s*</i);
   });
