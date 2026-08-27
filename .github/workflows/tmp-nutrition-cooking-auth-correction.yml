@@ -1,0 +1,105 @@
+name: Temporary Nutrition Cooking Auth Correction
+
+on:
+  push:
+    branches:
+      - feat/nutrition-v1-implementation
+    paths:
+      - .github/workflows/tmp-nutrition-cooking-auth-correction.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/nutrition-v1-implementation
+          fetch-depth: 0
+
+      - name: Verify bounded lineage
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "aaca969542ab40e7365c5503b8613fda84e767d7"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Confirm focused RED
+        run: |
+          set +e
+          ./node_modules/.bin/vitest run lib/product/nutrition-v1-review-corrections.test.ts > /tmp/nutrition-auth-red.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/nutrition-auth-red.log
+          if [ "$code" -eq 0 ]; then
+            echo "Expected the new cooking auth contract to be RED before implementation." >&2
+            exit 1
+          fi
+          grep -q "scopes Cooking recovery storage to the authenticated owner" /tmp/nutrition-auth-red.log
+
+      - name: Apply bounded cooking auth correction
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("components/nutrition/cooking/cooking-mode.tsx")
+          text = path.read_text()
+
+          replacements = [
+            (
+              'import { CookingResume } from "@/components/nutrition/cooking/cooking-resume";\n',
+              'import { useAuth } from "@/components/auth/auth-provider";\nimport { CookingResume } from "@/components/nutrition/cooking/cooking-resume";\n',
+            ),
+            (
+              '  const router = useRouter();\n  const { nt, language } = useNutritionV1Translation();\n',
+              '  const router = useRouter();\n  const { session: authSession, isLoading: authLoading } = useAuth();\n  const authOwnerId = authSession?.user.id ?? null;\n  const { nt, language } = useNutritionV1Translation();\n',
+            ),
+            (
+              '  const initialize = useCallback(async () => {\n',
+              '  const initialize = useCallback(async (authenticatedOwnerId: string | null) => {\n',
+            ),
+            (
+              '    try {\n      const auth = await supabase.auth.getUser();\n      if (auth.error) throw auth.error;\n      if (!auth.data.user) throw new Error(nt("cookingSignIn"));\n      const ownerId = auth.data.user.id;\n      setUserId(ownerId);\n',
+              '    try {\n      let ownerId = authenticatedOwnerId;\n      if (!ownerId) {\n        const auth = await supabase.auth.getUser();\n        if (auth.error) throw auth.error;\n        ownerId = auth.data.user?.id ?? null;\n      }\n      if (!ownerId) throw new Error(nt("cookingSignIn"));\n      setUserId(ownerId);\n',
+            ),
+            (
+              '  useEffect(() => { void initialize(); }, [initialize]);\n',
+              '  useEffect(() => {\n    if (authLoading) return;\n    void initialize(authOwnerId);\n  }, [authLoading, authOwnerId, initialize]);\n',
+            ),
+          ]
+
+          for old, new in replacements:
+            if text.count(old) != 1:
+              raise SystemExit(f"Expected exactly one bounded replacement, found {text.count(old)} for: {old[:80]!r}")
+            text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+          git diff --check
+          git diff -- components/nutrition/cooking/cooking-mode.tsx
+
+      - name: Focused GREEN
+        run: ./node_modules/.bin/vitest run lib/product/nutrition-v1-review-corrections.test.ts
+
+      - name: Focused lint
+        run: ./node_modules/.bin/eslint components/nutrition/cooking/cooking-mode.tsx lib/product/nutrition-v1-review-corrections.test.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Commit verified runtime correction
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain | grep -v '^ M components/nutrition/cooking/cooking-mode.tsx$')"
+          git config user.name "Plaivra Implementation Engineer"
+          git config user.email "actions@users.noreply.github.com"
+          git add components/nutrition/cooking/cooking-mode.tsx
+          git commit -m "fix(nutrition): honor canonical auth in cooking recovery"
+          git push origin HEAD:feat/nutrition-v1-implementation
