@@ -50,10 +50,6 @@ function throwDb(error: unknown) {
   if (error) throw new Error(message(error));
 }
 
-function rootName(name: string | null | undefined) {
-  return name?.trim() || "Untitled Recipe";
-}
-
 function draftPatch(input: RecipeDraftInput) {
   return {
     name: input.name?.trim() || null,
@@ -67,45 +63,27 @@ function draftPatch(input: RecipeDraftInput) {
 
 export async function createRecipeDraft(
   supabase: SupabaseClient,
-  userId: string,
+  _userId: string,
   input: RecipeDraftInput = {},
 ) {
-  const root = await supabase
-    .from("nutrition_recipes")
-    .insert({ user_id: userId, name: rootName(input.name) })
-    .select("*")
-    .single();
-  throwDb(root.error);
-  if (!root.data?.id) throw new Error("Recipe root was not created.");
-
-  const draft = await supabase
-    .from("nutrition_recipe_drafts")
-    .insert({
-      recipe_id: root.data.id,
-      user_id: userId,
-      base_recipe_version_id: null,
-      ...draftPatch(input),
-    })
-    .select("*")
-    .single();
-  if (draft.error || !draft.data?.id) {
-    await supabase
-      .from("nutrition_recipes")
-      .delete()
-      .eq("id", root.data.id)
-      .eq("user_id", userId);
-    throw new Error(
-      draft.error
-        ? message(draft.error)
-        : "Recipe Working Draft was not created.",
-    );
+  const result = await supabase.rpc("create_nutrition_recipe_draft", {
+    p_name: input.name?.trim() || null,
+    p_servings: input.servings ?? null,
+    p_total_cooked_weight_g: input.total_cooked_weight_g ?? null,
+    p_total_time_minutes: input.total_time_minutes ?? null,
+    p_notes: input.notes?.trim() || null,
+    p_draft_metadata: input.draft_metadata ?? {},
+  });
+  throwDb(result.error);
+  const data = result.data as Record<string, unknown> | null;
+  const recipeId = typeof data?.recipeId === "string" ? data.recipeId : null;
+  const draftId = typeof data?.draftId === "string" ? data.draftId : null;
+  const recipe = data?.recipe && typeof data.recipe === "object" ? data.recipe as Record<string, unknown> : null;
+  const draft = data?.draft && typeof data.draft === "object" ? data.draft as Record<string, unknown> : null;
+  if (!recipeId || !draftId || !recipe || !draft || recipe.id !== recipeId || draft.id !== draftId || draft.recipe_id !== recipeId) {
+    throw new Error("Atomic Recipe Working Draft creation returned an invalid result.");
   }
-  return {
-    recipeId: String(root.data.id),
-    draftId: String(draft.data.id),
-    recipe: root.data,
-    draft: draft.data,
-  };
+  return { recipeId, draftId, recipe, draft };
 }
 
 export async function autosaveRecipeDraft(
@@ -140,33 +118,24 @@ export async function publishRecipeDraft(
   throwDb(result.error);
 
   const data = result.data as Record<string, unknown> | null;
-  const returnedRecipeId =
-    typeof data?.recipeId === "string" ? data.recipeId : null;
-  const recipeVersionId =
-    typeof data?.recipeVersionId === "string" ? data.recipeVersionId : null;
-  const versionNumber =
-    typeof data?.versionNumber === "number" ? data.versionNumber : null;
-  const version =
-    data?.version && typeof data.version === "object"
-      ? (data.version as Record<string, unknown>)
-      : null;
+  const returnedRecipeId = typeof data?.recipeId === "string" ? data.recipeId : null;
+  const recipeVersionId = typeof data?.recipeVersionId === "string" ? data.recipeVersionId : null;
+  const versionNumber = typeof data?.versionNumber === "number" ? data.versionNumber : null;
+  const version = data?.version && typeof data.version === "object"
+    ? data.version as Record<string, unknown>
+    : null;
 
   if (
-    returnedRecipeId !== recipeId ||
-    !recipeVersionId ||
-    !Number.isInteger(versionNumber) ||
-    !version ||
-    version.id !== recipeVersionId
+    returnedRecipeId !== recipeId
+    || !recipeVersionId
+    || !Number.isInteger(versionNumber)
+    || !version
+    || version.id !== recipeVersionId
   ) {
     throw new Error("Recipe publication command returned an invalid result.");
   }
 
-  return {
-    recipeId: returnedRecipeId,
-    recipeVersionId,
-    versionNumber,
-    version,
-  };
+  return { recipeId: returnedRecipeId, recipeVersionId, versionNumber, version };
 }
 
 export async function discardRecipeDraft(
