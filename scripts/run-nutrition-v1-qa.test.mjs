@@ -73,6 +73,13 @@ test("Recipe editor QA fixtures contain a real working draft and drive editor, i
   for (const marker of ["Recipe editor", "Add ingredient", "Not saved"]) assert.equal(source.includes(marker), true, marker);
 });
 
+test("expected Recipe autosave 503 is bounded to the injected failure scenario instead of globally hiding console errors", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /item\.recipeAutosaveStatus\s*===\s*503/);
+  assert.match(source, /Failed to load resource[\s\S]{0,160}503/);
+  assert.match(source, /expectedAutosaveFailure/);
+});
+
 test("Food Library QA scenarios explicitly drive and assert Create, duplicate, edit-delete, serving, correction, and barcode states", async () => {
   const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
   for (const interaction of ["food-create-custom", "food-duplicate-suggestion", "food-custom-edit-delete", "food-serving-recalculation", "food-personal-correction", "food-barcode-fallback"]) {
@@ -81,6 +88,12 @@ test("Food Library QA scenarios explicitly drive and assert Create, duplicate, e
   for (const marker of ["Create Food", "Possible duplicate", "Delete Food", "Correct for me", "Barcode", "Search remains available"]) {
     assert.equal(source.includes(marker), true, marker);
   }
+});
+
+test("barcode fallback interaction targets the Barcode textbox rather than the dialog accessible name", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /getByRole\("textbox",\s*\{\s*name:\s*\/barcode\/i\s*\}\)/);
+  assert.doesNotMatch(source, /getByLabel\(\/barcode\/i\)/);
 });
 
 test("Playwright init fixture passes Node constants through the serializable argument boundary", async () => {
