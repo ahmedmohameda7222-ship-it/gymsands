@@ -1,30 +1,30 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Evidence captured:** 2026-08-03T18:10:27.000Z
+**Evidence captured:** 2026-08-27T07:24:17.000Z
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `92d936bc513af83fff41913477a8148a9ab5b845`
-**Status:** Applied Production history reconciled; thirteen repository migrations intentionally pending
+**Status:** Applied Production history reconciled; no repository migrations pending
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
 ## Current state
 
-- Physical Production migration records: **87**
+- Physical Production migration records: **100**
 - Exact applications (`state = applied`): **63**
-- Repository-only pending migrations: **13**
-- `pendingCount = 13`
+- Repository-only pending migrations: **0**
+- `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 13`
-- `historyRepair.state = pending`
-- `release_ready = false` while the repository migrations remain intentionally pending
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
+- `release_ready = true` for migration-ledger reconciliation; merge/deployment/compatibility-marker authorization remain separate gates
 - Released compatibility marker: `20260724232734`
-- Latest physical Production record: `20260804180932_fix_profiles_update_policy_recursion`
+- Latest physical Production record: `20260827072417_nutrition_v1_review_atomicity_corrections`
 - Activity Catalog Production remains isolated from the Main migration ledger
 
-The previously applied Plaivra Production migration history remains reconciled through `20260804180932_fix_profiles_update_policy_recursion`. P10F migration `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql`, Exercise Detail + Personal Records migration `20260813042754_exercise_detail_personal_records_authority.sql`, Workout History redesign migration `20260813071926_workout_history_redesign_read_contract.sql`, Active Workout feedback-preference migration `20260816044500_active_workout_feedback_preferences.sql`, Exercise Detail V2 setup-note migration `20260820060000_exercise_detail_setup_notes.sql`, Exercise Detail V2 replacement-reason migration `20260820070000_exercise_alternative_reason_v2.sql`, Nutrition V1 reusable-domain migration `20260825120000_nutrition_v1_reusable_domains.sql`, Nutrition V1 plan/Diary/target migration `20260825120100_nutrition_v1_plan_diary_targets.sql`, Nutrition V1 Cooking Session migration `20260825120200_nutrition_v1_cooking_sessions.sql`, Nutrition V1 Food search/curation migration `20260825120300_nutrition_v1_food_search_and_curation.sql`, Nutrition V1 Meal Plan week-start authority migration `20260825120350_nutrition_v1_meal_plan_week_start_authority.sql`, Nutrition V1 privacy-purge authority migration `20260825120400_nutrition_v1_privacy_purge_authority.sql`, and Nutrition V1 review atomicity correction migration `20260827060000_nutrition_v1_review_atomicity_corrections.sql` are intentionally classified `pending`. None has been applied to Production, none claims a Production identity, and none may be replayed or applied before explicit Planner approval.
+Production migration history is now reconciled through `20260827072417_nutrition_v1_review_atomicity_corrections`. The six previously pending non-Nutrition repository migrations were already applied exactly once on 2026-08-21 under generated aliases, and the seven explicitly authorized Nutrition V1 migrations were applied exactly once on 2026-08-27. Repository migration filenames remain immutable; generated Production identities are recorded below and in the machine ledger. Do not replay any of these migrations.
 
-Physical schema advancement and compatibility-marker promotion remain separate release operations. The pending repository state does not authorize Production migration application, application deployment, or compatibility-marker promotion.
+Physical schema advancement and compatibility-marker promotion remain separate release operations. The completed migration application does not authorize application deployment, merge, or compatibility-marker promotion.
 
 ## Workout History applied identities
 
@@ -93,96 +93,25 @@ AW-9 remains represented by repository migration `20260731090000_active_workout_
 - Plaivra Production now has **87** physical migration records and the latest physical record is `20260804180932_fix_profiles_update_policy_recursion`.
 - The compatibility marker remained unchanged and Activity Catalog was not modified.
 
-## P10F pending migration authority
+## 2026-08-27 Production reconciliation
 
-- `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql` is the single Planner-authorized narrow Main schema addition for P10F Stage A.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- No historical rows are rewritten; the migration remains repository-only until the Planner explicitly approves the merge/cutover sequence.
-- Do not replay or apply the P10F migration before that approval.
+| Immutable repository migration | Generated Production identity | Applied | State |
+|---|---|---|---|
+| `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql` | `20260821013625_p10f_v2_plan_activity_catalog_authority_snapshot` | `2026-08-21` | `applied_version_alias` |
+| `20260813042754_exercise_detail_personal_records_authority.sql` | `20260821013718_exercise_detail_personal_records_authority` | `2026-08-21` | `applied_version_alias` |
+| `20260813071926_workout_history_redesign_read_contract.sql` | `20260821013749_workout_history_redesign_read_contract` | `2026-08-21` | `applied_version_alias` |
+| `20260816044500_active_workout_feedback_preferences.sql` | `20260821013757_active_workout_feedback_preferences` | `2026-08-21` | `applied_version_alias` |
+| `20260820060000_exercise_detail_setup_notes.sql` | `20260821013814_exercise_detail_setup_notes` | `2026-08-21` | `applied_version_alias` |
+| `20260820070000_exercise_alternative_reason_v2.sql` | `20260821013822_exercise_alternative_reason_v2` | `2026-08-21` | `applied_version_alias` |
+| `20260825120000_nutrition_v1_reusable_domains.sql` | `20260827071936_nutrition_v1_reusable_domains` | `2026-08-27` | `applied_version_alias` |
+| `20260825120100_nutrition_v1_plan_diary_targets.sql` | `20260827072239_nutrition_v1_plan_diary_targets` | `2026-08-27` | `applied_version_alias` |
+| `20260825120200_nutrition_v1_cooking_sessions.sql` | `20260827072300_nutrition_v1_cooking_sessions` | `2026-08-27` | `applied_version_alias` |
+| `20260825120300_nutrition_v1_food_search_and_curation.sql` | `20260827072316_nutrition_v1_food_search_and_curation` | `2026-08-27` | `applied_version_alias` |
+| `20260825120350_nutrition_v1_meal_plan_week_start_authority.sql` | `20260827072351_nutrition_v1_meal_plan_week_start_authority` | `2026-08-27` | `applied_version_alias` |
+| `20260825120400_nutrition_v1_privacy_purge_authority.sql` | `20260827072406_nutrition_v1_privacy_purge_authority` | `2026-08-27` | `applied_version_alias` |
+| `20260827060000_nutrition_v1_review_atomicity_corrections.sql` | `20260827072417_nutrition_v1_review_atomicity_corrections` | `2026-08-27` | `applied_version_alias` |
 
-## Exercise Detail + Personal Records pending migration authority
-
-- `20260813042754_exercise_detail_personal_records_authority.sql` is the additive Main schema authority for Exercise Detail + Personal Records.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It preserves historical Verified events while adding versioned semantics, owner-scoped Manual records, and guarded atomic Add-to-plan authority.
-- Do not replay or apply this migration before explicit Planner approval of the phase merge/release sequence.
-
-## Workout History redesign pending migration authority
-
-- `20260813071926_workout_history_redesign_read_contract.sql` is the additive owner-scoped read authority for first-page period context and global-history existence.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It does not rewrite historical data and was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Planner approval of the Workout History redesign merge/release sequence.
-
-## Active Workout feedback preferences pending migration authority
-
-- `20260816044500_active_workout_feedback_preferences.sql` is the additive account-scoped settings authority for workout sound and haptic preferences.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- Existing owner-scoped `user_app_settings` RLS remains authoritative; the migration was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Planner approval of the Active Workout merge/release sequence.
-
-## Exercise Detail V2 setup-note pending migration authority
-
-- `20260820060000_exercise_detail_setup_notes.sql` is the additive owner-scoped setup-note authority for canonical Exercise Detail identities.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It adds the setup-note persistence/privacy lifecycle without rewriting historical data and was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Planner approval of the Exercise Detail V2 merge/release sequence.
-
-## Exercise Detail V2 replacement-reason pending migration authority
-
-- `20260820070000_exercise_alternative_reason_v2.sql` is the additive compatibility authority for the shared Exercise Detail V2 and Active Workout replacement-reason vocabulary.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It preserves every historically valid replacement-reason value and existing row, and adds the explicit new V2 intents without changing RLS or grants.
-- Do not replay or apply it before explicit Planner approval of the Exercise Detail V2 merge/release sequence.
-
-## Nutrition V1 reusable-domain pending migration authority
-
-- `20260825120000_nutrition_v1_reusable_domains.sql` is the additive Recipe, immutable Recipe-version, Working Draft, Saved Meal, 30-day recovery, owner-RLS, and private Recipe-cover authority for Nutrition V1 Task 2.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It preserves legacy Nutrition tables and frozen consumer lineage while adding canonical reusable-domain storage; it was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 merge/release sequence.
-
-## Nutrition V1 plan/Diary/target pending migration authority
-
-- `20260825120100_nutrition_v1_plan_diary_targets.sql` is the additive effective-target, canonical week-revision, frozen planned-occurrence, change-request, grouped actual-log, and atomic Plan-to-Diary execution authority for Nutrition V1 Task 3.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It preserves the legacy target, plan, Saved Recipe, Custom Meal, and `food_logs` compatibility tables while adding the reconciled V1 authorities; it was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 merge/release sequence.
-
-## Nutrition V1 Cooking Session pending migration authority
-
-- `20260825120200_nutrition_v1_cooking_sessions.sql` is the additive owner-scoped frozen Cooking Session, Action-state, concurrent timestamp-timer, and resumable-state persistence authority for Nutrition V1 Task 4.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It stores only deterministic/session truth and frozen Recipe facts; it does not claim observed boiling, browning, doneness, readiness, temperature, or food-safety state, and it was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 merge/release sequence.
-
-## Nutrition V1 Food search/curation pending migration authority
-
-- `20260825120300_nutrition_v1_food_search_and_curation.sql` is the additive canonical Food alias/search, attributed provenance, positive verification linkage, owner-scoped personal-correction/favorite, and durable duplicate-redirect authority for Nutrition V1 Task 5.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- Provider imports remain provenance evidence rather than implicit verification, user corrections do not rewrite canonical Food truth, and duplicate handling is non-destructive; it was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 merge/release sequence.
-
-## Nutrition V1 Meal Plan week-start pending migration authority
-
-- `20260825120350_nutrition_v1_meal_plan_week_start_authority.sql` is the additive corrective authority that removes the accidental fixed-Monday constraint so explicit historical week starts can follow the approved locale-default plus optional owner override.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It does not rewrite existing week rows or claim a Production identity; it remains repository-only and was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 merge/release sequence.
-
-## Nutrition V1 privacy purge pending migration authority
-
-- `20260825120400_nutrition_v1_privacy_purge_authority.sql` is the additive canonical account-purge authority that extends `purge_account_application_data_atomic` for Nutrition V1 owner data and consumer lineage in dependency-safe order before Auth deletion.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It was validated by chronological migration replay and Nutrition V1 privacy verification but was not applied to Plaivra Production and claims no Production identity.
-- Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 merge/release sequence.
-
-## Nutrition V1 review atomicity correction pending migration authority
-
-- `20260827060000_nutrition_v1_review_atomicity_corrections.sql` is the additive transactional authority for owner-derived Cooking Session synchronization and Recipe Working Draft autosave introduced by the final Nutrition V1 review correction.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It adds SECURITY DEFINER RPCs with fixed search paths and authenticated/service-role execution only; it was validated by chronological replay, DB lint, and executable rollback verification before Production application.
-- Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 migration sequence.
+All thirteen generated identities above are immutable Production history. They must not be replayed. Nutrition V1 schema application did not merge PR #152, deploy application code, or promote the released compatibility marker.
 
 ## Authority and verification
 
