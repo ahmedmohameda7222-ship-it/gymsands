@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/settings/user-settings-context", () => ({
+  useUserSettings: () => ({ settings: { language: "en" } }),
+}));
+
 import { SavedMealEditor } from "@/components/nutrition/saved-meals/saved-meal-editor";
 import { SavedMealPicker } from "@/components/nutrition/saved-meals/saved-meal-picker";
 import { RecentlyDeletedSavedMeals } from "@/components/nutrition/saved-meals/recently-deleted-saved-meals";
