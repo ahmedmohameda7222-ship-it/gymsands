@@ -19,15 +19,17 @@ describe("Nutrition V1 review privacy and recovery corrections", () => {
 
     const mode = source(cookingModePath);
     const initialize = mode.indexOf("const initialize");
-    const sessionAuthority = mode.indexOf("authSession?.user", initialize);
+    const ownerSeed = mode.indexOf("let ownerId = authenticatedOwnerId", initialize);
     const authenticate = mode.indexOf("supabase.auth.getUser()", initialize);
     const recover = mode.indexOf("recoverCookingLocalSession", initialize);
     expect(initialize).toBeGreaterThanOrEqual(0);
     expect(mode).toContain("const { session: authSession, isLoading: authLoading } = useAuth();");
-    expect(sessionAuthority).toBeGreaterThan(initialize);
-    expect(authenticate).toBeGreaterThan(sessionAuthority);
+    expect(mode).toContain("const authOwnerId = authSession?.user.id ?? null;");
+    expect(ownerSeed).toBeGreaterThan(initialize);
+    expect(authenticate).toBeGreaterThan(ownerSeed);
     expect(recover).toBeGreaterThan(authenticate);
     expect(mode).toContain("if (authLoading) return;");
+    expect(mode).toContain("void initialize(authOwnerId);");
     expect(mode).toContain("cookingLocalStorageKey(ownerId, recipeId)");
   });
 
