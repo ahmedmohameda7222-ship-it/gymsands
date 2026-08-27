@@ -76,10 +76,13 @@ describe("Nutrition V1 canonical Food Library product surface", () => {
 
   it("resolves Serving then Quantity then Destination for standalone Add To and excludes Shopping List", () => {
     const detail = source(detailPath);
+    const servingIndex = detail.indexOf('nt("serving")');
+    const quantityIndex = detail.indexOf('nt("quantity")');
+    const destinationIndex = detail.indexOf('<h3 className="text-sm font-semibold">{nt("addTo")}</h3>');
     expect(detail).toContain("useNutritionV1Translation");
-    expect(detail.indexOf('nt("serving")')).toBeGreaterThanOrEqual(0);
-    expect(detail.indexOf('nt("quantity")')).toBeGreaterThan(detail.indexOf('nt("serving")'));
-    expect(detail.indexOf('nt("addTo")')).toBeGreaterThan(detail.indexOf('nt("quantity")'));
+    expect(servingIndex).toBeGreaterThanOrEqual(0);
+    expect(quantityIndex).toBeGreaterThan(servingIndex);
+    expect(destinationIndex).toBeGreaterThan(quantityIndex);
     expectKeys(detail, ["diary", "mealPlan", "savedMeal", "recipe"]);
     expect(detail).not.toContain("/my-meal-plan/shopping");
   });
