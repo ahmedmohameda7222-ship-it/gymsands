@@ -1,0 +1,115 @@
+name: Temporary Nutrition Review DB Diagnostics
+
+on:
+  push:
+    branches:
+      - feat/nutrition-v1-implementation
+    paths:
+      - .github/workflows/tmp-nutrition-review-db-diagnostics.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_USE_MOCK_AUTH: true
+      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+      PLAIVRA_RELEASE_ENVIRONMENT: ci
+      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: 2
+      PLAIVRA_ACTIVITY_CATALOG_MODE: library_v2_with_legacy_fallback
+      PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
+      PLAIVRA_ACTIVITY_CATALOG_API_KEY: ci-placeholder-catalog-key-long-enough
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      SUPABASE_TELEMETRY_DISABLED: 1
+      DO_NOT_TRACK: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/nutrition-v1-implementation
+          fetch-depth: 0
+
+      - name: Verify bounded RED lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 10ae048b48661ceca12621418508ef1073c0bf95 HEAD
+          test "$(git merge-base HEAD origin/main)" = "b00b8205ed87aa53b7e76731f99156d58e989d0f"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Reuse exact staged GREEN patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/tmp-nutrition-review-corrections.yml')
+          lines = path.read_text().splitlines()
+          name_index = next(i for i, line in enumerate(lines) if line.strip() == '- name: Apply bounded GREEN corrections')
+          run_index = next(i for i in range(name_index + 1, len(lines)) if lines[i].strip() == 'run: |')
+          body = []
+          for line in lines[run_index + 1:]:
+              if line.startswith('      - name:') or line.startswith('      - uses:'):
+                  break
+              if line.startswith('          '):
+                  line = line[10:]
+              body.append(line)
+          script = '\n'.join(body) + '\n'
+          if '20260827060000_nutrition_v1_review_atomicity_corrections.sql' not in script:
+              raise SystemExit('Failed to extract exact staged GREEN patch block')
+          Path('/tmp/apply-green.sh').write_text(script)
+          PY
+          bash /tmp/apply-green.sh
+          git diff --check
+
+      - name: Migration ledger precheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run migration:ledger:check
+
+      - name: Chronological disposable migration replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-reports
+          node scripts/replay-local-migration-chain.mjs --log ci-reports/database-validation.log --prove-future-order
+
+      - name: Supabase DB lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db lint --local --schema public --level error --fail-on error
+
+      - name: Database verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/run-database-verification.mjs
+
+      - name: Migration ledger postcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run migration:ledger:check
