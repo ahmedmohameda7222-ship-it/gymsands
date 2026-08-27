@@ -9,6 +9,13 @@ const verification = readFileSync(verificationPath, "utf8").replaceAll("\r\n", "
 const databaseVerification = readFileSync("scripts/run-database-verification.mjs", "utf8").replaceAll("\r\n", "\n").toLowerCase();
 
 describe("Nutrition V1 review atomicity correction migration", () => {
+  it("uses executable multiline SQL rather than escaped line separators", () => {
+    expect(migration.split("\n").length).toBeGreaterThan(50);
+    expect(verification.split("\n").length).toBeGreaterThan(50);
+    expect(migration).not.toContain("\\ncreate or replace function");
+    expect(verification).not.toContain("\\nbegin;");
+  });
+
   it("adds owner-derived transactional Cooking Session synchronization", () => {
     expect(migration).toContain("create or replace function public.sync_nutrition_cooking_session_state");
     expect(migration).toContain("v_user_id uuid := auth.uid()");
