@@ -13,7 +13,7 @@ type Result = { data: any; error: null | { message?: string } };
 
 function query(result: Result) {
   const q: Record<string, any> = {};
-  for (const method of ["select", "insert", "upsert", "update", "delete", "eq", "is", "ilike", "limit"]) q[method] = vi.fn(() => q);
+  for (const method of ["select", "insert", "upsert", "update", "delete", "eq", "neq", "is", "ilike", "limit"]) q[method] = vi.fn(() => q);
   q.single = vi.fn(async () => result);
   q.maybeSingle = vi.fn(async () => result);
   q.then = (resolve: (value: Result) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(result).then(resolve, reject);
@@ -82,6 +82,7 @@ describe("Nutrition V1 owner Food write authority", () => {
 
     expect(duplicate).toMatchObject({ id: foodId, source: "catalog" });
     expect(personal.eq).toHaveBeenCalledWith("user_id", userId);
+    expect(catalog.neq).toHaveBeenCalledWith("lifecycle_status", "merged");
     expect(db.from).toHaveBeenCalledTimes(2);
   });
 
