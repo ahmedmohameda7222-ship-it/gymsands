@@ -42,6 +42,13 @@ test("approved RTL screenshot scenarios exercise the real Arabic product locale"
   }
 });
 
+test("Shopping rendered evidence visibly seeds Needed, Purchased, and Don't need states", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /shopping-list-three-states/);
+  assert.match(source, /state:\s*"Purchased"/);
+  assert.match(source, /state:\s*"Don't need"/);
+});
+
 test("Nutrition V1 screenshot names are deterministic, portable, and collision resistant", async () => {
   const qa = await import("./run-nutrition-v1-qa.mjs");
   const scenario = qa.NUTRITION_V1_QA_SCENARIOS.find((item) => item.name === "recipes-rtl-cooking-mobile");
