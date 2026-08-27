@@ -1,0 +1,123 @@
+name: Temporary NanoID 3.3.18 Lockfile Patch
+
+on:
+  push:
+    branches:
+      - feat/nutrition-v1-implementation
+    paths:
+      - .github/workflows/tmp-nanoid-3-3-18-lockfile-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/nutrition-v1-implementation
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify exact correction starting identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "0fcf067140bcdc5082718e410c9e863df94fe172"
+          test "$(git merge-base HEAD origin/main)" = "b00b8205ed87aa53b7e76731f99156d58e989d0f"
+          git diff --exit-code HEAD^ -- package.json
+
+      - name: Generate exact NanoID lockfile patch with npm
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp package-lock.json /tmp/package-lock.before.json
+          npm update nanoid --package-lock-only --ignore-scripts
+
+      - name: Reject unrelated lockfile drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const before = JSON.parse(fs.readFileSync('/tmp/package-lock.before.json', 'utf8'));
+          const after = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const allowed = 'packages.node_modules/nanoid';
+          const diffs = [];
+          function walk(a, b, path = '') {
+            if (path === allowed) return;
+            if (Object.is(a, b)) return;
+            if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+              diffs.push(path || '<root>');
+              return;
+            }
+            const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+            for (const key of [...keys].sort()) {
+              const next = path ? `${path}.${key}` : key;
+              if (!(key in a) || !(key in b)) {
+                if (next !== allowed) diffs.push(next);
+                continue;
+              }
+              walk(a[key], b[key], next);
+            }
+          }
+          walk(before, after);
+          if (diffs.length) throw new Error(`Unexpected semantic lockfile drift: ${diffs.join(', ')}`);
+          const oldNode = before.packages?.['node_modules/nanoid'];
+          const newNode = after.packages?.['node_modules/nanoid'];
+          if (oldNode?.version !== '3.3.17') throw new Error(`Expected prior nanoid 3.3.17, got ${oldNode?.version}`);
+          if (newNode?.version !== '3.3.18') throw new Error(`Expected final nanoid 3.3.18, got ${newNode?.version}`);
+          if (newNode?.resolved !== 'https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz') throw new Error(`Unexpected NanoID registry URL: ${newNode?.resolved}`);
+          if (newNode?.integrity !== 'sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==') throw new Error('NanoID 3.3.18 registry integrity mismatch');
+          if (after.packages?.['']?.dependencies?.nanoid || after.packages?.['']?.devDependencies?.nanoid) throw new Error('Root NanoID dependency was added');
+          if (after.packages?.['node_modules/next']?.version !== '16.2.11') throw new Error('Next version changed');
+          if (after.packages?.['node_modules/postcss']?.version !== '8.5.23') throw new Error('PostCSS version changed');
+          console.log(JSON.stringify({ oldNanoid: oldNode.version, newNanoid: newNode.version, unrelatedSemanticDrift: diffs.length }));
+          NODE
+          test "$(git diff --name-only)" = "package-lock.json"
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Prove patched production dependency identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -p "require('./package-lock.json').packages['node_modules/nanoid'].version")" = "3.3.18"
+          npm ls nanoid postcss next --all
+
+      - name: Corrected Production lockfile audit
+        run: npm audit --package-lock-only --omit=dev --audit-level=moderate
+
+      - name: Final bounded diff proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test "$(git diff --name-only)" = "package-lock.json"
+          git diff --exit-code HEAD^ -- package.json
+
+      - name: Commit validated lockfile only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          test "$(git diff --cached --name-only)" = "package-lock.json"
+          git commit -m "fix(security): patch transitive NanoID to 3.3.18"
+          git push origin HEAD:feat/nutrition-v1-implementation
+
+      - name: Upload validated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: validated-nanoid-3.3.18-lockfile
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 7
