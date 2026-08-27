@@ -43,4 +43,13 @@ describe("Nutrition V1 EN/DE/AR localization authority", () => {
     expect(dictionary).toContain('macroProtein: "Protein"');
     expect(dictionary).toContain('macroProtein: "بروتين"');
   });
+
+  it("keeps the general app-shell offline banner domain-neutral while workout sessions retain workout-specific recovery copy", () => {
+    const shell = source("components/layout/app-shell.tsx");
+    expect(shell).toContain("offlineAppMessage");
+    expect(shell).toContain('language === "ar"');
+    expect(shell).toContain('language === "de"');
+    expect(shell.match(/activeWorkoutT\("offline\.banner"\)/g)?.length).toBe(1);
+    expect(shell).toContain("offlineAppMessage");
+  });
 });
