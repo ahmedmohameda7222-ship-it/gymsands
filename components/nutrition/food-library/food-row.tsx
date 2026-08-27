@@ -32,7 +32,15 @@ export function FoodRow({
           <div className="flex flex-wrap items-center gap-1.5">
             <bdi className="truncate text-sm font-semibold sm:text-[15px]" dir="auto">{food.name}</bdi>
             {food.verified ? <ShieldCheck className="h-4 w-4 shrink-0" aria-label={nt("plaivraVerified")} /> : null}
-            {tags.slice(0, 2).map((tag) => <span key={tag} className="rounded-full border border-border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground"><bdi dir="auto">{tag}</bdi></span>)}
+            {tags.slice(0, 2).map((tag) => {
+              const normalized = tag.trim().toLowerCase().replace(/[\s_-]+/g, " ");
+              const label = normalized === "high protein"
+                ? nt("highProtein")
+                : normalized === "low carb"
+                  ? nt("lowCarb")
+                  : tag;
+              return <span key={tag} className="rounded-full border border-border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground"><bdi dir="auto">{label}</bdi></span>;
+            })}
           </div>
           <p className="mt-1 truncate text-xs text-muted-foreground"><bdi dir="auto">{food.servingLabel}</bdi>{food.category ? <> · <bdi dir="auto">{food.category}</bdi></> : null}{food.cuisine ? <> · <bdi dir="auto">{food.cuisine}</bdi></> : null}</p>
           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
