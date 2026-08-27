@@ -35,6 +35,14 @@ describe("Nutrition V1 Food Library completion contract", () => {
     expect(custom).not.toMatch(/fat[^\n]{0,160}\?\?\s*0/i);
   });
 
+  it("uses the locked × editor-title ✓ command header rather than a bottom full-width save CTA", () => {
+    const custom = source(customPath);
+    expect(custom).toContain("Check");
+    expect(custom).toContain('aria-label={effectiveMode === "correction" ? nt("saveCorrection") : nt("saveFood")}');
+    expect(custom).toContain('aria-label={nt("close")}');
+    expect(custom).not.toContain('className="min-h-12 w-full rounded-xl bg-foreground');
+  });
+
   it("makes duplicate review and user-owned Edit/Delete explicit instead of silently merging or hard-deleting", () => {
     const custom = source(customPath);
     expect(custom).toContain('nt("possibleDuplicate")');
@@ -45,14 +53,28 @@ describe("Nutrition V1 Food Library completion contract", () => {
     expect(custom).toContain('nt("deleteFoodConfirmation")');
   });
 
-  it("keeps Food Detail serving and quantity state live and exposes canonical correction versus personal management", () => {
+  it("keeps Food Detail serving and quantity state live and uses the locked header favorite/+ handoff", () => {
     const detail = source(detailPath);
     expect(detail).toMatch(/useState\([^)]*1[^)]*\)/);
     expect(detail).toContain("setQuantity");
     expect(detail).toContain("scaledNutrition");
+    expect(detail).toContain("setAddOpen");
+    expect(detail).toContain("onFavorite");
+    expect(detail).toContain('<select value={servingLabel}');
+    expect(detail).toContain('aria-label={nt("addTo")}');
     expect(detail).toContain('nt("correctForMe")');
     expect(detail).toContain('nt("editFood")');
     expect(detail).toContain('nt("deleteFood")');
+  });
+
+  it("shows removable active filter chips and an explicit offline/cached state while preserving normal search", () => {
+    const page = source(pagePath);
+    expect(page).toContain("activeFilterChips");
+    expect(page).toContain("removeActiveFilter");
+    expect(page).toContain('window.addEventListener("offline"');
+    expect(page).toContain('window.addEventListener("online"');
+    expect(page).toContain('nt("offline")');
+    expect(page).toContain('nt("showingAvailableSavedFoods")');
   });
 
   it("keeps barcode failure bounded so the normal Food Library remains usable", () => {
