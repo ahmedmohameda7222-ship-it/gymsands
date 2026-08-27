@@ -77,7 +77,9 @@ describe("Nutrition V1 focused Cooking Mode product contract", () => {
 
   it("owns screen-wake acquisition and release without making wake lock required for progress", () => {
     const mode = source(modePath);
-    expect(mode).toContain("navigator.wakeLock");
+    expect(mode).toContain("wakeLock?: WakeLockManager");
+    expect(mode).toMatch(/navigator[\s\S]{0,120}\.wakeLock/);
+    expect(mode).toContain("manager.request(\"screen\")");
     expect(mode).toContain("release()");
     expect(mode).toContain("visibilitychange");
   });
