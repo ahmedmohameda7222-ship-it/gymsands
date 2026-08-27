@@ -23,7 +23,7 @@ jobs:
       - name: Verify bounded lineage
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "6fe07488e386b76dac12bec6a1c2eccc203cac49"
+          test "$(git rev-parse HEAD^)" = "2609aaeaf60fc58cdca558aff6dd643f3231ed77"
 
       - uses: actions/setup-node@v4
         with:
@@ -35,75 +35,46 @@ jobs:
       - name: Confirm focused RED
         run: |
           set +e
-          ./node_modules/.bin/vitest run lib/product/nutrition-v1-review-corrections.test.ts > /tmp/nutrition-auth-red.log 2>&1
+          ./node_modules/.bin/vitest run lib/product/nutrition-v1-rendered-qa-auth.test.ts > /tmp/nutrition-qa-owner-red.log 2>&1
           code=$?
           set -e
-          cat /tmp/nutrition-auth-red.log
+          cat /tmp/nutrition-qa-owner-red.log
           if [ "$code" -eq 0 ]; then
-            echo "Expected the new cooking auth contract to be RED before implementation." >&2
+            echo "Expected owner-scoped rendered-QA cooking fixture contract to be RED before implementation." >&2
             exit 1
           fi
-          grep -q "scopes Cooking recovery storage to the authenticated owner" /tmp/nutrition-auth-red.log
+          grep -q "seeds Cooking rendered-QA recovery only under the authenticated owner scope" /tmp/nutrition-qa-owner-red.log
 
-      - name: Apply bounded cooking auth correction
+      - name: Apply bounded rendered-QA fixture correction
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path("components/nutrition/cooking/cooking-mode.tsx")
+          path = Path("scripts/run-nutrition-v1-qa.mjs")
           text = path.read_text()
-
-          replacements = [
-            (
-              'import { CookingResume } from "@/components/nutrition/cooking/cooking-resume";\n',
-              'import { useAuth } from "@/components/auth/auth-provider";\nimport { CookingResume } from "@/components/nutrition/cooking/cooking-resume";\n',
-            ),
-            (
-              '  const router = useRouter();\n  const { nt, language } = useNutritionV1Translation();\n',
-              '  const router = useRouter();\n  const { session: authSession, isLoading: authLoading } = useAuth();\n  const authOwnerId = authSession?.user.id ?? null;\n  const { nt, language } = useNutritionV1Translation();\n',
-            ),
-            (
-              '  const initialize = useCallback(async () => {\n',
-              '  const initialize = useCallback(async (authenticatedOwnerId: string | null) => {\n',
-            ),
-            (
-              '    try {\n      const auth = await supabase.auth.getUser();\n      if (auth.error) throw auth.error;\n      if (!auth.data.user) throw new Error(nt("cookingSignIn"));\n      const ownerId = auth.data.user.id;\n      setUserId(ownerId);\n',
-              '    try {\n      let ownerId = authenticatedOwnerId;\n      if (!ownerId) {\n        const auth = await supabase.auth.getUser();\n        if (auth.error) throw auth.error;\n        ownerId = auth.data.user?.id ?? null;\n      }\n      if (!ownerId) throw new Error(nt("cookingSignIn"));\n      setUserId(ownerId);\n',
-            ),
-            (
-              '  useEffect(() => { void initialize(); }, [initialize]);\n',
-              '  useEffect(() => {\n    if (authLoading) return;\n    void initialize(authOwnerId);\n  }, [authLoading, authOwnerId, initialize]);\n',
-            ),
-            (
-              'onClick={() => void initialize()}',
-              'onClick={() => void initialize(authOwnerId)}',
-            ),
-          ]
-
-          for old, new in replacements:
-            if text.count(old) != 1:
-              raise SystemExit(f"Expected exactly one bounded replacement, found {text.count(old)} for: {old[:80]!r}")
-            text = text.replace(old, new, 1)
-
-          path.write_text(text)
+          old = 'plaivra:nutrition:cooking:${recipeId}:active'
+          new = 'plaivra:nutrition:cooking:${mockAuthUserId}:${recipeId}:active'
+          if text.count(old) != 1:
+            raise SystemExit(f"Expected one legacy rendered-QA cooking key, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1))
           PY
           git diff --check
-          git diff -- components/nutrition/cooking/cooking-mode.tsx
+          git diff -- scripts/run-nutrition-v1-qa.mjs
 
       - name: Focused GREEN
-        run: ./node_modules/.bin/vitest run lib/product/nutrition-v1-review-corrections.test.ts
+        run: ./node_modules/.bin/vitest run lib/product/nutrition-v1-rendered-qa-auth.test.ts
 
-      - name: Focused lint
-        run: ./node_modules/.bin/eslint components/nutrition/cooking/cooking-mode.tsx lib/product/nutrition-v1-review-corrections.test.ts
+      - name: Syntax check
+        run: node --check scripts/run-nutrition-v1-qa.mjs
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Repository script contracts
+        run: npm run test:scripts
 
-      - name: Commit verified runtime correction
+      - name: Commit verified QA correction
         run: |
           set -euo pipefail
-          test -z "$(git status --porcelain | grep -v '^ M components/nutrition/cooking/cooking-mode.tsx$')"
+          test -z "$(git status --porcelain | grep -v '^ M scripts/run-nutrition-v1-qa.mjs$')"
           git config user.name "Plaivra Implementation Engineer"
           git config user.email "actions@users.noreply.github.com"
-          git add components/nutrition/cooking/cooking-mode.tsx
-          git commit -m "fix(nutrition): honor canonical auth in cooking recovery"
+          git add scripts/run-nutrition-v1-qa.mjs
+          git commit -m "fix(nutrition): scope rendered cooking fixture by owner"
           git push origin HEAD:feat/nutrition-v1-implementation
