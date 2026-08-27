@@ -33,18 +33,18 @@ jobs:
       DO_NOT_TRACK: "1"
       QA_BASE_URL: http://localhost:3000
       QA_SERVER_MODE: production
-      QA_HEAD_SHA: e9e048da1f07fb6a4f3053eaf7907bccabc46382
+      QA_HEAD_SHA: 351f9a792ed2941fd234d00a73acfdfa4f3d1a28
       QA_EVIDENCE_DIR: ci-reports/nutrition-v1-qa
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: e9e048da1f07fb6a4f3053eaf7907bccabc46382
+          ref: 351f9a792ed2941fd234d00a73acfdfa4f3d1a28
           fetch-depth: 0
 
       - name: Verify pinned implementation identity
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "e9e048da1f07fb6a4f3053eaf7907bccabc46382"
+          test "$(git rev-parse HEAD)" = "351f9a792ed2941fd234d00a73acfdfa4f3d1a28"
           test "$(git merge-base HEAD origin/main)" = "b00b8205ed87aa53b7e76731f99156d58e989d0f"
 
       - uses: actions/setup-node@v4
@@ -131,7 +131,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nutrition-v1-task20-proof-e9e048da
+          name: nutrition-v1-task20-proof-351f9a79
           path: ci-reports/
           if-no-files-found: ignore
           retention-days: 7
