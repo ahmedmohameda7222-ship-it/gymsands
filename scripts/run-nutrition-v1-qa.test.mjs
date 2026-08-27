@@ -63,6 +63,14 @@ test("offline Meal Plan rendered evidence explicitly proves queued, attention, c
   }
 });
 
+test("Playwright init fixture passes Node constants through the serializable argument boundary", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /addInitScript\(\(\{[^}]*mockAuthUserId[^}]*mealPlanWeekStart[^}]*\}\)\s*=>/s);
+  assert.match(source, /mockAuthUserId:\s*MOCK_AUTH_USER_ID/);
+  assert.match(source, /mealPlanWeekStart:\s*MEAL_PLAN_QA_WEEK_START/);
+  assert.match(source, /queue:\$\{mockAuthUserId\}:\$\{mealPlanWeekStart\}/);
+});
+
 test("Nutrition V1 screenshot names are deterministic, portable, and collision resistant", async () => {
   const qa = await import("./run-nutrition-v1-qa.mjs");
   const scenario = qa.NUTRITION_V1_QA_SCENARIOS.find((item) => item.name === "recipes-rtl-cooking-mobile");
