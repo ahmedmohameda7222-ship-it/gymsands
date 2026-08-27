@@ -88,9 +88,11 @@ function writeQueue(userId: string, weekStart: string, queue: MealPlanOfflineMut
   try { window.localStorage.setItem(queueKey(userId, weekStart), serializeMealPlanQueue(queue)); } catch { /* keep current session state */ }
 }
 function queueState(queue: MealPlanOfflineMutation[]) {
-  if (queue.some((item) => item.status === "conflict" || item.status === "needs_attention")) return "Needs attention";
-  if (queue.some((item) => item.status === "queued")) return "Waiting to sync";
-  return "";
+  const states: string[] = [];
+  if (queue.some((item) => item.status === "queued")) states.push("Waiting to sync");
+  if (queue.some((item) => item.status === "needs_attention")) states.push("Needs attention");
+  if (queue.some((item) => item.status === "conflict")) states.push("Conflict");
+  return states.join(" · ");
 }
 function customSlotMap(weekOverride: JsonObject | null | undefined) {
   const raw = object(object(weekOverride).customSlots);
@@ -268,6 +270,7 @@ export function MealPlanPage() {
   const flushQueue = useCallback(async (serverData: WeekResponse) => {
     if (!ownerId || syncingRef.current) return;
     const stored = readQueue(ownerId, weekStart);
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setSyncState(queueState(stored)); return; }
     if (!stored.some((item) => item.status === "queued")) { setSyncState(queueState(stored)); return; }
     syncingRef.current = true;
     let working = serverData;
@@ -559,7 +562,15 @@ export function MealPlanPage() {
     catch { setNotice("Open ChatGPT externally and ask for structured Meal Plan changes. Review every proposal before applying it in Plaivra."); }
   }
 
-  const visibleSyncState = syncState === "Needs attention" ? nt("needsAttention") : syncState === "Waiting to sync" ? nt("waitingToSync") : syncState;
+  const syncLabel = (state: string) => state === "Needs attention"
+    ? nt("needsAttention")
+    : state === "Waiting to sync"
+      ? nt("waitingToSync")
+      : state === "Conflict"
+        ? (language === "ar" ? "تعارض" : language === "de" ? "Konflikt" : "Conflict")
+        : state;
+  const visibleSyncState = syncState.split(" · ").filter(Boolean).map(syncLabel).join(" · ");
+  const syncNeedsReview = syncState.includes("Needs attention") || syncState.includes("Conflict");
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6" dir={dir} lang={language}>
@@ -569,7 +580,7 @@ export function MealPlanPage() {
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><label className="flex min-h-11 items-center gap-2 text-sm font-medium">{nt("weekStarts")}<select value={String(weekStartOverride)} onChange={(event) => changeWeekStart(event.target.value)} className="min-h-11 rounded-xl border border-border bg-background px-3 text-sm"><option value="locale">{nt("localeDefault")} · {weekdayOptions.find((item) => item.value === localeFirstDay) ? nt(weekdayOptions.find((item) => item.value === localeFirstDay)!.key) : ""}</option>{weekdayOptions.map((item) => <option key={item.value} value={item.value}>{nt(item.key)}</option>)}</select></label><button type="button" onClick={() => setBulkCopyDraft({ scope: "week", targetDate: shift(weekStart, 7) })} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{nt("copyWeek")}</button></div>
         <div className="mt-4"><WeekStrip dates={dates} selectedDate={selectedDate} today={today} onSelect={selectDate} /></div>
       </header>
-      {syncState ? <p role="status" className="mt-4 rounded-xl border border-border px-3 py-2 text-sm">{visibleSyncState}{syncState === "Needs attention" ? (language === "ar" ? " — تغييراتك المحلية محفوظة للمراجعة." : language === "de" ? " — deine lokalen Änderungen bleiben zur Prüfung erhalten." : " — your local changes are preserved for review.") : ""}</p> : null}
+      {syncState ? <p role="status" className="mt-4 rounded-xl border border-border px-3 py-2 text-sm">{visibleSyncState}{syncNeedsReview ? (language === "ar" ? " — تغييراتك المحلية محفوظة للمراجعة." : language === "de" ? " — deine lokalen Änderungen bleiben zur Prüfung erhalten." : " — your local changes are preserved for review.") : ""}</p> : null}
       {notice ? <p role="status" className="mt-4 rounded-xl bg-muted p-3 text-sm">{notice}</p> : null}
       {skippedReview ? <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-3"><p className="text-sm"><span className="font-semibold">Shopping review:</span> {skippedReview.frozen_name} was skipped, but its frozen Shopping contribution is still included.</p><button type="button" onClick={() => void removeSkippedFromShopping(skippedReview)} className="min-h-11 rounded-xl border border-border px-3 text-sm font-semibold">Review & Remove</button></div> : null}
       {error ? <p role="alert" className="mt-4 rounded-xl border border-destructive/30 p-3 text-sm text-destructive">{error}</p> : null}
