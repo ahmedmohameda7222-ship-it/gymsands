@@ -212,3 +212,32 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 8. Current Supabase organization is on the Free plan and is not final-launch infrastructure; backup/restore authority remains unresolved.
 9. Different domains have different reliability maturity; Workouts is stronger than Nutrition.
 10. Repository control documents are the current authority; historical PR descriptions and chat memory are not.
+
+## Nutrition V1 implementation candidate — Draft PR #152
+
+Nutrition V1 has a fully implemented, repository-verified Draft implementation candidate on `feat/nutrition-v1-implementation`. The latest runtime-bearing candidate validated before this documentation-only state record was `6d6d3c9c54a90121f63609fe9955de06c2256f07`.
+
+The implementation preserves the approved four-peer Nutrition IA (`Diary`, `Meal Plan`, `Food Library`, `My Recipes`) with Shopping nested under Meal Plan and Saved Meal contextual rather than peer navigation. Canonical Recipe/Saved Meal versioning and 30-day recovery, nullable nutrition truth, frozen consumer snapshots, effective-dated targets, Cooking Session persistence, Food provenance/curation, Diary actual-vs-planned separation, week-authoritative Meal Plan/offline conflict handling, EN/DE/AR localization, privacy/export/deletion consumers, MCP authority boundaries, and conservative legacy convergence are implemented.
+
+Exact-head Draft validation evidence for `6d6d3c9c54a90121f63609fe9955de06c2256f07`:
+
+| Evidence | Result |
+|---|---|
+| Phase A Diff Validation run `33034572635` | PASS |
+| PR Quality run `33034572637` | PASS |
+| Exercise Library Locale Runtime QA run `33034572655` | PASS |
+| Exercise Detail V2 Runtime QA run `33034572658` | PASS |
+| PR Quality core lint/typecheck/unit | PASS |
+| production build contract/build | PASS |
+| repository script/telemetry contracts | PASS |
+| chronological migration replay | PASS |
+| database lint and Nutrition verification SQL | PASS |
+| migration ledger check | PASS |
+| database and Workout History integration | PASS |
+| rendered Nutrition V1 matrix | PASS — 72/72 scenarios, 0 failures |
+| responsive/accessibility browser checks | PASS — zero overflow, unnamed controls, sub-44px targets, page errors, or unexpected console errors |
+| Arabic/RTL rendered proof | PASS — Meal Plan large text, Food Library mixed brand, My Recipes home, Cooking Mode |
+
+Repository migrations `20260825120000` through `20260825120400` remain intentionally pending and absent from Production. They were replayed and verified locally in CI only. No Production migration was applied, no compatibility marker was promoted, no Production deployment occurred, and this work is not merged.
+
+Per `PLAIVRA_DELIVERY_RULES.md`, Draft PR Quality is targeted implementation validation only. Ready-for-review transition, canonical phase-close Quality, Exact Release, release preflight, deployment, and Production verification require explicit authorization and therefore have not been performed for PR #152. The implementation candidate remains open/Draft for independent Lead QA/QC and Product Owner approval.
