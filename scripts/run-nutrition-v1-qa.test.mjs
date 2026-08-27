@@ -70,7 +70,7 @@ test("Recipe editor QA fixtures contain a real working draft and drive editor, i
   assert.match(source, /recipes-mobile-autosave-failure[\s\S]{0,260}trigger-recipe-autosave-failure/);
   assert.match(source, /getByRole\("link",\s*\{\s*name:\s*\/add ingredient\/i/);
   assert.match(source, /recipes-mobile-autosave-failure[\s\S]{0,700}503/);
-  for (const marker of ["Recipe Editor", "Add ingredient", "Not saved"]) assert.equal(source.includes(marker), true, marker);
+  for (const marker of ["Recipe editor", "Add ingredient", "Not saved"]) assert.equal(source.includes(marker), true, marker);
 });
 
 test("Food Library QA scenarios explicitly drive and assert Create, duplicate, edit-delete, serving, correction, and barcode states", async () => {
