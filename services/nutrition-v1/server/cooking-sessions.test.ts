@@ -297,42 +297,17 @@ describe("Nutrition V1 Cooking Session server authority", () => {
     expect(endedDb.from).not.toHaveBeenCalledWith("nutrition_log_groups");
   });
 
-  it("Start Over creates a fresh active session from the same frozen version without consulting mutable Recipe source", async () => {
-    const sessionRead = query({
-      data: {
-        id: sessionId,
-        user_id: userId,
-        recipe_id: recipeId,
-        recipe_version_id: versionId,
-        frozen_recipe_snapshot: frozenSnapshot,
-        serving_scale: 1,
-        status: "active",
-        state_revision: 4,
-      },
-      error: null,
-    });
-    const oldSessionEnd = query({ data: { id: sessionId, status: "ended" }, error: null });
-    const newSessionInsert = query({ data: { id: restartedSessionId, status: "active", state_revision: 0 }, error: null });
-    const newActionStateInsert = query({ data: null, error: null });
-    const db = fakeSupabase({
-      nutrition_cooking_sessions: [sessionRead, oldSessionEnd, newSessionInsert],
-      nutrition_cooking_action_states: [newActionStateInsert],
-    });
+  it("Start Over delegates the complete transition to one owner-derived transactional RPC", async () => {
+    const db = fakeSupabase({}, { data: { sessionId: restartedSessionId, reused: false }, error: null });
 
     const restarted = await startOverCookingSession(db.client, userId, sessionId, "2026-08-26T07:15:00.000Z");
 
     expect(restarted.sessionId).toBe(restartedSessionId);
-    expect(oldSessionEnd.update).toHaveBeenCalledWith(expect.objectContaining({ status: "ended", ended_at: "2026-08-26T07:15:00.000Z" }));
-    expect(newSessionInsert.insert).toHaveBeenCalledWith(expect.objectContaining({
-      user_id: userId,
-      recipe_id: recipeId,
-      recipe_version_id: versionId,
-      frozen_recipe_snapshot: frozenSnapshot,
-      serving_scale: 1,
-      status: "active",
-      state_revision: 0,
-    }));
-    expect(db.from).not.toHaveBeenCalledWith("nutrition_recipe_versions");
-    expect(db.from).not.toHaveBeenCalledWith("nutrition_recipe_actions");
+    expect(db.rpc).toHaveBeenCalledWith("start_over_nutrition_cooking_session", {
+      p_session_id: sessionId,
+      p_now: "2026-08-26T07:15:00.000Z",
+    });
+    expect(db.rpc).toHaveBeenCalledTimes(1);
+    expect(db.from).not.toHaveBeenCalled();
   });
 });
