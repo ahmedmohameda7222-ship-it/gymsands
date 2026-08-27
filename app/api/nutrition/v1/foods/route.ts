@@ -9,6 +9,14 @@ import {
   type FoodLibraryNumericFilter,
   type FoodLibraryPreset,
 } from "@/services/nutrition-v1/server/food-library";
+import {
+  createUserFood,
+  deleteUserFood,
+  setFoodPersonalCorrection,
+  updateUserFood,
+  type PersonalCorrectionInput,
+  type UserFoodWriteInput,
+} from "@/services/nutrition-v1/server/user-foods";
 
 function locale(value: string | null): FoodLibraryLocale {
   return value === "de" || value === "ar" ? value : "en";
@@ -45,11 +53,32 @@ export async function GET(request: Request) {
   }
 }
 
+type FoodMutationBody = {
+  operation?: unknown;
+  foodId?: unknown;
+  favorite?: unknown;
+  input?: unknown;
+};
+
 export async function POST(request: Request) {
   const context = await requireNutritionUser(request);
   if (context instanceof NextResponse) return context;
   try {
-    const body = await request.json().catch(() => ({})) as { foodId?: unknown; favorite?: unknown };
+    const body = await request.json().catch(() => ({})) as FoodMutationBody;
+    if (body.operation === "custom_food_create") {
+      return nutritionJson(await createUserFood(context.supabase, context.user.id, (body.input ?? {}) as UserFoodWriteInput));
+    }
+    if (body.operation === "custom_food_update") {
+      return nutritionJson(await updateUserFood(context.supabase, context.user.id, (body.input ?? {}) as UserFoodWriteInput));
+    }
+    if (body.operation === "custom_food_delete") {
+      const input = (body.input ?? {}) as { foodId?: unknown };
+      if (typeof input.foodId !== "string") return nutritionJson({ error: "foodId is required." }, { status: 400 });
+      return nutritionJson(await deleteUserFood(context.supabase, context.user.id, input.foodId));
+    }
+    if (body.operation === "personal_correction") {
+      return nutritionJson(await setFoodPersonalCorrection(context.supabase, context.user.id, (body.input ?? {}) as PersonalCorrectionInput));
+    }
     if (typeof body.foodId !== "string" || typeof body.favorite !== "boolean") {
       return nutritionJson({ error: "foodId and favorite are required." }, { status: 400 });
     }
