@@ -402,7 +402,7 @@ async function prepareScenario(page, item) {
       break;
     case "food-barcode-fallback": {
       await clickFirst(page, [/scan/i]);
-      const input = page.getByLabel(/barcode/i).first();
+      const input = page.getByRole("textbox", { name: /barcode/i }).first();
       if (await input.count()) await input.fill("4006381333931");
       await clickFirst(page, [/lookup/i]);
       await page.waitForTimeout(160);
@@ -524,7 +524,12 @@ export async function runNutritionV1Qa(options = {}) {
       const pageErrors = [];
       const consoleErrors = [];
       page.on("pageerror", (error) => pageErrors.push(sanitizedText(error.stack || error.message)));
-      page.on("console", (message) => { if (message.type() === "error" && !/favicon|Failed to load resource.*404/i.test(message.text())) consoleErrors.push(sanitizedText(message.text(), 800)); });
+      page.on("console", (message) => {
+        if (message.type() !== "error") return;
+        const text = message.text();
+        const expectedAutosaveFailure = item.recipeAutosaveStatus === 503 && /Failed to load resource.*503/i.test(text);
+        if (!expectedAutosaveFailure && !/favicon|Failed to load resource.*404/i.test(text)) consoleErrors.push(sanitizedText(text, 800));
+      });
       let response = null;
       let navigationError = null;
       try {
