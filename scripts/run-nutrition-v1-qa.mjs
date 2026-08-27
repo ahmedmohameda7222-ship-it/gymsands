@@ -342,7 +342,7 @@ async function createContext(browser, item) {
   const browserLocale = item.language === "ar" ? "ar-EG" : item.language === "de" ? "de-DE" : "en-GB";
   const context = await browser.newContext({ viewport: { width: item.viewport.width, height: item.viewport.height }, reducedMotion: "reduce", colorScheme: "light", locale: browserLocale });
   const mealPlanQueue = mealPlanOfflineQueueFixture(item);
-  await context.addInitScript(({ direction, language, largeText, offline, recipeId, cooking, mealPlanQueue }) => {
+  await context.addInitScript(({ direction, language, largeText, offline, recipeId, cooking, mealPlanQueue, mockAuthUserId, mealPlanWeekStart }) => {
     try { localStorage.setItem("plaivra.language.v1", language); } catch { /* origin may not be available yet */ }
     const applyDocumentPreferences = () => {
       if (!document.documentElement) return false;
@@ -356,12 +356,22 @@ async function createContext(browser, item) {
     }
     if (offline) Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
     if (mealPlanQueue) {
-      try { localStorage.setItem(`plaivra:nutrition-v1:meal-plan:queue:${MOCK_AUTH_USER_ID}:${MEAL_PLAN_QA_WEEK_START}`, JSON.stringify(mealPlanQueue)); } catch { /* origin not available yet */ }
+      try { localStorage.setItem(`plaivra:nutrition-v1:meal-plan:queue:${mockAuthUserId}:${mealPlanWeekStart}`, JSON.stringify(mealPlanQueue)); } catch { /* origin not available yet */ }
     }
     if (cooking) {
       try { localStorage.setItem(`plaivra:nutrition:cooking:${recipeId}:active`, JSON.stringify(cooking)); } catch { /* origin not available yet */ }
     }
-  }, { direction: item.direction, language: item.language, largeText: item.largeText, offline: item.offline, recipeId: RECIPE_ID, cooking: item.route.includes("/cook") ? cookingFixture(item) : null, mealPlanQueue });
+  }, {
+    direction: item.direction,
+    language: item.language,
+    largeText: item.largeText,
+    offline: item.offline,
+    recipeId: RECIPE_ID,
+    cooking: item.route.includes("/cook") ? cookingFixture(item) : null,
+    mealPlanQueue,
+    mockAuthUserId: MOCK_AUTH_USER_ID,
+    mealPlanWeekStart: MEAL_PLAN_QA_WEEK_START,
+  });
 
   await context.route("**/api/billing/entitlements", (route) => fulfillJson(route, { entitlements: [] }, 200, "empty-entitlements-v1"));
   await context.route("**/api/nutrition/v1/**", async (route) => {
