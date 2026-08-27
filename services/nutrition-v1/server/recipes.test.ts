@@ -61,17 +61,27 @@ const completeDraft = {
 beforeEach(() => vi.clearAllMocks());
 
 describe("Nutrition V1 Recipe server authority", () => {
-  it("creates an incomplete Working Draft without publishing it", async () => {
-    const root = query({ data: { id: recipeId, user_id: userId, name: "Chicken bowl" }, error: null });
-    const draft = query({ data: { id: draftId, recipe_id: recipeId, user_id: userId, name: "Chicken bowl", servings: null }, error: null });
-    const db = fakeSupabase({ nutrition_recipes: [root], nutrition_recipe_drafts: [draft] });
+  it("creates an incomplete Working Draft and root atomically without publishing it", async () => {
+    const db = fakeSupabase({}, {
+      data: {
+        recipeId,
+        draftId,
+        recipe: { id: recipeId, user_id: userId, name: "Chicken bowl" },
+        draft: { id: draftId, recipe_id: recipeId, user_id: userId, name: "Chicken bowl", servings: null },
+      },
+      error: null,
+    });
 
     const created = await createRecipeDraft(db.client, userId, { name: "Chicken bowl" });
 
     expect(created.recipeId).toBe(recipeId);
     expect(created.draftId).toBe(draftId);
-    expect(root.insert).toHaveBeenCalledWith(expect.objectContaining({ user_id: userId }));
-    expect(db.from).not.toHaveBeenCalledWith("nutrition_recipe_versions");
+    expect(db.rpc).toHaveBeenCalledWith("create_nutrition_recipe_draft", expect.objectContaining({
+      p_name: "Chicken bowl",
+      p_servings: null,
+    }));
+    expect(db.rpc).toHaveBeenCalledTimes(1);
+    expect(db.from).not.toHaveBeenCalled();
   });
 
   it("autosaves the Working Draft atomically and never mutates a published Recipe version", async () => {
