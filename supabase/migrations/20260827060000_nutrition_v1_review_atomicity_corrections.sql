@@ -1,1 +1,249 @@
--- Nutrition V1 post-review atomicity corrections.\n-- Repository-only additive migration. Do not apply to Production without explicit authority.\n\ncreate or replace function public.sync_nutrition_cooking_session_state(\n  p_session_id uuid,\n  p_expected_revision bigint,\n  p_current_action_key text,\n  p_last_active_at timestamptz,\n  p_action_states jsonb default '[]'::jsonb,\n  p_timers jsonb default '[]'::jsonb\n)\nreturns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path = pg_catalog, public\nas $$\ndeclare\n  v_user_id uuid := auth.uid();\n  v_current_revision bigint;\n  v_next_revision bigint;\n  v_item jsonb;\n  v_action_id uuid;\n  v_action_state_id uuid;\n  v_timer_id uuid;\nbegin\n  if v_user_id is null then\n    raise exception 'Authentication required.' using errcode = '42501';\n  end if;\n  if p_expected_revision is null or p_expected_revision < 0 then\n    raise exception 'Invalid Cooking Session revision.' using errcode = '22023';\n  end if;\n  if jsonb_typeof(coalesce(p_action_states, '[]'::jsonb)) <> 'array'\n     or jsonb_typeof(coalesce(p_timers, '[]'::jsonb)) <> 'array' then\n    raise exception 'Cooking Session state payload must use arrays.' using errcode = '22023';\n  end if;\n\n  select state_revision\n    into v_current_revision\n  from public.nutrition_cooking_sessions\n  where id = p_session_id\n    and user_id = v_user_id\n    and status = 'active'\n    and state_revision = p_expected_revision\n  for update;\n\n  if not found then\n    raise exception 'Cooking Session revision conflict: local state is stale.' using errcode = '40001';\n  end if;\n\n  v_next_revision := p_expected_revision + 1;\n  update public.nutrition_cooking_sessions\n  set current_action_key = p_current_action_key,\n      last_active_at = coalesce(p_last_active_at, clock_timestamp()),\n      state_revision = v_next_revision\n  where id = p_session_id\n    and user_id = v_user_id\n    and status = 'active'\n    and state_revision = p_expected_revision;\n\n  for v_item in select value from jsonb_array_elements(coalesce(p_action_states, '[]'::jsonb)) loop\n    v_action_id := nullif(v_item->>'id', '')::uuid;\n    update public.nutrition_cooking_action_states\n    set state = v_item->>'state',\n        state_revision = (v_item->>'state_revision')::bigint,\n        activated_at = nullif(v_item->>'activated_at', '')::timestamptz,\n        completed_at = nullif(v_item->>'completed_at', '')::timestamptz,\n        deferred_at = nullif(v_item->>'deferred_at', '')::timestamptz,\n        skipped_at = nullif(v_item->>'skipped_at', '')::timestamptz\n    where id = v_action_id\n      and session_id = p_session_id\n      and user_id = v_user_id\n      and action_key = v_item->>'action_key';\n    if not found then\n      raise exception 'Cooking Session action state does not belong to this session.' using errcode = '42501';\n    end if;\n  end loop;\n\n  for v_item in select value from jsonb_array_elements(coalesce(p_timers, '[]'::jsonb)) loop\n    v_timer_id := nullif(v_item->>'id', '')::uuid;\n    v_action_state_id := nullif(v_item->>'action_state_id', '')::uuid;\n    perform 1\n    from public.nutrition_cooking_action_states\n    where id = v_action_state_id\n      and session_id = p_session_id\n      and user_id = v_user_id;\n    if not found then\n      raise exception 'Cooking Session timer action state does not belong to this session.' using errcode = '42501';\n    end if;\n\n    insert into public.nutrition_cooking_timers (\n      id, action_state_id, user_id, timer_name, duration_seconds, status,\n      started_at, target_at, paused_at, paused_remaining_seconds, completed_at, cancelled_at\n    ) values (\n      v_timer_id,\n      v_action_state_id,\n      v_user_id,\n      btrim(v_item->>'timer_name'),\n      (v_item->>'duration_seconds')::integer,\n      v_item->>'status',\n      nullif(v_item->>'started_at', '')::timestamptz,\n      nullif(v_item->>'target_at', '')::timestamptz,\n      nullif(v_item->>'paused_at', '')::timestamptz,\n      nullif(v_item->>'paused_remaining_seconds', '')::integer,\n      nullif(v_item->>'completed_at', '')::timestamptz,\n      nullif(v_item->>'cancelled_at', '')::timestamptz\n    )\n    on conflict (id) do update\n    set action_state_id = excluded.action_state_id,\n        timer_name = excluded.timer_name,\n        duration_seconds = excluded.duration_seconds,\n        status = excluded.status,\n        started_at = excluded.started_at,\n        target_at = excluded.target_at,\n        paused_at = excluded.paused_at,\n        paused_remaining_seconds = excluded.paused_remaining_seconds,\n        completed_at = excluded.completed_at,\n        cancelled_at = excluded.cancelled_at\n    where nutrition_cooking_timers.user_id = v_user_id;\n    if not found then\n      raise exception 'Cooking Session timer does not belong to this owner.' using errcode = '42501';\n    end if;\n  end loop;\n\n  return jsonb_build_object('stateRevision', v_next_revision);\nend;\n$$;\n\nrevoke all on function public.sync_nutrition_cooking_session_state(uuid, bigint, text, timestamptz, jsonb, jsonb) from public, anon;\ngrant execute on function public.sync_nutrition_cooking_session_state(uuid, bigint, text, timestamptz, jsonb, jsonb) to authenticated, service_role;\n\ncreate or replace function public.autosave_nutrition_recipe_draft(\n  p_recipe_id uuid,\n  p_draft jsonb,\n  p_ingredients jsonb default '[]'::jsonb,\n  p_instructions jsonb default '[]'::jsonb,\n  p_equipment jsonb default '[]'::jsonb\n)\nreturns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path = pg_catalog, public\nas $$\ndeclare\n  v_user_id uuid := auth.uid();\n  v_draft public.nutrition_recipe_drafts%rowtype;\n  v_item jsonb;\n  v_position bigint;\nbegin\n  if v_user_id is null then\n    raise exception 'Authentication required.' using errcode = '42501';\n  end if;\n  if jsonb_typeof(coalesce(p_draft, '{}'::jsonb)) <> 'object'\n     or jsonb_typeof(coalesce(p_ingredients, '[]'::jsonb)) <> 'array'\n     or jsonb_typeof(coalesce(p_instructions, '[]'::jsonb)) <> 'array'\n     or jsonb_typeof(coalesce(p_equipment, '[]'::jsonb)) <> 'array' then\n    raise exception 'Recipe Working Draft autosave payload is invalid.' using errcode = '22023';\n  end if;\n\n  perform 1\n  from public.nutrition_recipes\n  where id = p_recipe_id\n    and user_id = v_user_id\n    and deleted_at is null\n  for update;\n  if not found then\n    raise exception 'Active Recipe not found.' using errcode = 'P0002';\n  end if;\n\n  select draft.*\n    into v_draft\n  from public.nutrition_recipe_drafts draft\n  where draft.recipe_id = p_recipe_id\n    and draft.user_id = v_user_id\n  for update;\n  if not found then\n    raise exception 'Recipe Working Draft was not found.' using errcode = 'P0002';\n  end if;\n\n  update public.nutrition_recipe_drafts draft\n  set name = nullif(btrim(p_draft->>'name'), ''),\n      servings = nullif(p_draft->>'servings', '')::numeric,\n      total_cooked_weight_g = nullif(p_draft->>'total_cooked_weight_g', '')::numeric,\n      total_time_minutes = nullif(p_draft->>'total_time_minutes', '')::integer,\n      notes = nullif(btrim(p_draft->>'notes'), ''),\n      draft_metadata = coalesce(p_draft->'draft_metadata', '{}'::jsonb)\n  where draft.id = v_draft.id\n    and draft.user_id = v_user_id\n  returning draft.* into v_draft;\n\n  delete from public.nutrition_recipe_ingredients\n  where recipe_draft_id = v_draft.id and user_id = v_user_id;\n  delete from public.nutrition_recipe_actions\n  where recipe_draft_id = v_draft.id and user_id = v_user_id;\n  delete from public.nutrition_recipe_equipment\n  where recipe_draft_id = v_draft.id and user_id = v_user_id;\n\n  for v_item, v_position in\n    select value, ordinality - 1\n    from jsonb_array_elements(coalesce(p_ingredients, '[]'::jsonb)) with ordinality\n  loop\n    insert into public.nutrition_recipe_ingredients (\n      user_id, recipe_version_id, recipe_draft_id, position, food_id, ingredient_name, quantity, unit, frozen_nutrition\n    ) values (\n      v_user_id, null, v_draft.id, v_position::integer, nullif(v_item->>'food_id', '')::uuid,\n      btrim(v_item->>'ingredient_name'), nullif(v_item->>'quantity', '')::numeric,\n      nullif(btrim(v_item->>'unit'), ''),\n      case when jsonb_typeof(v_item->'frozen_nutrition') = 'null' then null else v_item->'frozen_nutrition' end\n    );\n  end loop;\n\n  for v_item, v_position in\n    select value, ordinality - 1\n    from jsonb_array_elements(coalesce(p_instructions, '[]'::jsonb)) with ordinality\n  loop\n    insert into public.nutrition_recipe_actions (\n      user_id, recipe_version_id, recipe_draft_id, position, instruction, ingredient_refs, equipment_refs,\n      duration_seconds, heat_or_temperature, doneness_or_result_cue, prep_ahead_cue, track_key,\n      dependency_action_ids, can_run_in_background, metadata\n    ) values (\n      v_user_id, null, v_draft.id, v_position::integer, btrim(v_item->>'instruction'),\n      coalesce(v_item->'ingredient_refs', '[]'::jsonb), coalesce(v_item->'equipment_refs', '[]'::jsonb),\n      nullif(v_item->>'duration_seconds', '')::integer, nullif(btrim(v_item->>'heat_or_temperature'), ''),\n      nullif(btrim(v_item->>'doneness_or_result_cue'), ''), nullif(btrim(v_item->>'prep_ahead_cue'), ''),\n      nullif(btrim(v_item->>'track_key'), ''),\n      coalesce(array(select value::uuid from jsonb_array_elements_text(coalesce(v_item->'dependency_action_ids', '[]'::jsonb))), '{}'::uuid[]),\n      coalesce((v_item->>'can_run_in_background')::boolean, false), coalesce(v_item->'metadata', '{}'::jsonb)\n    );\n  end loop;\n\n  for v_item, v_position in\n    select value, ordinality - 1\n    from jsonb_array_elements(coalesce(p_equipment, '[]'::jsonb)) with ordinality\n  loop\n    insert into public.nutrition_recipe_equipment (\n      user_id, recipe_version_id, recipe_draft_id, position, name, quantity, note\n    ) values (\n      v_user_id, null, v_draft.id, v_position::integer, btrim(v_item->>'name'),\n      nullif(v_item->>'quantity', '')::numeric, nullif(btrim(v_item->>'note'), '')\n    );\n  end loop;\n\n  return to_jsonb(v_draft);\nend;\n$$;\n\nrevoke all on function public.autosave_nutrition_recipe_draft(uuid, jsonb, jsonb, jsonb, jsonb) from public, anon;\ngrant execute on function public.autosave_nutrition_recipe_draft(uuid, jsonb, jsonb, jsonb, jsonb) to authenticated, service_role;\n\nnotify pgrst, 'reload schema';\n
+-- Nutrition V1 post-review atomicity corrections.
+-- Repository-only additive migration. Do not apply to Production without explicit authority.
+
+create or replace function public.sync_nutrition_cooking_session_state(
+  p_session_id uuid,
+  p_expected_revision bigint,
+  p_current_action_key text,
+  p_last_active_at timestamptz,
+  p_action_states jsonb default '[]'::jsonb,
+  p_timers jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_current_revision bigint;
+  v_next_revision bigint;
+  v_item jsonb;
+  v_action_id uuid;
+  v_action_state_id uuid;
+  v_timer_id uuid;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required.' using errcode = '42501';
+  end if;
+  if p_expected_revision is null or p_expected_revision < 0 then
+    raise exception 'Invalid Cooking Session revision.' using errcode = '22023';
+  end if;
+  if jsonb_typeof(coalesce(p_action_states, '[]'::jsonb)) <> 'array'
+     or jsonb_typeof(coalesce(p_timers, '[]'::jsonb)) <> 'array' then
+    raise exception 'Cooking Session state payload must use arrays.' using errcode = '22023';
+  end if;
+
+  select state_revision
+    into v_current_revision
+  from public.nutrition_cooking_sessions
+  where id = p_session_id
+    and user_id = v_user_id
+    and status = 'active'
+    and state_revision = p_expected_revision
+  for update;
+
+  if not found then
+    raise exception 'Cooking Session revision conflict: local state is stale.' using errcode = '40001';
+  end if;
+
+  v_next_revision := p_expected_revision + 1;
+  update public.nutrition_cooking_sessions
+  set current_action_key = p_current_action_key,
+      last_active_at = coalesce(p_last_active_at, clock_timestamp()),
+      state_revision = v_next_revision
+  where id = p_session_id
+    and user_id = v_user_id
+    and status = 'active'
+    and state_revision = p_expected_revision;
+
+  for v_item in select value from jsonb_array_elements(coalesce(p_action_states, '[]'::jsonb)) loop
+    v_action_id := nullif(v_item->>'id', '')::uuid;
+    update public.nutrition_cooking_action_states
+    set state = v_item->>'state',
+        state_revision = (v_item->>'state_revision')::bigint,
+        activated_at = nullif(v_item->>'activated_at', '')::timestamptz,
+        completed_at = nullif(v_item->>'completed_at', '')::timestamptz,
+        deferred_at = nullif(v_item->>'deferred_at', '')::timestamptz,
+        skipped_at = nullif(v_item->>'skipped_at', '')::timestamptz
+    where id = v_action_id
+      and session_id = p_session_id
+      and user_id = v_user_id
+      and action_key = v_item->>'action_key';
+    if not found then
+      raise exception 'Cooking Session action state does not belong to this session.' using errcode = '42501';
+    end if;
+  end loop;
+
+  for v_item in select value from jsonb_array_elements(coalesce(p_timers, '[]'::jsonb)) loop
+    v_timer_id := nullif(v_item->>'id', '')::uuid;
+    v_action_state_id := nullif(v_item->>'action_state_id', '')::uuid;
+    perform 1
+    from public.nutrition_cooking_action_states
+    where id = v_action_state_id
+      and session_id = p_session_id
+      and user_id = v_user_id;
+    if not found then
+      raise exception 'Cooking Session timer action state does not belong to this session.' using errcode = '42501';
+    end if;
+
+    insert into public.nutrition_cooking_timers (
+      id, action_state_id, user_id, timer_name, duration_seconds, status,
+      started_at, target_at, paused_at, paused_remaining_seconds, completed_at, cancelled_at
+    ) values (
+      v_timer_id,
+      v_action_state_id,
+      v_user_id,
+      btrim(v_item->>'timer_name'),
+      (v_item->>'duration_seconds')::integer,
+      v_item->>'status',
+      nullif(v_item->>'started_at', '')::timestamptz,
+      nullif(v_item->>'target_at', '')::timestamptz,
+      nullif(v_item->>'paused_at', '')::timestamptz,
+      nullif(v_item->>'paused_remaining_seconds', '')::integer,
+      nullif(v_item->>'completed_at', '')::timestamptz,
+      nullif(v_item->>'cancelled_at', '')::timestamptz
+    )
+    on conflict (id) do update
+    set action_state_id = excluded.action_state_id,
+        timer_name = excluded.timer_name,
+        duration_seconds = excluded.duration_seconds,
+        status = excluded.status,
+        started_at = excluded.started_at,
+        target_at = excluded.target_at,
+        paused_at = excluded.paused_at,
+        paused_remaining_seconds = excluded.paused_remaining_seconds,
+        completed_at = excluded.completed_at,
+        cancelled_at = excluded.cancelled_at
+    where nutrition_cooking_timers.user_id = v_user_id;
+    if not found then
+      raise exception 'Cooking Session timer does not belong to this owner.' using errcode = '42501';
+    end if;
+  end loop;
+
+  return jsonb_build_object('stateRevision', v_next_revision);
+end;
+$$;
+
+revoke all on function public.sync_nutrition_cooking_session_state(uuid, bigint, text, timestamptz, jsonb, jsonb) from public, anon;
+grant execute on function public.sync_nutrition_cooking_session_state(uuid, bigint, text, timestamptz, jsonb, jsonb) to authenticated, service_role;
+
+create or replace function public.autosave_nutrition_recipe_draft(
+  p_recipe_id uuid,
+  p_draft jsonb,
+  p_ingredients jsonb default '[]'::jsonb,
+  p_instructions jsonb default '[]'::jsonb,
+  p_equipment jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_draft public.nutrition_recipe_drafts%rowtype;
+  v_item jsonb;
+  v_position bigint;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required.' using errcode = '42501';
+  end if;
+  if jsonb_typeof(coalesce(p_draft, '{}'::jsonb)) <> 'object'
+     or jsonb_typeof(coalesce(p_ingredients, '[]'::jsonb)) <> 'array'
+     or jsonb_typeof(coalesce(p_instructions, '[]'::jsonb)) <> 'array'
+     or jsonb_typeof(coalesce(p_equipment, '[]'::jsonb)) <> 'array' then
+    raise exception 'Recipe Working Draft autosave payload is invalid.' using errcode = '22023';
+  end if;
+
+  perform 1
+  from public.nutrition_recipes
+  where id = p_recipe_id
+    and user_id = v_user_id
+    and deleted_at is null
+  for update;
+  if not found then
+    raise exception 'Active Recipe not found.' using errcode = 'P0002';
+  end if;
+
+  select draft.*
+    into v_draft
+  from public.nutrition_recipe_drafts draft
+  where draft.recipe_id = p_recipe_id
+    and draft.user_id = v_user_id
+  for update;
+  if not found then
+    raise exception 'Recipe Working Draft was not found.' using errcode = 'P0002';
+  end if;
+
+  update public.nutrition_recipe_drafts draft
+  set name = nullif(btrim(p_draft->>'name'), ''),
+      servings = nullif(p_draft->>'servings', '')::numeric,
+      total_cooked_weight_g = nullif(p_draft->>'total_cooked_weight_g', '')::numeric,
+      total_time_minutes = nullif(p_draft->>'total_time_minutes', '')::integer,
+      notes = nullif(btrim(p_draft->>'notes'), ''),
+      draft_metadata = coalesce(p_draft->'draft_metadata', '{}'::jsonb)
+  where draft.id = v_draft.id
+    and draft.user_id = v_user_id
+  returning draft.* into v_draft;
+
+  delete from public.nutrition_recipe_ingredients
+  where recipe_draft_id = v_draft.id and user_id = v_user_id;
+  delete from public.nutrition_recipe_actions
+  where recipe_draft_id = v_draft.id and user_id = v_user_id;
+  delete from public.nutrition_recipe_equipment
+  where recipe_draft_id = v_draft.id and user_id = v_user_id;
+
+  for v_item, v_position in
+    select value, ordinality - 1
+    from jsonb_array_elements(coalesce(p_ingredients, '[]'::jsonb)) with ordinality
+  loop
+    insert into public.nutrition_recipe_ingredients (
+      user_id, recipe_version_id, recipe_draft_id, position, food_id, ingredient_name, quantity, unit, frozen_nutrition
+    ) values (
+      v_user_id, null, v_draft.id, v_position::integer, nullif(v_item->>'food_id', '')::uuid,
+      btrim(v_item->>'ingredient_name'), nullif(v_item->>'quantity', '')::numeric,
+      nullif(btrim(v_item->>'unit'), ''),
+      case when jsonb_typeof(v_item->'frozen_nutrition') = 'null' then null else v_item->'frozen_nutrition' end
+    );
+  end loop;
+
+  for v_item, v_position in
+    select value, ordinality - 1
+    from jsonb_array_elements(coalesce(p_instructions, '[]'::jsonb)) with ordinality
+  loop
+    insert into public.nutrition_recipe_actions (
+      user_id, recipe_version_id, recipe_draft_id, position, instruction, ingredient_refs, equipment_refs,
+      duration_seconds, heat_or_temperature, doneness_or_result_cue, prep_ahead_cue, track_key,
+      dependency_action_ids, can_run_in_background, metadata
+    ) values (
+      v_user_id, null, v_draft.id, v_position::integer, btrim(v_item->>'instruction'),
+      coalesce(v_item->'ingredient_refs', '[]'::jsonb), coalesce(v_item->'equipment_refs', '[]'::jsonb),
+      nullif(v_item->>'duration_seconds', '')::integer, nullif(btrim(v_item->>'heat_or_temperature'), ''),
+      nullif(btrim(v_item->>'doneness_or_result_cue'), ''), nullif(btrim(v_item->>'prep_ahead_cue'), ''),
+      nullif(btrim(v_item->>'track_key'), ''),
+      coalesce(array(select value::uuid from jsonb_array_elements_text(coalesce(v_item->'dependency_action_ids', '[]'::jsonb))), '{}'::uuid[]),
+      coalesce((v_item->>'can_run_in_background')::boolean, false), coalesce(v_item->'metadata', '{}'::jsonb)
+    );
+  end loop;
+
+  for v_item, v_position in
+    select value, ordinality - 1
+    from jsonb_array_elements(coalesce(p_equipment, '[]'::jsonb)) with ordinality
+  loop
+    insert into public.nutrition_recipe_equipment (
+      user_id, recipe_version_id, recipe_draft_id, position, name, quantity, note
+    ) values (
+      v_user_id, null, v_draft.id, v_position::integer, btrim(v_item->>'name'),
+      nullif(v_item->>'quantity', '')::numeric, nullif(btrim(v_item->>'note'), '')
+    );
+  end loop;
+
+  return to_jsonb(v_draft);
+end;
+$$;
+
+revoke all on function public.autosave_nutrition_recipe_draft(uuid, jsonb, jsonb, jsonb, jsonb) from public, anon;
+grant execute on function public.autosave_nutrition_recipe_draft(uuid, jsonb, jsonb, jsonb, jsonb) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
