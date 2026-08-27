@@ -23,7 +23,7 @@ jobs:
       - name: Verify bounded lineage
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "aaca969542ab40e7365c5503b8613fda84e767d7"
+          test "$(git rev-parse HEAD^)" = "6fe07488e386b76dac12bec6a1c2eccc203cac49"
 
       - uses: actions/setup-node@v4
         with:
@@ -72,6 +72,10 @@ jobs:
             (
               '  useEffect(() => { void initialize(); }, [initialize]);\n',
               '  useEffect(() => {\n    if (authLoading) return;\n    void initialize(authOwnerId);\n  }, [authLoading, authOwnerId, initialize]);\n',
+            ),
+            (
+              'onClick={() => void initialize()}',
+              'onClick={() => void initialize(authOwnerId)}',
             ),
           ]
 
