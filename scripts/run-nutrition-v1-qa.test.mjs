@@ -49,6 +49,20 @@ test("Shopping rendered evidence visibly seeds Needed, Purchased, and Don't need
   assert.match(source, /state:\s*"Don't need"/);
 });
 
+test("offline Meal Plan rendered evidence explicitly proves queued, attention, conflict, partial, and estimated truth", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /function mealPlanOfflineQueueFixture\(/);
+  assert.match(source, /function mealPlanOfflineEvidenceOccurrences\(/);
+  assert.match(source, /status:\s*"queued"/);
+  assert.match(source, /status:\s*"needs_attention"/);
+  assert.match(source, /status:\s*"conflict"/);
+  assert.match(source, /estimatedNutrition/);
+  assert.match(source, /plaivra:nutrition-v1:meal-plan:queue/);
+  for (const label of ["Waiting to sync", "Needs attention", "Conflict", "Partial", "Estimated"]) {
+    assert.equal(source.includes(label), true, label);
+  }
+});
+
 test("Nutrition V1 screenshot names are deterministic, portable, and collision resistant", async () => {
   const qa = await import("./run-nutrition-v1-qa.mjs");
   const scenario = qa.NUTRITION_V1_QA_SCENARIOS.find((item) => item.name === "recipes-rtl-cooking-mobile");
