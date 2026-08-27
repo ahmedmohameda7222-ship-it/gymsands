@@ -528,7 +528,8 @@ export async function runNutritionV1Qa(options = {}) {
         if (message.type() !== "error") return;
         const text = message.text();
         const expectedAutosaveFailure = item.recipeAutosaveStatus === 503 && /Failed to load resource.*503/i.test(text);
-        if (!expectedAutosaveFailure && !/favicon|Failed to load resource.*404/i.test(text)) consoleErrors.push(sanitizedText(text, 800));
+        const expectedBarcodeFailure = item.name === "food-library-mobile-barcode-fallback" && /Failed to load resource.*503/i.test(text);
+        if (!expectedAutosaveFailure && !expectedBarcodeFailure && !/favicon|Failed to load resource.*404/i.test(text)) consoleErrors.push(sanitizedText(text, 800));
       });
       let response = null;
       let navigationError = null;
