@@ -63,6 +63,7 @@ as $function$
 declare
   v_operator text;
   v_target numeric;
+  v_max numeric;
 begin
   if p_filter is null or p_filter = 'null'::jsonb then
     return true;
@@ -82,6 +83,15 @@ begin
   if v_operator = 'gte' then return p_value >= v_target; end if;
   if v_operator = 'lte' then return p_value <= v_target; end if;
   if v_operator = 'eq' then return p_value = v_target; end if;
+  if v_operator = 'between' then
+    begin
+      v_max := nullif(p_filter->>'max', '')::numeric;
+    exception when others then
+      return false;
+    end;
+    if v_max is null then return false; end if;
+    return p_value >= least(v_target, v_max) and p_value <= greatest(v_target, v_max);
+  end if;
   return false;
 end
 $function$;
