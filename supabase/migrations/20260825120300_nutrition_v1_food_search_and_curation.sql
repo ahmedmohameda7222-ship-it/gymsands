@@ -1,7 +1,21 @@
 -- Nutrition V1 Food search, provenance, personalization, and curation foundation.
--- Additive only: canonical Food identity remains public.food_items in Plaivra Main Supabase.
+-- Preservation-safe: canonical Food identity remains public.food_items in Plaivra Main Supabase.
 
 create extension if not exists "pg_trgm";
+
+-- Custom Food keeps Calories required but allows unknown P/C/F. Existing user Foods remain
+-- valid; soft deletion removes future discovery without erasing historical references.
+alter table public.user_food_items
+  alter column protein_g drop not null,
+  alter column carbs_g drop not null,
+  alter column fat_g drop not null,
+  add column if not exists nutrition_basis_amount numeric check (nutrition_basis_amount is null or nutrition_basis_amount > 0),
+  add column if not exists nutrition_basis_unit text check (nutrition_basis_unit is null or nutrition_basis_unit in ('g', 'ml', 'serving', 'piece', 'custom')),
+  add column if not exists deleted_at timestamptz;
+
+create index if not exists user_food_items_owner_active_idx
+  on public.user_food_items(user_id, updated_at desc, id)
+  where deleted_at is null;
 
 alter table public.food_items
   add column if not exists saturated_fat_g numeric check (saturated_fat_g is null or saturated_fat_g >= 0),
