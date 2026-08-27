@@ -164,6 +164,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
         if (!local) throw new Error(nt("cookingRecoveryFailed"));
         writeLocal(local);
         setResumeCandidate(local);
+        setLoading(false);
         return;
       }
       const started = await startCookingSession(supabase, ownerId, { recipeId });
@@ -525,9 +526,9 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
 
   return (
     <main dir={direction} lang={language} className="mx-auto w-full max-w-[720px] space-y-5 px-4 py-4 sm:px-6 sm:py-6">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 pb-3">
+      <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/70 pb-3">
         <button type="button" onClick={onBack} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm font-medium hover:bg-muted"><ArrowLeft className="h-4 w-4" aria-hidden="true" />{nt("cookingBack")}</button>
-        <bdi className="min-w-0 flex-1 break-words text-center text-sm font-semibold" dir="auto">{recipeName}</bdi>
+        <bdi className="min-w-0 break-words text-center text-sm font-semibold" dir="auto">{recipeName}</bdi>
         <button type="button" onClick={onEndCooking} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground hover:bg-muted"><Square className="h-4 w-4" aria-hidden="true" />{nt("cookingEnd")}</button>
       </header>
 
