@@ -117,8 +117,10 @@ describe("Nutrition V1 Meal Plan product contract", () => {
 
   it("protects Shopping manual quantity notes state and offers explicit carry-forward", () => {
     const shopping = source("components/nutrition/meal-plan/shopping-list.tsx");
+    const dictionary = source("lib/i18n/nutrition-v1.ts");
     expect(shopping).toContain("useNutritionV1Translation");
-    expect(shopping).toContain("manual quantity");
+    expect(shopping).toContain('nt("manualQuantity")');
+    expect(dictionary).toContain('manualQuantity: "Manual quantity"');
     expect(shopping).toContain("notes");
     expect(shopping).toContain('nt("carryUnchecked")');
   });
