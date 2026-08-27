@@ -80,6 +80,7 @@ jobs:
           ledger['capturedAt'] = '2026-08-27T07:24:17.000Z'
           ledger['pendingCount'] = 0
           ledger['unresolvedCount'] = 0
+          ledger['productionRecordCount'] = 100
           ledger['historyRepair'] = {
               'state': 'reconciled',
               'schemaAppliedUntrackedCount': 0,
@@ -144,7 +145,11 @@ jobs:
         run: |
           set -euo pipefail
           npm run migration:ledger:check
-          test "$(node scripts/quality-ledger-target.mjs --value expectedMigration)" = "20260827072417"
+          marker="$(node scripts/quality-ledger-target.mjs --value expectedMigration)"
+          physical_head="$(node scripts/quality-ledger-target.mjs --value latestAppliedMigrationVersion)"
+          printf 'compatibility_marker=%s\nphysical_migration_head=%s\n' "$marker" "$physical_head"
+          test "$marker" = "20260724232734"
+          test "$physical_head" = "20260827072417"
           node --test scripts/check-migration-ledger.test.mjs
 
       - name: Commit Production reconciliation evidence
