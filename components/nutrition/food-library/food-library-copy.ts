@@ -21,7 +21,9 @@ export type FoodLibraryExtraKey =
   | "searchStillAvailable"
   | "personalCorrection"
   | "foodManagement"
-  | "customFoodDeleted";
+  | "customFoodDeleted"
+  | "offline"
+  | "showingAvailableSavedFoods";
 
 export type FoodLibraryTextKey = NutritionV1Key | FoodLibraryExtraKey;
 type Language = "en" | "de" | "ar";
@@ -50,6 +52,8 @@ const extra: Record<Language, Record<FoodLibraryExtraKey, string>> = {
     personalCorrection: "Personal correction",
     foodManagement: "Food management",
     customFoodDeleted: "Food removed from future discovery.",
+    offline: "Offline",
+    showingAvailableSavedFoods: "Showing available saved foods.",
   },
   de: {
     createFood: "Lebensmittel erstellen",
@@ -73,6 +77,8 @@ const extra: Record<Language, Record<FoodLibraryExtraKey, string>> = {
     personalCorrection: "Persönliche Korrektur",
     foodManagement: "Lebensmittel verwalten",
     customFoodDeleted: "Lebensmittel aus der zukünftigen Suche entfernt.",
+    offline: "Offline",
+    showingAvailableSavedFoods: "Verfügbare gespeicherte Lebensmittel werden angezeigt.",
   },
   ar: {
     createFood: "إنشاء طعام",
@@ -96,6 +102,8 @@ const extra: Record<Language, Record<FoodLibraryExtraKey, string>> = {
     personalCorrection: "تصحيح شخصي",
     foodManagement: "إدارة الطعام",
     customFoodDeleted: "تمت إزالة الطعام من الاستخدام المستقبلي.",
+    offline: "غير متصل",
+    showingAvailableSavedFoods: "يتم عرض الأطعمة المحفوظة المتاحة.",
   },
 };
 
