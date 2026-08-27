@@ -63,6 +63,26 @@ test("offline Meal Plan rendered evidence explicitly proves queued, attention, c
   }
 });
 
+test("Recipe editor QA fixtures contain a real working draft and drive editor, ingredient-search, and autosave-failure states", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /function recipeDetail\([\s\S]*?draft:\s*\{/);
+  assert.match(source, /recipes-mobile-add-ingredient-search[\s\S]{0,260}open-recipe-add-ingredient/);
+  assert.match(source, /recipes-mobile-autosave-failure[\s\S]{0,260}trigger-recipe-autosave-failure/);
+  assert.match(source, /getByRole\("link",\s*\{\s*name:\s*\/add ingredient\/i/);
+  assert.match(source, /recipes-mobile-autosave-failure[\s\S]{0,700}503/);
+  for (const marker of ["Recipe Editor", "Add ingredient", "Not saved"]) assert.equal(source.includes(marker), true, marker);
+});
+
+test("Food Library QA scenarios explicitly drive and assert Create, duplicate, edit-delete, serving, correction, and barcode states", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  for (const interaction of ["food-create-custom", "food-duplicate-suggestion", "food-custom-edit-delete", "food-serving-recalculation", "food-personal-correction", "food-barcode-fallback"]) {
+    assert.equal(source.includes(interaction), true, interaction);
+  }
+  for (const marker of ["Create Food", "Possible duplicate", "Delete Food", "Correct for me", "Barcode", "Search remains available"]) {
+    assert.equal(source.includes(marker), true, marker);
+  }
+});
+
 test("Playwright init fixture passes Node constants through the serializable argument boundary", async () => {
   const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
   assert.match(source, /addInitScript\(\(\{[^}]*mockAuthUserId[^}]*mealPlanWeekStart[^}]*\}\)\s*=>/s);
