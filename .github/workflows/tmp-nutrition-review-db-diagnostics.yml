@@ -1,4 +1,4 @@
-name: Temporary Nutrition Review Correction Finalizer
+name: Temporary Nutrition SQL Repair
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  finalize-correction:
+  repair-and-verify:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
@@ -38,11 +38,11 @@ jobs:
           ref: feat/nutrition-v1-implementation
           fetch-depth: 0
 
-      - name: Verify bounded RED lineage
+      - name: Verify RED regression lineage
         shell: bash
         run: |
           set -euo pipefail
-          git merge-base --is-ancestor 10ae048b48661ceca12621418508ef1073c0bf95 HEAD
+          git merge-base --is-ancestor 58cb5e257b5e73be2a1258a159a98b4395f55f43 HEAD
           test "$(git merge-base HEAD origin/main)" = "b00b8205ed87aa53b7e76731f99156d58e989d0f"
 
       - uses: actions/setup-node@v4
@@ -57,99 +57,46 @@ jobs:
           version: 2.109.1
           github-token: ${{ github.token }}
 
-      - name: Reuse exact staged GREEN patch and reconcile documentation
+      - name: Convert escaped line separators to executable SQL
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path('.github/workflows/tmp-nutrition-review-corrections.yml')
-          lines = path.read_text().splitlines()
-          name_index = next(i for i, line in enumerate(lines) if line.strip() == '- name: Apply bounded GREEN corrections')
-          run_index = next(i for i in range(name_index + 1, len(lines)) if lines[i].strip() == 'run: |')
-          body = []
-          for line in lines[run_index + 1:]:
-              if line.startswith('      - name:') or line.startswith('      - uses:'):
-                  break
-              if line.startswith('          '):
-                  line = line[10:]
-              body.append(line)
-          script = '\n'.join(body) + '\n'
-          if '20260827060000_nutrition_v1_review_atomicity_corrections.sql' not in script:
-              raise SystemExit('Failed to extract exact staged GREEN patch block')
-          Path('/tmp/apply-green.sh').write_text(script)
-          PY
-          bash /tmp/apply-green.sh
-          python3 - <<'PY'
-          from pathlib import Path
-
-          doc_path = Path('docs/architecture/migration-ledger-reconciliation.md')
-          text = doc_path.read_text()
-
-          def replace_once(old, new):
-              global text
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'reconciliation doc expected one replacement, found {count}: {old[:80]}')
-              text = text.replace(old, new, 1)
-
-          replace_once(
-              '**Status:** Applied Production history reconciled; twelve repository migrations intentionally pending',
-              '**Status:** Applied Production history reconciled; thirteen repository migrations intentionally pending',
-          )
-          replace_once('- Repository-only pending migrations: **12**', '- Repository-only pending migrations: **13**')
-          replace_once('- `pendingCount = 12`', '- `pendingCount = 13`')
-          replace_once('- `unresolvedCount = 12`', '- `unresolvedCount = 13`')
-          replace_once(
-              'Nutrition V1 Meal Plan week-start authority migration `20260825120350_nutrition_v1_meal_plan_week_start_authority.sql`, and Nutrition V1 privacy-purge authority migration `20260825120400_nutrition_v1_privacy_purge_authority.sql` are intentionally classified `pending`.',
-              'Nutrition V1 Meal Plan week-start authority migration `20260825120350_nutrition_v1_meal_plan_week_start_authority.sql`, Nutrition V1 privacy-purge authority migration `20260825120400_nutrition_v1_privacy_purge_authority.sql`, and Nutrition V1 review atomicity correction migration `20260827060000_nutrition_v1_review_atomicity_corrections.sql` are intentionally classified `pending`.',
-          )
-          marker = '## Authority and verification\n'
-          section = '''## Nutrition V1 review atomicity correction pending migration authority\n\n- `20260827060000_nutrition_v1_review_atomicity_corrections.sql` is the additive transactional authority for owner-derived Cooking Session synchronization and Recipe Working Draft autosave introduced by the final Nutrition V1 review correction.\n- Ledger state: `pending`; Production version/name: intentionally absent.\n- It adds SECURITY DEFINER RPCs with fixed search paths and authenticated/service-role execution only; it was validated by chronological replay, DB lint, and executable rollback verification before Production application.\n- Do not replay or apply it before explicit Product Owner/Planner approval of the Nutrition V1 migration sequence.\n\n'''
-          if marker not in text:
-              raise SystemExit('reconciliation doc authority marker missing')
-          text = text.replace(marker, section + marker, 1)
-          doc_path.write_text(text)
+          paths = [
+              Path('supabase/migrations/20260827060000_nutrition_v1_review_atomicity_corrections.sql'),
+              Path('supabase/verification/nutrition-v1-review-atomicity.sql'),
+          ]
+          for path in paths:
+              text = path.read_text()
+              escaped = text.count('\\n')
+              real = text.count('\n')
+              if escaped <= 50 or real > 1:
+                  raise SystemExit(f'{path}: unexpected pre-repair shape escaped={escaped} real={real}')
+              repaired = text.replace('\\n', '\n')
+              if repaired.count('\n') <= 50 or '\\ncreate or replace function' in repaired.lower():
+                  raise SystemExit(f'{path}: repair did not produce executable multiline SQL')
+              path.write_text(repaired)
           PY
           git diff --check
-
-      - name: Enforce bounded correction diff
-        shell: bash
-        run: |
-          set -euo pipefail
           mapfile -t changed < <(git diff --name-only HEAD | sort)
           printf '%s\n' "${changed[@]}"
-          allowed='^(components/nutrition/cooking/cooking-mode\.tsx|components/nutrition/diary/logging-session\.tsx|docs/architecture/migration-ledger-reconciliation\.md|lib/nutrition-v1/cooking-local-store\.ts|services/nutrition-v1/server/(cooking-sessions|cooking-sessions\.test|food-library|recipes|recipes\.test)\.ts|scripts/run-database-verification\.mjs|supabase/migration-ledger\.json|supabase/migrations/20260827060000_nutrition_v1_review_atomicity_corrections\.sql|supabase/verification/nutrition-v1-review-atomicity\.sql)$'
-          for path in "${changed[@]}"; do
-            [[ "$path" =~ $allowed ]] || { echo "Unexpected correction path: $path"; exit 1; }
-          done
+          test "${#changed[@]}" -eq 2
+          test "${changed[0]}" = "supabase/migrations/20260827060000_nutrition_v1_review_atomicity_corrections.sql"
+          test "${changed[1]}" = "supabase/verification/nutrition-v1-review-atomicity.sql"
 
-      - name: Focused GREEN unit tests
+      - name: Focused GREEN regression
         shell: bash
         run: |
           set -euo pipefail
           ./node_modules/.bin/vitest run --config vitest.unit.config.mjs \
-            lib/product/nutrition-v1-review-corrections.test.ts \
-            services/nutrition-v1/server/review-corrections.test.ts \
             lib/product/nutrition-v1-review-atomicity-migration.test.ts \
-            lib/nutrition-v1/cooking-local-store.test.ts \
-            services/nutrition-v1/server/cooking-sessions.test.ts \
-            services/nutrition-v1/server/recipes.test.ts \
-            services/nutrition-v1/server/food-library.test.ts
-
-      - name: Lint and typecheck
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run lint
-          npm run typecheck
+            lib/product/nutrition-v1-review-corrections.test.ts \
+            services/nutrition-v1/server/review-corrections.test.ts
 
       - name: Migration ledger precheck
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run migration:ledger:check
+        run: npm run migration:ledger:check
 
       - name: Chronological disposable migration replay
         shell: bash
@@ -159,43 +106,24 @@ jobs:
           node scripts/replay-local-migration-chain.mjs --log ci-reports/database-validation.log --prove-future-order
 
       - name: Supabase DB lint
-        shell: bash
-        run: |
-          set -euo pipefail
-          supabase db lint --local --schema public --level error --fail-on error
+        run: supabase db lint --local --schema public --level error --fail-on error
 
       - name: Database verification
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/run-database-verification.mjs
+        run: node scripts/run-database-verification.mjs
 
       - name: Migration ledger postcheck
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run migration:ledger:check
+        run: npm run migration:ledger:check
 
-      - name: Commit verified correction
+      - name: Commit executable SQL repair
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            components/nutrition/cooking/cooking-mode.tsx \
-            components/nutrition/diary/logging-session.tsx \
-            docs/architecture/migration-ledger-reconciliation.md \
-            lib/nutrition-v1/cooking-local-store.ts \
-            services/nutrition-v1/server/cooking-sessions.ts \
-            services/nutrition-v1/server/cooking-sessions.test.ts \
-            services/nutrition-v1/server/food-library.ts \
-            services/nutrition-v1/server/recipes.ts \
-            services/nutrition-v1/server/recipes.test.ts \
-            scripts/run-database-verification.mjs \
-            supabase/migration-ledger.json \
             supabase/migrations/20260827060000_nutrition_v1_review_atomicity_corrections.sql \
             supabase/verification/nutrition-v1-review-atomicity.sql
           git diff --cached --check
-          git commit -m "fix(nutrition): resolve review privacy and atomicity blockers"
+          test "$(git diff --cached --name-only | wc -l)" -eq 2
+          git commit -m "fix(nutrition): make atomicity SQL executable"
           git push origin HEAD:feat/nutrition-v1-implementation
