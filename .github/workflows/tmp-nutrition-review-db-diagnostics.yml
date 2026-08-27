@@ -1,4 +1,4 @@
-name: Temporary Nutrition SQL Repair
+name: Temporary Production Migration Reconciliation
 
 on:
   push:
@@ -11,38 +11,20 @@ permissions:
   contents: write
 
 jobs:
-  repair-and-verify:
+  reconcile:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
-      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
-      NEXT_PUBLIC_USE_MOCK_AUTH: true
-      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
-      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
-      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
-      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
-      PLAIVRA_RELEASE_ENVIRONMENT: ci
-      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: 2
-      PLAIVRA_ACTIVITY_CATALOG_MODE: library_v2_with_legacy_fallback
-      PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
-      PLAIVRA_ACTIVITY_CATALOG_API_KEY: ci-placeholder-catalog-key-long-enough
-      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-      SUPABASE_TELEMETRY_DISABLED: 1
-      DO_NOT_TRACK: 1
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feat/nutrition-v1-implementation
           fetch-depth: 0
 
-      - name: Verify RED regression lineage
+      - name: Verify exact implementation lineage
         shell: bash
         run: |
           set -euo pipefail
-          git merge-base --is-ancestor 58cb5e257b5e73be2a1258a159a98b4395f55f43 HEAD
+          git merge-base --is-ancestor a2e9964e90331e5a52f7c6334b56d5d2b9698b5e HEAD
           test "$(git merge-base HEAD origin/main)" = "b00b8205ed87aa53b7e76731f99156d58e989d0f"
 
       - uses: actions/setup-node@v4
@@ -52,78 +34,127 @@ jobs:
 
       - run: npm ci
 
-      - uses: supabase/setup-cli@v2
-        with:
-          version: 2.109.1
-          github-token: ${{ github.token }}
-
-      - name: Convert escaped line separators to executable SQL
+      - name: Reconcile exact generated Production identities
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import json
           from pathlib import Path
 
-          paths = [
-              Path('supabase/migrations/20260827060000_nutrition_v1_review_atomicity_corrections.sql'),
-              Path('supabase/verification/nutrition-v1-review-atomicity.sql'),
-          ]
-          for path in paths:
-              text = path.read_text()
-              escaped = text.count('\\n')
-              real = text.count('\n')
-              if escaped <= 50 or real > 1:
-                  raise SystemExit(f'{path}: unexpected pre-repair shape escaped={escaped} real={real}')
-              repaired = text.replace('\\n', '\n')
-              if repaired.count('\n') <= 50 or '\\ncreate or replace function' in repaired.lower():
-                  raise SystemExit(f'{path}: repair did not produce executable multiline SQL')
-              path.write_text(repaired)
+          identities = {
+              '20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql': ('20260821013625', 'p10f_v2_plan_activity_catalog_authority_snapshot', '2026-08-21'),
+              '20260813042754_exercise_detail_personal_records_authority.sql': ('20260821013718', 'exercise_detail_personal_records_authority', '2026-08-21'),
+              '20260813071926_workout_history_redesign_read_contract.sql': ('20260821013749', 'workout_history_redesign_read_contract', '2026-08-21'),
+              '20260816044500_active_workout_feedback_preferences.sql': ('20260821013757', 'active_workout_feedback_preferences', '2026-08-21'),
+              '20260820060000_exercise_detail_setup_notes.sql': ('20260821013814', 'exercise_detail_setup_notes', '2026-08-21'),
+              '20260820070000_exercise_alternative_reason_v2.sql': ('20260821013822', 'exercise_alternative_reason_v2', '2026-08-21'),
+              '20260825120000_nutrition_v1_reusable_domains.sql': ('20260827071936', 'nutrition_v1_reusable_domains', '2026-08-27'),
+              '20260825120100_nutrition_v1_plan_diary_targets.sql': ('20260827072239', 'nutrition_v1_plan_diary_targets', '2026-08-27'),
+              '20260825120200_nutrition_v1_cooking_sessions.sql': ('20260827072300', 'nutrition_v1_cooking_sessions', '2026-08-27'),
+              '20260825120300_nutrition_v1_food_search_and_curation.sql': ('20260827072316', 'nutrition_v1_food_search_and_curation', '2026-08-27'),
+              '20260825120350_nutrition_v1_meal_plan_week_start_authority.sql': ('20260827072351', 'nutrition_v1_meal_plan_week_start_authority', '2026-08-27'),
+              '20260825120400_nutrition_v1_privacy_purge_authority.sql': ('20260827072406', 'nutrition_v1_privacy_purge_authority', '2026-08-27'),
+              '20260827060000_nutrition_v1_review_atomicity_corrections.sql': ('20260827072417', 'nutrition_v1_review_atomicity_corrections', '2026-08-27'),
+          }
+
+          ledger_path = Path('supabase/migration-ledger.json')
+          ledger = json.loads(ledger_path.read_text())
+          entries = {entry['localFile']: entry for entry in ledger['entries']}
+          pending = {entry['localFile'] for entry in ledger['entries'] if entry['state'] == 'pending'}
+          if pending != set(identities):
+              raise SystemExit(f'Unexpected pending migration set: {sorted(pending)}')
+
+          for local_file, (version, name, applied_date) in identities.items():
+              entry = entries[local_file]
+              if entry.get('productionVersion') or entry.get('productionName'):
+                  raise SystemExit(f'{local_file} already claims a Production identity')
+              entry['state'] = 'applied_version_alias'
+              entry['productionVersion'] = version
+              entry['productionName'] = name
+              entry['note'] = (
+                  f'differs; repository migration applied exactly once to Plaivra Production on {applied_date} '
+                  f'as generated identity {version}_{name}. Do not replay.'
+              )
+
+          ledger['capturedAt'] = '2026-08-27T07:24:17.000Z'
+          ledger['pendingCount'] = 0
+          ledger['unresolvedCount'] = 0
+          ledger['historyRepair'] = {
+              'state': 'reconciled',
+              'schemaAppliedUntrackedCount': 0,
+              'pendingCount': 0,
+              'unresolvedCount': 0,
+              'note': (
+                  'Production migration history is reconciled through generated identity '
+                  '20260827072417_nutrition_v1_review_atomicity_corrections. The six repository migrations '
+                  'applied on 2026-08-21 and the seven authorized Nutrition V1 migrations applied on 2026-08-27 '
+                  'are preserved as immutable applied-version aliases because their generated Production versions '
+                  'differ from repository filenames. Do not replay. The released compatibility marker remains '
+                  '20260724232734 and Activity Catalog Production was not modified.'
+              ),
+          }
+          ledger_path.write_text(json.dumps(ledger, separators=(',', ':')) + '\n')
+
+          doc_path = Path('docs/architecture/migration-ledger-reconciliation.md')
+          doc = doc_path.read_text()
+          replacements = {
+              '**Evidence captured:** 2026-08-03T18:10:27.000Z': '**Evidence captured:** 2026-08-27T07:24:17.000Z',
+              '**Status:** Applied Production history reconciled; thirteen repository migrations intentionally pending': '**Status:** Applied Production history reconciled; no repository migrations pending',
+              '- Physical Production migration records: **87**': '- Physical Production migration records: **100**',
+              '- Repository-only pending migrations: **13**': '- Repository-only pending migrations: **0**',
+              '- `pendingCount = 13`': '- `pendingCount = 0`',
+              '- `unresolvedCount = 13`': '- `unresolvedCount = 0`',
+              '- `historyRepair.state = pending`': '- `historyRepair.state = reconciled`',
+              '- `release_ready = false` while the repository migrations remain intentionally pending': '- `release_ready = true` for migration-ledger reconciliation; merge/deployment/compatibility-marker authorization remain separate gates',
+              '- Latest physical Production record: `20260804180932_fix_profiles_update_policy_recursion`': '- Latest physical Production record: `20260827072417_nutrition_v1_review_atomicity_corrections`',
+          }
+          for old, new in replacements.items():
+              if doc.count(old) != 1:
+                  raise SystemExit(f'Document reconciliation anchor drifted: {old}')
+              doc = doc.replace(old, new, 1)
+
+          start = doc.index('The previously applied Plaivra Production migration history remains reconciled through')
+          end = doc.index('\n\nPhysical schema advancement and compatibility-marker promotion remain separate release operations.', start)
+          current = '''Production migration history is now reconciled through `20260827072417_nutrition_v1_review_atomicity_corrections`. The six previously pending non-Nutrition repository migrations were already applied exactly once on 2026-08-21 under generated aliases, and the seven explicitly authorized Nutrition V1 migrations were applied exactly once on 2026-08-27. Repository migration filenames remain immutable; generated Production identities are recorded below and in the machine ledger. Do not replay any of these migrations.'''
+          doc = doc[:start] + current + doc[end:]
+          doc = doc.replace(
+              'Physical schema advancement and compatibility-marker promotion remain separate release operations. The pending repository state does not authorize Production migration application, application deployment, or compatibility-marker promotion.',
+              'Physical schema advancement and compatibility-marker promotion remain separate release operations. The completed migration application does not authorize application deployment, merge, or compatibility-marker promotion.',
+              1,
+          )
+
+          pending_start = doc.find('## P10F pending migration authority')
+          authority_start = doc.find('## Authority and verification')
+          if pending_start < 0 or authority_start < 0 or authority_start <= pending_start:
+              raise SystemExit('Pending-authority document section anchors drifted')
+
+          rows = []
+          for local_file, (version, name, applied_date) in identities.items():
+              rows.append(f'| `{local_file}` | `{version}_{name}` | `{applied_date}` | `applied_version_alias` |')
+          section = '''## 2026-08-27 Production reconciliation\n\n| Immutable repository migration | Generated Production identity | Applied | State |\n|---|---|---|---|\n''' + '\n'.join(rows) + '''\n\nAll thirteen generated identities above are immutable Production history. They must not be replayed. Nutrition V1 schema application did not merge PR #152, deploy application code, or promote the released compatibility marker.\n\n'''
+          doc = doc[:pending_start] + section + doc[authority_start:]
+          doc_path.write_text(doc)
           PY
           git diff --check
-          mapfile -t changed < <(git diff --name-only HEAD | sort)
-          printf '%s\n' "${changed[@]}"
-          test "${#changed[@]}" -eq 2
-          test "${changed[0]}" = "supabase/migrations/20260827060000_nutrition_v1_review_atomicity_corrections.sql"
-          test "${changed[1]}" = "supabase/verification/nutrition-v1-review-atomicity.sql"
+          git diff -- supabase/migration-ledger.json docs/architecture/migration-ledger-reconciliation.md
 
-      - name: Focused GREEN regression
+      - name: Validate reconciled migration ledger
         shell: bash
         run: |
           set -euo pipefail
-          ./node_modules/.bin/vitest run --config vitest.unit.config.mjs \
-            lib/product/nutrition-v1-review-atomicity-migration.test.ts \
-            lib/product/nutrition-v1-review-corrections.test.ts \
-            services/nutrition-v1/server/review-corrections.test.ts
+          npm run migration:ledger:check
+          test "$(node scripts/quality-ledger-target.mjs --value expectedMigration)" = "20260827072417"
+          node --test scripts/check-migration-ledger.test.mjs
 
-      - name: Migration ledger precheck
-        run: npm run migration:ledger:check
-
-      - name: Chronological disposable migration replay
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p ci-reports
-          node scripts/replay-local-migration-chain.mjs --log ci-reports/database-validation.log --prove-future-order
-
-      - name: Supabase DB lint
-        run: supabase db lint --local --schema public --level error --fail-on error
-
-      - name: Database verification
-        run: node scripts/run-database-verification.mjs
-
-      - name: Migration ledger postcheck
-        run: npm run migration:ledger:check
-
-      - name: Commit executable SQL repair
+      - name: Commit Production reconciliation evidence
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            supabase/migrations/20260827060000_nutrition_v1_review_atomicity_corrections.sql \
-            supabase/verification/nutrition-v1-review-atomicity.sql
+          git add supabase/migration-ledger.json docs/architecture/migration-ledger-reconciliation.md
           git diff --cached --check
           test "$(git diff --cached --name-only | wc -l)" -eq 2
-          git commit -m "fix(nutrition): make atomicity SQL executable"
+          git commit -m "docs(db): reconcile Nutrition Production migrations"
           git push origin HEAD:feat/nutrition-v1-implementation
