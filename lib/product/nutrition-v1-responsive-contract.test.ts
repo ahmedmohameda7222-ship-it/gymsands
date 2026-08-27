@@ -39,6 +39,7 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
   it("keeps all seven Meal Plan day selectors at least 44pt wide on compact phones", () => {
     expect(weekStrip).toContain("min-w-11");
     expect(weekStrip).toContain("min-h-14");
+    expect(weekStrip).toContain("grid-cols-[repeat(7,minmax(44px,1fr))]");
   });
 
   it("keeps localized Food Library browse controls on the shared 44pt custom-control baseline", () => {
@@ -77,6 +78,7 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
     expect(cooking).toContain('document.documentElement.dir === "rtl"');
     expect(cooking).toContain("break-words");
     expect(cooking).toContain("flex-wrap");
+    expect(cooking).toContain("grid-cols-[auto_minmax(0,1fr)_auto]");
   });
 
   it("keeps the approved approximately 56pt visible primary Done action in Cooking Mode", () => {
