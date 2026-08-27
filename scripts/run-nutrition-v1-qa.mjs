@@ -8,6 +8,8 @@ const RECIPE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const COOKING_SESSION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const ACTION_ONE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const ACTION_TWO_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const MOCK_AUTH_USER_ID = "00000000-0000-4000-8000-000000000001";
+const MEAL_PLAN_QA_WEEK_START = "2026-08-24";
 
 export const NUTRITION_V1_QA_VIEWPORTS = Object.freeze([
   { name: "390x844", width: 390, height: 844 },
@@ -204,17 +206,57 @@ function foodFixtures(item) {
   ];
 }
 
+function mealPlanOfflineEvidenceOccurrences(item, occurrence) {
+  if (item.name !== "meal-plan-offline-conflict-partial-estimated") return [occurrence];
+  const partial = {
+    ...occurrence,
+    frozen_name: "Imported lunch · partial nutrition",
+    frozen_snapshot: {
+      ...occurrence.frozen_snapshot,
+      nutrition: { calories: 430, protein_g: null, carbs_g: 52, fat_g: 14 },
+    },
+  };
+  const estimated = {
+    ...occurrence,
+    id: "33333333-3333-4333-8333-333333333337",
+    meal_slot_key: "Snacks",
+    source_type: "placeholder",
+    source_id: null,
+    resolved_serving_label: "1 estimate",
+    frozen_name: "Restaurant snack estimate",
+    frozen_snapshot: {
+      estimatedNutrition: { calories: 360, protein_g: 18, carbs_g: 44, fat_g: 12 },
+      estimated: true,
+    },
+  };
+  return [partial, estimated];
+}
+
+function mealPlanOfflineQueueFixture(item) {
+  if (item.name !== "meal-plan-offline-conflict-partial-estimated") return null;
+  const base = {
+    weekId: "44444444-4444-4444-8444-444444444444",
+    baseRevision: 3,
+    payload: { weekStartDate: MEAL_PLAN_QA_WEEK_START, mutation: { upsertOccurrences: [] }, baseSnapshot: null },
+  };
+  return [
+    { ...base, operationId: "qa-meal-plan-queued", target: { kind: "occurrence", id: "33333333-3333-4333-8333-333333333333", field: "frozen_name" }, status: "queued" },
+    { ...base, operationId: "qa-meal-plan-attention", target: { kind: "week_override", id: MEAL_PLAN_QA_WEEK_START, field: "customSlots" }, status: "needs_attention", lastError: "QA fixture validation needs review." },
+    { ...base, operationId: "qa-meal-plan-conflict", target: { kind: "meal_slot", id: "2026-08-26:Dinner" }, status: "conflict", lastError: "QA fixture concurrent edit conflict." },
+  ];
+}
+
 function mealPlanFixture(item, date = "2026-08-26") {
-  const weekStart = "2026-08-24";
+  const weekStart = MEAL_PLAN_QA_WEEK_START;
   const occurrence = {
     id: "33333333-3333-4333-8333-333333333333", week_id: "44444444-4444-4444-8444-444444444444",
-    user_id: "00000000-0000-4000-8000-000000000001", plan_date: date, meal_slot_key: "Lunch", position: 0,
+    user_id: MOCK_AUTH_USER_ID, plan_date: date, meal_slot_key: "Lunch", position: 0,
     source_type: "food", source_id: "11111111-1111-4111-8111-111111111111", source_version_id: null,
     resolved_quantity: 1, resolved_serving_label: "1 bowl", frozen_name: item.language === "ar" ? "وعاء أرز بالدجاج" : "Chicken rice bowl",
     frozen_snapshot: { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 }, shoppingIngredients: [{ foodId: "55555555-5555-4555-8555-555555555555", name: item.language === "ar" ? "صدر دجاج" : "Chicken breast", quantity: 400, unit: "g", qualifier: null }] },
     status: item.name.includes("skip") ? "skipped" : "planned", completed_at: null, actual_log_group_id: null,
   };
-  const weekOverride = item.name.includes("estimated") ? { estimated: true } : {};
+  const weekOverride = {};
   if (item.name === "shopping-list-three-states") {
     weekOverride.shopping = {
       states: {},
@@ -225,9 +267,10 @@ function mealPlanFixture(item, date = "2026-08-26") {
       ],
     };
   }
+  const occurrences = mealPlanOfflineEvidenceOccurrences(item, occurrence);
   return {
     week: { id: occurrence.week_id, user_id: occurrence.user_id, week_start_date: weekStart, revision: 3, week_override_json: weekOverride },
-    occurrences: [occurrence],
+    occurrences,
     target: { available: true, effective_from: weekStart, effective_to: null, values: { calories: 2200, protein_g: 160, carbs_g: 240, fat_g: 70, water_ml: 2500 }, source: "rendered_qa_fixture", source_evidence: { authority: "rendered_qa" }, reason: "effective_target" },
     pendingChangeRequests: item.name.includes("chatgpt") ? [{ id: "66666666-6666-4666-8666-666666666666", base_revision: 2, proposal_json: { summary: "Move lunch later" }, state: item.name.includes("stale") ? "stale" : "pending" }] : [],
     shoppingNeeds: [{ foodId: "55555555-5555-4555-8555-555555555555", name: item.language === "ar" ? "صدر دجاج" : "Chicken breast", quantity: 400, unit: "g", qualifier: null, sourceOccurrenceIds: [occurrence.id] }],
@@ -298,7 +341,8 @@ async function fulfillJson(route, body, status = 200, fixture = "nutrition-v1") 
 async function createContext(browser, item) {
   const browserLocale = item.language === "ar" ? "ar-EG" : item.language === "de" ? "de-DE" : "en-GB";
   const context = await browser.newContext({ viewport: { width: item.viewport.width, height: item.viewport.height }, reducedMotion: "reduce", colorScheme: "light", locale: browserLocale });
-  await context.addInitScript(({ direction, language, largeText, offline, recipeId, cooking }) => {
+  const mealPlanQueue = mealPlanOfflineQueueFixture(item);
+  await context.addInitScript(({ direction, language, largeText, offline, recipeId, cooking, mealPlanQueue }) => {
     try { localStorage.setItem("plaivra.language.v1", language); } catch { /* origin may not be available yet */ }
     const applyDocumentPreferences = () => {
       if (!document.documentElement) return false;
@@ -311,10 +355,13 @@ async function createContext(browser, item) {
       document.addEventListener("DOMContentLoaded", applyDocumentPreferences, { once: true });
     }
     if (offline) Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    if (mealPlanQueue) {
+      try { localStorage.setItem(`plaivra:nutrition-v1:meal-plan:queue:${MOCK_AUTH_USER_ID}:${MEAL_PLAN_QA_WEEK_START}`, JSON.stringify(mealPlanQueue)); } catch { /* origin not available yet */ }
+    }
     if (cooking) {
       try { localStorage.setItem(`plaivra:nutrition:cooking:${recipeId}:active`, JSON.stringify(cooking)); } catch { /* origin not available yet */ }
     }
-  }, { direction: item.direction, language: item.language, largeText: item.largeText, offline: item.offline, recipeId: RECIPE_ID, cooking: item.route.includes("/cook") ? cookingFixture(item) : null });
+  }, { direction: item.direction, language: item.language, largeText: item.largeText, offline: item.offline, recipeId: RECIPE_ID, cooking: item.route.includes("/cook") ? cookingFixture(item) : null, mealPlanQueue });
 
   await context.route("**/api/billing/entitlements", (route) => fulfillJson(route, { entitlements: [] }, 200, "empty-entitlements-v1"));
   await context.route("**/api/nutrition/v1/**", async (route) => {
@@ -479,6 +526,12 @@ function localizedAssertions(item, metrics) {
   const failures = [];
   const body = metrics.bodyText || "";
   if (/Please sign in before using (?:Meal Plan|My Recipes)\./i.test(body)) failures.push("rendered authenticated state fell back to sign-in error");
+  if (item.name === "shopping-list-three-states") {
+    for (const text of ["Needed", "Purchased", "Don't need"]) if (!body.includes(text)) failures.push(`missing Shopping state evidence: ${text}`);
+  }
+  if (item.name === "meal-plan-offline-conflict-partial-estimated") {
+    for (const text of ["Waiting to sync", "Needs attention", "Conflict", "Partial", "Estimated"]) if (!body.includes(text)) failures.push(`missing offline Meal Plan evidence: ${text}`);
+  }
   if (item.language !== "ar") return failures;
   if (metrics.htmlLanguage !== "ar") failures.push(`expected html lang ar, received ${metrics.htmlLanguage || "empty"}`);
   if (metrics.direction !== "rtl") failures.push(`expected RTL direction, received ${metrics.direction || "empty"}`);
