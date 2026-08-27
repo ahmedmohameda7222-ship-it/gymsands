@@ -435,53 +435,17 @@ export async function endCookingSession(
 
 export async function startOverCookingSession(
   supabase: SupabaseClient,
-  userId: string,
+  _userId: string,
   sessionId: string,
   now = new Date().toISOString(),
 ) {
-  const sourceResult = await supabase
-    .from("nutrition_cooking_sessions")
-    .select("*")
-    .eq("id", sessionId)
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .maybeSingle();
-  const source = requiredData(sourceResult.data as Record<string, unknown> | null, sourceResult.error, "Active Cooking Session not found.");
-  const normalized = normalizeSession(source);
-
-  const endResult = await supabase
-    .from("nutrition_cooking_sessions")
-    .update({ status: "ended", ended_at: now, last_active_at: now })
-    .eq("id", sessionId)
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .select("id,status")
-    .single();
-  requiredData(endResult.data as Record<string, unknown> | null, endResult.error, "Existing Cooking Session could not be ended.");
-
-  const snapshot = normalized.frozen_recipe_snapshot;
-  const newResult = await supabase.from("nutrition_cooking_sessions").insert({
-    user_id: userId,
-    recipe_id: normalized.recipe_id,
-    recipe_version_id: normalized.recipe_version_id,
-    frozen_recipe_snapshot: snapshot,
-    serving_scale: normalized.serving_scale,
-    current_action_key: actionIdsFromSnapshot(snapshot)[0] ?? null,
-    status: "active",
-    started_at: now,
-    last_active_at: now,
-    completed_at: null,
-    ended_at: null,
-    state_revision: 0,
-  }).select("*").single();
-  const created = requiredData(newResult.data as Record<string, unknown> | null, newResult.error, "Restarted Cooking Session could not be created.");
-  const newSessionId = String(created.id);
-
-  const rows = initialActionStateRows(snapshot, newSessionId, userId);
-  if (rows.length) {
-    const statesResult = await supabase.from("nutrition_cooking_action_states").insert(rows);
-    dbError(statesResult.error);
-  }
-
-  return { sessionId: newSessionId };
+  const result = await supabase.rpc("start_over_nutrition_cooking_session", {
+    p_session_id: sessionId,
+    p_now: now,
+  });
+  dbError(result.error);
+  const data = result.data as Record<string, unknown> | null;
+  const restartedSessionId = typeof data?.sessionId === "string" ? data.sessionId : null;
+  if (!restartedSessionId) throw new Error("Cooking Start Over returned an invalid replacement session.");
+  return { sessionId: restartedSessionId };
 }
