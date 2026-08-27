@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 const RECIPE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const RECIPE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const RECIPE_DRAFT_ID = "abababab-abab-4bab-8bab-abababababab";
 const COOKING_SESSION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const ACTION_ONE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const ACTION_TWO_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
@@ -61,14 +62,14 @@ export const NUTRITION_V1_QA_SCENARIOS = Object.freeze([
   scenario("food-library-mobile-no-results-removable-filters", "/calories/food-hub", "390x844", { interaction: "food-no-results" }),
   scenario("food-library-mobile-filter-sheet-live", "/calories/food-hub", "430x932", { interaction: "food-filters" }),
   scenario("food-library-mobile-nutrition-info", "/calories/food-hub", "390x844", { interaction: "food-nutrition-info" }),
-  scenario("food-library-mobile-detail-serving-recalculation", "/calories/food-hub", "430x932", { interaction: "food-detail" }),
-  scenario("food-library-mobile-detail-personal-correction", "/calories/food-hub", "430x932", { interaction: "food-detail" }),
+  scenario("food-library-mobile-detail-serving-recalculation", "/calories/food-hub", "430x932", { interaction: "food-serving-recalculation" }),
+  scenario("food-library-mobile-detail-personal-correction", "/calories/food-hub", "430x932", { interaction: "food-personal-correction" }),
   scenario("food-library-mobile-add-to-serving-quantity-destinations", "/calories/food-hub", "430x932", { interaction: "food-add-to" }),
-  scenario("food-library-mobile-create-custom-food-fast-core", "/calories/food-hub", "430x932", { interaction: "food-custom" }),
-  scenario("food-library-mobile-duplicate-suggestion", "/calories/food-hub", "390x844", { interaction: "food-custom" }),
-  scenario("food-library-mobile-custom-food-edit-delete", "/calories/food-hub", "390x844"),
+  scenario("food-library-mobile-create-custom-food-fast-core", "/calories/food-hub", "430x932", { interaction: "food-create-custom" }),
+  scenario("food-library-mobile-duplicate-suggestion", "/calories/food-hub", "390x844", { interaction: "food-duplicate-suggestion" }),
+  scenario("food-library-mobile-custom-food-edit-delete", "/calories/food-hub", "390x844", { interaction: "food-custom-edit-delete" }),
   scenario("food-library-mobile-offline-cached", "/calories/food-hub", "430x932", { offline: true }),
-  scenario("food-library-mobile-barcode-fallback", "/calories/food-hub", "390x844"),
+  scenario("food-library-mobile-barcode-fallback", "/calories/food-hub", "390x844", { interaction: "food-barcode-fallback" }),
   scenario("food-library-tablet-adaptive-density", "/calories/food-hub", "768x1024"),
   scenario("food-library-desktop-bounded-layout", "/calories/food-hub", "1280x800"),
   scenario("food-library-desktop-detail-panel-route", "/calories/food-hub", "1440x900", { interaction: "food-detail" }),
@@ -83,7 +84,7 @@ export const NUTRITION_V1_QA_SCENARIOS = Object.freeze([
   scenario("recipes-mobile-active-filters", "/my-recipes", "430x932", { interaction: "recipe-filters" }),
   scenario("recipes-mobile-no-results", "/my-recipes", "390x844", { interaction: "recipe-no-results" }),
   scenario("recipes-mobile-editor", `/my-recipes/${RECIPE_ID}/edit`, "430x932"),
-  scenario("recipes-mobile-add-ingredient-search", `/my-recipes/${RECIPE_ID}/edit`, "430x932"),
+  scenario("recipes-mobile-add-ingredient-search", `/my-recipes/${RECIPE_ID}/edit`, "430x932", { interaction: "open-recipe-add-ingredient" }),
   scenario("recipes-mobile-detail", `/my-recipes/${RECIPE_ID}`, "390x844"),
   scenario("recipes-mobile-before-you-start", `/my-recipes/${RECIPE_ID}/cook`, "390x844"),
   scenario("recipes-mobile-cooking-normal", `/my-recipes/${RECIPE_ID}/cook`, "390x844", { cookingState: "normal", interaction: "resume-cooking" }),
@@ -92,7 +93,7 @@ export const NUTRITION_V1_QA_SCENARIOS = Object.freeze([
   scenario("recipes-mobile-cooking-resume-start-over", `/my-recipes/${RECIPE_ID}/cook`, "390x844", { cookingState: "resume" }),
   scenario("recipes-mobile-cooking-complete", `/my-recipes/${RECIPE_ID}/cook`, "390x844", { cookingState: "complete", interaction: "resume-cooking" }),
   scenario("recipes-mobile-offline-partial-failure", `/my-recipes/${RECIPE_ID}/cook`, "430x932", { cookingState: "normal", interaction: "resume-cooking", offline: true }),
-  scenario("recipes-mobile-autosave-failure", `/my-recipes/${RECIPE_ID}/edit`, "430x932", { offline: true }),
+  scenario("recipes-mobile-autosave-failure", `/my-recipes/${RECIPE_ID}/edit`, "430x932", { interaction: "trigger-recipe-autosave-failure", recipeAutosaveStatus: 503 }),
   scenario("recipes-desktop-home", "/my-recipes", "1280x800"),
   scenario("recipes-desktop-detail", `/my-recipes/${RECIPE_ID}`, "1440x900"),
   scenario("recipes-desktop-cooking", `/my-recipes/${RECIPE_ID}/cook`, "1440x900", { cookingState: "normal", interaction: "resume-cooking" }),
@@ -124,45 +125,24 @@ function nutrition(caloriesKcal = 620, proteinG = 41, carbsG = 72, fatG = 18) {
 function diaryProjection(item, date) {
   const actual = nutrition();
   const target = nutrition(2200, 160, 240, 70);
-  const makeLog = (id, mealType, foodName, values = nutrition(320, 26, 34, 9)) => ({
-    id, mealType, foodName, servingLabel: "1 serving", quantity: 1, nutrition: values,
-    notes: null, foodItemId: null, userFoodItemId: null, createdAt: null,
-  });
-  const planned = (name = "Chicken rice bowl", frozen = {}) => ({
-    id: "00000000-0000-4000-8000-000000000104", mealType: "Lunch", name,
-    status: "planned", sourceType: "food", frozenSnapshot: { name, ...frozen },
-  });
+  const makeLog = (id, mealType, foodName, values = nutrition(320, 26, 34, 9)) => ({ id, mealType, foodName, servingLabel: "1 serving", quantity: 1, nutrition: values, notes: null, foodItemId: null, userFoodItemId: null, createdAt: null });
+  const planned = (name = "Chicken rice bowl", frozen = {}) => ({ id: "00000000-0000-4000-8000-000000000104", mealType: "Lunch", name, status: "planned", sourceType: "food", frozenSnapshot: { name, ...frozen } });
   let logs = [makeLog("00000000-0000-4000-8000-000000000101", "Breakfast", "Greek yogurt with berries")];
   let plans = [planned()];
   let actualValues = actual;
   let targetData = { available: true, effective_from: date, effective_to: null, values: { calories: 2200, protein_g: 160, carbs_g: 240, fat_g: 70, water_ml: 2500 }, source: "rendered_qa_fixture", source_evidence: { authority: "rendered_qa" }, reason: "effective_target" };
   let hydration = { status: "ready", data: { logs: [{ id: "00000000-0000-4000-8000-000000000103", amountMl: 750, createdAt: null }], totalMl: 750 } };
-
   if (item.name === "diary-empty") { logs = []; plans = []; actualValues = nutrition(0, 0, 0, 0); }
   if (item.name === "diary-logs-only") plans = [];
   if (item.name === "diary-plan-only") { logs = []; actualValues = nutrition(0, 0, 0, 0); }
-  if (item.name === "diary-plan-actual-matching") {
-    logs = [makeLog("00000000-0000-4000-8000-000000000105", "Lunch", "Chicken rice bowl", nutrition(540, 48, 63, 12))];
-    plans = [planned("Chicken rice bowl", { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 } })];
-    actualValues = nutrition(540, 48, 63, 12);
-  }
-  if (item.name === "diary-plan-actual-different" || item.name === "diary-plan-deviation-chatgpt") {
-    logs = [makeLog("00000000-0000-4000-8000-000000000106", "Lunch", "Falafel wrap", nutrition(670, 24, 81, 26))];
-    plans = [planned("Chicken rice bowl", { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 }, deviation: true })];
-    actualValues = nutrition(670, 24, 81, 26);
-  }
+  if (item.name === "diary-plan-actual-matching") { logs = [makeLog("00000000-0000-4000-8000-000000000105", "Lunch", "Chicken rice bowl", nutrition(540, 48, 63, 12))]; plans = [planned("Chicken rice bowl", { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 } })]; actualValues = nutrition(540, 48, 63, 12); }
+  if (item.name === "diary-plan-actual-different" || item.name === "diary-plan-deviation-chatgpt") { logs = [makeLog("00000000-0000-4000-8000-000000000106", "Lunch", "Falafel wrap", nutrition(670, 24, 81, 26))]; plans = [planned("Chicken rice bowl", { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 }, deviation: true })]; actualValues = nutrition(670, 24, 81, 26); }
   if (item.name === "diary-over-target") actualValues = nutrition(2380, 172, 275, 82);
   if (item.name === "diary-missing-target") targetData = { available: false, effective_from: null, effective_to: null, values: null, source: null, source_evidence: null, reason: "missing_target" };
-  if (item.name === "diary-incomplete-nutrition") {
-    logs = [makeLog("00000000-0000-4000-8000-000000000107", "Breakfast", "Imported food", { caloriesKcal: 310, proteinG: null, carbsG: 44, fatG: null })];
-    actualValues = { caloriesKcal: 310, proteinG: null, carbsG: 44, fatG: null };
-  }
-  if (item.name === "diary-many-foods") {
-    logs = Array.from({ length: 12 }, (_, index) => makeLog(`00000000-0000-4000-8000-${String(index + 200).padStart(12, "0")}`, index % 2 ? "Lunch" : "Breakfast", `Food ${index + 1}`, nutrition(120 + index * 10, 8 + index, 12 + index, 4 + index)));
-  }
+  if (item.name === "diary-incomplete-nutrition") { logs = [makeLog("00000000-0000-4000-8000-000000000107", "Breakfast", "Imported food", { caloriesKcal: 310, proteinG: null, carbsG: 44, fatG: null })]; actualValues = { caloriesKcal: 310, proteinG: null, carbsG: 44, fatG: null }; }
+  if (item.name === "diary-many-foods") logs = Array.from({ length: 12 }, (_, index) => makeLog(`00000000-0000-4000-8000-${String(index + 200).padStart(12, "0")}`, index % 2 ? "Lunch" : "Breakfast", `Food ${index + 1}`, nutrition(120 + index * 10, 8 + index, 12 + index, 4 + index)));
   if (item.name === "diary-other-logs") logs = [makeLog("00000000-0000-4000-8000-000000000108", "Other", "Electrolyte drink", nutrition(45, 0, 11, 0))];
   if (item.name === "diary-partial-service-failure") hydration = { status: "unavailable", reason: "hydration_service_unavailable" };
-
   const targetPosition = targetData.available ? target : { caloriesKcal: null, proteinG: null, carbsG: null, fatG: null };
   const remaining = {
     caloriesKcal: targetPosition.caloriesKcal === null || actualValues.caloriesKcal === null ? null : targetPosition.caloriesKcal - actualValues.caloriesKcal,
@@ -170,75 +150,28 @@ function diaryProjection(item, date) {
     carbsG: targetPosition.carbsG === null || actualValues.carbsG === null ? null : targetPosition.carbsG - actualValues.carbsG,
     fatG: targetPosition.fatG === null || actualValues.fatG === null ? null : targetPosition.fatG - actualValues.fatG,
   };
-  return {
-    date,
-    position: { actual: actualValues, target: targetPosition, remaining },
-    domains: {
-      actual: { status: "ready", data: { nutrition: actualValues, logs } },
-      target: { status: "ready", data: targetData },
-      hydration,
-      planned: { status: "ready", data: plans },
-      savedMeals: { status: "ready", data: [] },
-    },
-  };
+  return { date, position: { actual: actualValues, target: targetPosition, remaining }, domains: { actual: { status: "ready", data: { nutrition: actualValues, logs } }, target: { status: "ready", data: targetData }, hydration, planned: { status: "ready", data: plans }, savedMeals: { status: "ready", data: [] } } };
 }
 
 function foodFixtures(item) {
   if (item.name.includes("new-user") || item.name.includes("no-results")) return [];
   const long = item.name.includes("long-branded-name");
   return [
-    {
-      id: "11111111-1111-4111-8111-111111111111", source: "catalog",
-      name: long ? "Extra Long International Greek Style Strained Yogurt with Vanilla Bean and Mixed Forest Berries" : "Greek yogurt",
-      brand: long ? "Molkerei Internationale Handelsgesellschaft" : "Plaivra Foods", category: "Dairy", cuisine: null,
-      servingLabel: "170 g", verified: true, favorite: true, recentAt: "2026-08-26T06:00:00.000Z", frequency: 8,
-      locale: item.language, aliases: ["yogurt"],
-      nutrition: { calories: 130, protein_g: 18, carbs_g: 8, fat_g: 2, saturated_fat_g: 1, fiber_g: 0, sugars_g: 6, sodium_mg: 70, basis_amount: 170, basis_unit: "g" },
-      tags: ["High Protein", "Low Carb"], usingPersonalValues: false,
-    },
-    {
-      id: "22222222-2222-4222-8222-222222222222", source: "my_food", name: item.language === "ar" ? "وعاء شوفان Homemade" : "Homemade oat bowl", brand: null,
-      category: "Breakfast", cuisine: null, servingLabel: "1 bowl", verified: false, favorite: false,
-      recentAt: "2026-08-25T07:00:00.000Z", frequency: 3, locale: item.language, aliases: ["oats"],
-      nutrition: { calories: 410, protein_g: 19, carbs_g: 58, fat_g: 12, saturated_fat_g: 2, fiber_g: 9, sugars_g: 11, sodium_mg: 180, basis_amount: 1, basis_unit: "serving" },
-      tags: [], usingPersonalValues: item.name.includes("personal-correction"),
-    },
+    { id: "11111111-1111-4111-8111-111111111111", source: "catalog", name: long ? "Extra Long International Greek Style Strained Yogurt with Vanilla Bean and Mixed Forest Berries" : "Greek yogurt", brand: long ? "Molkerei Internationale Handelsgesellschaft" : "Plaivra Foods", category: "Dairy", cuisine: null, servingLabel: "170 g", verified: true, favorite: true, recentAt: "2026-08-26T06:00:00.000Z", frequency: 8, locale: item.language, aliases: [{ locale: "en", value: "yogurt" }], nutrition: { calories: 130, protein_g: 18, carbs_g: 8, fat_g: 2, saturated_fat_g: 1, fiber_g: 0, sugars_g: 6, sodium_mg: 70, basis_amount: 170, basis_unit: "g" }, tags: ["High Protein", "Low Carb"], usingPersonalValues: item.name.includes("personal-correction") },
+    { id: "22222222-2222-4222-8222-222222222222", source: "my_food", name: item.language === "ar" ? "وعاء شوفان Homemade" : "Homemade oat bowl", brand: null, category: "Breakfast", cuisine: null, servingLabel: "1 bowl", verified: false, favorite: false, recentAt: "2026-08-25T07:00:00.000Z", frequency: 3, locale: item.language, aliases: [{ locale: "en", value: "oats" }], nutrition: { calories: 410, protein_g: 19, carbs_g: 58, fat_g: 12, saturated_fat_g: 2, fiber_g: 9, sugars_g: 11, sodium_mg: 180, basis_amount: 1, basis_unit: "g" }, tags: [], usingPersonalValues: false },
   ];
 }
 
 function mealPlanOfflineEvidenceOccurrences(item, occurrence) {
   if (item.name !== "meal-plan-offline-conflict-partial-estimated") return [occurrence];
-  const partial = {
-    ...occurrence,
-    frozen_name: "Imported lunch · partial nutrition",
-    frozen_snapshot: {
-      ...occurrence.frozen_snapshot,
-      nutrition: { calories: 430, protein_g: null, carbs_g: 52, fat_g: 14 },
-    },
-  };
-  const estimated = {
-    ...occurrence,
-    id: "33333333-3333-4333-8333-333333333337",
-    meal_slot_key: "Snacks",
-    source_type: "placeholder",
-    source_id: null,
-    resolved_serving_label: "1 estimate",
-    frozen_name: "Restaurant snack estimate",
-    frozen_snapshot: {
-      estimatedNutrition: { calories: 360, protein_g: 18, carbs_g: 44, fat_g: 12 },
-      estimated: true,
-    },
-  };
+  const partial = { ...occurrence, frozen_name: "Imported lunch · partial nutrition", frozen_snapshot: { ...occurrence.frozen_snapshot, nutrition: { calories: 430, protein_g: null, carbs_g: 52, fat_g: 14 } } };
+  const estimated = { ...occurrence, id: "33333333-3333-4333-8333-333333333337", meal_slot_key: "Snacks", source_type: "placeholder", source_id: null, resolved_serving_label: "1 estimate", frozen_name: "Restaurant snack estimate", frozen_snapshot: { estimatedNutrition: { calories: 360, protein_g: 18, carbs_g: 44, fat_g: 12 }, estimated: true } };
   return [partial, estimated];
 }
 
 function mealPlanOfflineQueueFixture(item) {
   if (item.name !== "meal-plan-offline-conflict-partial-estimated") return null;
-  const base = {
-    weekId: "44444444-4444-4444-8444-444444444444",
-    baseRevision: 3,
-    payload: { weekStartDate: MEAL_PLAN_QA_WEEK_START, mutation: { upsertOccurrences: [] }, baseSnapshot: null },
-  };
+  const base = { weekId: "44444444-4444-4444-8444-444444444444", baseRevision: 3, payload: { weekStartDate: MEAL_PLAN_QA_WEEK_START, mutation: { upsertOccurrences: [] }, baseSnapshot: null } };
   return [
     { ...base, operationId: "qa-meal-plan-queued", target: { kind: "occurrence", id: "33333333-3333-4333-8333-333333333333", field: "frozen_name" }, status: "queued" },
     { ...base, operationId: "qa-meal-plan-attention", target: { kind: "week_override", id: MEAL_PLAN_QA_WEEK_START, field: "customSlots" }, status: "needs_attention", lastError: "QA fixture validation needs review." },
@@ -247,34 +180,9 @@ function mealPlanOfflineQueueFixture(item) {
 }
 
 function mealPlanFixture(item, date = "2026-08-26") {
-  const weekStart = MEAL_PLAN_QA_WEEK_START;
-  const occurrence = {
-    id: "33333333-3333-4333-8333-333333333333", week_id: "44444444-4444-4444-8444-444444444444",
-    user_id: MOCK_AUTH_USER_ID, plan_date: date, meal_slot_key: "Lunch", position: 0,
-    source_type: "food", source_id: "11111111-1111-4111-8111-111111111111", source_version_id: null,
-    resolved_quantity: 1, resolved_serving_label: "1 bowl", frozen_name: item.language === "ar" ? "وعاء أرز بالدجاج" : "Chicken rice bowl",
-    frozen_snapshot: { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 }, shoppingIngredients: [{ foodId: "55555555-5555-4555-8555-555555555555", name: item.language === "ar" ? "صدر دجاج" : "Chicken breast", quantity: 400, unit: "g", qualifier: null }] },
-    status: item.name.includes("skip") ? "skipped" : "planned", completed_at: null, actual_log_group_id: null,
-  };
-  const weekOverride = {};
-  if (item.name === "shopping-list-three-states") {
-    weekOverride.shopping = {
-      states: {},
-      derivedEdits: {},
-      manualItems: [
-        { id: "shopping-purchased", name: "Sparkling water", quantity: 2, unit: "bottles", state: "Purchased", notes: "" },
-        { id: "shopping-dont-need", name: "Napkins", quantity: 1, unit: "pack", state: "Don't need", notes: "Already at home" },
-      ],
-    };
-  }
-  const occurrences = mealPlanOfflineEvidenceOccurrences(item, occurrence);
-  return {
-    week: { id: occurrence.week_id, user_id: occurrence.user_id, week_start_date: weekStart, revision: 3, week_override_json: weekOverride },
-    occurrences,
-    target: { available: true, effective_from: weekStart, effective_to: null, values: { calories: 2200, protein_g: 160, carbs_g: 240, fat_g: 70, water_ml: 2500 }, source: "rendered_qa_fixture", source_evidence: { authority: "rendered_qa" }, reason: "effective_target" },
-    pendingChangeRequests: item.name.includes("chatgpt") ? [{ id: "66666666-6666-4666-8666-666666666666", base_revision: 2, proposal_json: { summary: "Move lunch later" }, state: item.name.includes("stale") ? "stale" : "pending" }] : [],
-    shoppingNeeds: [{ foodId: "55555555-5555-4555-8555-555555555555", name: item.language === "ar" ? "صدر دجاج" : "Chicken breast", quantity: 400, unit: "g", qualifier: null, sourceOccurrenceIds: [occurrence.id] }],
-  };
+  const occurrence = { id: "33333333-3333-4333-8333-333333333333", week_id: "44444444-4444-4444-8444-444444444444", user_id: MOCK_AUTH_USER_ID, plan_date: date, meal_slot_key: "Lunch", position: 0, source_type: "food", source_id: "11111111-1111-4111-8111-111111111111", source_version_id: null, resolved_quantity: 1, resolved_serving_label: "1 bowl", frozen_name: item.language === "ar" ? "وعاء أرز بالدجاج" : "Chicken rice bowl", frozen_snapshot: { nutrition: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 }, shoppingIngredients: [{ foodId: "55555555-5555-4555-8555-555555555555", name: item.language === "ar" ? "صدر دجاج" : "Chicken breast", quantity: 400, unit: "g", qualifier: null }] }, status: item.name.includes("skip") ? "skipped" : "planned", completed_at: null, actual_log_group_id: null };
+  const weekOverride = item.name === "shopping-list-three-states" ? { shopping: { states: {}, derivedEdits: {}, manualItems: [{ id: "shopping-purchased", name: "Sparkling water", quantity: 2, unit: "bottles", state: "Purchased", notes: "" }, { id: "shopping-dont-need", name: "Napkins", quantity: 1, unit: "pack", state: "Don't need", notes: "Already at home" }] } } : {};
+  return { week: { id: occurrence.week_id, user_id: occurrence.user_id, week_start_date: MEAL_PLAN_QA_WEEK_START, revision: 3, week_override_json: weekOverride }, occurrences: mealPlanOfflineEvidenceOccurrences(item, occurrence), target: { available: true, effective_from: MEAL_PLAN_QA_WEEK_START, effective_to: null, values: { calories: 2200, protein_g: 160, carbs_g: 240, fat_g: 70, water_ml: 2500 }, source: "rendered_qa_fixture", source_evidence: { authority: "rendered_qa" }, reason: "effective_target" }, pendingChangeRequests: item.name.includes("chatgpt") ? [{ id: "66666666-6666-4666-8666-666666666666", base_revision: 2, proposal_json: { summary: "Move lunch later" }, state: item.name.includes("stale") ? "stale" : "pending" }] : [], shoppingNeeds: [{ foodId: "55555555-5555-4555-8555-555555555555", name: item.language === "ar" ? "صدر دجاج" : "Chicken breast", quantity: 400, unit: "g", qualifier: null, sourceOccurrenceIds: [occurrence.id] }] };
 }
 
 function recipeRows(item) {
@@ -290,15 +198,14 @@ function recipeDetail(item) {
   const name = item.language === "ar" ? "وعاء دجاج Chicken bowl" : long ? "Roasted Mediterranean Vegetable and Lemon Herb Chicken Grain Bowl with Toasted Seeds" : "Chicken bowl";
   return {
     root: { id: RECIPE_ID, name, is_favorite: true, cover_path: null },
+    draft: { id: RECIPE_DRAFT_ID, name, servings: 4, total_time_minutes: 35, notes: "Working Draft notes.", draft_metadata: { cuisine: "Mediterranean" } },
     latestVersion: { id: RECIPE_VERSION_ID, version_number: 4, name, servings: 4, total_time_minutes: 35, notes: "Serve immediately.", metadata: {} },
     hasWorkingDraft: true,
-    ingredients: [{ id: "88888888-8888-4888-8888-888888888888", ingredient_name: "Chicken breast", quantity: 400, unit: "g", food_id: "55555555-5555-4555-8555-555555555555", verified: true }],
-    instructions: [
-      { id: ACTION_ONE_ID, instruction: "Prepare the confirmed ingredients.", duration_seconds: 300, heat_or_temperature: null, doneness_or_result_cue: null },
-      { id: ACTION_TWO_ID, instruction: long ? "Cook the chicken until the user-confirmed doneness cue is reached, then rest it before slicing across the grain." : "Cook the chicken and rest before slicing.", duration_seconds: 600, heat_or_temperature: null, doneness_or_result_cue: "User-confirmed doneness cue" },
-    ],
+    ingredients: [{ id: "88888888-8888-4888-8888-888888888888", ingredient_name: "Chicken breast", quantity: 400, unit: "g", food_id: "55555555-5555-4555-8555-555555555555", frozen_nutrition: { calories: 660, protein_g: 124, carbs_g: 0, fat_g: 14 }, verified: true }],
+    instructions: [{ id: ACTION_ONE_ID, instruction: "Prepare the confirmed ingredients.", duration_seconds: 300, heat_or_temperature: null, doneness_or_result_cue: null, prep_ahead_cue: null }, { id: ACTION_TWO_ID, instruction: long ? "Cook the chicken until the user-confirmed doneness cue is reached, then rest it before slicing across the grain." : "Cook the chicken and rest before slicing.", duration_seconds: 600, heat_or_temperature: null, doneness_or_result_cue: "User-confirmed doneness cue", prep_ahead_cue: null }],
     equipment: [{ id: "99999999-9999-4999-8999-999999999999", name: "Pan", quantity: 1, note: null }],
-    nutritionPerServing: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 }, cuisine: "Mediterranean",
+    nutritionPerServing: { calories: 540, protein_g: 48, carbs_g: 63, fat_g: 12 },
+    cuisine: "Mediterranean",
   };
 }
 
@@ -308,30 +215,9 @@ function cookingFixture(item) {
   const timers = item.cookingState === "parallel" ? [
     { id: "a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1", actionId: ACTION_TWO_ID, actionStateId: "34343434-3434-4434-8434-343434343434", name: "Sauce", durationSeconds: 3600, status: "running", startedAt: now, targetAt: "2026-08-26T23:00:00.000Z", pausedAt: null, pausedRemainingSeconds: null, completedAt: null, cancelledAt: null },
     { id: "b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2", actionId: ACTION_TWO_ID, actionStateId: "34343434-3434-4434-8434-343434343434", name: "Rest", durationSeconds: 900, status: "paused", startedAt: now, targetAt: "2026-08-26T23:10:00.000Z", pausedAt: "2026-08-26T06:05:00.000Z", pausedRemainingSeconds: 600, completedAt: null, cancelledAt: null },
-  ] : [
-    { id: "a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1", actionId: ACTION_TWO_ID, actionStateId: "34343434-3434-4434-8434-343434343434", name: "Rest", durationSeconds: 600, status: timerStatus, startedAt: now, targetAt: timerStatus === "completed" ? "2026-08-26T06:05:00.000Z" : "2026-08-26T23:00:00.000Z", pausedAt: null, pausedRemainingSeconds: null, completedAt: timerStatus === "completed" ? "2026-08-26T06:05:00.000Z" : null, cancelledAt: null },
-  ];
+  ] : [{ id: "a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1", actionId: ACTION_TWO_ID, actionStateId: "34343434-3434-4434-8434-343434343434", name: "Rest", durationSeconds: 600, status: timerStatus, startedAt: now, targetAt: timerStatus === "completed" ? "2026-08-26T06:05:00.000Z" : "2026-08-26T23:00:00.000Z", pausedAt: null, pausedRemainingSeconds: null, completedAt: timerStatus === "completed" ? "2026-08-26T06:05:00.000Z" : null, cancelledAt: null }];
   const complete = item.cookingState === "complete";
-  return {
-    schemaVersion: 1, sessionId: COOKING_SESSION_ID, recipeId: RECIPE_ID, recipeVersionId: RECIPE_VERSION_ID,
-    frozenRecipeSnapshot: {
-      schemaVersion: 1,
-      recipe: { id: RECIPE_VERSION_ID, recipe_id: RECIPE_ID, version_number: 4, name: item.language === "ar" ? "وعاء دجاج Chicken bowl" : "Chicken bowl", servings: 4 },
-      ingredients: [{ id: "ingredient-one", name: "Chicken breast", quantity: 400, unit: "g" }],
-      actions: [
-        { id: ACTION_ONE_ID, position: 0, instruction: "Prepare the confirmed ingredients.", dependency_action_ids: [] },
-        { id: ACTION_TWO_ID, position: 1, instruction: "Cook the chicken and rest before slicing.", dependency_action_ids: [ACTION_ONE_ID], can_run_in_background: true, doneness_or_result_cue: "User-confirmed doneness cue" },
-      ],
-      equipment: [{ id: "equipment-one", name: "Pan", quantity: 1 }],
-    },
-    servingScale: 1, status: "active", stateRevision: 4, currentActionKey: ACTION_TWO_ID,
-    actionStates: [
-      { id: "12121212-1212-4212-8212-121212121212", actionKey: ACTION_ONE_ID, state: "completed", stateRevision: 2, activatedAt: now, completedAt: "2026-08-26T06:02:00.000Z", deferredAt: null, skippedAt: null },
-      { id: "34343434-3434-4434-8434-343434343434", actionKey: ACTION_TWO_ID, state: complete ? "completed" : "active", stateRevision: 4, activatedAt: "2026-08-26T06:03:00.000Z", completedAt: complete ? "2026-08-26T06:10:00.000Z" : null, deferredAt: null, skippedAt: null },
-    ],
-    timers, pendingMutations: item.offline ? [{ operationId: "qa-pending-1", type: "action_state", payload: { actionKey: ACTION_TWO_ID, state: "active" }, createdAt: "2026-08-26T06:03:00.000Z" }] : [],
-    startedAt: now, lastActiveAt: "2026-08-26T06:10:00.000Z", completedAt: null, endedAt: null,
-  };
+  return { schemaVersion: 1, sessionId: COOKING_SESSION_ID, recipeId: RECIPE_ID, recipeVersionId: RECIPE_VERSION_ID, frozenRecipeSnapshot: { schemaVersion: 1, recipe: { id: RECIPE_VERSION_ID, recipe_id: RECIPE_ID, version_number: 4, name: item.language === "ar" ? "وعاء دجاج Chicken bowl" : "Chicken bowl", servings: 4 }, ingredients: [{ id: "ingredient-one", name: "Chicken breast", quantity: 400, unit: "g" }], actions: [{ id: ACTION_ONE_ID, position: 0, instruction: "Prepare the confirmed ingredients.", dependency_action_ids: [] }, { id: ACTION_TWO_ID, position: 1, instruction: "Cook the chicken and rest before slicing.", dependency_action_ids: [ACTION_ONE_ID], can_run_in_background: true, doneness_or_result_cue: "User-confirmed doneness cue" }], equipment: [{ id: "equipment-one", name: "Pan", quantity: 1 }] }, servingScale: 1, status: "active", stateRevision: 4, currentActionKey: ACTION_TWO_ID, actionStates: [{ id: "12121212-1212-4212-8212-121212121212", actionKey: ACTION_ONE_ID, state: "completed", stateRevision: 2, activatedAt: now, completedAt: "2026-08-26T06:02:00.000Z", deferredAt: null, skippedAt: null }, { id: "34343434-3434-4434-8434-343434343434", actionKey: ACTION_TWO_ID, state: complete ? "completed" : "active", stateRevision: 4, activatedAt: "2026-08-26T06:03:00.000Z", completedAt: complete ? "2026-08-26T06:10:00.000Z" : null, deferredAt: null, skippedAt: null }], timers, pendingMutations: item.offline ? [{ operationId: "qa-pending-1", type: "action_state", payload: { actionKey: ACTION_TWO_ID, state: "active" }, createdAt: "2026-08-26T06:03:00.000Z" }] : [], startedAt: now, lastActiveAt: "2026-08-26T06:10:00.000Z", completedAt: null, endedAt: null };
 }
 
 async function fulfillJson(route, body, status = 200, fixture = "nutrition-v1") {
@@ -351,9 +237,7 @@ async function createContext(browser, item) {
       if (largeText) document.documentElement.style.fontSize = "125%";
       return true;
     };
-    if (!applyDocumentPreferences()) {
-      document.addEventListener("DOMContentLoaded", applyDocumentPreferences, { once: true });
-    }
+    if (!applyDocumentPreferences()) document.addEventListener("DOMContentLoaded", applyDocumentPreferences, { once: true });
     if (offline) Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
     if (mealPlanQueue) {
       try { localStorage.setItem(`plaivra:nutrition-v1:meal-plan:queue:${mockAuthUserId}:${mealPlanWeekStart}`, JSON.stringify(mealPlanQueue)); } catch { /* origin not available yet */ }
@@ -361,34 +245,40 @@ async function createContext(browser, item) {
     if (cooking) {
       try { localStorage.setItem(`plaivra:nutrition:cooking:${recipeId}:active`, JSON.stringify(cooking)); } catch { /* origin not available yet */ }
     }
-  }, {
-    direction: item.direction,
-    language: item.language,
-    largeText: item.largeText,
-    offline: item.offline,
-    recipeId: RECIPE_ID,
-    cooking: item.route.includes("/cook") ? cookingFixture(item) : null,
-    mealPlanQueue,
-    mockAuthUserId: MOCK_AUTH_USER_ID,
-    mealPlanWeekStart: MEAL_PLAN_QA_WEEK_START,
-  });
+  }, { direction: item.direction, language: item.language, largeText: item.largeText, offline: item.offline, recipeId: RECIPE_ID, cooking: item.route.includes("/cook") ? cookingFixture(item) : null, mealPlanQueue, mockAuthUserId: MOCK_AUTH_USER_ID, mealPlanWeekStart: MEAL_PLAN_QA_WEEK_START });
 
   await context.route("**/api/billing/entitlements", (route) => fulfillJson(route, { entitlements: [] }, 200, "empty-entitlements-v1"));
+  await context.route("**/api/food/open-food-facts**", async (route) => {
+    if (item.name === "food-library-mobile-barcode-fallback") {
+      await fulfillJson(route, { error: "Rendered QA barcode provider unavailable" }, 503, `nutrition-${item.name}`);
+      return;
+    }
+    await fulfillJson(route, { food: { name: "Barcode yogurt", barcode: "4006381333931" } }, 200, `nutrition-${item.name}`);
+  });
   await context.route("**/api/nutrition/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const pathname = url.pathname;
     const method = route.request().method();
     if (pathname.endsWith("/diary")) {
       if (item.name === "diary-loading") await new Promise((resolve) => setTimeout(resolve, 1200));
-      const date = url.searchParams.get("date") || "2026-08-26";
-      await fulfillJson(route, diaryProjection(item, date), 200, `nutrition-${item.name}`);
+      await fulfillJson(route, diaryProjection(item, url.searchParams.get("date") || "2026-08-26"), 200, `nutrition-${item.name}`);
       return;
     }
     if (pathname.endsWith("/log") && method !== "GET") {
       await fulfillJson(route, item.name === "diary-failed-sync" ? { error: "Rendered QA sync rejection" } : { ok: true }, item.name === "diary-failed-sync" ? 503 : 200, `nutrition-${item.name}`);
       return;
     }
-    if (pathname.includes("/foods")) {
+    if (pathname.endsWith("/foods") && method === "POST") {
+      let body = {};
+      try { body = route.request().postDataJSON(); } catch { body = {}; }
+      if (item.name === "food-library-mobile-duplicate-suggestion" && body.operation === "custom_food_create") {
+        await fulfillJson(route, { food: null, duplicate: { id: "11111111-1111-4111-8111-111111111111", source: "catalog", food_name: "Greek yogurt", serving_size: "170 g" } }, 200, `nutrition-${item.name}`);
+        return;
+      }
+      await fulfillJson(route, { food: { id: "22222222-2222-4222-8222-222222222229" }, duplicate: null, deleted: body.operation === "custom_food_delete", ok: true }, 200, `nutrition-${item.name}`);
+      return;
+    }
+    if (pathname.endsWith("/foods")) {
       await fulfillJson(route, { items: foodFixtures(item), nextCursor: null }, 200, `nutrition-${item.name}`);
       return;
     }
@@ -410,6 +300,10 @@ async function createContext(browser, item) {
     }
     if (pathname === "/api/nutrition/v1/recipes" && method === "POST") {
       await fulfillJson(route, { recipeId: RECIPE_ID }, 201, `nutrition-${item.name}`);
+      return;
+    }
+    if (pathname === `/api/nutrition/v1/recipes/${RECIPE_ID}` && method === "PATCH" && item.recipeAutosaveStatus === 503) {
+      await fulfillJson(route, { error: "Rendered QA autosave failure" }, 503, `nutrition-${item.name}`);
       return;
     }
     if (pathname === `/api/nutrition/v1/recipes/${RECIPE_ID}` && method === "GET") {
@@ -441,6 +335,12 @@ async function clickFirst(page, patterns) {
   return false;
 }
 
+async function openFoodDetail(page, name = /greek yogurt/i) {
+  const row = page.getByRole("button", { name }).first();
+  if (await row.count()) { await row.click(); await page.waitForTimeout(120); return true; }
+  return false;
+}
+
 async function prepareScenario(page, item) {
   if (item.offline) await page.evaluate(() => window.dispatchEvent(new Event("offline")));
   switch (item.interaction) {
@@ -464,17 +364,50 @@ async function prepareScenario(page, item) {
       await clickFirst(page, [/filters/i, /filter/i]);
       break;
     case "food-detail":
-      await clickFirst(page, [/greek yogurt/i, /details/i]);
+      await openFoodDetail(page);
       break;
     case "food-nutrition-info":
-      await clickFirst(page, [/nutrition info/i, /nutrition/i]);
+      await clickFirst(page, [/filters/i]);
+      await page.waitForTimeout(80);
+      await clickFirst(page, [/nutrition info/i, /about nutrition/i, /info/i]);
       break;
     case "food-add-to":
-      await clickFirst(page, [/add to/i, /add/i]);
+      await clickFirst(page, [/add greek yogurt/i, /add/i]);
       break;
-    case "food-custom":
-      await clickFirst(page, [/create custom/i, /custom food/i]);
+    case "food-serving-recalculation":
+      if (await openFoodDetail(page)) await clickFirst(page, [/increase quantity/i]);
       break;
+    case "food-personal-correction":
+      if (await openFoodDetail(page)) await clickFirst(page, [/correct for me/i]);
+      break;
+    case "food-create-custom":
+      await clickFirst(page, [/create food/i]);
+      break;
+    case "food-duplicate-suggestion": {
+      await clickFirst(page, [/create food/i]);
+      const name = page.getByLabel(/food name/i).first();
+      const calories = page.getByLabel(/^calories$/i).first();
+      if (await name.count()) await name.fill("Greek yogurt");
+      if (await calories.count()) await calories.fill("130");
+      await clickFirst(page, [/save food/i]);
+      await page.waitForTimeout(160);
+      break;
+    }
+    case "food-custom-edit-delete":
+      if (await openFoodDetail(page, /homemade oat bowl/i)) {
+        await clickFirst(page, [/edit food/i]);
+        await page.waitForTimeout(80);
+        await clickFirst(page, [/delete food/i]);
+      }
+      break;
+    case "food-barcode-fallback": {
+      await clickFirst(page, [/scan/i]);
+      const input = page.getByLabel(/barcode/i).first();
+      if (await input.count()) await input.fill("4006381333931");
+      await clickFirst(page, [/lookup/i]);
+      await page.waitForTimeout(160);
+      break;
+    }
     case "recipe-search": {
       const input = page.getByPlaceholder("Search recipes");
       if (await input.count()) await input.fill("Chicken");
@@ -488,6 +421,17 @@ async function prepareScenario(page, item) {
     case "recipe-filters":
       await clickFirst(page, [/filters/i]);
       break;
+    case "open-recipe-add-ingredient": {
+      const candidate = page.getByRole("link", { name: /add ingredient/i }).first();
+      if (await candidate.count()) { await candidate.click(); await page.waitForLoadState("networkidle"); }
+      break;
+    }
+    case "trigger-recipe-autosave-failure": {
+      const input = page.getByLabel(/recipe name/i).first();
+      if (await input.count()) await input.fill("Chicken bowl QA edit");
+      await page.waitForTimeout(900);
+      break;
+    }
     case "resume-cooking":
       await clickFirst(page, [/resume/i, /استئناف/]);
       break;
@@ -518,42 +462,35 @@ async function collectMetrics(page) {
       const rect = target.getBoundingClientRect();
       return rect.width < 44 || rect.height < 44 ? [{ tag: element.tagName.toLowerCase(), text: String(element.textContent || element.getAttribute("aria-label") || "").trim().slice(0, 80), width: Math.round(rect.width), height: Math.round(rect.height) }] : [];
     });
-    return {
-      horizontalOverflowPx: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
-      unnamedInteractiveElements,
-      compactInteractiveTargets: compact.length,
-      compactTargetDetails: compact.slice(0, 16),
-      interactiveElements: interactive.length,
-      h1: document.querySelector("h1")?.textContent?.trim() || null,
-      direction: document.documentElement.dir || getComputedStyle(document.documentElement).direction,
-      htmlLanguage: document.documentElement.lang || null,
-      bodyText: String(document.body?.innerText || "").slice(0, 12000),
-    };
+    return { horizontalOverflowPx: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth), unnamedInteractiveElements, compactInteractiveTargets: compact.length, compactTargetDetails: compact.slice(0, 16), interactiveElements: interactive.length, h1: document.querySelector("h1")?.textContent?.trim() || null, direction: document.documentElement.dir || getComputedStyle(document.documentElement).direction, htmlLanguage: document.documentElement.lang || null, bodyText: String(document.body?.innerText || "").slice(0, 12000) };
   });
+}
+
+function requiredEvidence(item) {
+  if (item.name === "recipes-mobile-editor") return ["Recipe editor", "Basics", "Add ingredient"];
+  if (item.name === "recipes-mobile-add-ingredient-search") return ["Food Library", "Search foods"];
+  if (item.name === "recipes-mobile-autosave-failure") return ["Not saved"];
+  if (item.name === "food-library-mobile-create-custom-food-fast-core") return ["Create Food", "Nutrition is for", "Calories", "Protein", "Carbohydrates", "Fat"];
+  if (item.name === "food-library-mobile-duplicate-suggestion") return ["Possible duplicate", "Use Existing", "Correct for me", "Create Separately"];
+  if (item.name === "food-library-mobile-custom-food-edit-delete") return ["Delete Food", "Historical frozen nutrition remains unchanged"];
+  if (item.name === "food-library-mobile-detail-serving-recalculation") return ["1.25", "162.5 kcal"];
+  if (item.name === "food-library-mobile-detail-personal-correction") return ["Personal correction"];
+  if (item.name === "food-library-mobile-add-to-serving-quantity-destinations") return ["Serving", "Quantity", "Diary", "Meal Plan", "Saved Meal", "Recipe"];
+  if (item.name === "food-library-mobile-barcode-fallback") return ["Barcode", "Barcode lookup failed", "Search remains available"];
+  return [];
 }
 
 function localizedAssertions(item, metrics) {
   const failures = [];
   const body = metrics.bodyText || "";
   if (/Please sign in before using (?:Meal Plan|My Recipes)\./i.test(body)) failures.push("rendered authenticated state fell back to sign-in error");
-  if (item.name === "shopping-list-three-states") {
-    for (const text of ["Needed", "Purchased", "Don't need"]) if (!body.includes(text)) failures.push(`missing Shopping state evidence: ${text}`);
-  }
-  if (item.name === "meal-plan-offline-conflict-partial-estimated") {
-    for (const text of ["Waiting to sync", "Needs attention", "Conflict", "Partial", "Estimated"]) if (!body.includes(text)) failures.push(`missing offline Meal Plan evidence: ${text}`);
-  }
+  if (item.name === "shopping-list-three-states") for (const text of ["Needed", "Purchased", "Don't need"]) if (!body.includes(text)) failures.push(`missing Shopping state evidence: ${text}`);
+  if (item.name === "meal-plan-offline-conflict-partial-estimated") for (const text of ["Waiting to sync", "Needs attention", "Conflict", "Partial", "Estimated"]) if (!body.includes(text)) failures.push(`missing offline Meal Plan evidence: ${text}`);
+  for (const text of requiredEvidence(item)) if (!body.includes(text)) failures.push(`missing rendered state evidence: ${text}`);
   if (item.language !== "ar") return failures;
   if (metrics.htmlLanguage !== "ar") failures.push(`expected html lang ar, received ${metrics.htmlLanguage || "empty"}`);
   if (metrics.direction !== "rtl") failures.push(`expected RTL direction, received ${metrics.direction || "empty"}`);
-  const required = item.name === "meal-plan-rtl-large-text"
-    ? ["خطة الوجبات", "بروتين", "كربوهيدرات", "دهون"]
-    : item.name === "food-library-rtl-mixed-brand"
-      ? ["مكتبة الأطعمة", "بروتين", "كربوهيدرات", "دهون", "غني بالبروتين", "قليل الكربوهيدرات"]
-      : item.name === "recipes-rtl-home-mobile"
-        ? ["وصفاتي", "المحذوفة مؤخرًا"]
-        : item.name === "recipes-rtl-cooking-mobile"
-          ? ["الآن", "تم"]
-          : [];
+  const required = item.name === "meal-plan-rtl-large-text" ? ["خطة الوجبات", "بروتين", "كربوهيدرات", "دهون"] : item.name === "food-library-rtl-mixed-brand" ? ["مكتبة الأطعمة", "بروتين", "كربوهيدرات", "دهون", "غني بالبروتين", "قليل الكربوهيدرات"] : item.name === "recipes-rtl-home-mobile" ? ["وصفاتي", "المحذوفة مؤخرًا"] : item.name === "recipes-rtl-cooking-mobile" ? ["الآن", "تم"] : [];
   for (const text of required) if (!body.includes(text)) failures.push(`missing localized Arabic evidence: ${text}`);
   if (item.name === "food-library-rtl-mixed-brand" && /\bP\s+\d|\bC\s+\d|\bF\s+\d/.test(body)) failures.push("Arabic Food Library still exposes Latin P/C/F macro abbreviations");
   if (item.name === "food-library-rtl-mixed-brand" && /\bHIGH PROTEIN\b|\bLOW CARB\b/i.test(body)) failures.push("Arabic Food Library still exposes English objective tags");
@@ -592,8 +529,7 @@ export async function runNutritionV1Qa(options = {}) {
       let navigationError = null;
       try {
         response = await page.goto(`${baseUrl}${item.route}`, { waitUntil: item.name === "diary-loading" ? "domcontentloaded" : "networkidle", timeout: 30_000 });
-        if (item.name === "diary-loading") await page.waitForTimeout(120);
-        else await page.waitForTimeout(520);
+        if (item.name === "diary-loading") await page.waitForTimeout(120); else await page.waitForTimeout(520);
         await prepareScenario(page, item);
       } catch (error) {
         navigationError = sanitizedText(error instanceof Error ? error.message : String(error));
@@ -621,20 +557,7 @@ export async function runNutritionV1Qa(options = {}) {
     await browser.close();
   }
   const failed = results.filter((result) => !result.passed);
-  const report = {
-    generatedAt: new Date().toISOString(),
-    QA_HEAD_SHA,
-    QA_SERVER_MODE,
-    workflowRunId,
-    baseUrl,
-    evidenceDir,
-    viewports: NUTRITION_V1_QA_VIEWPORTS,
-    scenarios: NUTRITION_V1_QA_SCENARIOS.map((item) => ({ name: item.name, route: item.route, viewport: item.viewport.name, direction: item.direction, language: item.language, largeText: item.largeText, offline: item.offline })),
-    checks: { horizontalOverflowPx: true, compactInteractiveTargets: true, unnamedInteractiveElements: true, pageErrors: true, consoleErrors: true, focusVisible: true, localizedAssertions: true, screenshots: true },
-    summary: { observations: results.length, failures: failed.length, passed: failed.length === 0 },
-    failures: failed,
-    observations: results,
-  };
+  const report = { generatedAt: new Date().toISOString(), QA_HEAD_SHA, QA_SERVER_MODE, workflowRunId, baseUrl, evidenceDir, viewports: NUTRITION_V1_QA_VIEWPORTS, scenarios: NUTRITION_V1_QA_SCENARIOS.map((item) => ({ name: item.name, route: item.route, viewport: item.viewport.name, direction: item.direction, language: item.language, largeText: item.largeText, offline: item.offline })), checks: { horizontalOverflowPx: true, compactInteractiveTargets: true, unnamedInteractiveElements: true, pageErrors: true, consoleErrors: true, focusVisible: true, localizedAssertions: true, screenshots: true }, summary: { observations: results.length, failures: failed.length, passed: failed.length === 0 }, failures: failed, observations: results };
   await writeFile(path.join(evidenceDir, "nutrition-v1-qa-results.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
   console.log(`Nutrition V1 QA: ${report.summary.observations} scenarios, ${report.summary.failures} failures.`);
   if (options.throwOnFailure !== false && !report.summary.passed) throw new Error(`Nutrition V1 rendered QA failed ${failed.length} scenario(s).`);
