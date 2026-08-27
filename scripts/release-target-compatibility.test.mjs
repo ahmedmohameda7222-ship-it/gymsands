@@ -11,14 +11,19 @@ const ledger = JSON.parse(
   readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"),
 );
 
-test("all release target consumers preserve the declared compatibility marker while pending repository migrations block release-ready authority", () => {
+test("all release target consumers preserve the declared compatibility marker while the reconciled ledger permits release-ready authority", () => {
   const releaseTarget = deriveReleaseTarget(ledger);
   const qualityTarget = deriveQualityLedgerTarget(ledger);
   const environment = qualityLedgerEnvironment(qualityTarget);
 
   assert.equal(releaseTarget.expectedMigration, "20260724232734");
-  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260804180932");
+  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260827072417");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
+  assert.equal(releaseTarget.reconciliationState, "reconciled");
+  assert.equal(releaseTarget.pendingCount, 0);
+  assert.equal(releaseTarget.schemaAppliedUntrackedCount, 0);
+  assert.equal(releaseTarget.unresolvedCount, 0);
+  assert.equal(releaseTarget.releaseReady, true);
   assert.equal(qualityTarget.expectedMigration, releaseTarget.expectedMigration);
   assert.equal(
     qualityTarget.latestAppliedMigrationVersion,
@@ -29,26 +34,10 @@ test("all release target consumers preserve the declared compatibility marker wh
     releaseTarget.expectedMigration,
   );
   assert.notEqual(releaseTarget.expectedMigration, releaseTarget.latestAppliedMigrationVersion);
-  assert.throws(
-    () => deriveReleaseReadyTarget(ledger),
-    /Migration ledger is not release-ready/,
-    "repository-only pending migrations must block release-ready authority before Planner approval",
-  );
 
-  const reconciledFixture = {
-    ...ledger,
-    entries: ledger.entries.filter((entry) => entry.state !== "pending"),
-    pendingCount: 0,
-    unresolvedCount: 0,
-    historyRepair: {
-      ...ledger.historyRepair,
-      state: "reconciled",
-      pendingCount: 0,
-      unresolvedCount: 0,
-    },
-  };
-  const readyTarget = deriveReleaseReadyTarget(reconciledFixture);
+  const readyTarget = deriveReleaseReadyTarget(ledger);
   assert.equal(readyTarget.expectedMigration, releaseTarget.expectedMigration);
+  assert.equal(readyTarget.latestAppliedMigrationVersion, releaseTarget.latestAppliedMigrationVersion);
 });
 
 test("preflight validates the declared marker rather than the physical migration head", () => {
