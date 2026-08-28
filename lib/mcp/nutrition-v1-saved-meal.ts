@@ -1,7 +1,7 @@
 import type { McpContext } from "@/lib/mcp/auth";
 import { asObject, getArray, getOptionalString, getString, type JsonObject } from "@/lib/mcp/schemas";
 import { fail, ok, type McpToolResult } from "@/lib/mcp/tool-helpers";
-import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import { resolveFoodHandoff, type ResolvedFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
 import { listFoodLibrary, normalizeFoodSearchText } from "@/services/nutrition-v1/server/food-library";
 import { createSavedMeal } from "@/services/nutrition-v1/server/saved-meals";
 
@@ -47,7 +47,7 @@ export async function createCanonicalSavedMealFromMcp(
   if (!items.length) return fail("missing_required_input", "Provide at least one custom meal item.");
 
   try {
-    const resolved = [];
+    const resolved: ResolvedFoodHandoff[] = [];
     for (const item of items) resolved.push(await resolveCanonicalFood(ctx, item));
     const savedMeal = await createSavedMeal(ctx.supabase, ctx.userId, {
       name: getString(input, "meal_name"),
