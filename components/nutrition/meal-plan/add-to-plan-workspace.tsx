@@ -9,7 +9,7 @@ import type { DiaryProjection, DiarySavedMealChoice } from "@/services/nutrition
 import type { FoodLibraryCandidate, FoodLibraryPage } from "@/services/nutrition-v1/server/food-library";
 import type { MealPlanOccurrenceMutation } from "@/services/nutrition-v1/server/meal-plan";
 import type { RecipeHomeRecord } from "@/services/nutrition-v1/server/recipe-workspace";
-import { mealPlanApi } from "./meal-plan-api";
+import { mealPlanApi, mealPlanApiFetch } from "./meal-plan-api";
 
 type SearchScope = "all" | "recent" | "favorites";
 type SearchResult =
@@ -85,7 +85,7 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: { d
     if (!clean) { setError(nt("enterValidBarcode")); return; }
     setBarcodeBusy(true);
     try {
-      const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}`);
+      const response = await mealPlanApiFetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}`);
       const body = await response.json().catch(() => ({})) as { food?: BarcodeFood };
       if (!response.ok || !body.food?.name?.trim()) throw new Error(nt("barcodeNotFound"));
       setQuery(body.food.name.trim()); setScope("all"); setBarcodeOpen(false); setBarcode(clean);
