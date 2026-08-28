@@ -52,11 +52,12 @@ export async function POST(request: Request) {
     const source = await resolveSource(context.supabase, context.user.id, object(body.source, "Handoff source"));
 
     if (destination === "diary") {
+      const operationId = text(body.operationId, "Operation ID");
       const date = text(body.date, "Diary date");
       const meal = text(body.meal, "Diary meal");
       if (source.kind === "food") {
         const result = await logDiaryMeal(context.supabase, {
-          operationId: crypto.randomUUID(),
+          operationId,
           date,
           meal,
           source: { type: "food", id: source.value.foodId, frozenSnapshot: source.value.frozenSourceSnapshot },
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
         return nutritionJson({ destination, result });
       }
       const result = await logDiaryMeal(context.supabase, {
-        operationId: crypto.randomUUID(),
+        operationId,
         date,
         meal,
         source: { type: "recipe", id: source.value.recipeId, versionId: source.value.recipeVersionId, frozenSnapshot: source.value.frozenSourceSnapshot },
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
     }
 
     if (destination === "meal_plan") {
+      const operationId = text(body.operationId, "Operation ID");
       const planDate = text(body.planDate, "Plan date");
       const mealSlot = text(body.mealSlot, "Meal slot");
       const weekStartDate = text(body.weekStartDate, "Week start");
@@ -116,7 +118,7 @@ export async function POST(request: Request) {
         weekId: week.week?.id ?? null,
         weekStartDate,
         baseRevision: week.week?.revision ?? 0,
-        operationId: crypto.randomUUID(),
+        operationId,
         mutation: { upsertOccurrences: [occurrence] },
       });
       return nutritionJson({ destination, result });
