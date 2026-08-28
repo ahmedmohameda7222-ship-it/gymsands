@@ -209,21 +209,21 @@ export async function listRecipeHome(
   return roots.map((root) => {
     const draft = drafts.get(root.id) ?? null;
     const version = versions.get(root.id) ?? null;
-    const metadata = draft?.draft_metadata ?? version?.metadata ?? {};
+    const metadata = version?.metadata ?? draft?.draft_metadata ?? {};
     return {
       recipeId: root.id,
-      name: draft?.name?.trim() || version?.name || root.name,
+      name: version?.name || draft?.name?.trim() || root.name,
       favorite: root.is_favorite,
       coverPath: root.cover_path,
       updatedAt: root.updated_at,
       lastUsedAt: lastUsed.get(root.id) ?? null,
-      status: draft ? "draft" : "published",
+      status: version ? "published" : "draft",
       draftId: draft?.id ?? null,
       draftUpdatedAt: draft?.updated_at ?? null,
       recipeVersionId: version?.id ?? null,
       versionNumber: version?.version_number ?? null,
-      servings: draft?.servings ?? version?.servings ?? null,
-      totalTimeMinutes: draft?.total_time_minutes ?? version?.total_time_minutes ?? null,
+      servings: version?.servings ?? draft?.servings ?? null,
+      totalTimeMinutes: version?.total_time_minutes ?? draft?.total_time_minutes ?? null,
       cuisine: metadataCuisine(metadata),
       nutritionPerServing: metadataNutrition(metadata),
     };
