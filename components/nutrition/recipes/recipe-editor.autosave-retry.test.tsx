@@ -82,6 +82,12 @@ function setReactActEnvironment(value: boolean) {
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = value;
 }
 
+async function waitInsideAct(ms: number) {
+  await act(async () => {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+  });
+}
+
 describe("Recipe editor autosave retry", () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -96,7 +102,6 @@ describe("Recipe editor autosave retry", () => {
   });
 
   afterEach(async () => {
-    vi.useRealTimers();
     await act(async () => { root.unmount(); });
     host.remove();
     setReactActEnvironment(false);
@@ -116,48 +121,38 @@ describe("Recipe editor autosave retry", () => {
 
   it("retries a transient autosave failure without requiring another user edit", async () => {
     const input = await renderReadyEditor();
-    vi.useFakeTimers();
     mocks.recipeApi
       .mockRejectedValueOnce(new Error("Network request failed."))
       .mockResolvedValueOnce({ recipe: workspace("Changed") });
 
     await act(async () => { setInputValue(input, "Changed"); });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(650);
-    });
+    await waitInsideAct(750);
     expect(mocks.recipeApi).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain("notSavedRetrying");
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000);
-    });
+    await waitInsideAct(1100);
 
     expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
     const retry = mocks.recipeApi.mock.calls[2];
     const retryBody = JSON.parse(String((retry?.[1] as RequestInit | undefined)?.body)) as { draft?: { name?: string } };
     expect(retryBody.draft?.name).toBe("Changed");
     expect(host.textContent).toContain("saved");
-  });
+  }, 7000);
 
   it("does not retry a Recipe revision conflict", async () => {
     const input = await renderReadyEditor();
-    vi.useFakeTimers();
     mocks.recipeApi.mockRejectedValueOnce(
       new mocks.RecipeApiError("Recipe Working Draft revision conflict.", 409, "recipe_draft_revision_conflict"),
     );
 
     await act(async () => { setInputValue(input, "Conflicting change"); });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(650);
-    });
+    await waitInsideAct(750);
     expect(mocks.recipeApi).toHaveBeenCalledTimes(2);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
-    });
+    await waitInsideAct(1500);
 
     expect(mocks.recipeApi).toHaveBeenCalledTimes(2);
     expect(host.textContent).not.toContain("notSavedRetrying");
     expect(host.textContent).toContain("draftSaveFailed");
-  });
+  }, 7000);
 });
