@@ -1,7 +1,7 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Evidence captured:** 2026-08-28T10:10:09.092Z
+**Evidence captured:** 2026-08-28T11:32:55.627Z
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `dfa14c3bc2c1524ff185b1ee4e170f4537a80230`
 **Status:** Production migration history reconciled through the latest applied identity; no repository migration remains pending or unresolved
@@ -10,7 +10,7 @@ This document records migration identity and verification. It does not independe
 
 ## Current state
 
-- Physical Production migration records: **107**
+- Physical Production migration records: **108**
 - Exact applications (`state = applied`): **63**
 - Repository-only pending migrations: **0**
 - `pendingCount = 0`
@@ -19,12 +19,12 @@ This document records migration identity and verification. It does not independe
 - `historyRepair.state = reconciled`
 - `release_ready = true` for the migration-ledger authority; merge, application deployment, compatibility-marker promotion, and Product Owner approval remain separate gates
 - Released compatibility marker: `20260724232734`
-- Latest physical Production record: `20260828100730_nutrition_v1_meal_plan_week_atomicity`
+- Latest physical Production record: `20260828112951_nutrition_v1_recipe_draft_revision`
 - Activity Catalog Production remains isolated from the Main migration ledger
 
-Production migration history is reconciled through `20260828100730_nutrition_v1_meal_plan_week_atomicity`. The six previously pending non-Nutrition repository migrations were applied exactly once on 2026-08-21 under generated aliases. Eight authorized Nutrition V1 migrations were applied exactly once on 2026-08-27. The five final closure migrations were applied on 2026-08-28, followed by the bounded Meal Plan final-review correction under canonical generated identity `20260828100730_nutrition_v1_meal_plan_week_atomicity`.
+Production migration history is reconciled through `20260828112951_nutrition_v1_recipe_draft_revision`. The six previously pending non-Nutrition repository migrations were applied exactly once on 2026-08-21 under generated aliases. Eight authorized Nutrition V1 migrations were applied exactly once on 2026-08-27. The five final closure migrations were applied on 2026-08-28, followed by the bounded Meal Plan final-review correction under canonical generated identity `20260828100730_nutrition_v1_meal_plan_week_atomicity` and the bounded Recipe Working Draft revision correction under generated identity `20260828112951_nutrition_v1_recipe_draft_revision`.
 
-During that final Meal Plan application, a concurrent duplicate execution produced later migration-history identity `20260828100735_nutrition_v1_meal_plan_week_atomicity`. Both stored statements were verified byte-equivalent and the migration itself is schema-idempotent: it performs a read-only precondition, `CREATE OR REPLACE` functions, grants/revokes, and trigger replacement without application-row DML. The redundant later history row was therefore removed by a guarded metadata-only repair that first required exactly two matching records and exact statement equality. The canonical first identity `20260828100730` remains immutable and Production now contains exactly 107 migration records. No application data or schema authority was rolled back by the history repair. Do not replay the migration.
+During the final Meal Plan application, a concurrent duplicate execution produced later migration-history identity `20260828100735_nutrition_v1_meal_plan_week_atomicity`. Both stored statements were verified byte-equivalent and the migration itself is schema-idempotent: it performs a read-only precondition, `CREATE OR REPLACE` functions, grants/revokes, and trigger replacement without application-row DML. The redundant later history row was therefore removed by a guarded metadata-only repair that first required exactly two matching records and exact statement equality. The canonical first identity `20260828100730` remains immutable. The later Recipe revision migration was subsequently applied exactly once, so Production now contains exactly 108 migration records. No application data or schema authority was rolled back by the history repair. Do not replay either migration.
 
 Repository migration filenames remain immutable; generated Production identities are recorded below and in the machine ledger. Physical schema advancement and compatibility-marker promotion remain separate release operations. These migration applications did not deploy application code, merge PR #152, modify Activity Catalog Production, or promote the released compatibility marker.
 
@@ -125,6 +125,7 @@ All fourteen generated identities above are immutable Production history. They m
 | `20260828032300_nutrition_v1_timer_instance_identity.sql` | `20260828091159_nutrition_v1_timer_instance_identity` | `2026-08-28` | `applied_version_alias` |
 | `20260828032400_nutrition_v1_working_draft_command.sql` | `20260828091228_nutrition_v1_working_draft_command` | `2026-08-28` | `applied_version_alias` |
 | `20260828032500_nutrition_v1_meal_plan_week_atomicity.sql` | `20260828100730_nutrition_v1_meal_plan_week_atomicity` | `2026-08-28` | `applied_version_alias` |
+| `20260828032600_nutrition_v1_recipe_draft_revision.sql` | `20260828112951_nutrition_v1_recipe_draft_revision` | `2026-08-28` | `applied_version_alias` |
 
 Production verification for the Meal Plan final-review correction confirmed:
 
@@ -135,7 +136,15 @@ Production verification for the Meal Plan final-review correction confirmed:
 - no existing planned occurrence is outside the seven-day interval of its persisted week;
 - disposable verification proves lazy week creation plus the first meaningful mutation commit atomically, a failed first mutation leaves no orphan week, and direct cross-week date writes are rejected.
 
-The previously applied five final migrations retain their verified Food Library trigram indexes, Cooking/Saved Meal/Recipe RPCs, Recipe cover owner constraint, Cooking command privilege revocations, removal of obsolete write policies, timer instance-identity correction, and Working Draft command. Supabase advisor warnings remain generic/pre-existing or expected for the bounded command/index architecture and did not establish a new Nutrition V1 blocker.
+Production verification for the Recipe Working Draft revision correction confirmed:
+
+- `public.nutrition_recipe_drafts.revision` is `bigint NOT NULL DEFAULT 0` with the nonnegative revision constraint present and no invalid existing rows;
+- `public.autosave_nutrition_recipe_draft(uuid,bigint,jsonb,jsonb,jsonb,jsonb)` exists as `SECURITY DEFINER` with fixed `search_path = pg_catalog, public` and derives owner identity from `auth.uid()`;
+- `authenticated` and `service_role` can execute the revision-aware command while `anon` cannot;
+- the retired unversioned `public.autosave_nutrition_recipe_draft(uuid,jsonb,jsonb,jsonb,jsonb)` signature is absent;
+- disposable verification proves a valid save advances revision atomically, a stale expected revision is rejected without replacing canonical draft state, a later valid save can advance the new revision, and cross-owner autosave is rejected.
+
+The previously applied final migrations retain their verified Food Library trigram indexes, Cooking/Saved Meal/Recipe RPCs, Recipe cover owner constraint, Cooking command privilege revocations, removal of obsolete write policies, timer instance-identity correction, Working Draft command, Meal Plan atomicity correction, and Recipe Working Draft revision CAS. Supabase advisor warnings remain generic/pre-existing or expected for the bounded command/index architecture and did not establish a new Nutrition V1 blocker.
 
 The released compatibility marker remains `20260724232734`. No application deployment, PR merge, compatibility-marker promotion, or Activity Catalog Production mutation occurred as part of these migration applications or the metadata-only history repair.
 
