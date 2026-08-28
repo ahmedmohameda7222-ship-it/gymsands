@@ -121,35 +121,23 @@ const frozenSnapshot = {
 beforeEach(() => vi.clearAllMocks());
 
 describe("Nutrition V1 Cooking Session server authority", () => {
-  it("starts only from one published Recipe version and materializes immutable Recipe/action facts into the session", async () => {
-    const versionRead = query({ data: version, error: null });
-    const ingredientRead = query({ data: ingredients, error: null });
-    const actionRead = query({ data: actions, error: null });
-    const equipmentRead = query({ data: equipment, error: null });
-    const sessionInsert = query({
-      data: {
-        id: sessionId,
-        user_id: userId,
-        recipe_id: recipeId,
-        recipe_version_id: versionId,
-        frozen_recipe_snapshot: frozenSnapshot,
-        serving_scale: 1,
-        current_action_key: action1,
-        status: "active",
-        state_revision: 0,
-        started_at: "2026-08-26T07:00:00.000Z",
-        last_active_at: "2026-08-26T07:00:00.000Z",
-      },
+  it("starts from one published Recipe version through one transactional database authority", async () => {
+    const session = {
+      id: sessionId,
+      user_id: userId,
+      recipe_id: recipeId,
+      recipe_version_id: versionId,
+      frozen_recipe_snapshot: frozenSnapshot,
+      serving_scale: 1,
+      current_action_key: action1,
+      status: "active",
+      state_revision: 0,
+      started_at: "2026-08-26T07:00:00.000Z",
+      last_active_at: "2026-08-26T07:00:00.000Z",
+    };
+    const db = fakeSupabase({}, {
+      data: { sessionId, session, snapshot: frozenSnapshot, reused: false },
       error: null,
-    });
-    const actionStateInsert = query({ data: null, error: null });
-    const db = fakeSupabase({
-      nutrition_recipe_versions: [versionRead],
-      nutrition_recipe_ingredients: [ingredientRead],
-      nutrition_recipe_actions: [actionRead],
-      nutrition_recipe_equipment: [equipmentRead],
-      nutrition_cooking_sessions: [sessionInsert],
-      nutrition_cooking_action_states: [actionStateInsert],
     });
 
     const started = await startCookingSession(db.client, userId, {
@@ -160,23 +148,15 @@ describe("Nutrition V1 Cooking Session server authority", () => {
     });
 
     expect(started.sessionId).toBe(sessionId);
-    expect(versionRead.eq).toHaveBeenCalledWith("user_id", userId);
-    expect(versionRead.eq).toHaveBeenCalledWith("recipe_id", recipeId);
-    expect(versionRead.eq).toHaveBeenCalledWith("id", versionId);
-    expect(sessionInsert.insert).toHaveBeenCalledWith(expect.objectContaining({
-      user_id: userId,
-      recipe_id: recipeId,
-      recipe_version_id: versionId,
-      frozen_recipe_snapshot: frozenSnapshot,
-      serving_scale: 1,
-      status: "active",
-      state_revision: 0,
-    }));
-    expect(actionStateInsert.insert).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ session_id: sessionId, user_id: userId, action_key: action1 }),
-      expect.objectContaining({ session_id: sessionId, user_id: userId, action_key: action2 }),
-    ]));
-    expect(db.from).not.toHaveBeenCalledWith("nutrition_recipe_drafts");
+    expect(started.snapshot).toEqual(frozenSnapshot);
+    expect(db.rpc).toHaveBeenCalledWith("start_nutrition_cooking_session", {
+      p_recipe_id: recipeId,
+      p_recipe_version_id: versionId,
+      p_serving_scale: 1,
+      p_now: "2026-08-26T07:00:00.000Z",
+    });
+    expect(db.rpc).toHaveBeenCalledTimes(1);
+    expect(db.from).not.toHaveBeenCalled();
   });
 
   it("resumes an active owner session with action states and multiple persisted timers after interruption", async () => {
