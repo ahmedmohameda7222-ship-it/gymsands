@@ -64,6 +64,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
   const [sourceName, setSourceName] = useState("");
   const [date, setDate] = useState("");
   const [meal, setMeal] = useState("");
+  const [recipeQuantity, setRecipeQuantity] = useState("1");
   const [savedMealName, setSavedMealName] = useState("");
   const [note, setNote] = useState("");
   const [recipeChoices, setRecipeChoices] = useState<RecipeChoice[]>([]);
@@ -74,6 +75,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
 
   useEffect(() => {
     pendingOperationIdRef.current = null;
+    if (source?.type === "recipe") setRecipeQuantity(String(source.quantity));
   }, [destination, source]);
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
       try {
         const preview = current.type === "food"
           ? await jsonRequest<{ name: string }>(`/api/nutrition/v1/foods/${encodeURIComponent(current.id)}/handoff?source=${encodeURIComponent(current.source)}&quantity=${encodeURIComponent(String(current.quantity))}&serving=${encodeURIComponent(current.serving)}`)
-          : await jsonRequest<{ name: string }>(`/api/nutrition/v1/recipes/${encodeURIComponent(current.id)}/handoff?recipeVersionId=${encodeURIComponent(current.versionId)}`);
+          : await jsonRequest<{ name: string }>(`/api/nutrition/v1/recipes/${encodeURIComponent(current.id)}/handoff?recipeVersionId=${encodeURIComponent(current.versionId)}&quantity=${encodeURIComponent(String(current.quantity))}`);
         if (!cancelled) setSourceName(preview.name);
         if (destination === "recipe") {
           const result = await jsonRequest<{ recipes?: RecipeChoice[] }>("/api/nutrition/v1/recipes?limit=100");
@@ -105,11 +107,15 @@ export function AddToHandoffConsumer({ destination }: Props) {
     setError("");
     let successfulRecipeOperationKey: string | null = null;
     try {
+      const resolvedRecipeQuantity = currentSource.type === "recipe" ? Number(recipeQuantity) : null;
+      if (currentSource.type === "recipe" && (!Number.isFinite(resolvedRecipeQuantity) || Number(resolvedRecipeQuantity) <= 0)) {
+        throw new Error("Choose a serving quantity greater than zero.");
+      }
       const payload: Record<string, unknown> = {
         destination,
         source: currentSource.type === "food"
           ? { type: "food", id: currentSource.id, source: currentSource.source, quantity: currentSource.quantity, serving: currentSource.serving }
-          : { type: "recipe", id: currentSource.id, versionId: currentSource.versionId },
+          : { type: "recipe", id: currentSource.id, versionId: currentSource.versionId, quantity: resolvedRecipeQuantity },
       };
       if (destination === "diary") {
         if (!date || !meal) throw new Error("Choose the Diary date and meal before adding this item.");
@@ -179,6 +185,8 @@ export function AddToHandoffConsumer({ destination }: Props) {
           <div><h2 id={`handoff-${destination}-title`} className="text-lg font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{sourceName || "Resolving canonical Nutrition source…"}</p></div>
           <button type="button" onClick={() => router.back()} className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted" aria-label="Close Add To"><X className="h-5 w-5" /></button>
         </header>
+
+        {currentSource.type === "recipe" ? <label className="mt-5 grid gap-1 text-sm font-medium">Serving quantity<input type="number" min="0.1" step="0.25" inputMode="decimal" value={recipeQuantity} onChange={(event) => { pendingOperationIdRef.current = null; setRecipeQuantity(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label> : null}
 
         {(destination === "diary" || destination === "meal_plan") ? <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary date" : "Plan date"}<input type="date" value={date} onChange={(event) => { pendingOperationIdRef.current = null; setDate(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label>
