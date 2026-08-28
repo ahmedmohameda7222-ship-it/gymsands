@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { normalizeOwnedRecipeCoverPath } from "@/lib/nutrition-v1/recipe-cover-path";
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { nutritionErrorResponse, NutritionRequestError } from "@/services/nutrition-v1/server/errors";
 import { duplicatePublishedRecipeAtomically } from "@/services/nutrition-v1/server/recipe-duplicate";
@@ -32,9 +33,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ re
       return nutritionJson({ recipe: await getRecipeWorkspace(context.supabase, context.user.id, recipeId) });
     }
     if (body.operation === "presentation") {
+      let coverPath: string | null | undefined;
+      try {
+        coverPath = normalizeOwnedRecipeCoverPath(context.user.id, body.coverPath);
+      } catch (error) {
+        throw new NutritionRequestError(error instanceof Error ? error.message : "Recipe cover path is invalid.");
+      }
       return nutritionJson({ recipe: await updateRecipePresentation(context.supabase, context.user.id, recipeId, {
         favorite: typeof body.favorite === "boolean" ? body.favorite : undefined,
-        coverPath: body.coverPath === null || typeof body.coverPath === "string" ? body.coverPath : undefined,
+        coverPath,
       }) });
     }
     throw new NutritionRequestError("Unsupported Recipe update operation.");
