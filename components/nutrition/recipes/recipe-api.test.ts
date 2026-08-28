@@ -72,4 +72,32 @@ describe("Recipe API autosave concurrency", () => {
     const secondAutosaveBody = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body)) as Record<string, unknown>;
     expect(secondAutosaveBody.expectedRevision).toBe(1);
   });
+
+  it("preserves HTTP status and stable error code for a Recipe revision conflict", async () => {
+    const recipeId = "22222222-2222-4222-8222-222222222222";
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if ((init?.method ?? "GET").toUpperCase() === "GET") return workspaceResponse(3);
+      return new Response(JSON.stringify({
+        error: "Recipe Working Draft revision conflict.",
+        code: "recipe_draft_revision_conflict",
+      }), {
+        status: 409,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await recipeApi(`/${recipeId}`);
+
+    const save = recipeApi(`/${recipeId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ operation: "autosave", draft: { name: "Local intent" } }),
+    });
+
+    await expect(save).rejects.toMatchObject({
+      status: 409,
+      code: "recipe_draft_revision_conflict",
+      message: "Recipe Working Draft revision conflict.",
+    });
+  });
 });
