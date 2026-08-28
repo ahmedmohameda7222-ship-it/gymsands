@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   currentUser: { id: "11111111-1111-4111-8111-111111111111" } as { id: string } | null,
   push: vi.fn(),
   refresh: vi.fn(),
+  nt: (key: string) => key,
 }));
 
 vi.mock("next/link", () => ({
@@ -20,7 +21,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/components/nutrition/recipes/recipe-api", () => ({ recipeApi: mocks.recipeApi }));
 vi.mock("@/lib/i18n/nutrition-v1", () => ({
-  useNutritionV1Translation: () => ({ nt: (key: string) => key, dir: "ltr" }),
+  useNutritionV1Translation: () => ({ nt: mocks.nt, dir: "ltr" }),
 }));
 
 import { RecipeDetail } from "@/components/nutrition/recipes/recipe-detail";
@@ -28,6 +29,10 @@ import { RecipeDetail } from "@/components/nutrition/recipes/recipe-detail";
 const recipeId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ownerA = "11111111-1111-4111-8111-111111111111";
 const ownerB = "22222222-2222-4222-8222-222222222222";
+
+function setReactActEnvironment(value: boolean) {
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = value;
+}
 
 function publishedRecipe() {
   return {
@@ -66,6 +71,7 @@ describe("RecipeDetail owner-scoped offline cache", () => {
     vi.clearAllMocks();
     localStorage.clear();
     mocks.currentUser = { id: ownerA };
+    setReactActEnvironment(true);
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -75,14 +81,15 @@ describe("RecipeDetail owner-scoped offline cache", () => {
     await act(async () => root.unmount());
     host.remove();
     localStorage.clear();
+    setReactActEnvironment(false);
   });
 
   async function cacheAsOwnerA() {
     mocks.recipeApi.mockResolvedValueOnce({ recipe: publishedRecipe() });
-    await act(async () => root.render(createElement(RecipeDetail, { recipeId })));
+    await act(async () => { root.render(createElement(RecipeDetail, { recipeId })); });
     await flush();
     expect(host.textContent).toContain("Owner A private recipe");
-    await act(async () => root.unmount());
+    await act(async () => { root.unmount(); });
     root = createRoot(host);
   }
 
@@ -91,7 +98,7 @@ describe("RecipeDetail owner-scoped offline cache", () => {
     mocks.currentUser = { id: ownerA };
     mocks.recipeApi.mockRejectedValueOnce(new Error("offline"));
 
-    await act(async () => root.render(createElement(RecipeDetail, { recipeId })));
+    await act(async () => { root.render(createElement(RecipeDetail, { recipeId })); });
     await flush();
 
     expect(host.textContent).toContain("Owner A private recipe");
@@ -103,7 +110,7 @@ describe("RecipeDetail owner-scoped offline cache", () => {
     mocks.currentUser = { id: ownerB };
     mocks.recipeApi.mockRejectedValueOnce(new Error("not found"));
 
-    await act(async () => root.render(createElement(RecipeDetail, { recipeId })));
+    await act(async () => { root.render(createElement(RecipeDetail, { recipeId })); });
     await flush();
 
     expect(host.textContent).not.toContain("Owner A private recipe");
@@ -116,7 +123,7 @@ describe("RecipeDetail owner-scoped offline cache", () => {
     mocks.currentUser = null;
     mocks.recipeApi.mockRejectedValueOnce(new Error("Please sign in"));
 
-    await act(async () => root.render(createElement(RecipeDetail, { recipeId })));
+    await act(async () => { root.render(createElement(RecipeDetail, { recipeId })); });
     await flush();
 
     expect(host.textContent).not.toContain("Owner A private recipe");
@@ -147,7 +154,7 @@ describe("RecipeDetail owner-scoped offline cache", () => {
     mocks.currentUser = { id: ownerA };
     mocks.recipeApi.mockRejectedValueOnce(new Error("offline"));
 
-    await act(async () => root.render(createElement(RecipeDetail, { recipeId })));
+    await act(async () => { root.render(createElement(RecipeDetail, { recipeId })); });
     await flush();
 
     expect(host.textContent).not.toContain("Legacy private recipe");
