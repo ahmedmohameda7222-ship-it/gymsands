@@ -140,6 +140,7 @@ jobs:
           --commit "$PLAIVRA_COMMIT_SHA"
           --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
           -- supabase db lint --local --schema public --level error --fail-on error
+
       - name: Gate — database preflight and verification SQL
         run: >-
           node scripts/run-quality-gate.mjs
@@ -313,9 +314,9 @@ jobs:
             sleep 1;
           done;
           curl --fail --silent http://localhost:3000/ > /dev/null;
-          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="$PLAIVRA_COMMIT_SHA" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered;
-          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="$PLAIVRA_COMMIT_SHA" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train;
-          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="$PLAIVRA_COMMIT_SHA" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_WORKOUT_HISTORY_EVIDENCE_DIR=quality-reports/workout-history-qa-evidence npm run qa:workout-history;
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="$PLAIVRA_COMMIT_SHA" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered;
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="$PLAIVRA_COMMIT_SHA" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train;
+          QA_SERVER_MODE=production QA_BUILD_COMMAND="NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_PLAIVRA_PRODUCTION_QA=true npm run build" QA_START_COMMAND="npm run start" QA_MOCK_AUTH_BUILD_VALUE=true QA_HEAD_SHA="$PLAIVRA_COMMIT_SHA" QA_WORKFLOW_RUN_ID="$GITHUB_RUN_ID" QA_BASE_URL=http://localhost:3000 QA_WORKOUT_HISTORY_EVIDENCE_DIR=quality-reports/workout-history-qa-evidence npm run qa:workout-history;
           kill "$server_pid" 2>/dev/null || true;
           wait "$server_pid" 2>/dev/null || true;
           trap - EXIT;
@@ -419,6 +420,7 @@ jobs:
           };
           fs.writeFileSync('quality-reports/artifact-metadata.json', JSON.stringify(metadata, null, 2) + '\n');
           NODE
+
       - name: Generate authoritative release manifest last
         run: >-
           npm run release:manifest --
