@@ -21,7 +21,12 @@ import { createCanonicalSavedMealFromMcp } from "@/lib/mcp/nutrition-v1-saved-me
 const userId = "11111111-1111-4111-8111-111111111111";
 const foodId = "22222222-2222-4222-8222-222222222222";
 const savedMealId = "33333333-3333-4333-8333-333333333333";
-const ctx = { userId, supabase: {} } as unknown as McpContext;
+const idempotencyKey = "saved-meal-request-0001";
+const ctx = {
+  userId,
+  connectionId: "44444444-4444-4444-8444-444444444444",
+  supabase: {},
+} as unknown as McpContext;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -51,6 +56,7 @@ beforeEach(() => {
 describe("Nutrition V1 MCP Saved Meal convergence", () => {
   it("resolves Food through Plaivra authority and writes only the canonical Saved Meal domain", async () => {
     const result = await createCanonicalSavedMealFromMcp(ctx, {
+      idempotency_key: idempotencyKey,
       meal_name: "Breakfast",
       items: [{ food_name: "Greek yogurt", serving_hint: "170 g", quantity: 2 }],
     });
@@ -63,6 +69,7 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
       serving: "170 g",
     });
     expect(createSavedMeal).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({
+      operationId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
       name: "Breakfast",
       items: [expect.objectContaining({ food_id: foodId, frozen_nutrition: expect.objectContaining({ carbs_g: null }) })],
     }));
@@ -70,8 +77,25 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
     expect(result.structuredContent).toMatchObject({ ok: true, saved_meal_id: savedMealId, authority: "nutrition_saved_meals" });
   });
 
+  it("derives the same Saved Meal operation UUID from the same MCP idempotency identity", async () => {
+    const input = {
+      idempotency_key: idempotencyKey,
+      meal_name: "Breakfast",
+      items: [{ food_name: "Greek yogurt", serving_hint: "170 g", quantity: 2 }],
+    };
+
+    await createCanonicalSavedMealFromMcp(ctx, input);
+    await createCanonicalSavedMealFromMcp(ctx, input);
+
+    const firstOperationId = createSavedMeal.mock.calls[0]?.[2]?.operationId;
+    const secondOperationId = createSavedMeal.mock.calls[1]?.[2]?.operationId;
+    expect(firstOperationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(secondOperationId).toBe(firstOperationId);
+  });
+
   it("preserves the public create_custom_meal output contract using canonical Saved Meal data", async () => {
     const result = await createCanonicalSavedMealFromMcp(ctx, {
+      idempotency_key: idempotencyKey,
       meal_name: "Breakfast",
       items: [{ food_name: "Greek yogurt", serving_hint: "170 g", quantity: 2 }],
     });
@@ -98,12 +122,13 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
     listFoodLibrary.mockResolvedValue({
       items: [
         { id: foodId, source: "catalog", name: "Yogurt", servingLabel: "100 g" },
-        { id: "44444444-4444-4444-8444-444444444444", source: "catalog", name: "Yogurt", servingLabel: "100 g" },
+        { id: "55555555-5555-4555-8555-555555555555", source: "catalog", name: "Yogurt", servingLabel: "100 g" },
       ],
       nextCursor: null,
     });
 
     const result = await createCanonicalSavedMealFromMcp(ctx, {
+      idempotency_key: idempotencyKey,
       meal_name: "Ambiguous",
       items: [{ food_name: "Yogurt", quantity: 1 }],
     });
