@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpContext } from "@/lib/mcp/auth";
+import { deriveMcpMutationOperationId } from "@/lib/mcp/idempotency";
 import { sanitizeMcpToolResult, validateMcpToolOutput } from "@/lib/mcp/safety";
 import { mcpTools } from "@/lib/mcp/tools";
 
@@ -55,11 +56,12 @@ beforeEach(() => {
 
 describe("Nutrition V1 MCP Saved Meal convergence", () => {
   it("resolves Food through Plaivra authority and writes only the canonical Saved Meal domain", async () => {
-    const result = await createCanonicalSavedMealFromMcp(ctx, {
+    const input = {
       idempotency_key: idempotencyKey,
       meal_name: "Breakfast",
       items: [{ food_name: "Greek yogurt", serving_hint: "170 g", quantity: 2 }],
-    });
+    };
+    const result = await createCanonicalSavedMealFromMcp(ctx, input);
 
     expect(listFoodLibrary).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({ query: "Greek yogurt" }));
     expect(resolveFoodHandoff).toHaveBeenCalledWith(ctx.supabase, userId, {
@@ -69,7 +71,7 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
       serving: "170 g",
     });
     expect(createSavedMeal).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({
-      operationId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+      operationId: deriveMcpMutationOperationId(ctx, "create_custom_meal", input),
       name: "Breakfast",
       items: [expect.objectContaining({ food_id: foodId, frozen_nutrition: expect.objectContaining({ carbs_g: null }) })],
     }));
@@ -77,19 +79,20 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
     expect(result.structuredContent).toMatchObject({ ok: true, saved_meal_id: savedMealId, authority: "nutrition_saved_meals" });
   });
 
-  it("derives the same Saved Meal operation UUID from the same MCP idempotency identity", async () => {
+  it("derives the same Saved Meal operation UUID from the same MCP idempotency identity even after connection rotation", async () => {
     const input = {
       idempotency_key: idempotencyKey,
       meal_name: "Breakfast",
       items: [{ food_name: "Greek yogurt", serving_hint: "170 g", quantity: 2 }],
     };
+    const rotatedCtx = { ...ctx, connectionId: "66666666-6666-4666-8666-666666666666" };
 
     await createCanonicalSavedMealFromMcp(ctx, input);
-    await createCanonicalSavedMealFromMcp(ctx, input);
+    await createCanonicalSavedMealFromMcp(rotatedCtx, input);
 
     const firstOperationId = createSavedMeal.mock.calls[0]?.[2]?.operationId;
     const secondOperationId = createSavedMeal.mock.calls[1]?.[2]?.operationId;
-    expect(firstOperationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(firstOperationId).toBe(deriveMcpMutationOperationId(ctx, "create_custom_meal", input));
     expect(secondOperationId).toBe(firstOperationId);
   });
 
