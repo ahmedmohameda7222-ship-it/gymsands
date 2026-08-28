@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SOURCE_TYPES = new Set(["food", "recipe", "saved_meal", "placeholder"] as const);
 const OCCURRENCE_STATUSES = new Set(["planned", "completed", "completed_changed", "skipped"] as const);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 type JsonObject = Record<string, unknown>;
 
@@ -95,6 +96,19 @@ function requiredIsoDate(value: unknown, field: string) {
   const result = requiredText(value, field);
   if (!ISO_DATE.test(result)) throw new Error(`${field} must use YYYY-MM-DD.`);
   return result;
+}
+
+function dateAtUtcMidnight(value: string) {
+  return Date.parse(`${value}T00:00:00Z`);
+}
+
+function isDateInTargetWeek(planDate: string, weekStartDate: string) {
+  const planTime = dateAtUtcMidnight(planDate);
+  const weekStartTime = dateAtUtcMidnight(weekStartDate);
+  return Number.isFinite(planTime)
+    && Number.isFinite(weekStartTime)
+    && planTime >= weekStartTime
+    && planTime < weekStartTime + (7 * DAY_MS);
 }
 
 function positiveNumber(value: unknown, field: string) {
@@ -251,37 +265,31 @@ export async function mutateMealPlanWeek(
     mutation: MealPlanWeekMutation;
   },
 ) {
+  requiredText(userId, "User ID");
   const weekStartDate = requiredIsoDate(input.weekStartDate, "Week start");
   if (!Number.isInteger(input.baseRevision) || input.baseRevision < 0) throw new Error("Base revision is invalid.");
   const operationId = requiredText(input.operationId, "Operation ID");
+  const targetWeekId = input.weekId?.trim() || null;
+  if (!targetWeekId && input.baseRevision !== 0) throw new Error("A new Meal Plan week must start at revision zero.");
 
-  let targetWeekId = input.weekId?.trim() || null;
-  let baseRevision = input.baseRevision;
-  if (!targetWeekId) {
-    if (baseRevision !== 0) throw new Error("A new Meal Plan week must start at revision zero.");
-    const { data, error } = await supabase
-      .from("nutrition_meal_plan_weeks")
-      .insert({ user_id: userId, week_start_date: weekStartDate })
-      .select("id,revision")
-      .single();
-    if (error) throw error;
-    const created = data as unknown as { id?: unknown; revision?: unknown };
-    targetWeekId = requiredText(created.id, "Week ID");
-    baseRevision = Number(created.revision ?? 0);
-  }
-
-  const normalizedMutation: Record<string, unknown> = { operationId };
+  const normalizedMutation: Record<string, unknown> = { operationId, weekStartDate };
   if (input.mutation.weekOverride !== undefined) normalizedMutation.weekOverride = asObject(input.mutation.weekOverride, "Week override");
   if (input.mutation.deleteOccurrenceIds !== undefined) {
     normalizedMutation.deleteOccurrenceIds = [...new Set(input.mutation.deleteOccurrenceIds.map((id) => requiredText(id, "Occurrence ID")))];
   }
   if (input.mutation.upsertOccurrences !== undefined) {
-    normalizedMutation.upsertOccurrences = input.mutation.upsertOccurrences.map(normalizeOccurrenceForMutation);
+    const upsertOccurrences = input.mutation.upsertOccurrences.map(normalizeOccurrenceForMutation);
+    for (const occurrence of upsertOccurrences) {
+      if (!isDateInTargetWeek(occurrence.planDate, weekStartDate)) {
+        throw new Error("Meal Plan occurrence date must remain within the target week.");
+      }
+    }
+    normalizedMutation.upsertOccurrences = upsertOccurrences;
   }
 
   const { data, error } = await supabase.rpc("mutate_nutrition_meal_plan_week", {
     p_week_id: targetWeekId,
-    p_base_revision: baseRevision,
+    p_base_revision: input.baseRevision,
     p_mutation: normalizedMutation,
   });
   if (error) throw error;
