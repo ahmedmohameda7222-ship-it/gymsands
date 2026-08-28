@@ -5,7 +5,7 @@ import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 export type SavedMealPickerItem = {
   id: string;
   name: string;
-  itemCount: number;
+  itemCount: number | null;
   summary: string | null;
 };
 
@@ -30,7 +30,7 @@ export function SavedMealPicker({ meals, onPick, disabled = false }: SavedMealPi
             <button key={meal.id} type="button" data-saved-meal-id={meal.id} onClick={() => onPick(meal.id)} disabled={disabled} className="flex min-h-14 w-full items-center justify-between gap-4 py-3 text-start outline-none transition hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">
               <span className="min-w-0">
                 <span className="block truncate text-sm font-semibold text-foreground"><bdi dir="auto">{meal.name}</bdi></span>
-                <span className="block text-xs text-muted-foreground">{meal.itemCount} {nt(meal.itemCount === 1 ? "itemSingular" : "itemPlural")}</span>
+                {meal.itemCount === null ? null : <span className="block text-xs text-muted-foreground">{meal.itemCount} {nt(meal.itemCount === 1 ? "itemSingular" : "itemPlural")}</span>}
               </span>
               {meal.summary ? <span className="shrink-0 text-sm font-medium text-muted-foreground"><bdi dir="auto">{meal.summary}</bdi></span> : null}
             </button>
