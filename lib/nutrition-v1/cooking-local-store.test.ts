@@ -8,7 +8,9 @@ import {
   recoverCookingLocalSession,
   serializeCookingLocalSession,
   startOverLocalCookingSession,
+  upsertCookingLocalTimer,
   type CookingLocalSession,
+  type CookingLocalTimer,
 } from "@/lib/nutrition-v1/cooking-local-store";
 
 const sessionId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -99,6 +101,66 @@ describe("Nutrition V1 Cooking local-first recovery", () => {
     );
     expect(afterTermination?.timers[0]).toMatchObject({ name: "Sauce", status: "completed", remainingSeconds: 0, expired: true });
     expect(afterTermination?.timers[0].attentionEvent).toMatchObject({ kind: "timer_finished" });
+  });
+
+  it("uses the stable timer instance ID for idempotent retry rather than action/name identity", () => {
+    const original = baseSession.timers[0]!;
+    const retried: CookingLocalTimer = {
+      ...original,
+      status: "paused",
+      pausedAt: "2026-08-26T07:08:00.000Z",
+      pausedRemainingSeconds: 180,
+    };
+
+    const next = upsertCookingLocalTimer(baseSession, retried);
+
+    expect(next.timers.filter((timer) => timer.id === original.id)).toHaveLength(1);
+    expect(next.timers.find((timer) => timer.id === original.id)).toMatchObject({
+      name: "Sauce",
+      status: "paused",
+      pausedRemainingSeconds: 180,
+    });
+  });
+
+  it("keeps genuinely separate same-name timer instances even on the same action state", () => {
+    const existing = baseSession.timers[0]!;
+    const independent: CookingLocalTimer = {
+      ...existing,
+      id: "c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3",
+      startedAt: "2026-08-26T07:07:00.000Z",
+      targetAt: "2026-08-26T07:12:00.000Z",
+    };
+
+    const next = upsertCookingLocalTimer(baseSession, independent);
+
+    expect(next.timers.filter((timer) => timer.name === "Sauce")).toHaveLength(2);
+    expect(next.timers.map((timer) => timer.id)).toEqual(expect.arrayContaining([existing.id, independent.id]));
+  });
+
+  it("preserves timer instance IDs across offline queueing, serialization, and resumed-session recovery", () => {
+    const independent: CookingLocalTimer = {
+      ...baseSession.timers[0]!,
+      id: "d4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4",
+    };
+    const withIndependent = upsertCookingLocalTimer(baseSession, independent);
+    const queued = queueCookingMutation(withIndependent, {
+      operationId: "timer-op-retry",
+      type: "timer",
+      payload: { timerId: independent.id, status: independent.status },
+      createdAt: "2026-08-26T07:10:25.000Z",
+    });
+    const recovered = recoverCookingLocalSession(
+      serializeCookingLocalSession(queued),
+      "2026-08-26T07:10:30.000Z",
+    );
+
+    expect(recovered?.session.pendingMutations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operationId: "timer-op-retry", payload: expect.objectContaining({ timerId: independent.id }) }),
+    ]));
+    expect(recovered?.timers.map((timer) => timer.id)).toEqual(expect.arrayContaining([
+      baseSession.timers[0]!.id,
+      independent.id,
+    ]));
   });
 
   it("queues offline mutations with stable operation IDs and only removes server-acknowledged operations", () => {
