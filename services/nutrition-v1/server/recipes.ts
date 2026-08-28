@@ -40,10 +40,26 @@ export type RecipeDraftInput = {
   draft_metadata?: Record<string, unknown>;
 };
 
+export class RecipeDraftRevisionConflictError extends Error {
+  readonly status = 409 as const;
+  readonly code = "recipe_draft_revision_conflict" as const;
+
+  constructor(message = "Recipe Working Draft revision conflict.") {
+    super(message);
+    this.name = "RecipeDraftRevisionConflictError";
+  }
+}
+
 function message(error: unknown) {
   return error && typeof error === "object" && "message" in error
     ? String((error as { message?: unknown }).message)
     : "Nutrition Recipe operation failed.";
+}
+
+function dbCode(error: unknown) {
+  return error && typeof error === "object" && "code" in error
+    ? String((error as { code?: unknown }).code ?? "")
+    : "";
 }
 
 function throwDb(error: unknown) {
@@ -104,6 +120,9 @@ export async function autosaveRecipeDraft(
     p_instructions: input.instructions ?? [],
     p_equipment: input.equipment ?? [],
   });
+  if (result.error && dbCode(result.error) === "40001") {
+    throw new RecipeDraftRevisionConflictError(message(result.error));
+  }
   throwDb(result.error);
   const draft = result.data as Record<string, unknown> | null;
   if (!draft?.id || draft.recipe_id !== recipeId || !Number.isInteger(Number(draft.revision))) {
