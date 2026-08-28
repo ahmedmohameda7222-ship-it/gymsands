@@ -33,9 +33,9 @@ export async function duplicatePublishedRecipeAtomically(
   if (!Number.isFinite(servings) || servings <= 0) throw new Error("Published Recipe has invalid servings.");
 
   const graph = clonePublishedRecipeGraphForDraft({
-    ingredients: source.ingredients.map((item) => ({ ...item, id: String(item.id) })),
-    equipment: source.equipment.map((item) => ({ ...item, id: String(item.id) })),
-    instructions: source.instructions.map((item) => ({ ...item, id: String(item.id) })),
+    ingredients: (source.ingredients as Array<Record<string, unknown>>).map((item) => ({ ...item, id: String(item.id) })),
+    equipment: (source.equipment as Array<Record<string, unknown>>).map((item) => ({ ...item, id: String(item.id) })),
+    instructions: (source.instructions as Array<Record<string, unknown>>).map((item) => ({ ...item, id: String(item.id) })),
   }, nextId);
 
   const ingredients = graph.ingredients.map((item) => ({
