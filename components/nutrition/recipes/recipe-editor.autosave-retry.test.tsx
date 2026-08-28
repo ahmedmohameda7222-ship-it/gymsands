@@ -78,22 +78,28 @@ function setInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function setReactActEnvironment(value: boolean) {
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = value;
+}
+
 describe("Recipe editor autosave retry", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.useRealTimers();
     vi.clearAllMocks();
+    setReactActEnvironment(true);
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     await act(async () => { root.unmount(); });
     host.remove();
-    vi.useRealTimers();
+    setReactActEnvironment(false);
   });
 
   async function renderReadyEditor() {
@@ -110,6 +116,7 @@ describe("Recipe editor autosave retry", () => {
 
   it("retries a transient autosave failure without requiring another user edit", async () => {
     const input = await renderReadyEditor();
+    vi.useFakeTimers();
     mocks.recipeApi
       .mockRejectedValueOnce(new Error("Network request failed."))
       .mockResolvedValueOnce({ recipe: workspace("Changed") });
@@ -134,6 +141,7 @@ describe("Recipe editor autosave retry", () => {
 
   it("does not retry a Recipe revision conflict", async () => {
     const input = await renderReadyEditor();
+    vi.useFakeTimers();
     mocks.recipeApi.mockRejectedValueOnce(
       new mocks.RecipeApiError("Recipe Working Draft revision conflict.", 409, "recipe_draft_revision_conflict"),
     );
