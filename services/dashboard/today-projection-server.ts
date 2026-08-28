@@ -21,6 +21,7 @@ import {
   type TodayWorkoutProjection,
 } from "@/lib/dashboard/today-projection-contract";
 import { getEffectiveNutritionTarget } from "@/services/nutrition-v1/server/targets";
+import { readTodayV1ShoppingProjection } from "@/services/nutrition-v1/server/today-shopping";
 
 const WEEKDAYS = [
   "Sunday",
@@ -122,17 +123,6 @@ type NullableNutrition = {
   proteinG: number | null;
   carbsG: number | null;
   fatG: number | null;
-};
-
-type GroceryRow = {
-  id: string;
-  week_start: string;
-  item_name: string;
-  quantity: number | null;
-  unit: string | null;
-  store_section: string | null;
-  checked: boolean;
-  already_have: boolean;
 };
 
 type HabitRow = { name: string; completed: boolean };
@@ -242,14 +232,6 @@ function localDateInTimezone(timestamp: string | null, timezone: string) {
 
 function weekdayForDate(date: string) {
   return WEEKDAYS[new Date(`${date}T12:00:00.000Z`).getUTCDay()];
-}
-
-function isoWeekStart(date: string) {
-  const value = new Date(`${date}T12:00:00.000Z`);
-  const day = value.getUTCDay();
-  const delta = day === 0 ? -6 : 1 - day;
-  value.setUTCDate(value.getUTCDate() + delta);
-  return value.toISOString().slice(0, 10);
 }
 
 function isMeaningful(value: unknown): boolean {
@@ -578,27 +560,11 @@ export async function readTodayHydrationProjection(
 export async function readTodayShoppingProjection(
   input: ProjectionInput,
 ): Promise<TodayShoppingProjection> {
-  const weekStart = isoWeekStart(input.date);
-  const result = await input.supabase
-    .from("user_grocery_items")
-    .select("id,week_start,item_name,quantity,unit,store_section,checked,already_have")
-    .eq("user_id", input.userId)
-    .eq("week_start", weekStart)
-    .order("store_section", { ascending: true })
-    .order("item_name", { ascending: true })
-    .limit(200);
-  const rows = (assertQuery(result) ?? []) as GroceryRow[];
-  const items = rows.map((row) => ({
-    id: row.id,
-    weekStart: row.week_start,
-    itemName: row.item_name,
-    quantity: row.quantity,
-    unit: row.unit,
-    storeSection: row.store_section ?? "Other",
-    checked: Boolean(row.checked),
-    alreadyHave: Boolean(row.already_have),
-  }));
-  return { items, itemCount: items.length };
+  return readTodayV1ShoppingProjection({
+    supabase: input.supabase,
+    userId: input.userId,
+    date: input.date,
+  });
 }
 
 export async function readTodayHabitsProjection(
