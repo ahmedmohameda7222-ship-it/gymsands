@@ -15,7 +15,7 @@ export const DIARY_DRAFT_TTL_MS = 2 * 60 * 60 * 1000;
 
 type LoggerMode = "search" | "barcode" | "quick-add" | "saved-meals" | "recipes";
 type SubmitState = "editing" | "submitting" | "confirmed" | "failed";
-type DraftPayload = { savedAt: number; plate: DiaryPlateItem[] };
+type DraftPayload = { savedAt: number; plate: DiaryPlateItem[]; pendingOperationId?: string | null };
 type BarcodeFood = { name: string; brand?: string | null; servingSize?: string | null; calories?: number | null; protein?: number | null; carbs?: number | null; fat?: number | null };
 
 const nullFacts = (): DiaryPlateNutrition => ({ caloriesKcal: null, proteinG: null, carbsG: null, fatG: null });
@@ -39,7 +39,7 @@ const loggerCopy = {
     quickAdd: "Schnelleingabe", recipes: "Rezepte", placeholderUnverified: "Dieser Platzhalter ist kein verifiziertes Lebensmittel. Suche, ersetze oder erfasse das tatsächlich Gegessene per Schnelleingabe.",
     plannedUnresolved: "Der geplante Eintrag kann nicht automatisch aufgelöst werden. Füge vor der Protokollierung das tatsächlich Gegessene hinzu.", plannedLoaded: "Geplante Mahlzeit in den Teller geladen. Passe ihn an das tatsächlich Gegessene an.",
     searchUnavailable: "Die Lebensmittelsuche ist vorübergehend nicht verfügbar.", recipesUnavailable: "Rezepte sind vorübergehend nicht verfügbar.", addedToPlate: "{name} zum Teller hinzugefügt.", enterValidBarcode: "Gib einen gültigen Barcode ein.",
-    productFound: "Produkt gefunden. Prüfe es vor dem Hinzufügen zum Teller.", barcodeFallback: "Barcode-Suche fehlgeschlagen. Verwende Lebensmittelsuche oder Schnelleingabe.", quickCaloriesRequired: "Die Schnelleingabe benötigt gültige Kalorien.",
+    productFound: "Produkt gefunden. Prüfe es vor dem Hinzufügen.", barcodeFallback: "Barcode-Suche fehlgeschlagen. Verwende Lebensmittelsuche oder Schnelleingabe.", quickCaloriesRequired: "Die Schnelleingabe benötigt gültige Kalorien.",
     loggingPlate: "Teller wird protokolliert…", plannedLogged: "Geplante Mahlzeit mit Änderungen protokolliert.", plateLogged: "Teller protokolliert.", plateFailed: "Der Teller wurde nicht protokolliert. Deine Einträge bleiben für einen erneuten Versuch erhalten.",
     scanOrEnter: "Scanne auf einer unterstützten Plattform oder gib den Barcode ein. Das aufgelöste Produkt bleibt bis zur Bestätigung auf diesem Teller.", addToPlate: "Zum Teller hinzufügen", caloriesRequired: "Kalorien sind erforderlich. Unbekannte Makros bleiben unbekannt.",
     optionalName: "Name (optional)", optionalProtein: "Protein g (optional)", optionalCarbs: "Kohlenhydrate g (optional)", optionalFat: "Fett g (optional)", savedMealDescription: "Füge ein eingefrorenes wiederverwendbares Paket hinzu und passe den Teller bei Bedarf vor der Protokollierung an.",
@@ -102,6 +102,7 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
   const localizedMeal = mealLabel(meal);
   const [mode, setMode] = useState<LoggerMode>("search");
   const [plate, setPlate] = useState<DiaryPlateItem[]>([]);
+  const [pendingOperationId, setPendingOperationId] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>("editing");
   const [feedback, setFeedback] = useState("");
   const [query, setQuery] = useState("");
@@ -122,12 +123,15 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
     const scopedKey = draftKey(userId, date, meal, plannedOccurrence?.id);
     localStorage.removeItem(legacyDraftKey(date, meal, plannedOccurrence?.id));
     setPlate([]);
+    setPendingOperationId(null);
     const stored = localStorage.getItem(scopedKey);
     if (!stored) return;
     try {
       const draft = JSON.parse(stored) as DraftPayload;
-      if (Date.now() - draft.savedAt <= DIARY_DRAFT_TTL_MS && Array.isArray(draft.plate)) setPlate(draft.plate);
-      else localStorage.removeItem(scopedKey);
+      if (Date.now() - draft.savedAt <= DIARY_DRAFT_TTL_MS && Array.isArray(draft.plate)) {
+        setPlate(draft.plate);
+        setPendingOperationId(typeof draft.pendingOperationId === "string" && draft.pendingOperationId ? draft.pendingOperationId : null);
+      } else localStorage.removeItem(scopedKey);
     } catch {
       localStorage.removeItem(scopedKey);
     }
@@ -141,8 +145,8 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
   }, [plannedOccurrence, text.placeholderUnverified, text.plannedLoaded, text.plannedUnresolved]);
   useEffect(() => {
     if (!userId) return;
-    if (plate.length) localStorage.setItem(draftKey(userId, date, meal, plannedOccurrence?.id), JSON.stringify({ savedAt: Date.now(), plate } satisfies DraftPayload));
-  }, [date, meal, plannedOccurrence?.id, plate, userId]);
+    if (plate.length) localStorage.setItem(draftKey(userId, date, meal, plannedOccurrence?.id), JSON.stringify({ savedAt: Date.now(), plate, pendingOperationId } satisfies DraftPayload));
+  }, [date, meal, pendingOperationId, plannedOccurrence?.id, plate, userId]);
   const clearConfirmedDraft = useCallback(() => { if (key) localStorage.removeItem(key); }, [key]);
 
   useEffect(() => {
@@ -166,7 +170,7 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
     void (async () => { try { const response = await fetch("/api/nutrition/v1/recipes?limit=24", { headers: authHeaders(token) }); if (!response.ok) throw new Error(); const data = await response.json() as { recipes?: RecipeHomeRecord[] }; setRecipes((data.recipes ?? []).filter((recipe) => recipe.status === "published" && Boolean(recipe.recipeVersionId))); } catch { setFeedback(text.recipesUnavailable); } })();
   }, [mode, text.recipesUnavailable, token]);
 
-  function pushItem(item: Omit<DiaryPlateItem, "id">) { setPlate((current) => [...current, { ...item, id: crypto.randomUUID() }]); setSubmitState("editing"); setFeedback(text.addedToPlate.replace("{name}", item.foodName)); }
+  function pushItem(item: Omit<DiaryPlateItem, "id">) { setPendingOperationId(null); setPlate((current) => [...current, { ...item, id: crypto.randomUUID() }]); setSubmitState("editing"); setFeedback(text.addedToPlate.replace("{name}", item.foodName)); }
   function addFood(food: FoodLibraryCandidate) { const nutrition = { caloriesKcal: food.nutrition.calories, proteinG: food.nutrition.protein_g, carbsG: food.nutrition.carbs_g, fatG: food.nutrition.fat_g }; const frozenSnapshot = { name: food.name, servingLabel: food.servingLabel, nutrition, verified: food.verified, source: food.source }; pushItem({ foodName: food.name, servingLabel: food.servingLabel, quantity: 1, nutrition, foodItemId: food.source === "catalog" ? food.id : null, userFoodItemId: food.source === "my_food" ? food.id : null, source: { type: "food", id: food.id, frozenSnapshot } }); }
 
   async function lookupBarcode() {
@@ -178,11 +182,18 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
   function addQuick() { const calories = Number(quickCalories); if (!Number.isFinite(calories) || calories < 0) { setFeedback(text.quickCaloriesRequired); return; } const optional = (value: string) => value.trim() === "" ? null : known(value); const nutrition = { caloriesKcal: calories, proteinG: optional(quickProtein), carbsG: optional(quickCarbs), fatG: optional(quickFat) }; const name = quickName.trim() || `${Math.round(calories)} kcal`; pushItem({ foodName: name, servingLabel: text.entry, quantity: 1, nutrition, source: { type: "quick_add", frozenSnapshot: { name, nutrition } } }); setQuickCalories(""); setQuickProtein(""); setQuickCarbs(""); setQuickFat(""); setQuickName(""); }
   function addRecipe(recipe: RecipeHomeRecord) { if (!recipe.recipeVersionId) return; const nutrition = recipe.nutritionPerServing ? { caloriesKcal: recipe.nutritionPerServing.calories, proteinG: recipe.nutritionPerServing.protein_g, carbsG: recipe.nutritionPerServing.carbs_g, fatG: recipe.nutritionPerServing.fat_g } : nullFacts(); const frozenSnapshot = { name: recipe.name, recipeId: recipe.recipeId, recipeVersionId: recipe.recipeVersionId, serving: { quantity: 1, label: text.serving }, nutrition }; pushItem({ foodName: recipe.name, servingLabel: text.serving, quantity: 1, nutrition, source: { type: "recipe", id: recipe.recipeId, recipeVersionId: recipe.recipeVersionId, frozenSnapshot } }); }
   function addSavedMeal(mealChoice: DiarySavedMealChoice) { const bundle = mealChoice.bundle; for (const raw of bundle.items) { if (raw.kind === "food") { const nutrition = snakeFacts(raw.frozen_nutrition); pushItem({ foodName: String(raw.frozen_name ?? et("product")), servingLabel: String(raw.resolved_serving_label ?? et("serving")), quantity: Number(raw.resolved_quantity ?? 1), nutrition, foodItemId: typeof raw.food_id === "string" ? raw.food_id : null, source: { type: "saved_meal", id: mealChoice.id, frozenSnapshot: bundle } }); } else if (raw.kind === "recipe") { const recipe = raw.recipe && typeof raw.recipe === "object" && !Array.isArray(raw.recipe) ? raw.recipe as Record<string, unknown> : {}; const nutrition = snakeFacts(recipe.frozen_nutrition); pushItem({ foodName: String(recipe.frozen_recipe_name ?? text.recipes), servingLabel: String(recipe.resolved_serving_label ?? et("serving")), quantity: Number(recipe.resolved_serving_quantity ?? 1), nutrition, source: { type: "saved_meal", id: mealChoice.id, frozenSnapshot: bundle } }); } } }
-  function updateQuantity(id: string, quantity: number) { if (!Number.isFinite(quantity) || quantity <= 0) return; setPlate((current) => current.map((item) => item.id === id ? { ...item, nutrition: scaleFacts(item.nutrition, quantity / item.quantity), quantity } : item)); }
+  function updateQuantity(id: string, quantity: number) { if (!Number.isFinite(quantity) || quantity <= 0) return; setPendingOperationId(null); setPlate((current) => current.map((item) => item.id === id ? { ...item, nutrition: scaleFacts(item.nutrition, quantity / item.quantity), quantity } : item)); setSubmitState("editing"); }
+  function removePlateItem(id: string) { setPendingOperationId(null); setPlate((current) => current.filter((item) => item.id !== id)); setSubmitState("editing"); }
 
   async function submitPlate() {
-    if (!plate.length || submitState === "submitting") return; const operationId = crypto.randomUUID(); setSubmitState("submitting"); setFeedback(text.loggingPlate);
-    try { const executionSnapshot = plannedOccurrence ? { ...plannedOccurrence.frozenSnapshot, items: executionItems(plate), actualItems: plate, actualSource: sourceForPlate(plate) } : null; const payload = plannedOccurrence ? { kind: "complete_planned", occurrenceId: plannedOccurrence.id, operationId, executionSnapshot } : { operationId, date, meal, source: sourceForPlate(plate), items: plate }; const response = await fetch("/api/nutrition/v1/log", { method: "POST", headers: authHeaders(token, true), body: JSON.stringify(payload) }); if (!response.ok) throw new Error(); setSubmitState("confirmed"); clearConfirmedDraft(); setPlate([]); setFeedback(plannedOccurrence ? text.plannedLogged : text.plateLogged); onConfirmed(); }
+    if (!plate.length || submitState === "submitting") return;
+    const operationId = pendingOperationId ?? crypto.randomUUID();
+    if (!pendingOperationId) {
+      setPendingOperationId(operationId);
+      if (key) localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), plate, pendingOperationId: operationId } satisfies DraftPayload));
+    }
+    setSubmitState("submitting"); setFeedback(text.loggingPlate);
+    try { const executionSnapshot = plannedOccurrence ? { ...plannedOccurrence.frozenSnapshot, items: executionItems(plate), actualItems: plate, actualSource: sourceForPlate(plate) } : null; const payload = plannedOccurrence ? { kind: "complete_planned", occurrenceId: plannedOccurrence.id, operationId, executionSnapshot } : { operationId, date, meal, source: sourceForPlate(plate), items: plate }; const response = await fetch("/api/nutrition/v1/log", { method: "POST", headers: authHeaders(token, true), body: JSON.stringify(payload) }); if (!response.ok) throw new Error(); setSubmitState("confirmed"); setPendingOperationId(null); clearConfirmedDraft(); setPlate([]); setFeedback(plannedOccurrence ? text.plannedLogged : text.plateLogged); onConfirmed(); }
     catch { setSubmitState("failed"); setFeedback(text.plateFailed); }
   }
 
@@ -204,7 +215,7 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
           {mode === "saved-meals" ? <section className="space-y-3"><div><h3 className="font-semibold">{et("savedMeals")}</h3><p className="text-sm text-muted-foreground">{text.savedMealDescription}</p></div>{savedMeals.length ? <div className="divide-y divide-border">{savedMeals.map((saved) => <div key={saved.id} className="flex min-h-16 items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="font-semibold"><bdi dir="auto">{saved.name}</bdi></p><p className="text-xs text-muted-foreground">{saved.bundle.items.length} {itemLabel(saved.bundle.items.length)}</p></div><button type="button" onClick={() => addSavedMeal(saved)} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{text.addToPlate}</button></div>)}</div> : <p className="text-sm text-muted-foreground">{text.noSavedMeals}</p>}</section> : null}
           {mode === "recipes" ? <section className="space-y-3"><div><h3 className="font-semibold">{text.recipes}</h3><p className="text-sm text-muted-foreground">{text.recipeDescription}</p></div>{recipes.length ? <div className="divide-y divide-border">{recipes.map((recipe) => <div key={recipe.recipeId} className="flex min-h-16 items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="font-semibold"><bdi dir="auto">{recipe.name}</bdi></p><p className="text-xs text-muted-foreground">{text.serving} · {recipe.nutritionPerServing?.calories ?? "—"} kcal</p></div><button type="button" onClick={() => addRecipe(recipe)} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{text.addToPlate}</button></div>)}</div> : <p className="text-sm text-muted-foreground">{text.noRecipes}</p>}</section> : null}
           {feedback ? <p className="mt-4 text-sm text-muted-foreground" aria-live="polite">{feedback}</p> : null}
-          <PlateDock plate={plate} pending={submitState === "submitting"} onQuantityChange={updateQuantity} onRemove={(id) => setPlate((current) => current.filter((item) => item.id !== id))} onSubmit={() => void submitPlate()} />
+          <PlateDock plate={plate} pending={submitState === "submitting"} onQuantityChange={updateQuantity} onRemove={removePlateItem} onSubmit={() => void submitPlate()} />
         </div>
       </div>
     </div>
