@@ -4,7 +4,7 @@
 **Evidence captured:** 2026-08-27T10:53:32.000Z
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `dfa14c3bc2c1524ff185b1ee4e170f4537a80230`
-**Status:** Production history reconciled through the latest applied identity; two repository migrations pending separate Production authorization
+**Status:** Production history reconciled through the latest applied identity; four repository migrations pending separate Production authorization
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
@@ -12,19 +12,19 @@ This document records migration identity and verification. It does not independe
 
 - Physical Production migration records: **101**
 - Exact applications (`state = applied`): **63**
-- Repository-only pending migrations: **2**
-- `pendingCount = 2`
+- Repository-only pending migrations: **4**
+- `pendingCount = 4`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 2`
+- `unresolvedCount = 4`
 - `historyRepair.state = pending`
-- `release_ready = false` while the two repository migrations remain unapplied; merge/deployment/compatibility-marker authorization remain separate gates
+- `release_ready = false` while the four repository migrations remain unapplied; merge/deployment/compatibility-marker authorization remain separate gates
 - Released compatibility marker: `20260724232734`
 - Latest physical Production record: `20260827105332_nutrition_v1_long_term_architecture_corrections`
 - Activity Catalog Production remains isolated from the Main migration ledger
 
 Production migration history is reconciled through `20260827105332_nutrition_v1_long_term_architecture_corrections`. The six previously pending non-Nutrition repository migrations were already applied exactly once on 2026-08-21 under generated aliases, and eight explicitly authorized Nutrition V1 migrations were applied exactly once on 2026-08-27. Repository migration filenames remain immutable; generated Production identities are recorded below and in the machine ledger. Do not replay any applied migration.
 
-Two later Nutrition V1 correction migrations are repository-only and intentionally classified as `pending`. They have **not** been applied to Production. Applying them requires separate explicit Production authorization; their repository presence and successful disposable verification do not constitute application authority.
+Four later Nutrition V1 correction migrations are repository-only and intentionally classified as `pending`. They have **not** been applied to Production. Applying them requires separate explicit Production authorization; their repository presence and successful disposable verification do not constitute application authority.
 
 Physical schema advancement and compatibility-marker promotion remain separate release operations. Prior migration application does not authorize application deployment, merge, or compatibility-marker promotion.
 
@@ -121,8 +121,10 @@ All fourteen generated identities above are immutable Production history. They m
 |---|---|---|
 | `20260828032000_nutrition_v1_final_architecture_corrections.sql` | Not applied | `pending` |
 | `20260828032100_nutrition_v1_cooking_command_authority.sql` | Not applied | `pending` |
+| `20260828032200_nutrition_v1_final_closure.sql` | Not applied | `pending` |
+| `20260828032300_nutrition_v1_timer_instance_identity.sql` | Not applied | `pending` |
 
-Both pending migrations have passed disposable local replay/lint/verification as part of PR #152 validation, but neither has been applied to Production. Do not assign a generated Production identity or change either ledger entry to an applied state unless a separately authorized Production migration operation actually succeeds and its exact resulting identity is captured.
+All four pending migrations have passed disposable local replay/lint/verification as part of PR #152 validation, but none has been applied to Production. Do not assign a generated Production identity or change any ledger entry to an applied state unless a separately authorized Production migration operation actually succeeds and its exact resulting identity is captured.
 
 ## Authority and verification
 
