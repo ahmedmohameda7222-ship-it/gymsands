@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -15,6 +16,16 @@ function placeholder(planDate: string) {
     frozenName: "Restaurant meal",
     frozenSnapshot: { name: "Restaurant meal" },
   };
+}
+
+function nutritionMigrationText() {
+  return readdirSync("supabase/migrations")
+    .filter((name) => name.includes("nutrition_v1") && name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(`supabase/migrations/${name}`, "utf8"))
+    .join("\n")
+    .replaceAll("\r\n", "\n")
+    .toLowerCase();
 }
 
 describe("Nutrition V1 Meal Plan review corrections", () => {
@@ -60,5 +71,15 @@ describe("Nutrition V1 Meal Plan review corrections", () => {
     })).rejects.toThrow(/target week/i);
 
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("makes lazy week creation and same-week occurrence enforcement database-authoritative", () => {
+    const migration = nutritionMigrationText();
+    expect(migration).toContain("p_week_id is null");
+    expect(migration).toContain("weekstartdate");
+    expect(migration).toContain("on conflict (user_id, week_start_date) do nothing");
+    expect(migration).toContain("meal plan occurrence date must remain within the target week");
+    expect(migration).toContain("enforce_nutrition_planned_occurrence_week_date");
+    expect(migration).toContain("before insert or update of week_id, user_id, plan_date");
   });
 });
