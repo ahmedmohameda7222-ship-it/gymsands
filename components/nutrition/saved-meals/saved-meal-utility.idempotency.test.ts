@@ -13,4 +13,21 @@ describe("Saved Meal utility uncertain-completion identity", () => {
     expect(source).toMatch(/operationId[^\n]*name|name[^\n]*operationId/);
     expect(source).toMatch(/sessionStorage\.removeItem/);
   });
+
+  it("leaves create mode immediately after confirmed creation before refresh/detail reads can fail", async () => {
+    const source = await readFile(new URL("./saved-meal-utility.tsx", import.meta.url), "utf8");
+    const start = source.indexOf("async function save()");
+    const end = source.indexOf("async function removeCurrent()", start);
+    const save = source.slice(start, end);
+    const clear = save.indexOf("clearSavedMealCreateOperation");
+    const leaveCreate = save.indexOf('setMode("browse")');
+    const refresh = save.indexOf("await loadActive()");
+    const detail = save.indexOf("await openDetail(");
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(clear).toBeGreaterThanOrEqual(0);
+    expect(leaveCreate).toBeGreaterThan(clear);
+    expect(refresh).toBeGreaterThan(leaveCreate);
+    expect(detail).toBeGreaterThan(refresh);
+  });
 });
