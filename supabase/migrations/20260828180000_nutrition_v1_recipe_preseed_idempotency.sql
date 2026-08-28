@@ -77,6 +77,20 @@ begin
     raise exception 'Recipe preseed frozen nutrition must be an object or null.' using errcode = '22023';
   end if;
 
+  -- Keep the security-definer command aligned with the Food handoff resolver:
+  -- only an active canonical Food or this owner's non-deleted custom Food can
+  -- seed a new Recipe. A direct RPC call cannot bypass Food lifecycle/ownership.
+  if not exists (
+       select 1 from public.food_items
+       where id = v_food_id and lifecycle_status = 'active'
+     )
+     and not exists (
+       select 1 from public.user_food_items
+       where id = v_food_id and user_id = v_user_id and deleted_at is null
+     ) then
+    raise exception 'Recipe preseed Food is unavailable for this owner.' using errcode = '22023';
+  end if;
+
   v_request_hash := encode(
     extensions.digest(convert_to(p_ingredient::text, 'UTF8'), 'sha256'),
     'hex'
