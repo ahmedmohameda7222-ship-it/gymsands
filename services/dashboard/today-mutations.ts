@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase/client";
+import { env } from "@/lib/env";
 import type {
   TodayMealPlanItemProjection,
   TodayShoppingItemProjection,
@@ -95,6 +96,40 @@ function shopping(row: Record<string, unknown>): TodayShoppingItemProjection {
   };
 }
 
+async function postMealPlanCommand(body: Record<string, unknown>) {
+  if (!supabase) throw new Error("Please refresh, sign in again, and retry.");
+  const renderedQa = env.useMockAuth && env.productionQaBuild;
+  let authorization: string | null = null;
+  if (!renderedQa) {
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session?.access_token) throw new Error("Please sign in before updating Meal Plan.");
+    authorization = `Bearer ${data.session.access_token}`;
+  }
+
+  const response = await fetch("/api/nutrition/v1/meal-plan/week", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(authorization ? { Authorization: authorization } : {}),
+      ...(renderedQa ? { "x-plaivra-rendered-qa": "mock-auth" } : {}),
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Meal Plan update could not be completed.");
+  return payload;
+}
+
+function verifiedSkippedMeals(payload: Record<string, unknown>, userId: string) {
+  const raw = Array.isArray(payload.occurrences) ? payload.occurrences : [];
+  const rows = raw.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value)));
+  if (!rows.length || rows.some((row) => String(row.user_id) !== userId)) {
+    throw new Error("Meal Plan skip ownership could not be verified.");
+  }
+  return rows.map(meal);
+}
+
 export async function markTodayMealDone(
   userId: string,
   itemId: string,
@@ -128,16 +163,14 @@ export async function markTodayMealSkipped(
   itemId: string,
 ): Promise<TodayMealPlanItemProjection> {
   requireIdentity(userId, itemId);
-  const { data, error } = await supabase!
-    .from("nutrition_planned_occurrences")
-    .update({ status: "skipped", completed_at: null, actual_log_group_id: null })
-    .eq("id", itemId)
-    .eq("user_id", userId)
-    .eq("status", "planned")
-    .select("id,user_id,meal_slot_key,frozen_name,frozen_snapshot,status")
-    .single();
-  if (error) throw error;
-  return meal(data as Record<string, unknown>);
+  const payload = await postMealPlanCommand({
+    kind: "skip",
+    occurrenceIds: [itemId],
+    operationId: crypto.randomUUID(),
+  });
+  const [item] = verifiedSkippedMeals(payload, userId);
+  if (!item || item.id !== itemId) throw new Error("Meal Plan skip returned an invalid result.");
+  return item;
 }
 
 export async function markTodayMealsSkipped(
@@ -147,15 +180,15 @@ export async function markTodayMealsSkipped(
   const ids = [...new Set(itemIds)].filter(isUuid);
   if (!ids.length) return [];
   requireIdentity(userId);
-  const { data, error } = await supabase!
-    .from("nutrition_planned_occurrences")
-    .update({ status: "skipped", completed_at: null, actual_log_group_id: null })
-    .eq("user_id", userId)
-    .in("id", ids)
-    .eq("status", "planned")
-    .select("id,user_id,meal_slot_key,frozen_name,frozen_snapshot,status");
-  if (error) throw error;
-  return ((data ?? []) as Record<string, unknown>[]).map(meal);
+  const payload = await postMealPlanCommand({
+    kind: "skip",
+    occurrenceIds: ids,
+    operationId: crypto.randomUUID(),
+  });
+  const items = verifiedSkippedMeals(payload, userId);
+  const byId = new Map(items.map((item) => [item.id, item]));
+  if (ids.some((id) => !byId.has(id))) throw new Error("Meal Plan skip returned an incomplete result.");
+  return ids.map((id) => byId.get(id)!);
 }
 
 export async function toggleTodayShoppingItem(
