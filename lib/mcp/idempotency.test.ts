@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { McpContext } from "@/lib/mcp/auth";
-import { executeIdempotentMcpMutation } from "@/lib/mcp/idempotency";
+import { deriveMcpMutationOperationId, executeIdempotentMcpMutation } from "@/lib/mcp/idempotency";
 import { ok } from "@/lib/mcp/tool-helpers";
 
 type Claim = {
@@ -27,11 +27,11 @@ function ledgerClient(claim: Claim, persistError: { message: string } | null = n
   return { client: client as unknown as McpContext["supabase"], updates, rpc: client.rpc };
 }
 
-function context(supabase: McpContext["supabase"]): McpContext {
+function context(supabase: McpContext["supabase"], connectionId = "22222222-2222-4222-8222-222222222222"): McpContext {
   return {
     supabase,
     userId: "11111111-1111-4111-8111-111111111111",
-    connectionId: "22222222-2222-4222-8222-222222222222",
+    connectionId,
     scopes: [],
     profile: { id: "11111111-1111-4111-8111-111111111111", email: null, full_name: null, role: "member" }
   };
@@ -40,6 +40,22 @@ function context(supabase: McpContext["supabase"]): McpContext {
 const input = { idempotency_key: "request-key-0001", amount_ml: 250 };
 
 describe("MCP mutation idempotency", () => {
+  it("derives a stable inner operation UUID from the same logical MCP identity even after reconnect", () => {
+    const first = deriveMcpMutationOperationId(context({} as McpContext["supabase"]), "create_custom_meal", input);
+    const reconnected = deriveMcpMutationOperationId(
+      context({} as McpContext["supabase"], "33333333-3333-4333-8333-333333333333"),
+      "create_custom_meal",
+      input,
+    );
+    const changed = deriveMcpMutationOperationId(context({} as McpContext["supabase"]), "create_custom_meal", {
+      ...input,
+      idempotency_key: "request-key-0002",
+    });
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(reconnected).toBe(first);
+    expect(changed).not.toBe(first);
+  });
+
   it("executes a newly claimed mutation once and persists replay evidence", async () => {
     const { client, updates, rpc } = ledgerClient({ action: "execute", ledger_id: "ledger-1", response: null });
     const execute = vi.fn(async () => ok({ ok: true, created_id: "record-1" }));
