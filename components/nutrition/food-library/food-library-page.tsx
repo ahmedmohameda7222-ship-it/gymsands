@@ -6,6 +6,7 @@ import { Filter, Plus, ScanLine, Search, X } from "lucide-react";
 import { BarcodeLookup } from "@/components/nutrition/food-library/barcode-lookup";
 import { CustomFoodWorkspace } from "@/components/nutrition/food-library/custom-food-workspace";
 import { FoodDetail } from "@/components/nutrition/food-library/food-detail";
+import { foodLibraryApi } from "@/components/nutrition/food-library/food-library-api";
 import { foodLibraryText, type FoodLibraryTextKey } from "@/components/nutrition/food-library/food-library-copy";
 import { FoodFilters, emptyFoodLibraryFilters, type FoodLibraryFilterState } from "@/components/nutrition/food-library/food-filters";
 import { FoodRow } from "@/components/nutrition/food-library/food-row";
@@ -49,7 +50,7 @@ export function FoodLibraryPage() {
   const load = useCallback(async (cursor?: string | null, append = false, signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/nutrition/v1/foods?${params(cursor).toString()}`, { signal, headers: { accept: "application/json" } });
+      const response = await foodLibraryApi(`/api/nutrition/v1/foods?${params(cursor).toString()}`, { signal, headers: { accept: "application/json" } });
       if (!response.ok) throw new Error(nt("foodLibraryLoadFailed"));
       const data = await response.json() as FoodLibraryResponse;
       setRows((current) => append ? [...current, ...data.items] : data.items);
@@ -110,7 +111,7 @@ export function FoodLibraryPage() {
     const favorite = !food.favorite;
     setRows((current) => current.map((row) => row.id === food.id && row.source === food.source ? { ...row, favorite } : row));
     setSelected((current) => current?.food.id === food.id && current.food.source === food.source ? { ...current, food: { ...current.food, favorite } } : current);
-    const response = await fetch("/api/nutrition/v1/foods", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ foodId: food.id, favorite }) });
+    const response = await foodLibraryApi("/api/nutrition/v1/foods", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ foodId: food.id, favorite }) });
     if (!response.ok) void load();
   }
 
