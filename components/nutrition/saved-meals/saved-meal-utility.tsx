@@ -36,6 +36,13 @@ type SavedMealDetail = {
 type UtilityEditorItem = SavedMealEditorItem & { payload: SavedMealItemInput };
 type Mode = "browse" | "detail" | "create" | "edit" | "deleted" | "add-food" | "add-recipe";
 
+type PendingSavedMealCreateOperation = {
+  fingerprint: string;
+  operationId: string;
+};
+
+const savedMealCreateOperationStorageKey = "plaivra:nutrition-v1:saved-meal:create:pending";
+
 const copy = {
   en: {
     manage: "Manage Saved Meals", close: "Close Saved Meals", newMeal: "New Saved Meal", deleted: "Recently Deleted",
@@ -65,6 +72,47 @@ const copy = {
 
 function authHeaders(token?: string | null, json = false) {
   return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(json ? { "Content-Type": "application/json" } : {}) };
+}
+
+function savedMealCreateFingerprint(name: string, note: string, items: SavedMealItemInput[]) {
+  return JSON.stringify({ name: name.trim(), note: note.trim() || null, items });
+}
+
+function readSavedMealCreateOperation(): PendingSavedMealCreateOperation | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(savedMealCreateOperationStorageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingSavedMealCreateOperation>;
+    if (typeof parsed.fingerprint !== "string" || typeof parsed.operationId !== "string") return null;
+    return { fingerprint: parsed.fingerprint, operationId: parsed.operationId };
+  } catch {
+    return null;
+  }
+}
+
+function pendingSavedMealCreateOperation(fingerprint: string): PendingSavedMealCreateOperation {
+  const stored = readSavedMealCreateOperation();
+  if (stored?.fingerprint === fingerprint) return stored;
+  const pending = { fingerprint, operationId: crypto.randomUUID() };
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem(savedMealCreateOperationStorageKey, JSON.stringify(pending));
+    } catch {
+      // The current save attempt still retains the operation identity in memory.
+    }
+  }
+  return pending;
+}
+
+function clearSavedMealCreateOperation(operationId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const stored = readSavedMealCreateOperation();
+    if (!stored || stored.operationId === operationId) window.sessionStorage.removeItem(savedMealCreateOperationStorageKey);
+  } catch {
+    // Confirmed server success is authoritative even if storage cleanup fails.
+  }
 }
 
 function editorItems(bundle: SavedMealBundle | null): UtilityEditorItem[] {
@@ -229,10 +277,16 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
     setBusy(true);
     try {
       const editingId = mode === "edit" ? detail?.savedMeal.id : null;
+      const itemPayloads = items.map((item) => item.payload);
+      const createOperation = editingId ? null : pendingSavedMealCreateOperation(savedMealCreateFingerprint(name, note, itemPayloads));
+      const requestBody = editingId
+        ? { name, note, items: itemPayloads }
+        : { operationId: createOperation!.operationId, name, note, items: itemPayloads };
       const body = await request<{ savedMeal: SavedMealListRow }>(editingId ? `/api/nutrition/v1/saved-meals/${encodeURIComponent(editingId)}` : "/api/nutrition/v1/saved-meals", {
         method: editingId ? "PATCH" : "POST",
-        body: JSON.stringify({ name, note, items: items.map((item) => item.payload) }),
+        body: JSON.stringify(requestBody),
       });
+      if (createOperation) clearSavedMealCreateOperation(createOperation.operationId);
       await loadActive();
       await openDetail(body.savedMeal.id);
     } catch (cause) {
