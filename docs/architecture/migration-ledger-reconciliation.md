@@ -1,32 +1,30 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Evidence captured:** 2026-08-27T10:53:32.000Z
+**Evidence captured:** 2026-08-28T09:16:40.239Z
 **Machine authority:** `supabase/migration-ledger.json`
 **Audit baseline:** `dfa14c3bc2c1524ff185b1ee4e170f4537a80230`
-**Status:** Production history reconciled through the latest applied identity; five repository migrations pending separate Production authorization
+**Status:** Production migration history reconciled through the latest applied identity; no repository migration remains pending or unresolved
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
 ## Current state
 
-- Physical Production migration records: **101**
+- Physical Production migration records: **106**
 - Exact applications (`state = applied`): **63**
-- Repository-only pending migrations: **5**
-- `pendingCount = 5`
+- Repository-only pending migrations: **0**
+- `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 5`
-- `historyRepair.state = pending`
-- `release_ready = false` while the five repository migrations remain unapplied; merge/deployment/compatibility-marker authorization remain separate gates
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
+- `release_ready = true` for the migration-ledger authority; merge, application deployment, compatibility-marker promotion, and Product Owner approval remain separate gates
 - Released compatibility marker: `20260724232734`
-- Latest physical Production record: `20260827105332_nutrition_v1_long_term_architecture_corrections`
+- Latest physical Production record: `20260828091228_nutrition_v1_working_draft_command`
 - Activity Catalog Production remains isolated from the Main migration ledger
 
-Production migration history is reconciled through `20260827105332_nutrition_v1_long_term_architecture_corrections`. The six previously pending non-Nutrition repository migrations were already applied exactly once on 2026-08-21 under generated aliases, and eight explicitly authorized Nutrition V1 migrations were applied exactly once on 2026-08-27. Repository migration filenames remain immutable; generated Production identities are recorded below and in the machine ledger. Do not replay any applied migration.
+Production migration history is reconciled through `20260828091228_nutrition_v1_working_draft_command`. The six previously pending non-Nutrition repository migrations were applied exactly once on 2026-08-21 under generated aliases. Eight authorized Nutrition V1 migrations were applied exactly once on 2026-08-27, and the five final Nutrition V1 correction migrations were applied exactly once on 2026-08-28. Repository migration filenames remain immutable; generated Production identities are recorded below and in the machine ledger. Do not replay any applied migration.
 
-Five later Nutrition V1 correction migrations are repository-only and intentionally classified as `pending`. They have **not** been applied to Production. Applying them requires separate explicit Production authorization; their repository presence or successful disposable verification does not constitute application authority.
-
-Physical schema advancement and compatibility-marker promotion remain separate release operations. Prior migration application does not authorize application deployment, merge, or compatibility-marker promotion.
+Physical schema advancement and compatibility-marker promotion remain separate release operations. These migration applications did not deploy application code, merge PR #152, modify Activity Catalog Production, or promote the released compatibility marker.
 
 ## Workout History applied identities
 
@@ -115,17 +113,21 @@ AW-9 remains represented by repository migration `20260731090000_active_workout_
 
 All fourteen generated identities above are immutable Production history. They must not be replayed. Nutrition V1 schema application did not merge PR #152, deploy application code, or promote the released compatibility marker.
 
-## 2026-08-28 repository-only pending Nutrition corrections
+## 2026-08-28 final Nutrition corrections — applied
 
-| Repository migration | Production identity | State |
-|---|---|---|
-| `20260828032000_nutrition_v1_final_architecture_corrections.sql` | Not applied | `pending` |
-| `20260828032100_nutrition_v1_cooking_command_authority.sql` | Not applied | `pending` |
-| `20260828032200_nutrition_v1_final_closure.sql` | Not applied | `pending` |
-| `20260828032300_nutrition_v1_timer_instance_identity.sql` | Not applied | `pending` |
-| `20260828032400_nutrition_v1_working_draft_command.sql` | Not applied | `pending` |
+| Immutable repository migration | Generated Production identity | Applied | State |
+|---|---|---|---|
+| `20260828032000_nutrition_v1_final_architecture_corrections.sql` | `20260828091053_nutrition_v1_final_architecture_corrections` | `2026-08-28` | `applied_version_alias` |
+| `20260828032100_nutrition_v1_cooking_command_authority.sql` | `20260828091108_nutrition_v1_cooking_command_authority` | `2026-08-28` | `applied_version_alias` |
+| `20260828032200_nutrition_v1_final_closure.sql` | `20260828091147_nutrition_v1_final_closure` | `2026-08-28` | `applied_version_alias` |
+| `20260828032300_nutrition_v1_timer_instance_identity.sql` | `20260828091159_nutrition_v1_timer_instance_identity` | `2026-08-28` | `applied_version_alias` |
+| `20260828032400_nutrition_v1_working_draft_command.sql` | `20260828091228_nutrition_v1_working_draft_command` | `2026-08-28` | `applied_version_alias` |
 
-All five migrations above are repository-only release blockers until separately authorized Production application. Disposable replay/lint/verification on the final exact PR head is required before pre-merge sign-off, and even a successful result does not assign a Production identity or authorize application.
+All five final migrations were applied exactly once after explicit Product Owner authorization. Read-only Production verification confirmed the expected Food Library trigram indexes, Cooking/Saved Meal/Recipe RPCs, Recipe cover owner constraint, Cooking command privilege revocations, removal of obsolete write policies, timer instance-identity constraint removal, and Working Draft command. The new authenticated `SECURITY DEFINER` RPCs retain fixed `search_path`, derive owner authority from `auth.uid()`, deny `anon`/`public` execution, and permit only `authenticated`/`service_role` execution as designed.
+
+Supabase security/performance advisors were re-run after DDL application. Their warnings are generic/pre-existing or expected immediately after creation (including authenticated `SECURITY DEFINER` notices and newly unused indexes); no advisor result established a new Nutrition V1 blocker requiring an out-of-scope redesign. Supabase remediation references remain available through the project advisor output.
+
+The released compatibility marker remains `20260724232734`. No application deployment, PR merge, compatibility-marker promotion, or Activity Catalog Production mutation occurred as part of these five applications.
 
 ## Authority and verification
 
