@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
@@ -31,6 +31,11 @@ export function AddToHandoffConsumer({ destination }: Props) {
   const [targetRecipeId, setTargetRecipeId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const pendingOperationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    pendingOperationIdRef.current = null;
+  }, [destination, source]);
 
   useEffect(() => {
     if (!source) return;
@@ -68,10 +73,16 @@ export function AddToHandoffConsumer({ destination }: Props) {
       };
       if (destination === "diary") {
         if (!date || !meal) throw new Error("Choose the Diary date and meal before adding this item.");
+        const operationId = pendingOperationIdRef.current ?? crypto.randomUUID();
+        pendingOperationIdRef.current = operationId;
+        payload.operationId = operationId;
         payload.date = date;
         payload.meal = meal;
       } else if (destination === "meal_plan") {
         if (!date || !meal) throw new Error("Choose the plan date and meal slot before adding this item.");
+        const operationId = pendingOperationIdRef.current ?? crypto.randomUUID();
+        pendingOperationIdRef.current = operationId;
+        payload.operationId = operationId;
         const locale = typeof navigator === "undefined" ? "en-GB" : navigator.language;
         payload.planDate = date;
         payload.mealSlot = meal;
@@ -89,6 +100,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
+      pendingOperationIdRef.current = null;
       if (destination === "diary") router.replace(`/calories?date=${encodeURIComponent(date)}`);
       else if (destination === "meal_plan") {
         const locale = typeof navigator === "undefined" ? "en-GB" : navigator.language;
@@ -119,8 +131,8 @@ export function AddToHandoffConsumer({ destination }: Props) {
         </header>
 
         {(destination === "diary" || destination === "meal_plan") ? <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary date" : "Plan date"}<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label>
-          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary meal" : "Meal slot"}<select value={meal} onChange={(event) => setMeal(event.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">Choose…</option>{mealChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select></label>
+          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary date" : "Plan date"}<input type="date" value={date} onChange={(event) => { pendingOperationIdRef.current = null; setDate(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label>
+          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary meal" : "Meal slot"}<select value={meal} onChange={(event) => { pendingOperationIdRef.current = null; setMeal(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">Choose…</option>{mealChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select></label>
         </div> : null}
 
         {destination === "saved_meal" ? <div className="mt-5 grid gap-4"><label className="grid gap-1 text-sm font-medium">Saved Meal name<input value={savedMealName} onChange={(event) => setSavedMealName(event.target.value)} maxLength={200} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label><label className="grid gap-1 text-sm font-medium">Note <span className="font-normal text-muted-foreground">(optional)</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="rounded-xl border border-border bg-background p-3 font-normal" /></label></div> : null}
