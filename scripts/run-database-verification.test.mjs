@@ -38,8 +38,17 @@ test("permanent verification chain covers current Active Workout and Nutrition a
     "nutrition-v1-meal-plan-week-start.sql",
     "nutrition-v1-privacy-purge.sql",
     "nutrition-v1-legacy-reconciliation.sql",
+    "nutrition-v1-final-architecture-corrections.sql",
     "production-release-migration-preflight.sql",
   ]) {
     assert.equal(DATABASE_VERIFICATION_FILES.some((file) => file.endsWith(required)), true, required);
   }
+
+  const finalCorrection = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/nutrition-v1-final-architecture-corrections.sql",
+  );
+  const productionPreflight = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/production-release-migration-preflight.sql",
+  );
+  assert.equal(finalCorrection >= 0 && finalCorrection < productionPreflight, true);
 });
