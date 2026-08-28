@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import type { McpContext } from "@/lib/mcp/auth";
+import { deriveMcpMutationOperationId } from "@/lib/mcp/idempotency";
 import { asObject, getArray, getOptionalString, getString, type JsonObject } from "@/lib/mcp/schemas";
 import { fail, ok, type McpToolResult } from "@/lib/mcp/tool-helpers";
 import { resolveFoodHandoff, type ResolvedFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
@@ -10,15 +10,6 @@ function positive(value: unknown) {
   const parsed = Number(value ?? 1);
   if (!Number.isFinite(parsed) || parsed <= 0) throw new Error("quantity must be greater than 0.");
   return parsed;
-}
-
-function stableSavedMealOperationId(ctx: McpContext, input: JsonObject) {
-  const idempotencyKey = getString(input, "idempotency_key").trim();
-  const hex = createHash("sha256")
-    .update(`${ctx.userId}:${ctx.connectionId}:create_custom_meal:${idempotencyKey}`)
-    .digest("hex");
-  const variant = ((Number.parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
@@ -71,10 +62,11 @@ export async function createCanonicalSavedMealFromMcp(
   if (!items.length) return fail("missing_required_input", "Provide at least one custom meal item.");
 
   try {
+    const operationId = deriveMcpMutationOperationId(ctx, "create_custom_meal", input);
     const resolved: ResolvedFoodHandoff[] = [];
     for (const item of items) resolved.push(await resolveCanonicalFood(ctx, item));
     const savedMeal = await createSavedMeal(ctx.supabase, ctx.userId, {
-      operationId: stableSavedMealOperationId(ctx, input),
+      operationId,
       name: getString(input, "meal_name"),
       note: getOptionalString(input, "notes") ?? null,
       isFavorite: Boolean(input.is_favorite),
