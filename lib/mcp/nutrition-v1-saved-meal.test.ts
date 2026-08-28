@@ -56,7 +56,8 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
       name: "Breakfast",
       items: [expect.objectContaining({ food_id: foodId, frozen_nutrition: expect.objectContaining({ carbs_g: null }) })],
     }));
-    expect(result).toMatchObject({ ok: true, saved_meal_id: savedMealId, authority: "nutrition_saved_meals" });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ ok: true, saved_meal_id: savedMealId, authority: "nutrition_saved_meals" });
   });
 
   it("fails closed for ambiguous Food identity instead of manufacturing nutrition truth", async () => {
@@ -73,7 +74,8 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
       items: [{ food_name: "Yogurt", quantity: 1 }],
     });
 
-    expect(result.ok).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({ ok: false, code: "canonical_food_required" });
     expect(createSavedMeal).not.toHaveBeenCalled();
     expect(resolveFoodHandoff).not.toHaveBeenCalled();
   });
