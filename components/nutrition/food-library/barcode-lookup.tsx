@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { ScanLine, X } from "lucide-react";
 
+import { foodLibraryApi } from "@/components/nutrition/food-library/food-library-api";
 import { foodLibraryText, type FoodLibraryTextKey } from "@/components/nutrition/food-library/food-library-copy";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 
@@ -23,7 +24,7 @@ export function BarcodeLookup({ onClose, onSeedSearch }: { onClose: () => void; 
     setError(null);
     setMatch(null);
     try {
-      const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(value)}`);
+      const response = await foodLibraryApi(`/api/food/open-food-facts?barcode=${encodeURIComponent(value)}`);
       const result = await response.json().catch(() => ({})) as { food?: BarcodeFood | null };
       if (!response.ok || !result.food?.name) throw new Error(nt("barcodeLookupFailed"));
       setMatch(result.food);
