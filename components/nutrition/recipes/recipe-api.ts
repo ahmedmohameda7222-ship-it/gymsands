@@ -4,10 +4,22 @@ import { env } from "@/lib/env";
 import { supabase } from "@/lib/supabase/client";
 
 const draftRevisionByRecipe = new Map<string, number>();
+const autosaveTailByRecipe = new Map<string, Promise<void>>();
 
 function recipeIdFromPath(path: string) {
   const value = path.replace(/^\/+/, "").split(/[/?#]/, 1)[0]?.trim();
   return value || null;
+}
+
+function autosaveRecipeId(path: string, init: RequestInit) {
+  if ((init.method ?? "GET").toUpperCase() !== "PATCH" || typeof init.body !== "string") return null;
+  try {
+    const parsed = JSON.parse(init.body) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return (parsed as Record<string, unknown>).operation === "autosave" ? recipeIdFromPath(path) : null;
+  } catch {
+    return null;
+  }
 }
 
 function rememberDraftRevision(path: string, body: Record<string, unknown>) {
@@ -42,7 +54,7 @@ function withExpectedDraftRevision(path: string, init: RequestInit) {
   return { ...init, body: JSON.stringify(requestBody) };
 }
 
-export async function recipeApi<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function performRecipeApiRequest<T>(path: string, init: RequestInit): Promise<T> {
   if (!supabase) throw new Error("Recipe client is unavailable.");
   const renderedQa = env.useMockAuth && env.productionQaBuild;
   let authorization: string | null = null;
@@ -66,4 +78,22 @@ export async function recipeApi<T>(path: string, init: RequestInit = {}): Promis
   if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "Recipe request could not be completed.");
   rememberDraftRevision(path, body);
   return body as T;
+}
+
+export async function recipeApi<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const recipeId = autosaveRecipeId(path, init);
+  if (!recipeId) return performRecipeApiRequest<T>(path, init);
+
+  const previous = autosaveTailByRecipe.get(recipeId) ?? Promise.resolve();
+  const request = previous
+    .catch(() => undefined)
+    .then(() => performRecipeApiRequest<T>(path, init));
+  const tail = request.then(() => undefined, () => undefined);
+  autosaveTailByRecipe.set(recipeId, tail);
+
+  try {
+    return await request;
+  } finally {
+    if (autosaveTailByRecipe.get(recipeId) === tail) autosaveTailByRecipe.delete(recipeId);
+  }
 }
