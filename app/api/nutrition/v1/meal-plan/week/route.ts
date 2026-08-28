@@ -13,6 +13,7 @@ import {
 } from "@/services/nutrition-v1/server/meal-plan";
 import { skipMealPlanOccurrences } from "@/services/nutrition-v1/server/meal-plan-skip";
 import { getEffectiveNutritionTarget } from "@/services/nutrition-v1/server/targets";
+import { setTodayShoppingItemState } from "@/services/nutrition-v1/server/today-shopping";
 
 function requireDate(value: unknown, label: string) {
   if (typeof value !== "string" || !isIsoDate(value)) throw new NutritionRequestError(`${label} must use YYYY-MM-DD.`);
@@ -105,6 +106,21 @@ export async function POST(request: Request) {
       }
       return nutritionJson(await skipMealPlanOccurrences(context.supabase, context.user.id, {
         occurrenceIds,
+        operationId: body.operationId,
+      }));
+    }
+    if (body.kind === "shopping_state") {
+      if (
+        typeof body.itemId !== "string" ||
+        typeof body.operationId !== "string" ||
+        (body.state !== "Needed" && body.state !== "Purchased")
+      ) {
+        throw new NutritionRequestError("Shopping item, state, and operation ID are required.");
+      }
+      return nutritionJson(await setTodayShoppingItemState(context.supabase, context.user.id, {
+        weekStartDate: requireDate(body.weekStartDate, "Week start"),
+        itemId: body.itemId,
+        state: body.state,
         operationId: body.operationId,
       }));
     }
