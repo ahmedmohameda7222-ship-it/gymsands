@@ -96,7 +96,7 @@ export async function resolveRecipeHandoff(
     .eq("user_id", userId)
     .order("position", { ascending: true });
   if (ingredientResult.error) throw new Error(`Recipe ingredients could not be resolved. ${ingredientResult.error.message ?? "Database request failed."}`);
-  const shoppingIngredients = (ingredientResult.data ?? []).flatMap((raw) => {
+  const shoppingIngredients: ResolvedRecipeHandoff["shoppingIngredients"] = (ingredientResult.data ?? []).flatMap((raw) => {
     const item = record(raw);
     const quantity = Number(item.quantity);
     if (typeof item.food_id !== "string" || !isUuid(item.food_id) || !Number.isFinite(quantity) || quantity <= 0 || typeof item.unit !== "string" || !item.unit.trim()) return [];
@@ -105,7 +105,7 @@ export async function resolveRecipeHandoff(
       name: typeof item.ingredient_name === "string" && item.ingredient_name.trim() ? item.ingredient_name.trim() : name,
       quantity: quantity / servings,
       unit: item.unit.trim(),
-      qualifier: null as const,
+      qualifier: null,
     }];
   });
 
