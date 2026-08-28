@@ -33,11 +33,14 @@ async function resolveSource(supabase: Parameters<typeof resolveFoodHandoff>[0],
     }) };
   }
   if (raw.type === "recipe") {
+    const quantity = Number(raw.quantity ?? 1);
+    if (!Number.isFinite(quantity) || quantity <= 0) throw new NutritionRequestError("Recipe serving quantity must be greater than zero.");
     return { kind: "recipe" as const, value: await resolveRecipeHandoff(
       supabase,
       userId,
       text(raw.id, "Recipe"),
       text(raw.versionId, "Recipe version"),
+      quantity,
     ) };
   }
   throw new NutritionRequestError("Unsupported handoff source.");
@@ -97,7 +100,7 @@ export async function POST(request: Request) {
         : {
             id: crypto.randomUUID(), planDate, mealSlotKey: mealSlot, position,
             sourceType: "recipe" as const, sourceId: source.value.recipeId, sourceVersionId: source.value.recipeVersionId,
-            resolvedQuantity: 1, resolvedServingLabel: "1 serving", frozenName: source.value.name,
+            resolvedQuantity: source.value.quantity, resolvedServingLabel: source.value.servingLabel, frozenName: source.value.name,
             frozenSnapshot: { ...source.value.frozenSourceSnapshot, shoppingIngredients: source.value.shoppingIngredients },
             status: "planned" as const,
           };
