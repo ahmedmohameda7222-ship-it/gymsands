@@ -79,20 +79,26 @@ function meal(row: Record<string, unknown>): TodayMealPlanItemProjection {
   };
 }
 
-function shopping(row: Record<string, unknown>): TodayShoppingItemProjection {
+function shoppingProjection(row: Record<string, unknown>): TodayShoppingItemProjection {
+  const id = typeof row.id === "string" ? row.id : "";
+  const weekStart = typeof row.weekStart === "string" ? row.weekStart : "";
+  const itemName = typeof row.itemName === "string" ? row.itemName : "";
+  if (!id || !weekStart || !itemName) {
+    throw new Error("The saved Shopping result is invalid.");
+  }
   return {
-    id: String(row.id),
-    weekStart: String(row.week_start),
-    itemName: String(row.item_name ?? ""),
+    id,
+    weekStart,
+    itemName,
     quantity:
       row.quantity === null || row.quantity === undefined
         ? null
         : nonNegative(row.quantity),
     unit: typeof row.unit === "string" ? row.unit : null,
     storeSection:
-      typeof row.store_section === "string" ? row.store_section : "Other",
+      typeof row.storeSection === "string" ? row.storeSection : "Other",
     checked: Boolean(row.checked),
-    alreadyHave: Boolean(row.already_have),
+    alreadyHave: Boolean(row.alreadyHave),
   };
 }
 
@@ -195,14 +201,20 @@ export async function toggleTodayShoppingItem(
   userId: string,
   item: TodayShoppingItemProjection,
 ): Promise<TodayShoppingItemProjection> {
-  requireIdentity(userId, item.id);
-  const { data, error } = await supabase!
-    .from("user_grocery_items")
-    .update({ checked: !item.checked })
-    .eq("id", item.id)
-    .eq("user_id", userId)
-    .select("id,week_start,item_name,quantity,unit,store_section,checked,already_have")
-    .single();
-  if (error) throw error;
-  return shopping(data as Record<string, unknown>);
+  requireIdentity(userId);
+  if (!item.id.startsWith("derived:") && !item.id.startsWith("manual:")) {
+    throw new Error("Shopping item identity is invalid.");
+  }
+  const payload = await postMealPlanCommand({
+    kind: "shopping_state",
+    weekStartDate: item.weekStart,
+    itemId: item.id,
+    state: item.checked ? "Needed" : "Purchased",
+    operationId: crypto.randomUUID(),
+  });
+  const saved = shoppingProjection(record(payload.item));
+  if (saved.id !== item.id || saved.weekStart !== item.weekStart) {
+    throw new Error("Shopping item state returned an invalid result.");
+  }
+  return saved;
 }
