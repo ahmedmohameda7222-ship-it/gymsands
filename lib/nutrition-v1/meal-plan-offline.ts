@@ -80,15 +80,6 @@ export function reconcileMealPlanQueue(
   });
 }
 
-export function markMealPlanMutationFailed(
-  mutation: MealPlanOfflineMutation,
-  message: string,
-): MealPlanOfflineMutation {
-  if (!validMutation(mutation)) throw new Error("Meal Plan offline mutation is invalid.");
-  const lastError = message.trim() || "Meal Plan mutation could not be synchronized.";
-  return { ...mutation, status: "needs_attention", lastError };
-}
-
 export function markMealPlanMutationRetryable(
   mutation: MealPlanOfflineMutation,
   message: string,
@@ -96,6 +87,18 @@ export function markMealPlanMutationRetryable(
   if (!validMutation(mutation)) throw new Error("Meal Plan offline mutation is invalid.");
   const lastError = message.trim() || "Meal Plan mutation could not be synchronized yet.";
   return { ...mutation, status: "queued", lastError };
+}
+
+export function markMealPlanMutationFailed(
+  mutation: MealPlanOfflineMutation,
+  message: string,
+): MealPlanOfflineMutation {
+  if (!validMutation(mutation)) throw new Error("Meal Plan offline mutation is invalid.");
+  const lastError = message.trim() || "Meal Plan mutation could not be synchronized.";
+  const terminal = /no longer readable|invalid|corrupt/i.test(lastError);
+  return terminal
+    ? { ...mutation, status: "needs_attention", lastError }
+    : markMealPlanMutationRetryable(mutation, lastError);
 }
 
 export function serializeMealPlanQueue(queue: MealPlanOfflineMutation[]) {
