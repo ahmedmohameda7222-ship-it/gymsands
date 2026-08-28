@@ -91,9 +91,14 @@ export async function autosaveRecipeDraft(
   _userId: string,
   recipeId: string,
   input: RecipeDraftInput,
+  expectedRevision: number,
 ) {
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
+    throw new Error("Recipe Working Draft expected revision is invalid.");
+  }
   const result = await supabase.rpc("autosave_nutrition_recipe_draft", {
     p_recipe_id: recipeId,
+    p_expected_revision: expectedRevision,
     p_draft: draftPatch(input),
     p_ingredients: input.ingredients ?? [],
     p_instructions: input.instructions ?? [],
@@ -101,7 +106,7 @@ export async function autosaveRecipeDraft(
   });
   throwDb(result.error);
   const draft = result.data as Record<string, unknown> | null;
-  if (!draft?.id || draft.recipe_id !== recipeId) {
+  if (!draft?.id || draft.recipe_id !== recipeId || !Number.isInteger(Number(draft.revision))) {
     throw new Error("Recipe Working Draft autosave returned an invalid result.");
   }
   return draft;
