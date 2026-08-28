@@ -51,7 +51,7 @@ import { RecipeEditor } from "@/components/nutrition/recipes/recipe-editor";
 
 const recipeId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-function workspace(name = "Original", revision = 0) {
+function workspace(name = "Original") {
   return {
     root: { id: recipeId, name, cover_path: null, is_favorite: false },
     draft: {
@@ -61,7 +61,6 @@ function workspace(name = "Original", revision = 0) {
       total_time_minutes: null,
       notes: null,
       draft_metadata: {},
-      revision,
     },
     latestVersion: null,
     ingredients: [],
@@ -128,14 +127,14 @@ describe("Recipe editor autosave retry", () => {
     setReactActEnvironment(false);
   });
 
-  async function renderReadyEditor(initial = workspace()) {
-    mocks.recipeApi.mockResolvedValueOnce({ recipe: initial });
+  async function renderReadyEditor() {
+    mocks.recipeApi.mockResolvedValueOnce({ recipe: workspace() });
     await act(async () => {
       root.render(createElement(RecipeEditor, { recipeId }));
       await Promise.resolve();
       await Promise.resolve();
     });
-    const input = Array.from(host.querySelectorAll("input")).find((candidate) => candidate.value === initial.draft.name);
+    const input = Array.from(host.querySelectorAll("input")).find((candidate) => candidate.value === "Original");
     if (!(input instanceof HTMLInputElement)) throw new Error("Recipe name input not rendered.");
     return input;
   }
@@ -145,7 +144,7 @@ describe("Recipe editor autosave retry", () => {
     vi.useFakeTimers();
     mocks.recipeApi
       .mockRejectedValueOnce(new Error("Network request failed."))
-      .mockResolvedValueOnce({ recipe: workspace("Changed", 1) });
+      .mockResolvedValueOnce({ recipe: workspace("Changed") });
 
     await act(async () => { setInputValue(input, "Changed"); });
     await advanceTimers(650);
@@ -156,31 +155,10 @@ describe("Recipe editor autosave retry", () => {
 
     expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
     const retry = mocks.recipeApi.mock.calls[2];
-    const retryBody = JSON.parse(String((retry?.[1] as RequestInit | undefined)?.body)) as { expectedRevision?: number; draft?: { name?: string } };
-    expect(retryBody.expectedRevision).toBe(0);
+    const retryBody = JSON.parse(String((retry?.[1] as RequestInit | undefined)?.body)) as { draft?: { name?: string } };
     expect(retryBody.draft?.name).toBe("Changed");
     expect(host.textContent).toContain("saved");
   }, 7000);
-
-  it("uses the confirmed server revision for the next autosave", async () => {
-    const input = await renderReadyEditor(workspace("Original", 4));
-    vi.useFakeTimers();
-    mocks.recipeApi
-      .mockResolvedValueOnce({ recipe: workspace("First", 5) })
-      .mockResolvedValueOnce({ recipe: workspace("Second", 6) });
-
-    await act(async () => { setInputValue(input, "First"); });
-    await advanceTimers(650);
-    expect(mocks.recipeApi).toHaveBeenCalledTimes(2);
-    const firstBody = JSON.parse(String((mocks.recipeApi.mock.calls[1]?.[1] as RequestInit | undefined)?.body)) as { expectedRevision?: number };
-    expect(firstBody.expectedRevision).toBe(4);
-
-    await act(async () => { setInputValue(input, "Second"); });
-    await advanceTimers(650);
-    expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
-    const secondBody = JSON.parse(String((mocks.recipeApi.mock.calls[2]?.[1] as RequestInit | undefined)?.body)) as { expectedRevision?: number };
-    expect(secondBody.expectedRevision).toBe(5);
-  });
 
   it("does not retry a Recipe revision conflict", async () => {
     const input = await renderReadyEditor();
@@ -206,7 +184,7 @@ describe("Recipe editor autosave retry", () => {
     vi.useFakeTimers();
     mocks.recipeApi
       .mockRejectedValueOnce(new Error("Network request failed."))
-      .mockResolvedValueOnce({ recipe: workspace("Newest", 1) });
+      .mockResolvedValueOnce({ recipe: workspace("Newest") });
 
     await act(async () => { setInputValue(input, "Older"); });
     await advanceTimers(650);
@@ -238,7 +216,7 @@ describe("Recipe editor autosave retry", () => {
     await advanceTimers(10_000);
     expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
 
-    slowRetry.resolve({ recipe: workspace("Slow retry", 1) });
+    slowRetry.resolve({ recipe: workspace("Slow retry") });
     await flushAsyncWork();
     expect(host.textContent).toContain("saved");
   });
@@ -270,7 +248,7 @@ describe("Recipe editor autosave retry", () => {
     await advanceTimers(10_000);
     expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
 
-    manualSave.resolve({ recipe: workspace("Latest before publish", 1) });
+    manualSave.resolve({ recipe: workspace("Latest before publish") });
     await flushAsyncWork();
     expect(mocks.recipeApi.mock.calls[3]?.[0]).toBe(`/${recipeId}/publish`);
   });
