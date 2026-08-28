@@ -5,7 +5,7 @@ import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrit
 import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
 import { getMealPlanWeek, mutateMealPlanWeek } from "@/services/nutrition-v1/server/meal-plan";
 import { resolveRecipeHandoff } from "@/services/nutrition-v1/server/recipe-handoff";
-import { createRecipeDraft, autosaveRecipeDraft } from "@/services/nutrition-v1/server/recipes";
+import { autosaveRecipeDraft, createPreseededRecipeDraft } from "@/services/nutrition-v1/server/recipes";
 import { getRecipeWorkspace } from "@/services/nutrition-v1/server/recipe-workspace";
 import { createSavedMeal } from "@/services/nutrition-v1/server/saved-meals";
 import { logDiaryMeal } from "@/services/nutrition-v1/server/diary";
@@ -124,27 +124,22 @@ export async function POST(request: Request) {
     if (destination === "recipe") {
       if (source.kind !== "food") throw new NutritionRequestError("Only Food can be handed into Recipe ingredient authoring.");
       const targetRecipeId = typeof body.targetRecipeId === "string" && body.targetRecipeId.trim() ? body.targetRecipeId.trim() : null;
-      let recipeId: string;
-      let draft: Record<string, unknown>;
-      let ingredients: Array<Record<string, unknown>>;
-      let instructions: Array<Record<string, unknown>>;
-      let equipment: Array<Record<string, unknown>>;
       if (!targetRecipeId) {
-        const created = await createRecipeDraft(context.supabase, context.user.id);
-        recipeId = created.recipeId;
-        draft = created.draft;
-        ingredients = [];
-        instructions = [];
-        equipment = [];
-      } else {
-        const workspace = await getRecipeWorkspace(context.supabase, context.user.id, targetRecipeId);
-        if (!workspace.draft) throw new NutritionRequestError("Choose a Recipe with a Working Draft or start a new Recipe.");
-        recipeId = targetRecipeId;
-        draft = workspace.draft as unknown as Record<string, unknown>;
-        ingredients = workspace.ingredients as unknown as Array<Record<string, unknown>>;
-        instructions = workspace.instructions as unknown as Array<Record<string, unknown>>;
-        equipment = workspace.equipment as unknown as Array<Record<string, unknown>>;
+        const operationId = text(body.operationId, "Operation ID");
+        const created = await createPreseededRecipeDraft(context.supabase, context.user.id, {
+          operationId,
+          ingredient: source.value.recipeIngredient,
+        });
+        return nutritionJson({ destination, recipeId: created.recipeId, draftId: created.draftId });
       }
+
+      const workspace = await getRecipeWorkspace(context.supabase, context.user.id, targetRecipeId);
+      if (!workspace.draft) throw new NutritionRequestError("Choose a Recipe with a Working Draft or start a new Recipe.");
+      const recipeId = targetRecipeId;
+      const draft = workspace.draft as unknown as Record<string, unknown>;
+      const ingredients = workspace.ingredients as unknown as Array<Record<string, unknown>>;
+      const instructions = workspace.instructions as unknown as Array<Record<string, unknown>>;
+      const equipment = workspace.equipment as unknown as Array<Record<string, unknown>>;
       const expectedRevision = Number(draft.revision);
       if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new NutritionRequestError("Recipe Working Draft revision is unavailable.");
       const savedDraft = await autosaveRecipeDraft(context.supabase, context.user.id, recipeId, {
