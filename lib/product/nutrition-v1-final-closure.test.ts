@@ -39,16 +39,19 @@ describe("Nutrition V1 final closure regressions", () => {
 
   it("moves Recipe duplicate and Saved Meal multi-table writes behind transactional DB commands", () => {
     const migration = source("supabase/migrations/20260828032200_nutrition_v1_final_closure.sql").toLowerCase();
+    const replayMigration = source("supabase/migrations/20260828220000_nutrition_v1_saved_meal_creation_idempotency.sql").toLowerCase();
     const recipeRoute = source("app/api/nutrition/v1/recipes/[recipeId]/route.ts");
     const recipeWorkspace = source("services/nutrition-v1/server/recipe-workspace.ts");
     const savedMeals = source("services/nutrition-v1/server/saved-meals.ts");
     expect(migration).toContain("create or replace function public.duplicate_nutrition_recipe");
     expect(migration).toContain("create or replace function public.create_nutrition_saved_meal");
     expect(migration).toContain("create or replace function public.update_nutrition_saved_meal");
+    expect(replayMigration).toContain("create or replace function public.create_nutrition_saved_meal_idempotent");
+    expect(replayMigration).toContain("public.create_nutrition_saved_meal(");
     expect(recipeRoute).toContain("duplicatePublishedRecipeAtomically");
     expect(recipeWorkspace).not.toContain("export async function duplicatePublishedRecipe(");
     expect(recipeWorkspace).not.toContain('await supabase.from("nutrition_recipes").delete().eq("id", root.id)');
-    expect(savedMeals).toContain('rpc("create_nutrition_saved_meal"');
+    expect(savedMeals).toContain('rpc("create_nutrition_saved_meal_idempotent"');
     expect(savedMeals).toContain('rpc("update_nutrition_saved_meal"');
   });
 
@@ -64,6 +67,7 @@ describe("Nutrition V1 final closure regressions", () => {
     expect(publicSurface).toContain('toolName === "create_custom_meal"');
     expect(publicSurface).toContain("createCanonicalSavedMealFromMcp");
     expect(canonical).toContain("createSavedMeal");
+    expect(canonical).toContain("deriveMcpMutationOperationId");
     expect(canonical).toContain('authority: "nutrition_saved_meals"');
     expect(canonical).not.toContain('from("saved_recipes")');
     expect(canonical).not.toContain('from("saved_recipe_ingredients")');
