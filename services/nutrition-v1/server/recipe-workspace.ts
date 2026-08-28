@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { RecipeNutritionPerServing } from "@/lib/nutrition-v1/recipe-cache";
+import { normalizeOwnedRecipeCoverPath } from "@/lib/nutrition-v1/recipe-cover-path";
 import { clonePublishedRecipeGraphForDraft } from "@/lib/nutrition-v1/recipe-versioning";
 
 type JsonRecord = Record<string, unknown>;
@@ -367,7 +368,9 @@ export async function updateRecipePresentation(
 ) {
   const update: Record<string, unknown> = {};
   if (typeof patch.favorite === "boolean") update.is_favorite = patch.favorite;
-  if (patch.coverPath === null || typeof patch.coverPath === "string") update.cover_path = patch.coverPath?.trim() || null;
+  if (patch.coverPath === null || typeof patch.coverPath === "string") {
+    update.cover_path = normalizeOwnedRecipeCoverPath(userId, patch.coverPath);
+  }
   if (!Object.keys(update).length) return getRecipeWorkspace(supabase, userId, recipeId);
   const result = await supabase.from("nutrition_recipes").update(update).eq("id", recipeId).eq("user_id", userId).is("deleted_at", null).select("id").single();
   requiredData(result.data, result.error, "Recipe presentation could not be updated.");
