@@ -11,7 +11,7 @@ const ledger = JSON.parse(
   readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"),
 );
 
-test("all release target consumers preserve the declared compatibility marker while the reconciled ledger permits release-ready authority", () => {
+test("all release target consumers preserve the declared compatibility marker while pending migrations fail release-ready authority closed", () => {
   const releaseTarget = deriveReleaseTarget(ledger);
   const qualityTarget = deriveQualityLedgerTarget(ledger);
   const environment = qualityLedgerEnvironment(qualityTarget);
@@ -19,25 +19,33 @@ test("all release target consumers preserve the declared compatibility marker wh
   assert.equal(releaseTarget.expectedMigration, "20260724232734");
   assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260827105332");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
-  assert.equal(releaseTarget.reconciliationState, "reconciled");
-  assert.equal(releaseTarget.pendingCount, 0);
+  assert.equal(releaseTarget.reconciliationState, "pending");
+  assert.equal(releaseTarget.pendingCount, 2);
   assert.equal(releaseTarget.schemaAppliedUntrackedCount, 0);
-  assert.equal(releaseTarget.unresolvedCount, 0);
-  assert.equal(releaseTarget.releaseReady, true);
+  assert.equal(releaseTarget.unresolvedCount, 2);
+  assert.equal(releaseTarget.releaseReady, false);
   assert.equal(qualityTarget.expectedMigration, releaseTarget.expectedMigration);
   assert.equal(
     qualityTarget.latestAppliedMigrationVersion,
     releaseTarget.latestAppliedMigrationVersion,
   );
+  assert.equal(qualityTarget.reconciliationState, "pending");
+  assert.equal(qualityTarget.pendingCount, 2);
+  assert.equal(qualityTarget.unresolvedCount, 2);
+  assert.equal(qualityTarget.releaseReady, false);
   assert.equal(
     environment.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION,
     releaseTarget.expectedMigration,
   );
+  assert.equal(environment.PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE, "pending");
+  assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "2");
+  assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "2");
   assert.notEqual(releaseTarget.expectedMigration, releaseTarget.latestAppliedMigrationVersion);
 
-  const readyTarget = deriveReleaseReadyTarget(ledger);
-  assert.equal(readyTarget.expectedMigration, releaseTarget.expectedMigration);
-  assert.equal(readyTarget.latestAppliedMigrationVersion, releaseTarget.latestAppliedMigrationVersion);
+  assert.throws(
+    () => deriveReleaseReadyTarget(ledger),
+    /Migration ledger is not release-ready/,
+  );
 });
 
 test("preflight validates the declared marker rather than the physical migration head", () => {
@@ -75,6 +83,7 @@ test("preflight validates the declared marker rather than the physical migration
 
   const markerResult = evaluateReleasePreflight({ ...baseInput, manifest });
   assert.equal(markerResult.failures.includes("release_manifest_migration_mismatch"), false);
+  assert.equal(markerResult.failures.includes("migration_ledger_not_release_ready"), true);
 
   const physicalHeadResult = evaluateReleasePreflight({
     ...baseInput,
@@ -87,6 +96,7 @@ test("preflight validates the declared marker rather than the physical migration
     },
   });
   assert.equal(physicalHeadResult.failures.includes("release_manifest_migration_mismatch"), true);
+  assert.equal(physicalHeadResult.failures.includes("migration_ledger_not_release_ready"), true);
 });
 
 test("release authority fails closed when the declared marker is absent", () => {
