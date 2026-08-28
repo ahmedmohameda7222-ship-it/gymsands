@@ -89,6 +89,15 @@ export function markMealPlanMutationFailed(
   return { ...mutation, status: "needs_attention", lastError };
 }
 
+export function markMealPlanMutationRetryable(
+  mutation: MealPlanOfflineMutation,
+  message: string,
+): MealPlanOfflineMutation {
+  if (!validMutation(mutation)) throw new Error("Meal Plan offline mutation is invalid.");
+  const lastError = message.trim() || "Meal Plan mutation could not be synchronized yet.";
+  return { ...mutation, status: "queued", lastError };
+}
+
 export function serializeMealPlanQueue(queue: MealPlanOfflineMutation[]) {
   if (!queue.every(validMutation)) throw new Error("Meal Plan offline queue contains invalid data.");
   return JSON.stringify(queue);
