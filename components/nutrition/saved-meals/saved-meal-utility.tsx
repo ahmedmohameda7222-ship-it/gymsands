@@ -286,7 +286,10 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
         method: editingId ? "PATCH" : "POST",
         body: JSON.stringify(requestBody),
       });
-      if (createOperation) clearSavedMealCreateOperation(createOperation.operationId);
+      if (createOperation) {
+        clearSavedMealCreateOperation(createOperation.operationId);
+        setMode("browse");
+      }
       await loadActive();
       await openDetail(body.savedMeal.id);
     } catch (cause) {
