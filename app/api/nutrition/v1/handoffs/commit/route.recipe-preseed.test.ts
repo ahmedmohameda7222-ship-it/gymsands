@@ -50,6 +50,7 @@ describe("Food to new Recipe handoff", () => {
     mocks.resolveFoodHandoff.mockResolvedValue({
       foodId: "55555555-5555-4555-8555-555555555555",
       name: "Atomic chicken",
+      source: "catalog",
       quantity: 2,
       serving: "100 g",
       frozenSourceSnapshot: { name: "Atomic chicken" },
@@ -61,8 +62,13 @@ describe("Food to new Recipe handoff", () => {
         frozen_nutrition: { calories: 220 },
       },
     });
-    mocks.createRecipeDraft.mockResolvedValue({ recipeId, draftId });
-    mocks.autosaveRecipeDraft.mockResolvedValue({ id: draftId, revision: 1 });
+    mocks.createRecipeDraft.mockResolvedValue({
+      recipeId,
+      draftId,
+      recipe: { id: recipeId },
+      draft: { id: draftId, recipe_id: recipeId, revision: 0, name: null, servings: null, total_cooked_weight_g: null, total_time_minutes: null, notes: null, draft_metadata: {} },
+    });
+    mocks.autosaveRecipeDraft.mockResolvedValue({ id: draftId, recipe_id: recipeId, revision: 1 });
     mocks.createPreseededRecipeDraft.mockResolvedValue({ recipeId, draftId, reused: false });
   });
 
