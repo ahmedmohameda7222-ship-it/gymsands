@@ -34,7 +34,7 @@ function autosaveRecipeId(path: string, init: RequestInit) {
   }
 }
 
-function rememberDraftRevision(path: string, body: Record<string, unknown>, renderedQa: boolean) {
+function rememberDraftRevision(path: string, body: Record<string, unknown>) {
   const recipeId = recipeIdFromPath(path);
   const recipe = body.recipe && typeof body.recipe === "object" && !Array.isArray(body.recipe)
     ? body.recipe as Record<string, unknown>
@@ -44,14 +44,7 @@ function rememberDraftRevision(path: string, body: Record<string, unknown>, rend
     : null;
   if (!recipeId || !draft) return;
   const revision = Number(draft.revision);
-  if (Number.isInteger(revision) && revision >= 0) {
-    draftRevisionByRecipe.set(recipeId, revision);
-    return;
-  }
-  // The rendered-QA mock Recipe fixture predates Draft revision CAS. Seed only
-  // that isolated fixture so the real UI can exercise retry/conflict behavior;
-  // authenticated Production requests never infer a missing authoritative revision.
-  if (renderedQa) draftRevisionByRecipe.set(recipeId, 0);
+  if (Number.isInteger(revision) && revision >= 0) draftRevisionByRecipe.set(recipeId, revision);
 }
 
 function withExpectedDraftRevision(path: string, init: RequestInit) {
@@ -102,7 +95,7 @@ async function performRecipeApiRequest<T>(path: string, init: RequestInit): Prom
       typeof body.code === "string" ? body.code : null,
     );
   }
-  rememberDraftRevision(path, body, renderedQa);
+  rememberDraftRevision(path, body);
   return body as T;
 }
 
