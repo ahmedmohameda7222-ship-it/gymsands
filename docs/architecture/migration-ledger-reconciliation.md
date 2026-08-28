@@ -1,30 +1,32 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Evidence captured:** 2026-08-27T07:24:17.000Z
+**Evidence captured:** 2026-08-27T10:53:32.000Z
 **Machine authority:** `supabase/migration-ledger.json`
-**Audit baseline:** `92d936bc513af83fff41913477a8148a9ab5b845`
-**Status:** Applied Production history reconciled; no repository migrations pending
+**Audit baseline:** `dfa14c3bc2c1524ff185b1ee4e170f4537a80230`
+**Status:** Production history reconciled through the latest applied identity; two repository migrations pending separate Production authorization
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
 ## Current state
 
-- Physical Production migration records: **100**
+- Physical Production migration records: **101**
 - Exact applications (`state = applied`): **63**
-- Repository-only pending migrations: **0**
-- `pendingCount = 0`
+- Repository-only pending migrations: **2**
+- `pendingCount = 2`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- `release_ready = true` for migration-ledger reconciliation; merge/deployment/compatibility-marker authorization remain separate gates
+- `unresolvedCount = 2`
+- `historyRepair.state = pending`
+- `release_ready = false` while the two repository migrations remain unapplied; merge/deployment/compatibility-marker authorization remain separate gates
 - Released compatibility marker: `20260724232734`
-- Latest physical Production record: `20260827072417_nutrition_v1_review_atomicity_corrections`
+- Latest physical Production record: `20260827105332_nutrition_v1_long_term_architecture_corrections`
 - Activity Catalog Production remains isolated from the Main migration ledger
 
-Production migration history is now reconciled through `20260827072417_nutrition_v1_review_atomicity_corrections`. The six previously pending non-Nutrition repository migrations were already applied exactly once on 2026-08-21 under generated aliases, and the seven explicitly authorized Nutrition V1 migrations were applied exactly once on 2026-08-27. Repository migration filenames remain immutable; generated Production identities are recorded below and in the machine ledger. Do not replay any of these migrations.
+Production migration history is reconciled through `20260827105332_nutrition_v1_long_term_architecture_corrections`. The six previously pending non-Nutrition repository migrations were already applied exactly once on 2026-08-21 under generated aliases, and eight explicitly authorized Nutrition V1 migrations were applied exactly once on 2026-08-27. Repository migration filenames remain immutable; generated Production identities are recorded below and in the machine ledger. Do not replay any applied migration.
 
-Physical schema advancement and compatibility-marker promotion remain separate release operations. The completed migration application does not authorize application deployment, merge, or compatibility-marker promotion.
+Two later Nutrition V1 correction migrations are repository-only and intentionally classified as `pending`. They have **not** been applied to Production. Applying them requires separate explicit Production authorization; their repository presence and successful disposable verification do not constitute application authority.
+
+Physical schema advancement and compatibility-marker promotion remain separate release operations. Prior migration application does not authorize application deployment, merge, or compatibility-marker promotion.
 
 ## Workout History applied identities
 
@@ -90,7 +92,6 @@ AW-9 remains represented by repository migration `20260731090000_active_workout_
 
 - `20260804174500_fix_profiles_update_policy_recursion.sql` was applied exactly once to Plaivra Production as generated version `20260804180932_fix_profiles_update_policy_recursion`.
 - The repository filename and Production version differ, so the migration ledger preserves the immutable mapping as `applied_version_alias`. Do not replay.
-- Plaivra Production now has **87** physical migration records and the latest physical record is `20260804180932_fix_profiles_update_policy_recursion`.
 - The compatibility marker remained unchanged and Activity Catalog was not modified.
 
 ## 2026-08-27 Production reconciliation
@@ -110,8 +111,18 @@ AW-9 remains represented by repository migration `20260731090000_active_workout_
 | `20260825120350_nutrition_v1_meal_plan_week_start_authority.sql` | `20260827072351_nutrition_v1_meal_plan_week_start_authority` | `2026-08-27` | `applied_version_alias` |
 | `20260825120400_nutrition_v1_privacy_purge_authority.sql` | `20260827072406_nutrition_v1_privacy_purge_authority` | `2026-08-27` | `applied_version_alias` |
 | `20260827060000_nutrition_v1_review_atomicity_corrections.sql` | `20260827072417_nutrition_v1_review_atomicity_corrections` | `2026-08-27` | `applied_version_alias` |
+| `20260827103000_nutrition_v1_long_term_architecture_corrections.sql` | `20260827105332_nutrition_v1_long_term_architecture_corrections` | `2026-08-27` | `applied_version_alias` |
 
-All thirteen generated identities above are immutable Production history. They must not be replayed. Nutrition V1 schema application did not merge PR #152, deploy application code, or promote the released compatibility marker.
+All fourteen generated identities above are immutable Production history. They must not be replayed. Nutrition V1 schema application did not merge PR #152, deploy application code, or promote the released compatibility marker.
+
+## 2026-08-28 repository-only pending Nutrition corrections
+
+| Repository migration | Production identity | State |
+|---|---|---|
+| `20260828032000_nutrition_v1_final_architecture_corrections.sql` | Not applied | `pending` |
+| `20260828032100_nutrition_v1_cooking_command_authority.sql` | Not applied | `pending` |
+
+Both pending migrations have passed disposable local replay/lint/verification as part of PR #152 validation, but neither has been applied to Production. Do not assign a generated Production identity or change either ledger entry to an applied state unless a separately authorized Production migration operation actually succeeds and its exact resulting identity is captured.
 
 ## Authority and verification
 
