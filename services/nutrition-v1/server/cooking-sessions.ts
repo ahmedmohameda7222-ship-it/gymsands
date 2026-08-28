@@ -115,41 +115,21 @@ function asFiniteNumber(value: unknown, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-function actionIdsFromSnapshot(snapshot: FrozenCookingRecipeSnapshot) {
-  return snapshot.actions
-    .map((action) => typeof action.id === "string" ? action.id : null)
-    .filter((id): id is string => Boolean(id));
-}
-
-function dependencyIds(action: JsonRecord) {
-  const value = action.dependency_action_ids ?? action.dependencyActionIds;
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function initialActionStateRows(
-  snapshot: FrozenCookingRecipeSnapshot,
-  sessionId: string,
-  userId: string,
-) {
-  return snapshot.actions.flatMap((action) => {
-    if (typeof action.id !== "string") return [];
-    return [{
-      session_id: sessionId,
-      user_id: userId,
-      action_key: action.id,
-      state: dependencyIds(action).length === 0 ? "ready" : "not_available",
-      state_revision: 0,
-    }];
-  });
-}
-
 function normalizeSession(row: Record<string, unknown>): CookingSessionRow {
   const status = row.status;
   if (status !== "active" && status !== "completed" && status !== "ended") {
     throw new Error("Invalid Cooking Session status.");
   }
   const snapshot = asRecord(row.frozen_recipe_snapshot);
-  if (snapshot.schemaVersion !== 1 || !Array.isArray(snapshot.actions)) {
+  if (
+    snapshot.schemaVersion !== 1
+    || !snapshot.recipe
+    || typeof snapshot.recipe !== "object"
+    || Array.isArray(snapshot.recipe)
+    || !Array.isArray(snapshot.ingredients)
+    || !Array.isArray(snapshot.actions)
+    || !Array.isArray(snapshot.equipment)
+  ) {
     throw new Error("Invalid frozen Cooking Recipe snapshot.");
   }
   return {
@@ -215,47 +195,9 @@ function normalizeTimer(row: Record<string, unknown>): CookingTimerRecord {
   };
 }
 
-async function readPublishedRecipeGraph(
-  supabase: SupabaseClient,
-  userId: string,
-  recipeId: string,
-  recipeVersionId?: string,
-): Promise<FrozenCookingRecipeSnapshot> {
-  let versionQuery = supabase
-    .from("nutrition_recipe_versions")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("recipe_id", recipeId);
-  if (recipeVersionId) {
-    versionQuery = versionQuery.eq("id", recipeVersionId);
-  } else {
-    versionQuery = versionQuery.order("version_number", { ascending: false }).limit(1);
-  }
-  const versionResult = await versionQuery.maybeSingle();
-  const version = requiredData(versionResult.data as Record<string, unknown> | null, versionResult.error, "Published Recipe version not found.");
-  const resolvedVersionId = String(version.id);
-
-  const [ingredientsResult, actionsResult, equipmentResult] = await Promise.all([
-    supabase.from("nutrition_recipe_ingredients").select("*").eq("user_id", userId).eq("recipe_version_id", resolvedVersionId).order("position", { ascending: true }),
-    supabase.from("nutrition_recipe_actions").select("*").eq("user_id", userId).eq("recipe_version_id", resolvedVersionId).order("position", { ascending: true }),
-    supabase.from("nutrition_recipe_equipment").select("*").eq("user_id", userId).eq("recipe_version_id", resolvedVersionId).order("position", { ascending: true }),
-  ]);
-  dbError(ingredientsResult.error);
-  dbError(actionsResult.error);
-  dbError(equipmentResult.error);
-
-  return {
-    schemaVersion: 1,
-    recipe: version,
-    ingredients: (ingredientsResult.data ?? []) as JsonRecord[],
-    actions: (actionsResult.data ?? []) as JsonRecord[],
-    equipment: (equipmentResult.data ?? []) as JsonRecord[],
-  };
-}
-
 export async function startCookingSession(
   supabase: SupabaseClient,
-  userId: string,
+  _userId: string,
   input: {
     recipeId: string;
     recipeVersionId?: string;
@@ -266,39 +208,27 @@ export async function startCookingSession(
   const servingScale = input.servingScale ?? 1;
   if (!Number.isFinite(servingScale) || servingScale <= 0) throw new Error("Cooking servingScale must be greater than 0.");
   const now = input.now ?? new Date().toISOString();
-  const snapshot = await readPublishedRecipeGraph(supabase, userId, input.recipeId, input.recipeVersionId);
-  const resolvedVersionId = String(snapshot.recipe.id);
-  const currentActionKey = actionIdsFromSnapshot(snapshot)[0] ?? null;
-
-  const sessionResult = await supabase.from("nutrition_cooking_sessions").insert({
-    user_id: userId,
-    recipe_id: input.recipeId,
-    recipe_version_id: resolvedVersionId,
-    frozen_recipe_snapshot: snapshot,
-    serving_scale: servingScale,
-    current_action_key: currentActionKey,
-    status: "active",
-    started_at: now,
-    last_active_at: now,
-    completed_at: null,
-    ended_at: null,
-    state_revision: 0,
-  }).select("*").single();
-  const session = requiredData(sessionResult.data as Record<string, unknown> | null, sessionResult.error, "Cooking Session could not be started.");
-  const sessionId = String(session.id);
-
-  const rows = initialActionStateRows(snapshot, sessionId, userId);
-  if (rows.length) {
-    const statesResult = await supabase.from("nutrition_cooking_action_states").insert(rows);
-    try {
-      dbError(statesResult.error);
-    } catch (error) {
-      await supabase.from("nutrition_cooking_sessions").delete().eq("id", sessionId).eq("user_id", userId);
-      throw error;
-    }
+  const result = await supabase.rpc("start_nutrition_cooking_session", {
+    p_recipe_id: input.recipeId,
+    p_recipe_version_id: input.recipeVersionId ?? null,
+    p_serving_scale: servingScale,
+    p_now: now,
+  });
+  const payload = requiredData(
+    result.data as JsonRecord | null,
+    result.error,
+    "Cooking Session could not be started.",
+  );
+  const session = normalizeSession(asRecord(payload.session));
+  const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : session.id;
+  if (!sessionId || sessionId !== session.id) {
+    throw new Error("Cooking Session start returned an invalid canonical session.");
   }
-
-  return { sessionId, session: normalizeSession(session), snapshot };
+  return {
+    sessionId,
+    session,
+    snapshot: session.frozen_recipe_snapshot,
+  };
 }
 
 export async function getActiveCookingSession(
