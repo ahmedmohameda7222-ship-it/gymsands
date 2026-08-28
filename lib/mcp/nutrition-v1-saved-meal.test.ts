@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpContext } from "@/lib/mcp/auth";
 
-const listFoodLibrary = vi.fn();
-const resolveFoodHandoff = vi.fn();
-const createSavedMeal = vi.fn();
+const { listFoodLibrary, resolveFoodHandoff, createSavedMeal } = vi.hoisted(() => ({
+  listFoodLibrary: vi.fn(),
+  resolveFoodHandoff: vi.fn(),
+  createSavedMeal: vi.fn(),
+}));
 
 vi.mock("@/services/nutrition-v1/server/food-library", async () => {
   const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/food-library")>("@/services/nutrition-v1/server/food-library");
