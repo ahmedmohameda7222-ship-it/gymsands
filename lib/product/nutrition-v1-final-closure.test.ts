@@ -3,13 +3,6 @@ import { describe, expect, it } from "vitest";
 
 const source = (path: string) => readFileSync(path, "utf8");
 
-function functionBody(text: string, name: string) {
-  const start = text.indexOf(`async function ${name}`);
-  if (start < 0) return "";
-  const next = text.indexOf("\nasync function ", start + 1);
-  return text.slice(start, next < 0 ? undefined : next);
-}
-
 describe("Nutrition V1 final closure regressions", () => {
   it("keeps every Food Library and Meal Plan barcode request on authenticated client authority", () => {
     expect(existsSync("components/nutrition/food-library/food-library-api.ts")).toBe(true);
@@ -32,46 +25,76 @@ describe("Nutrition V1 final closure regressions", () => {
     expect(page).toContain("markMealPlanMutationRetryable");
   });
 
-  it("reuses a Cooking timer identity for the same action-state/name pair", () => {
+  it("uses timer UUIDs as instance identity and removes display-name uniqueness", () => {
     const store = source("lib/nutrition-v1/cooking-local-store.ts");
-    const mode = source("components/nutrition/cooking/cooking-mode.tsx");
-    expect(store).toContain("upsertCookingLocalTimer");
-    expect(mode).toContain("upsertCookingLocalTimer");
+    const migration = source("supabase/migrations/20260828032300_nutrition_v1_timer_instance_identity.sql").toLowerCase();
+    expect(store).not.toContain("item.actionStateId === timer.actionStateId\n    && item.name === timer.name");
+    expect(store).toContain("item.id === timer.id");
+    expect(migration).toContain("drop constraint if exists nutrition_cooking_timers_action_state_id_timer_name_key");
+    expect(migration).toContain("create index if not exists nutrition_cooking_timers_action_name_idx");
+    expect(migration).not.toContain("create unique index");
   });
 
   it("moves Recipe duplicate and Saved Meal multi-table writes behind transactional DB commands", () => {
-    const migration = source("supabase/migrations/20260828032000_nutrition_v1_final_architecture_corrections.sql").toLowerCase();
+    const migration = source("supabase/migrations/20260828032200_nutrition_v1_final_closure.sql").toLowerCase();
     const recipeRoute = source("app/api/nutrition/v1/recipes/[recipeId]/route.ts");
     const savedMeals = source("services/nutrition-v1/server/saved-meals.ts");
-    expect(migration).toContain("duplicate_nutrition_recipe");
-    expect(migration).toContain("create_nutrition_saved_meal");
-    expect(migration).toContain("update_nutrition_saved_meal");
-    expect(recipeRoute).toContain("duplicatePublishedRecipeAtomic");
+    expect(migration).toContain("create or replace function public.duplicate_nutrition_recipe");
+    expect(migration).toContain("create or replace function public.create_nutrition_saved_meal");
+    expect(migration).toContain("create or replace function public.update_nutrition_saved_meal");
+    expect(recipeRoute).toContain("duplicatePublishedRecipeAtomically");
     expect(savedMeals).toContain('rpc("create_nutrition_saved_meal"');
     expect(savedMeals).toContain('rpc("update_nutrition_saved_meal"');
   });
 
   it("enforces Recipe cover ownership in database truth", () => {
-    const migration = source("supabase/migrations/20260828032000_nutrition_v1_final_architecture_corrections.sql").toLowerCase();
+    const migration = source("supabase/migrations/20260828032200_nutrition_v1_final_closure.sql").toLowerCase();
     expect(migration).toContain("recipe_cover_path_owner");
     expect(migration).toContain("split_part(cover_path, '/', 1) = user_id::text");
   });
 
-  it("persists MCP custom meals in the canonical Saved Meal domain, never legacy saved_recipes", () => {
-    const executor = source("lib/mcp/tool-executor-safe.ts");
-    const body = functionBody(executor, "createCustomMeal");
-    expect(body).toContain("nutrition_saved_meals");
-    expect(body).not.toContain('.from("saved_recipes")');
-    expect(body).not.toContain('.from("saved_recipe_ingredients")');
+  it("routes public MCP custom-meal creation to canonical Nutrition Saved Meals", () => {
+    const publicSurface = source("lib/mcp/public-surface.ts");
+    const canonical = source("lib/mcp/nutrition-v1-saved-meal.ts");
+    expect(publicSurface).toContain('toolName === "create_custom_meal"');
+    expect(publicSurface).toContain("createCanonicalSavedMealFromMcp");
+    expect(canonical).toContain("createSavedMeal");
+    expect(canonical).toContain('authority: "nutrition_saved_meals"');
+    expect(canonical).not.toContain('from("saved_recipes")');
+    expect(canonical).not.toContain('from("saved_recipe_ingredients")');
   });
 
-  it("has live consumers for standalone Food and Recipe Add To handoffs", () => {
-    const diary = source("components/nutrition/diary/diary-page.tsx");
-    const mealPlan = source("components/nutrition/meal-plan/meal-plan-page.tsx");
-    const recipeHome = source("components/nutrition/recipes/recipe-home.tsx");
-    expect(diary).toContain('searchParams.get("addFoodId")');
-    expect(diary).toContain('searchParams.get("source")');
-    expect(mealPlan).toContain('params.get("addFoodId")');
-    expect(recipeHome).toContain('ingredientFoodId');
+  it("connects every approved Add To producer to a destination consumer and canonical write route", () => {
+    const foodDetail = source("components/nutrition/food-library/food-detail.tsx");
+    const recipeDetail = source("components/nutrition/recipes/recipe-detail.tsx");
+    const diaryPage = source("app/(private)/calories/page.tsx");
+    const planPage = source("app/(private)/my-meal-plan/page.tsx");
+    const recipePage = source("app/(private)/my-recipes/page.tsx");
+    const consumer = source("components/nutrition/handoffs/add-to-handoff-consumer.tsx");
+    const commit = source("app/api/nutrition/v1/handoffs/commit/route.ts");
+
+    for (const destination of ["/calories?", "/my-meal-plan?", "savedMealFoodId=", "ingredientFoodId="]) {
+      expect(foodDetail).toContain(destination);
+    }
+    expect(recipeDetail).toContain("source=recipe");
+    expect(recipeDetail).toContain("savedMealRecipeId");
+    expect(diaryPage).toContain('destination="diary"');
+    expect(diaryPage).toContain('destination="saved_meal"');
+    expect(planPage).toContain('destination="meal_plan"');
+    expect(recipePage).toContain('destination="recipe"');
+    expect(consumer).toContain("/api/nutrition/v1/handoffs/commit");
+    expect(commit).toContain("logDiaryMeal");
+    expect(commit).toContain("mutateMealPlanWeek");
+    expect(commit).toContain("createSavedMeal");
+    expect(commit).toContain("autosaveRecipeDraft");
+  });
+
+  it("keeps Saved Meal contextual inside Diary and Meal Plan rather than adding a fifth peer destination", () => {
+    const diary = source("components/nutrition/diary/logging-session.tsx");
+    const plan = source("components/nutrition/meal-plan/add-to-plan-workspace.tsx");
+    const navigation = source("lib/navigation/mobile-nav.ts");
+    expect(diary).toContain('"saved-meals"');
+    expect(plan).toContain('kind: "saved_meal"');
+    expect(navigation).not.toMatch(/href:\s*["']\/saved-meals/);
   });
 });
