@@ -19,15 +19,16 @@ describe("Nutrition V1 retry and concurrency closure", () => {
     const service = source("services/nutrition-v1/server/recipes.ts");
     const route = source("app/api/nutrition/v1/recipes/[recipeId]/route.ts");
     const handoff = source("app/api/nutrition/v1/handoffs/commit/route.ts");
-    const editor = source("components/nutrition/recipes/recipe-editor.tsx");
+    const client = source("components/nutrition/recipes/recipe-api.ts");
     const migration = source("supabase/migrations/20260828032600_nutrition_v1_recipe_draft_revision.sql").toLowerCase();
 
     expect(service).toContain("expectedRevision: number");
     expect(service).toContain("p_expected_revision: expectedRevision");
     expect(route).toContain("expectedRevision");
     expect(handoff).toContain("expectedRevision");
-    expect(editor).toContain("draftRevisionRef");
-    expect(editor).toContain("expectedRevision: draftRevisionRef.current");
+    expect(client).toContain("draftRevisionByRecipe");
+    expect(client).toContain("requestBody.expectedRevision = expectedRevision");
+    expect(client).toContain("rememberDraftRevision");
     expect(migration).toContain("add column if not exists revision bigint");
     expect(migration).toContain("p_expected_revision bigint");
     expect(migration).toContain("draft.revision = p_expected_revision");
