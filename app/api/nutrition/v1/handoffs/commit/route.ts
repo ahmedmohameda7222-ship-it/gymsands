@@ -84,15 +84,9 @@ export async function POST(request: Request) {
       const position = week.occurrences.filter((item) => item.plan_date === planDate && item.meal_slot_key === mealSlot).length;
       const occurrence = source.kind === "food"
         ? {
-            id: crypto.randomUUID(),
-            planDate,
-            mealSlotKey: mealSlot,
-            position,
-            sourceType: "food" as const,
-            sourceId: source.value.foodId,
-            sourceVersionId: null,
-            resolvedQuantity: source.value.quantity,
-            resolvedServingLabel: source.value.serving,
+            id: crypto.randomUUID(), planDate, mealSlotKey: mealSlot, position,
+            sourceType: "food" as const, sourceId: source.value.foodId, sourceVersionId: null,
+            resolvedQuantity: source.value.quantity, resolvedServingLabel: source.value.serving,
             frozenName: source.value.name,
             frozenSnapshot: {
               ...source.value.frozenSourceSnapshot,
@@ -101,16 +95,9 @@ export async function POST(request: Request) {
             status: "planned" as const,
           }
         : {
-            id: crypto.randomUUID(),
-            planDate,
-            mealSlotKey: mealSlot,
-            position,
-            sourceType: "recipe" as const,
-            sourceId: source.value.recipeId,
-            sourceVersionId: source.value.recipeVersionId,
-            resolvedQuantity: 1,
-            resolvedServingLabel: "1 serving",
-            frozenName: source.value.name,
+            id: crypto.randomUUID(), planDate, mealSlotKey: mealSlot, position,
+            sourceType: "recipe" as const, sourceId: source.value.recipeId, sourceVersionId: source.value.recipeVersionId,
+            resolvedQuantity: 1, resolvedServingLabel: "1 serving", frozenName: source.value.name,
             frozenSnapshot: { ...source.value.frozenSourceSnapshot, shoppingIngredients: source.value.shoppingIngredients },
             status: "planned" as const,
           };
@@ -158,6 +145,8 @@ export async function POST(request: Request) {
         instructions = workspace.instructions as unknown as Array<Record<string, unknown>>;
         equipment = workspace.equipment as unknown as Array<Record<string, unknown>>;
       }
+      const expectedRevision = Number(draft.revision);
+      if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new NutritionRequestError("Recipe Working Draft revision is unavailable.");
       const savedDraft = await autosaveRecipeDraft(context.supabase, context.user.id, recipeId, {
         name: typeof draft.name === "string" ? draft.name : null,
         servings: typeof draft.servings === "number" ? draft.servings : draft.servings == null ? null : Number(draft.servings),
@@ -186,7 +175,7 @@ export async function POST(request: Request) {
           metadata: item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata) ? item.metadata as Record<string, unknown> : {},
         })),
         equipment: equipment.map((item) => ({ name: String(item.name ?? ""), quantity: item.quantity == null ? null : Number(item.quantity), note: typeof item.note === "string" ? item.note : null })),
-      });
+      }, expectedRevision);
       return nutritionJson({ destination, recipeId, draftId: savedDraft.id });
     }
 
