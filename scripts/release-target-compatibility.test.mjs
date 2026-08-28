@@ -20,9 +20,10 @@ test("all release target consumers preserve the declared compatibility marker wh
   assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260827105332");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
   assert.equal(releaseTarget.reconciliationState, "pending");
-  assert.equal(releaseTarget.pendingCount, 2);
+  assert.ok(ledger.pendingCount > 0, "fixture must retain at least one truthfully pending repository migration");
+  assert.equal(releaseTarget.pendingCount, ledger.pendingCount);
   assert.equal(releaseTarget.schemaAppliedUntrackedCount, 0);
-  assert.equal(releaseTarget.unresolvedCount, 2);
+  assert.equal(releaseTarget.unresolvedCount, ledger.unresolvedCount);
   assert.equal(releaseTarget.releaseReady, false);
   assert.equal(qualityTarget.expectedMigration, releaseTarget.expectedMigration);
   assert.equal(
@@ -30,16 +31,16 @@ test("all release target consumers preserve the declared compatibility marker wh
     releaseTarget.latestAppliedMigrationVersion,
   );
   assert.equal(qualityTarget.reconciliationState, "pending");
-  assert.equal(qualityTarget.pendingCount, 2);
-  assert.equal(qualityTarget.unresolvedCount, 2);
+  assert.equal(qualityTarget.pendingCount, ledger.pendingCount);
+  assert.equal(qualityTarget.unresolvedCount, ledger.unresolvedCount);
   assert.equal(qualityTarget.releaseReady, false);
   assert.equal(
     environment.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION,
     releaseTarget.expectedMigration,
   );
   assert.equal(environment.PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE, "pending");
-  assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "2");
-  assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "2");
+  assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, String(ledger.pendingCount));
+  assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, String(ledger.unresolvedCount));
   assert.notEqual(releaseTarget.expectedMigration, releaseTarget.latestAppliedMigrationVersion);
 
   assert.throws(
