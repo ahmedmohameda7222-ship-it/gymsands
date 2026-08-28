@@ -81,6 +81,16 @@ begin
   ) then
     raise exception 'Nutrition V1 Recipe occurrence version lineage missing.';
   end if;
+
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgrelid = 'public.nutrition_planned_occurrences'::regclass
+      and tgname = 'enforce_nutrition_planned_occurrence_week_date'
+      and not tgisinternal
+  ) then
+    raise exception 'Nutrition V1 Meal Plan occurrence week-date guard missing.';
+  end if;
 end
 $catalog$;
 
@@ -171,6 +181,58 @@ select pg_temp.nv1p_assert(
     where id = 'a2200000-0000-4000-8000-000000000020'
   ),
   'Meal Plan week mutation did not advance exactly one revision.'
+);
+
+-- Lazy creation and the first meaningful mutation must be one transaction.
+do $atomic_lazy_create$
+declare
+  v_result jsonb;
+  v_week_id uuid;
+begin
+  v_result := public.mutate_nutrition_meal_plan_week(
+    null,
+    0,
+    '{"weekStartDate":"2026-09-07","upsertOccurrences":[{"planDate":"2026-09-07","mealSlotKey":"Lunch","position":0,"sourceType":"placeholder","sourceId":null,"sourceVersionId":null,"resolvedQuantity":null,"resolvedServingLabel":null,"frozenName":"Atomic lunch","frozenSnapshot":{"name":"Atomic lunch"},"status":"planned"}]}'::jsonb
+  );
+  v_week_id := (v_result->>'weekId')::uuid;
+  perform pg_temp.nv1p_assert(
+    v_week_id is not null
+    and (select count(*) = 1 from public.nutrition_meal_plan_weeks where id = v_week_id and user_id = 'a2200000-0000-4000-8000-000000000001' and week_start_date = date '2026-09-07' and revision = 1)
+    and (select count(*) = 1 from public.nutrition_planned_occurrences where week_id = v_week_id and user_id = 'a2200000-0000-4000-8000-000000000001' and plan_date = date '2026-09-07'),
+    'Meal Plan lazy creation did not commit one complete first-write transaction.'
+  );
+end
+$atomic_lazy_create$;
+
+-- A failed first mutation must not strand the lazily created week.
+select pg_temp.nv1p_rejected(
+  $$select public.mutate_nutrition_meal_plan_week(
+    null,
+    0,
+    '{"weekStartDate":"2026-09-14","upsertOccurrences":[{"planDate":"2026-09-21","mealSlotKey":"Lunch","position":0,"sourceType":"placeholder","sourceId":null,"sourceVersionId":null,"resolvedQuantity":null,"resolvedServingLabel":null,"frozenName":"Out of week","frozenSnapshot":{"name":"Out of week"},"status":"planned"}]}'::jsonb
+  )$$,
+  'Meal Plan accepted an occurrence outside the target week.'
+);
+select pg_temp.nv1p_assert(
+  not exists (
+    select 1
+    from public.nutrition_meal_plan_weeks
+    where user_id = 'a2200000-0000-4000-8000-000000000001'
+      and week_start_date = date '2026-09-14'
+  ),
+  'Failed first Meal Plan mutation stranded an empty week.'
+);
+
+-- The table-level trigger must also block bypasses around the RPC.
+select pg_temp.nv1p_rejected(
+  $$update public.nutrition_planned_occurrences
+    set plan_date = date '2026-08-31'
+    where id = 'a2200000-0000-4000-8000-000000000021'$$,
+  'Direct cross-week Meal Plan occurrence update was accepted.'
+);
+select pg_temp.nv1p_assert(
+  (select plan_date = date '2026-08-25' from public.nutrition_planned_occurrences where id = 'a2200000-0000-4000-8000-000000000021'),
+  'Rejected cross-week update changed the persisted occurrence date.'
 );
 
 insert into public.nutrition_meal_plan_change_requests (
