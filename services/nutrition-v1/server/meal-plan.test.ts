@@ -44,13 +44,9 @@ describe("Nutrition V1 week authority", () => {
     expect((weeks as any).insert).toBeUndefined();
   });
 
-  it("creates a week only for the first meaningful mutation and advances through the atomic revision RPC", async () => {
-    const insertSingle = vi.fn(async () => ({ data: { id: weekId, revision: 0 }, error: null }));
-    const insertSelect = vi.fn(() => ({ single: insertSingle }));
-    const insert = vi.fn(() => ({ select: insertSelect }));
-    const from = vi.fn((table: string) => {
-      if (table === "nutrition_meal_plan_weeks") return { insert };
-      throw new Error(`unexpected table ${table}`);
+  it("creates a week only for the first meaningful mutation inside the atomic revision RPC", async () => {
+    const from = vi.fn(() => {
+      throw new Error("direct Meal Plan week insert is forbidden");
     });
     const rpc = vi.fn(async () => ({ data: { weekId, revision: 1 }, error: null }));
     const client = { from, rpc } as unknown as SupabaseClient;
@@ -71,13 +67,14 @@ describe("Nutrition V1 week authority", () => {
       },
     });
 
-    expect(insert).toHaveBeenCalledWith({ user_id: userId, week_start_date: "2026-08-24" });
+    expect(from).not.toHaveBeenCalled();
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith("mutate_nutrition_meal_plan_week", {
-      p_week_id: weekId,
+      p_week_id: null,
       p_base_revision: 0,
       p_mutation: expect.objectContaining({
         operationId,
+        weekStartDate: "2026-08-24",
         upsertOccurrences: expect.any(Array),
       }),
     });
