@@ -95,7 +95,7 @@ export function markMealPlanMutationFailed(
 ): MealPlanOfflineMutation {
   if (!validMutation(mutation)) throw new Error("Meal Plan offline mutation is invalid.");
   const lastError = message.trim() || "Meal Plan mutation could not be synchronized.";
-  const terminal = /no longer readable|invalid|corrupt/i.test(lastError);
+  const terminal = /no longer (?:readable|valid)|invalid|corrupt/i.test(lastError);
   return terminal
     ? { ...mutation, status: "needs_attention", lastError }
     : markMealPlanMutationRetryable(mutation, lastError);
