@@ -6,6 +6,13 @@ import { clonePublishedRecipeGraphForDraft } from "@/lib/nutrition-v1/recipe-ver
 import { isUuid } from "@/lib/utils";
 import { getPublishedRecipeDetail } from "@/services/nutrition-v1/server/recipe-published";
 
+type CloneRecord = Record<string, unknown> & { id: string };
+type CloneInstruction = CloneRecord & {
+  dependency_action_ids?: readonly string[];
+  ingredient_refs?: unknown;
+  equipment_refs?: unknown;
+};
+
 function record(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -32,7 +39,7 @@ export async function duplicatePublishedRecipeAtomically(
   const servings = Number(version.servings);
   if (!Number.isFinite(servings) || servings <= 0) throw new Error("Published Recipe has invalid servings.");
 
-  const graph = clonePublishedRecipeGraphForDraft({
+  const graph = clonePublishedRecipeGraphForDraft<CloneRecord, CloneRecord, CloneInstruction>({
     ingredients: (source.ingredients as Array<Record<string, unknown>>).map((item) => ({ ...item, id: String(item.id) })),
     equipment: (source.equipment as Array<Record<string, unknown>>).map((item) => ({ ...item, id: String(item.id) })),
     instructions: (source.instructions as Array<Record<string, unknown>>).map((item) => ({ ...item, id: String(item.id) })),
