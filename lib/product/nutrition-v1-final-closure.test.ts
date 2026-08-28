@@ -22,7 +22,9 @@ describe("Nutrition V1 final closure regressions", () => {
     const offline = source("lib/nutrition-v1/meal-plan-offline.ts");
     const page = source("components/nutrition/meal-plan/meal-plan-page.tsx");
     expect(offline).toContain("markMealPlanMutationRetryable");
-    expect(page).toContain("markMealPlanMutationRetryable");
+    expect(offline).toContain('status: "queued"');
+    expect(page).toContain("markMealPlanMutationFailed");
+    expect(page).not.toContain('status: "needs_attention", lastError: cause');
   });
 
   it("uses timer UUIDs as instance identity and removes display-name uniqueness", () => {
@@ -77,7 +79,7 @@ describe("Nutrition V1 final closure regressions", () => {
       expect(foodDetail).toContain(destination);
     }
     expect(recipeDetail).toContain("source=recipe");
-    expect(recipeDetail).toContain("savedMealRecipeId");
+    expect(recipeDetail).toContain("destination=saved_meal");
     expect(diaryPage).toContain('destination="diary"');
     expect(diaryPage).toContain('destination="saved_meal"');
     expect(planPage).toContain('destination="meal_plan"');
