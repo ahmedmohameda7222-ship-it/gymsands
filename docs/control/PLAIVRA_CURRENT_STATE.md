@@ -178,7 +178,7 @@ By Product Owner decision, P6B live acceptance and P7 notifications remain defer
 | Muscle Intelligence and Heat Maps | Strong | Strong foundation |
 | Today | Functional | PCS-3B projection and Production measurement are complete; initial direct browser-to-Supabase reads measured zero |
 | Nutrition and food logging | Functional | Nutrition V1 Draft candidate is implemented; its repository migration chain is applied and reconciled in Production, while the application runtime is not yet merged or deployed |
-| Meal planning | Functional | Nutrition V1 Draft candidate implements the approved week-authoritative plan, shopping, offline conflict model, same-week move invariant, and atomic lazy week creation |
+| Meal planning | Functional | Nutrition V1 Draft candidate implements week-authoritative planning, canonical Shopping, atomic lazy creation, durable owner-scoped mutation replay, and exact-first offline retry before conflict reconciliation |
 | Hydration | Functional | — |
 | Progress and body measurements | Functional | — |
 | Progress photos | Functional | Delete-compensation debt |
@@ -210,58 +210,39 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 6. PCS-5A and PCS-5B are merged, Production/live-routing verified, and complete; PCS-5 remains open for broader monitoring and backup/restore authority.
 7. GitHub-native routing is not independent external monitoring and does not close broader runtime, OAuth/MCP, deletion, billing, retention, or backup alerting.
 8. Current Supabase organization is on the Free plan and is not final-launch infrastructure; backup/restore authority remains unresolved.
-9. Nutrition V1 migration history is reconciled with no pending/unresolved repository migrations; Nutrition runtime maturity still remains below Workouts until PR #152 is merged, deployed, and Production-runtime verified under the separate release authority.
+9. Nutrition V1 migration history is reconciled through `20260828193416_nutrition_v1_meal_plan_mutation_idempotency` with 111 physical Production records and no pending/unresolved repository migrations; Nutrition application runtime remains a Draft candidate until PR #152 is merged, deployed, and Production-runtime verified under separate release authority.
 10. Repository control documents are the current authority; historical PR descriptions and chat memory are not.
 
 ## Nutrition V1 implementation candidate — Draft PR #152
 
-Nutrition V1 is implemented as the approved 20-task Draft candidate plus the approved architectural and pre-merge corrections on `feat/nutrition-v1-implementation`. The latest application-runtime correction head is `0a2edefe8d408396fac3fcae39401814fc8f2d54`; verification head `797708c2ce92720cace7d88973d9f2df8f3def24` adds executable database proof without changing application behavior. Later commits reconcile Production migration evidence and repository control documentation only.
+Nutrition V1 is implemented as the approved 20-task Draft candidate plus the approved architectural and pre-merge corrections on `feat/nutrition-v1-implementation`. Runtime corrections now include owner-scoped Recipe recovery, Recipe revision CAS and structured graph identity, Diary and Food-to-New-Recipe durable operation replay, Published Recipe/Working Draft projection convergence, Today Shopping/skip convergence onto Nutrition V1 authorities, and durable Meal Plan mutation replay with exact-first offline retry before any target-level conflict reconciliation. The latest runtime queue correction was committed as `773fe5f234fa66c1f703ea04e347f10e2049e43e`; subsequent commits reconcile Production migration and control-plane evidence only.
 
-The implementation preserves the approved four-peer Nutrition IA (`Diary`, `Meal Plan`, `Food Library`, `My Recipes`) with Shopping nested under Meal Plan and Saved Meal contextual rather than peer navigation. It includes canonical Recipe/Saved Meal versioning and 30-day recovery, nullable nutrition truth, frozen consumer snapshots, effective-dated targets, owner-scoped local recovery, active-only Food Catalog discovery, database-authoritative scalable Food Library filtering/ranking/keyset pagination, transactional Cooking state and Start Over authority, transactional Recipe/Saved Meal write authority, atomic published-Recipe Working Draft creation, UUID Cooking timer identity, Diary actual-vs-planned separation, week-authoritative Meal Plan/offline conflict handling, same-week occurrence-date enforcement, atomic lazy Meal Plan week creation, EN/DE/AR localization, privacy/export/deletion consumers, MCP authority convergence, and repository-controlled automatic retention purge scheduling.
+The implementation preserves the approved four-peer Nutrition IA (`Diary`, `Meal Plan`, `Food Library`, `My Recipes`) with Shopping nested under Meal Plan and Saved Meal contextual rather than peer navigation. It includes canonical Recipe/Saved Meal versioning and 30-day recovery, nullable nutrition truth, frozen consumer snapshots, effective-dated targets, owner-scoped local recovery, active-only Food Catalog discovery, database-authoritative scalable Food Library filtering/ranking/keyset pagination, transactional Cooking state and Start Over authority, transactional Recipe/Saved Meal write authority, atomic published-Recipe Working Draft creation, UUID Cooking timer identity, Diary actual-vs-planned separation, week-authoritative Meal Plan/offline conflict handling, same-week occurrence-date enforcement, atomic lazy Meal Plan week creation, durable owner-scoped Meal Plan operation idempotency, exact-first persisted queue replay, EN/DE/AR localization, privacy/export/deletion consumers, MCP authority convergence, and repository-controlled automatic retention purge scheduling.
 
 The final rendered-QA correction was closed with explicit RED→GREEN evidence rather than by weakening the 44px accessibility threshold. Test-only commit `629511eeda8a200fa923b6beae3744d127e85376` added a regression requiring the Saved Meal utility launcher to remain above the 44px subpixel boundary; PR Quality run `33155015154` failed exactly that new test while the launcher remained `min-h-11`. Runtime commit `8047633962fc18ce59db58120ffcd73d20e73135` changed only that launcher height contract to `min-h-12` (48px). The same Nutrition rendered matrix then passed, including the previously failing `diary-loading` scenario.
 
-The Meal Plan pre-merge findings were also closed with RED→GREEN evidence. Test-only head `ed7c335c1e7675adfd4b60a008b0dc2b0d167634` failed exactly two new tests: direct week insertion occurred before the mutation RPC, and a cross-week `planDate` was accepted. The bounded runtime/migration correction on `0a2edefe8d408396fac3fcae39401814fc8f2d54` removed the separate week insert, passed `weekStartDate` into the mutation envelope, rejected occurrence dates outside the seven-day target week, and added forward-only migration `20260828032500_nutrition_v1_meal_plan_week_atomicity.sql`. Verification head `797708c2ce92720cace7d88973d9f2df8f3def24` then passed the full unit suite, chronological migration replay, database lint, and executable database verification proving atomic lazy creation, rollback/no orphan week after a failed first mutation, and table-trigger rejection of direct cross-week writes. Its database job stopped only at the intentionally stale migration-ledger gate before Production reconciliation.
+The Meal Plan pre-merge findings were closed with RED→GREEN evidence. Test-only head `ed7c335c1e7675adfd4b60a008b0dc2b0d167634` failed exactly two tests: direct week insertion occurred before the mutation RPC, and a cross-week `planDate` was accepted. The bounded runtime/migration correction on `0a2edefe8d408396fac3fcae39401814fc8f2d54` removed the separate week insert, passed `weekStartDate` into the mutation envelope, rejected occurrence dates outside the seven-day target week, and added forward-only migration `20260828032500_nutrition_v1_meal_plan_week_atomicity.sql`. Later TDD proved a second Meal Plan defect: the command accepted `operationId` but did not persist/replay it, so an ambiguous successful commit could be retried as a stale revision. Forward migration `20260828210000_nutrition_v1_meal_plan_mutation_idempotency.sql` adds a private owner-scoped replay ledger and replays identical commands before CAS. Client RED `3ff2a0310bfeb89aac380fc152800abd7aa55046` then proved the durable queue lacked an exact-first replay primitive; runtime commits `aecfa83dcaa3145fb5fa90688f25249922844124` and `773fe5f234fa66c1f703ea04e347f10e2049e43e` preserve the original operation/week/base/mutation envelope, attempt it before reconciliation, and only rebase after the canonical stale CAS signal. Transient or ambiguous failures retain the exact envelope for retry.
 
-Earlier exact runtime head `8047633962fc18ce59db58120ffcd73d20e73135` completed the permanent Draft validation sequence successfully:
-
-| Evidence | Result |
-|---|---|
-| Phase A Diff Validation run `33155197445` | PASS |
-| PR Quality run `33155197460` | PASS |
-| Exercise Detail V2 Runtime QA run `33155197453` | PASS |
-| Exercise Library Locale Runtime QA run `33155197446` | PASS |
-| PR Quality repository integrity | PASS |
-| full unit suite, including Saved Meal launcher regression | PASS |
-| lint / typecheck | PASS |
-| chronological migration replay | PASS |
-| database lint / verification SQL / migration ledger | PASS |
-| database integration / Workout History integration | PASS |
-| production environment contract / production build | PASS |
-| general rendered QA, including all Nutrition V1 scenarios | PASS |
-| Train / Active Workout rendered QA | PASS |
-| Workout History rendered QA | PASS |
-
-The later documentation-only head `2a07305ad8a64c14d087be342b2873a3d92a40e2` also completed all four Draft PR workflows successfully before the authorized Production migration applications: Phase A `33156208402`, PR Quality `33156208374`, Exercise Detail Runtime QA `33156208307`, and Exercise Library Locale Runtime QA `33156208523` all passed.
+Earlier permanent Draft validation runs proved the broad Nutrition implementation and rendered matrix, including Phase A, PR Quality, Exercise Detail Runtime QA, Exercise Library Locale Runtime QA, lint/typecheck/unit, chronological migration replay, database lint/verification/ledger/integration, production build, general rendered QA, Train/Active Workout QA, and Workout History QA. Every new closure correction is required to repeat those exact-head gates before merge-readiness can be claimed.
 
 ### Nutrition V1 Production migration closure
 
-All fourteen Nutrition V1 repository migrations are now represented in reconciled Plaivra Production migration history under generated version aliases. The first eight were applied on 2026-08-27; five closure migrations were applied on 2026-08-28; the bounded Meal Plan final-review migration is canonically recorded as `20260828100730_nutrition_v1_meal_plan_week_atomicity`. No repository migration remains pending or unresolved.
+All eighteen Nutrition V1 repository migrations are now represented in reconciled Plaivra Production migration history under generated version aliases. The first eight were applied on 2026-08-27; the remaining closure and bounded correction migrations were applied on 2026-08-28. No repository migration remains pending or unresolved.
 
 | Migration state | Verified value |
 |---|---|
 | Production project | `bkwezjxvapaeasfvlhvv` |
-| ledger capturedAt | `2026-08-28T10:10:09.092Z` |
-| physical Production migration records | `107` |
+| ledger capturedAt | `2026-08-28T19:34:31.343591Z` |
+| physical Production migration records | `111` |
 | pendingMigrationCount | `0` |
 | schemaVerifiedUntrackedCount | `0` |
 | unresolvedMigrationCount | `0` |
 | migration history repair state | `reconciled` |
 | migration-ledger releaseReady | `true` |
-| latest physical Production migration | `20260828100730_nutrition_v1_meal_plan_week_atomicity` |
+| latest physical Production migration | `20260828193416_nutrition_v1_meal_plan_mutation_idempotency` |
 | released compatibility marker | `20260724232734` — unchanged |
 
-The six final generated Production identities are:
+The ten 2026-08-28 generated Production identities are:
 
 1. `20260828091053_nutrition_v1_final_architecture_corrections`
 2. `20260828091108_nutrition_v1_cooking_command_authority`
@@ -269,13 +250,17 @@ The six final generated Production identities are:
 4. `20260828091159_nutrition_v1_timer_instance_identity`
 5. `20260828091228_nutrition_v1_working_draft_command`
 6. `20260828100730_nutrition_v1_meal_plan_week_atomicity`
+7. `20260828112951_nutrition_v1_recipe_draft_revision`
+8. `20260828170752_nutrition_v1_recipe_draft_graph_identity`
+9. `20260828181729_nutrition_v1_recipe_preseed_idempotency`
+10. `20260828193416_nutrition_v1_meal_plan_mutation_idempotency`
 
-A concurrent duplicate execution of the final Meal Plan SQL briefly produced later history identity `20260828100735_nutrition_v1_meal_plan_week_atomicity`. Both stored statements were verified byte-equivalent and the migration is schema-idempotent with no application-row DML. A guarded metadata-only repair required exactly two matching records and exact statement equality before removing only the redundant later history row. The canonical first identity `20260828100730` remains, Production contains 107 migration records, and neither application data nor schema authority was rolled back.
+A concurrent duplicate execution of the Meal Plan atomicity SQL briefly produced later history identity `20260828100735_nutrition_v1_meal_plan_week_atomicity`. Both stored statements were verified byte-equivalent and the migration is schema-idempotent with no application-row DML. A guarded metadata-only repair required exactly two matching records and exact statement equality before removing only the redundant later history row. The canonical first identity `20260828100730` remains; later bounded migrations were each applied exactly once; Production now contains 111 migration records; and neither application data nor schema authority was rolled back.
 
-Read-only Production verification after reconciliation confirmed the planned-occurrence week-date trigger is active; `public.mutate_nutrition_meal_plan_week(uuid,bigint,jsonb)` is `SECURITY DEFINER` with fixed `search_path = pg_catalog, public`; `authenticated` and `service_role` execute while `anon` cannot; zero persisted occurrences violate their week boundary; and the previously applied Food Library, Cooking, Saved Meal, Recipe, timer, and Working Draft authorities remain present. Supabase security/performance advisor warnings remain generic existing findings or expected consequences of the approved authenticated command/index architecture and did not establish a new bounded Nutrition V1 blocker.
+Read-only Production verification after the latest application confirmed `private.nutrition_meal_plan_mutation_operations` exists; authenticated users cannot directly read or mutate it; `public.mutate_nutrition_meal_plan_week(uuid,bigint,jsonb)` remains the authenticated command while `anon` cannot execute it; and the generated migration identity `20260828193416_nutrition_v1_meal_plan_mutation_idempotency` exists exactly once. Disposable verification proves identical owner-scoped operation replay converges before CAS, changed-input operation-ID reuse is rejected, failed commands leave no operation/occurrence/revision residue, and another owner cannot see/replay the first owner's operation. The previously applied Food Library, Cooking, Saved Meal, Recipe, timer, Working Draft, Recipe graph, and atomic Recipe preseed authorities remain represented in the reconciled ledger.
 
 The Production migration work did **not** merge PR #152, deploy Nutrition V1 application code, promote the compatibility marker, or modify Activity Catalog Production.
 
-The final migration-ledger reconciliation and this state update create a new documentation/control-plane PR head after the Green implementation/verification head. A fresh exact-head Draft validation must pass on the final reconciliation head before the Ready-for-review transition. Canonical phase-close Quality must then run on that same unchanged head. Exact Release, release preflight, application deployment, Production runtime verification, merge, and final Product Owner approval remain separate gates.
+The final migration-ledger reconciliation and this state update create a new control-plane PR head after the latest runtime correction. Fresh exact-head Draft validation, canonical phase-close Quality, Exact Release, release preflight, and the independent pre-merge code review must all be green on an unchanged candidate before merge-readiness can be claimed. Application deployment, Production runtime verification, merge, and final Product Owner approval remain separate later gates.
 
-PR #152 remains open and Draft. It must be returned to Draft during phase-close validation after the Ready-for-review Quality trigger is attached. No merge is authorized by this state reconciliation.
+PR #152 remains open and Draft. No merge is authorized by this state reconciliation.
