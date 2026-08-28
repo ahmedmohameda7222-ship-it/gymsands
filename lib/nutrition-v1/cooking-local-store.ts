@@ -185,12 +185,33 @@ export function recoverCookingLocalSession(
   }
 }
 
+export function upsertCookingLocalTimer(
+  session: CookingLocalSession,
+  timer: CookingLocalTimer,
+): CookingLocalSession {
+  const existing = session.timers.find((item) =>
+    item.actionStateId === timer.actionStateId
+    && item.name === timer.name
+    && item.id !== timer.id,
+  );
+  const canonicalTimer = existing ? { ...timer, id: existing.id } : timer;
+  const timers = session.timers.filter((item) =>
+    !(item.actionStateId === timer.actionStateId && item.name === timer.name),
+  );
+  return { ...session, timers: [...timers, canonicalTimer] };
+}
+
 export function queueCookingMutation(
   session: CookingLocalSession,
   mutation: CookingOfflineMutation,
 ): CookingLocalSession {
-  if (session.pendingMutations.some((item) => item.operationId === mutation.operationId)) return session;
-  return { ...session, pendingMutations: [...session.pendingMutations, mutation] };
+  let canonicalSession = session;
+  if (mutation.type === "timer" && typeof mutation.payload.timerId === "string") {
+    const timer = session.timers.find((item) => item.id === mutation.payload.timerId);
+    if (timer) canonicalSession = upsertCookingLocalTimer(session, timer);
+  }
+  if (canonicalSession.pendingMutations.some((item) => item.operationId === mutation.operationId)) return canonicalSession;
+  return { ...canonicalSession, pendingMutations: [...canonicalSession.pendingMutations, mutation] };
 }
 
 export function acknowledgeCookingMutations(
