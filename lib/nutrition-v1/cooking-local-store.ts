@@ -189,16 +189,11 @@ export function upsertCookingLocalTimer(
   session: CookingLocalSession,
   timer: CookingLocalTimer,
 ): CookingLocalSession {
-  const existing = session.timers.find((item) =>
-    item.actionStateId === timer.actionStateId
-    && item.name === timer.name
-    && item.id !== timer.id,
-  );
-  const canonicalTimer = existing ? { ...timer, id: existing.id } : timer;
-  const timers = session.timers.filter((item) =>
-    !(item.actionStateId === timer.actionStateId && item.name === timer.name),
-  );
-  return { ...session, timers: [...timers, canonicalTimer] };
+  const index = session.timers.findIndex((item) => item.id === timer.id);
+  if (index < 0) return { ...session, timers: [...session.timers, timer] };
+  const timers = [...session.timers];
+  timers[index] = timer;
+  return { ...session, timers };
 }
 
 export function queueCookingMutation(
