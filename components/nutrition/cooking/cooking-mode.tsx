@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Clock3, Mic, Pause, Play, RotateCcw, SkipForward, Square } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { CookingCompletion } from "@/components/nutrition/cooking/cooking-completion";
 import { CookingResume } from "@/components/nutrition/cooking/cooking-resume";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 import {
@@ -574,7 +575,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   }
 
   if (session.status === "completed") {
-    return <main className="mx-auto max-w-[620px] px-4 py-8" dir={direction} lang={language}><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{language === "ar" ? "اكتمل الطهي" : language === "de" ? "Kochen abgeschlossen" : "Cooking complete"}</p><h1 className="mt-2 text-2xl font-semibold">{language === "ar" ? "اكتملت الجلسة" : language === "de" ? "Sitzung abgeschlossen" : "Session complete"}</h1><p className="mt-2 text-sm text-muted-foreground">{language === "ar" ? "اكتمال الطهي منفصل عن إضافة أي شيء إلى اليوميات." : language === "de" ? "Der Abschluss des Kochens ist vom Eintragen in dein Tagebuch getrennt." : "Cooking completion is separate from adding anything to your Diary."}</p><button type="button" onClick={onBack} className="mt-5 min-h-[44px] rounded-xl border border-border px-4 text-sm font-medium">{nt("cookingBack")}</button></main>;
+    return <CookingCompletion session={session} language={language === "ar" ? "ar" : language === "de" ? "de" : "en"} onClose={onBack} />;
   }
 
   const rawNow = session.frozenRecipeSnapshot.actions.find((item) => item.id === timeline?.now?.id);
