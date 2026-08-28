@@ -14,9 +14,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace, back: mocks.back, refresh: mocks.refresh }),
   useSearchParams: () => new URLSearchParams({
-    source: "food",
-    foodId: "55555555-5555-4555-8555-555555555555",
-    foodSource: "catalog",
+    destination: "recipe",
+    ingredientFoodId: "55555555-5555-4555-8555-555555555555",
+    source: "catalog",
     quantity: "2",
     serving: "100 g",
   }),
