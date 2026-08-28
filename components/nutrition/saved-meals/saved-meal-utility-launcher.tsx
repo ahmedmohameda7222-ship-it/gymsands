@@ -17,7 +17,7 @@ export function SavedMealUtilityLauncher() {
   const [open, setOpen] = useState(false);
   return (
     <div dir={dir} className="mx-auto flex w-full max-w-5xl justify-end px-4 pt-4 sm:px-6">
-      <button type="button" onClick={() => setOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">
         <Bookmark className="h-4 w-4" />{copy[language]}
       </button>
       <SavedMealUtility open={open} onClose={() => setOpen(false)} />
