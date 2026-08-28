@@ -33,25 +33,34 @@ grant execute on function pg_temp.nv1_review_rejected(text, text) to public;
 
 do $catalog$
 declare
+  v_start regprocedure := to_regprocedure('public.start_nutrition_cooking_session(uuid,uuid,numeric,timestamp with time zone)');
   v_cooking regprocedure := to_regprocedure('public.sync_nutrition_cooking_session_state(uuid,bigint,text,timestamp with time zone,jsonb,jsonb)');
   v_recipe regprocedure := to_regprocedure('public.autosave_nutrition_recipe_draft(uuid,jsonb,jsonb,jsonb,jsonb)');
 begin
+  if v_start is null then
+    raise exception 'Nutrition V1 cooking atomic start RPC missing.';
+  end if;
   if v_cooking is null then
     raise exception 'Nutrition V1 cooking atomic sync RPC missing.';
   end if;
   if v_recipe is null then
     raise exception 'Nutrition V1 recipe atomic autosave RPC missing.';
   end if;
-  if not (select prosecdef from pg_proc where oid = v_cooking)
+  if not (select prosecdef from pg_proc where oid = v_start)
+     or not (select prosecdef from pg_proc where oid = v_cooking)
      or not (select prosecdef from pg_proc where oid = v_recipe)
+     or position('auth.uid()' in pg_get_functiondef(v_start)) = 0
      or position('auth.uid()' in pg_get_functiondef(v_cooking)) = 0
      or position('auth.uid()' in pg_get_functiondef(v_recipe)) = 0 then
     raise exception 'Nutrition V1 atomic review RPC owner authority invalid.';
   end if;
-  if not has_function_privilege('authenticated', v_cooking, 'EXECUTE')
+  if not has_function_privilege('authenticated', v_start, 'EXECUTE')
+     or not has_function_privilege('authenticated', v_cooking, 'EXECUTE')
      or not has_function_privilege('authenticated', v_recipe, 'EXECUTE')
+     or not has_function_privilege('service_role', v_start, 'EXECUTE')
      or not has_function_privilege('service_role', v_cooking, 'EXECUTE')
      or not has_function_privilege('service_role', v_recipe, 'EXECUTE')
+     or has_function_privilege('anon', v_start, 'EXECUTE')
      or has_function_privilege('anon', v_cooking, 'EXECUTE')
      or has_function_privilege('anon', v_recipe, 'EXECUTE') then
     raise exception 'Nutrition V1 atomic review RPC execute grants invalid.';
@@ -67,50 +76,108 @@ insert into auth.users (
   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()
 );
 
+-- Seed the immutable published Recipe graph as database owner. Authenticated runtime
+-- creation must use start_nutrition_cooking_session rather than direct table inserts.
+insert into public.nutrition_recipes (id, user_id, name) values (
+  'a2700000-0000-4000-8000-000000000020',
+  'a2700000-0000-4000-8000-000000000001',
+  'Atomic review cooking fixture'
+);
+insert into public.nutrition_recipe_versions (
+  id, recipe_id, user_id, version_number, name, servings, metadata
+) values (
+  'a2700000-0000-4000-8000-000000000021',
+  'a2700000-0000-4000-8000-000000000020',
+  'a2700000-0000-4000-8000-000000000001',
+  1, 'Atomic review cooking fixture', 1, '{"fixture":true}'::jsonb
+);
+insert into public.nutrition_recipe_actions (
+  id, user_id, recipe_version_id, position, instruction, dependency_action_ids
+) values (
+  'a2700000-0000-4000-8000-000000000022',
+  'a2700000-0000-4000-8000-000000000001',
+  'a2700000-0000-4000-8000-000000000021',
+  0, 'Atomic review step', '{}'
+);
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'a2700000-0000-4000-8000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
-insert into public.nutrition_cooking_sessions (
-  id, user_id, recipe_id, recipe_version_id, frozen_recipe_snapshot, current_action_key, state_revision
-) values (
-  'a2700000-0000-4000-8000-000000000010',
-  'a2700000-0000-4000-8000-000000000001',
+select public.start_nutrition_cooking_session(
   'a2700000-0000-4000-8000-000000000020',
   'a2700000-0000-4000-8000-000000000021',
-  '{"schemaVersion":1,"recipe":{"name":"Fixture"},"ingredients":[],"actions":[],"equipment":[]}'::jsonb,
-  'step-1', 0
-);
-insert into public.nutrition_cooking_action_states (
-  id, session_id, user_id, action_key, state, state_revision
-) values (
-  'a2700000-0000-4000-8000-000000000030',
-  'a2700000-0000-4000-8000-000000000010',
-  'a2700000-0000-4000-8000-000000000001',
-  'step-1', 'active', 0
+  1,
+  '2026-08-27T05:59:00Z'
 );
 
 select public.sync_nutrition_cooking_session_state(
-  'a2700000-0000-4000-8000-000000000010', 0, 'step-1', clock_timestamp(),
-  '[{"id":"a2700000-0000-4000-8000-000000000030","action_key":"step-1","state":"completed","state_revision":1,"completed_at":"2026-08-27T06:00:00Z"}]'::jsonb,
+  (
+    select id from public.nutrition_cooking_sessions
+    where recipe_id = 'a2700000-0000-4000-8000-000000000020'
+      and status = 'active'
+  ),
+  0,
+  'a2700000-0000-4000-8000-000000000022',
+  '2026-08-27T06:00:00Z',
+  jsonb_build_array(jsonb_build_object(
+    'id', (
+      select id from public.nutrition_cooking_action_states
+      where action_key = 'a2700000-0000-4000-8000-000000000022'
+    ),
+    'action_key', 'a2700000-0000-4000-8000-000000000022',
+    'state', 'completed',
+    'state_revision', 1,
+    'completed_at', '2026-08-27T06:00:00Z'
+  )),
   '[]'::jsonb
 );
 select pg_temp.nv1_review_assert(
-  (select state_revision = 1 from public.nutrition_cooking_sessions where id = 'a2700000-0000-4000-8000-000000000010')
-  and (select state = 'completed' from public.nutrition_cooking_action_states where id = 'a2700000-0000-4000-8000-000000000030'),
+  (
+    select state_revision = 1
+    from public.nutrition_cooking_sessions
+    where recipe_id = 'a2700000-0000-4000-8000-000000000020'
+      and status = 'active'
+  )
+  and (
+    select state = 'completed'
+    from public.nutrition_cooking_action_states
+    where action_key = 'a2700000-0000-4000-8000-000000000022'
+  ),
   'Nutrition V1 cooking atomic sync RPC did not persist the complete state.'
 );
 
 select pg_temp.nv1_review_rejected(
   $$select public.sync_nutrition_cooking_session_state(
-    'a2700000-0000-4000-8000-000000000010', 1, 'step-1', clock_timestamp(),
-    '[{"id":"a2700000-0000-4000-8000-000000000030","action_key":"step-1","state":"completed","state_revision":2,"completed_at":"2026-08-27T06:01:00Z"}]'::jsonb,
+    (
+      select id from public.nutrition_cooking_sessions
+      where recipe_id = 'a2700000-0000-4000-8000-000000000020'
+        and status = 'active'
+    ),
+    1,
+    'a2700000-0000-4000-8000-000000000022',
+    '2026-08-27T06:01:00Z',
+    jsonb_build_array(jsonb_build_object(
+      'id', (
+        select id from public.nutrition_cooking_action_states
+        where action_key = 'a2700000-0000-4000-8000-000000000022'
+      ),
+      'action_key', 'a2700000-0000-4000-8000-000000000022',
+      'state', 'completed',
+      'state_revision', 2,
+      'completed_at', '2026-08-27T06:01:00Z'
+    )),
     '[{"id":"a2700000-0000-4000-8000-000000000040","action_state_id":"a2700000-0000-4000-8000-000000000099","timer_name":"Bad","duration_seconds":60,"status":"idle"}]'::jsonb
   )$$,
   'Nutrition V1 cooking atomic sync RPC accepted an invalid timer owner relation.'
 );
 select pg_temp.nv1_review_assert(
-  (select state_revision = 1 from public.nutrition_cooking_sessions where id = 'a2700000-0000-4000-8000-000000000010'),
+  (
+    select state_revision = 1
+    from public.nutrition_cooking_sessions
+    where recipe_id = 'a2700000-0000-4000-8000-000000000020'
+      and status = 'active'
+  ),
   'Nutrition V1 cooking atomic sync RPC failed to roll back its parent revision.'
 );
 
