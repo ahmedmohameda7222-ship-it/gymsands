@@ -3,10 +3,11 @@
 import { Suspense } from "react";
 
 import { DiaryPage } from "@/components/nutrition/diary/diary-page";
+import { AddToHandoffConsumer } from "@/components/nutrition/handoffs/add-to-handoff-consumer";
 import { CardSkeleton } from "@/components/ui/state-views";
 
 export default function CaloriesPage() {
-  return <Suspense fallback={<DiaryPageFallback />}><DiaryPage /></Suspense>;
+  return <Suspense fallback={<DiaryPageFallback />}><DiaryPage /><AddToHandoffConsumer destination="diary" /><AddToHandoffConsumer destination="saved_meal" /></Suspense>;
 }
 
 function DiaryPageFallback() {
