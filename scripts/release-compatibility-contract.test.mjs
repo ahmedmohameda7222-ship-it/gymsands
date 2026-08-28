@@ -22,9 +22,10 @@ test("declared database marker remains distinct from newer compatible physical m
     "fixture must prove that compatible physical migrations may be newer than the release marker",
   );
   assert.equal(resolved.migrationLedgerReconciliationState, "pending");
-  assert.equal(resolved.pendingMigrationCount, 2);
+  assert.ok(ledger.pendingCount > 0, "fixture must retain at least one truthfully pending repository migration");
+  assert.equal(resolved.pendingMigrationCount, ledger.pendingCount);
   assert.equal(resolved.schemaAppliedUntrackedCount, 0);
-  assert.equal(resolved.unresolvedMigrationCount, 2);
+  assert.equal(resolved.unresolvedMigrationCount, ledger.unresolvedCount);
 });
 
 test("Next build metadata binds the declared compatibility marker and exposes the truthful pending repository ledger state", async () => {
@@ -34,9 +35,9 @@ test("Next build metadata binds the declared compatibility marker and exposes th
   assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, "20260724232734");
   assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20260827105332");
   assert.equal(releaseMetadata.migrationLedgerReconciliationState, "pending");
-  assert.equal(releaseMetadata.pendingMigrationCount, "2");
+  assert.equal(releaseMetadata.pendingMigrationCount, String(ledger.pendingCount));
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, "0");
-  assert.equal(releaseMetadata.unresolvedMigrationCount, "2");
+  assert.equal(releaseMetadata.unresolvedMigrationCount, String(ledger.unresolvedCount));
 });
 
 test("rejects a marker that is not represented by a resolved Production migration", () => {
