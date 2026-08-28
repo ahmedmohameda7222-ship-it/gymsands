@@ -48,7 +48,7 @@ test("all release target consumers preserve the declared compatibility marker wh
   );
 });
 
-test("preflight validates the declared marker rather than the physical migration head", () => {
+test("preflight validates the declared marker rather than the physical migration head and still blocks release while migrations are pending", () => {
   const expectedCommit = "a".repeat(40);
   const releaseTarget = deriveReleaseTarget(ledger);
   const migrationState = deriveMigrationLedgerState(ledger);
@@ -83,7 +83,8 @@ test("preflight validates the declared marker rather than the physical migration
 
   const markerResult = evaluateReleasePreflight({ ...baseInput, manifest });
   assert.equal(markerResult.failures.includes("release_manifest_migration_mismatch"), false);
-  assert.equal(markerResult.failures.includes("migration_ledger_not_release_ready"), true);
+  assert.equal(markerResult.failures.includes("migration_ledger_not_reconciled"), true);
+  assert.equal(markerResult.releaseReady, false);
 
   const physicalHeadResult = evaluateReleasePreflight({
     ...baseInput,
@@ -96,7 +97,8 @@ test("preflight validates the declared marker rather than the physical migration
     },
   });
   assert.equal(physicalHeadResult.failures.includes("release_manifest_migration_mismatch"), true);
-  assert.equal(physicalHeadResult.failures.includes("migration_ledger_not_release_ready"), true);
+  assert.equal(physicalHeadResult.failures.includes("migration_ledger_not_reconciled"), true);
+  assert.equal(physicalHeadResult.releaseReady, false);
 });
 
 test("release authority fails closed when the declared marker is absent", () => {
