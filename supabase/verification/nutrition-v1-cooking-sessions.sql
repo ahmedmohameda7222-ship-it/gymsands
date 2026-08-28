@@ -148,82 +148,139 @@ insert into auth.users (
     '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()
   );
 
+-- Published source graph is seeded by the database owner. Runtime Cooking creation
+-- must then go through the owner-derived atomic start RPC rather than direct inserts.
+insert into public.nutrition_recipes (id, user_id, name) values (
+  'a2120000-0000-4000-8000-000000000020',
+  'a2120000-0000-4000-8000-000000000001',
+  'Frozen cooking fixture'
+);
+insert into public.nutrition_recipe_versions (
+  id, recipe_id, user_id, version_number, name, servings, metadata
+) values (
+  'a2120000-0000-4000-8000-000000000021',
+  'a2120000-0000-4000-8000-000000000020',
+  'a2120000-0000-4000-8000-000000000001',
+  1, 'Frozen cooking fixture', 4, '{"fixture":true}'::jsonb
+);
+insert into public.nutrition_recipe_actions (
+  id, user_id, recipe_version_id, position, instruction, dependency_action_ids
+) values (
+  'a2120000-0000-4000-8000-000000000022',
+  'a2120000-0000-4000-8000-000000000001',
+  'a2120000-0000-4000-8000-000000000021',
+  0, 'Boil water', '{}'
+);
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'a2120000-0000-4000-8000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
-insert into public.nutrition_cooking_sessions (
-  id, user_id, recipe_id, recipe_version_id, frozen_recipe_snapshot,
-  serving_scale, current_action_key, state_revision
-) values (
-  'a2120000-0000-4000-8000-000000000010',
-  'a2120000-0000-4000-8000-000000000001',
-  'a2120000-0000-4000-8000-000000000020',
-  'a2120000-0000-4000-8000-000000000021',
-  '{"name":"Frozen cooking fixture","actions":[{"key":"boil-water"}],"servings":4}'::jsonb,
-  1.5,
-  'boil-water',
-  3
-);
+do $runtime$
+declare
+  v_started jsonb;
+  v_session_id uuid;
+  v_action_state_id uuid;
+  v_sync jsonb;
+begin
+  v_started := public.start_nutrition_cooking_session(
+    'a2120000-0000-4000-8000-000000000020',
+    'a2120000-0000-4000-8000-000000000021',
+    1.5,
+    '2026-08-28T03:00:00Z'
+  );
+  v_session_id := (v_started->>'sessionId')::uuid;
 
-insert into public.nutrition_cooking_action_states (
-  id, session_id, user_id, action_key, state, state_revision
-) values (
-  'a2120000-0000-4000-8000-000000000030',
-  'a2120000-0000-4000-8000-000000000010',
-  'a2120000-0000-4000-8000-000000000001',
-  'boil-water',
-  'waiting_for_condition',
-  2
-);
+  select id into v_action_state_id
+  from public.nutrition_cooking_action_states
+  where session_id = v_session_id
+    and action_key = 'a2120000-0000-4000-8000-000000000022';
 
-insert into public.nutrition_cooking_timers (
-  id, action_state_id, user_id, timer_name, duration_seconds,
-  status, started_at, target_at
-) values
-  (
-    'a2120000-0000-4000-8000-000000000040',
-    'a2120000-0000-4000-8000-000000000030',
-    'a2120000-0000-4000-8000-000000000001',
-    'Pasta', 540, 'running', clock_timestamp(), clock_timestamp() + interval '9 minutes'
-  ),
-  (
-    'a2120000-0000-4000-8000-000000000041',
-    'a2120000-0000-4000-8000-000000000030',
-    'a2120000-0000-4000-8000-000000000001',
-    'Chicken rest', 240, 'running', clock_timestamp(), clock_timestamp() + interval '4 minutes'
+  v_sync := public.sync_nutrition_cooking_session_state(
+    v_session_id,
+    0,
+    'a2120000-0000-4000-8000-000000000022',
+    '2026-08-28T03:01:00Z',
+    jsonb_build_array(jsonb_build_object(
+      'id', v_action_state_id,
+      'action_key', 'a2120000-0000-4000-8000-000000000022',
+      'state', 'waiting_for_condition',
+      'state_revision', 1
+    )),
+    jsonb_build_array(
+      jsonb_build_object(
+        'id', 'a2120000-0000-4000-8000-000000000040',
+        'action_state_id', v_action_state_id,
+        'timer_name', 'Pasta',
+        'duration_seconds', 540,
+        'status', 'running',
+        'started_at', '2026-08-28T03:01:00Z',
+        'target_at', '2026-08-28T03:10:00Z'
+      ),
+      jsonb_build_object(
+        'id', 'a2120000-0000-4000-8000-000000000041',
+        'action_state_id', v_action_state_id,
+        'timer_name', 'Chicken rest',
+        'duration_seconds', 240,
+        'status', 'running',
+        'started_at', '2026-08-28T03:01:00Z',
+        'target_at', '2026-08-28T03:05:00Z'
+      )
+    )
   );
 
-select pg_temp.nv1_cooking_assert(
-  (
-    select count(*) = 2
-    from public.nutrition_cooking_timers
-    where action_state_id = 'a2120000-0000-4000-8000-000000000030'
-      and started_at is not null
-      and target_at is not null
-  ),
-  'Nutrition V1 cooking multiple timers contract missing.'
-);
+  perform pg_temp.nv1_cooking_assert(
+    (v_sync->>'stateRevision')::integer = 1,
+    'Nutrition V1 cooking sync revision contract missing.'
+  );
 
-select pg_temp.nv1_cooking_assert(
-  (
-    select current_action_key = 'boil-water'
-       and status = 'active'
-       and started_at is not null
-       and last_active_at is not null
-       and state_revision = 3
-       and frozen_recipe_snapshot->>'name' = 'Frozen cooking fixture'
-    from public.nutrition_cooking_sessions
-    where id = 'a2120000-0000-4000-8000-000000000010'
-  ),
-  'Nutrition V1 cooking resumable state contract missing.'
-);
+  perform pg_temp.nv1_cooking_assert(
+    (
+      select count(*) = 2
+      from public.nutrition_cooking_timers
+      where action_state_id = v_action_state_id
+        and started_at is not null
+        and target_at is not null
+    ),
+    'Nutrition V1 cooking multiple timers contract missing.'
+  );
+
+  perform pg_temp.nv1_cooking_assert(
+    (
+      select current_action_key = 'a2120000-0000-4000-8000-000000000022'
+         and status = 'active'
+         and started_at is not null
+         and last_active_at is not null
+         and state_revision = 1
+         and frozen_recipe_snapshot->'recipe'->>'name' = 'Frozen cooking fixture'
+         and jsonb_array_length(frozen_recipe_snapshot->'actions') = 1
+      from public.nutrition_cooking_sessions
+      where id = v_session_id
+    ),
+    'Nutrition V1 cooking resumable state contract missing.'
+  );
+end
+$runtime$;
 
 select pg_temp.nv1_cooking_rejected(
   $$update public.nutrition_cooking_sessions
-    set frozen_recipe_snapshot = '{"name":"Mutated"}'::jsonb
-    where id = 'a2120000-0000-4000-8000-000000000010'$$,
+    set frozen_recipe_snapshot = '{"schemaVersion":1,"recipe":{"name":"Mutated"},"ingredients":[],"actions":[],"equipment":[]}'::jsonb
+    where recipe_id = 'a2120000-0000-4000-8000-000000000020'$$,
   'Nutrition V1 cooking frozen Recipe snapshot was mutable.'
+);
+
+-- Direct initial/child writes are no longer a valid authenticated command path.
+select pg_temp.nv1_cooking_rejected(
+  $$insert into public.nutrition_cooking_sessions (
+      user_id, recipe_id, recipe_version_id, frozen_recipe_snapshot, serving_scale
+    ) values (
+      'a2120000-0000-4000-8000-000000000001',
+      'a2120000-0000-4000-8000-000000000020',
+      'a2120000-0000-4000-8000-000000000021',
+      '{"schemaVersion":1,"recipe":{},"ingredients":[],"actions":[],"equipment":[]}'::jsonb,
+      1
+    )$$,
+  'Nutrition V1 cooking initial session creation bypassed the transactional RPC.'
 );
 
 select set_config('request.jwt.claim.sub', 'a2120000-0000-4000-8000-000000000002', true);
@@ -231,15 +288,18 @@ select set_config('request.jwt.claim.sub', 'a2120000-0000-4000-8000-000000000002
 select pg_temp.nv1_cooking_assert(
   not exists (
     select 1 from public.nutrition_cooking_sessions
-    where id = 'a2120000-0000-4000-8000-000000000010'
+    where recipe_id = 'a2120000-0000-4000-8000-000000000020'
   )
   and not exists (
     select 1 from public.nutrition_cooking_action_states
-    where id = 'a2120000-0000-4000-8000-000000000030'
+    where action_key = 'a2120000-0000-4000-8000-000000000022'
   )
   and not exists (
     select 1 from public.nutrition_cooking_timers
-    where action_state_id = 'a2120000-0000-4000-8000-000000000030'
+    where id in (
+      'a2120000-0000-4000-8000-000000000040',
+      'a2120000-0000-4000-8000-000000000041'
+    )
   ),
   'Nutrition V1 cooking cross-owner access leaked.'
 );
@@ -252,7 +312,7 @@ select pg_temp.nv1_cooking_rejected(
       'a2120000-0000-4000-8000-000000000001',
       'intruder-action', 'ready'
     )$$,
-  'Nutrition V1 cooking cross-owner access leaked.'
+  'Nutrition V1 cooking cross-owner/write-authority access leaked.'
 );
 
 rollback;
