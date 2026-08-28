@@ -4,6 +4,7 @@ import { asObject, cleanDate, getArray, getOptionalNumber, getOptionalString, ge
 import { executeMcpTool as executeOriginalMcpTool } from "@/lib/mcp/tool-executor";
 import { fail, num, ok, type DbRow, type McpToolResult } from "@/lib/mcp/tool-helpers";
 import { ContextProjectionError, projectTaskContext, type ContextTask } from "@/lib/mcp/context-projections";
+import { createCanonicalSavedMealFromMcp } from "@/lib/mcp/nutrition-v1-saved-meal";
 import { weekContainsDate } from "@/lib/nutrition-v1/week-start";
 import {
   completeMealPlanOccurrence,
@@ -94,10 +95,6 @@ function normalizeMealKey(value: unknown): MealKey {
 function dbMealType(value: unknown) {
   const key = normalizeMealKey(value);
   return key === "breakfast" ? "Breakfast" : key === "lunch" ? "Lunch" : key === "dinner" ? "Dinner" : "Snack";
-}
-
-function readMacro(item: JsonObject, canonical: "protein" | "carbs" | "fat") {
-  return item[canonical] ?? item[`${canonical}_g`] ?? 0;
 }
 
 function readNullableMacro(item: JsonObject, canonical: "protein" | "carbs" | "fat") {
@@ -357,20 +354,6 @@ async function generateShoppingList(ctx: McpContext, input: JsonObject) {
       source_occurrence_ids: need.sourceOccurrenceIds,
     })),
   });
-}
-
-async function createCustomMeal(ctx: McpContext, input: JsonObject) {
-  const items = getArray<JsonObject>(input, "items");
-  if (!items.length) return fail("missing_required_input", "Provide at least one custom meal item.");
-  const { data: meal, error: mealError } = await ctx.supabase.from("saved_recipes").insert({ user_id: ctx.userId, name: getString(input, "meal_name"), saved_item_type: "meal", notes: getOptionalString(input, "notes") ?? null, is_favorite: Boolean(input.is_favorite) }).select("*").single();
-  if (mealError) throw new Error(mealError.message);
-  const rows = items.map((item) => ({ recipe_id: meal.id, user_id: ctx.userId, food_name: getString(item, "food_name"), serving_unit: getOptionalString(item, "serving_hint") ?? getOptionalString(item, "serving_size") ?? "serving", quantity: positive(item.quantity ?? 1), calories: nonNegative(item.calories, "calories"), protein_g: nonNegative(readMacro(item, "protein"), "protein"), carbs_g: nonNegative(readMacro(item, "carbs"), "carbs"), fat_g: nonNegative(readMacro(item, "fat"), "fat") }));
-  const { data: mealItems, error: itemsError } = await ctx.supabase.from("saved_recipe_ingredients").insert(rows).select("*");
-  if (itemsError) {
-    await ctx.supabase.from("saved_recipes").delete().eq("id", meal.id).eq("user_id", ctx.userId);
-    throw new Error(itemsError.message);
-  }
-  return ok({ ok: true, meal, items: mealItems ?? [] });
 }
 
 async function readOwnedOccurrence(ctx: McpContext, id: string) {
@@ -648,7 +631,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
   if (toolName === "update_meal_plan_item") return updateMealPlanItem(ctx, input);
   if (toolName === "delete_meal_plan_item") return deleteMealPlanItem(ctx, input);
   if (toolName === "mark_meal_plan_item_done") return markMealPlanItemDone(ctx, input);
-  if (toolName === "create_custom_meal") return createCustomMeal(ctx, input);
+  if (toolName === "create_custom_meal") return createCanonicalSavedMealFromMcp(ctx, input);
   if (toolName === "add_sleep_recovery_log") return addSleepRecoveryLog(ctx, input);
   if (toolName === "get_today_workout") {
     const date = cleanDate(input.date ?? "today");
