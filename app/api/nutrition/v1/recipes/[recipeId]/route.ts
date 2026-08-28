@@ -28,8 +28,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ re
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     if (body.operation === "autosave") {
       const draft = body.draft;
+      const expectedRevision = Number(body.expectedRevision);
       if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new NutritionRequestError("Recipe Draft payload is required.");
-      await autosaveRecipeDraft(context.supabase, context.user.id, recipeId, draft as Parameters<typeof autosaveRecipeDraft>[3]);
+      if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new NutritionRequestError("Recipe Working Draft expected revision is required.");
+      await autosaveRecipeDraft(context.supabase, context.user.id, recipeId, draft as Parameters<typeof autosaveRecipeDraft>[3], expectedRevision);
       return nutritionJson({ recipe: await getRecipeWorkspace(context.supabase, context.user.id, recipeId) });
     }
     if (body.operation === "presentation") {
