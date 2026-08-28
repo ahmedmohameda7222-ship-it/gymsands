@@ -91,19 +91,32 @@ begin
 end
 $exact_replay$;
 
+-- The operation ledger is internal authority, never an authenticated data surface.
+reset role;
 select pg_temp.nv1mpi_assert(
-  to_regclass('public.nutrition_meal_plan_mutation_operations') is not null,
-  'Meal Plan mutation operation authority is missing.'
+  to_regclass('private.nutrition_meal_plan_mutation_operations') is not null,
+  'Private Meal Plan mutation operation authority is missing.'
 );
 select pg_temp.nv1mpi_assert(
   (
     select count(*) = 1
-    from public.nutrition_meal_plan_mutation_operations
+    from private.nutrition_meal_plan_mutation_operations
     where user_id = 'a2290000-0000-4000-8000-000000000001'
       and operation_id = 'a2290000-0000-4000-8000-000000000020'
   ),
-  'Meal Plan logical command did not persist exactly one operation record.'
+  'Meal Plan logical command did not persist exactly one private operation record.'
 );
+select pg_temp.nv1mpi_assert(
+  not has_table_privilege('authenticated', 'private.nutrition_meal_plan_mutation_operations', 'SELECT')
+  and not has_table_privilege('authenticated', 'private.nutrition_meal_plan_mutation_operations', 'INSERT')
+  and not has_table_privilege('authenticated', 'private.nutrition_meal_plan_mutation_operations', 'UPDATE')
+  and not has_table_privilege('authenticated', 'private.nutrition_meal_plan_mutation_operations', 'DELETE'),
+  'Authenticated role can access the private Meal Plan operation ledger.'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'a2290000-0000-4000-8000-000000000001', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select pg_temp.nv1mpi_rejected(
   $$select public.mutate_nutrition_meal_plan_week(
@@ -128,9 +141,10 @@ select pg_temp.nv1mpi_rejected(
   )$$,
   'Meal Plan accepted an invalid command used for rollback proof.'
 );
+reset role;
 select pg_temp.nv1mpi_assert(
   not exists (
-    select 1 from public.nutrition_meal_plan_mutation_operations
+    select 1 from private.nutrition_meal_plan_mutation_operations
     where user_id = 'a2290000-0000-4000-8000-000000000001'
       and operation_id = 'a2290000-0000-4000-8000-000000000021'
   )
@@ -144,7 +158,9 @@ select pg_temp.nv1mpi_assert(
 
 -- Operation identity is owner-scoped: another owner may use the same opaque
 -- operation UUID for a different owned week without seeing/replaying owner A.
+set local role authenticated;
 select set_config('request.jwt.claim.sub', 'a2290000-0000-4000-8000-000000000002', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
 insert into public.nutrition_meal_plan_weeks (
   id, user_id, week_start_date
 ) values (
@@ -158,10 +174,11 @@ select public.mutate_nutrition_meal_plan_week(
   0,
   '{"operationId":"a2290000-0000-4000-8000-000000000020","weekStartDate":"2026-10-05","weekOverride":{"note":"owner B command"}}'::jsonb
 );
+reset role;
 select pg_temp.nv1mpi_assert(
   (
     select count(*) = 2
-    from public.nutrition_meal_plan_mutation_operations
+    from private.nutrition_meal_plan_mutation_operations
     where operation_id = 'a2290000-0000-4000-8000-000000000020'
   )
   and (select revision = 1 from public.nutrition_meal_plan_weeks where id = 'a2290000-0000-4000-8000-000000000011'),
