@@ -215,30 +215,32 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 
 ## Nutrition V1 implementation candidate — Draft PR #152
 
-Nutrition V1 is implemented as the approved 20-task Draft candidate plus the approved long-term architectural corrections on `feat/nutrition-v1-implementation`. The latest runtime-bearing head before this documentation-only state reconciliation is `696f7233a1f6ce13adedb7aad9c9ef428e109a60`; this state-record commit changes documentation only.
+Nutrition V1 is implemented as the approved 20-task Draft candidate plus the approved long-term architectural corrections on `feat/nutrition-v1-implementation`. The latest runtime-bearing head before this documentation-only state reconciliation is `8047633962fc18ce59db58120ffcd73d20e73135`; this state-record commit changes documentation only.
 
 The implementation preserves the approved four-peer Nutrition IA (`Diary`, `Meal Plan`, `Food Library`, `My Recipes`) with Shopping nested under Meal Plan and Saved Meal contextual rather than peer navigation. It includes canonical Recipe/Saved Meal versioning and 30-day recovery, nullable nutrition truth, frozen consumer snapshots, effective-dated targets, owner-scoped local recovery, active-only Food Catalog discovery, database-authoritative scalable Food Library filtering/ranking/keyset pagination, transactional Cooking state and Start Over authority, transactional Recipe/Saved Meal write authority, atomic published-Recipe Working Draft creation, UUID Cooking timer identity, Diary actual-vs-planned separation, week-authoritative Meal Plan/offline conflict handling, EN/DE/AR localization, privacy/export/deletion consumers, MCP authority convergence, and repository-controlled automatic retention purge scheduling.
 
-The exact runtime head `696f7233a1f6ce13adedb7aad9c9ef428e109a60` completed the permanent Draft validation sequence successfully before this documentation-only reconciliation:
+The final rendered-QA correction was closed with explicit RED→GREEN evidence rather than by weakening the 44px accessibility threshold. Test-only commit `629511eeda8a200fa923b6beae3744d127e85376` added a regression requiring the Saved Meal utility launcher to remain above the 44px subpixel boundary; PR Quality run `33155015154` failed exactly that new test while the launcher remained `min-h-11`. Runtime commit `8047633962fc18ce59db58120ffcd73d20e73135` changed only that launcher height contract to `min-h-12` (48px). The same Nutrition rendered matrix then passed, including the previously failing `diary-loading` scenario.
+
+The exact runtime head `8047633962fc18ce59db58120ffcd73d20e73135` completed the permanent Draft validation sequence successfully before this documentation-only reconciliation:
 
 | Evidence | Result |
 |---|---|
-| Phase A Diff Validation run `33152765143` | PASS |
-| PR Quality run `33152764966` | PASS |
-| Exercise Detail V2 Runtime QA run `33152764973` | PASS |
-| Exercise Library Locale Runtime QA run `33152765335` | PASS |
+| Phase A Diff Validation run `33155197445` | PASS |
+| PR Quality run `33155197460` | PASS |
+| Exercise Detail V2 Runtime QA run `33155197453` | PASS |
+| Exercise Library Locale Runtime QA run `33155197446` | PASS |
 | PR Quality repository integrity | PASS |
-| full unit suite | PASS |
+| full unit suite, including Saved Meal launcher regression | PASS |
 | lint / typecheck | PASS |
 | chronological migration replay | PASS |
 | database lint / verification SQL / migration ledger | PASS |
 | database integration / Workout History integration | PASS |
 | production environment contract / production build | PASS |
-| general rendered QA | PASS |
+| general rendered QA, including all Nutrition V1 scenarios | PASS |
 | Train / Active Workout rendered QA | PASS |
 | Workout History rendered QA | PASS |
 
-All inline automated review findings recorded before that exact-head validation were verified against current code and resolved before the canonical phase-close transition. The public MCP `create_custom_meal` path also converges on canonical `nutrition_saved_meals` authority rather than the legacy Saved Recipe tables.
+All previously recorded automated review findings remain resolved against the current runtime implementation. The public MCP `create_custom_meal` path converges on canonical `nutrition_saved_meals` authority rather than the legacy Saved Recipe tables.
 
 Nutrition V1 Production migration history is reconciled through the long-term architecture correction applied exactly once on 2026-08-27 as generated Production identity `20260827105332_nutrition_v1_long_term_architecture_corrections`. Five later forward-only repository corrections remain pending and have not been applied to Production.
 
@@ -265,6 +267,6 @@ The pending repository-only corrections are:
 
 Those five migrations require separate explicit Production authorization/application. This implementation continuation did not apply them, did not promote the compatibility marker, did not deploy the application, and did not modify Activity Catalog Production.
 
-Canonical phase-close Quality run `33153697649` was started on runtime head `696f7233a1f6ce13adedb7aad9c9ef428e109a60` after its Draft validation and review closure. This documentation-only reconciliation supersedes that exact head, so the run is not final merge evidence even if it completes successfully. A fresh Ready-for-review transition and canonical Quality run must validate the new exact PR head after this commit.
+Canonical phase-close Quality run `33153697649` on runtime head `696f7233a1f6ce13adedb7aad9c9ef428e109a60` and subsequent validation on superseded heads are not final merge evidence. This documentation-only reconciliation creates a new exact PR head, so a fresh Draft validation followed by a Ready-for-review canonical Quality run must validate that final exact head.
 
 PR #152 remains open and must be returned to Draft during phase-close validation. Exact Release, release preflight, deployment, Production migration application, Production verification, merge, and final Product Owner approval remain separate gates; none is implied or authorized by this state reconciliation.
