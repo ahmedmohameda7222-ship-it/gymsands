@@ -25,6 +25,13 @@ insert into auth.users (
   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()
 );
 
+insert into public.food_items (
+  id, food_name, serving_size, calories, protein_g, carbs_g, fat_g, lifecycle_status
+) values (
+  'f3280000-0000-4000-8000-000000000003',
+  'Atomic chicken', '100 g', 110, 21, 0, 2, 'active'
+);
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'f3280000-0000-4000-8000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -73,13 +80,23 @@ begin
     null;
   end;
 
+  begin
+    perform public.create_preseeded_nutrition_recipe_draft(
+      'f3280000-0000-4000-8000-000000000004',
+      jsonb_set(v_ingredient, '{food_id}', '"f3280000-0000-4000-8000-000000000099"'::jsonb)
+    );
+    raise exception 'Unowned or unavailable Food unexpectedly seeded a Recipe.';
+  exception when invalid_parameter_value then
+    null;
+  end;
+
   perform pg_temp.nv1_recipe_preseed_assert(
     (select count(*) = 1 from public.nutrition_recipes where user_id = 'f3280000-0000-4000-8000-000000000001'),
-    'Rejected replay with different input created another Recipe root.'
+    'Rejected replay or unavailable Food created another Recipe root.'
   );
   perform pg_temp.nv1_recipe_preseed_assert(
     (select count(*) = 1 from public.nutrition_recipe_ingredients where recipe_draft_id = v_draft_id),
-    'Rejected replay with different input changed the preseeded ingredient graph.'
+    'Rejected replay or unavailable Food changed the preseeded ingredient graph.'
   );
 end
 $owner$;
@@ -91,6 +108,10 @@ begin
   perform pg_temp.nv1_recipe_preseed_assert(
     (select count(*) = 1 from private.nutrition_recipe_creation_operations where user_id = 'f3280000-0000-4000-8000-000000000001' and operation_id = 'f3280000-0000-4000-8000-000000000002'),
     'Atomic Recipe creation replay ledger did not retain exactly one operation record.'
+  );
+  perform pg_temp.nv1_recipe_preseed_assert(
+    (select count(*) = 1 from private.nutrition_recipe_creation_operations where user_id = 'f3280000-0000-4000-8000-000000000001'),
+    'Rejected unavailable Food unexpectedly created a replay-ledger record.'
   );
 end
 $ledger$;
