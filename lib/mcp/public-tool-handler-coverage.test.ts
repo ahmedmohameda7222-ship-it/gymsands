@@ -181,6 +181,34 @@ function createInMemorySupabase() {
   }
 
   async function rpc(name: string, args: Record<string, unknown>) {
+    if (name === "search_nutrition_food_library") {
+      const query = String(args.p_query ?? "").trim().toLowerCase();
+      const limit = Math.max(1, Number(args.p_limit ?? 20));
+      const items = tables.food_items
+        .filter((row) => !query || String(row.food_name ?? "").toLowerCase().includes(query))
+        .slice(0, limit)
+        .map((row) => ({
+          id: row.id,
+          source: "catalog",
+          name: row.food_name,
+          servingLabel: row.serving_size,
+        }));
+      return { data: { items, nextCursor: null }, error: null };
+    }
+    if (name === "create_nutrition_saved_meal") {
+      return {
+        data: {
+          id: nextId(),
+          user_id: USER_ID,
+          name: String(args.p_name ?? "Saved meal"),
+          note: typeof args.p_note === "string" ? args.p_note : null,
+          is_favorite: args.p_is_favorite === true,
+          deleted_at: null,
+          purge_after: null,
+        },
+        error: null,
+      };
+    }
     if (name === "mutate_nutrition_meal_plan_week") {
       const weekId = String(args.p_week_id ?? "");
       const week = tables.nutrition_meal_plan_weeks.find((row) => row.id === weekId && row.user_id === USER_ID) ?? null;
