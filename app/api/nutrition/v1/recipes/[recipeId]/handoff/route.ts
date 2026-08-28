@@ -9,9 +9,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ reci
   if (context instanceof NextResponse) return context;
   try {
     const { recipeId } = await params;
-    const recipeVersionId = new URL(request.url).searchParams.get("recipeVersionId");
+    const search = new URL(request.url).searchParams;
+    const recipeVersionId = search.get("recipeVersionId");
     if (!recipeVersionId) throw new NutritionRequestError("Recipe version is required.");
-    return nutritionJson(await resolveRecipeHandoff(context.supabase, context.user.id, recipeId, recipeVersionId));
+    const rawQuantity = search.get("quantity");
+    const quantity = rawQuantity === null || rawQuantity.trim() === "" ? 1 : Number(rawQuantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) throw new NutritionRequestError("Recipe serving quantity must be greater than zero.");
+    return nutritionJson(await resolveRecipeHandoff(context.supabase, context.user.id, recipeId, recipeVersionId, quantity));
   } catch (error) {
     return nutritionErrorResponse(error);
   }
