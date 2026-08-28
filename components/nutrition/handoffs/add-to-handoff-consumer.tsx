@@ -11,11 +11,50 @@ import { localeWeekStartDay, startOfMealPlanWeek } from "@/lib/nutrition-v1/week
 type RecipeChoice = { recipeId: string; name: string; status?: string };
 type Props = { destination: AddToDestination };
 
+type RecipeFoodSource = {
+  type: "food";
+  id: string;
+  source: string;
+  quantity: number;
+  serving: string;
+};
+
 async function jsonRequest<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await foodLibraryApi(input, init);
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Nutrition handoff could not be completed.");
   return data as T;
+}
+
+function newRecipeOperationStorageKey(source: RecipeFoodSource) {
+  return `plaivra:nutrition:handoff:recipe:new:${source.source}:${source.id}:${source.quantity}:${encodeURIComponent(source.serving)}`;
+}
+
+function readStoredOperationId(key: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storeOperationId(key: string, operationId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, operationId);
+  } catch {
+    // The in-memory ref still preserves retries for this mounted handoff.
+  }
+}
+
+function clearStoredOperationId(key: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // A successful server response is authoritative even if storage cleanup fails.
+  }
 }
 
 export function AddToHandoffConsumer({ destination }: Props) {
@@ -64,6 +103,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
   async function commit() {
     setLoading(true);
     setError("");
+    let successfulRecipeOperationKey: string | null = null;
     try {
       const payload: Record<string, unknown> = {
         destination,
@@ -93,6 +133,15 @@ export function AddToHandoffConsumer({ destination }: Props) {
         payload.note = note.trim() || null;
       } else if (destination === "recipe") {
         payload.targetRecipeId = targetRecipeId || null;
+        if (!targetRecipeId) {
+          if (currentSource.type !== "food") throw new Error("Only Food can be added to a new Recipe.");
+          const operationKey = newRecipeOperationStorageKey(currentSource);
+          const operationId = pendingOperationIdRef.current ?? readStoredOperationId(operationKey) ?? crypto.randomUUID();
+          pendingOperationIdRef.current = operationId;
+          storeOperationId(operationKey, operationId);
+          payload.operationId = operationId;
+          successfulRecipeOperationKey = operationKey;
+        }
       }
 
       const result = await jsonRequest<{ recipeId?: string }>("/api/nutrition/v1/handoffs/commit", {
@@ -101,6 +150,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
         body: JSON.stringify(payload),
       });
       pendingOperationIdRef.current = null;
+      if (successfulRecipeOperationKey) clearStoredOperationId(successfulRecipeOperationKey);
       if (destination === "diary") router.replace(`/calories?date=${encodeURIComponent(date)}`);
       else if (destination === "meal_plan") {
         const locale = typeof navigator === "undefined" ? "en-GB" : navigator.language;
@@ -137,7 +187,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
 
         {destination === "saved_meal" ? <div className="mt-5 grid gap-4"><label className="grid gap-1 text-sm font-medium">Saved Meal name<input value={savedMealName} onChange={(event) => setSavedMealName(event.target.value)} maxLength={200} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label><label className="grid gap-1 text-sm font-medium">Note <span className="font-normal text-muted-foreground">(optional)</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="rounded-xl border border-border bg-background p-3 font-normal" /></label></div> : null}
 
-        {destination === "recipe" ? <div className="mt-5"><label className="grid gap-1 text-sm font-medium">Recipe authoring target<select value={targetRecipeId} onChange={(event) => setTargetRecipeId(event.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">New Recipe Working Draft</option>{recipeChoices.map((recipe) => <option key={recipe.recipeId} value={recipe.recipeId}>{recipe.name}</option>)}</select></label><p className="mt-2 text-xs text-muted-foreground">My Recipes owns the Recipe. This handoff only pre-seeds the selected Food, serving, and quantity.</p></div> : null}
+        {destination === "recipe" ? <div className="mt-5"><label className="grid gap-1 text-sm font-medium">Recipe authoring target<select value={targetRecipeId} onChange={(event) => { pendingOperationIdRef.current = null; setTargetRecipeId(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">New Recipe Working Draft</option>{recipeChoices.map((recipe) => <option key={recipe.recipeId} value={recipe.recipeId}>{recipe.name}</option>)}</select></label><p className="mt-2 text-xs text-muted-foreground">My Recipes owns the Recipe. This handoff only pre-seeds the selected Food, serving, and quantity.</p></div> : null}
 
         {error ? <p role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
         <button type="button" onClick={() => void commit()} disabled={loading || !sourceName} className="mt-5 min-h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">{loading ? "Saving…" : action}</button>
