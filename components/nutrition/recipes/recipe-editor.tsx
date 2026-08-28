@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, ChevronDown, Plus, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { recipeApi } from "@/components/nutrition/recipes/recipe-api";
+import { recipeApi, RecipeApiError } from "@/components/nutrition/recipes/recipe-api";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 import { supabase } from "@/lib/supabase/client";
 
@@ -30,6 +30,27 @@ type DraftPayload = {
   equipment: Array<{ name: string; quantity: number | null; note: string | null }>;
   draft_metadata: Record<string, unknown>;
 };
+
+type PersistDraft = () => Promise<Workspace | null>;
+
+const AUTOSAVE_DELAY_MS = 650;
+const AUTOSAVE_RETRY_DELAY_MS = 1_000;
+
+function isRecipeDraftRevisionConflict(cause: unknown): cause is RecipeApiError {
+  return cause instanceof RecipeApiError
+    && cause.status === 409
+    && cause.code === "recipe_draft_revision_conflict";
+}
+
+function isRetryableRecipeSaveFailure(cause: unknown) {
+  if (isRecipeDraftRevisionConflict(cause)) return false;
+  if (cause instanceof RecipeApiError) {
+    return cause.status === 408 || cause.status === 429 || cause.status >= 500;
+  }
+  if (!(cause instanceof Error)) return false;
+  if (/working draft revision is unavailable|please sign in|recipe client is unavailable/i.test(cause.message)) return false;
+  return true;
+}
 
 const numberOrNull = (value: string) => value.trim() && Number.isFinite(Number(value)) ? Number(value) : null;
 const textOrNull = (value: string) => value.trim() || null;
@@ -61,6 +82,11 @@ export function RecipeEditor({ recipeId, initialAssistantMode, linkedFood }: { r
   const [ready, setReady] = useState(false);
   const lastSavedPayload = useRef("");
   const saveTimer = useRef<number | null>(null);
+  const latestDraft = useRef<{ payload: DraftPayload; serialized: string } | null>(null);
+  const saveLoop = useRef<Promise<Workspace | null> | null>(null);
+  const persistLatestRef = useRef<PersistDraft | null>(null);
+  const revisionConflict = useRef<RecipeApiError | null>(null);
+  const mounted = useRef(true);
 
   const draftMetadata = useMemo(() => { const base = workspace?.draft?.draft_metadata ?? workspace?.latestVersion?.metadata ?? {}; return { ...base, cuisine: cuisine.trim() || null, ...(workspace?.nutritionPerServing ? { nutrition_per_serving: workspace.nutritionPerServing } : {}) }; }, [workspace, cuisine]);
   const payload = useMemo<DraftPayload>(() => ({
@@ -71,6 +97,25 @@ export function RecipeEditor({ recipeId, initialAssistantMode, linkedFood }: { r
     draft_metadata: draftMetadata,
   }), [name, servings, totalTime, notes, ingredients, instructions, equipment, draftMetadata]);
   const serializedPayload = useMemo(() => JSON.stringify(payload), [payload]);
+  useEffect(() => {
+    latestDraft.current = { payload, serialized: serializedPayload };
+  }, [payload, serializedPayload]);
+
+  const clearScheduledSave = useCallback(() => {
+    if (saveTimer.current === null) return;
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+  }, []);
+
+  const scheduleTransientRetry = useCallback(() => {
+    clearScheduledSave();
+    if (!mounted.current || revisionConflict.current) return;
+    setStatus(nt("notSavedRetrying"));
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      void persistLatestRef.current?.().catch(() => undefined);
+    }, AUTOSAVE_RETRY_DELAY_MS);
+  }, [clearScheduledSave, nt]);
 
   const hydrate = useCallback(async (value: Workspace) => {
     setWorkspace(value); setName(value.draft?.name ?? value.latestVersion?.name ?? value.root.name ?? ""); setServings(value.draft?.servings === null || value.draft?.servings === undefined ? "" : String(value.draft.servings)); setTotalTime(value.draft?.total_time_minutes === null || value.draft?.total_time_minutes === undefined ? "" : String(value.draft.total_time_minutes)); setNotes(value.draft?.notes ?? ""); setCuisine(value.cuisine ?? ""); setIngredients(value.ingredients.map(initialIngredient)); setInstructions(value.instructions.map(initialInstruction)); setEquipment(value.equipment.map(initialEquipment)); setCoverPath(value.root.cover_path ?? null); setCoverPhotoUrl(null);
@@ -82,26 +127,91 @@ export function RecipeEditor({ recipeId, initialAssistantMode, linkedFood }: { r
       equipment: value.equipment.map((item) => ({ name: item.name, quantity: item.quantity === null ? null : Number(item.quantity), note: item.note ?? null })),
       draft_metadata: { ...(value.draft?.draft_metadata ?? value.latestVersion?.metadata ?? {}), cuisine: value.cuisine ?? null, ...(value.nutritionPerServing ? { nutrition_per_serving: value.nutritionPerServing } : {}) },
     };
-    lastSavedPayload.current = JSON.stringify(saved); setStatus(nt("saved")); setReady(true);
+    lastSavedPayload.current = JSON.stringify(saved); revisionConflict.current = null; setStatus(nt("saved")); setReady(true);
   }, [nt]);
 
   const load = useCallback(async () => {
     setReady(false); setStatus(nt("loading"));
     try { let result = await recipeApi<{ recipe: Workspace }>(`/${recipeId}`); if (!result.recipe.draft && result.recipe.latestVersion) result = await recipeApi<{ recipe: Workspace }>(`/${recipeId}/draft`, { method: "POST" }); if (!result.recipe.draft) throw new Error(nt("workingDraftUnavailable")); await hydrate(result.recipe); setError(null); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : nt("recipeEditorLoadFailed")); setStatus(nt("notSavedRetrying")); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : nt("recipeEditorLoadFailed")); setStatus(nt("recipeEditorLoadFailed")); }
   }, [hydrate, nt, recipeId]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (!ready || !linkedFood || ingredients.some((item) => item.food_id === linkedFood.id)) return; setIngredients((current) => [...current, { food_id: linkedFood.id, ingredient_name: linkedFood.name, quantity: "", unit: "", frozen_nutrition: null }]); }, [ready, linkedFood, ingredients]);
 
-  const persist = useCallback(async (draft: DraftPayload, serialized = JSON.stringify(draft)) => {
-    setStatus(nt("saving"));
-    try { const result = await recipeApi<{ recipe: Workspace }>(`/${recipeId}`, { method: "PATCH", body: JSON.stringify({ operation: "autosave", draft }) }); setWorkspace(result.recipe); lastSavedPayload.current = serialized; setStatus(nt("saved")); setError(null); return result.recipe; }
-    catch (cause) { setStatus(nt("notSavedRetrying")); setError(cause instanceof Error ? cause.message : nt("draftSaveFailed")); throw cause; }
-  }, [nt, recipeId]);
-  useEffect(() => { if (!ready || serializedPayload === lastSavedPayload.current) return; setStatus(nt("saving")); if (saveTimer.current) window.clearTimeout(saveTimer.current); saveTimer.current = window.setTimeout(() => { void persist(payload, serializedPayload).catch(() => undefined); }, 650); return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current); }; }, [nt, payload, persist, ready, serializedPayload]);
+  const persistLatest = useCallback<PersistDraft>(async () => {
+    if (revisionConflict.current) throw revisionConflict.current;
+    if (saveLoop.current) return saveLoop.current;
 
-  async function saveRecipe() { if (saveTimer.current) window.clearTimeout(saveTimer.current); try { await persist(payload, serializedPayload); await recipeApi(`/${recipeId}/publish`, { method: "POST" }); router.push(`/my-recipes/${recipeId}`); router.refresh(); } catch { /* bounded state already set */ } }
-  async function discardDraft() { if (saveTimer.current) window.clearTimeout(saveTimer.current); try { if (workspace?.latestVersion) { await recipeApi(`/${recipeId}/draft`, { method: "DELETE" }); router.push(`/my-recipes/${recipeId}`); } else { await recipeApi(`/${recipeId}`, { method: "DELETE" }); router.push("/my-recipes"); } router.refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : nt("draftDiscardFailed")); } }
+    const currentLoop = (async () => {
+      let confirmedWorkspace: Workspace | null = null;
+      while (mounted.current && !revisionConflict.current) {
+        const candidate = latestDraft.current;
+        if (!candidate || candidate.serialized === lastSavedPayload.current) break;
+        setStatus(nt("saving"));
+        try {
+          const result = await recipeApi<{ recipe: Workspace }>(`/${recipeId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ operation: "autosave", draft: candidate.payload }),
+          });
+          if (!mounted.current) return result.recipe;
+          confirmedWorkspace = result.recipe;
+          setWorkspace(result.recipe);
+          lastSavedPayload.current = candidate.serialized;
+          if (latestDraft.current?.serialized === candidate.serialized) {
+            setStatus(nt("saved"));
+            setError(null);
+          }
+        } catch (cause) {
+          if (!mounted.current) throw cause;
+          setError(cause instanceof Error ? cause.message : nt("draftSaveFailed"));
+          if (isRecipeDraftRevisionConflict(cause)) {
+            revisionConflict.current = cause;
+            clearScheduledSave();
+            setStatus(nt("draftSaveFailed"));
+          } else if (isRetryableRecipeSaveFailure(cause)) {
+            scheduleTransientRetry();
+          } else {
+            clearScheduledSave();
+            setStatus(nt("draftSaveFailed"));
+          }
+          throw cause;
+        }
+      }
+      return confirmedWorkspace;
+    })();
+
+    saveLoop.current = currentLoop;
+    try {
+      return await currentLoop;
+    } finally {
+      if (saveLoop.current === currentLoop) saveLoop.current = null;
+    }
+  }, [clearScheduledSave, nt, recipeId, scheduleTransientRetry]);
+  useEffect(() => {
+    persistLatestRef.current = persistLatest;
+  }, [persistLatest]);
+
+  useEffect(() => {
+    if (!ready || revisionConflict.current || serializedPayload === lastSavedPayload.current) return;
+    setStatus(nt("saving"));
+    clearScheduledSave();
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      void persistLatestRef.current?.().catch(() => undefined);
+    }, AUTOSAVE_DELAY_MS);
+    return clearScheduledSave;
+  }, [clearScheduledSave, nt, ready, serializedPayload]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      clearScheduledSave();
+    };
+  }, [clearScheduledSave]);
+
+  async function saveRecipe() { clearScheduledSave(); try { await persistLatest(); if (latestDraft.current?.serialized !== lastSavedPayload.current) return; await recipeApi(`/${recipeId}/publish`, { method: "POST" }); router.push(`/my-recipes/${recipeId}`); router.refresh(); } catch { /* bounded state already set */ } }
+  async function discardDraft() { clearScheduledSave(); try { if (workspace?.latestVersion) { await recipeApi(`/${recipeId}/draft`, { method: "DELETE" }); router.push(`/my-recipes/${recipeId}`); } else { await recipeApi(`/${recipeId}`, { method: "DELETE" }); router.push("/my-recipes"); } router.refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : nt("draftDiscardFailed")); } }
   function updateIngredient(index: number, patch: Partial<Ingredient>) { setIngredients((current) => current.map((item, position) => position === index ? { ...item, ...patch } : item)); }
   function updateInstruction(index: number, patch: Partial<Instruction>) { setInstructions((current) => current.map((item, position) => position === index ? { ...item, ...patch } : item)); }
   function updateEquipment(index: number, patch: Partial<Equipment>) { setEquipment((current) => current.map((item, position) => position === index ? { ...item, ...patch } : item)); }

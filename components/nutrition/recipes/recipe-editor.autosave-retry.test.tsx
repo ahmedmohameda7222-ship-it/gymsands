@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => {
     recipeApi: vi.fn(),
     push: vi.fn(),
     refresh: vi.fn(),
+    nt: (key: string) => key,
     RecipeApiError,
   };
 });
@@ -40,7 +41,7 @@ vi.mock("@/components/nutrition/recipes/recipe-api", () => ({
 }));
 vi.mock("@/lib/i18n/nutrition-v1", () => ({
   useNutritionV1Translation: () => ({
-    nt: (key: string) => key,
+    nt: mocks.nt,
     dir: "ltr",
   }),
 }));
@@ -82,10 +83,28 @@ function setReactActEnvironment(value: boolean) {
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = value;
 }
 
-async function waitInsideAct(ms: number) {
+async function advanceTimers(ms: number) {
   await act(async () => {
-    await new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+    await vi.advanceTimersByTimeAsync(ms);
   });
+}
+
+async function flushAsyncWork() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 describe("Recipe editor autosave retry", () => {
@@ -95,6 +114,7 @@ describe("Recipe editor autosave retry", () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    mocks.recipeApi.mockReset();
     setReactActEnvironment(true);
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -104,6 +124,7 @@ describe("Recipe editor autosave retry", () => {
   afterEach(async () => {
     await act(async () => { root.unmount(); });
     host.remove();
+    vi.useRealTimers();
     setReactActEnvironment(false);
   });
 
@@ -121,16 +142,17 @@ describe("Recipe editor autosave retry", () => {
 
   it("retries a transient autosave failure without requiring another user edit", async () => {
     const input = await renderReadyEditor();
+    vi.useFakeTimers();
     mocks.recipeApi
       .mockRejectedValueOnce(new Error("Network request failed."))
       .mockResolvedValueOnce({ recipe: workspace("Changed") });
 
     await act(async () => { setInputValue(input, "Changed"); });
-    await waitInsideAct(750);
+    await advanceTimers(650);
     expect(mocks.recipeApi).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain("notSavedRetrying");
 
-    await waitInsideAct(1100);
+    await advanceTimers(1_000);
 
     expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
     const retry = mocks.recipeApi.mock.calls[2];
@@ -141,18 +163,94 @@ describe("Recipe editor autosave retry", () => {
 
   it("does not retry a Recipe revision conflict", async () => {
     const input = await renderReadyEditor();
+    vi.useFakeTimers();
     mocks.recipeApi.mockRejectedValueOnce(
       new mocks.RecipeApiError("Recipe Working Draft revision conflict.", 409, "recipe_draft_revision_conflict"),
     );
 
     await act(async () => { setInputValue(input, "Conflicting change"); });
-    await waitInsideAct(750);
+    await advanceTimers(650);
     expect(mocks.recipeApi).toHaveBeenCalledTimes(2);
 
-    await waitInsideAct(1500);
+    await advanceTimers(60_000);
 
     expect(mocks.recipeApi).toHaveBeenCalledTimes(2);
     expect(host.textContent).not.toContain("notSavedRetrying");
-    expect(host.textContent).toContain("draftSaveFailed");
+    expect(host.textContent).toContain("Recipe Working Draft revision conflict.");
+    expect(input.value).toBe("Conflicting change");
   }, 7000);
+
+  it("replaces a scheduled retry with the newest local Draft payload", async () => {
+    const input = await renderReadyEditor();
+    vi.useFakeTimers();
+    mocks.recipeApi
+      .mockRejectedValueOnce(new Error("Network request failed."))
+      .mockResolvedValueOnce({ recipe: workspace("Newest") });
+
+    await act(async () => { setInputValue(input, "Older"); });
+    await advanceTimers(650);
+    expect(host.textContent).toContain("notSavedRetrying");
+
+    await act(async () => { setInputValue(input, "Newest"); });
+    await advanceTimers(1_000);
+
+    expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
+    const retryBody = JSON.parse(String((mocks.recipeApi.mock.calls[2]?.[1] as RequestInit | undefined)?.body)) as { draft?: { name?: string } };
+    expect(retryBody.draft?.name).toBe("Newest");
+    await advanceTimers(10_000);
+    expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not overlap another retry while a retry request is in flight", async () => {
+    const input = await renderReadyEditor();
+    vi.useFakeTimers();
+    const slowRetry = deferred<{ recipe: ReturnType<typeof workspace> }>();
+    mocks.recipeApi
+      .mockRejectedValueOnce(new Error("Network request failed."))
+      .mockImplementationOnce(() => slowRetry.promise);
+
+    await act(async () => { setInputValue(input, "Slow retry"); });
+    await advanceTimers(650);
+    await advanceTimers(1_000);
+    expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
+
+    await advanceTimers(10_000);
+    expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
+
+    slowRetry.resolve({ recipe: workspace("Slow retry") });
+    await flushAsyncWork();
+    expect(host.textContent).toContain("saved");
+  });
+
+  it("subsumes a scheduled retry and publishes only after the latest Draft is confirmed", async () => {
+    const input = await renderReadyEditor();
+    vi.useFakeTimers();
+    const manualSave = deferred<{ recipe: ReturnType<typeof workspace> }>();
+    mocks.recipeApi
+      .mockRejectedValueOnce(new Error("Network request failed."))
+      .mockImplementationOnce(() => manualSave.promise)
+      .mockResolvedValueOnce({});
+
+    await act(async () => { setInputValue(input, "First attempt"); });
+    await advanceTimers(650);
+    expect(host.textContent).toContain("notSavedRetrying");
+
+    await act(async () => { setInputValue(input, "Latest before publish"); });
+    const saveButton = Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "saveRecipe");
+    if (!(saveButton instanceof HTMLButtonElement)) throw new Error("Save Recipe button not rendered.");
+    await act(async () => { saveButton.click(); });
+    await flushAsyncWork();
+
+    expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
+    const saveBody = JSON.parse(String((mocks.recipeApi.mock.calls[2]?.[1] as RequestInit | undefined)?.body)) as { draft?: { name?: string } };
+    expect(saveBody.draft?.name).toBe("Latest before publish");
+    expect(mocks.recipeApi.mock.calls.some(([path]) => path === `/${recipeId}/publish`)).toBe(false);
+
+    await advanceTimers(10_000);
+    expect(mocks.recipeApi).toHaveBeenCalledTimes(3);
+
+    manualSave.resolve({ recipe: workspace("Latest before publish") });
+    await flushAsyncWork();
+    expect(mocks.recipeApi.mock.calls[3]?.[0]).toBe(`/${recipeId}/publish`);
+  });
 });
