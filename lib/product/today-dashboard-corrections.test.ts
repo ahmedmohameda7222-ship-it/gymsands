@@ -27,10 +27,13 @@ describe("Today dashboard implementation contracts", () => {
     expect(surface).toContain("getPromptPermissionLabel");
   });
 
-  it("uses checked for grocery bought and routes skipped meals through the canonical Meal Plan command", () => {
+  it("routes Today Shopping and skipped meals through canonical Meal Plan commands", () => {
     const mutations = source("services/dashboard/today-mutations.ts");
     const route = source("app/api/nutrition/v1/meal-plan/week/route.ts");
-    expect(mutations).toContain("checked: !item.checked");
+    expect(mutations).toContain('kind: "shopping_state"');
+    expect(mutations).toContain('state: item.checked ? "Needed" : "Purchased"');
+    expect(route).toContain('body.kind === "shopping_state"');
+    expect(route).toContain("setTodayShoppingItemState");
     expect(mutations).toContain('kind: "skip"');
     expect(route).toContain('body.kind === "skip"');
     expect(route).toContain("skipMealPlanOccurrences");
