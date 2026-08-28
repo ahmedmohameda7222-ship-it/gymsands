@@ -198,7 +198,7 @@ function recipeDetail(item) {
   const name = item.language === "ar" ? "وعاء دجاج Chicken bowl" : long ? "Roasted Mediterranean Vegetable and Lemon Herb Chicken Grain Bowl with Toasted Seeds" : "Chicken bowl";
   return {
     root: { id: RECIPE_ID, name, is_favorite: true, cover_path: null },
-    draft: { id: RECIPE_DRAFT_ID, name, servings: 4, total_time_minutes: 35, notes: "Working Draft notes.", draft_metadata: { cuisine: "Mediterranean" } },
+    draft: { id: RECIPE_DRAFT_ID, revision: 1, name, servings: 4, total_time_minutes: 35, notes: "Working Draft notes.", draft_metadata: { cuisine: "Mediterranean" } },
     latestVersion: { id: RECIPE_VERSION_ID, version_number: 4, name, servings: 4, total_time_minutes: 35, notes: "Serve immediately.", metadata: {} },
     hasWorkingDraft: true,
     ingredients: [{ id: "88888888-8888-4888-8888-888888888888", ingredient_name: "Chicken breast", quantity: 400, unit: "g", food_id: "55555555-5555-4555-8555-555555555555", frozen_nutrition: { calories: 660, protein_g: 124, carbs_g: 0, fat_g: 14 }, verified: true }],
