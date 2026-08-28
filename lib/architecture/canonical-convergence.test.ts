@@ -26,8 +26,9 @@ describe("canonical data convergence", () => {
     expect(workoutExecutor).toContain('rpc("start_or_resume_workout_session_atomic"');
     expect(workoutExecutor).toContain('rpc("upsert_workout_set_logs_atomic"');
     expect(workoutExecutor).toContain('rpc("complete_workout_session_atomic"');
-    expect(safeExecutor).toContain('.from("saved_recipes")');
-    expect(safeExecutor).toContain('.from("saved_recipe_ingredients")');
+    expect(safeExecutor).toContain("createCanonicalSavedMealFromMcp");
+    expect(safeExecutor).not.toContain('.from("saved_recipes")');
+    expect(safeExecutor).not.toContain('.from("saved_recipe_ingredients")');
     expect(safeExecutor).not.toContain('.from("custom_meals")');
     expect(safeExecutor).not.toContain('.from("custom_meal_items")');
   });
