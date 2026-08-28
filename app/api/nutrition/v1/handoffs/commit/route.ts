@@ -115,8 +115,10 @@ export async function POST(request: Request) {
     }
 
     if (destination === "saved_meal") {
+      const operationId = text(body.operationId, "Operation ID");
       const name = text(body.name, "Saved Meal name");
       const savedMeal = await createSavedMeal(context.supabase, context.user.id, {
+        operationId,
         name,
         note: typeof body.note === "string" ? body.note : null,
         items: [source.value.savedMealItem],
