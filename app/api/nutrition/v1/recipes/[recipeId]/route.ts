@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { nutritionErrorResponse, NutritionRequestError } from "@/services/nutrition-v1/server/errors";
+import { duplicatePublishedRecipeAtomically } from "@/services/nutrition-v1/server/recipe-duplicate";
 import { autosaveRecipeDraft, softDeleteRecipe } from "@/services/nutrition-v1/server/recipes";
-import { duplicatePublishedRecipe, getRecipeWorkspace, updateRecipePresentation } from "@/services/nutrition-v1/server/recipe-workspace";
+import { getRecipeWorkspace, updateRecipePresentation } from "@/services/nutrition-v1/server/recipe-workspace";
 import { getPublishedRecipeDetail } from "@/services/nutrition-v1/server/recipe-published";
 
 export async function GET(request: Request, { params }: { params: Promise<{ recipeId: string }> }) {
@@ -49,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rec
     const { recipeId } = await params;
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     if (body.operation !== "duplicate") throw new NutritionRequestError("Unsupported Recipe command.");
-    return nutritionJson(await duplicatePublishedRecipe(context.supabase, context.user.id, recipeId), { status: 201 });
+    return nutritionJson(await duplicatePublishedRecipeAtomically(context.supabase, context.user.id, recipeId), { status: 201 });
   } catch (error) {
     return nutritionErrorResponse(error);
   }
