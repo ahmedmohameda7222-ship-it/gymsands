@@ -6,6 +6,18 @@ import { supabase } from "@/lib/supabase/client";
 const draftRevisionByRecipe = new Map<string, number>();
 const autosaveTailByRecipe = new Map<string, Promise<void>>();
 
+export class RecipeApiError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+
+  constructor(message: string, status: number, code: string | null = null) {
+    super(message);
+    this.name = "RecipeApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 function recipeIdFromPath(path: string) {
   const value = path.replace(/^\/+/, "").split(/[/?#]/, 1)[0]?.trim();
   return value || null;
@@ -75,7 +87,13 @@ async function performRecipeApiRequest<T>(path: string, init: RequestInit): Prom
     cache: "no-store",
   });
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-  if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "Recipe request could not be completed.");
+  if (!response.ok) {
+    throw new RecipeApiError(
+      typeof body.error === "string" ? body.error : "Recipe request could not be completed.",
+      response.status,
+      typeof body.code === "string" ? body.code : null,
+    );
+  }
   rememberDraftRevision(path, body);
   return body as T;
 }
