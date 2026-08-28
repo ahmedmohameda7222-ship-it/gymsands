@@ -11,6 +11,7 @@ import {
   mutateMealPlanWeek,
   type MealPlanWeekMutation,
 } from "@/services/nutrition-v1/server/meal-plan";
+import { skipMealPlanOccurrences } from "@/services/nutrition-v1/server/meal-plan-skip";
 import { getEffectiveNutritionTarget } from "@/services/nutrition-v1/server/targets";
 
 function requireDate(value: unknown, label: string) {
@@ -93,6 +94,18 @@ export async function POST(request: Request) {
         occurrenceId: body.occurrenceId,
         operationId: body.operationId,
         executionSnapshot,
+      }));
+    }
+    if (body.kind === "skip") {
+      const occurrenceIds = Array.isArray(body.occurrenceIds)
+        ? body.occurrenceIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+        : [];
+      if (!occurrenceIds.length || typeof body.operationId !== "string") {
+        throw new NutritionRequestError("Occurrence IDs and operation ID are required.");
+      }
+      return nutritionJson(await skipMealPlanOccurrences(context.supabase, context.user.id, {
+        occurrenceIds,
+        operationId: body.operationId,
       }));
     }
     if (body.kind === "apply_change_request") {
