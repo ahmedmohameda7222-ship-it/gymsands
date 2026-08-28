@@ -11,7 +11,7 @@ const contract = JSON.parse(
   readFileSync(new URL("../config/release-compatibility.json", import.meta.url), "utf8"),
 );
 
-test("declared database marker remains distinct from newer compatible physical migrations after Production reconciliation", () => {
+test("declared database marker remains distinct from newer compatible physical migrations while repository migrations are truthfully pending", () => {
   const resolved = resolveReleaseCompatibilityContract({ ledger, contract });
 
   assert.equal(resolved.schemaCompatibilityVersion, "2");
@@ -21,19 +21,22 @@ test("declared database marker remains distinct from newer compatible physical m
     resolved.latestAppliedMigrationVersion.localeCompare(resolved.expectedDatabaseMigrationVersion) > 0,
     "fixture must prove that compatible physical migrations may be newer than the release marker",
   );
-  assert.equal(resolved.migrationLedgerReconciliationState, "reconciled");
-  assert.equal(resolved.pendingMigrationCount, 0);
+  assert.equal(resolved.migrationLedgerReconciliationState, "pending");
+  assert.equal(resolved.pendingMigrationCount, 2);
   assert.equal(resolved.schemaAppliedUntrackedCount, 0);
-  assert.equal(resolved.unresolvedMigrationCount, 0);
+  assert.equal(resolved.unresolvedMigrationCount, 2);
 });
 
-test("Next build metadata binds the declared compatibility marker and exposes the reconciled repository ledger state", async () => {
+test("Next build metadata binds the declared compatibility marker and exposes the truthful pending repository ledger state", async () => {
   const { releaseMetadata } = await import("../next.config.mjs");
 
   assert.equal(releaseMetadata.schemaCompatibilityVersion, "2");
   assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, "20260724232734");
   assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20260827105332");
-  assert.equal(releaseMetadata.migrationLedgerReconciliationState, "reconciled");
+  assert.equal(releaseMetadata.migrationLedgerReconciliationState, "pending");
+  assert.equal(releaseMetadata.pendingMigrationCount, "2");
+  assert.equal(releaseMetadata.schemaAppliedUntrackedCount, "0");
+  assert.equal(releaseMetadata.unresolvedMigrationCount, "2");
 });
 
 test("rejects a marker that is not represented by a resolved Production migration", () => {
