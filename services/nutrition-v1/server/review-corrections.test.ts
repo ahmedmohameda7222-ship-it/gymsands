@@ -55,6 +55,7 @@ it("replaces a Recipe Working Draft and all child rows through one transactional
       user_id: userId,
       name: "Chicken bowl",
       servings: 4,
+      revision: 1,
     },
     error: null,
   });
@@ -65,12 +66,13 @@ it("replaces a Recipe Working Draft and all child rows through one transactional
     ingredients: [{ ingredient_name: "Chicken", quantity: 500, unit: "g" }],
     instructions: [{ instruction: "Cook the chicken." }],
     equipment: [{ name: "Pan", quantity: 1 }],
-  });
+  }, 0);
 
-  expect(saved).toMatchObject({ id: draftId, recipe_id: recipeId });
+  expect(saved).toMatchObject({ id: draftId, recipe_id: recipeId, revision: 1 });
   expect(db.rpc).toHaveBeenCalledTimes(1);
   expect(db.rpc).toHaveBeenCalledWith("autosave_nutrition_recipe_draft", expect.objectContaining({
     p_recipe_id: recipeId,
+    p_expected_revision: 0,
   }));
   expect(db.from).not.toHaveBeenCalled();
 });
