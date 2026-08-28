@@ -155,13 +155,15 @@ export async function POST(request: Request) {
         notes: typeof draft.notes === "string" ? draft.notes : null,
         draft_metadata: object(draft.draft_metadata ?? {}, "Recipe draft metadata"),
         ingredients: [...ingredients.map((item) => ({
+          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
           food_id: typeof item.food_id === "string" ? item.food_id : null,
           ingredient_name: String(item.ingredient_name ?? ""),
           quantity: item.quantity == null ? null : Number(item.quantity),
           unit: typeof item.unit === "string" ? item.unit : null,
           frozen_nutrition: item.frozen_nutrition && typeof item.frozen_nutrition === "object" ? item.frozen_nutrition as Record<string, unknown> : null,
-        })), source.value.recipeIngredient],
+        })), { id: crypto.randomUUID(), ...source.value.recipeIngredient }],
         instructions: instructions.map((item) => ({
+          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
           instruction: String(item.instruction ?? ""),
           ingredient_refs: Array.isArray(item.ingredient_refs) ? item.ingredient_refs : [],
           equipment_refs: Array.isArray(item.equipment_refs) ? item.equipment_refs : [],
@@ -174,7 +176,12 @@ export async function POST(request: Request) {
           can_run_in_background: item.can_run_in_background === true,
           metadata: item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata) ? item.metadata as Record<string, unknown> : {},
         })),
-        equipment: equipment.map((item) => ({ name: String(item.name ?? ""), quantity: item.quantity == null ? null : Number(item.quantity), note: typeof item.note === "string" ? item.note : null })),
+        equipment: equipment.map((item) => ({
+          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+          name: String(item.name ?? ""),
+          quantity: item.quantity == null ? null : Number(item.quantity),
+          note: typeof item.note === "string" ? item.note : null,
+        })),
       }, expectedRevision);
       return nutritionJson({ destination, recipeId, draftId: savedDraft.id });
     }
