@@ -172,7 +172,7 @@ select pg_temp.nv1p_assert(
 select public.mutate_nutrition_meal_plan_week(
   'a2200000-0000-4000-8000-000000000020',
   0,
-  '{"weekOverride":{"note":"verified"}}'::jsonb
+  '{"operationId":"a2200000-0000-4000-8000-000000000060","weekOverride":{"note":"verified"}}'::jsonb
 );
 select pg_temp.nv1p_assert(
   (
@@ -192,7 +192,7 @@ begin
   v_result := public.mutate_nutrition_meal_plan_week(
     null,
     0,
-    '{"weekStartDate":"2026-09-07","upsertOccurrences":[{"planDate":"2026-09-07","mealSlotKey":"Lunch","position":0,"sourceType":"placeholder","sourceId":null,"sourceVersionId":null,"resolvedQuantity":null,"resolvedServingLabel":null,"frozenName":"Atomic lunch","frozenSnapshot":{"name":"Atomic lunch"},"status":"planned"}]}'::jsonb
+    '{"operationId":"a2200000-0000-4000-8000-000000000061","weekStartDate":"2026-09-07","upsertOccurrences":[{"planDate":"2026-09-07","mealSlotKey":"Lunch","position":0,"sourceType":"placeholder","sourceId":null,"sourceVersionId":null,"resolvedQuantity":null,"resolvedServingLabel":null,"frozenName":"Atomic lunch","frozenSnapshot":{"name":"Atomic lunch"},"status":"planned"}]}'::jsonb
   );
   v_week_id := (v_result->>'weekId')::uuid;
   perform pg_temp.nv1p_assert(
@@ -209,7 +209,7 @@ select pg_temp.nv1p_rejected(
   $$select public.mutate_nutrition_meal_plan_week(
     null,
     0,
-    '{"weekStartDate":"2026-09-14","upsertOccurrences":[{"planDate":"2026-09-21","mealSlotKey":"Lunch","position":0,"sourceType":"placeholder","sourceId":null,"sourceVersionId":null,"resolvedQuantity":null,"resolvedServingLabel":null,"frozenName":"Out of week","frozenSnapshot":{"name":"Out of week"},"status":"planned"}]}'::jsonb
+    '{"operationId":"a2200000-0000-4000-8000-000000000062","weekStartDate":"2026-09-14","upsertOccurrences":[{"planDate":"2026-09-21","mealSlotKey":"Lunch","position":0,"sourceType":"placeholder","sourceId":null,"sourceVersionId":null,"resolvedQuantity":null,"resolvedServingLabel":null,"frozenName":"Out of week","frozenSnapshot":{"name":"Out of week"},"status":"planned"}]}'::jsonb
   )$$,
   'Meal Plan accepted an occurrence outside the target week.'
 );
