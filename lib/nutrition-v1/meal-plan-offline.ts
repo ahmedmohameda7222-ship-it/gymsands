@@ -21,6 +21,18 @@ export type MealPlanQueueReconciliation = {
   changedTargets: MealPlanMutationTarget[];
 };
 
+export type MealPlanExactReplayCommand = {
+  weekId: string | null;
+  weekStartDate: string;
+  baseRevision: number;
+  operationId: string;
+  mutation: Record<string, unknown>;
+};
+
+export type MealPlanExactReplayResult<T> =
+  | { state: "applied"; result: T }
+  | { state: "stale" };
+
 function validText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -54,6 +66,39 @@ function targetsConflict(local: MealPlanMutationTarget, changed: MealPlanMutatio
   if (local.kind !== changed.kind || local.id !== changed.id) return false;
   if (!local.field || !changed.field) return true;
   return local.field === changed.field;
+}
+
+function exactReplayCommand(mutation: MealPlanOfflineMutation): MealPlanExactReplayCommand {
+  if (!validMutation(mutation)) throw new Error("Meal Plan offline mutation is invalid.");
+  const weekStartDate = mutation.payload.weekStartDate;
+  const payloadMutation = mutation.payload.mutation;
+  if (!validText(weekStartDate) || !payloadMutation || typeof payloadMutation !== "object" || Array.isArray(payloadMutation)) {
+    throw new Error("Queued Meal Plan mutation is no longer readable.");
+  }
+  return {
+    weekId: mutation.weekId.startsWith("local:") ? null : mutation.weekId,
+    weekStartDate,
+    baseRevision: mutation.baseRevision,
+    operationId: mutation.operationId,
+    mutation: payloadMutation as Record<string, unknown>,
+  };
+}
+
+export function isMealPlanBaseRevisionStaleError(error: unknown) {
+  return error instanceof Error && error.message.trim() === "Meal Plan base revision is stale.";
+}
+
+export async function replayMealPlanMutationExactFirst<T>(
+  mutation: MealPlanOfflineMutation,
+  send: (command: MealPlanExactReplayCommand) => Promise<T>,
+): Promise<MealPlanExactReplayResult<T>> {
+  const command = exactReplayCommand(mutation);
+  try {
+    return { state: "applied", result: await send(command) };
+  } catch (error) {
+    if (isMealPlanBaseRevisionStaleError(error)) return { state: "stale" };
+    throw error;
+  }
 }
 
 export function enqueueMealPlanMutation(
