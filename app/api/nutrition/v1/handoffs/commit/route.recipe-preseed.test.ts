@@ -18,11 +18,15 @@ vi.mock("@/lib/nutrition-v1/http", async () => {
   return { ...actual, requireNutritionUser: mocks.requireNutritionUser };
 });
 vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({ resolveFoodHandoff: mocks.resolveFoodHandoff }));
-vi.mock("@/services/nutrition-v1/server/recipes", () => ({
-  createRecipeDraft: mocks.createRecipeDraft,
-  autosaveRecipeDraft: mocks.autosaveRecipeDraft,
-  createPreseededRecipeDraft: mocks.createPreseededRecipeDraft,
-}));
+vi.mock("@/services/nutrition-v1/server/recipes", async () => {
+  const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/recipes")>("@/services/nutrition-v1/server/recipes");
+  return {
+    ...actual,
+    createRecipeDraft: mocks.createRecipeDraft,
+    autosaveRecipeDraft: mocks.autosaveRecipeDraft,
+    createPreseededRecipeDraft: mocks.createPreseededRecipeDraft,
+  };
+});
 
 import { POST } from "@/app/api/nutrition/v1/handoffs/commit/route";
 
@@ -57,6 +61,8 @@ describe("Food to new Recipe handoff", () => {
         frozen_nutrition: { calories: 220 },
       },
     });
+    mocks.createRecipeDraft.mockResolvedValue({ recipeId, draftId });
+    mocks.autosaveRecipeDraft.mockResolvedValue({ id: draftId, revision: 1 });
     mocks.createPreseededRecipeDraft.mockResolvedValue({ recipeId, draftId, reused: false });
   });
 
