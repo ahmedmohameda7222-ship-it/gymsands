@@ -38,6 +38,20 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
   });
 }
 
+function publicSavedMealItem(item: ResolvedFoodHandoff) {
+  return {
+    ...(item.source === "catalog" ? { food_item_id: item.foodId } : { user_food_item_id: item.foodId }),
+    food_name: item.name,
+    serving_size: item.serving,
+    quantity: item.quantity,
+    ...(item.frozenNutrition.calories === null ? {} : { calories: item.frozenNutrition.calories }),
+    ...(item.frozenNutrition.protein_g === null ? {} : { protein_g: item.frozenNutrition.protein_g }),
+    ...(item.frozenNutrition.carbs_g === null ? {} : { carbs_g: item.frozenNutrition.carbs_g }),
+    ...(item.frozenNutrition.fat_g === null ? {} : { fat_g: item.frozenNutrition.fat_g }),
+    ...(item.frozenNutrition.fiber_g === null ? {} : { fiber_g: item.frozenNutrition.fiber_g }),
+  };
+}
+
 export async function createCanonicalSavedMealFromMcp(
   ctx: McpContext,
   rawInput: unknown,
@@ -57,6 +71,12 @@ export async function createCanonicalSavedMealFromMcp(
     });
     return ok({
       ok: true,
+      meal: {
+        id: savedMeal.id,
+        name: savedMeal.name,
+        is_favorite: savedMeal.is_favorite === true,
+      },
+      items: resolved.map(publicSavedMealItem),
       saved_meal_id: savedMeal.id,
       saved_meal: savedMeal,
       item_count: resolved.length,
