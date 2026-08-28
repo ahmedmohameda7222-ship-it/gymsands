@@ -9,17 +9,14 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   back: vi.fn(),
   refresh: vi.fn(),
+  searchParams: {
+    toString: () => "destination=recipe&ingredientFoodId=55555555-5555-4555-8555-555555555555&source=catalog&quantity=2&serving=100%20g",
+  },
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace, back: mocks.back, refresh: mocks.refresh }),
-  useSearchParams: () => new URLSearchParams({
-    destination: "recipe",
-    ingredientFoodId: "55555555-5555-4555-8555-555555555555",
-    source: "catalog",
-    quantity: "2",
-    serving: "100 g",
-  }),
+  useSearchParams: () => mocks.searchParams,
 }));
 vi.mock("@/components/nutrition/food-library/food-library-api", () => ({
   foodLibraryApi: mocks.api,
