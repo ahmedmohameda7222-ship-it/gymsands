@@ -57,7 +57,16 @@ describe("Nutrition V1 Meal Plan offline queue", () => {
     expect(result?.status).toBe("conflict");
   });
 
-  it("keeps failed trusted local intent visible for attention instead of deleting it", () => {
+  it("keeps transient synchronization failures queued for automatic retry", () => {
+    for (const message of ["Network request failed", "Request timed out", "Service temporarily unavailable"]) {
+      const failed = markMealPlanMutationFailed(base, message);
+      expect(failed).toMatchObject({ status: "queued", lastError: message });
+      expect(failed.operationId).toBe(base.operationId);
+      expect(failed.payload).toEqual(base.payload);
+    }
+  });
+
+  it("keeps failed trusted local intent visible for attention when the payload is no longer valid", () => {
     const failed = markMealPlanMutationFailed(base, "Serving is no longer valid");
     expect(failed).toMatchObject({ status: "needs_attention", lastError: "Serving is no longer valid" });
     expect(failed.payload).toEqual(base.payload);
