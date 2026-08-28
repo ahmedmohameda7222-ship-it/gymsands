@@ -34,15 +34,18 @@ grant execute on function pg_temp.nv1_long_term_rejected(text, text) to public;
 do $catalog$
 declare
   v_food regprocedure := to_regprocedure('public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)');
+  v_start regprocedure := to_regprocedure('public.start_nutrition_cooking_session(uuid,uuid,numeric,timestamp with time zone)');
   v_start_over regprocedure := to_regprocedure('public.start_over_nutrition_cooking_session(uuid,timestamp with time zone)');
   v_create_recipe regprocedure := to_regprocedure('public.create_nutrition_recipe_draft(text,numeric,numeric,integer,text,jsonb)');
 begin
   perform pg_temp.nv1_long_term_assert(v_food is not null, 'Nutrition V1 authoritative Food Library RPC missing.');
+  perform pg_temp.nv1_long_term_assert(v_start is not null, 'Nutrition V1 atomic Cooking start RPC missing.');
   perform pg_temp.nv1_long_term_assert(v_start_over is not null, 'Nutrition V1 atomic Start Over RPC missing.');
   perform pg_temp.nv1_long_term_assert(v_create_recipe is not null, 'Nutrition V1 atomic initial Recipe RPC missing.');
 
   perform pg_temp.nv1_long_term_assert(
     (select prosecdef from pg_proc where oid = v_food)
+    and (select prosecdef from pg_proc where oid = v_start)
     and (select prosecdef from pg_proc where oid = v_start_over)
     and (select prosecdef from pg_proc where oid = v_create_recipe),
     'Nutrition V1 long-term RPCs must use explicit owner-derived security-definer authority.'
@@ -50,9 +53,11 @@ begin
 
   perform pg_temp.nv1_long_term_assert(
     has_function_privilege('authenticated', v_food, 'EXECUTE')
+    and has_function_privilege('authenticated', v_start, 'EXECUTE')
     and has_function_privilege('authenticated', v_start_over, 'EXECUTE')
     and has_function_privilege('authenticated', v_create_recipe, 'EXECUTE')
     and not has_function_privilege('anon', v_food, 'EXECUTE')
+    and not has_function_privilege('anon', v_start, 'EXECUTE')
     and not has_function_privilege('anon', v_start_over, 'EXECUTE')
     and not has_function_privilege('anon', v_create_recipe, 'EXECUTE'),
     'Nutrition V1 long-term RPC execute grants invalid.'
@@ -90,6 +95,51 @@ select
   '100 g', 120, 25, 4, 2,
   'LT scalable', 'LT cuisine', 100, 'g', true, 'active'
 from generate_series(1, 101) as series;
+
+-- Corrupt historical state is injected only by the database owner so Start Over
+-- rollback can be failure-tested. Authenticated runtime cannot create this shape.
+insert into public.nutrition_cooking_sessions (
+  id, user_id, recipe_id, recipe_version_id, frozen_recipe_snapshot,
+  serving_scale, current_action_key, status, state_revision
+) values (
+  'b2700000-0000-4000-8000-000000000010',
+  'b2700000-0000-4000-8000-000000000001',
+  'b2700000-0000-4000-8000-000000000020',
+  'b2700000-0000-4000-8000-000000000021',
+  '{"schemaVersion":1,"recipe":{"name":"Broken restart"},"ingredients":[],"actions":[{"id":"","dependency_action_ids":[]}],"equipment":[]}'::jsonb,
+  1, null, 'active', 0
+);
+
+-- Valid Start Over coverage begins from a canonical published Recipe graph. The
+-- source Cooking Session itself is created later through start_nutrition_cooking_session.
+insert into public.nutrition_recipes (id, user_id, name) values (
+  'b2700000-0000-4000-8000-000000000022',
+  'b2700000-0000-4000-8000-000000000001',
+  'Valid restart'
+);
+insert into public.nutrition_recipe_versions (
+  id, recipe_id, user_id, version_number, name, servings, metadata
+) values (
+  'b2700000-0000-4000-8000-000000000023',
+  'b2700000-0000-4000-8000-000000000022',
+  'b2700000-0000-4000-8000-000000000001',
+  1, 'Valid restart', 1, '{"fixture":true}'::jsonb
+);
+insert into public.nutrition_recipe_actions (
+  id, user_id, recipe_version_id, position, instruction, dependency_action_ids
+) values
+(
+  'b2700000-0000-4000-8000-000000000024',
+  'b2700000-0000-4000-8000-000000000001',
+  'b2700000-0000-4000-8000-000000000023',
+  0, 'Step 1', '{}'
+),
+(
+  'b2700000-0000-4000-8000-000000000025',
+  'b2700000-0000-4000-8000-000000000001',
+  'b2700000-0000-4000-8000-000000000023',
+  1, 'Step 2', array['b2700000-0000-4000-8000-000000000024'::uuid]
+);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'b2700000-0000-4000-8000-000000000001', true);
@@ -138,18 +188,6 @@ $food_paging$;
 
 -- Start Over failure injection: the invalid action key fails after the parent
 -- transition point, and the function-level transaction must roll everything back.
-insert into public.nutrition_cooking_sessions (
-  id, user_id, recipe_id, recipe_version_id, frozen_recipe_snapshot,
-  serving_scale, current_action_key, status, state_revision
-) values (
-  'b2700000-0000-4000-8000-000000000010',
-  'b2700000-0000-4000-8000-000000000001',
-  'b2700000-0000-4000-8000-000000000020',
-  'b2700000-0000-4000-8000-000000000021',
-  '{"schemaVersion":1,"recipe":{"name":"Broken restart"},"ingredients":[],"actions":[{"id":"","dependency_action_ids":[]}],"equipment":[]}'::jsonb,
-  1, null, 'active', 0
-);
-
 select pg_temp.nv1_long_term_rejected(
   $$select public.start_over_nutrition_cooking_session(
     'b2700000-0000-4000-8000-000000000010', '2026-08-27T10:30:00Z'
@@ -165,35 +203,33 @@ select pg_temp.nv1_long_term_assert(
   'Nutrition V1 Start Over left an ended old session or partial replacement after injected failure.'
 );
 
-insert into public.nutrition_cooking_sessions (
-  id, user_id, recipe_id, recipe_version_id, frozen_recipe_snapshot,
-  serving_scale, current_action_key, status, state_revision
-) values (
-  'b2700000-0000-4000-8000-000000000011',
-  'b2700000-0000-4000-8000-000000000001',
-  'b2700000-0000-4000-8000-000000000022',
-  'b2700000-0000-4000-8000-000000000023',
-  '{"schemaVersion":1,"recipe":{"name":"Valid restart"},"ingredients":[],"actions":[{"id":"step-1","dependency_action_ids":[]},{"id":"step-2","dependency_action_ids":["step-1"]}],"equipment":[]}'::jsonb,
-  1, 'step-1', 'active', 0
-);
-
 do $start_over$
 declare
+  v_started jsonb;
+  v_source_id uuid;
   v_first jsonb;
   v_second jsonb;
   v_replacement_id uuid;
 begin
+  v_started := public.start_nutrition_cooking_session(
+    'b2700000-0000-4000-8000-000000000022',
+    'b2700000-0000-4000-8000-000000000023',
+    1,
+    '2026-08-27T10:30:30Z'
+  );
+  v_source_id := (v_started->>'sessionId')::uuid;
+
   v_first := public.start_over_nutrition_cooking_session(
-    'b2700000-0000-4000-8000-000000000011', '2026-08-27T10:31:00Z'
+    v_source_id, '2026-08-27T10:31:00Z'
   );
   v_second := public.start_over_nutrition_cooking_session(
-    'b2700000-0000-4000-8000-000000000011', '2026-08-27T10:31:01Z'
+    v_source_id, '2026-08-27T10:31:01Z'
   );
   v_replacement_id := (v_first->>'sessionId')::uuid;
 
   perform pg_temp.nv1_long_term_assert(v_second->>'sessionId' = v_first->>'sessionId', 'Duplicate Start Over did not converge on the same replacement session.');
   perform pg_temp.nv1_long_term_assert(
-    (select count(*) = 1 from public.nutrition_cooking_sessions where restart_parent_session_id = 'b2700000-0000-4000-8000-000000000011'),
+    (select count(*) = 1 from public.nutrition_cooking_sessions where restart_parent_session_id = v_source_id),
     'Duplicate Start Over created inconsistent replacement sessions.'
   );
   perform pg_temp.nv1_long_term_assert(
@@ -201,7 +237,7 @@ begin
     'Restarted Cooking Session exists without its complete required initial state.'
   );
   perform pg_temp.nv1_long_term_assert(
-    (select status = 'ended' from public.nutrition_cooking_sessions where id = 'b2700000-0000-4000-8000-000000000011'),
+    (select status = 'ended' from public.nutrition_cooking_sessions where id = v_source_id),
     'Canonical Start Over did not terminally transition the source session.'
   );
 end
