@@ -2,7 +2,7 @@ export type AddToDestination = "diary" | "meal_plan" | "saved_meal" | "recipe";
 
 export type AddToHandoffSource =
   | { type: "food"; id: string; source: "catalog" | "my_food"; quantity: number; serving: string }
-  | { type: "recipe"; id: string; versionId: string };
+  | { type: "recipe"; id: string; versionId: string; quantity: number };
 
 export function parseAddToHandoff(search: URLSearchParams, destination: AddToDestination): AddToHandoffSource | null {
   const explicitDestination = search.get("destination");
@@ -21,7 +21,9 @@ export function parseAddToHandoff(search: URLSearchParams, destination: AddToDes
   if (destination !== "recipe" && search.get("source") === "recipe") {
     const id = search.get("recipeId");
     const versionId = search.get("recipeVersionId");
-    if (id && versionId) return { type: "recipe", id, versionId };
+    const rawQuantity = search.get("quantity");
+    const quantity = rawQuantity === null || rawQuantity.trim() === "" ? 1 : Number(rawQuantity);
+    if (id && versionId && Number.isFinite(quantity) && quantity > 0) return { type: "recipe", id, versionId, quantity };
   }
   return null;
 }
