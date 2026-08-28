@@ -54,16 +54,22 @@ export async function POST(request: Request) {
     if (destination === "diary") {
       const date = text(body.date, "Diary date");
       const meal = text(body.meal, "Diary meal");
-      const sourceValue = source.value;
-      const commandSource = source.kind === "food"
-        ? { type: "food" as const, id: sourceValue.foodId, frozenSnapshot: sourceValue.frozenSourceSnapshot }
-        : { type: "recipe" as const, id: sourceValue.recipeId, versionId: sourceValue.recipeVersionId, frozenSnapshot: sourceValue.frozenSourceSnapshot };
+      if (source.kind === "food") {
+        const result = await logDiaryMeal(context.supabase, {
+          operationId: crypto.randomUUID(),
+          date,
+          meal,
+          source: { type: "food", id: source.value.foodId, frozenSnapshot: source.value.frozenSourceSnapshot },
+          items: [source.value.diaryItem],
+        });
+        return nutritionJson({ destination, result });
+      }
       const result = await logDiaryMeal(context.supabase, {
         operationId: crypto.randomUUID(),
         date,
         meal,
-        source: commandSource,
-        items: [sourceValue.diaryItem],
+        source: { type: "recipe", id: source.value.recipeId, versionId: source.value.recipeVersionId, frozenSnapshot: source.value.frozenSourceSnapshot },
+        items: [source.value.diaryItem],
       });
       return nutritionJson({ destination, result });
     }
@@ -74,40 +80,54 @@ export async function POST(request: Request) {
       const weekStartDate = text(body.weekStartDate, "Week start");
       const week = await getMealPlanWeek(context.supabase, context.user.id, weekStartDate);
       const position = week.occurrences.filter((item) => item.plan_date === planDate && item.meal_slot_key === mealSlot).length;
-      const sourceValue = source.value;
-      const frozenSnapshot = source.kind === "food"
-        ? { ...sourceValue.frozenSourceSnapshot, shoppingIngredients: [{ foodId: sourceValue.foodId, name: sourceValue.name, quantity: sourceValue.quantity, unit: sourceValue.serving, qualifier: null }] }
-        : { ...sourceValue.frozenSourceSnapshot, shoppingIngredients: sourceValue.shoppingIngredients };
+      const occurrence = source.kind === "food"
+        ? {
+            id: crypto.randomUUID(),
+            planDate,
+            mealSlotKey: mealSlot,
+            position,
+            sourceType: "food" as const,
+            sourceId: source.value.foodId,
+            sourceVersionId: null,
+            resolvedQuantity: source.value.quantity,
+            resolvedServingLabel: source.value.serving,
+            frozenName: source.value.name,
+            frozenSnapshot: {
+              ...source.value.frozenSourceSnapshot,
+              shoppingIngredients: [{ foodId: source.value.foodId, name: source.value.name, quantity: source.value.quantity, unit: source.value.serving, qualifier: null }],
+            },
+            status: "planned" as const,
+          }
+        : {
+            id: crypto.randomUUID(),
+            planDate,
+            mealSlotKey: mealSlot,
+            position,
+            sourceType: "recipe" as const,
+            sourceId: source.value.recipeId,
+            sourceVersionId: source.value.recipeVersionId,
+            resolvedQuantity: 1,
+            resolvedServingLabel: "1 serving",
+            frozenName: source.value.name,
+            frozenSnapshot: { ...source.value.frozenSourceSnapshot, shoppingIngredients: source.value.shoppingIngredients },
+            status: "planned" as const,
+          };
       const result = await mutateMealPlanWeek(context.supabase, context.user.id, {
         weekId: week.week?.id ?? null,
         weekStartDate,
         baseRevision: week.week?.revision ?? 0,
         operationId: crypto.randomUUID(),
-        mutation: { upsertOccurrences: [{
-          id: crypto.randomUUID(),
-          planDate,
-          mealSlotKey: mealSlot,
-          position,
-          sourceType: source.kind,
-          sourceId: source.kind === "food" ? sourceValue.foodId : sourceValue.recipeId,
-          sourceVersionId: source.kind === "recipe" ? sourceValue.recipeVersionId : null,
-          resolvedQuantity: source.kind === "food" ? sourceValue.quantity : 1,
-          resolvedServingLabel: source.kind === "food" ? sourceValue.serving : "1 serving",
-          frozenName: sourceValue.name,
-          frozenSnapshot,
-          status: "planned",
-        }] },
+        mutation: { upsertOccurrences: [occurrence] },
       });
       return nutritionJson({ destination, result });
     }
 
     if (destination === "saved_meal") {
       const name = text(body.name, "Saved Meal name");
-      const item = source.value.savedMealItem;
       const savedMeal = await createSavedMeal(context.supabase, context.user.id, {
         name,
         note: typeof body.note === "string" ? body.note : null,
-        items: [item],
+        items: [source.value.savedMealItem],
       });
       return nutritionJson({ destination, savedMeal }, { status: 201 });
     }
@@ -136,7 +156,6 @@ export async function POST(request: Request) {
         instructions = workspace.instructions as unknown as Array<Record<string, unknown>>;
         equipment = workspace.equipment as unknown as Array<Record<string, unknown>>;
       }
-      const ingredient = source.value.recipeIngredient;
       const savedDraft = await autosaveRecipeDraft(context.supabase, context.user.id, recipeId, {
         name: typeof draft.name === "string" ? draft.name : null,
         servings: typeof draft.servings === "number" ? draft.servings : draft.servings == null ? null : Number(draft.servings),
@@ -150,7 +169,7 @@ export async function POST(request: Request) {
           quantity: item.quantity == null ? null : Number(item.quantity),
           unit: typeof item.unit === "string" ? item.unit : null,
           frozen_nutrition: item.frozen_nutrition && typeof item.frozen_nutrition === "object" ? item.frozen_nutrition as Record<string, unknown> : null,
-        })), ingredient],
+        })), source.value.recipeIngredient],
         instructions: instructions.map((item) => ({
           instruction: String(item.instruction ?? ""),
           ingredient_refs: Array.isArray(item.ingredient_refs) ? item.ingredient_refs : [],
