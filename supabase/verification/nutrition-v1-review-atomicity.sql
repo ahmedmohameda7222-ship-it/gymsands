@@ -35,7 +35,7 @@ do $catalog$
 declare
   v_start regprocedure := to_regprocedure('public.start_nutrition_cooking_session(uuid,uuid,numeric,timestamp with time zone)');
   v_cooking regprocedure := to_regprocedure('public.sync_nutrition_cooking_session_state(uuid,bigint,text,timestamp with time zone,jsonb,jsonb)');
-  v_recipe regprocedure := to_regprocedure('public.autosave_nutrition_recipe_draft(uuid,jsonb,jsonb,jsonb,jsonb)');
+  v_recipe regprocedure := to_regprocedure('public.autosave_nutrition_recipe_draft(uuid,bigint,jsonb,jsonb,jsonb,jsonb)');
 begin
   if v_start is null then
     raise exception 'Nutrition V1 cooking atomic start RPC missing.';
@@ -44,7 +44,10 @@ begin
     raise exception 'Nutrition V1 cooking atomic sync RPC missing.';
   end if;
   if v_recipe is null then
-    raise exception 'Nutrition V1 recipe atomic autosave RPC missing.';
+    raise exception 'Nutrition V1 revision-aware recipe atomic autosave RPC missing.';
+  end if;
+  if to_regprocedure('public.autosave_nutrition_recipe_draft(uuid,jsonb,jsonb,jsonb,jsonb)') is not null then
+    raise exception 'Nutrition V1 legacy unversioned recipe autosave RPC remains callable.';
   end if;
   if not (select prosecdef from pg_proc where oid = v_start)
      or not (select prosecdef from pg_proc where oid = v_cooking)
@@ -198,6 +201,7 @@ insert into public.nutrition_recipe_ingredients (
 select pg_temp.nv1_review_rejected(
   $$select public.autosave_nutrition_recipe_draft(
     'a2700000-0000-4000-8000-000000000050',
+    0,
     '{"name":"Broken replacement","servings":4,"draft_metadata":{}}'::jsonb,
     '[{"ingredient_name":"","quantity":1,"unit":"g"}]'::jsonb,
     '[]'::jsonb, '[]'::jsonb
@@ -205,7 +209,7 @@ select pg_temp.nv1_review_rejected(
   'Nutrition V1 recipe atomic autosave RPC accepted an invalid replacement.'
 );
 select pg_temp.nv1_review_assert(
-  (select name = 'Original draft' from public.nutrition_recipe_drafts where id = 'a2700000-0000-4000-8000-000000000051')
+  (select revision = 0 and name = 'Original draft' from public.nutrition_recipe_drafts where id = 'a2700000-0000-4000-8000-000000000051')
   and exists (select 1 from public.nutrition_recipe_ingredients where id = 'a2700000-0000-4000-8000-000000000052' and ingredient_name = 'Original ingredient'),
   'Nutrition V1 recipe atomic autosave RPC failed to preserve the prior valid draft after rejection.'
 );
