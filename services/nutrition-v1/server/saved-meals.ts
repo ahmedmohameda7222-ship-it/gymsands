@@ -19,6 +19,10 @@ export type SavedMealWriteInput = {
   items: SavedMealItemInput[];
 };
 
+export type SavedMealCreateInput = SavedMealWriteInput & {
+  operationId: string;
+};
+
 export type SavedMealRecord = {
   id: string;
   user_id: string;
@@ -119,11 +123,13 @@ function savedMealRecord(value: unknown, action: string): SavedMealRecord {
 export async function createSavedMeal(
   supabase: SupabaseClient,
   userId: string,
-  input: SavedMealWriteInput,
+  input: SavedMealCreateInput,
 ): Promise<SavedMealRecord> {
   requiredUuid(userId, "Owner");
+  const operationId = requiredUuid(input.operationId, "Operation ID");
   const normalized = normalizeWriteInput(input);
-  const result = await supabase.rpc("create_nutrition_saved_meal", {
+  const result = await supabase.rpc("create_nutrition_saved_meal_idempotent", {
+    p_operation_id: operationId,
     p_name: normalized.name,
     p_note: normalized.note,
     p_is_favorite: normalized.isFavorite,
