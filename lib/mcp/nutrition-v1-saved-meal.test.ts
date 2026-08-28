@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpContext } from "@/lib/mcp/auth";
+import { sanitizeMcpToolResult, validateMcpToolOutput } from "@/lib/mcp/safety";
+import { mcpTools } from "@/lib/mcp/tools";
 
 const { listFoodLibrary, resolveFoodHandoff, createSavedMeal } = vi.hoisted(() => ({
   listFoodLibrary: vi.fn(),
@@ -28,6 +30,12 @@ beforeEach(() => {
     nextCursor: null,
   });
   resolveFoodHandoff.mockResolvedValue({
+    foodId,
+    source: "catalog",
+    name: "Greek yogurt",
+    serving: "170 g",
+    quantity: 2,
+    frozenNutrition: { calories: 180, protein_g: 30, carbs_g: null, fat_g: 0, fiber_g: null },
     savedMealItem: {
       kind: "food",
       food_id: foodId,
@@ -37,7 +45,7 @@ beforeEach(() => {
       frozen_nutrition: { calories: 180, protein_g: 30, carbs_g: null, fat_g: 0, fiber_g: null },
     },
   });
-  createSavedMeal.mockResolvedValue({ id: savedMealId, user_id: userId, name: "Breakfast" });
+  createSavedMeal.mockResolvedValue({ id: savedMealId, user_id: userId, name: "Breakfast", is_favorite: false });
 });
 
 describe("Nutrition V1 MCP Saved Meal convergence", () => {
@@ -60,6 +68,30 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
     }));
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toMatchObject({ ok: true, saved_meal_id: savedMealId, authority: "nutrition_saved_meals" });
+  });
+
+  it("preserves the public create_custom_meal output contract using canonical Saved Meal data", async () => {
+    const result = await createCanonicalSavedMealFromMcp(ctx, {
+      meal_name: "Breakfast",
+      items: [{ food_name: "Greek yogurt", serving_hint: "170 g", quantity: 2 }],
+    });
+    const tool = mcpTools.find((candidate) => candidate.name === "create_custom_meal");
+    expect(tool).toBeTruthy();
+
+    const sanitized = sanitizeMcpToolResult(result, tool!.outputSchema);
+    expect(validateMcpToolOutput(tool!, sanitized)).toMatchObject({ success: true });
+    expect(sanitized.structuredContent).toMatchObject({
+      ok: true,
+      meal: { id: savedMealId, name: "Breakfast" },
+      items: [{
+        food_name: "Greek yogurt",
+        serving_size: "170 g",
+        quantity: 2,
+        calories: 180,
+        protein_g: 30,
+        fat_g: 0,
+      }],
+    });
   });
 
   it("fails closed for ambiguous Food identity instead of manufacturing nutrition truth", async () => {
