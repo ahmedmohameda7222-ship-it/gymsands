@@ -10,6 +10,7 @@ const foodRow = readFileSync("components/nutrition/food-library/food-row.tsx", "
 const recipeHome = readFileSync("components/nutrition/recipes/recipe-home.tsx", "utf8");
 const recentlyDeleted = readFileSync("components/nutrition/recipes/recently-deleted-recipes.tsx", "utf8");
 const cooking = readFileSync("components/nutrition/cooking/cooking-mode.tsx", "utf8");
+const savedMealLauncher = readFileSync("components/nutrition/saved-meals/saved-meal-utility-launcher.tsx", "utf8");
 const nutritionI18n = readFileSync("lib/i18n/nutrition-v1.ts", "utf8");
 
 function doneButtonSource() {
@@ -34,6 +35,11 @@ describe("Nutrition V1 responsive, RTL, large-text and interaction contract", ()
     ] as const) {
       expect(source, name).toMatch(/\b(?:min-h|h)-(?:11|12|14|\[44px\]|\[48px\]|\[56px\])/);
     }
+  });
+
+  it("keeps the Saved Meal utility launcher above the 44px subpixel rounding boundary", () => {
+    expect(savedMealLauncher).toContain('className="inline-flex min-h-12');
+    expect(savedMealLauncher).not.toContain('className="inline-flex min-h-11');
   });
 
   it("keeps all seven Meal Plan day selectors at least 44pt wide on compact phones", () => {
