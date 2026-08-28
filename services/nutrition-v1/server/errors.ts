@@ -1,4 +1,5 @@
 import { nutritionJson } from "@/lib/nutrition-v1/http";
+import { RecipeDraftRevisionConflictError } from "@/services/nutrition-v1/server/recipes";
 
 const DEFAULT_INVALID_MESSAGE = "Nutrition request is invalid.";
 const MAX_PUBLIC_ERROR_LENGTH = 160;
@@ -28,6 +29,13 @@ export function nutritionErrorResponse(error: unknown) {
   if (error instanceof NutritionRequestError) {
     return nutritionJson(
       { error: error.publicMessage, code: error.code },
+      { status: error.status },
+    );
+  }
+
+  if (error instanceof RecipeDraftRevisionConflictError) {
+    return nutritionJson(
+      { error: boundedPublicMessage(error.message), code: error.code },
       { status: error.status },
     );
   }
