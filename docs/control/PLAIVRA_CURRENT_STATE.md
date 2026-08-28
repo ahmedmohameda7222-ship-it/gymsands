@@ -177,14 +177,14 @@ By Product Owner decision, P6B live acceptance and P7 notifications remain defer
 | Workout History | Strong | PCS-3 request stability and canonical Production measurement are complete; the recorded baseline is not a launch SLA |
 | Muscle Intelligence and Heat Maps | Strong | Strong foundation |
 | Today | Functional | PCS-3B projection and Production measurement are complete; initial direct browser-to-Supabase reads measured zero |
-| Nutrition and food logging | Functional | Nutrition V1 Draft candidate is implemented; five later repository migrations remain pending Production authorization/application |
+| Nutrition and food logging | Functional | Nutrition V1 Draft candidate is implemented; its repository migration chain is applied and reconciled in Production, while the application runtime is not yet merged or deployed |
 | Meal planning | Functional | Nutrition V1 Draft candidate implements the approved week-authoritative plan, shopping, and offline conflict model |
 | Hydration | Functional | — |
 | Progress and body measurements | Functional | — |
 | Progress photos | Functional | Delete-compensation debt |
 | Wellness, sleep, habits, supplements | Functional | Fragmented product presentation |
 | Daily Tasks | Partial | Product relationship with Today is unresolved |
-| My Recipes | Functional | Nutrition V1 standalone Recipe experience is implemented in Draft; not yet merged or Production-applied |
+| My Recipes | Functional | Nutrition V1 standalone Recipe experience is implemented in Draft; its schema/command migrations are applied in Production, while the application runtime is not yet merged or deployed |
 | Notifications | Scaffold | Preferences exist but no delivery engine |
 | PDF reports | Partial | Grocery PDF exists; general reporting does not |
 | Activity Catalog external service | Scaffold | Inactive; current provider is legacy |
@@ -210,18 +210,18 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 6. PCS-5A and PCS-5B are merged, Production/live-routing verified, and complete; PCS-5 remains open for broader monitoring and backup/restore authority.
 7. GitHub-native routing is not independent external monitoring and does not close broader runtime, OAuth/MCP, deletion, billing, retention, or backup alerting.
 8. Current Supabase organization is on the Free plan and is not final-launch infrastructure; backup/restore authority remains unresolved.
-9. Different domains have different reliability maturity; Workouts is stronger than Nutrition until the pending Nutrition V1 migrations are separately authorized/applied and the feature is merged/deployed.
+9. Nutrition V1 migration history is now reconciled with no pending/unresolved repository migrations; Nutrition runtime maturity still remains below Workouts until PR #152 is merged, deployed, and Production-runtime verified under the separate release authority.
 10. Repository control documents are the current authority; historical PR descriptions and chat memory are not.
 
 ## Nutrition V1 implementation candidate — Draft PR #152
 
-Nutrition V1 is implemented as the approved 20-task Draft candidate plus the approved long-term architectural corrections on `feat/nutrition-v1-implementation`. The latest runtime-bearing head before this documentation-only state reconciliation is `8047633962fc18ce59db58120ffcd73d20e73135`; this state-record commit changes documentation only.
+Nutrition V1 is implemented as the approved 20-task Draft candidate plus the approved long-term architectural corrections on `feat/nutrition-v1-implementation`. The latest runtime-bearing head remains `8047633962fc18ce59db58120ffcd73d20e73135`; subsequent commits reconcile Production migration evidence and repository control documentation only.
 
 The implementation preserves the approved four-peer Nutrition IA (`Diary`, `Meal Plan`, `Food Library`, `My Recipes`) with Shopping nested under Meal Plan and Saved Meal contextual rather than peer navigation. It includes canonical Recipe/Saved Meal versioning and 30-day recovery, nullable nutrition truth, frozen consumer snapshots, effective-dated targets, owner-scoped local recovery, active-only Food Catalog discovery, database-authoritative scalable Food Library filtering/ranking/keyset pagination, transactional Cooking state and Start Over authority, transactional Recipe/Saved Meal write authority, atomic published-Recipe Working Draft creation, UUID Cooking timer identity, Diary actual-vs-planned separation, week-authoritative Meal Plan/offline conflict handling, EN/DE/AR localization, privacy/export/deletion consumers, MCP authority convergence, and repository-controlled automatic retention purge scheduling.
 
 The final rendered-QA correction was closed with explicit RED→GREEN evidence rather than by weakening the 44px accessibility threshold. Test-only commit `629511eeda8a200fa923b6beae3744d127e85376` added a regression requiring the Saved Meal utility launcher to remain above the 44px subpixel boundary; PR Quality run `33155015154` failed exactly that new test while the launcher remained `min-h-11`. Runtime commit `8047633962fc18ce59db58120ffcd73d20e73135` changed only that launcher height contract to `min-h-12` (48px). The same Nutrition rendered matrix then passed, including the previously failing `diary-loading` scenario.
 
-The exact runtime head `8047633962fc18ce59db58120ffcd73d20e73135` completed the permanent Draft validation sequence successfully before this documentation-only reconciliation:
+The exact runtime head `8047633962fc18ce59db58120ffcd73d20e73135` completed the permanent Draft validation sequence successfully:
 
 | Evidence | Result |
 |---|---|
@@ -240,33 +240,41 @@ The exact runtime head `8047633962fc18ce59db58120ffcd73d20e73135` completed the 
 | Train / Active Workout rendered QA | PASS |
 | Workout History rendered QA | PASS |
 
+The later documentation-only head `2a07305ad8a64c14d087be342b2873a3d92a40e2` also completed all four Draft PR workflows successfully before the authorized Production migration application: Phase A `33156208402`, PR Quality `33156208374`, Exercise Detail Runtime QA `33156208307`, and Exercise Library Locale Runtime QA `33156208523` all passed.
+
 All previously recorded automated review findings remain resolved against the current runtime implementation. The public MCP `create_custom_meal` path converges on canonical `nutrition_saved_meals` authority rather than the legacy Saved Recipe tables.
 
-Nutrition V1 Production migration history is reconciled through the long-term architecture correction applied exactly once on 2026-08-27 as generated Production identity `20260827105332_nutrition_v1_long_term_architecture_corrections`. Five later forward-only repository corrections remain pending and have not been applied to Production.
+### Nutrition V1 Production migration closure
+
+All thirteen Nutrition V1 repository migrations are now applied exactly once to Plaivra Production under generated version aliases. The first eight were applied on 2026-08-27; the five final corrections were explicitly authorized and applied on 2026-08-28. No repository migration remains pending or unresolved.
 
 | Migration state | Verified value |
 |---|---|
 | Production project | `bkwezjxvapaeasfvlhvv` |
-| ledger capturedAt | `2026-08-27T10:53:32.000Z` |
-| pendingMigrationCount | `5` |
+| ledger capturedAt | `2026-08-28T09:16:40.239Z` |
+| physical Production migration records | `106` |
+| pendingMigrationCount | `0` |
 | schemaVerifiedUntrackedCount | `0` |
-| unresolvedMigrationCount | `5` |
-| migration history repair state | `pending` |
-| latest physical Production migration | `20260827105332_nutrition_v1_long_term_architecture_corrections` |
+| unresolvedMigrationCount | `0` |
+| migration history repair state | `reconciled` |
+| migration-ledger releaseReady | `true` |
+| latest physical Production migration | `20260828091228_nutrition_v1_working_draft_command` |
 | released compatibility marker | `20260724232734` — unchanged |
 
-The applied Nutrition repository migrations are `20260825120000_nutrition_v1_reusable_domains.sql`, `20260825120100_nutrition_v1_plan_diary_targets.sql`, `20260825120200_nutrition_v1_cooking_sessions.sql`, `20260825120300_nutrition_v1_food_search_and_curation.sql`, `20260825120350_nutrition_v1_meal_plan_week_start_authority.sql`, `20260825120400_nutrition_v1_privacy_purge_authority.sql`, `20260827060000_nutrition_v1_review_atomicity_corrections.sql`, and `20260827103000_nutrition_v1_long_term_architecture_corrections.sql`. Their generated Production identities run from `20260827071936_nutrition_v1_reusable_domains` through `20260827105332_nutrition_v1_long_term_architecture_corrections`; those applied identities are immutable and must not be replayed.
+The five final generated Production identities are:
 
-The pending repository-only corrections are:
+1. `20260828091053_nutrition_v1_final_architecture_corrections`
+2. `20260828091108_nutrition_v1_cooking_command_authority`
+3. `20260828091147_nutrition_v1_final_closure`
+4. `20260828091159_nutrition_v1_timer_instance_identity`
+5. `20260828091228_nutrition_v1_working_draft_command`
 
-1. `20260828032000_nutrition_v1_final_architecture_corrections.sql`
-2. `20260828032100_nutrition_v1_cooking_command_authority.sql`
-3. `20260828032200_nutrition_v1_final_closure.sql`
-4. `20260828032300_nutrition_v1_timer_instance_identity.sql`
-5. `20260828032400_nutrition_v1_working_draft_command.sql`
+Read-only Production verification after application confirmed each migration is recorded exactly once and the intended schema/command effects are present: normalized Food Library trigram indexes; scalable search and start-Cooking RPCs; Cooking write privilege/policy hardening; atomic Saved Meal create/update and Recipe duplicate RPCs; Recipe cover owner constraint; timer UUID-instance identity with same-name coexistence; and atomic published-Recipe Working Draft creation. Authenticated `SECURITY DEFINER` commands retain fixed `search_path`, derive owner authority from `auth.uid()`, deny `anon`/`public` execution, and allow `authenticated`/`service_role` execution as designed.
 
-Those five migrations require separate explicit Production authorization/application. This implementation continuation did not apply them, did not promote the compatibility marker, did not deploy the application, and did not modify Activity Catalog Production.
+Supabase security and performance advisors were re-run after DDL application. Their returned warnings are generic existing platform/schema findings or expected immediately after creating new indexes/approved authenticated command RPCs; none established a new bounded Nutrition V1 blocker. The released compatibility marker was read back unchanged at schema version `2` / migration version `20260724232734`.
 
-Canonical phase-close Quality run `33153697649` on runtime head `696f7233a1f6ce13adedb7aad9c9ef428e109a60` and subsequent validation on superseded heads are not final merge evidence. This documentation-only reconciliation creates a new exact PR head, so a fresh Draft validation followed by a Ready-for-review canonical Quality run must validate that final exact head.
+The Production migration application did **not** merge PR #152, deploy Nutrition V1 application code, promote the compatibility marker, or modify Activity Catalog Production.
 
-PR #152 remains open and must be returned to Draft during phase-close validation. Exact Release, release preflight, deployment, Production migration application, Production verification, merge, and final Product Owner approval remain separate gates; none is implied or authorized by this state reconciliation.
+The migration-ledger reconciliation and this state update create a new documentation/control-plane PR head after the previously Green exact-head Draft validation. A fresh exact-head Draft validation must therefore pass on the final reconciliation head before the Ready-for-review transition. Canonical phase-close Quality must then run on that same unchanged head. Exact Release, release preflight, application deployment, Production runtime verification, merge, and final Product Owner approval remain separate gates.
+
+PR #152 remains open. It must be returned to Draft during phase-close validation after the Ready-for-review Quality trigger is attached. No merge is authorized by this state reconciliation.
