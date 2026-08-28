@@ -9,7 +9,6 @@ import { parseAddToHandoff, type AddToDestination } from "@/lib/nutrition-v1/add
 import { localeWeekStartDay, startOfMealPlanWeek } from "@/lib/nutrition-v1/week-start";
 
 type RecipeChoice = { recipeId: string; name: string; status?: string };
-
 type Props = { destination: AddToDestination };
 
 async function jsonRequest<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
@@ -35,12 +34,13 @@ export function AddToHandoffConsumer({ destination }: Props) {
 
   useEffect(() => {
     if (!source) return;
+    const current = source;
     let cancelled = false;
     void (async () => {
       try {
-        const preview = source.type === "food"
-          ? await jsonRequest<{ name: string }>(`/api/nutrition/v1/foods/${encodeURIComponent(source.id)}/handoff?source=${encodeURIComponent(source.source)}&quantity=${encodeURIComponent(String(source.quantity))}&serving=${encodeURIComponent(source.serving)}`)
-          : await jsonRequest<{ name: string }>(`/api/nutrition/v1/recipes/${encodeURIComponent(source.id)}/handoff?recipeVersionId=${encodeURIComponent(source.versionId)}`);
+        const preview = current.type === "food"
+          ? await jsonRequest<{ name: string }>(`/api/nutrition/v1/foods/${encodeURIComponent(current.id)}/handoff?source=${encodeURIComponent(current.source)}&quantity=${encodeURIComponent(String(current.quantity))}&serving=${encodeURIComponent(current.serving)}`)
+          : await jsonRequest<{ name: string }>(`/api/nutrition/v1/recipes/${encodeURIComponent(current.id)}/handoff?recipeVersionId=${encodeURIComponent(current.versionId)}`);
         if (!cancelled) setSourceName(preview.name);
         if (destination === "recipe") {
           const result = await jsonRequest<{ recipes?: RecipeChoice[] }>("/api/nutrition/v1/recipes?limit=100");
@@ -54,6 +54,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
   }, [destination, source]);
 
   if (!source) return null;
+  const currentSource = source;
 
   async function commit() {
     setLoading(true);
@@ -61,9 +62,9 @@ export function AddToHandoffConsumer({ destination }: Props) {
     try {
       const payload: Record<string, unknown> = {
         destination,
-        source: source.type === "food"
-          ? { type: "food", id: source.id, source: source.source, quantity: source.quantity, serving: source.serving }
-          : { type: "recipe", id: source.id, versionId: source.versionId },
+        source: currentSource.type === "food"
+          ? { type: "food", id: currentSource.id, source: currentSource.source, quantity: currentSource.quantity, serving: currentSource.serving }
+          : { type: "recipe", id: currentSource.id, versionId: currentSource.versionId },
       };
       if (destination === "diary") {
         if (!date || !meal) throw new Error("Choose the Diary date and meal before adding this item.");
@@ -105,6 +106,9 @@ export function AddToHandoffConsumer({ destination }: Props) {
 
   const title = destination === "diary" ? "Add to Diary" : destination === "meal_plan" ? "Add to Meal Plan" : destination === "saved_meal" ? "Save as Meal" : "Add Food to Recipe";
   const action = destination === "diary" ? "Add to Diary" : destination === "meal_plan" ? "Add to plan" : destination === "saved_meal" ? "Create Saved Meal" : targetRecipeId ? "Add to Working Draft" : "Add to new Recipe";
+  const mealChoices = destination === "meal_plan"
+    ? [{ value: "breakfast", label: "Breakfast" }, { value: "lunch", label: "Lunch" }, { value: "dinner", label: "Dinner" }, { value: "snack", label: "Snack" }]
+    : [{ value: "Breakfast", label: "Breakfast" }, { value: "Lunch", label: "Lunch" }, { value: "Dinner", label: "Dinner" }, { value: "Snack", label: "Snack" }];
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-0 sm:items-center sm:p-6" role="presentation">
@@ -116,7 +120,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
 
         {(destination === "diary" || destination === "meal_plan") ? <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary date" : "Plan date"}<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label>
-          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary meal" : "Meal slot"}<select value={meal} onChange={(event) => setMeal(event.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">Choose…</option><option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option></select></label>
+          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary meal" : "Meal slot"}<select value={meal} onChange={(event) => setMeal(event.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">Choose…</option>{mealChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select></label>
         </div> : null}
 
         {destination === "saved_meal" ? <div className="mt-5 grid gap-4"><label className="grid gap-1 text-sm font-medium">Saved Meal name<input value={savedMealName} onChange={(event) => setSavedMealName(event.target.value)} maxLength={200} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label><label className="grid gap-1 text-sm font-medium">Note <span className="font-normal text-muted-foreground">(optional)</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="rounded-xl border border-border bg-background p-3 font-normal" /></label></div> : null}
