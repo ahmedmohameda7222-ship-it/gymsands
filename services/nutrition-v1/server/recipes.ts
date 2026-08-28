@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type RecipeIngredientInput = {
+import { isUuid } from "@/lib/utils";
+
+export type RecipeIngredientInput = {
   id?: string;
   food_id?: string | null;
   ingredient_name: string;
@@ -103,6 +105,26 @@ export async function createRecipeDraft(
     throw new Error("Atomic Recipe Working Draft creation returned an invalid result.");
   }
   return { recipeId, draftId, recipe, draft };
+}
+
+export async function createPreseededRecipeDraft(
+  supabase: SupabaseClient,
+  _userId: string,
+  input: { operationId: string; ingredient: RecipeIngredientInput },
+) {
+  if (!isUuid(input.operationId)) throw new Error("Recipe creation Operation ID must be a valid ID.");
+  const result = await supabase.rpc("create_preseeded_nutrition_recipe_draft", {
+    p_operation_id: input.operationId,
+    p_ingredient: input.ingredient,
+  });
+  throwDb(result.error);
+  const data = result.data as Record<string, unknown> | null;
+  const recipeId = typeof data?.recipeId === "string" ? data.recipeId : null;
+  const draftId = typeof data?.draftId === "string" ? data.draftId : null;
+  if (!recipeId || !draftId || !isUuid(recipeId) || !isUuid(draftId)) {
+    throw new Error("Atomic preseeded Recipe Working Draft creation returned an invalid result.");
+  }
+  return { recipeId, draftId, reused: data?.reused === true };
 }
 
 export async function autosaveRecipeDraft(
