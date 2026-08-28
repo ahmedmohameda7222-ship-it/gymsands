@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
 import { foodLibraryApi } from "@/components/nutrition/food-library/food-library-api";
-import { parseAddToHandoff, type AddToDestination } from "@/lib/nutrition-v1/add-to-handoff";
+import { parseAddToHandoff, type AddToDestination, type AddToHandoffSource } from "@/lib/nutrition-v1/add-to-handoff";
 import { localeWeekStartDay, startOfMealPlanWeek } from "@/lib/nutrition-v1/week-start";
 
 type RecipeChoice = { recipeId: string; name: string; status?: string };
@@ -28,6 +28,24 @@ async function jsonRequest<T>(input: RequestInfo | URL, init?: RequestInit): Pro
 
 function newRecipeOperationStorageKey(source: RecipeFoodSource) {
   return `plaivra:nutrition:handoff:recipe:new:${source.source}:${source.id}:${source.quantity}:${encodeURIComponent(source.serving)}`;
+}
+
+function commandSourceIdentity(source: AddToHandoffSource, resolvedRecipeQuantity: number | null) {
+  if (source.type === "food") {
+    return ["food", source.source, source.id, String(source.quantity), source.serving];
+  }
+  return ["recipe", source.id, source.versionId, String(resolvedRecipeQuantity ?? source.quantity)];
+}
+
+function commandOperationStorageKey(
+  destination: Exclude<AddToDestination, "recipe">,
+  source: AddToHandoffSource,
+  resolvedRecipeQuantity: number | null,
+  context: string[],
+) {
+  return ["plaivra", "nutrition", "handoff", destination, ...commandSourceIdentity(source, resolvedRecipeQuantity), ...context]
+    .map((part) => encodeURIComponent(part))
+    .join(":");
 }
 
 function readStoredOperationId(key: string) {
@@ -105,7 +123,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
   async function commit() {
     setLoading(true);
     setError("");
-    let successfulRecipeOperationKey: string | null = null;
+    let successfulOperationKey: string | null = null;
     try {
       const resolvedRecipeQuantity = currentSource.type === "recipe" ? Number(recipeQuantity) : null;
       if (currentSource.type === "recipe" && (!Number.isFinite(resolvedRecipeQuantity) || Number(resolvedRecipeQuantity) <= 0)) {
@@ -117,36 +135,44 @@ export function AddToHandoffConsumer({ destination }: Props) {
           ? { type: "food", id: currentSource.id, source: currentSource.source, quantity: currentSource.quantity, serving: currentSource.serving }
           : { type: "recipe", id: currentSource.id, versionId: currentSource.versionId, quantity: resolvedRecipeQuantity },
       };
+
+      const claimOperationId = (operationKey: string) => {
+        const operationId = pendingOperationIdRef.current ?? readStoredOperationId(operationKey) ?? crypto.randomUUID();
+        pendingOperationIdRef.current = operationId;
+        storeOperationId(operationKey, operationId);
+        successfulOperationKey = operationKey;
+        return operationId;
+      };
+
       if (destination === "diary") {
         if (!date || !meal) throw new Error("Choose the Diary date and meal before adding this item.");
-        const operationId = pendingOperationIdRef.current ?? crypto.randomUUID();
-        pendingOperationIdRef.current = operationId;
-        payload.operationId = operationId;
+        const operationKey = commandOperationStorageKey("diary", currentSource, resolvedRecipeQuantity, [date, meal]);
+        payload.operationId = claimOperationId(operationKey);
         payload.date = date;
         payload.meal = meal;
       } else if (destination === "meal_plan") {
         if (!date || !meal) throw new Error("Choose the plan date and meal slot before adding this item.");
-        const operationId = pendingOperationIdRef.current ?? crypto.randomUUID();
-        pendingOperationIdRef.current = operationId;
-        payload.operationId = operationId;
         const locale = typeof navigator === "undefined" ? "en-GB" : navigator.language;
+        const weekStartDate = startOfMealPlanWeek(date, localeWeekStartDay(locale));
+        const operationKey = commandOperationStorageKey("meal_plan", currentSource, resolvedRecipeQuantity, [date, meal, weekStartDate]);
+        payload.operationId = claimOperationId(operationKey);
         payload.planDate = date;
         payload.mealSlot = meal;
-        payload.weekStartDate = startOfMealPlanWeek(date, localeWeekStartDay(locale));
+        payload.weekStartDate = weekStartDate;
       } else if (destination === "saved_meal") {
         if (!savedMealName.trim()) throw new Error("Name the Saved Meal before creating it.");
-        payload.name = savedMealName.trim();
-        payload.note = note.trim() || null;
+        const normalizedName = savedMealName.trim();
+        const normalizedNote = note.trim();
+        const operationKey = commandOperationStorageKey("saved_meal", currentSource, resolvedRecipeQuantity, [normalizedName, normalizedNote]);
+        payload.operationId = claimOperationId(operationKey);
+        payload.name = normalizedName;
+        payload.note = normalizedNote || null;
       } else if (destination === "recipe") {
         payload.targetRecipeId = targetRecipeId || null;
         if (!targetRecipeId) {
           if (currentSource.type !== "food") throw new Error("Only Food can be added to a new Recipe.");
           const operationKey = newRecipeOperationStorageKey(currentSource);
-          const operationId = pendingOperationIdRef.current ?? readStoredOperationId(operationKey) ?? crypto.randomUUID();
-          pendingOperationIdRef.current = operationId;
-          storeOperationId(operationKey, operationId);
-          payload.operationId = operationId;
-          successfulRecipeOperationKey = operationKey;
+          payload.operationId = claimOperationId(operationKey);
         }
       }
 
@@ -156,7 +182,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
         body: JSON.stringify(payload),
       });
       pendingOperationIdRef.current = null;
-      if (successfulRecipeOperationKey) clearStoredOperationId(successfulRecipeOperationKey);
+      if (successfulOperationKey) clearStoredOperationId(successfulOperationKey);
       if (destination === "diary") router.replace(`/calories?date=${encodeURIComponent(date)}`);
       else if (destination === "meal_plan") {
         const locale = typeof navigator === "undefined" ? "en-GB" : navigator.language;
@@ -193,7 +219,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
           <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary meal" : "Meal slot"}<select value={meal} onChange={(event) => { pendingOperationIdRef.current = null; setMeal(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">Choose…</option>{mealChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select></label>
         </div> : null}
 
-        {destination === "saved_meal" ? <div className="mt-5 grid gap-4"><label className="grid gap-1 text-sm font-medium">Saved Meal name<input value={savedMealName} onChange={(event) => setSavedMealName(event.target.value)} maxLength={200} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label><label className="grid gap-1 text-sm font-medium">Note <span className="font-normal text-muted-foreground">(optional)</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="rounded-xl border border-border bg-background p-3 font-normal" /></label></div> : null}
+        {destination === "saved_meal" ? <div className="mt-5 grid gap-4"><label className="grid gap-1 text-sm font-medium">Saved Meal name<input value={savedMealName} onChange={(event) => { pendingOperationIdRef.current = null; setSavedMealName(event.target.value); }} maxLength={200} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label><label className="grid gap-1 text-sm font-medium">Note <span className="font-normal text-muted-foreground">(optional)</span><textarea value={note} onChange={(event) => { pendingOperationIdRef.current = null; setNote(event.target.value); }} rows={3} className="rounded-xl border border-border bg-background p-3 font-normal" /></label></div> : null}
 
         {destination === "recipe" ? <div className="mt-5"><label className="grid gap-1 text-sm font-medium">Recipe authoring target<select value={targetRecipeId} onChange={(event) => { pendingOperationIdRef.current = null; setTargetRecipeId(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">New Recipe Working Draft</option>{recipeChoices.map((recipe) => <option key={recipe.recipeId} value={recipe.recipeId}>{recipe.name}</option>)}</select></label><p className="mt-2 text-xs text-muted-foreground">My Recipes owns the Recipe. This handoff only pre-seeds the selected Food, serving, and quantity.</p></div> : null}
 
