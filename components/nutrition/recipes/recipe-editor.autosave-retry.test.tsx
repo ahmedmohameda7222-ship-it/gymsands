@@ -4,23 +4,26 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  recipeApi: vi.fn(),
-  push: vi.fn(),
-  refresh: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  class RecipeApiError extends Error {
+    readonly status: number;
+    readonly code: string | null;
 
-class MockRecipeApiError extends Error {
-  readonly status: number;
-  readonly code: string | null;
-
-  constructor(message: string, status: number, code: string | null = null) {
-    super(message);
-    this.name = "RecipeApiError";
-    this.status = status;
-    this.code = code;
+    constructor(message: string, status: number, code: string | null = null) {
+      super(message);
+      this.name = "RecipeApiError";
+      this.status = status;
+      this.code = code;
+    }
   }
-}
+
+  return {
+    recipeApi: vi.fn(),
+    push: vi.fn(),
+    refresh: vi.fn(),
+    RecipeApiError,
+  };
+});
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children: ReactNode }) => createElement("a", { href, ...props }, children),
@@ -33,7 +36,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/components/nutrition/recipes/recipe-api", () => ({
   recipeApi: mocks.recipeApi,
-  RecipeApiError: MockRecipeApiError,
+  RecipeApiError: mocks.RecipeApiError,
 }));
 vi.mock("@/lib/i18n/nutrition-v1", () => ({
   useNutritionV1Translation: () => ({
@@ -132,7 +135,7 @@ describe("Recipe editor autosave retry", () => {
   it("does not retry a Recipe revision conflict", async () => {
     const input = await renderReadyEditor();
     mocks.recipeApi.mockRejectedValueOnce(
-      new MockRecipeApiError("Recipe Working Draft revision conflict.", 409, "recipe_draft_revision_conflict"),
+      new mocks.RecipeApiError("Recipe Working Draft revision conflict.", 409, "recipe_draft_revision_conflict"),
     );
 
     await act(async () => { setInputValue(input, "Conflicting change"); });
