@@ -39,6 +39,7 @@ test("permanent verification chain covers current Active Workout and Nutrition a
     "nutrition-v1-privacy-purge.sql",
     "nutrition-v1-legacy-reconciliation.sql",
     "nutrition-v1-final-architecture-corrections.sql",
+    "nutrition-v1-cooking-command-authority.sql",
     "production-release-migration-preflight.sql",
   ]) {
     assert.equal(DATABASE_VERIFICATION_FILES.some((file) => file.endsWith(required)), true, required);
@@ -47,8 +48,12 @@ test("permanent verification chain covers current Active Workout and Nutrition a
   const finalCorrection = DATABASE_VERIFICATION_FILES.indexOf(
     "supabase/verification/nutrition-v1-final-architecture-corrections.sql",
   );
+  const commandAuthority = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/nutrition-v1-cooking-command-authority.sql",
+  );
   const productionPreflight = DATABASE_VERIFICATION_FILES.indexOf(
     "supabase/verification/production-release-migration-preflight.sql",
   );
   assert.equal(finalCorrection >= 0 && finalCorrection < productionPreflight, true);
+  assert.equal(commandAuthority >= 0 && commandAuthority < productionPreflight, true);
 });
