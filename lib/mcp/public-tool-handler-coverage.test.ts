@@ -195,7 +195,7 @@ function createInMemorySupabase() {
         }));
       return { data: { items, nextCursor: null }, error: null };
     }
-    if (name === "create_nutrition_saved_meal") {
+    if (name === "create_nutrition_saved_meal" || name === "create_nutrition_saved_meal_idempotent") {
       return {
         data: {
           id: nextId(),
