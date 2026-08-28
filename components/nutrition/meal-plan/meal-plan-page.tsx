@@ -14,6 +14,7 @@ import {
   enqueueMealPlanMutation,
   markMealPlanMutationFailed,
   reconcileMealPlanQueue,
+  replayMealPlanMutationExactFirst,
   serializeMealPlanQueue,
   type MealPlanMutationTarget,
   type MealPlanOfflineMutation,
@@ -278,26 +279,54 @@ export function MealPlanPage() {
     let workingRevision = serverData.week?.revision ?? 0;
     const remaining: MealPlanOfflineMutation[] = [];
     let applied = 0;
+    const sendQueued = (command: { weekId: string | null; weekStartDate: string; baseRevision: number; operationId: string; mutation: Record<string, unknown> }) =>
+      mealPlanApi<{ weekId: string; revision: number }>("/api/nutrition/v1/meal-plan/week", {
+        method: "POST",
+        body: JSON.stringify({ kind: "mutate", ...command }),
+      });
     try {
       for (let index = 0; index < stored.length; index += 1) {
         const storedItem = stored[index]!;
         if (storedItem.status !== "queued") { remaining.push(storedItem); continue; }
         const payload = queuePayload(storedItem);
         if (!payload || payload.weekStartDate !== weekStart) { remaining.push(markMealPlanMutationFailed(storedItem, "Queued Meal Plan mutation is no longer readable.")); continue; }
-        let candidate = storedItem;
-        if (candidate.baseRevision !== workingRevision) {
-          const changed = !sameSnapshot(targetSnapshot(working, candidate.target), payload.baseSnapshot);
-          candidate = reconcileMealPlanQueue([candidate], { serverRevision: workingRevision, changedTargets: changed ? [candidate.target] : [] })[0]!;
-          if (candidate.status === "conflict") { remaining.push(candidate); continue; }
-        }
+
+        let exact;
         try {
-          const result = await mealPlanApi<{ weekId: string; revision: number }>("/api/nutrition/v1/meal-plan/week", {
-            method: "POST",
-            body: JSON.stringify({ kind: "mutate", weekId: workingWeekId, weekStartDate: weekStart, baseRevision: candidate.baseRevision, operationId: candidate.operationId, mutation: payload.mutation }),
+          exact = await replayMealPlanMutationExactFirst(storedItem, sendQueued);
+        } catch (cause) {
+          remaining.push(markMealPlanMutationFailed(storedItem, cause instanceof Error ? cause.message : "Meal Plan mutation could not be synchronized."), ...stored.slice(index + 1));
+          break;
+        }
+
+        if (exact.state === "applied") {
+          working = await fetchWeek();
+          workingWeekId = working.week?.id ?? exact.result.weekId;
+          workingRevision = working.week?.revision ?? exact.result.revision;
+          applied += 1;
+          continue;
+        }
+
+        working = await fetchWeek();
+        workingWeekId = working.week?.id ?? null;
+        workingRevision = working.week?.revision ?? 0;
+        const changed = !sameSnapshot(targetSnapshot(working, storedItem.target), payload.baseSnapshot);
+        let candidate = reconcileMealPlanQueue([storedItem], { serverRevision: workingRevision, changedTargets: changed ? [storedItem.target] : [] })[0]!;
+        if (candidate.status === "conflict") { remaining.push(candidate); continue; }
+        candidate = { ...candidate, weekId: workingWeekId ?? localWeekId(weekStart) };
+        try {
+          const result = await sendQueued({
+            weekId: isLocalWeekId(candidate.weekId) ? null : candidate.weekId,
+            weekStartDate: payload.weekStartDate,
+            baseRevision: candidate.baseRevision,
+            operationId: candidate.operationId,
+            mutation: payload.mutation as Record<string, unknown>,
           });
           workingWeekId = result.weekId;
           workingRevision = result.revision;
-          working = applyMutationLocally(working, payload.mutation, { weekId: result.weekId, revision: result.revision, userId: ownerId, weekStart });
+          working = await fetchWeek();
+          workingWeekId = working.week?.id ?? result.weekId;
+          workingRevision = working.week?.revision ?? result.revision;
           applied += 1;
         } catch (cause) {
           remaining.push(markMealPlanMutationFailed(candidate, cause instanceof Error ? cause.message : "Meal Plan mutation could not be synchronized."), ...stored.slice(index + 1));
