@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type RecipeIngredientInput = {
+  id?: string;
   food_id?: string | null;
   ingredient_name: string;
   quantity?: number | null;
@@ -9,6 +10,7 @@ type RecipeIngredientInput = {
 };
 
 type RecipeInstructionInput = {
+  id?: string;
   instruction: string;
   ingredient_refs?: unknown[];
   equipment_refs?: unknown[];
@@ -23,6 +25,7 @@ type RecipeInstructionInput = {
 };
 
 type RecipeEquipmentInput = {
+  id?: string;
   name: string;
   quantity?: number | null;
   note?: string | null;
