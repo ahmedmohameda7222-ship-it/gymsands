@@ -28,7 +28,10 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("Nutrition V1 atomic Recipe duplication", () => {
   it("remaps the graph in the trusted server domain and commits root, draft, and children in one RPC", async () => {
-    const rpc = vi.fn(async () => ({ data: { recipeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", draftId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }, error: null }));
+    const rpc = vi.fn(async (_name: string, _payload: Record<string, any>) => ({
+      data: { recipeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", draftId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" },
+      error: null,
+    }));
     const client = { rpc } as unknown as SupabaseClient;
 
     const result = await duplicatePublishedRecipeAtomically(client, userId, recipeId, (() => {
@@ -38,7 +41,9 @@ describe("Nutrition V1 atomic Recipe duplication", () => {
 
     expect(result).toEqual({ recipeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", draftId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" });
     expect(rpc).toHaveBeenCalledOnce();
-    const [, payload] = rpc.mock.calls[0]!;
+    const call = rpc.mock.calls[0];
+    expect(call).toBeDefined();
+    const payload = call![1];
     expect(payload).toMatchObject({
       p_source_recipe_id: recipeId,
       p_source_version_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -50,7 +55,7 @@ describe("Nutrition V1 atomic Recipe duplication", () => {
   });
 
   it("does not expose a partial duplicate when the atomic database command fails", async () => {
-    const rpc = vi.fn(async () => ({ data: null, error: { message: "invalid graph" } }));
+    const rpc = vi.fn(async (_name: string, _payload: Record<string, any>) => ({ data: null, error: { message: "invalid graph" } }));
     const client = { rpc } as unknown as SupabaseClient;
     await expect(duplicatePublishedRecipeAtomically(client, userId, recipeId)).rejects.toThrow(/invalid graph/i);
     expect(rpc).toHaveBeenCalledOnce();
