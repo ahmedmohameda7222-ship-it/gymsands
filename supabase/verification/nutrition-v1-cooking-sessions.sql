@@ -105,7 +105,7 @@ begin
     raise exception 'Nutrition V1 cooking action state vocabulary invalid.';
   end if;
 
-  if not exists (
+  if exists (
     select 1
     from pg_constraint
     where conrelid = 'public.nutrition_cooking_timers'::regclass
@@ -118,7 +118,17 @@ begin
       and contype = 'u'
       and pg_get_constraintdef(oid) ~* '^UNIQUE \(action_state_id\)$'
   ) then
-    raise exception 'Nutrition V1 cooking multiple timers contract missing.';
+    raise exception 'Nutrition V1 cooking timer display metadata is still acting as identity.';
+  end if;
+
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'nutrition_cooking_timers'
+      and indexname = 'nutrition_cooking_timers_action_name_idx'
+      and indexdef not ilike '%unique%'
+  ) then
+    raise exception 'Nutrition V1 cooking same-name timer lookup index missing.';
   end if;
 
   if not exists (
@@ -148,8 +158,6 @@ insert into auth.users (
     '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()
   );
 
--- Published source graph is seeded by the database owner. Runtime Cooking creation
--- must then go through the owner-derived atomic start RPC rather than direct inserts.
 insert into public.nutrition_recipes (id, user_id, name) values (
   'a2120000-0000-4000-8000-000000000020',
   'a2120000-0000-4000-8000-000000000001',
@@ -220,7 +228,7 @@ begin
       jsonb_build_object(
         'id', 'a2120000-0000-4000-8000-000000000041',
         'action_state_id', v_action_state_id,
-        'timer_name', 'Chicken rest',
+        'timer_name', 'Pasta',
         'duration_seconds', 240,
         'status', 'running',
         'started_at', '2026-08-28T03:01:00Z',
@@ -239,10 +247,52 @@ begin
       select count(*) = 2
       from public.nutrition_cooking_timers
       where action_state_id = v_action_state_id
+        and timer_name = 'Pasta'
         and started_at is not null
         and target_at is not null
     ),
-    'Nutrition V1 cooking multiple timers contract missing.'
+    'Nutrition V1 distinct same-name timer instances could not coexist.'
+  );
+
+  v_sync := public.sync_nutrition_cooking_session_state(
+    v_session_id,
+    1,
+    'a2120000-0000-4000-8000-000000000022',
+    '2026-08-28T03:02:00Z',
+    jsonb_build_array(jsonb_build_object(
+      'id', v_action_state_id,
+      'action_key', 'a2120000-0000-4000-8000-000000000022',
+      'state', 'waiting_for_condition',
+      'state_revision', 2
+    )),
+    jsonb_build_array(jsonb_build_object(
+      'id', 'a2120000-0000-4000-8000-000000000040',
+      'action_state_id', v_action_state_id,
+      'timer_name', 'Pasta',
+      'duration_seconds', 540,
+      'status', 'paused',
+      'started_at', '2026-08-28T03:01:00Z',
+      'target_at', '2026-08-28T03:10:00Z',
+      'paused_at', '2026-08-28T03:02:00Z',
+      'paused_remaining_seconds', 480
+    ))
+  );
+
+  perform pg_temp.nv1_cooking_assert(
+    (v_sync->>'stateRevision')::integer = 2
+    and (
+      select count(*) = 2
+      from public.nutrition_cooking_timers
+      where action_state_id = v_action_state_id and timer_name = 'Pasta'
+    )
+    and (
+      select count(*) = 1
+      from public.nutrition_cooking_timers
+      where id = 'a2120000-0000-4000-8000-000000000040'
+        and status = 'paused'
+        and paused_remaining_seconds = 480
+    ),
+    'Nutrition V1 same timer UUID retry was not idempotent.'
   );
 
   perform pg_temp.nv1_cooking_assert(
@@ -251,7 +301,7 @@ begin
          and status = 'active'
          and started_at is not null
          and last_active_at is not null
-         and state_revision = 1
+         and state_revision = 2
          and frozen_recipe_snapshot->'recipe'->>'name' = 'Frozen cooking fixture'
          and jsonb_array_length(frozen_recipe_snapshot->'actions') = 1
       from public.nutrition_cooking_sessions
@@ -269,7 +319,6 @@ select pg_temp.nv1_cooking_rejected(
   'Nutrition V1 cooking frozen Recipe snapshot was mutable.'
 );
 
--- Direct initial/child writes are no longer a valid authenticated command path.
 select pg_temp.nv1_cooking_rejected(
   $$insert into public.nutrition_cooking_sessions (
       user_id, recipe_id, recipe_version_id, frozen_recipe_snapshot, serving_scale
