@@ -40,11 +40,14 @@ describe("Nutrition V1 final closure regressions", () => {
   it("moves Recipe duplicate and Saved Meal multi-table writes behind transactional DB commands", () => {
     const migration = source("supabase/migrations/20260828032200_nutrition_v1_final_closure.sql").toLowerCase();
     const recipeRoute = source("app/api/nutrition/v1/recipes/[recipeId]/route.ts");
+    const recipeWorkspace = source("services/nutrition-v1/server/recipe-workspace.ts");
     const savedMeals = source("services/nutrition-v1/server/saved-meals.ts");
     expect(migration).toContain("create or replace function public.duplicate_nutrition_recipe");
     expect(migration).toContain("create or replace function public.create_nutrition_saved_meal");
     expect(migration).toContain("create or replace function public.update_nutrition_saved_meal");
     expect(recipeRoute).toContain("duplicatePublishedRecipeAtomically");
+    expect(recipeWorkspace).not.toContain("export async function duplicatePublishedRecipe(");
+    expect(recipeWorkspace).not.toContain('await supabase.from("nutrition_recipes").delete().eq("id", root.id)');
     expect(savedMeals).toContain('rpc("create_nutrition_saved_meal"');
     expect(savedMeals).toContain('rpc("update_nutrition_saved_meal"');
   });
