@@ -9,6 +9,8 @@ export type ResolvedRecipeHandoff = {
   recipeId: string;
   recipeVersionId: string;
   name: string;
+  quantity: number;
+  servingLabel: string;
   frozenNutrition: {
     calories: number | null;
     protein_g: number | null;
@@ -45,15 +47,25 @@ function requiredText(value: unknown, label: string) {
   return text;
 }
 
+function scaled(value: number | null, quantity: number) {
+  return value === null ? null : value * quantity;
+}
+
+function servingLabel(quantity: number) {
+  return `${quantity} ${quantity === 1 ? "serving" : "servings"}`;
+}
+
 export async function resolveRecipeHandoff(
   supabase: SupabaseClient,
   userId: string,
   recipeId: string,
   recipeVersionId: string,
+  quantity = 1,
 ): Promise<ResolvedRecipeHandoff> {
   if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
   if (!isUuid(recipeId)) throw new Error("Recipe must be a valid ID.");
   if (!isUuid(recipeVersionId)) throw new Error("Recipe version must be a valid ID.");
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Recipe serving quantity must be greater than zero.");
 
   const rootResult = await supabase
     .from("nutrition_recipes")
@@ -81,13 +93,21 @@ export async function resolveRecipeHandoff(
   const name = requiredText(version.name, "Recipe name");
   const metadata = record(version.metadata);
   const rawNutrition = record(metadata.nutrition_per_serving ?? metadata.nutritionPerServing);
-  const frozenNutrition = {
+  const perServingNutrition = {
     calories: nutritionNumber(rawNutrition.calories),
     protein_g: nutritionNumber(rawNutrition.protein_g ?? rawNutrition.proteinG),
     carbs_g: nutritionNumber(rawNutrition.carbs_g ?? rawNutrition.carbsG),
     fat_g: nutritionNumber(rawNutrition.fat_g ?? rawNutrition.fatG),
     fiber_g: nutritionNumber(rawNutrition.fiber_g ?? rawNutrition.fiberG),
   };
+  const frozenNutrition = {
+    calories: scaled(perServingNutrition.calories, quantity),
+    protein_g: scaled(perServingNutrition.protein_g, quantity),
+    carbs_g: scaled(perServingNutrition.carbs_g, quantity),
+    fat_g: scaled(perServingNutrition.fat_g, quantity),
+    fiber_g: scaled(perServingNutrition.fiber_g, quantity),
+  };
+  const resolvedServingLabel = servingLabel(quantity);
 
   const ingredientResult = await supabase
     .from("nutrition_recipe_ingredients")
@@ -98,12 +118,12 @@ export async function resolveRecipeHandoff(
   if (ingredientResult.error) throw new Error(`Recipe ingredients could not be resolved. ${ingredientResult.error.message ?? "Database request failed."}`);
   const shoppingIngredients: ResolvedRecipeHandoff["shoppingIngredients"] = (ingredientResult.data ?? []).flatMap((raw) => {
     const item = record(raw);
-    const quantity = Number(item.quantity);
-    if (typeof item.food_id !== "string" || !isUuid(item.food_id) || !Number.isFinite(quantity) || quantity <= 0 || typeof item.unit !== "string" || !item.unit.trim()) return [];
+    const ingredientQuantity = Number(item.quantity);
+    if (typeof item.food_id !== "string" || !isUuid(item.food_id) || !Number.isFinite(ingredientQuantity) || ingredientQuantity <= 0 || typeof item.unit !== "string" || !item.unit.trim()) return [];
     return [{
       foodId: item.food_id,
       name: typeof item.ingredient_name === "string" && item.ingredient_name.trim() ? item.ingredient_name.trim() : name,
-      quantity: quantity / servings,
+      quantity: (ingredientQuantity / servings) * quantity,
       unit: item.unit.trim(),
       qualifier: null,
     }];
@@ -112,8 +132,8 @@ export async function resolveRecipeHandoff(
   const frozenSourceSnapshot = {
     recipe_id: recipeId,
     recipe_version_id: recipeVersionId,
-    resolved_serving_quantity: 1,
-    resolved_serving_label: "1 serving",
+    resolved_serving_quantity: quantity,
+    resolved_serving_label: resolvedServingLabel,
     frozen_recipe_name: name,
     frozen_nutrition: frozenNutrition,
   };
@@ -126,12 +146,14 @@ export async function resolveRecipeHandoff(
     recipeId,
     recipeVersionId,
     name,
+    quantity,
+    servingLabel: resolvedServingLabel,
     frozenNutrition,
     frozenSourceSnapshot,
     diaryItem: {
       foodName: name,
-      servingLabel: "1 serving",
-      quantity: 1,
+      servingLabel: resolvedServingLabel,
+      quantity,
       nutrition: {
         caloriesKcal: frozenNutrition.calories,
         proteinG: frozenNutrition.protein_g,
