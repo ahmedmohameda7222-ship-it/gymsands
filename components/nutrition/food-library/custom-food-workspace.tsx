@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 
+import { foodLibraryApi } from "@/components/nutrition/food-library/food-library-api";
 import { foodLibraryText, type FoodLibraryTextKey } from "@/components/nutrition/food-library/food-library-copy";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 import type { FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
@@ -80,7 +81,7 @@ export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Pro
             basisUnit,
             createSeparately,
           };
-      const response = await fetch("/api/nutrition/v1/foods", {
+      const response = await foodLibraryApi("/api/nutrition/v1/foods", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ operation, input }),
@@ -104,7 +105,7 @@ export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Pro
     setPending(true);
     setError(null);
     try {
-      const response = await fetch("/api/nutrition/v1/foods", {
+      const response = await foodLibraryApi("/api/nutrition/v1/foods", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ operation: "custom_food_delete", input: { foodId: food.id } }),
