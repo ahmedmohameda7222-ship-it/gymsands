@@ -86,14 +86,15 @@ describe("Nutrition V1 Recipe server authority", () => {
 
   it("autosaves the Working Draft atomically and never mutates a published Recipe version", async () => {
     const db = fakeSupabase({}, {
-      data: { id: draftId, recipe_id: recipeId, user_id: userId, name: "Chicken bowl edited", servings: 4 },
+      data: { id: draftId, recipe_id: recipeId, user_id: userId, name: "Chicken bowl edited", servings: 4, revision: 1 },
       error: null,
     });
 
-    await autosaveRecipeDraft(db.client, userId, recipeId, { ...completeDraft, name: "Chicken bowl edited" });
+    await autosaveRecipeDraft(db.client, userId, recipeId, { ...completeDraft, name: "Chicken bowl edited" }, 0);
 
     expect(db.rpc).toHaveBeenCalledWith("autosave_nutrition_recipe_draft", expect.objectContaining({
       p_recipe_id: recipeId,
+      p_expected_revision: 0,
       p_ingredients: completeDraft.ingredients,
       p_instructions: completeDraft.instructions,
       p_equipment: completeDraft.equipment,
