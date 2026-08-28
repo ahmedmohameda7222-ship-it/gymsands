@@ -16,6 +16,7 @@ import {
 } from "@/services/nutrition-v1/server/saved-meals";
 
 const userId = "11111111-1111-4111-8111-111111111111";
+const operationId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const savedMealId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const foodId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const recipeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -86,15 +87,16 @@ function fakeSupabase(tableQueries: Record<string, Query[]>, rpcResults: QueryRe
 beforeEach(() => vi.clearAllMocks());
 
 describe("Nutrition V1 Saved Meal authority", () => {
-  it("creates root plus complete frozen item set through one transactional authority", async () => {
+  it("creates root plus complete frozen item set through one transactional replay authority", async () => {
     const root = { id: savedMealId, user_id: userId, name: "Lunch staples", note: null, is_favorite: false, deleted_at: null, purge_after: null };
     const db = fakeSupabase({}, [{ data: root, error: null }]);
 
-    const result = await createSavedMeal(db.client, userId, { name: "Lunch staples", items: [food, recipe] });
+    const result = await createSavedMeal(db.client, userId, { operationId, name: "Lunch staples", items: [food, recipe] });
 
     expect(result.id).toBe(savedMealId);
     expect(db.rpc).toHaveBeenCalledOnce();
-    expect(db.rpc).toHaveBeenCalledWith("create_nutrition_saved_meal", {
+    expect(db.rpc).toHaveBeenCalledWith("create_nutrition_saved_meal_idempotent", {
+      p_operation_id: operationId,
       p_name: "Lunch staples",
       p_note: null,
       p_is_favorite: false,
@@ -106,7 +108,7 @@ describe("Nutrition V1 Saved Meal authority", () => {
   it("rejects Saved Meal nesting before any database write", async () => {
     const db = fakeSupabase({});
     const nested = { kind: "saved_meal", saved_meal: { saved_meal_id: savedMealId, frozen_name: "Nested", items: [] } } as never;
-    await expect(createSavedMeal(db.client, userId, { name: "Invalid", items: [nested] })).rejects.toThrow(/food|recipe|nest/i);
+    await expect(createSavedMeal(db.client, userId, { operationId, name: "Invalid", items: [nested] })).rejects.toThrow(/food|recipe|nest/i);
     expect(db.from).not.toHaveBeenCalled();
     expect(db.rpc).not.toHaveBeenCalled();
   });
@@ -145,7 +147,7 @@ describe("Nutrition V1 Saved Meal authority", () => {
 
   it("propagates transaction failure without compensating client writes", async () => {
     const db = fakeSupabase({}, [{ data: null, error: { message: "invalid child" } }]);
-    await expect(createSavedMeal(db.client, userId, { name: "Broken", items: [food] })).rejects.toThrow(/invalid child/i);
+    await expect(createSavedMeal(db.client, userId, { operationId, name: "Broken", items: [food] })).rejects.toThrow(/invalid child/i);
     expect(db.rpc).toHaveBeenCalledOnce();
     expect(db.from).not.toHaveBeenCalled();
   });
