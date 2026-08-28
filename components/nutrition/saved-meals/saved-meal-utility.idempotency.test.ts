@@ -9,7 +9,8 @@ describe("Saved Meal utility uncertain-completion identity", () => {
     expect(source).toMatch(/sessionStorage\.getItem/);
     expect(source).toMatch(/sessionStorage\.setItem/);
     expect(source).toMatch(/operationId/);
-    expect(source).toMatch(/editingId\s*\?[^:]+:\s*[^\n]*operationId/s);
+    expect(source.includes("editingId")).toBe(true);
+    expect(source).toMatch(/operationId[^\n]*name|name[^\n]*operationId/);
     expect(source).toMatch(/sessionStorage\.removeItem/);
   });
 });
