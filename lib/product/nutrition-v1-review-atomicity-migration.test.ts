@@ -50,7 +50,7 @@ describe("Nutrition V1 review atomicity correction migration", () => {
   it("ships executable verification registered before release preflight", () => {
     for (const phrase of [
       "nutrition v1 cooking atomic sync rpc missing",
-      "nutrition v1 recipe atomic autosave rpc missing",
+      "nutrition v1 revision-aware recipe atomic autosave rpc missing",
       "nutrition v1 atomic review rpc execute grants invalid",
     ]) {
       expect(verification).toContain(phrase);
