@@ -77,7 +77,7 @@ test("Cooking completion QA restores a completed session and asserts all approve
   const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
   assert.match(source, /const complete = item\.cookingState === "complete"/);
   assert.match(source, /status:\s*complete\s*\?\s*"completed"\s*:\s*"active"/);
-  assert.match(source, /completedAt:\s*complete\s*\?[^:]+:\s*null/);
+  assert.match(source, /completedAt:\s*complete\s*\?\s*"[^"]+"\s*:\s*null/);
   for (const marker of ["Cooking complete", "Add to Diary", "Add to Meal Plan", "Save as Meal", "Close"]) {
     assert.equal(source.includes(marker), true, marker);
   }
