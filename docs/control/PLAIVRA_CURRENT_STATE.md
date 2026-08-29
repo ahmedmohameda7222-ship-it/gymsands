@@ -8,20 +8,20 @@
 - PCS-1 changed documentation and project governance only; it did not change application runtime behavior.
 - Exact current Git and Production identities must be verified from GitHub `main` and Production `/api/version`. Do not infer them from this historical audit snapshot.
 
-## Current Production runtime identity
+## Nutrition V1 Production closure baseline
 
-Fresh post-merge verification on 2026-08-29 established the current Plaivra application/runtime state:
+Fresh post-merge verification on 2026-08-29 established the Nutrition V1 application/runtime closure baseline:
 
 | Field | Verified value |
 |---|---|
-| current `main` / Production commit | `0efddc0d6969487eb4105fccc02f3b629efbab91` |
+| Nutrition V1 feature squash / first verified Production commit | `0efddc0d6969487eb4105fccc02f3b629efbab91` |
 | merged feature | Nutrition V1 — PR `#152` |
 | reviewed PR head | `e2c0b18c1d168360b280feb7c28dac7ec70318bf` |
 | reviewed tree / squash tree | `330917a2d3c5aa67cfcad885658ae8a8f5b62f77` |
-| Vercel Production deployment | `dpl_CsGXokKyNA9HffKtJcVKfL62gTxv` |
-| deployment state | `READY` |
-| Production `/api/version` | HTTP `200` |
-| build timestamp | `2026-08-29T11:47:37.029Z` |
+| first verified Vercel Production deployment | `dpl_CsGXokKyNA9HffKtJcVKfL62gTxv` |
+| deployment state at closure | `READY` |
+| Production `/api/version` at closure | HTTP `200` |
+| closure build timestamp | `2026-08-29T11:47:37.029Z` |
 | schemaCompatibilityVersion | `2` |
 | expectedDatabaseMigrationVersion | `20260724232734` |
 | databaseMigrationVersion | `20260724232734` |
@@ -38,7 +38,9 @@ Fresh post-merge verification on 2026-08-29 established the current Plaivra appl
 
 The PR #152 squash commit and the final reviewed PR head have the same Git tree. The squash changed commit/history identity only; it did not change the reviewed runtime file bytes.
 
-Push-triggered Production uptime synthetic run `33250942724` passed against the merged `main` commit. The Vercel deployment for the same SHA is `READY`, and immediate runtime-error inspection found no error cluster.
+Push-triggered Production uptime synthetic run `33250942724` passed against the feature squash commit. The first verified Vercel Production deployment for the Nutrition V1 feature baseline was `READY`, and immediate runtime-error inspection found no error cluster.
+
+`main` and the deployed commit may advance after this closure baseline because approved documentation-only or later product changes can trigger the repository's normal Production deployment integration. Therefore this document intentionally does **not** claim that the Nutrition V1 feature squash SHA is the permanently current `main` or Production deployment SHA. Exact current Git and Production identities must always be verified live from GitHub `main`, Vercel, and Production `/api/version`.
 
 ## Compatibility state verified during the PCS-1 audit
 
@@ -56,7 +58,7 @@ Push-triggered Production uptime synthetic run `33250942724` passed against the 
 | migrationLedgerReconciled | `true` |
 | releaseReady | `true` |
 
-These values describe the verified PCS-1 audit baseline, not the current physical migration count. The current runtime and migration state is recorded in the current sections of this document and in `docs/architecture/migration-ledger-reconciliation.md`.
+These values describe the verified PCS-1 audit baseline, not the current physical migration count. The current migration state is recorded in `docs/architecture/migration-ledger-reconciliation.md`; exact current runtime identity is verified live.
 
 ## PCS-2 Production migration reconciliation
 
@@ -104,7 +106,7 @@ The PCS-2 migration application did not deploy application code and did not prom
 | compute region | `fra1` |
 | runtime-error clusters during closure verification | `0` |
 
-PCS-2 is merged, deployed, Production-verified, and closed. This is a historical closure snapshot; current Production identity is recorded above.
+PCS-2 is merged, deployed, Production-verified, and closed. This is a historical closure snapshot; exact current Production identity is verified live.
 
 ## PCS-3 request architecture
 
@@ -159,7 +161,7 @@ By Product Owner decision, P6B live acceptance and P7 notifications remain defer
 - PCS-3 Request Architecture — complete, Production-measured, and closed.
 - PCS-4 CI Operating Model — complete.
 - PCS-5 Production Foundation — in progress; PCS-5A and PCS-5B are complete, while broader monitoring and backup/restore work remain open.
-- Nutrition V1 — merged through PR #152, deployed, Production-runtime verified, and migration-reconciled.
+- Nutrition V1 — merged through PR #152, Production-deployed at closure, runtime-verified, and migration-reconciled.
 
 ## Feature maturity
 
@@ -171,7 +173,7 @@ By Product Owner decision, P6B live acceptance and P7 notifications remain defer
 | Workout History | Strong | PCS-3 request stability and canonical Production measurement are complete; the recorded baseline is not a launch SLA |
 | Muscle Intelligence and Heat Maps | Strong | Strong foundation |
 | Today | Functional | PCS-3B projection and Production measurement are complete; initial direct browser-to-Supabase reads measured zero |
-| Nutrition and food logging | Strong | Nutrition V1 is merged, Production-deployed, exact-runtime verified, and backed by the reconciled Nutrition migration chain |
+| Nutrition and food logging | Strong | Nutrition V1 is merged, Production-deployed, runtime-verified at closure, and backed by the reconciled Nutrition migration chain |
 | Meal planning | Strong | Nutrition V1 provides week-authoritative planning, nested Shopping, atomic lazy creation, owner-scoped durable mutation replay, and offline conflict recovery |
 | Hydration | Strong | Nutrition V1 hydration writes are replay-safe through owner-scoped operation identity |
 | Progress and body measurements | Functional | — |
@@ -204,26 +206,28 @@ Allowed maturity classifications are `Strong`, `Functional`, `Partial`, `Scaffol
 6. PCS-5A and PCS-5B are merged, Production/live-routing verified, and complete; PCS-5 remains open for broader monitoring and backup/restore authority.
 7. GitHub-native routing is not independent external monitoring and does not close broader runtime, OAuth/MCP, deletion, billing, retention, or backup alerting.
 8. Current Supabase organization is on the Free plan and is not final-launch infrastructure; backup/restore authority remains unresolved.
-9. Nutrition V1 is merged through PR #152 as `main@0efddc0d6969487eb4105fccc02f3b629efbab91`, deployed to Vercel Production as `dpl_CsGXokKyNA9HffKtJcVKfL62gTxv`, runtime-verified on the same SHA, and backed by 113 physical Production migration records with no pending/untracked/unresolved repository migration state.
+9. Nutrition V1 feature code was squash-merged through PR #152 as `0efddc0d6969487eb4105fccc02f3b629efbab91`, first Production-verified on that exact feature SHA, and is backed by 113 physical Production migration records with no pending/untracked/unresolved repository migration state. Later documentation-only or product commits may advance `main` and Production commit identity without changing this closure fact.
 10. Repository control documents are the current authority; historical PR descriptions, completed implementation reports, and chat memory are evidence only.
 
 ## Nutrition V1 current state
 
 Nutrition V1 completed the approved 20-task implementation plus the approved architectural and pre-merge corrections and was squash-merged through PR #152.
 
-### Git and release identity
+### Git and release closure identity
 
 | Field | Verified value |
 |---|---|
 | reviewed PR head | `e2c0b18c1d168360b280feb7c28dac7ec70318bf` |
-| squash merge / current Production commit | `0efddc0d6969487eb4105fccc02f3b629efbab91` |
+| Nutrition V1 feature squash / first verified Production commit | `0efddc0d6969487eb4105fccc02f3b629efbab91` |
 | PR state | merged |
-| Vercel deployment | `dpl_CsGXokKyNA9HffKtJcVKfL62gTxv` |
-| deployment target/state | `production` / `READY` |
-| post-merge uptime synthetic | `33250942724` — success |
+| first verified Vercel Production deployment | `dpl_CsGXokKyNA9HffKtJcVKfL62gTxv` |
+| deployment target/state at closure | `production` / `READY` |
+| post-feature-merge uptime synthetic | `33250942724` — success |
 | released compatibility marker | `20260724232734` — unchanged |
 
 The final reviewed PR head completed PR Quality `33246252440`, canonical Quality `33247003276`, Exact Release `33248477077`, and read-only Stage-1 Release Preflight `33248487847` successfully. Canonical Quality covered chronological migration replay, database lint and verification, migration-ledger validation, lint, typecheck, full unit and integration suites, production build, rendered browser QA, and final non-mock rebuild.
+
+The exact current `main` and deployed commit are intentionally not frozen into this closure table. Verify them live whenever operational identity matters.
 
 ### Product/runtime authority
 
@@ -240,7 +244,7 @@ The deployed V1 includes nullable nutrition truth, frozen consumer snapshots, ef
 
 ### Production migration closure
 
-Fresh Supabase Production inspection for project `bkwezjxvapaeasfvlhvv` reports **113 physical migration records**.
+Fresh Supabase Production inspection for project `bkwezjxvapaeasfvlhvv` at Nutrition V1 closure reports **113 physical migration records**.
 
 | Migration state | Verified value |
 |---|---|
@@ -259,8 +263,8 @@ The historical duplicate Meal Plan migration-history row was already resolved by
 
 ### Production runtime closure
 
-Fresh `https://plaivra.com/api/version` verification returned HTTP 200 on the squash merge SHA and reported `releaseReady = true`, `schemaCompatible = true`, `migrationVersionCompatible = true`, and `migrationLedgerReconciled = true` with all migration reconciliation counters at zero.
+At Nutrition V1 feature closure, `https://plaivra.com/api/version` returned HTTP 200 on the feature squash SHA and reported `releaseReady = true`, `schemaCompatible = true`, `migrationVersionCompatible = true`, and `migrationLedgerReconciled = true` with all migration reconciliation counters at zero.
 
-The Vercel Production deployment is `READY`. Immediate Vercel runtime-error inspection found no runtime-error cluster. The push-triggered Production uptime synthetic passed.
+The first verified Vercel Production deployment for that feature baseline was `READY`. Immediate Vercel runtime-error inspection found no runtime-error cluster. The push-triggered Production uptime synthetic passed.
 
 The Nutrition merge did not modify the separate Plaivra Activity Catalog Production authority. Compatibility-marker promotion remains a separate explicit release decision; the released marker is unchanged.
