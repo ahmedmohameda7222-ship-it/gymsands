@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 import type { McpContext } from "@/lib/mcp/auth";
-import { executeMcpTool } from "@/lib/mcp/tool-executor-implementation";
+import { executeMcpTool } from "@/lib/mcp/tool-executor";
 
 type Row = Record<string, unknown>;
 type Filter = { kind: "eq" | "is" | "ilike"; field: string; value: unknown };
@@ -285,7 +285,13 @@ describe("Nutrition V1 MCP canonical Food write authority", () => {
   });
 
   it("keeps public MCP implementation free of direct food_items access", () => {
-    const source = readFileSync(join(process.cwd(), "lib/mcp/tool-executor-implementation.ts"), "utf8");
-    expect(source).not.toMatch(/\.from\(["']food_items["']\)/);
+    for (const path of [
+      "lib/mcp/tool-executor.ts",
+      "lib/mcp/nutrition-v1-food-execution.ts",
+      "lib/mcp/tool-executor-implementation.ts",
+    ]) {
+      const source = readFileSync(join(process.cwd(), path), "utf8");
+      expect(source, path).not.toMatch(/\.from\(["']food_items["']\)/);
+    }
   });
 });
