@@ -83,6 +83,19 @@ test("Cooking completion QA restores a completed session and asserts all approve
   }
 });
 
+test("rendered evidence matching tolerates CSS text transforms without masking missing content", async () => {
+  const qa = await import("./run-nutrition-v1-qa.mjs");
+  assert.equal(typeof qa.renderedTextContains, "function");
+  assert.equal(
+    qa.renderedTextContains("COOKING COMPLETE\nChicken bowl\nAdd to Diary", "Cooking complete"),
+    true,
+  );
+  assert.equal(
+    qa.renderedTextContains("COOKING COMPLETE\nChicken bowl\nAdd to Diary", "Save as Meal"),
+    false,
+  );
+});
+
 test("expected Recipe autosave 503 is bounded to the injected failure scenario instead of globally hiding console errors", async () => {
   const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
   assert.match(source, /item\.recipeAutosaveStatus\s*===\s*503/);
