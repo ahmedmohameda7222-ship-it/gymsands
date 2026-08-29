@@ -1,6 +1,6 @@
 # Food Catalog Logical Service Authority
 
-Status: **Approved product architecture; implementation not yet authorized**
+Status: **Approved product architecture; implementation and Production population are separately governed.**
 
 This document defines the long-term architectural boundary for Plaivra's canonical Food Catalog. It does not populate the catalog, change Production data, create a new database, or authorize implementation by itself.
 
