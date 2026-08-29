@@ -14,6 +14,15 @@ describe("Saved Meal utility uncertain-completion identity", () => {
     expect(source).toMatch(/sessionStorage\.removeItem/);
   });
 
+  it("scopes pending Saved Meal create recovery to the authenticated owner", async () => {
+    const source = await readFile(new URL("./saved-meal-utility.tsx", import.meta.url), "utf8");
+
+    expect(source).toMatch(/function savedMealCreateOperationStorageKey\(ownerId: string\)/);
+    expect(source).toMatch(/`plaivra:nutrition-v1:saved-meal:create:pending:\$\{ownerId\}`/);
+    expect(source).toMatch(/pendingSavedMealCreateOperation\(ownerId,/);
+    expect(source).toMatch(/clearSavedMealCreateOperation\(ownerId,/);
+  });
+
   it("leaves create mode immediately after confirmed creation before refresh/detail reads can fail", async () => {
     const source = await readFile(new URL("./saved-meal-utility.tsx", import.meta.url), "utf8");
     const start = source.indexOf("async function save()");
