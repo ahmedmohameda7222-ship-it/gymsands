@@ -139,12 +139,31 @@ export async function searchCatalogFoodsByName(
 ): Promise<Array<Record<string, unknown>>> {
   const result = await supabase
     .from("food_items")
-    .select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g")
+    .select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,lifecycle_status,merged_into_food_id")
     .eq("is_global", true)
     .ilike("food_name", `%${query}%`)
     .limit(limit);
   if (result.error) throw new Error(errorMessage(result.error));
-  return (result.data ?? []) as Array<Record<string, unknown>>;
+
+  const canonical = new Map<string, Record<string, unknown>>();
+  for (const raw of (result.data ?? []) as Array<Record<string, unknown>>) {
+    const row = record(raw);
+    const status = typeof row.lifecycle_status === "string" ? row.lifecycle_status.toLowerCase() : "active";
+    if (status !== "active" && status !== "merged") continue;
+    const foodId = requiredText(row.id, "Catalog Food ID");
+    const resolved = await resolveCatalogFood(supabase, foodId);
+    if (canonical.has(resolved.id)) continue;
+    canonical.set(resolved.id, {
+      id: resolved.id,
+      food_name: resolved.name,
+      serving_size: resolved.servingLabel,
+      calories: resolved.nutrition.calories,
+      protein_g: resolved.nutrition.protein_g,
+      carbs_g: resolved.nutrition.carbs_g,
+      fat_g: resolved.nutrition.fat_g,
+    });
+  }
+  return Array.from(canonical.values()).slice(0, limit);
 }
 
 export async function findCatalogDuplicateByName(
