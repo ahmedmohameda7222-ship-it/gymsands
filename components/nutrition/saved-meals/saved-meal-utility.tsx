@@ -41,7 +41,9 @@ type PendingSavedMealCreateOperation = {
   operationId: string;
 };
 
-const savedMealCreateOperationStorageKey = "plaivra:nutrition-v1:saved-meal:create:pending";
+function savedMealCreateOperationStorageKey(ownerId: string) {
+  return `plaivra:nutrition-v1:saved-meal:create:pending:${ownerId}`;
+}
 
 const copy = {
   en: {
@@ -78,10 +80,10 @@ function savedMealCreateFingerprint(name: string, note: string, items: SavedMeal
   return JSON.stringify({ name: name.trim(), note: note.trim() || null, items });
 }
 
-function readSavedMealCreateOperation(): PendingSavedMealCreateOperation | null {
+function readSavedMealCreateOperation(ownerId: string): PendingSavedMealCreateOperation | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(savedMealCreateOperationStorageKey);
+    const raw = window.sessionStorage.getItem(savedMealCreateOperationStorageKey(ownerId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PendingSavedMealCreateOperation>;
     if (typeof parsed.fingerprint !== "string" || typeof parsed.operationId !== "string") return null;
@@ -91,13 +93,13 @@ function readSavedMealCreateOperation(): PendingSavedMealCreateOperation | null 
   }
 }
 
-function pendingSavedMealCreateOperation(fingerprint: string): PendingSavedMealCreateOperation {
-  const stored = readSavedMealCreateOperation();
+function pendingSavedMealCreateOperation(ownerId: string, fingerprint: string): PendingSavedMealCreateOperation {
+  const stored = readSavedMealCreateOperation(ownerId);
   if (stored?.fingerprint === fingerprint) return stored;
   const pending = { fingerprint, operationId: crypto.randomUUID() };
   if (typeof window !== "undefined") {
     try {
-      window.sessionStorage.setItem(savedMealCreateOperationStorageKey, JSON.stringify(pending));
+      window.sessionStorage.setItem(savedMealCreateOperationStorageKey(ownerId), JSON.stringify(pending));
     } catch {
       // The current save attempt still retains the operation identity in memory.
     }
@@ -105,11 +107,11 @@ function pendingSavedMealCreateOperation(fingerprint: string): PendingSavedMealC
   return pending;
 }
 
-function clearSavedMealCreateOperation(operationId: string) {
+function clearSavedMealCreateOperation(ownerId: string, operationId: string) {
   if (typeof window === "undefined") return;
   try {
-    const stored = readSavedMealCreateOperation();
-    if (!stored || stored.operationId === operationId) window.sessionStorage.removeItem(savedMealCreateOperationStorageKey);
+    const stored = readSavedMealCreateOperation(ownerId);
+    if (!stored || stored.operationId === operationId) window.sessionStorage.removeItem(savedMealCreateOperationStorageKey(ownerId));
   } catch {
     // Confirmed server success is authoritative even if storage cleanup fails.
   }
@@ -176,8 +178,9 @@ function recipePayload(recipe: RecipeHomeRecord): SavedMealItemInput | null {
 }
 
 export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const token = session?.access_token;
+  const ownerId = user?.id ?? session?.user.id ?? null;
   const { language, dir } = useNutritionV1Translation();
   const text = copy[language];
   const [mode, setMode] = useState<Mode>("browse");
@@ -278,7 +281,11 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
     try {
       const editingId = mode === "edit" ? detail?.savedMeal.id : null;
       const itemPayloads = items.map((item) => item.payload);
-      const createOperation = editingId ? null : pendingSavedMealCreateOperation(savedMealCreateFingerprint(name, note, itemPayloads));
+      let createOperation: PendingSavedMealCreateOperation | null = null;
+      if (!editingId) {
+        if (!ownerId) throw new Error("Please sign in before creating a Saved Meal.");
+        createOperation = pendingSavedMealCreateOperation(ownerId, savedMealCreateFingerprint(name, note, itemPayloads));
+      }
       const requestBody = editingId
         ? { name, note, items: itemPayloads }
         : { operationId: createOperation!.operationId, name, note, items: itemPayloads };
@@ -287,7 +294,8 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
         body: JSON.stringify(requestBody),
       });
       if (createOperation) {
-        clearSavedMealCreateOperation(createOperation.operationId);
+        if (!ownerId) throw new Error("Please sign in before completing Saved Meal creation.");
+        clearSavedMealCreateOperation(ownerId, createOperation.operationId);
         setMode("browse");
       }
       await loadActive();
