@@ -82,17 +82,22 @@ describe("Nutrition V1 Food Catalog read boundary", () => {
     expect(db.seen[0].in).toHaveBeenCalledWith("id", [activeId, mergedId]);
   });
 
-  it("preserves the public MCP global Food search query semantics behind the boundary", async () => {
-    const row = { id: activeId, food_name: "Greek yogurt", serving_size: "170 g", calories: 100, protein_g: 10, carbs_g: 8, fat_g: 2 };
-    const db = fakeSupabase([{ data: [row], error: null }]);
+  it("preserves the public MCP name query while returning current canonical Food values", async () => {
+    const searchRow = { id: activeId, food_name: "Greek yogurt", serving_size: "170 g", calories: 100, protein_g: 10, carbs_g: 8, fat_g: 2, lifecycle_status: "active", merged_into_food_id: null };
+    const resolvedRow = { ...searchRow, saturated_fat_g: null, fiber_g: null, sugars_g: 7, sodium_mg: 60, nutrition_basis_amount: 170, nutrition_basis_unit: "g", is_verified: true };
+    const db = fakeSupabase([
+      { data: [searchRow], error: null },
+      { data: resolvedRow, error: null },
+    ]);
 
     const foods = await searchCatalogFoodsByName(db.client, "Greek", 5);
 
-    expect(foods).toEqual([row]);
-    expect(db.seen[0].select).toHaveBeenCalledWith("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g");
+    expect(foods).toEqual([{ id: activeId, food_name: "Greek yogurt", serving_size: "170 g", calories: 100, protein_g: 10, carbs_g: 8, fat_g: 2 }]);
+    expect(db.seen[0].select).toHaveBeenCalledWith("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,lifecycle_status,merged_into_food_id");
     expect(db.seen[0].eq).toHaveBeenCalledWith("is_global", true);
     expect(db.seen[0].ilike).toHaveBeenCalledWith("food_name", "%Greek%");
     expect(db.seen[0].limit).toHaveBeenCalledWith(5);
+    expect(db.seen[1].eq).toHaveBeenCalledWith("id", activeId);
   });
 
   it("finds only an active shared duplicate candidate", async () => {
