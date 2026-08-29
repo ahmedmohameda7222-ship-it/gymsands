@@ -11,11 +11,15 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   searchValue: "",
   searchParams: { toString: () => mocks.searchValue },
+  ownerId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace, back: mocks.back, refresh: mocks.refresh }),
   useSearchParams: () => mocks.searchParams,
+}));
+vi.mock("@/components/auth/auth-provider", () => ({
+  useAuth: () => ({ user: { id: mocks.ownerId } }),
 }));
 vi.mock("@/components/nutrition/food-library/food-library-api", () => ({
   foodLibraryApi: mocks.api,
@@ -61,6 +65,7 @@ describe("AddToHandoffConsumer canonical command retry identity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
+    mocks.ownerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     mocks.api.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -127,6 +132,20 @@ describe("AddToHandoffConsumer canonical command retry identity", () => {
       expect(second?.operationId).toBe(first?.operationId);
     });
   }
+
+  it("does not reuse another owner's persisted handoff operation identity", async () => {
+    await renderDestination("diary", 2);
+    const first = await ambiguousCommit("diary");
+    expect(first?.operationId).toBeTruthy();
+
+    await remount();
+    mocks.ownerId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    await renderDestination("diary", 2);
+    const second = await ambiguousCommit("diary");
+
+    expect(second?.operationId).toBeTruthy();
+    expect(second?.operationId).not.toBe(first?.operationId);
+  });
 
   it("uses a new Diary operation identity when the resolved Recipe quantity changes", async () => {
     await renderDestination("diary", 2);
