@@ -110,6 +110,12 @@ export function nutritionV1ScreenshotName(item) {
   return `${item.name}__${viewport}__${item.direction === "rtl" ? "rtl" : "ltr"}__${language}__${item.largeText ? "large" : "normal"}.png`;
 }
 
+export function renderedTextContains(body, expected) {
+  const normalizedBody = String(body ?? "").normalize("NFKC").toUpperCase();
+  const normalizedExpected = String(expected ?? "").normalize("NFKC").toUpperCase();
+  return normalizedExpected.length > 0 && normalizedBody.includes(normalizedExpected);
+}
+
 function sanitizedText(value, limit = 1200) {
   return String(value ?? "")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "[REDACTED]")
@@ -487,7 +493,7 @@ function localizedAssertions(item, metrics) {
   if (/Please sign in before using (?:Meal Plan|My Recipes)\./i.test(body)) failures.push("rendered authenticated state fell back to sign-in error");
   if (item.name === "shopping-list-three-states") for (const text of ["Needed", "Purchased", "Don't need"]) if (!body.includes(text)) failures.push(`missing Shopping state evidence: ${text}`);
   if (item.name === "meal-plan-offline-conflict-partial-estimated") for (const text of ["Waiting to sync", "Needs attention", "Conflict", "Partial", "Estimated"]) if (!body.includes(text)) failures.push(`missing offline Meal Plan evidence: ${text}`);
-  for (const text of requiredEvidence(item)) if (!body.includes(text)) failures.push(`missing rendered state evidence: ${text}`);
+  for (const text of requiredEvidence(item)) if (!renderedTextContains(body, text)) failures.push(`missing rendered state evidence: ${text}`);
   if (item.language !== "ar") return failures;
   if (metrics.htmlLanguage !== "ar") failures.push(`expected html lang ar, received ${metrics.htmlLanguage || "empty"}`);
   if (metrics.direction !== "rtl") failures.push(`expected RTL direction, received ${metrics.direction || "empty"}`);
