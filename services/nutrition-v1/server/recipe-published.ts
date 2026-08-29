@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { RecipeNutritionPerServing } from "@/lib/nutrition-v1/recipe-cache";
+import { getCatalogVerificationStates } from "@/services/nutrition-v1/server/food-catalog";
 
 function fail(error: unknown) {
   if (!error) return;
@@ -46,12 +47,7 @@ export async function getPublishedRecipeDetail(supabase: SupabaseClient, userId:
 
   const ingredientRows = (ingredientsResult.data ?? []) as Array<Record<string, unknown>>;
   const foodIds = Array.from(new Set(ingredientRows.map((row) => typeof row.food_id === "string" ? row.food_id : null).filter((id): id is string => Boolean(id))));
-  const verified = new Map<string, boolean>();
-  if (foodIds.length) {
-    const foodsResult = await supabase.from("food_items").select("id,is_verified").in("id", foodIds);
-    fail(foodsResult.error);
-    for (const food of (foodsResult.data ?? []) as Array<{ id: string; is_verified: boolean }>) verified.set(food.id, food.is_verified === true);
-  }
+  const verified = await getCatalogVerificationStates(supabase, foodIds);
 
   const metadata = record(versionResult.data.metadata);
   return {
