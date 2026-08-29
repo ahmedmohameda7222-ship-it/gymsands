@@ -30,6 +30,9 @@ describe("Nutrition V1 Food Catalog persistence boundary", () => {
     const roots = [
       join(ROOT, "services/nutrition-v1/server"),
       join(ROOT, "app/api/nutrition/v1"),
+      join(ROOT, "lib/mcp"),
+      join(ROOT, "app/api/mcp"),
+      join(ROOT, "services/mcp"),
     ];
     const violations = roots
       .flatMap(productionTypescriptFiles)
