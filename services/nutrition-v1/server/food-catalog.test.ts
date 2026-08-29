@@ -5,6 +5,7 @@ import {
   findCatalogDuplicateByName,
   getCatalogVerificationStates,
   resolveCatalogFood,
+  searchCatalogFoodsByName,
 } from "@/services/nutrition-v1/server/food-catalog";
 
 type Result = { data: any; error: null | { message?: string } };
@@ -81,6 +82,19 @@ describe("Nutrition V1 Food Catalog read boundary", () => {
     expect(db.seen[0].in).toHaveBeenCalledWith("id", [activeId, mergedId]);
   });
 
+  it("preserves the public MCP global Food search query semantics behind the boundary", async () => {
+    const row = { id: activeId, food_name: "Greek yogurt", serving_size: "170 g", calories: 100, protein_g: 10, carbs_g: 8, fat_g: 2 };
+    const db = fakeSupabase([{ data: [row], error: null }]);
+
+    const foods = await searchCatalogFoodsByName(db.client, "Greek", 5);
+
+    expect(foods).toEqual([row]);
+    expect(db.seen[0].select).toHaveBeenCalledWith("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g");
+    expect(db.seen[0].eq).toHaveBeenCalledWith("is_global", true);
+    expect(db.seen[0].ilike).toHaveBeenCalledWith("food_name", "%Greek%");
+    expect(db.seen[0].limit).toHaveBeenCalledWith(5);
+  });
+
   it("finds only an active shared duplicate candidate", async () => {
     const db = fakeSupabase([{ data: { id: activeId, food_name: "Greek yogurt", serving_size: "170 g" }, error: null }]);
 
@@ -98,6 +112,9 @@ describe("Nutrition V1 Food Catalog read boundary", () => {
 
     const verifyDb = fakeSupabase([{ data: null, error: { message: "verify failed" } }]);
     await expect(getCatalogVerificationStates(verifyDb.client, [activeId])).rejects.toThrow(/verify failed/i);
+
+    const searchDb = fakeSupabase([{ data: null, error: { message: "search failed" } }]);
+    await expect(searchCatalogFoodsByName(searchDb.client, "Yogurt", 5)).rejects.toThrow(/search failed/i);
 
     const duplicateDb = fakeSupabase([{ data: null, error: { message: "duplicate failed" } }]);
     await expect(findCatalogDuplicateByName(duplicateDb.client, "Yogurt")).rejects.toThrow(/duplicate failed/i);
