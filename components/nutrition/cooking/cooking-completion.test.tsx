@@ -1,5 +1,9 @@
+// @vitest-environment jsdom
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CookingCompletion } from "@/components/nutrition/cooking/cooking-completion";
 import type { CookingLocalSession } from "@/lib/nutrition-v1/cooking-local-store";
@@ -32,7 +36,35 @@ const completedSession: CookingLocalSession = {
   endedAt: null,
 };
 
+function expectedHandoff(destination: "diary" | "meal_plan" | "saved_meal") {
+  const pathname = destination === "meal_plan" ? "/my-meal-plan" : "/calories";
+  const params = new URLSearchParams({
+    source: "recipe",
+    recipeId,
+    recipeVersionId,
+    quantity: "1",
+    destination,
+  });
+  return `${pathname}?${params.toString()}`;
+}
+
 describe("Cooking completion contextual actions", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(async () => {
+    await act(async () => { root.unmount(); });
+    host.remove();
+    (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  });
+
   it("renders the approved four actions from the frozen cooked Recipe version without implying consumption", () => {
     const html = renderToStaticMarkup(<CookingCompletion session={completedSession} onClose={vi.fn()} />);
 
@@ -47,6 +79,47 @@ describe("Cooking completion contextual actions", () => {
     expect(html).toContain(`recipeVersionId=${recipeVersionId}`);
     expect(html).toContain("quantity=1");
     expect(html).not.toMatch(/logged|consumed|ate the whole/i);
+  });
+
+  it("renders clickable post-cooking handoffs bound to the frozen Recipe version and lets Close finish without a downstream write", async () => {
+    const onClose = vi.fn();
+    await act(async () => {
+      root.render(<CookingCompletion session={completedSession} onClose={onClose} />);
+    });
+
+    const links = Array.from(host.querySelectorAll("a"));
+    expect(links).toHaveLength(3);
+    expect(links.map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
+      ["Add to Diary›", expectedHandoff("diary")],
+      ["Add to Meal Plan›", expectedHandoff("meal_plan")],
+      ["Save as Meal›", expectedHandoff("saved_meal")],
+    ]);
+
+    const clicked: string[] = [];
+    const preventNavigation = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLAnchorElement)) return;
+      event.preventDefault();
+      clicked.push(target.getAttribute("href") ?? "");
+    };
+    host.addEventListener("click", preventNavigation);
+    try {
+      for (const link of links) {
+        await act(async () => { link.click(); });
+      }
+    } finally {
+      host.removeEventListener("click", preventNavigation);
+    }
+    expect(clicked).toEqual([
+      expectedHandoff("diary"),
+      expectedHandoff("meal_plan"),
+      expectedHandoff("saved_meal"),
+    ]);
+
+    const close = Array.from(host.querySelectorAll("button")).find((button) => button.textContent?.trim() === "Close");
+    if (!(close instanceof HTMLButtonElement)) throw new Error("Cooking completion Close action was not rendered.");
+    await act(async () => { close.click(); });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("derives prepared servings from the frozen Recipe servings and Cooking serving scale", () => {
