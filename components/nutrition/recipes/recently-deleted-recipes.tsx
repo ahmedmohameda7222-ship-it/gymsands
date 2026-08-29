@@ -17,6 +17,8 @@ const recoveryCopy = {
     recoveryEnds: "Recovery ends {date}",
     restore: "Restore",
     deleteNow: "Delete Now",
+    confirmDelete: "Confirm delete",
+    cancel: "Cancel",
     loadError: "Recently Deleted could not be loaded.",
   },
   de: {
@@ -27,6 +29,8 @@ const recoveryCopy = {
     recoveryEnds: "Wiederherstellung endet am {date}",
     restore: "Wiederherstellen",
     deleteNow: "Jetzt löschen",
+    confirmDelete: "Löschen bestätigen",
+    cancel: "Abbrechen",
     loadError: "Kürzlich gelöschte Rezepte konnten nicht geladen werden.",
   },
   ar: {
@@ -37,6 +41,8 @@ const recoveryCopy = {
     recoveryEnds: "تنتهي الاستعادة في {date}",
     restore: "استعادة",
     deleteNow: "الحذف الآن",
+    confirmDelete: "تأكيد الحذف",
+    cancel: "إلغاء",
     loadError: "تعذر تحميل الوصفات المحذوفة مؤخرًا.",
   },
 } as const;
@@ -47,6 +53,7 @@ export function RecentlyDeletedRecipes({ onChange }: { onChange?: () => void }) 
   const [rows, setRows] = useState<DeletedRecipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,12 +72,14 @@ export function RecentlyDeletedRecipes({ onChange }: { onChange?: () => void }) 
 
   async function restore(id: string) {
     await recipeApi(`/${id}/restore`, { method: "POST" });
+    setPendingPurgeId(null);
     await load();
     onChange?.();
   }
 
   async function purge(id: string) {
     await recipeApi(`/${id}/purge`, { method: "DELETE" });
+    setPendingPurgeId(null);
     await load();
     onChange?.();
   }
@@ -89,15 +98,19 @@ export function RecentlyDeletedRecipes({ onChange }: { onChange?: () => void }) 
       <div className="mt-3 divide-y divide-border/70">
         {rows.map((recipe) => {
           const recoveryDate = new Intl.DateTimeFormat(locale).format(new Date(recipe.purge_after));
+          const confirmingPurge = pendingPurgeId === recipe.id;
           return (
             <div key={recipe.id} className="flex min-h-14 items-center justify-between gap-3 py-2">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium"><bdi dir="auto">{recipe.name}</bdi></p>
                 <p className="text-xs text-muted-foreground">{copy.recoveryEnds.replace("{date}", recoveryDate)}</p>
               </div>
-              <div className="flex gap-1">
+              <div className="flex flex-wrap justify-end gap-1">
                 <button type="button" onClick={() => void restore(recipe.id)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-medium hover:bg-muted" aria-label={`${copy.restore} ${recipe.name}`}><RotateCcw className="h-4 w-4" />{copy.restore}</button>
-                <button type="button" onClick={() => void purge(recipe.id)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-medium text-destructive hover:bg-destructive/10" aria-label={`${copy.deleteNow} ${recipe.name}`}><Trash2 className="h-4 w-4" />{copy.deleteNow}</button>
+                {confirmingPurge ? <>
+                  <button type="button" onClick={() => void purge(recipe.id)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-semibold text-destructive hover:bg-destructive/10" aria-label={`${copy.confirmDelete} ${recipe.name}`}><Trash2 className="h-4 w-4" />{copy.confirmDelete}</button>
+                  <button type="button" onClick={() => setPendingPurgeId(null)} className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium hover:bg-muted">{copy.cancel}</button>
+                </> : <button type="button" onClick={() => setPendingPurgeId(recipe.id)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-medium text-destructive hover:bg-destructive/10" aria-label={`${copy.deleteNow} ${recipe.name}`}><Trash2 className="h-4 w-4" />{copy.deleteNow}</button>}
               </div>
             </div>
           );

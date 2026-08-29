@@ -285,17 +285,21 @@ export async function addDiaryWater(
   userId: string,
   date: string,
   amountMl: number,
+  operationId: string,
 ) {
-  const owner = requiredId(userId, "Owner");
+  requiredId(userId, "Owner");
   const logDate = requireDate(date);
   const amount = Math.round(positive(amountMl, "Water amount"));
-  const result = await supabase
-    .from("water_logs")
-    .insert({ user_id: owner, log_date: logDate, amount_ml: amount })
-    .select("id,amount_ml,created_at")
-    .single();
-  if (result.error || !result.data) throw publicDbError("Water could not be logged.", result.error);
-  return result.data;
+  const operation = requiredId(operationId, "Operation ID");
+  const result = await supabase.rpc("log_nutrition_water", {
+    p_operation_id: operation,
+    p_log_date: logDate,
+    p_amount_ml: amount,
+  });
+  const { data, error } = result as unknown as RpcResult;
+  if (error) throw publicDbError("Water could not be logged.", error);
+  if (!data || typeof data !== "object") throw new Error("Water logging returned an invalid result.");
+  return data as { id: string; amount_ml: number; created_at: string | null; alreadyLogged: boolean };
 }
 
 function rawNumber(value: unknown): number | null {

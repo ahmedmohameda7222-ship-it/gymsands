@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -10,6 +10,7 @@ import { isIsoDate } from "@/lib/date-utils";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { useEatTranslation } from "@/lib/i18n/eat";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
+import { resolveWaterLogIntent, type WaterLogIntent } from "@/lib/nutrition-v1/water-log-retry";
 import type { DiaryActualLog, DiaryProjection } from "@/services/nutrition-v1/server/diary";
 
 const standardMeals = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
@@ -75,6 +76,7 @@ export function DiaryPage() {
   const [error, setError] = useState("");
   const [loggingMeal, setLoggingMeal] = useState<string | null>(null);
   const [waterPending, setWaterPending] = useState(false);
+  const waterIntentRef = useRef<WaterLogIntent | null>(null);
   const [planPending, setPlanPending] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -134,10 +136,21 @@ export function DiaryPage() {
 
   async function addWater(amountMl: number) {
     if (waterPending) return;
+    const intent = resolveWaterLogIntent(waterIntentRef.current, {
+      ownerId: session?.user.id ?? "",
+      date,
+      amountMl,
+    });
+    waterIntentRef.current = intent;
     setWaterPending(true);
     try {
-      const response = await fetch("/api/nutrition/v1/diary", { method: "POST", headers: headers(token, true), body: JSON.stringify({ kind: "water", date, amountMl }) });
+      const response = await fetch("/api/nutrition/v1/diary", {
+        method: "POST",
+        headers: headers(token, true),
+        body: JSON.stringify({ kind: "water", date, amountMl, operationId: intent.operationId }),
+      });
       if (!response.ok) throw new Error();
+      waterIntentRef.current = null;
       await load();
     } catch {
       setError(copy.waterFailed);

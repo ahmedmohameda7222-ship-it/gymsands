@@ -21,11 +21,18 @@ export async function POST(request: Request) {
   const context = await requireNutritionUser(request);
   if (context instanceof NextResponse) return context;
   try {
-    const body = await request.json().catch(() => ({})) as { kind?: unknown; date?: unknown; amountMl?: unknown };
-    if (body.kind !== "water" || typeof body.date !== "string" || typeof body.amountMl !== "number") {
+    const body = await request.json().catch(() => ({})) as { kind?: unknown; date?: unknown; amountMl?: unknown; operationId?: unknown };
+    if (
+      body.kind !== "water"
+      || typeof body.date !== "string"
+      || typeof body.amountMl !== "number"
+      || typeof body.operationId !== "string"
+    ) {
       throw new NutritionRequestError("A valid water log is required.");
     }
-    return nutritionJson({ water: await addDiaryWater(context.supabase, context.user.id, body.date, body.amountMl) }, { status: 201 });
+    return nutritionJson({
+      water: await addDiaryWater(context.supabase, context.user.id, body.date, body.amountMl, body.operationId),
+    }, { status: 201 });
   } catch (error) {
     return nutritionErrorResponse(error);
   }
