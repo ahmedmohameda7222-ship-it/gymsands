@@ -50,19 +50,16 @@ Plaivra consumers
 
 The boundary must be strong enough that replacing the storage implementation later does not require rewriting Diary, Recipes, Saved Meals, or other consumers.
 
-## 3. Current-state audit
+## 3. Boundary integration
 
-The existing Nutrition V1 implementation already has part of this boundary:
+Nutrition V1 consumers integrate with the Food Catalog through domain-owned service boundaries:
 
 - `services/nutrition-v1/server/food-library.ts` owns authoritative Food Library search and calls `search_nutrition_food_library`.
-- `app/api/nutrition/v1/foods/route.ts` delegates search to that service instead of querying `food_items` directly.
+- `app/api/nutrition/v1/foods/route.ts` delegates Food Library search to that service rather than querying `food_items` directly.
+- Recipe verification and Food handoff resolve global catalog identity, lifecycle, and verification through the Food Catalog service boundary rather than consumer-owned direct table reads.
+- Public/member MCP Food operations use Food Catalog domain services for global catalog access; user-owned Food state remains owner-scoped.
 
-The boundary is not yet complete. Current examples of direct catalog coupling include:
-
-- published Recipe detail reading `food_items` to resolve verification state;
-- Food handoff reading `food_items` and merge lineage directly while preparing frozen snapshots.
-
-Those reads are valid under the current schema but must move behind the Food Catalog contract during the implementation phase.
+Direct global catalog table access belongs only inside approved Food Catalog persistence/curation internals or database functions/RPCs that implement the Food Catalog service.
 
 ## 4. Domain ownership
 
