@@ -12,6 +12,7 @@ import {
   type JsonObject
 } from "@/lib/mcp/schemas";
 import { fail, num, ok, sumMacros, type MacroTotals, type McpToolResult } from "@/lib/mcp/tool-helpers";
+import { searchCatalogFoodsByName } from "@/services/nutrition-v1/server/food-catalog";
 
 type FoodCandidate = {
   id: string;
@@ -56,12 +57,7 @@ async function findFood(ctx: McpContext, query: string, limit = 5): Promise<{ ex
   if (!cleanQuery) throw new Error("food_name is required.");
 
   const [globalFoods, userFoods] = await Promise.all([
-    ctx.supabase
-      .from("food_items")
-      .select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g")
-      .eq("is_global", true)
-      .ilike("food_name", `%${cleanQuery}%`)
-      .limit(limit),
+    searchCatalogFoodsByName(ctx.supabase, cleanQuery, limit),
     ctx.supabase
       .from("user_food_items")
       .select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g")
@@ -70,12 +66,11 @@ async function findFood(ctx: McpContext, query: string, limit = 5): Promise<{ ex
       .limit(limit)
   ]);
 
-  if (globalFoods.error) throw new Error(globalFoods.error.message);
   if (userFoods.error) throw new Error(userFoods.error.message);
 
   const candidates = [
     ...((userFoods.data ?? []) as Array<Record<string, unknown>>).map((food) => normalizeFood(food, "user")),
-    ...((globalFoods.data ?? []) as Array<Record<string, unknown>>).map((food) => normalizeFood(food, "global"))
+    ...globalFoods.map((food) => normalizeFood(food, "global"))
   ].slice(0, limit);
 
   const exact = candidates.find((food) => food.food_name.toLowerCase() === cleanQuery.toLowerCase()) ?? (candidates.length === 1 ? candidates[0] : undefined);
