@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealFoodItemSnapshot } from "@/lib/nutrition-v1/contracts";
 import { isUuid } from "@/lib/utils";
+import { resolveCatalogFood } from "@/services/nutrition-v1/server/food-catalog";
 import {
   resolveEffectiveFoodNutrition,
   type FoodLibraryCorrection,
@@ -77,21 +78,6 @@ function scale(value: number | null, quantity: number) {
   return value === null ? null : Math.round(value * quantity * 1000) / 1000;
 }
 
-function nutritionFromCatalog(row: Record<string, unknown>): FoodLibraryNutrition {
-  return {
-    calories: numberOrNull(row.calories),
-    protein_g: numberOrNull(row.protein_g),
-    carbs_g: numberOrNull(row.carbs_g),
-    fat_g: numberOrNull(row.fat_g),
-    saturated_fat_g: numberOrNull(row.saturated_fat_g),
-    fiber_g: numberOrNull(row.fiber_g),
-    sugars_g: numberOrNull(row.sugars_g),
-    sodium_mg: numberOrNull(row.sodium_mg),
-    basis_amount: numberOrNull(row.nutrition_basis_amount),
-    basis_unit: typeof row.nutrition_basis_unit === "string" ? row.nutrition_basis_unit as FoodLibraryNutrition["basis_unit"] : null,
-  };
-}
-
 function correctionFromRow(row: Record<string, unknown>): FoodLibraryCorrection {
   return {
     calories: numberOrNull(row.calories),
@@ -105,29 +91,6 @@ function correctionFromRow(row: Record<string, unknown>): FoodLibraryCorrection 
     basis_amount: numberOrNull(row.basis_amount),
     basis_unit: typeof row.basis_unit === "string" ? row.basis_unit as FoodLibraryCorrection["basis_unit"] : null,
   };
-}
-
-async function resolveCatalogRow(supabase: SupabaseClient, initialFoodId: string) {
-  let foodId = initialFoodId;
-  for (let depth = 0; depth < 8; depth += 1) {
-    const result = await supabase
-      .from("food_items")
-      .select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,saturated_fat_g,fiber_g,sugars_g,sodium_mg,nutrition_basis_amount,nutrition_basis_unit,lifecycle_status,merged_into_food_id")
-      .eq("id", foodId)
-      .maybeSingle();
-    if (result.error) throw new Error(`Food could not be resolved. ${result.error.message ?? "Database request failed."}`);
-    if (!result.data) throw new Error("Food is unavailable.");
-    const row = record(result.data);
-    const status = String(row.lifecycle_status ?? "active");
-    const mergedInto = typeof row.merged_into_food_id === "string" ? row.merged_into_food_id : null;
-    if (status === "merged" && mergedInto && isUuid(mergedInto)) {
-      foodId = mergedInto;
-      continue;
-    }
-    if (status !== "active") throw new Error("Food is unavailable for new Nutrition writes.");
-    return { foodId, row };
-  }
-  throw new Error("Food merge lineage could not be resolved safely.");
 }
 
 export async function resolveFoodHandoff(
@@ -147,10 +110,10 @@ export async function resolveFoodHandoff(
   let effectiveNutrition: FoodLibraryNutrition;
 
   if (input.source === "catalog") {
-    const resolved = await resolveCatalogRow(supabase, input.foodId);
-    foodId = resolved.foodId;
-    row = resolved.row;
-    canonicalNutrition = nutritionFromCatalog(row);
+    const resolved = await resolveCatalogFood(supabase, input.foodId);
+    foodId = resolved.id;
+    row = { food_name: resolved.name, serving_size: resolved.servingLabel };
+    canonicalNutrition = resolved.nutrition;
     const correctionResult = await supabase
       .from("food_personal_corrections")
       .select("calories,protein_g,carbs_g,fat_g,saturated_fat_g,fiber_g,sugars_g,sodium_mg,basis_amount,basis_unit")
