@@ -73,7 +73,7 @@ describe("Nutrition V1 owner Food write authority", () => {
     expect(result.food?.id).toBe(foodId);
   });
 
-  it("returns a possible duplicate without silently inserting or merging", async () => {
+  it("returns an active shared catalog duplicate without silently inserting or merging", async () => {
     const personal = query({ data: null, error: null });
     const catalog = query({ data: { id: foodId, food_name: "Greek yogurt", serving_size: "170 g" }, error: null });
     const db = fakeSupabase({ user_food_items: [personal], food_items: [catalog] });
@@ -82,8 +82,20 @@ describe("Nutrition V1 owner Food write authority", () => {
 
     expect(duplicate).toMatchObject({ id: foodId, source: "catalog" });
     expect(personal.eq).toHaveBeenCalledWith("user_id", userId);
-    expect(catalog.neq).toHaveBeenCalledWith("lifecycle_status", "merged");
+    expect(catalog.eq).toHaveBeenCalledWith("is_global", true);
+    expect(catalog.eq).toHaveBeenCalledWith("lifecycle_status", "active");
     expect(db.from).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves duplicate precedence for the matching owner Food before the shared catalog", async () => {
+    const personal = query({ data: { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", food_name: "Greek yogurt", serving_size: "1 bowl" }, error: null });
+    const catalog = query({ data: { id: foodId, food_name: "Greek yogurt", serving_size: "170 g" }, error: null });
+    const db = fakeSupabase({ user_food_items: [personal], food_items: [catalog] });
+
+    const duplicate = await findPossibleFoodDuplicate(db.client, userId, "Greek yogurt");
+
+    expect(duplicate).toMatchObject({ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", source: "my_food" });
+    expect(personal.eq).toHaveBeenCalledWith("user_id", userId);
   });
 
   it("updates only the active owner-scoped Custom Food", async () => {

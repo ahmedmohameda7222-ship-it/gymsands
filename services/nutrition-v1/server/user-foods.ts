@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { findCatalogDuplicateByName } from "@/services/nutrition-v1/server/food-catalog";
+
 export type UserFoodBasisUnit = "g" | "ml" | "serving" | "piece" | "custom";
 
 export type UserFoodWriteInput = {
@@ -88,18 +90,11 @@ export async function findPossibleFoodDuplicate(supabase: SupabaseClient, userId
       .ilike("food_name", clean)
       .limit(1)
       .maybeSingle(),
-    supabase.from("food_items")
-      .select("id,food_name,serving_size")
-      .eq("is_global", true)
-      .neq("lifecycle_status", "merged")
-      .ilike("food_name", clean)
-      .limit(1)
-      .maybeSingle(),
+    findCatalogDuplicateByName(supabase, clean),
   ]);
   if (personal.error) throw new Error(`Custom Food duplicate read: ${personal.error.message ?? "database error"}`);
-  if (catalog.error) throw new Error(`Catalog duplicate read: ${catalog.error.message ?? "database error"}`);
   if (personal.data) return { source: "my_food" as const, ...personal.data };
-  if (catalog.data) return { source: "catalog" as const, ...catalog.data };
+  if (catalog) return { source: "catalog" as const, ...catalog };
   return null;
 }
 
