@@ -132,6 +132,21 @@ export async function getCatalogVerificationStates(
   return states;
 }
 
+export async function searchCatalogFoodsByName(
+  supabase: SupabaseClient,
+  query: string,
+  limit: number,
+): Promise<Array<Record<string, unknown>>> {
+  const result = await supabase
+    .from("food_items")
+    .select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g")
+    .eq("is_global", true)
+    .ilike("food_name", `%${query}%`)
+    .limit(limit);
+  if (result.error) throw new Error(errorMessage(result.error));
+  return (result.data ?? []) as Array<Record<string, unknown>>;
+}
+
 export async function findCatalogDuplicateByName(
   supabase: SupabaseClient,
   name: string,
