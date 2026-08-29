@@ -13,6 +13,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace, back: mocks.back, refresh: mocks.refresh }),
   useSearchParams: () => mocks.searchParams,
 }));
+vi.mock("@/components/auth/auth-provider", () => ({
+  useAuth: () => ({ user: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } }),
+}));
 vi.mock("@/components/nutrition/food-library/food-library-api", () => ({ foodLibraryApi: mocks.api }));
 
 import { AddToHandoffConsumer } from "@/components/nutrition/handoffs/add-to-handoff-consumer";
