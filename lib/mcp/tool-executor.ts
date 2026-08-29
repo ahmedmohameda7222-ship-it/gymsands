@@ -1,4 +1,5 @@
 import type { McpContext } from "@/lib/mcp/auth";
+import { executeCanonicalFoodMcpTool } from "@/lib/mcp/nutrition-v1-food-execution";
 import type { McpToolResult } from "@/lib/mcp/tool-helpers";
 import { executeMcpTool as executeMcpToolImplementation } from "./tool-executor-implementation";
 
@@ -63,5 +64,8 @@ export async function executeMcpTool(
   toolName: string,
   rawInput: unknown
 ): Promise<McpToolResult> {
-  return executeMcpToolImplementation(withAw3aMcpMetricAuthority(ctx), toolName, rawInput);
+  const normalizedContext = withAw3aMcpMetricAuthority(ctx);
+  const canonicalFoodResult = await executeCanonicalFoodMcpTool(normalizedContext, toolName, rawInput);
+  if (canonicalFoodResult) return canonicalFoodResult;
+  return executeMcpToolImplementation(normalizedContext, toolName, rawInput);
 }
