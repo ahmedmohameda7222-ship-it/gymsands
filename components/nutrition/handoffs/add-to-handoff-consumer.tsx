@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
+import { useAuth } from "@/components/auth/auth-provider";
 import { foodLibraryApi } from "@/components/nutrition/food-library/food-library-api";
 import { parseAddToHandoff, type AddToDestination, type AddToHandoffSource } from "@/lib/nutrition-v1/add-to-handoff";
 import { localeWeekStartDay, startOfMealPlanWeek } from "@/lib/nutrition-v1/week-start";
@@ -26,8 +27,10 @@ async function jsonRequest<T>(input: RequestInfo | URL, init?: RequestInit): Pro
   return data as T;
 }
 
-function newRecipeOperationStorageKey(source: RecipeFoodSource) {
-  return `plaivra:nutrition:handoff:recipe:new:${source.source}:${source.id}:${source.quantity}:${encodeURIComponent(source.serving)}`;
+function newRecipeOperationStorageKey(ownerId: string, source: RecipeFoodSource) {
+  return ["plaivra", "nutrition", "handoff", ownerId, "recipe", "new", source.source, source.id, String(source.quantity), source.serving]
+    .map((part) => encodeURIComponent(part))
+    .join(":");
 }
 
 function commandSourceIdentity(source: AddToHandoffSource, resolvedRecipeQuantity: number | null) {
@@ -38,12 +41,13 @@ function commandSourceIdentity(source: AddToHandoffSource, resolvedRecipeQuantit
 }
 
 function commandOperationStorageKey(
+  ownerId: string,
   destination: Exclude<AddToDestination, "recipe">,
   source: AddToHandoffSource,
   resolvedRecipeQuantity: number | null,
   context: string[],
 ) {
-  return ["plaivra", "nutrition", "handoff", destination, ...commandSourceIdentity(source, resolvedRecipeQuantity), ...context]
+  return ["plaivra", "nutrition", "handoff", ownerId, destination, ...commandSourceIdentity(source, resolvedRecipeQuantity), ...context]
     .map((part) => encodeURIComponent(part))
     .join(":");
 }
@@ -78,6 +82,8 @@ function clearStoredOperationId(key: string) {
 export function AddToHandoffConsumer({ destination }: Props) {
   const router = useRouter();
   const search = useSearchParams();
+  const { user } = useAuth();
+  const ownerId = user?.id ?? null;
   const source = useMemo(() => parseAddToHandoff(new URLSearchParams(search.toString()), destination), [destination, search]);
   const [sourceName, setSourceName] = useState("");
   const [date, setDate] = useState("");
@@ -94,7 +100,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
   useEffect(() => {
     pendingOperationIdRef.current = null;
     if (source?.type === "recipe") setRecipeQuantity(String(source.quantity));
-  }, [destination, source]);
+  }, [destination, ownerId, source]);
 
   useEffect(() => {
     if (!source) return;
@@ -125,6 +131,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
     setError("");
     let successfulOperationKey: string | null = null;
     try {
+      if (!ownerId) throw new Error("Please sign in before completing this Nutrition handoff.");
       const resolvedRecipeQuantity = currentSource.type === "recipe" ? Number(recipeQuantity) : null;
       if (currentSource.type === "recipe" && (!Number.isFinite(resolvedRecipeQuantity) || Number(resolvedRecipeQuantity) <= 0)) {
         throw new Error("Choose a serving quantity greater than zero.");
@@ -146,7 +153,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
 
       if (destination === "diary") {
         if (!date || !meal) throw new Error("Choose the Diary date and meal before adding this item.");
-        const operationKey = commandOperationStorageKey("diary", currentSource, resolvedRecipeQuantity, [date, meal]);
+        const operationKey = commandOperationStorageKey(ownerId, "diary", currentSource, resolvedRecipeQuantity, [date, meal]);
         payload.operationId = claimOperationId(operationKey);
         payload.date = date;
         payload.meal = meal;
@@ -154,7 +161,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
         if (!date || !meal) throw new Error("Choose the plan date and meal slot before adding this item.");
         const locale = typeof navigator === "undefined" ? "en-GB" : navigator.language;
         const weekStartDate = startOfMealPlanWeek(date, localeWeekStartDay(locale));
-        const operationKey = commandOperationStorageKey("meal_plan", currentSource, resolvedRecipeQuantity, [date, meal, weekStartDate]);
+        const operationKey = commandOperationStorageKey(ownerId, "meal_plan", currentSource, resolvedRecipeQuantity, [date, meal, weekStartDate]);
         payload.operationId = claimOperationId(operationKey);
         payload.planDate = date;
         payload.mealSlot = meal;
@@ -163,7 +170,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
         if (!savedMealName.trim()) throw new Error("Name the Saved Meal before creating it.");
         const normalizedName = savedMealName.trim();
         const normalizedNote = note.trim();
-        const operationKey = commandOperationStorageKey("saved_meal", currentSource, resolvedRecipeQuantity, [normalizedName, normalizedNote]);
+        const operationKey = commandOperationStorageKey(ownerId, "saved_meal", currentSource, resolvedRecipeQuantity, [normalizedName, normalizedNote]);
         payload.operationId = claimOperationId(operationKey);
         payload.name = normalizedName;
         payload.note = normalizedNote || null;
@@ -171,7 +178,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
         payload.targetRecipeId = targetRecipeId || null;
         if (!targetRecipeId) {
           if (currentSource.type !== "food") throw new Error("Only Food can be added to a new Recipe.");
-          const operationKey = newRecipeOperationStorageKey(currentSource);
+          const operationKey = newRecipeOperationStorageKey(ownerId, currentSource);
           payload.operationId = claimOperationId(operationKey);
         }
       }
