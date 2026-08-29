@@ -66,21 +66,26 @@ type RequestAuthority = {
 };
 
 function mealTypeLabel(
-  value: TodayMealPlanItemProjection["mealType"] | undefined,
+  value: string | undefined,
   copy: ReturnType<typeof getFocusedTodayCopy>,
 ) {
-  if (value === "Breakfast") return copy.breakfast;
-  if (value === "Lunch") return copy.lunch;
-  if (value === "Dinner") return copy.dinner;
-  return copy.snack;
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "breakfast") return copy.breakfast;
+  if (normalized === "lunch") return copy.lunch;
+  if (normalized === "dinner") return copy.dinner;
+  if (normalized === "snack") return copy.snack;
+  return value?.trim() || copy.snack;
 }
 
 function selectRelevantMeal(items: TodayMealPlanItemProjection[], hour: number) {
   const open = items.filter((item) => item.status === "planned");
   if (!open.length) return null;
   const preferred =
-    hour < 11 ? "Breakfast" : hour < 15 ? "Lunch" : hour < 18 ? "Snack" : "Dinner";
-  return open.find((item) => item.mealType === preferred) ?? open[0];
+    hour < 11 ? "breakfast" : hour < 15 ? "lunch" : hour < 18 ? "snack" : "dinner";
+  return (
+    open.find((item) => item.mealSlotKey.trim().toLowerCase() === preferred) ??
+    open[0]
+  );
 }
 
 function projectionSourceState(
@@ -166,56 +171,25 @@ function applyMealCompletion(
   const items = projection.meals.value.items.map((item) =>
     item.id === result.item.id ? result.item : item,
   );
-  let next = updateMealProjection(projection, items);
-  if (result.alreadyDone) return { projection: next, needsRefresh: false };
-  if (next.nutrition.logs.state !== "loaded") {
-    return { projection: next, needsRefresh: true };
-  }
-  const logs = next.nutrition.logs.value;
-  const totals = {
-    calories: logs.totals.calories + result.log.calories,
-    proteinG: logs.totals.proteinG + result.log.proteinG,
-    carbsG: logs.totals.carbsG + result.log.carbsG,
-    fatG: logs.totals.fatG + result.log.fatG,
+  return {
+    projection: updateMealProjection(projection, items),
+    // Actual Diary facts are grouped canonical records. Re-read server authority
+    // instead of inventing client-side macro deltas from a planned snapshot.
+    needsRefresh: true,
   };
-  const foodLogCount = logs.foodLogCount + 1;
-  const targets =
-    next.nutrition.targets.state === "loaded"
-      ? next.nutrition.targets.value
-      : null;
-  const remaining = (target: number, consumed: number) => Math.max(0, target - consumed);
-  next = {
-    ...next,
-    nutrition: {
-      ...next.nutrition,
-      logs: {
-        state: "loaded",
-        errorCode: null,
-        value: { totals, foodLogCount },
-      },
-    },
-    promptContext: {
-      ...next.promptContext,
-      nutrition: {
-        ...next.promptContext.nutrition,
-        foodLogsState: "loaded",
-        foodLogCount,
-        remainingCalories: targets
-          ? remaining(targets.dailyCalories, totals.calories)
-          : null,
-        remainingProtein: targets
-          ? remaining(targets.proteinG, totals.proteinG)
-          : null,
-        remainingCarbs: targets
-          ? remaining(targets.carbsG, totals.carbsG)
-          : null,
-        remainingFat: targets
-          ? remaining(targets.fatG, totals.fatG)
-          : null,
-      },
-    },
-  };
-  return { projection: next, needsRefresh: false };
+}
+
+function completeNutritionTotals(
+  value: TodayProjectionResponseV1["nutrition"]["logs"] extends infer _T
+    ? { calories: number | null; proteinG: number | null; carbsG: number | null; fatG: number | null }
+    : never,
+) {
+  return (
+    value.calories !== null &&
+    value.proteinG !== null &&
+    value.carbsG !== null &&
+    value.fatG !== null
+  );
 }
 
 export function TodayDashboard() {
@@ -455,23 +429,30 @@ export function TodayDashboard() {
     visibleProjection?.nutrition.targets.state === "loaded"
       ? visibleProjection.nutrition.targets.value
       : null;
-  const totals = nutritionLogs
-    ? {
-        calories: nutritionLogs.totals.calories,
-        protein_g: nutritionLogs.totals.proteinG,
-        carbs_g: nutritionLogs.totals.carbsG,
-        fat_g: nutritionLogs.totals.fatG,
-      }
-    : null;
-  const targets: SavedTargets | null = nutritionTargets?.hasTarget
-    ? {
-        daily_calories: nutritionTargets.dailyCalories,
-        protein_g: nutritionTargets.proteinG,
-        carbs_g: nutritionTargets.carbsG,
-        fat_g: nutritionTargets.fatG,
-        water_ml: nutritionTargets.waterMl,
-      }
-    : null;
+  const totals =
+    nutritionLogs && completeNutritionTotals(nutritionLogs.totals)
+      ? {
+          calories: nutritionLogs.totals.calories as number,
+          protein_g: nutritionLogs.totals.proteinG as number,
+          carbs_g: nutritionLogs.totals.carbsG as number,
+          fat_g: nutritionLogs.totals.fatG as number,
+        }
+      : null;
+  const targets: SavedTargets | null =
+    nutritionTargets?.hasTarget &&
+    nutritionTargets.dailyCalories !== null &&
+    nutritionTargets.proteinG !== null &&
+    nutritionTargets.carbsG !== null &&
+    nutritionTargets.fatG !== null &&
+    nutritionTargets.waterMl !== null
+      ? {
+          daily_calories: nutritionTargets.dailyCalories,
+          protein_g: nutritionTargets.proteinG,
+          carbs_g: nutritionTargets.carbsG,
+          fat_g: nutritionTargets.fatG,
+          water_ml: nutritionTargets.waterMl,
+        }
+      : null;
   const remaining = useDashboardRemainingMacros(targets, totals);
   const foodLogCount = nutritionLogs?.foodLogCount ?? null;
   const waterTotal =
@@ -886,12 +867,18 @@ export function TodayDashboard() {
                   <>
                     <div>
                       <p className="font-semibold">
-                        {mealTypeLabel(relevantMeal.mealType, copy)}:{" "}
+                        {mealTypeLabel(relevantMeal.mealSlotKey, copy)}:{" "}
                         {relevantMeal.name}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {Math.round(relevantMeal.calories)} kcal ·{" "}
-                        {Math.round(relevantMeal.proteinG)} g {copy.protein}
+                        {relevantMeal.calories === null
+                          ? "—"
+                          : Math.round(relevantMeal.calories)}{" "}
+                        kcal ·{" "}
+                        {relevantMeal.proteinG === null
+                          ? "—"
+                          : Math.round(relevantMeal.proteinG)}{" "}
+                        g {copy.protein}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -940,7 +927,7 @@ export function TodayDashboard() {
                 ) : null}
                 {mealsState === "loaded" ? (
                   <Button asChild variant="outline" className="min-h-11">
-                    <Link href={`/my-meal-plan?tab=day&date=${today}`}>
+                    <Link href={`/my-meal-plan?date=${today}`}>
                       {copy.openMealPlan}
                     </Link>
                   </Button>
@@ -1083,7 +1070,7 @@ export function TodayDashboard() {
                     </div>
                   ) : null}
                   <Button asChild variant="outline" className="min-h-11">
-                    <Link href={`/my-meal-plan?tab=shopping&date=${today}`}>
+                    <Link href={`/my-meal-plan/shopping?date=${today}`}>
                       {copy.openFullGrocery}
                     </Link>
                   </Button>

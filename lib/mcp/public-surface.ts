@@ -1,4 +1,5 @@
 import type { McpContext } from "@/lib/mcp/auth";
+import { createCanonicalSavedMealFromMcp } from "@/lib/mcp/nutrition-v1-saved-meal";
 import { fail } from "@/lib/mcp/tool-helpers";
 import { executeMcpTool as executeCatalogTool, type McpToolResult } from "@/lib/mcp/tool-executor-safe";
 import {
@@ -14,6 +15,9 @@ export const RETIRED_DAILY_CHECKIN_TOOLS = new Set(["get_daily_checkins", "upser
 export async function executeMcpTool(ctx: McpContext, toolName: string, input: unknown): Promise<McpToolResult> {
   if (RETIRED_DAILY_CHECKIN_TOOLS.has(toolName)) {
     return fail("tool_retired", "Daily Check-in is no longer an active Plaivra capability.");
+  }
+  if (toolName === "create_custom_meal") {
+    return createCanonicalSavedMealFromMcp(ctx, input);
   }
   return executeCatalogTool(ctx, toolName, input);
 }

@@ -1,6 +1,7 @@
 import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { runNutritionV1Qa } from "./run-nutrition-v1-qa.mjs";
 
 const baseUrl = process.env.QA_BASE_URL || "http://localhost:3000";
 const evidenceDir = path.resolve(
@@ -82,6 +83,211 @@ async function createDeterministicContext(browser, viewport) {
       });
     },
   );
+  await context.route("**/api/nutrition/v1/diary*", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    const date = requestUrl.searchParams.get("date") || "2026-08-26";
+    const actual = {
+      caloriesKcal: 620,
+      proteinG: 41,
+      carbsG: 72,
+      fatG: 18,
+    };
+    const target = {
+      caloriesKcal: 2200,
+      proteinG: 160,
+      carbsG: 240,
+      fatG: 70,
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "x-plaivra-qa-fixture": "nutrition-diary-v1" },
+      body: JSON.stringify({
+        date,
+        position: {
+          actual,
+          target,
+          remaining: {
+            caloriesKcal: 1580,
+            proteinG: 119,
+            carbsG: 168,
+            fatG: 52,
+          },
+        },
+        domains: {
+          actual: {
+            status: "ready",
+            data: {
+              nutrition: actual,
+              logs: [
+                {
+                  id: "00000000-0000-4000-8000-000000000101",
+                  mealType: "Breakfast",
+                  foodName: "Greek yogurt with berries",
+                  servingLabel: "1 bowl",
+                  quantity: 1,
+                  nutrition: {
+                    caloriesKcal: 320,
+                    proteinG: 26,
+                    carbsG: 34,
+                    fatG: 9,
+                  },
+                  notes: null,
+                  foodItemId: null,
+                  userFoodItemId: null,
+                  createdAt: null,
+                },
+                {
+                  id: "00000000-0000-4000-8000-000000000102",
+                  mealType: "Snack",
+                  foodName: "Banana and almonds",
+                  servingLabel: "1 serving",
+                  quantity: 1,
+                  nutrition: {
+                    caloriesKcal: 300,
+                    proteinG: 15,
+                    carbsG: 38,
+                    fatG: 9,
+                  },
+                  notes: null,
+                  foodItemId: null,
+                  userFoodItemId: null,
+                  createdAt: null,
+                },
+              ],
+            },
+          },
+          target: {
+            status: "ready",
+            data: {
+              available: true,
+              effective_from: date,
+              effective_to: null,
+              values: {
+                calories: 2200,
+                protein_g: 160,
+                carbs_g: 240,
+                fat_g: 70,
+                water_ml: 2500,
+              },
+              source: "rendered_qa_fixture",
+              source_evidence: { authority: "rendered_qa" },
+              reason: "effective_target",
+            },
+          },
+          hydration: {
+            status: "ready",
+            data: {
+              logs: [
+                {
+                  id: "00000000-0000-4000-8000-000000000103",
+                  amountMl: 750,
+                  createdAt: null,
+                },
+              ],
+              totalMl: 750,
+            },
+          },
+          planned: {
+            status: "ready",
+            data: [
+              {
+                id: "00000000-0000-4000-8000-000000000104",
+                mealType: "Lunch",
+                name: "Chicken rice bowl",
+                status: "planned",
+                sourceType: "food",
+                frozenSnapshot: { name: "Chicken rice bowl" },
+              },
+            ],
+          },
+          savedMeals: { status: "ready", data: [] },
+        },
+      }),
+    });
+  });
+  await context.route("**/api/nutrition/v1/meal-plan/week*", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    const weekStart = requestUrl.searchParams.get("weekStart") || "2026-08-24";
+    const date = requestUrl.searchParams.get("date") || "2026-08-26";
+    const occurrenceId = "33333333-3333-4333-8333-333333333333";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "x-plaivra-qa-fixture": "nutrition-meal-plan-v1" },
+      body: JSON.stringify({
+        week: {
+          id: "44444444-4444-4444-8444-444444444444",
+          user_id: "00000000-0000-4000-8000-000000000001",
+          week_start_date: weekStart,
+          revision: 3,
+          week_override_json: {},
+        },
+        occurrences: [
+          {
+            id: occurrenceId,
+            week_id: "44444444-4444-4444-8444-444444444444",
+            user_id: "00000000-0000-4000-8000-000000000001",
+            plan_date: date,
+            meal_slot_key: "Lunch",
+            position: 0,
+            source_type: "food",
+            source_id: "11111111-1111-4111-8111-111111111111",
+            source_version_id: null,
+            resolved_quantity: 1,
+            resolved_serving_label: "1 bowl",
+            frozen_name: "Chicken rice bowl",
+            frozen_snapshot: {
+              nutrition: {
+                calories: 540,
+                protein_g: 48,
+                carbs_g: 63,
+                fat_g: 12,
+              },
+              shoppingIngredients: [
+                {
+                  foodId: "55555555-5555-4555-8555-555555555555",
+                  name: "Chicken breast",
+                  quantity: 400,
+                  unit: "g",
+                  qualifier: null,
+                },
+              ],
+            },
+            status: "planned",
+            completed_at: null,
+            actual_log_group_id: null,
+          },
+        ],
+        target: {
+          available: true,
+          effective_from: weekStart,
+          effective_to: null,
+          values: {
+            calories: 2200,
+            protein_g: 160,
+            carbs_g: 240,
+            fat_g: 70,
+            water_ml: 2500,
+          },
+          source: "rendered_qa_fixture",
+          source_evidence: { authority: "rendered_qa" },
+          reason: "effective_target",
+        },
+        pendingChangeRequests: [],
+        shoppingNeeds: [
+          {
+            foodId: "55555555-5555-4555-8555-555555555555",
+            name: "Chicken breast",
+            quantity: 400,
+            unit: "g",
+            qualifier: null,
+            sourceOccurrenceIds: [occurrenceId],
+          },
+        ],
+      }),
+    });
+  });
   await context.route(/^https:\/\/[^/]+\.supabase\.co\//, async (route) => {
     const method = route.request().method();
     let requestBody = null;
@@ -401,6 +607,15 @@ await zoomPage.screenshot({
 await zoomContext.close();
 await browser.close();
 
+const nutritionReport = await runNutritionV1Qa({
+  baseUrl,
+  evidenceDir: path.join(evidenceDir, "nutrition-v1"),
+  headSha,
+  serverMode,
+  workflowRunId,
+  throwOnFailure: false,
+});
+
 const failures = results.filter(
   (item) =>
     item.status !== 200 ||
@@ -432,19 +647,25 @@ const report = {
     zoomOverflowPx: zoomOverflow,
     longLocalizedTextLanguage: "ar",
     localizedOverflowPx: localizedOverflow,
+    nutritionV1: true,
   },
   summary: {
-    observations: results.length,
+    observations: results.length + nutritionReport.summary.observations,
     navigationRegressions: 1,
-    failures: failures.length + (navigationEvidence.passed ? 0 : 1),
+    failures:
+      failures.length +
+      (navigationEvidence.passed ? 0 : 1) +
+      nutritionReport.summary.failures,
     passed:
       failures.length === 0 &&
       navigationEvidence.passed &&
       zoomOverflow <= 1 &&
-      localizedOverflow <= 1,
+      localizedOverflow <= 1 &&
+      nutritionReport.summary.passed,
   },
   failures,
   navigationEvidence,
+  nutritionV1: nutritionReport.summary,
   observations: results,
 };
 await writeFile(
@@ -453,6 +674,6 @@ await writeFile(
   "utf8",
 );
 console.log(
-  `Rendered QA: ${report.summary.observations} observations, ${report.summary.failures} failures, zoom overflow ${zoomOverflow}px.`,
+  `Rendered QA: ${report.summary.observations} observations, ${report.summary.failures} failures, zoom overflow ${zoomOverflow}px; Nutrition V1 ${nutritionReport.summary.failures} failures.`,
 );
 if (!report.summary.passed) process.exitCode = 1;

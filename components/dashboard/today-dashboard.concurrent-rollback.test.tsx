@@ -20,7 +20,7 @@ const groceryB = "11111111-1111-4111-8111-111111111142";
 function meal(id: string, name: string): TodayMealPlanItemProjection {
   return {
     id,
-    mealType: "Dinner",
+    mealSlotKey: "Dinner",
     name,
     calories: 600,
     proteinG: 45,
@@ -108,6 +108,32 @@ function fixture(calories = 100): TodayProjectionResponseV1 {
       grocery: { state: "loaded", itemCount: 2 },
     },
   };
+}
+
+function completedFixture(): TodayProjectionResponseV1 {
+  const next = fixture(700);
+  if (next.meals.state === "loaded") {
+    next.meals = {
+      ...next.meals,
+      value: {
+        ...next.meals.value,
+        items: next.meals.value.items.map((item) =>
+          item.id === mealA ? { ...item, status: "completed" as const } : item,
+        ),
+        plannedCount: 2,
+      },
+    };
+  }
+  next.promptContext = {
+    ...next.promptContext,
+    nutrition: {
+      ...next.promptContext.nutrition,
+      remainingCalories: 1300,
+      foodLogCount: 2,
+      plannedMealCount: 2,
+    },
+  };
+  return next;
 }
 
 function deferred<T>() {
@@ -294,14 +320,7 @@ beforeEach(() => {
   mocks.markDone.mockImplementation(async (_userId: string, itemId: string) => ({
     item: {
       ...meal(itemId, itemId === mealA ? "Meal A" : "Meal"),
-      status: "done",
-    },
-    log: {
-      id: `log-${itemId}`,
-      calories: 600,
-      proteinG: 45,
-      carbsG: 60,
-      fatG: 20,
+      status: "completed",
     },
     alreadyDone: false,
   }));
@@ -366,6 +385,7 @@ describe("Today domain-scoped optimistic rollback", () => {
     const toggle = deferred<TodayShoppingItemProjection>();
     mocks.toggleShopping.mockReturnValueOnce(toggle.promise);
     await renderDashboard();
+    mocks.getProjection.mockResolvedValueOnce(completedFixture());
 
     await expandShopping();
     await clickFirstCheckbox();
@@ -377,7 +397,7 @@ describe("Today domain-scoped optimistic rollback", () => {
       container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
     ).toBe("700");
     expect(lastPlannedCount()).toBe(2);
-    expect(mocks.getProjection).toHaveBeenCalledOnce();
+    expect(mocks.getProjection).toHaveBeenCalledTimes(2);
   });
 
   it("keeps one concurrent grocery toggle when the other fails", async () => {

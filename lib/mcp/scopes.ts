@@ -29,6 +29,14 @@ export const MCP_SCOPES = {
   all: "plaivra.all" // legacy alias, prefer fullAccess
 } as const;
 
+// Recipe authorization is part of Nutrition. There is intentionally no Recipe
+// publish scope: MCP may read Recipe context and create/update Working Drafts,
+// while publication remains a Plaivra-owned explicit Save Recipe action.
+export const MCP_RECIPE_SCOPES = {
+  read: MCP_SCOPES.nutritionRead,
+  writeDraft: MCP_SCOPES.nutritionWrite
+} as const;
+
 // Normal user scopes (non-admin)
 export const MCP_NORMAL_USER_SCOPES = [
   MCP_SCOPES.workoutsRead,

@@ -2,6 +2,10 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid, todayIso } from "@/lib/utils";
+import {
+  readLegacySavedContent,
+  type LegacySavedContentCompatibility,
+} from "@/services/nutrition-v1/compatibility/legacy-nutrition";
 import type { FoodItem, FoodLog, MealType } from "@/types";
 
 export type FoodFavoriteKey = string;
@@ -292,6 +296,45 @@ function normalizeRecipeRow(recipe: Record<string, unknown>, ingredients: Record
   };
 }
 
+function compatibilityRecipeToSavedRecipe(item: LegacySavedContentCompatibility): SavedRecipe | null {
+  if (item.source_table !== "saved_recipes" || item.classification !== "recipe") return null;
+  if (item.portions === null || !item.ingredients.length) return null;
+  const ingredients: RecipeIngredient[] = [];
+  for (const ingredient of item.ingredients) {
+    const facts = ingredient.nutrition;
+    if (
+      ingredient.quantity === null ||
+      ingredient.serving_label === null ||
+      facts.calories === null ||
+      facts.protein_g === null ||
+      facts.carbs_g === null ||
+      facts.fat_g === null
+    ) {
+      return null;
+    }
+    ingredients.push({
+      id: ingredient.source_id,
+      foodName: ingredient.name,
+      quantity: ingredient.quantity,
+      servingUnit: ingredient.serving_label as ServingUnit,
+      calories: facts.calories,
+      proteinG: facts.protein_g,
+      carbsG: facts.carbs_g,
+      fatG: facts.fat_g,
+    });
+  }
+  return {
+    id: item.source_id,
+    user_id: item.owner_id,
+    name: item.name,
+    portions: Math.max(1, Math.round(item.portions)),
+    ingredients,
+    notes: item.notes,
+    created_at: item.created_at ?? new Date(0).toISOString(),
+    updated_at: item.updated_at ?? item.created_at ?? new Date(0).toISOString(),
+  };
+}
+
 async function migrateLocalRecipes(userId: string, local: SavedRecipe[]) {
   if (!local.length) return;
   for (const recipe of local) {
@@ -340,31 +383,15 @@ export async function getSavedRecipesAsync(userId: string | null | undefined) {
     await migrateLocalRecipes(userId, local);
   }
 
-  const { data: recipes, error } = await supabase!
-    .from("saved_recipes")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.warn("Plaivra could not load synced recipes.", error.message);
+  try {
+    const compatibility = await readLegacySavedContent(supabase!, userId);
+    return compatibility
+      .map(compatibilityRecipeToSavedRecipe)
+      .filter((recipe): recipe is SavedRecipe => recipe !== null);
+  } catch (error) {
+    console.warn("Plaivra could not load legacy-compatible saved recipes.", error instanceof Error ? error.message : String(error));
     return local;
   }
-
-  const recipeIds = (recipes ?? []).map((recipe) => recipe.id);
-  const ingredientsResult = recipeIds.length
-    ? await supabase!.from("saved_recipe_ingredients").select("*").in("recipe_id", recipeIds)
-    : { data: [], error: null };
-  if (ingredientsResult.error) {
-    console.warn("Plaivra could not load synced recipe ingredients.", ingredientsResult.error.message);
-    return local;
-  }
-
-  return ((recipes ?? []) as Record<string, unknown>[]).map((recipe) =>
-    normalizeRecipeRow(
-      recipe,
-      ((ingredientsResult.data ?? []) as Record<string, unknown>[]).filter((ingredient) => ingredient.recipe_id === recipe.id)
-    )
-  );
 }
 
 export function saveRecipe(userId: string | null | undefined, input: Omit<SavedRecipe, "id" | "user_id" | "created_at" | "updated_at">) {

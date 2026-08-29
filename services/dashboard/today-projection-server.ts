@@ -20,12 +20,8 @@ import {
   type TodaySupplementProjection,
   type TodayWorkoutProjection,
 } from "@/lib/dashboard/today-projection-contract";
-import { resolveActiveNutritionTarget } from "@/services/nutrition/active-target";
-import { normalizeSavedTargets } from "@/services/nutrition/targets";
-import type {
-  NutritionTargetProfileType,
-  UserNutritionTargetProfile,
-} from "@/types";
+import { getEffectiveNutritionTarget } from "@/services/nutrition-v1/server/targets";
+import { readTodayV1ShoppingProjection } from "@/services/nutrition-v1/server/today-shopping";
 
 const WEEKDAYS = [
   "Sunday",
@@ -110,29 +106,23 @@ type ScheduledSessionRow = {
 
 type MealRow = {
   id: string;
-  meal_type: TodayMealPlanItemProjection["mealType"];
-  food_name: string;
-  calories: number;
-  protein_g: number;
+  meal_slot_key: string;
+  frozen_name: string;
+  frozen_snapshot: Record<string, unknown>;
   status: TodayMealPlanItemProjection["status"];
 };
 
-type MacroRow = {
-  calories: number | null;
-  protein_g: number | null;
-  carbs_g: number | null;
-  fat_g: number | null;
+type NutritionGroupRow = { id: string };
+type NutritionGroupItemRow = {
+  group_id: string;
+  frozen_item_snapshot: Record<string, unknown>;
 };
 
-type GroceryRow = {
-  id: string;
-  week_start: string;
-  item_name: string;
-  quantity: number | null;
-  unit: string | null;
-  store_section: string | null;
-  checked: boolean;
-  already_have: boolean;
+type NullableNutrition = {
+  calories: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
 };
 
 type HabitRow = { name: string; completed: boolean };
@@ -150,6 +140,65 @@ function finite(value: unknown): number {
 
 function nonNegative(value: unknown): number {
   return Math.max(0, finite(value));
+}
+
+function nullableNonNegative(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function firstNutritionValue(
+  source: Record<string, unknown>,
+  keys: readonly string[],
+) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      return nullableNonNegative(source[key]);
+    }
+  }
+  return null;
+}
+
+function directNutrition(source: Record<string, unknown>): NullableNutrition {
+  return {
+    calories: firstNutritionValue(source, ["caloriesKcal", "calories", "calories_kcal"]),
+    proteinG: firstNutritionValue(source, ["proteinG", "protein_g"]),
+    carbsG: firstNutritionValue(source, ["carbsG", "carbs_g"]),
+    fatG: firstNutritionValue(source, ["fatG", "fat_g"]),
+  };
+}
+
+function sumNutrition(values: NullableNutrition[]): NullableNutrition {
+  if (!values.length) {
+    return { calories: null, proteinG: null, carbsG: null, fatG: null };
+  }
+  const keys = ["calories", "proteinG", "carbsG", "fatG"] as const;
+  const result = {} as NullableNutrition;
+  for (const key of keys) {
+    result[key] = values.some((value) => value[key] === null)
+      ? null
+      : values.reduce((total, value) => total + (value[key] as number), 0);
+  }
+  return result;
+}
+
+function snapshotNutrition(value: unknown): NullableNutrition {
+  const snapshot = record(value);
+  const frozen = record(snapshot.frozen_nutrition);
+  if (Object.keys(frozen).length) return directNutrition(frozen);
+  const nutrition = record(snapshot.nutrition);
+  if (Object.keys(nutrition).length) return directNutrition(nutrition);
+  if (Array.isArray(snapshot.items) && snapshot.items.length) {
+    return sumNutrition(snapshot.items.map((item) => snapshotNutrition(item)));
+  }
+  return directNutrition(snapshot);
 }
 
 function assertQuery<T>(
@@ -183,14 +232,6 @@ function localDateInTimezone(timestamp: string | null, timezone: string) {
 
 function weekdayForDate(date: string) {
   return WEEKDAYS[new Date(`${date}T12:00:00.000Z`).getUTCDay()];
-}
-
-function isoWeekStart(date: string) {
-  const value = new Date(`${date}T12:00:00.000Z`);
-  const day = value.getUTCDay();
-  const delta = day === 0 ? -6 : 1 - day;
-  value.setUTCDate(value.getUTCDate() + delta);
-  return value.toISOString().slice(0, 10);
 }
 
 function isMeaningful(value: unknown): boolean {
@@ -406,21 +447,30 @@ export async function readTodayMealsProjection(
   input: ProjectionInput,
 ): Promise<TodayMealsProjection> {
   const result = await input.supabase
-    .from("user_meal_plan_items")
-    .select("id,meal_type,food_name,calories,protein_g,status")
+    .from("nutrition_planned_occurrences")
+    .select("id,meal_slot_key,frozen_name,frozen_snapshot,status")
     .eq("user_id", input.userId)
     .eq("plan_date", input.date)
-    .order("created_at", { ascending: true })
+    .order("meal_slot_key", { ascending: true })
+    .order("position", { ascending: true })
     .limit(100);
-  const rows = (assertQuery(result) ?? []) as MealRow[];
-  const items = rows.map((row) => ({
-    id: row.id,
-    mealType: row.meal_type,
-    name: row.food_name,
-    calories: nonNegative(row.calories),
-    proteinG: nonNegative(row.protein_g),
-    status: row.status,
-  }));
+  const rows = (assertQuery(result) ?? []) as unknown as MealRow[];
+  const items = rows.map((row) => {
+    const nutrition = snapshotNutrition(row.frozen_snapshot);
+    return {
+      id: row.id,
+      mealSlotKey: row.meal_slot_key,
+      name: row.frozen_name,
+      calories: nutrition.calories,
+      proteinG: nutrition.proteinG,
+      status:
+        row.status === "completed" ||
+        row.status === "completed_changed" ||
+        row.status === "skipped"
+          ? row.status
+          : "planned",
+    } satisfies TodayMealPlanItemProjection;
+  });
   return {
     items,
     itemCount: items.length,
@@ -431,118 +481,63 @@ export async function readTodayMealsProjection(
 export async function readTodayNutritionLogsProjection(
   input: ProjectionInput,
 ): Promise<TodayNutritionLogProjection> {
-  const result = await input.supabase
-    .from("food_logs")
-    .select("calories,protein_g,carbs_g,fat_g")
+  const groupResult = await input.supabase
+    .from("nutrition_log_groups")
+    .select("id")
     .eq("user_id", input.userId)
     .eq("log_date", input.date)
-    .limit(500);
-  const rows = (assertQuery(result) ?? []) as MacroRow[];
-  return {
-    totals: rows.reduce(
-      (totals, row) => ({
-        calories: totals.calories + nonNegative(row.calories),
-        proteinG: totals.proteinG + nonNegative(row.protein_g),
-        carbsG: totals.carbsG + nonNegative(row.carbs_g),
-        fatG: totals.fatG + nonNegative(row.fat_g),
-      }),
-      { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
-    ),
-    foodLogCount: rows.length,
-  };
+    .order("created_at", { ascending: false })
+    .limit(250);
+  const groups = (assertQuery(groupResult) ?? []) as unknown as NutritionGroupRow[];
+  if (!groups.length) {
+    return {
+      totals: { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+      foodLogCount: 0,
+    };
+  }
+
+  const itemResult = await input.supabase
+    .from("nutrition_log_group_items")
+    .select("group_id,frozen_item_snapshot")
+    .eq("user_id", input.userId)
+    .in(
+      "group_id",
+      groups.map((group) => group.id),
+    )
+    .order("position", { ascending: true })
+    .limit(1000);
+  const rows = (assertQuery(itemResult) ?? []) as unknown as NutritionGroupItemRow[];
+  const totals = sumNutrition(rows.map((row) => snapshotNutrition(row.frozen_item_snapshot)));
+  return { totals, foodLogCount: rows.length };
 }
 
 export async function readTodayNutritionTargetsProjection(
   input: ProjectionInput,
 ): Promise<TodayNutritionTargetProjection> {
-  const [baseResult, profilesResult, overrideResult, planResult] =
-    await Promise.all([
-      input.supabase
-        .from("calorie_targets")
-        .select("daily_calories,protein_g,carbs_g,fat_g,water_ml")
-        .eq("user_id", input.userId)
-        .maybeSingle(),
-      input.supabase
-        .from("user_nutrition_target_profiles")
-        .select("id,user_id,target_type,calories,protein_g,carbs_g,fat_g,water_ml,created_at,updated_at")
-        .eq("user_id", input.userId)
-        .order("target_type", { ascending: true })
-        .limit(8),
-      input.supabase
-        .from("user_nutrition_target_date_overrides")
-        .select("target_type")
-        .eq("user_id", input.userId)
-        .eq("target_date", input.date)
-        .maybeSingle(),
-      input.supabase
-        .from("user_workout_plans")
-        .select("id")
-        .eq("user_id", input.userId)
-        .eq("is_active", true)
-        .is("archived_at", null)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
-
-  const base = assertQuery(baseResult) as Record<string, unknown> | null;
-  const profiles = (assertQuery(profilesResult) ?? []) as UserNutritionTargetProfile[];
-  const override = assertQuery(overrideResult) as { target_type?: string } | null;
-  const plan = assertQuery(planResult) as { id: string } | null;
-  let trainingDay = false;
-  if (plan) {
-    const dayResult = await input.supabase
-      .from("user_workout_plan_days")
-      .select("id")
-      .eq("plan_id", plan.id)
-      .eq("weekday", weekdayForDate(input.date))
-      .order("day_number", { ascending: true })
-      .limit(MAX_MATCHING_WORKOUT_DAYS);
-    const candidateDays = (assertQuery(dayResult) ?? []) as Array<{ id: string }>;
-    if (candidateDays.length) {
-      const exerciseResult = await input.supabase
-        .from("user_workout_plan_exercises")
-        .select("id,plan_day_id")
-        .in(
-          "plan_day_id",
-          candidateDays.map((candidate) => candidate.id),
-        )
-        .limit(MAX_MATCHING_WORKOUT_EXERCISES);
-      const candidateExercises = (assertQuery(exerciseResult) ?? []) as Array<{
-        id: string;
-        plan_day_id: string;
-      }>;
-      trainingDay = classifyCandidateWorkoutActivity(
-        candidateDays,
-        candidateExercises,
-      ).trainingDay;
-    }
+  const effective = await getEffectiveNutritionTarget(
+    input.supabase,
+    input.userId,
+    input.date,
+  );
+  if (!effective.available || !effective.values) {
+    return {
+      hasTarget: false,
+      dailyCalories: null,
+      proteinG: null,
+      carbsG: null,
+      fatG: null,
+      waterMl: null,
+      sourceType: "none",
+    };
   }
-
-  const explicit = override?.target_type;
-  const requestedType: NutritionTargetProfileType =
-    explicit === "default_day" ||
-    explicit === "training_day" ||
-    explicit === "rest_day" ||
-    explicit === "high_activity_day"
-      ? explicit
-      : trainingDay
-        ? "training_day"
-        : "rest_day";
-  const active = resolveActiveNutritionTarget({
-    profiles,
-    baseTarget: normalizeSavedTargets(base),
-    requestedType,
-  });
-
   return {
-    hasTarget: active.hasTarget,
-    dailyCalories: nonNegative(active.values.daily_calories),
-    proteinG: nonNegative(active.values.protein_g),
-    carbsG: nonNegative(active.values.carbs_g),
-    fatG: nonNegative(active.values.fat_g),
-    waterMl: nonNegative(active.values.water_ml),
-    sourceType: active.sourceType,
+    hasTarget: true,
+    dailyCalories: effective.values.calories,
+    proteinG: effective.values.protein_g,
+    carbsG: effective.values.carbs_g,
+    fatG: effective.values.fat_g,
+    waterMl: effective.values.water_ml,
+    sourceType: effective.source ?? "effective_target",
   };
 }
 
@@ -565,27 +560,11 @@ export async function readTodayHydrationProjection(
 export async function readTodayShoppingProjection(
   input: ProjectionInput,
 ): Promise<TodayShoppingProjection> {
-  const weekStart = isoWeekStart(input.date);
-  const result = await input.supabase
-    .from("user_grocery_items")
-    .select("id,week_start,item_name,quantity,unit,store_section,checked,already_have")
-    .eq("user_id", input.userId)
-    .eq("week_start", weekStart)
-    .order("store_section", { ascending: true })
-    .order("item_name", { ascending: true })
-    .limit(200);
-  const rows = (assertQuery(result) ?? []) as GroceryRow[];
-  const items = rows.map((row) => ({
-    id: row.id,
-    weekStart: row.week_start,
-    itemName: row.item_name,
-    quantity: row.quantity,
-    unit: row.unit,
-    storeSection: row.store_section ?? "Other",
-    checked: Boolean(row.checked),
-    alreadyHave: Boolean(row.already_have),
-  }));
-  return { items, itemCount: items.length };
+  return readTodayV1ShoppingProjection({
+    supabase: input.supabase,
+    userId: input.userId,
+    date: input.date,
+  });
 }
 
 export async function readTodayHabitsProjection(
@@ -715,8 +694,10 @@ export async function readTodayProgressContextProjection(
   return { state: "loaded", entryCount: result.count ?? 0 };
 }
 
-function remaining(target: number, consumed: number) {
-  return Math.max(0, target - consumed);
+function remaining(target: number | null, consumed: number | null) {
+  return target === null || consumed === null
+    ? null
+    : Math.max(0, target - consumed);
 }
 
 function buildPromptContext(input: {
@@ -744,7 +725,6 @@ function buildPromptContext(input: {
   const sleep = input.sleep.state === "loaded" ? input.sleep.value : null;
   const profile = input.profile.state === "loaded" ? input.profile.value : null;
   const progress = input.progress.state === "loaded" ? input.progress.value : null;
-  const canCalculate = Boolean(logs && targets?.hasTarget);
   const wellnessLoaded = Boolean(habits || supplements || sleep);
 
   return {
@@ -764,18 +744,22 @@ function buildPromptContext(input: {
       targetsState: targets ? "loaded" : "failed",
       foodLogsState: logs ? "loaded" : "failed",
       hasTargets: Boolean(targets?.hasTarget),
-      remainingCalories: canCalculate
-        ? remaining(targets!.dailyCalories, logs!.totals.calories)
-        : null,
-      remainingProtein: canCalculate
-        ? remaining(targets!.proteinG, logs!.totals.proteinG)
-        : null,
-      remainingCarbs: canCalculate
-        ? remaining(targets!.carbsG, logs!.totals.carbsG)
-        : null,
-      remainingFat: canCalculate
-        ? remaining(targets!.fatG, logs!.totals.fatG)
-        : null,
+      remainingCalories:
+        logs && targets?.hasTarget
+          ? remaining(targets.dailyCalories, logs.totals.calories)
+          : null,
+      remainingProtein:
+        logs && targets?.hasTarget
+          ? remaining(targets.proteinG, logs.totals.proteinG)
+          : null,
+      remainingCarbs:
+        logs && targets?.hasTarget
+          ? remaining(targets.carbsG, logs.totals.carbsG)
+          : null,
+      remainingFat:
+        logs && targets?.hasTarget
+          ? remaining(targets.fatG, logs.totals.fatG)
+          : null,
       foodLogCount: logs?.foodLogCount ?? null,
       mealPlanCount: meals?.itemCount ?? null,
       plannedMealCount: meals?.plannedCount ?? null,
@@ -786,10 +770,10 @@ function buildPromptContext(input: {
     },
     hydration: {
       state: hydration ? "loaded" : "failed",
-      hasTarget: Boolean(targets?.waterMl),
+      hasTarget: targets?.waterMl !== null && targets?.waterMl !== undefined,
       logCount: hydration?.logCount ?? null,
       remainingMl:
-        hydration && targets?.waterMl
+        hydration && targets?.waterMl !== null && targets?.waterMl !== undefined
           ? remaining(targets.waterMl, hydration.totalMl)
           : null,
     },

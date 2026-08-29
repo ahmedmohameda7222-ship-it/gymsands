@@ -5,6 +5,8 @@ import type { EnhancedSleepRecoveryLog } from "@/services/wellness/wellness-data
 import { addDays, datesInRange, endOfMonth, endOfWeek, formatIsoDate, startOfMonth, startOfWeek, todayIso } from "@/lib/date-utils";
 import { nullablePercent } from "@/services/nutrition/calculations";
 
+export const REPORTING_NUTRITION_SOURCE = "actual_diary" as const;
+
 export type ReportRange = { start: string; end: string; label: string; kind: "weekly" | "monthly" };
 export type ReportMetric = { label: string; value: string; detail: string; empty?: boolean };
 export type AggregatedReport = {
@@ -66,6 +68,8 @@ function habitCompletionStats(habits: FitnessHabit[], range: ReportRange) {
 
 export function aggregateReport({ range, nutrition, workouts, progressEntries, habits, sleepLogs, personalRecords }: { range: ReportRange; nutrition: DailyNutritionSummary[]; workouts: WorkoutSession[]; progressEntries: ProgressEntry[]; habits: FitnessHabit[]; sleepLogs: EnhancedSleepRecoveryLog[]; personalRecords: PersonalRecord[] }): AggregatedReport {
   const periodDates = datesInRange(range.start, range.end);
+  // `nutrition` is the actual Diary summary stream. Planned Meal Plan intent is
+  // deliberately excluded from report averages and adherence evidence.
   const periodNutrition = nutrition.filter((day) => inRange(day.date, range));
   const loggedNutritionDays = periodNutrition.filter((day) => day.logs.length > 0);
   const waterDays = periodNutrition.filter((day) => day.water_ml > 0);

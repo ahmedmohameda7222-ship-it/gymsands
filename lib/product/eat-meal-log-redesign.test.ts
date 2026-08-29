@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 const source = (path: string) => readFileSync(path, "utf8");
 
 describe("Eat meal-log redesign contracts", () => {
-  it("uses a focused Eat route with URL-backed day and week state", () => {
+  it("keeps the predecessor Eat route contract available after the canonical Diary cutover", () => {
     const route = source("components/meals/eat-page.tsx");
-    expect(source("app/(private)/calories/page.tsx")).toContain("<EatPage />");
+    expect(source("app/(private)/calories/page.tsx")).toContain("<DiaryPage />");
+    expect(source("app/(private)/calories/page.tsx")).not.toContain("<EatPage />");
     expect(route).toContain("parseEatView(rawView)");
     expect(route).toContain("parseEatDate(rawDate, today)");
     expect(route).toContain('view === "day"');
@@ -191,12 +192,15 @@ describe("Eat meal-log redesign contracts", () => {
     expect(model).toContain('value.includes("\\\\")');
   });
 
-  it("keeps verified Eat overrides and Today on the approved pure target precedence", () => {
+  it("keeps verified Eat overrides while Today uses canonical effective-dated targets", () => {
     const eatPage = source("components/meals/eat-page.tsx");
     const eatTargets = source("services/database/eat-targets.ts");
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     const projection = source(
       "services/dashboard/today-projection-server.ts",
+    );
+    const canonicalTargets = source(
+      "services/nutrition-v1/server/targets.ts",
     );
     const activeTarget = source("services/nutrition/active-target.ts");
 
@@ -206,10 +210,10 @@ describe("Eat meal-log redesign contracts", () => {
     );
     expect(eatTargets).toContain("resolveEatTargetForDate");
     expect(activeTarget).toContain("export function resolveEatTargetForDate");
-    expect(projection).toContain("resolveActiveNutritionTarget");
-    expect(projection).toContain(
-      "user_nutrition_target_date_overrides",
-    );
+    expect(projection).toContain("getEffectiveNutritionTarget");
+    expect(canonicalTargets).toContain('from("nutrition_target_periods")');
+    expect(projection).not.toContain("resolveActiveNutritionTarget");
+    expect(projection).not.toContain("user_nutrition_target_date_overrides");
     expect(dashboard).toContain(
       "subscribeToTodayNutritionTargetChanges",
     );

@@ -18,6 +18,24 @@ function digest(value: string) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+function stableMutationKey(input: Record<string, unknown>) {
+  const key = typeof input.idempotency_key === "string" ? input.idempotency_key.trim() : "";
+  if (key.length < 16 || key.length > 200) return null;
+  return key;
+}
+
+export function deriveMcpMutationOperationId(
+  ctx: Pick<McpContext, "userId">,
+  toolName: string,
+  input: Record<string, unknown>,
+) {
+  const key = stableMutationKey(input);
+  if (!key) throw new Error("A stable 16-200 character idempotency_key is required for this mutation.");
+  const hex = digest(`${ctx.userId}:${toolName}:${key}`);
+  const variant = (8 + (Number.parseInt(hex[16]!, 16) % 4)).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
 type StoredResponse = Pick<McpToolResult, "structuredContent" | "isError">;
 type ClaimRow = {
   action: "execute" | "replay" | "conflict" | "in_progress" | "review_required";
@@ -47,8 +65,8 @@ export async function executeIdempotentMcpMutation({
   input: Record<string, unknown>;
   execute: () => Promise<McpToolResult>;
 }): Promise<McpToolResult> {
-  const key = typeof input.idempotency_key === "string" ? input.idempotency_key.trim() : "";
-  if (key.length < 16 || key.length > 200) {
+  const key = stableMutationKey(input);
+  if (!key) {
     return fail("invalid_idempotency_key", "Provide a stable 16-200 character idempotency_key for this mutation.");
   }
 

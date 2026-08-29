@@ -1,0 +1,381 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+type JsonRecord = Record<string, unknown>;
+
+export type CookingActionStateValue =
+  | "not_available"
+  | "ready"
+  | "active"
+  | "waiting_for_condition"
+  | "running_background"
+  | "completed"
+  | "deferred"
+  | "skipped";
+
+export type FrozenCookingRecipeSnapshot = {
+  schemaVersion: 1;
+  recipe: JsonRecord;
+  ingredients: JsonRecord[];
+  actions: JsonRecord[];
+  equipment: JsonRecord[];
+};
+
+export type CookingSessionRow = {
+  id: string;
+  user_id: string;
+  recipe_id: string;
+  recipe_version_id: string;
+  frozen_recipe_snapshot: FrozenCookingRecipeSnapshot;
+  serving_scale: number;
+  current_action_key: string | null;
+  status: "active" | "completed" | "ended";
+  started_at: string;
+  last_active_at: string;
+  completed_at?: string | null;
+  ended_at?: string | null;
+  state_revision: number;
+};
+
+export type CookingActionStateRecord = {
+  id: string;
+  actionKey: string;
+  state: CookingActionStateValue;
+  stateRevision: number;
+  activatedAt: string | null;
+  completedAt: string | null;
+  deferredAt: string | null;
+  skippedAt: string | null;
+};
+
+export type CookingTimerRecord = {
+  id: string;
+  actionStateId: string;
+  timerName: string;
+  durationSeconds: number;
+  status: "idle" | "running" | "paused" | "completed" | "cancelled";
+  startedAt: string | null;
+  targetAt: string | null;
+  pausedAt: string | null;
+  pausedRemainingSeconds: number | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+};
+
+export type CookingSessionBundle = {
+  session: CookingSessionRow;
+  actionStates: CookingActionStateRecord[];
+  timers: CookingTimerRecord[];
+};
+
+export type SyncCookingActionState = {
+  id: string;
+  actionKey: string;
+  state: CookingActionStateValue;
+  stateRevision: number;
+  activatedAt?: string | null;
+  completedAt?: string | null;
+  deferredAt?: string | null;
+  skippedAt?: string | null;
+};
+
+export type SyncCookingTimer = {
+  id: string;
+  actionStateId: string;
+  timerName: string;
+  durationSeconds: number;
+  status: CookingTimerRecord["status"];
+  startedAt?: string | null;
+  targetAt?: string | null;
+  pausedAt?: string | null;
+  pausedRemainingSeconds?: number | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+};
+
+function dbError(error: unknown) {
+  if (!error) return;
+  const message = error && typeof error === "object" && "message" in error
+    ? String((error as { message?: unknown }).message)
+    : "Cooking Session request failed.";
+  throw new Error(message);
+}
+
+function requiredData<T>(data: T | null, error: unknown, fallback: string): T {
+  dbError(error);
+  if (data === null) throw new Error(fallback);
+  return data;
+}
+
+function asRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function asFiniteNumber(value: unknown, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeSession(row: Record<string, unknown>): CookingSessionRow {
+  const status = row.status;
+  if (status !== "active" && status !== "completed" && status !== "ended") {
+    throw new Error("Invalid Cooking Session status.");
+  }
+  const snapshot = asRecord(row.frozen_recipe_snapshot);
+  if (
+    snapshot.schemaVersion !== 1
+    || !snapshot.recipe
+    || typeof snapshot.recipe !== "object"
+    || Array.isArray(snapshot.recipe)
+    || !Array.isArray(snapshot.ingredients)
+    || !Array.isArray(snapshot.actions)
+    || !Array.isArray(snapshot.equipment)
+  ) {
+    throw new Error("Invalid frozen Cooking Recipe snapshot.");
+  }
+  return {
+    id: String(row.id),
+    user_id: String(row.user_id),
+    recipe_id: String(row.recipe_id),
+    recipe_version_id: String(row.recipe_version_id),
+    frozen_recipe_snapshot: snapshot as unknown as FrozenCookingRecipeSnapshot,
+    serving_scale: asFiniteNumber(row.serving_scale, 1),
+    current_action_key: typeof row.current_action_key === "string" ? row.current_action_key : null,
+    status,
+    started_at: String(row.started_at ?? ""),
+    last_active_at: String(row.last_active_at ?? ""),
+    completed_at: typeof row.completed_at === "string" ? row.completed_at : null,
+    ended_at: typeof row.ended_at === "string" ? row.ended_at : null,
+    state_revision: asFiniteNumber(row.state_revision, 0),
+  };
+}
+
+function normalizeActionState(row: Record<string, unknown>): CookingActionStateRecord {
+  const state = row.state;
+  if (
+    state !== "not_available"
+    && state !== "ready"
+    && state !== "active"
+    && state !== "waiting_for_condition"
+    && state !== "running_background"
+    && state !== "completed"
+    && state !== "deferred"
+    && state !== "skipped"
+  ) throw new Error("Invalid Cooking action state.");
+  return {
+    id: String(row.id),
+    actionKey: String(row.action_key),
+    state,
+    stateRevision: asFiniteNumber(row.state_revision, 0),
+    activatedAt: typeof row.activated_at === "string" ? row.activated_at : null,
+    completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
+    deferredAt: typeof row.deferred_at === "string" ? row.deferred_at : null,
+    skippedAt: typeof row.skipped_at === "string" ? row.skipped_at : null,
+  };
+}
+
+function normalizeTimer(row: Record<string, unknown>): CookingTimerRecord {
+  const status = row.status;
+  if (status !== "idle" && status !== "running" && status !== "paused" && status !== "completed" && status !== "cancelled") {
+    throw new Error("Invalid Cooking timer status.");
+  }
+  return {
+    id: String(row.id),
+    actionStateId: String(row.action_state_id),
+    timerName: String(row.timer_name),
+    durationSeconds: asFiniteNumber(row.duration_seconds),
+    status,
+    startedAt: typeof row.started_at === "string" ? row.started_at : null,
+    targetAt: typeof row.target_at === "string" ? row.target_at : null,
+    pausedAt: typeof row.paused_at === "string" ? row.paused_at : null,
+    pausedRemainingSeconds: row.paused_remaining_seconds === null || row.paused_remaining_seconds === undefined
+      ? null
+      : asFiniteNumber(row.paused_remaining_seconds),
+    completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
+    cancelledAt: typeof row.cancelled_at === "string" ? row.cancelled_at : null,
+  };
+}
+
+export async function startCookingSession(
+  supabase: SupabaseClient,
+  _userId: string,
+  input: {
+    recipeId: string;
+    recipeVersionId?: string;
+    servingScale?: number;
+    now?: string;
+  },
+) {
+  const servingScale = input.servingScale ?? 1;
+  if (!Number.isFinite(servingScale) || servingScale <= 0) throw new Error("Cooking servingScale must be greater than 0.");
+  const now = input.now ?? new Date().toISOString();
+  const result = await supabase.rpc("start_nutrition_cooking_session", {
+    p_recipe_id: input.recipeId,
+    p_recipe_version_id: input.recipeVersionId ?? null,
+    p_serving_scale: servingScale,
+    p_now: now,
+  });
+  const payload = requiredData(
+    result.data as JsonRecord | null,
+    result.error,
+    "Cooking Session could not be started.",
+  );
+  const session = normalizeSession(asRecord(payload.session));
+  const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : session.id;
+  if (!sessionId || sessionId !== session.id) {
+    throw new Error("Cooking Session start returned an invalid canonical session.");
+  }
+  return {
+    sessionId,
+    session,
+    snapshot: session.frozen_recipe_snapshot,
+  };
+}
+
+export async function getActiveCookingSession(
+  supabase: SupabaseClient,
+  userId: string,
+  recipeId?: string,
+): Promise<CookingSessionBundle | null> {
+  let query = supabase
+    .from("nutrition_cooking_sessions")
+    .select("*")
+    .eq("user_id", userId);
+  if (recipeId) query = query.eq("recipe_id", recipeId);
+  query = query.eq("status", "active").order("last_active_at", { ascending: false }).limit(1);
+  const sessionResult = await query.maybeSingle();
+  dbError(sessionResult.error);
+  if (!sessionResult.data) return null;
+  const session = normalizeSession(sessionResult.data as Record<string, unknown>);
+
+  const statesResult = await supabase
+    .from("nutrition_cooking_action_states")
+    .select("*")
+    .eq("session_id", session.id)
+    .eq("user_id", userId)
+    .order("action_key", { ascending: true });
+  dbError(statesResult.error);
+  const rawStates = (statesResult.data ?? []) as Record<string, unknown>[];
+  const actionStates = rawStates.map(normalizeActionState);
+  const stateIds = actionStates.map((item) => item.id);
+
+  let timers: CookingTimerRecord[] = [];
+  if (stateIds.length) {
+    const timersResult = await supabase
+      .from("nutrition_cooking_timers")
+      .select("*")
+      .eq("user_id", userId)
+      .in("action_state_id", stateIds)
+      .order("created_at", { ascending: true });
+    dbError(timersResult.error);
+    timers = ((timersResult.data ?? []) as Record<string, unknown>[]).map(normalizeTimer);
+  }
+
+  return { session, actionStates, timers };
+}
+
+export async function syncCookingSessionState(
+  supabase: SupabaseClient,
+  _userId: string,
+  sessionId: string,
+  input: {
+    expectedRevision: number;
+    currentActionKey: string | null;
+    lastActiveAt?: string;
+    actionStates: readonly SyncCookingActionState[];
+    timers: readonly SyncCookingTimer[];
+  },
+) {
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 0) throw new Error("Invalid Cooking Session revision.");
+  const result = await supabase.rpc("sync_nutrition_cooking_session_state", {
+    p_session_id: sessionId,
+    p_expected_revision: input.expectedRevision,
+    p_current_action_key: input.currentActionKey,
+    p_last_active_at: input.lastActiveAt ?? new Date().toISOString(),
+    p_action_states: input.actionStates.map((item) => ({
+      id: item.id,
+      action_key: item.actionKey,
+      state: item.state,
+      state_revision: item.stateRevision,
+      activated_at: item.activatedAt ?? null,
+      completed_at: item.completedAt ?? null,
+      deferred_at: item.deferredAt ?? null,
+      skipped_at: item.skippedAt ?? null,
+    })),
+    p_timers: input.timers.map((item) => ({
+      id: item.id,
+      action_state_id: item.actionStateId,
+      timer_name: item.timerName,
+      duration_seconds: Math.max(1, Math.ceil(item.durationSeconds)),
+      status: item.status,
+      started_at: item.startedAt ?? null,
+      target_at: item.targetAt ?? null,
+      paused_at: item.pausedAt ?? null,
+      paused_remaining_seconds: item.pausedRemainingSeconds ?? null,
+      completed_at: item.completedAt ?? null,
+      cancelled_at: item.cancelledAt ?? null,
+    })),
+  });
+  dbError(result.error);
+  const data = result.data as Record<string, unknown> | null;
+  const stateRevision = Number(data?.stateRevision ?? data?.state_revision);
+  if (!Number.isInteger(stateRevision) || stateRevision !== input.expectedRevision + 1) {
+    throw new Error("Cooking Session synchronization returned an invalid revision.");
+  }
+  return { stateRevision };
+}
+
+async function updateTerminalStatus(
+  supabase: SupabaseClient,
+  userId: string,
+  sessionId: string,
+  status: "completed" | "ended",
+  now: string,
+) {
+  const update = status === "completed"
+    ? { status, completed_at: now, ended_at: null, last_active_at: now }
+    : { status, ended_at: now, last_active_at: now };
+  const result = await supabase
+    .from("nutrition_cooking_sessions")
+    .update(update)
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .select("id,status,state_revision")
+    .single();
+  return requiredData(result.data as Record<string, unknown> | null, result.error, `Cooking Session could not be marked ${status}.`);
+}
+
+export async function completeCookingSession(
+  supabase: SupabaseClient,
+  userId: string,
+  sessionId: string,
+  now = new Date().toISOString(),
+) {
+  return updateTerminalStatus(supabase, userId, sessionId, "completed", now);
+}
+
+export async function endCookingSession(
+  supabase: SupabaseClient,
+  userId: string,
+  sessionId: string,
+  now = new Date().toISOString(),
+) {
+  return updateTerminalStatus(supabase, userId, sessionId, "ended", now);
+}
+
+export async function startOverCookingSession(
+  supabase: SupabaseClient,
+  _userId: string,
+  sessionId: string,
+  now = new Date().toISOString(),
+) {
+  const result = await supabase.rpc("start_over_nutrition_cooking_session", {
+    p_session_id: sessionId,
+    p_now: now,
+  });
+  dbError(result.error);
+  const data = result.data as Record<string, unknown> | null;
+  const restartedSessionId = typeof data?.sessionId === "string" ? data.sessionId : null;
+  if (!restartedSessionId) throw new Error("Cooking Start Over returned an invalid replacement session.");
+  return { sessionId: restartedSessionId };
+}

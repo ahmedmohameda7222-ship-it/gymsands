@@ -26,7 +26,7 @@ function populatedFixture(
         items: [
           {
             id: mealId,
-            mealType: "Dinner",
+            mealSlotKey: "Dinner",
             name: "Chicken bowl",
             calories: 600,
             proteinG: 45,
@@ -101,6 +101,36 @@ function populatedFixture(
       },
     },
   };
+}
+
+function completedFixture(
+  date = "2026-08-03",
+  timezone = "Europe/Berlin",
+): TodayProjectionResponseV1 {
+  const next = populatedFixture(700, date, timezone);
+  if (next.meals.state === "loaded") {
+    next.meals = {
+      ...next.meals,
+      value: {
+        items: next.meals.value.items.map((item) => ({
+          ...item,
+          status: "completed" as const,
+        })),
+        itemCount: 1,
+        plannedCount: 0,
+      },
+    };
+  }
+  next.promptContext = {
+    ...next.promptContext,
+    nutrition: {
+      ...next.promptContext.nutrition,
+      remainingCalories: 1300,
+      foodLogCount: 2,
+      plannedMealCount: 0,
+    },
+  };
+  return next;
 }
 
 function deferred<T>() {
@@ -289,24 +319,17 @@ beforeEach(() => {
   mocks.markDone.mockResolvedValue({
     item: {
       id: mealId,
-      mealType: "Dinner",
+      mealSlotKey: "Dinner",
       name: "Chicken bowl",
       calories: 600,
       proteinG: 45,
-      status: "done",
-    },
-    log: {
-      id: "log-new",
-      calories: 600,
-      proteinG: 45,
-      carbsG: 60,
-      fatG: 20,
+      status: "completed",
     },
     alreadyDone: false,
   });
   mocks.markSkipped.mockResolvedValue({
     id: mealId,
-    mealType: "Dinner",
+    mealSlotKey: "Dinner",
     name: "Chicken bowl",
     calories: 600,
     proteinG: 45,
@@ -489,12 +512,13 @@ describe("Today projection request authority", () => {
     expect(mocks.getProjection).toHaveBeenCalledTimes(4);
   });
 
-  it("updates meal done, meal skip, and grocery toggle without projection reloads", async () => {
+  it("refreshes canonical Diary after meal done while keeping skip and grocery local", async () => {
     await renderDashboard();
+    mocks.getProjection.mockResolvedValueOnce(completedFixture());
     await act(async () => clickButton("Done"));
     await flush();
     expect(mocks.markDone).toHaveBeenCalledOnce();
-    expect(mocks.getProjection).toHaveBeenCalledOnce();
+    expect(mocks.getProjection).toHaveBeenCalledTimes(2);
     expect(
       container?.querySelector("[data-calories]")?.getAttribute("data-calories"),
     ).toBe("700");
@@ -507,7 +531,7 @@ describe("Today projection request authority", () => {
     await act(async () => clickButton("Skip"));
     await flush();
     expect(mocks.markSkipped).toHaveBeenCalledOnce();
-    expect(mocks.getProjection).toHaveBeenCalledTimes(2);
+    expect(mocks.getProjection).toHaveBeenCalledTimes(3);
 
     clickButton("Shopping list");
     await flush();
@@ -518,7 +542,7 @@ describe("Today projection request authority", () => {
     await act(async () => checkbox!.click());
     await flush();
     expect(mocks.toggleShopping).toHaveBeenCalledOnce();
-    expect(mocks.getProjection).toHaveBeenCalledTimes(2);
+    expect(mocks.getProjection).toHaveBeenCalledTimes(3);
   });
 
   it("prevents an old mutation result from publishing into a new owner", async () => {
@@ -538,18 +562,11 @@ describe("Today projection request authority", () => {
     mutation.resolve({
       item: {
         id: mealId,
-        mealType: "Dinner",
+        mealSlotKey: "Dinner",
         name: "Chicken bowl",
         calories: 600,
         proteinG: 45,
-        status: "done",
-      },
-      log: {
-        id: "old-log",
-        calories: 600,
-        proteinG: 45,
-        carbsG: 60,
-        fatG: 20,
+        status: "completed",
       },
       alreadyDone: false,
     });

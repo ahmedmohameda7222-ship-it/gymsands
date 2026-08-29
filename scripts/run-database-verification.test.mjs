@@ -18,7 +18,7 @@ test("database verification remains local-only", () => {
   }
 });
 
-test("permanent verification chain covers the current Active Workout authority", () => {
+test("permanent verification chain covers current Active Workout and Nutrition authorities", () => {
   for (const required of [
     "active-workout-aw2a-execution-state.sql",
     "active-workout-aw3a-structured-metrics.sql",
@@ -31,8 +31,34 @@ test("permanent verification chain covers the current Active Workout authority",
     "workout-history-correction-muscle-reconcile.sql",
     "workout-history-keyset-read.sql",
     "workout-history-repeat.sql",
+    "nutrition-v1-reusable-domains.sql",
+    "nutrition-v1-plan-diary-targets.sql",
+    "nutrition-v1-cooking-sessions.sql",
+    "nutrition-v1-food-search-and-curation.sql",
+    "nutrition-v1-meal-plan-week-start.sql",
+    "nutrition-v1-privacy-purge.sql",
+    "nutrition-v1-legacy-reconciliation.sql",
+    "nutrition-v1-final-architecture-corrections.sql",
+    "nutrition-v1-cooking-command-authority.sql",
+    "nutrition-v1-final-closure.sql",
     "production-release-migration-preflight.sql",
   ]) {
     assert.equal(DATABASE_VERIFICATION_FILES.some((file) => file.endsWith(required)), true, required);
   }
+
+  const finalCorrection = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/nutrition-v1-final-architecture-corrections.sql",
+  );
+  const commandAuthority = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/nutrition-v1-cooking-command-authority.sql",
+  );
+  const finalClosure = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/nutrition-v1-final-closure.sql",
+  );
+  const productionPreflight = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/production-release-migration-preflight.sql",
+  );
+  assert.equal(finalCorrection >= 0 && finalCorrection < productionPreflight, true);
+  assert.equal(commandAuthority >= 0 && commandAuthority < finalClosure, true);
+  assert.equal(finalClosure >= 0 && finalClosure < productionPreflight, true);
 });

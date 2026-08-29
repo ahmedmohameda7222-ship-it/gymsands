@@ -1,0 +1,144 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { McpContext } from "@/lib/mcp/auth";
+import { deriveMcpMutationOperationId } from "@/lib/mcp/idempotency";
+import { sanitizeMcpToolResult, validateMcpToolOutput } from "@/lib/mcp/safety";
+import { mcpTools } from "@/lib/mcp/tools";
+
+const { listFoodLibrary, resolveFoodHandoff, createSavedMeal } = vi.hoisted(() => ({
+  listFoodLibrary: vi.fn(),
+  resolveFoodHandoff: vi.fn(),
+  createSavedMeal: vi.fn(),
+}));
+
+vi.mock("@/services/nutrition-v1/server/food-library", async () => {
+  const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/food-library")>("@/services/nutrition-v1/server/food-library");
+  return { ...actual, listFoodLibrary };
+});
+vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({ resolveFoodHandoff }));
+vi.mock("@/services/nutrition-v1/server/saved-meals", () => ({ createSavedMeal }));
+
+import { createCanonicalSavedMealFromMcp } from "@/lib/mcp/nutrition-v1-saved-meal";
+
+const userId = "11111111-1111-4111-8111-111111111111";
+const foodId = "22222222-2222-4222-8222-222222222222";
+const savedMealId = "33333333-3333-4333-8333-333333333333";
+const idempotencyKey = "saved-meal-request-0001";
+const ctx = {
+  userId,
+  connectionId: "44444444-4444-4444-8444-444444444444",
+  supabase: {},
+} as unknown as McpContext;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  listFoodLibrary.mockResolvedValue({
+    items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: "170 g" }],
+    nextCursor: null,
+  });
+  resolveFoodHandoff.mockResolvedValue({
+    foodId,
+    source: "catalog",
+    name: "Greek yogurt",
+    serving: "170 g",
+    quantity: 2,
+    frozenNutrition: { calories: 180, protein_g: 30, carbs_g: null, fat_g: 0, fiber_g: null },
+    savedMealItem: {
+      kind: "food",
+      food_id: foodId,
+      frozen_name: "Greek yogurt",
+      resolved_quantity: 2,
+      resolved_serving_label: "170 g",
+      frozen_nutrition: { calories: 180, protein_g: 30, carbs_g: null, fat_g: 0, fiber_g: null },
+    },
+  });
+  createSavedMeal.mockResolvedValue({ id: savedMealId, user_id: userId, name: "Breakfast", is_favorite: false });
+});
+
+describe("Nutrition V1 MCP Saved Meal convergence", () => {
+  it("resolves Food through Plaivra authority and writes only the canonical Saved Meal domain", async () => {
+    const input = {
+      idempotency_key: idempotencyKey,
+      meal_name: "Breakfast",
+      items: [{ food_name: "Greek yogurt", serving_hint: "170 g", quantity: 2 }],
+    };
+    const result = await createCanonicalSavedMealFromMcp(ctx, input);
+
+    expect(listFoodLibrary).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({ query: "Greek yogurt" }));
+    expect(resolveFoodHandoff).toHaveBeenCalledWith(ctx.supabase, userId, {
+      foodId,
+      source: "catalog",
+      quantity: 2,
+      serving: "170 g",
+    });
+    expect(createSavedMeal).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({
+      operationId: deriveMcpMutationOperationId(ctx, "create_custom_meal", input),
+      name: "Breakfast",
+      items: [expect.objectContaining({ food_id: foodId, frozen_nutrition: expect.objectContaining({ carbs_g: null }) })],
+    }));
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ ok: true, saved_meal_id: savedMealId, authority: "nutrition_saved_meals" });
+  });
+
+  it("derives the same Saved Meal operation UUID from the same MCP idempotency identity even after connection rotation", async () => {
+    const input = {
+      idempotency_key: idempotencyKey,
+      meal_name: "Breakfast",
+      items: [{ food_name: "Greek yogurt", serving_hint: "170 g", quantity: 2 }],
+    };
+    const rotatedCtx = { ...ctx, connectionId: "66666666-6666-4666-8666-666666666666" };
+
+    await createCanonicalSavedMealFromMcp(ctx, input);
+    await createCanonicalSavedMealFromMcp(rotatedCtx, input);
+
+    const firstOperationId = createSavedMeal.mock.calls[0]?.[2]?.operationId;
+    const secondOperationId = createSavedMeal.mock.calls[1]?.[2]?.operationId;
+    expect(firstOperationId).toBe(deriveMcpMutationOperationId(ctx, "create_custom_meal", input));
+    expect(secondOperationId).toBe(firstOperationId);
+  });
+
+  it("preserves the public create_custom_meal output contract using canonical Saved Meal data", async () => {
+    const result = await createCanonicalSavedMealFromMcp(ctx, {
+      idempotency_key: idempotencyKey,
+      meal_name: "Breakfast",
+      items: [{ food_name: "Greek yogurt", serving_hint: "170 g", quantity: 2 }],
+    });
+    const tool = mcpTools.find((candidate) => candidate.name === "create_custom_meal");
+    expect(tool).toBeTruthy();
+
+    const sanitized = sanitizeMcpToolResult(result, tool!.outputSchema);
+    expect(validateMcpToolOutput(tool!, sanitized)).toMatchObject({ success: true });
+    expect(sanitized.structuredContent).toMatchObject({
+      ok: true,
+      meal: { id: savedMealId, name: "Breakfast" },
+      items: [{
+        food_name: "Greek yogurt",
+        serving_size: "170 g",
+        quantity: 2,
+        calories: 180,
+        protein_g: 30,
+        fat_g: 0,
+      }],
+    });
+  });
+
+  it("fails closed for ambiguous Food identity instead of manufacturing nutrition truth", async () => {
+    listFoodLibrary.mockResolvedValue({
+      items: [
+        { id: foodId, source: "catalog", name: "Yogurt", servingLabel: "100 g" },
+        { id: "55555555-5555-4555-8555-555555555555", source: "catalog", name: "Yogurt", servingLabel: "100 g" },
+      ],
+      nextCursor: null,
+    });
+
+    const result = await createCanonicalSavedMealFromMcp(ctx, {
+      idempotency_key: idempotencyKey,
+      meal_name: "Ambiguous",
+      items: [{ food_name: "Yogurt", quantity: 1 }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({ ok: false, code: "canonical_food_required" });
+    expect(createSavedMeal).not.toHaveBeenCalled();
+    expect(resolveFoodHandoff).not.toHaveBeenCalled();
+  });
+});

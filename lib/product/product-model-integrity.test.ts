@@ -28,7 +28,7 @@ const forbiddenCopyFamilies: ForbiddenCopyFamily[] = [
   { label: "English ChatGPT import navigation", pattern: /["'`](?:AI\s*&\s*Imports|ChatGPT\s+import|Import\s+workout\s+plan)["'`]/giu },
   { label: "German ChatGPT import navigation", pattern: /["'`](?:KI\s*&\s*Importe|ChatGPT-Import|Trainingsplan\s+importieren)["'`]/giu },
   { label: "Arabic ChatGPT import navigation", pattern: /["'`](?:الذكاء الاصطناعي والاستيراد|استيراد\s+ChatGPT|استيراد\s+خطة\s+تمرين)["'`]/gu },
-  { label: "Arabic structured-result review", pattern: /راجع\s+النتيجة\s+المنظمة|للمراجعة\s+قبل\s+حفظ|بعد\s+الموافقة|موافقة\s+قبل\s+(?:الحفظ|التتبع)/gu }
+  { label: "Arabic structured-result review", pattern: /راجع\s+النتيجة\s+المنظمة|للمراجعة\s+قبل\s+حفظ|بعد\s+الموافقة[^\n]{0,120}(?:الحفظ|التتبع|التخزين|الاستيراد)|موافقة\s+قبل\s+(?:الحفظ|التتبع)/gu }
 ];
 
 function isRuntimeSource(path: string) {
@@ -82,13 +82,14 @@ describe("Plaivra product-model runtime integrity", () => {
     expect(findings, findings.join("\n")).toEqual([]);
   });
 
-  it("does not confuse legitimate consent, confirmation, export, or safety language with the retired workflow", () => {
+  it("does not confuse legitimate consent, confirmation, bounded Recipe approval, export, or safety language with the retired workflow", () => {
     const allowedRuntimeCopy = [
       "Approve Plaivra access to the scopes listed on this OAuth consent screen.",
       "Confirm account deletion. This destructive action cannot be undone.",
       "Export your Plaivra data as JSON and CSV.",
       "Review readiness, form, and safety constraints before changing today's workout.",
-      "Import an exercise record from the approved public catalogue."
+      "Import an exercise record from the approved public catalogue.",
+      "بعد الموافقة الصريحة، يمكن كتابة مسودة الوصفة فقط. لا يتم نشر الوصفة تلقائيًا."
     ];
 
     for (const copy of allowedRuntimeCopy) expect(findRetiredCopy(copy), copy).toEqual([]);

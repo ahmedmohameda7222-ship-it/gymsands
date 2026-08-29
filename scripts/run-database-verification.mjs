@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -24,6 +23,25 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/workout-history-keyset-read.sql",
   "supabase/verification/workout-history-repeat.sql",
   "supabase/verification/train-atomic-rpc-security.sql",
+  "supabase/verification/nutrition-v1-reusable-domains.sql",
+  "supabase/verification/nutrition-v1-plan-diary-targets.sql",
+  "supabase/verification/nutrition-v1-cooking-sessions.sql",
+  "supabase/verification/nutrition-v1-food-search-and-curation.sql",
+  "supabase/verification/nutrition-v1-meal-plan-week-start.sql",
+  "supabase/verification/nutrition-v1-privacy-purge.sql",
+  "supabase/verification/nutrition-v1-user-food-authority.sql",
+  "supabase/verification/nutrition-v1-legacy-reconciliation.sql",
+  "supabase/verification/nutrition-v1-review-atomicity.sql",
+  "supabase/verification/nutrition-v1-long-term-architecture.sql",
+  "supabase/verification/nutrition-v1-final-architecture-corrections.sql",
+  "supabase/verification/nutrition-v1-cooking-command-authority.sql",
+  "supabase/verification/nutrition-v1-final-closure.sql",
+  "supabase/verification/nutrition-v1-working-draft-command.sql",
+  "supabase/verification/nutrition-v1-recipe-draft-revision.sql",
+  "supabase/verification/nutrition-v1-recipe-draft-graph-identity.sql",
+  "supabase/verification/nutrition-v1-recipe-preseed-idempotency.sql",
+  "supabase/verification/nutrition-v1-meal-plan-mutation-idempotency.sql",
+  "supabase/verification/nutrition-v1-saved-meal-create-idempotency.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 

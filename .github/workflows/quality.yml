@@ -31,6 +31,9 @@ jobs:
       PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
       PLAIVRA_RELEASE_ENVIRONMENT: ci
       PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+      PLAIVRA_ACTIVITY_CATALOG_MODE: library_v2_with_legacy_fallback
+      PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
+      PLAIVRA_ACTIVITY_CATALOG_API_KEY: ci-placeholder-catalog-key-long-enough
       PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
       SUPABASE_TELEMETRY_DISABLED: "1"
       DO_NOT_TRACK: "1"

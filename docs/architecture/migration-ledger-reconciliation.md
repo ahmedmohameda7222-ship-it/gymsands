@@ -1,30 +1,32 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Evidence captured:** 2026-08-03T18:10:27.000Z
+**Evidence captured:** 2026-08-28T22:17:51Z
 **Machine authority:** `supabase/migration-ledger.json`
-**Audit baseline:** `92d936bc513af83fff41913477a8148a9ab5b845`
-**Status:** Applied Production history reconciled; six repository migrations intentionally pending
+**Audit baseline:** `dfa14c3bc2c1524ff185b1ee4e170f4537a80230`
+**Status:** Production migration history reconciled through the latest applied identity; no repository migration remains pending or unresolved
 
 This document records migration identity and verification. It does not independently authorize merge, deployment, compatibility-marker promotion, or migration replay.
 
 ## Current state
 
-- Physical Production migration records: **87**
+- Physical Production migration records: **112**
 - Exact applications (`state = applied`): **63**
-- Repository-only pending migrations: **6**
-- `pendingCount = 6`
+- Repository-only pending migrations: **0**
+- `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 6`
-- `historyRepair.state = pending`
-- `release_ready = false` while the repository migrations remain intentionally pending
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
+- `release_ready = true` for the migration-ledger authority; merge, application deployment, compatibility-marker promotion, and Product Owner approval remain separate gates
 - Released compatibility marker: `20260724232734`
-- Latest physical Production record: `20260804180932_fix_profiles_update_policy_recursion`
+- Latest physical Production record: `20260828220542_nutrition_v1_saved_meal_creation_idempotency`
 - Activity Catalog Production remains isolated from the Main migration ledger
 
-The previously applied Plaivra Production migration history remains reconciled through `20260804180932_fix_profiles_update_policy_recursion`. P10F migration `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql`, Exercise Detail + Personal Records migration `20260813042754_exercise_detail_personal_records_authority.sql`, Workout History redesign migration `20260813071926_workout_history_redesign_read_contract.sql`, Active Workout feedback-preference migration `20260816044500_active_workout_feedback_preferences.sql`, Exercise Detail V2 setup-note migration `20260820060000_exercise_detail_setup_notes.sql`, and Exercise Detail V2 replacement-reason migration `20260820070000_exercise_alternative_reason_v2.sql` are intentionally classified `pending`. None has been applied to Production, none claims a Production identity, and none may be replayed or applied before explicit Planner approval.
+Production migration history is reconciled through `20260828220542_nutrition_v1_saved_meal_creation_idempotency`. The six previously pending non-Nutrition repository migrations were applied exactly once on 2026-08-21 under generated aliases. Eight authorized Nutrition V1 migrations were applied exactly once on 2026-08-27. The five final closure migrations were applied on 2026-08-28, followed by the bounded Meal Plan final-review correction under canonical generated identity `20260828100730_nutrition_v1_meal_plan_week_atomicity`, the bounded Recipe Working Draft revision correction under generated identity `20260828112951_nutrition_v1_recipe_draft_revision`, the Recipe Draft graph-identity correction under generated identity `20260828170752_nutrition_v1_recipe_draft_graph_identity`, the atomic/idempotent Food-to-New-Recipe preseed correction under generated identity `20260828181729_nutrition_v1_recipe_preseed_idempotency`, the durable Meal Plan mutation replay correction under generated identity `20260828193416_nutrition_v1_meal_plan_mutation_idempotency`, and the replay-safe Saved Meal creation correction under generated identity `20260828220542_nutrition_v1_saved_meal_creation_idempotency`.
 
-Physical schema advancement and compatibility-marker promotion remain separate release operations. The pending repository state does not authorize Production migration application, application deployment, or compatibility-marker promotion.
+During the final Meal Plan application, a concurrent duplicate execution produced later migration-history identity `20260828100735_nutrition_v1_meal_plan_week_atomicity`. Both stored statements were verified byte-equivalent and the migration itself is schema-idempotent: it performs a read-only precondition, `CREATE OR REPLACE` functions, grants/revokes, and trigger replacement without application-row DML. The redundant later history row was therefore removed by a guarded metadata-only repair that first required exactly two matching records and exact statement equality. The canonical first identity `20260828100730` remains immutable. The later Recipe revision, graph-identity, preseed-idempotency, Meal Plan mutation-idempotency, and Saved Meal creation-idempotency migrations were subsequently applied exactly once, so Production now contains exactly 112 migration records. No application data or schema authority was rolled back by the history repair. Do not replay these migrations.
+
+Repository migration filenames remain immutable; generated Production identities are recorded below and in the machine ledger. Physical schema advancement and compatibility-marker promotion remain separate release operations. These migration applications did not deploy application code, merge PR #152, modify Activity Catalog Production, or promote the released compatibility marker.
 
 ## Workout History applied identities
 
@@ -90,50 +92,108 @@ AW-9 remains represented by repository migration `20260731090000_active_workout_
 
 - `20260804174500_fix_profiles_update_policy_recursion.sql` was applied exactly once to Plaivra Production as generated version `20260804180932_fix_profiles_update_policy_recursion`.
 - The repository filename and Production version differ, so the migration ledger preserves the immutable mapping as `applied_version_alias`. Do not replay.
-- Plaivra Production now has **87** physical migration records and the latest physical record is `20260804180932_fix_profiles_update_policy_recursion`.
 - The compatibility marker remained unchanged and Activity Catalog was not modified.
 
-## P10F pending migration authority
+## 2026-08-27 Production reconciliation
 
-- `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql` is the single Planner-authorized narrow Main schema addition for P10F Stage A.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- No historical rows are rewritten; the migration remains repository-only until the Planner explicitly approves the merge/cutover sequence.
-- Do not replay or apply the P10F migration before that approval.
+| Immutable repository migration | Generated Production identity | Applied | State |
+|---|---|---|---|
+| `20260811234000_p10f_v2_plan_activity_catalog_authority_snapshot.sql` | `20260821013625_p10f_v2_plan_activity_catalog_authority_snapshot` | `2026-08-21` | `applied_version_alias` |
+| `20260813042754_exercise_detail_personal_records_authority.sql` | `20260821013718_exercise_detail_personal_records_authority` | `2026-08-21` | `applied_version_alias` |
+| `20260813071926_workout_history_redesign_read_contract.sql` | `20260821013749_workout_history_redesign_read_contract` | `2026-08-21` | `applied_version_alias` |
+| `20260816044500_active_workout_feedback_preferences.sql` | `20260821013757_active_workout_feedback_preferences` | `2026-08-21` | `applied_version_alias` |
+| `20260820060000_exercise_detail_setup_notes.sql` | `20260821013814_exercise_detail_setup_notes` | `2026-08-21` | `applied_version_alias` |
+| `20260820070000_exercise_alternative_reason_v2.sql` | `20260821013822_exercise_alternative_reason_v2` | `2026-08-21` | `applied_version_alias` |
+| `20260825120000_nutrition_v1_reusable_domains.sql` | `20260827071936_nutrition_v1_reusable_domains` | `2026-08-27` | `applied_version_alias` |
+| `20260825120100_nutrition_v1_plan_diary_targets.sql` | `20260827072239_nutrition_v1_plan_diary_targets` | `2026-08-27` | `applied_version_alias` |
+| `20260825120200_nutrition_v1_cooking_sessions.sql` | `20260827072300_nutrition_v1_cooking_sessions` | `2026-08-27` | `applied_version_alias` |
+| `20260825120300_nutrition_v1_food_search_and_curation.sql` | `20260827072316_nutrition_v1_food_search_and_curation` | `2026-08-27` | `applied_version_alias` |
+| `20260825120350_nutrition_v1_meal_plan_week_start_authority.sql` | `20260827072351_nutrition_v1_meal_plan_week_start_authority` | `2026-08-27` | `applied_version_alias` |
+| `20260825120400_nutrition_v1_privacy_purge_authority.sql` | `20260827072406_nutrition_v1_privacy_purge_authority` | `2026-08-27` | `applied_version_alias` |
+| `20260827060000_nutrition_v1_review_atomicity_corrections.sql` | `20260827072417_nutrition_v1_review_atomicity_corrections` | `2026-08-27` | `applied_version_alias` |
+| `20260827103000_nutrition_v1_long_term_architecture_corrections.sql` | `20260827105332_nutrition_v1_long_term_architecture_corrections` | `2026-08-27` | `applied_version_alias` |
 
-## Exercise Detail + Personal Records pending migration authority
+All fourteen generated identities above are immutable Production history. They must not be replayed. Nutrition V1 schema application did not merge PR #152, deploy application code, or promote the released compatibility marker.
 
-- `20260813042754_exercise_detail_personal_records_authority.sql` is the additive Main schema authority for Exercise Detail + Personal Records.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It preserves historical Verified events while adding versioned semantics, owner-scoped Manual records, and guarded atomic Add-to-plan authority.
-- Do not replay or apply this migration before explicit Planner approval of the phase merge/release sequence.
+## 2026-08-28 final Nutrition corrections — applied
 
-## Workout History redesign pending migration authority
+| Immutable repository migration | Generated Production identity | Applied | State |
+|---|---|---|---|
+| `20260828032000_nutrition_v1_final_architecture_corrections.sql` | `20260828091053_nutrition_v1_final_architecture_corrections` | `2026-08-28` | `applied_version_alias` |
+| `20260828032100_nutrition_v1_cooking_command_authority.sql` | `20260828091108_nutrition_v1_cooking_command_authority` | `2026-08-28` | `applied_version_alias` |
+| `20260828032200_nutrition_v1_final_closure.sql` | `20260828091147_nutrition_v1_final_closure` | `2026-08-28` | `applied_version_alias` |
+| `20260828032300_nutrition_v1_timer_instance_identity.sql` | `20260828091159_nutrition_v1_timer_instance_identity` | `2026-08-28` | `applied_version_alias` |
+| `20260828032400_nutrition_v1_working_draft_command.sql` | `20260828091228_nutrition_v1_working_draft_command` | `2026-08-28` | `applied_version_alias` |
+| `20260828032500_nutrition_v1_meal_plan_week_atomicity.sql` | `20260828100730_nutrition_v1_meal_plan_week_atomicity` | `2026-08-28` | `applied_version_alias` |
+| `20260828032600_nutrition_v1_recipe_draft_revision.sql` | `20260828112951_nutrition_v1_recipe_draft_revision` | `2026-08-28` | `applied_version_alias` |
+| `20260828170500_nutrition_v1_recipe_draft_graph_identity.sql` | `20260828170752_nutrition_v1_recipe_draft_graph_identity` | `2026-08-28` | `applied_version_alias` |
+| `20260828180000_nutrition_v1_recipe_preseed_idempotency.sql` | `20260828181729_nutrition_v1_recipe_preseed_idempotency` | `2026-08-28` | `applied_version_alias` |
+| `20260828210000_nutrition_v1_meal_plan_mutation_idempotency.sql` | `20260828193416_nutrition_v1_meal_plan_mutation_idempotency` | `2026-08-28` | `applied_version_alias` |
+| `20260828220000_nutrition_v1_saved_meal_creation_idempotency.sql` | `20260828220542_nutrition_v1_saved_meal_creation_idempotency` | `2026-08-28` | `applied_version_alias` |
 
-- `20260813071926_workout_history_redesign_read_contract.sql` is the additive owner-scoped read authority for first-page period context and global-history existence.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It does not rewrite historical data and was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Planner approval of the Workout History redesign merge/release sequence.
+Production verification for the Meal Plan final-review correction confirmed:
 
-## Active Workout feedback preferences pending migration authority
+- exactly one canonical migration-history record remains for `nutrition_v1_meal_plan_week_atomicity`;
+- the planned-occurrence week-date trigger is installed and active;
+- `public.mutate_nutrition_meal_plan_week(uuid,bigint,jsonb)` exists as `SECURITY DEFINER` with fixed `search_path = pg_catalog, public`;
+- `authenticated` and `service_role` can execute the command while `anon` cannot;
+- no existing planned occurrence is outside the seven-day interval of its persisted week;
+- disposable verification proves lazy week creation plus the first meaningful mutation commit atomically, a failed first mutation leaves no orphan week, and direct cross-week date writes are rejected.
 
-- `20260816044500_active_workout_feedback_preferences.sql` is the additive account-scoped settings authority for workout sound and haptic preferences.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- Existing owner-scoped `user_app_settings` RLS remains authoritative; the migration was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Planner approval of the Active Workout merge/release sequence.
+Production verification for the durable Meal Plan mutation-replay correction confirmed:
 
-## Exercise Detail V2 setup-note pending migration authority
+- `private.nutrition_meal_plan_mutation_operations` exists as the owner-scoped private replay authority;
+- `authenticated` has no direct `SELECT`, `INSERT`, `UPDATE`, or `DELETE` access to that ledger;
+- `public.mutate_nutrition_meal_plan_week(uuid,bigint,jsonb)` retains the existing authenticated command surface while anonymous execution remains denied;
+- the command validates an opaque UUID operation identity, locks the owner/operation namespace, and checks an exact request hash before the normal Meal Plan CAS path;
+- an identical ambiguous retry returns the original committed result before stale-revision evaluation and does not advance the week revision twice;
+- reuse of one operation ID with different input is rejected;
+- failed mutations leave no operation row, occurrence residue, or revision advancement;
+- operation identity is owner-scoped, so another member cannot observe or replay another owner's command;
+- disposable chronological replay, database lint, and the full database verification suite were green before Production application;
+- the repository migration is recorded exactly once in Production as generated identity `20260828193416_nutrition_v1_meal_plan_mutation_idempotency` and must not be replayed.
 
-- `20260820060000_exercise_detail_setup_notes.sql` is the additive owner-scoped setup-note authority for canonical Exercise Detail identities.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It adds the setup-note persistence/privacy lifecycle without rewriting historical data and was not applied to Plaivra Production.
-- Do not replay or apply it before explicit Planner approval of the Exercise Detail V2 merge/release sequence.
+Production verification for replay-safe Saved Meal creation confirmed:
 
-## Exercise Detail V2 replacement-reason pending migration authority
+- `private.nutrition_saved_meal_creation_operations` exists as the owner-scoped private replay authority;
+- `authenticated` has no direct `SELECT` or `INSERT` access to that ledger while `service_role` retains the required private access;
+- `public.create_nutrition_saved_meal_idempotent(uuid,text,text,boolean,jsonb)` exists; `authenticated` and `service_role` can execute it while `anon` cannot;
+- the command serializes the owner/operation namespace, hashes normalized create input, and reuses the previously committed Saved Meal identity on an exact ambiguous retry;
+- reuse of one operation ID with different input is rejected;
+- the underlying atomic Saved Meal root-plus-items transaction remains the write authority, so a failed create cannot leave replay-ledger residue;
+- operation identity is owner-scoped and another member cannot observe or replay another owner's command;
+- disposable chronological replay, database lint, and the full Saved Meal replay verification SQL were green before Production application;
+- post-apply read-only Production verification confirmed the function/ACL boundary and private-ledger isolation;
+- the repository migration is recorded exactly once in Production as generated identity `20260828220542_nutrition_v1_saved_meal_creation_idempotency` and must not be replayed.
 
-- `20260820070000_exercise_alternative_reason_v2.sql` is the additive compatibility authority for the shared Exercise Detail V2 and Active Workout replacement-reason vocabulary.
-- Ledger state: `pending`; Production version/name: intentionally absent.
-- It preserves every historically valid replacement-reason value and existing row, and adds the explicit new V2 intents without changing RLS or grants.
-- Do not replay or apply it before explicit Planner approval of the Exercise Detail V2 merge/release sequence.
+Production verification for the Recipe Working Draft revision correction confirmed:
+
+- `public.nutrition_recipe_drafts.revision` is `bigint NOT NULL DEFAULT 0` with the nonnegative revision constraint present and no invalid existing rows;
+- `public.autosave_nutrition_recipe_draft(uuid,bigint,jsonb,jsonb,jsonb,jsonb)` exists as `SECURITY DEFINER` with fixed `search_path = pg_catalog, public` and derives owner identity from `auth.uid()`;
+- `authenticated` and `service_role` can execute the revision-aware command while `anon` cannot;
+- the retired unversioned `public.autosave_nutrition_recipe_draft(uuid,jsonb,jsonb,jsonb,jsonb)` signature is absent;
+- disposable verification proves a valid save advances revision atomically, a stale expected revision is rejected without replacing canonical draft state, a later valid save can advance the new revision, and cross-owner autosave is rejected.
+
+Production verification for Recipe Draft graph identity confirmed:
+
+- the graph-aware autosave preserves stable ingredient, action, and equipment identities across full Draft replacement;
+- action dependencies and ingredient/equipment references are remapped against preserved child identities instead of dangling after autosave;
+- structured action fields remain round-trippable through the Working Draft editor and command path;
+- the repository migration is recorded exactly once in Production as generated identity `20260828170752_nutrition_v1_recipe_draft_graph_identity` and must not be replayed.
+
+Production verification for atomic/idempotent Food-to-New-Recipe preseed confirmed:
+
+- `private.nutrition_recipe_creation_operations` exists as the owner-scoped replay ledger;
+- `public.create_preseeded_nutrition_recipe_draft(uuid,jsonb)` exists and commits the Recipe root, Working Draft, first ingredient, and replay identity in one database transaction;
+- `authenticated` and `service_role` can execute the command while `anon` cannot;
+- direct RPC calls reject unavailable catalog foods and another member's custom Food rather than relying only on route-level ownership checks;
+- same-owner retries with the same operation ID and identical input converge on the original Recipe/Draft result, while reusing the operation ID with different input is rejected;
+- disposable migration replay, database lint, database verification, and exact-head unit verification passed before Production application;
+- the repository migration is recorded exactly once in Production as generated identity `20260828181729_nutrition_v1_recipe_preseed_idempotency` and must not be replayed.
+
+The previously applied final migrations retain their verified Food Library trigram indexes, Cooking/Saved Meal/Recipe RPCs, Recipe cover owner constraint, Cooking command privilege revocations, removal of obsolete write policies, timer instance-identity correction, Working Draft command, Meal Plan atomicity correction, Recipe Working Draft revision CAS, structured graph identity, atomic/idempotent new-Recipe preseed authority, durable Meal Plan operation replay, and replay-safe Saved Meal creation. Supabase advisor warnings remain generic/pre-existing or expected for the bounded command/index architecture and did not establish a new Nutrition V1 blocker.
+
+The released compatibility marker remains `20260724232734`. No application deployment, PR merge, compatibility-marker promotion, or Activity Catalog Production mutation occurred as part of these migration applications or the metadata-only history repair.
 
 ## Authority and verification
 

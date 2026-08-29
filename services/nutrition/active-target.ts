@@ -1,3 +1,4 @@
+import type { EffectiveNutritionTarget, NutritionTargetValues } from "@/lib/nutrition-v1/targets";
 import type { NutritionTargetAssignment, NutritionTargetProfileType, UserNutritionTargetProfile, UserWorkoutPlan } from "@/types";
 import type { SavedTargets } from "@/services/nutrition/targets";
 
@@ -91,6 +92,90 @@ export function resolveActiveNutritionTarget({
       ? "No reusable target profile is saved, so the legacy base target is used as a backend fallback."
       : "No target is saved for this date.",
     hasTarget
+  };
+}
+
+export function canonicalValuesFromLegacyTarget(
+  activeTarget: ActiveNutritionTarget,
+  baseTarget: SavedTargets | null,
+): NutritionTargetValues | null {
+  const profile = activeTarget.profile;
+  const values: NutritionTargetValues = {
+    calories: profile?.calories ?? baseTarget?.daily_calories ?? null,
+    protein_g: profile?.protein_g ?? baseTarget?.protein_g ?? null,
+    carbs_g: profile?.carbs_g ?? baseTarget?.carbs_g ?? null,
+    fat_g: profile?.fat_g ?? baseTarget?.fat_g ?? null,
+    water_ml: profile?.water_ml ?? baseTarget?.water_ml ?? null,
+  };
+  return Object.values(values).some((value) => value !== null) ? values : null;
+}
+
+function compatibilitySourceType(
+  evidence: Record<string, unknown> | null,
+): ActiveNutritionTarget["sourceType"] {
+  const value = evidence?.legacy_source_type;
+  return value === "default_day"
+    || value === "training_day"
+    || value === "rest_day"
+    || value === "high_activity_day"
+    || value === "base"
+    || value === "none"
+    ? value
+    : "base";
+}
+
+export function activeNutritionTargetFromEffectiveTarget(
+  target: EffectiveNutritionTarget,
+): ActiveNutritionTarget {
+  if (!target.available || !target.values) {
+    return {
+      values: emptyTargets,
+      profile: null,
+      requestedType: "default_day",
+      sourceType: "none",
+      label: "Nutrition target",
+      reason: "No trustworthy target is stored for this date.",
+      hasTarget: false,
+    };
+  }
+
+  const { calories, protein_g, carbs_g, fat_g, water_ml } = target.values;
+  if (
+    calories === null
+    || protein_g === null
+    || carbs_g === null
+    || fat_g === null
+    || water_ml === null
+  ) {
+    // The legacy ActiveNutritionTarget shape cannot express unknown nutrients without
+    // coercing them to zero. Keep the compatibility surface unconfigured instead;
+    // canonical V1 readers consume EffectiveNutritionTarget directly and preserve nulls.
+    return {
+      values: emptyTargets,
+      profile: null,
+      requestedType: "default_day",
+      sourceType: "none",
+      label: "Nutrition target",
+      reason: "This target contains unknown nutrition values and requires the canonical Nutrition view.",
+      hasTarget: false,
+    };
+  }
+
+  const values: SavedTargets = {
+    daily_calories: calories,
+    protein_g,
+    carbs_g,
+    fat_g,
+    water_ml,
+  };
+  return {
+    values,
+    profile: null,
+    requestedType: "default_day",
+    sourceType: compatibilitySourceType(target.source_evidence),
+    label: "Nutrition target",
+    reason: "Effective target stored for this date.",
+    hasTarget: Object.values(values).some((value) => value > 0),
   };
 }
 
