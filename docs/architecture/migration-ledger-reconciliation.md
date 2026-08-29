@@ -28,11 +28,11 @@ Fresh Plaivra Production inspection after the Nutrition V1 squash merge confirms
 
 The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Physical Production count is established by Supabase migration history and is currently 113.
 
-## Current runtime compatibility
+## Nutrition V1 runtime compatibility baseline
 
-Production `/api/version` on the merged Nutrition V1 runtime reports:
+At Nutrition V1 feature closure, Production `/api/version` reported:
 
-- application commit: `0efddc0d6969487eb4105fccc02f3b629efbab91`
+- Nutrition V1 feature squash / first verified Production commit: `0efddc0d6969487eb4105fccc02f3b629efbab91`
 - `schemaCompatibilityVersion = 2`
 - `expectedDatabaseMigrationVersion = 20260724232734`
 - `databaseMigrationVersion = 20260724232734`
@@ -44,6 +44,8 @@ Production `/api/version` on the merged Nutrition V1 runtime reports:
 - `migrationLedgerReconciled = true`
 - `schemaCompatible = true`
 - `releaseReady = true`
+
+This is the verified Nutrition V1 closure baseline, not a permanent claim about the latest `main` or Vercel deployment SHA. Documentation-only and later product commits can advance both Git and deployed commit identity. Exact current runtime identity must be verified live from GitHub `main`, Vercel, and Production `/api/version`.
 
 Physical schema advancement and compatibility-marker promotion are separate authorities. Nutrition V1 advanced physical schema without changing the released compatibility marker because the deployed runtime remains compatible with marker `20260724232734`.
 
@@ -205,13 +207,15 @@ Disposable chronological replay, database lint, verification SQL, integration te
 - private Meal Plan and Saved Meal replay ledgers are included in deletion/reconciliation authority;
 - residual-row verification fails closed if owner Nutrition rows remain.
 
-## Nutrition V1 runtime/merge reconciliation
+## Nutrition V1 runtime/merge closure
 
-PR #152 was squash-merged into `main` as `0efddc0d6969487eb4105fccc02f3b629efbab91` after exact-head PR Quality, canonical Quality, Exact Release, and read-only Stage-1 preflight passed.
+PR #152 was squash-merged into `main` as feature commit `0efddc0d6969487eb4105fccc02f3b629efbab91` after exact-head PR Quality, canonical Quality, Exact Release, and read-only Stage-1 preflight passed.
 
-Vercel Git integration deployed that exact merged commit to Plaivra Production as `dpl_CsGXokKyNA9HffKtJcVKfL62gTxv`, state `READY`. Production `/api/version` reports the same SHA with migration reconciliation healthy and `releaseReady = true`.
+Vercel Git integration first deployed that exact feature commit to Plaivra Production as `dpl_CsGXokKyNA9HffKtJcVKfL62gTxv`, state `READY`. Production `/api/version` reported the same feature SHA with migration reconciliation healthy and `releaseReady = true` at closure.
 
-Push-triggered Production uptime synthetic run `33250942724` passed after the merge. Immediate Vercel runtime-error inspection found no runtime-error cluster.
+Push-triggered Production uptime synthetic run `33250942724` passed after the feature merge. Immediate Vercel runtime-error inspection found no runtime-error cluster.
+
+Later documentation-only or product commits may advance `main` and Vercel Production commit identity. This closure section deliberately preserves the feature baseline rather than pretending it is the permanently current deployment identity.
 
 The Nutrition merge did not promote the released compatibility marker and did not mutate the separate Activity Catalog Production project.
 
@@ -224,8 +228,8 @@ Use these current sources in order for migration facts:
 3. Executable contracts under `supabase/verification/` for database invariants.
 4. `scripts/check-migration-ledger.mjs` for ledger validation.
 5. Supabase Production migration history for physical applied records.
-6. Production `/api/version` for runtime compatibility and reconciliation state.
-7. Vercel Production deployment identity/runtime logs for deployed application identity.
+6. Production `/api/version` for live runtime compatibility and reconciliation state.
+7. Vercel Production deployment identity/runtime logs for live deployed application identity.
 8. Exact-head Quality/release workflow artifacts for phase-close evidence.
 
 Do not use historical PR descriptions or completed implementation reports as current migration authority.
