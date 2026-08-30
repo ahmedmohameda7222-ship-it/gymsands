@@ -13,13 +13,17 @@ function functionBody(source: string, start: string, end: string) {
 describe("nullable nutrition compatibility regression guard", () => {
   it("does not coerce Food Library catalog nutrition through the generic zero fallback", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "components/meals/food-browser.tsx"), "utf8");
-    const normalizeBody = functionBody(source, "function normalizeFoodItem", "function toNumber");
-    const unknownBody = functionBody(source, "function hasUnknownMacros", "function sourceLabelForFood");
+    const loggingSource = fs.readFileSync(path.join(process.cwd(), "services/database/food-library-logging.ts"), "utf8");
+    const normalizeBody = functionBody(source, "function normalizeFoodItem", "function customMealCategory");
+    const unknownBody = functionBody(source, "function hasUnknownMacros", "function nutritionDisplay");
     const logBody = functionBody(source, "async function logFoodNow", "async function addToPlan");
+    const libraryLogBody = functionBody(loggingSource, "export async function addFoodLibraryItemToToday", "}");
 
-    expect(normalizeBody).not.toMatch(/toNumber\(food\.(?:calories|protein_g|carbs_g|fat_g)\)/);
-    expect(unknownBody).not.toMatch(/toNumber\(value\)\s*===\s*0/);
-    expect(logBody).toMatch(/food\.is_global/);
+    expect(normalizeBody).not.toMatch(/(?:Number|toNumber)\(food\.(?:calories|protein_g|carbs_g|fat_g)\)/);
+    expect(unknownBody).not.toMatch(/(?:Number|toNumber)\(value\)\s*===\s*0/);
+    expect(logBody).toMatch(/addFoodLibraryItemToToday/);
+    expect(libraryLogBody).toMatch(/food\.is_global/);
+    expect(libraryLogBody).toMatch(/addUserFoodToToday/);
   });
 
   it("does not sum frozen Eat nutrition through the generic zero fallback", () => {
@@ -41,11 +45,10 @@ describe("nullable nutrition compatibility regression guard", () => {
   it("keeps nullable planned-meal adjustment fields unknown instead of drafting zero", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "components/meals/eat-planned-meal-adjust.tsx"), "utf8");
     const draftBody = functionBody(source, "function draft", "export function EatPlannedMealAdjust");
-    const fieldBody = functionBody(source, "function NumberField", "}");
 
     expect(draftBody).not.toMatch(/Number\(item\.(?:calories|protein_g|carbs_g|fat_g)\)/);
     expect(draftBody).not.toMatch(/(?:calories|proteinG|carbsG|fatG):[^\n}]*\|\|\s*0/);
-    expect(fieldBody).not.toMatch(/value[^\n}]*:\s*0/);
+    expect(source).toMatch(/value=\{value === null \? "" : value\}/);
   });
 
   it("keeps Meal Plan nullable snapshots unknown in display and edit paths", () => {
