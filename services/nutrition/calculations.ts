@@ -54,11 +54,18 @@ export function nullablePercent(value: number | null, target: number) {
   return target > 0 ? Math.round((value / target) * 100) : null;
 }
 
-export function validateFoodLogInput(name: string, quantity: number, macros: MacroTotals) {
+export function validateFoodLogInput(name: string, quantity: number, macros: NullableNutritionInput) {
   if (!name.trim()) return "Meal name cannot be empty.";
-  if (quantity <= 0) return "Quantity must be greater than zero.";
-  if (macros.calories < 0 || macros.protein_g < 0 || macros.carbs_g < 0 || macros.fat_g < 0) {
-    return "Calories and macros cannot be negative.";
+  if (!Number.isFinite(quantity) || quantity <= 0) return "Quantity must be greater than zero.";
+  for (const [label, value] of [
+    ["Calories", macros.calories],
+    ["Protein", macros.protein_g],
+    ["Carbs", macros.carbs_g],
+    ["Fat", macros.fat_g]
+  ] as const) {
+    if (value !== null && value !== undefined && (!Number.isFinite(value) || value < 0)) {
+      return `${label} must be a non-negative number or unknown.`;
+    }
   }
   return null;
 }
