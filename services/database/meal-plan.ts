@@ -55,6 +55,11 @@ function finiteNonNegative(value: unknown, field: string) {
   return parsed;
 }
 
+function nullablePersistedNutrition(value: unknown, field: string): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  return finiteNonNegative(value, field);
+}
+
 function positive(value: unknown, field: string) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${field} must be greater than zero.`);
@@ -92,8 +97,8 @@ export function normalizePersistedMealPlanItem(row: Record<string, unknown>): Me
     food_item_id: typeof row.food_item_id === "string" && isUuid(row.food_item_id) ? row.food_item_id : null,
     user_food_item_id: typeof row.user_food_item_id === "string" && isUuid(row.user_food_item_id) ? row.user_food_item_id : null,
     food_name: requiredText(row.food_name, "food name"), serving_size: requiredText(row.serving_size, "serving"),
-    quantity: positive(row.quantity, "Quantity"), calories: finiteNonNegative(row.calories, "calories"),
-    protein_g: finiteNonNegative(row.protein_g, "protein"), carbs_g: finiteNonNegative(row.carbs_g, "carbs"), fat_g: finiteNonNegative(row.fat_g, "fat"),
+    quantity: positive(row.quantity, "Quantity"), calories: nullablePersistedNutrition(row.calories, "calories"),
+    protein_g: nullablePersistedNutrition(row.protein_g, "protein"), carbs_g: nullablePersistedNutrition(row.carbs_g, "carbs"), fat_g: nullablePersistedNutrition(row.fat_g, "fat"),
     status, food_log_id: foodLogId, completed_at: completedAt,
     notes: typeof row.notes === "string" ? row.notes : null,
     created_at: requiredText(row.created_at, "created timestamp"), updated_at: requiredText(row.updated_at, "updated timestamp")
@@ -107,8 +112,8 @@ function normalizeFoodLog(row: Record<string, unknown>): FoodLog {
     user_food_item_id: typeof row.user_food_item_id === "string" && isUuid(row.user_food_item_id) ? row.user_food_item_id : null,
     log_date: normalizeDate(String(row.log_date ?? "")), meal_type: requiredText(row.meal_type, "food log meal type"),
     food_name: requiredText(row.food_name, "food log name"), serving_size: requiredText(row.serving_size, "food log serving"),
-    quantity: positive(row.quantity, "Quantity"), calories: finiteNonNegative(row.calories, "food log calories"),
-    protein_g: finiteNonNegative(row.protein_g, "food log protein"), carbs_g: finiteNonNegative(row.carbs_g, "food log carbs"), fat_g: finiteNonNegative(row.fat_g, "food log fat"),
+    quantity: positive(row.quantity, "Quantity"), calories: nullablePersistedNutrition(row.calories, "food log calories"),
+    protein_g: nullablePersistedNutrition(row.protein_g, "food log protein"), carbs_g: nullablePersistedNutrition(row.carbs_g, "food log carbs"), fat_g: nullablePersistedNutrition(row.fat_g, "food log fat"),
     notes: typeof row.notes === "string" ? row.notes : null
   };
 }
@@ -124,6 +129,31 @@ function validatedPayload(input: DirectMealInput) {
     quantity: positive(input.quantity, "Quantity"), calories: finiteNonNegative(input.calories, "calories"),
     protein_g: finiteNonNegative(input.protein, "protein"), carbs_g: finiteNonNegative(input.carbs, "carbs"), fat_g: finiteNonNegative(input.fat, "fat"),
     status: "planned", food_log_id: null, completed_at: null, notes: input.notes?.trim() || null
+  };
+}
+
+function validatedExistingPayload(item: MealPlanItem, patch: MealPlanPatch) {
+  const foodName = (patch.foodName ?? item.food_name).trim();
+  const serving = (patch.servingInfo ?? item.serving_size)?.trim() ?? "";
+  if (!foodName) throw new Error("Food name is required.");
+  if (!serving) throw new Error("Serving is required.");
+  return {
+    user_id: item.user_id,
+    plan_date: normalizeDate(patch.date ?? item.plan_date),
+    meal_type: normalizeMealPlanType(String(patch.mealType ?? item.meal_type)),
+    food_item_id: item.food_item_id,
+    user_food_item_id: item.user_food_item_id,
+    food_name: foodName,
+    serving_size: serving,
+    quantity: positive(patch.quantity ?? item.quantity, "Quantity"),
+    calories: patch.calories === undefined ? item.calories : finiteNonNegative(patch.calories, "calories"),
+    protein_g: patch.protein === undefined ? item.protein_g : finiteNonNegative(patch.protein, "protein"),
+    carbs_g: patch.carbs === undefined ? item.carbs_g : finiteNonNegative(patch.carbs, "carbs"),
+    fat_g: patch.fat === undefined ? item.fat_g : finiteNonNegative(patch.fat, "fat"),
+    status: item.status,
+    food_log_id: item.food_log_id,
+    completed_at: item.completed_at,
+    notes: patch.notes === undefined ? item.notes : patch.notes?.trim() || null
   };
 }
 
@@ -153,19 +183,9 @@ export async function createDirectMealPlanItem(input: DirectMealInput) {
   return normalizePersistedMealPlanItem(data as Record<string, unknown>);
 }
 
-function mergedInput(item: MealPlanItem, patch: MealPlanPatch): DirectMealInput {
-  return {
-    userId: item.user_id, date: patch.date ?? item.plan_date, mealType: patch.mealType ?? item.meal_type,
-    foodName: patch.foodName ?? item.food_name, quantity: patch.quantity ?? item.quantity,
-    servingInfo: patch.servingInfo ?? item.serving_size, calories: patch.calories ?? item.calories,
-    protein: patch.protein ?? item.protein_g, carbs: patch.carbs ?? item.carbs_g, fat: patch.fat ?? item.fat_g,
-    notes: patch.notes === undefined ? item.notes : patch.notes
-  };
-}
-
 export async function correctCompletedMealPlanItem(item: MealPlanItem, patch: MealPlanPatch) {
   requireClient(item.user_id);
-  const payload = validatedPayload(mergedInput(item, patch));
+  const payload = validatedExistingPayload(item, patch);
   const { data, error } = await supabase!.rpc("correct_completed_meal_plan_item", {
     p_item_id: item.id, p_plan_date: payload.plan_date, p_meal_type: payload.meal_type,
     p_food_name: payload.food_name, p_serving_size: payload.serving_size, p_quantity: payload.quantity,
@@ -185,7 +205,7 @@ export async function updateDirectMealPlanItem(userId: string, itemId: string, p
   if (currentError) throw currentError;
   const current = normalizePersistedMealPlanItem(currentData as Record<string, unknown>);
   if (current.status === "done") return (await correctCompletedMealPlanItem(current, patch)).item;
-  const payload = validatedPayload(mergedInput(current, patch));
+  const payload = validatedExistingPayload(current, patch);
   const { data, error } = await supabase!.from("user_meal_plan_items").update({
     plan_date: payload.plan_date, meal_type: payload.meal_type, food_name: payload.food_name,
     serving_size: payload.serving_size, quantity: payload.quantity, calories: payload.calories,
