@@ -118,6 +118,26 @@ begin
       using errcode = '23514';
   end if;
 
+  if old.review_state = 'approved' and new.review_state = 'superseded' then
+    -- The UPDATE already owns this row lock. Keep the shared batch authority explicit so
+    -- Production-run creation/start and supersession serialize on the same row.
+    perform 1
+    from public.food_ingestion_batches
+    where id = old.id
+    for update;
+
+    if exists (
+      select 1
+      from public.food_ingestion_runs
+      where batch_id = old.id
+        and execution_mode = 'production'
+        and status in ('prepared', 'running')
+    ) then
+      raise exception 'Approved Food ingestion batch cannot be superseded while Production runs are nonterminal.'
+        using errcode = '23514';
+    end if;
+  end if;
+
   if old.review_state <> 'prepared' or new.review_state <> 'prepared' then
     if new.provider is distinct from old.provider
        or new.dataset_name is distinct from old.dataset_name
@@ -211,9 +231,21 @@ begin
     return new;
   end if;
 
+  -- Only creation and the prepared -> running authority boundary require the batch
+  -- to still be approved. Cancellation/terminalization must remain possible without
+  -- re-gating historical run audit on the batch's current lifecycle state.
+  if tg_op = 'INSERT' then
+    null;
+  elsif tg_op = 'UPDATE' and old.status = 'prepared' and new.status = 'running' then
+    null;
+  else
+    return new;
+  end if;
+
   select * into v_batch
   from public.food_ingestion_batches
-  where id = new.batch_id;
+  where id = new.batch_id
+  for update;
 
   if not found
      or v_batch.review_state <> 'approved'
@@ -333,34 +365,64 @@ returns trigger
 language plpgsql
 set search_path = ''
 as $function$
+declare
+  v_review_state text;
+  v_batch record;
 begin
   if tg_op = 'INSERT' then
-    if exists (
-      select 1 from public.food_ingestion_batches
-      where id = new.batch_id and review_state <> 'prepared'
-    ) then
+    select review_state into v_review_state
+    from public.food_ingestion_batches
+    where id = new.batch_id
+    for update;
+
+    if found and v_review_state <> 'prepared' then
       raise exception 'Reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
     end if;
+
+    -- Serialize first participation against protected source-snapshot updates.
+    perform 1
+    from public.food_source_records
+    where id = new.source_record_id
+    for update;
+
     return new;
   end if;
 
   if tg_op = 'DELETE' then
-    if exists (
-      select 1 from public.food_ingestion_batches
-      where id = old.batch_id and review_state <> 'prepared'
-    ) then
+    select review_state into v_review_state
+    from public.food_ingestion_batches
+    where id = old.batch_id
+    for update;
+
+    if found and v_review_state <> 'prepared' then
       raise exception 'Reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
     end if;
+
     return old;
   end if;
 
   if tg_op = 'UPDATE' then
-    if exists (
-      select 1 from public.food_ingestion_batches
-      where id in (old.batch_id, new.batch_id) and review_state <> 'prepared'
-    ) then
-      raise exception 'Reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
+    -- Lock all affected batch authorities in deterministic ID order so re-parenting
+    -- cannot deadlock with another membership mutation or a review-state transition.
+    for v_batch in
+      select id, review_state
+      from public.food_ingestion_batches
+      where id in (old.batch_id, new.batch_id)
+      order by id
+      for update
+    loop
+      if v_batch.review_state <> 'prepared' then
+        raise exception 'Reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
+      end if;
+    end loop;
+
+    if new.source_record_id is distinct from old.source_record_id then
+      perform 1
+      from public.food_source_records
+      where id = new.source_record_id
+      for update;
     end if;
+
     return new;
   end if;
 
