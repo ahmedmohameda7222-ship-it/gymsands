@@ -9,15 +9,21 @@ export type FoodCatalogProvenance = {
   food_id: string;
   provider: string;
   source_record_id: string;
+  source_dataset: string | null;
+  source_version: string | null;
+  source_release_date: string | null;
+  source_record_checksum_sha256: string | null;
   source_reference: string | null;
   license_name: string;
   license_reference: string | null;
   retrieved_at: string | null;
+  ingestion_batch_ids: string[];
 };
 
 export type FoodCatalogCandidateReview = {
   id: string;
   food_name: string;
+  brand_name: string | null;
   serving_size: string | null;
   category: string | null;
   cuisine: string | null;
@@ -115,7 +121,7 @@ export async function listFoodCatalogCandidates(
   const limit = Math.max(1, Math.min(50, Number.isFinite(requested) ? Math.floor(requested) : 40));
   const foodResult = await supabase
     .from("food_items")
-    .select("id,food_name,serving_size,category,cuisine,calories,protein_g,carbs_g,fat_g,lifecycle_status,is_verified,verified_at,verified_source_record_id,merged_into_food_id")
+    .select("id,food_name,brand_name,serving_size,category,cuisine,calories,protein_g,carbs_g,fat_g,lifecycle_status,is_verified,verified_at,verified_source_record_id,merged_into_food_id")
     .eq("is_global", true)
     .order("food_name", { ascending: true })
     .limit(limit);
@@ -126,7 +132,7 @@ export async function listFoodCatalogCandidates(
   if (ids.length) {
     const provenanceResult = await supabase
       .from("food_source_records")
-      .select("id,food_id,provider,source_record_id,source_reference,license_name,license_reference,retrieved_at")
+      .select("id,food_id,provider,source_record_id,source_dataset,source_version,source_release_date,source_record_checksum_sha256,source_reference,license_name,license_reference,retrieved_at")
       .in("food_id", ids)
       .order("retrieved_at", { ascending: false })
       .limit(Math.min(200, limit * 4));
@@ -134,6 +140,31 @@ export async function listFoodCatalogCandidates(
       provenanceResult as unknown as DbResult<Array<Record<string, unknown>>>,
       "Food Catalog provenance read",
     );
+  }
+
+  const sourceRecordIds = provenanceRows
+    .map((row) => asText(row.id))
+    .filter((id): id is string => Boolean(id));
+  const batchIdsBySourceRecord = new Map<string, string[]>();
+  if (sourceRecordIds.length) {
+    const participationResult = await supabase
+      .from("food_ingestion_batch_records")
+      .select("source_record_id,batch_id")
+      .in("source_record_id", sourceRecordIds)
+      .limit(Math.min(500, Math.max(1, sourceRecordIds.length * 4)));
+    const participationRows = requiredData(
+      participationResult as unknown as DbResult<Array<Record<string, unknown>>>,
+      "Food Catalog ingestion participation read",
+    );
+    for (const raw of participationRows) {
+      const row = asRecord(raw);
+      const sourceRecordId = asText(row.source_record_id);
+      const batchId = asText(row.batch_id);
+      if (!sourceRecordId || !batchId) continue;
+      const next = new Set(batchIdsBySourceRecord.get(sourceRecordId) ?? []);
+      next.add(batchId);
+      batchIdsBySourceRecord.set(sourceRecordId, [...next].sort());
+    }
   }
 
   const provenanceByFood = new Map<string, FoodCatalogProvenance[]>();
@@ -150,10 +181,15 @@ export async function listFoodCatalogCandidates(
       food_id: foodId,
       provider,
       source_record_id: sourceRecordId,
+      source_dataset: asText(row.source_dataset),
+      source_version: asText(row.source_version),
+      source_release_date: asText(row.source_release_date),
+      source_record_checksum_sha256: asText(row.source_record_checksum_sha256),
       source_reference: asText(row.source_reference),
       license_name: licenseName,
       license_reference: asText(row.license_reference),
       retrieved_at: asText(row.retrieved_at),
+      ingestion_batch_ids: batchIdsBySourceRecord.get(id) ?? [],
     };
     provenanceByFood.set(foodId, [...(provenanceByFood.get(foodId) ?? []), item]);
   }
@@ -164,6 +200,7 @@ export async function listFoodCatalogCandidates(
     return {
       id,
       food_name: asText(row.food_name) ?? "Food",
+      brand_name: asText(row.brand_name),
       serving_size: asText(row.serving_size),
       category: asText(row.category),
       cuisine: asText(row.cuisine),
@@ -252,7 +289,7 @@ export async function verifyFood(
   assertFoodCatalogOwner(actor);
   const provenanceResult = await supabase
     .from("food_source_records")
-    .select("id,food_id,provider,source_record_id,source_reference,license_name,license_reference,retrieved_at")
+    .select("id,food_id,provider,source_record_id,source_dataset,source_version,source_release_date,source_record_checksum_sha256,source_reference,license_name,license_reference,retrieved_at")
     .eq("id", input.sourceRecordId)
     .eq("food_id", input.foodId)
     .maybeSingle();
