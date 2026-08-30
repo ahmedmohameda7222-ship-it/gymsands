@@ -11,7 +11,7 @@ alter table public.food_items
 
 alter table public.food_items
   add column brand_name text,
-  add column is_market_global boolean not null default true,
+  add column is_market_global boolean not null default false,
   add constraint food_items_brand_name_nonblank_check
     check (brand_name is null or length(btrim(brand_name)) > 0);
 
@@ -52,12 +52,15 @@ create table public.food_ingestion_batches (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint food_ingestion_batches_review_timestamps_check check (
-    (review_state in ('reviewed', 'approved', 'rejected') and reviewed_at is not null)
-    or (review_state not in ('reviewed', 'approved', 'rejected'))
+    (review_state = 'prepared' and reviewed_at is null)
+    or (review_state in ('reviewed', 'approved', 'rejected', 'superseded') and reviewed_at is not null)
   ),
   constraint food_ingestion_batches_approval_state_check check (
-    (review_state = 'approved' and approved_at is not null)
-    or (review_state <> 'approved' and approved_at is null)
+    (review_state in ('approved', 'superseded') and approved_at is not null)
+    or (review_state not in ('approved', 'superseded') and approved_at is null)
+  ),
+  constraint food_ingestion_batches_approval_reference_check check (
+    approval_reference is null or approved_at is not null
   ),
   unique (
     provider,
@@ -104,18 +107,54 @@ begin
     raise exception 'Reviewed Food ingestion batch cannot return to prepared.' using errcode = '23514';
   end if;
 
+  if new.review_state is distinct from old.review_state
+     and not (
+       (old.review_state = 'prepared' and new.review_state = 'reviewed')
+       or (old.review_state = 'reviewed' and new.review_state in ('approved', 'rejected'))
+       or (old.review_state = 'approved' and new.review_state = 'superseded')
+     )
+  then
+    raise exception 'Invalid Food ingestion batch review-state transition: % -> %.', old.review_state, new.review_state
+      using errcode = '23514';
+  end if;
+
   if old.review_state <> 'prepared' or new.review_state <> 'prepared' then
     if new.provider is distinct from old.provider
        or new.dataset_name is distinct from old.dataset_name
        or new.source_version is distinct from old.source_version
+       or new.source_release_date is distinct from old.source_release_date
+       or new.license_name is distinct from old.license_name
+       or new.license_reference is distinct from old.license_reference
+       or new.source_reference is distinct from old.source_reference
        or new.source_checksum_sha256 is distinct from old.source_checksum_sha256
        or new.importer_version is distinct from old.importer_version
        or new.config_checksum_sha256 is distinct from old.config_checksum_sha256
        or new.manifest_content_checksum_sha256 is distinct from old.manifest_content_checksum_sha256
+       or new.input_count is distinct from old.input_count
+       or new.accepted_count is distinct from old.accepted_count
+       or new.rejected_count is distinct from old.rejected_count
+       or new.matched_count is distinct from old.matched_count
+       or new.created_count is distinct from old.created_count
+       or new.possible_duplicate_count is distinct from old.possible_duplicate_count
     then
-      raise exception 'Reviewed Food ingestion batch identity is immutable.' using errcode = '23514';
+      raise exception 'Reviewed Food ingestion batch semantic authority is immutable.' using errcode = '23514';
     end if;
   end if;
+
+  if old.reviewed_at is not null and new.reviewed_at is distinct from old.reviewed_at then
+    raise exception 'Established Food ingestion batch reviewed_at is immutable.' using errcode = '23514';
+  end if;
+
+  if old.approved_at is not null and new.approved_at is distinct from old.approved_at then
+    raise exception 'Established Food ingestion batch approved_at is immutable.' using errcode = '23514';
+  end if;
+
+  if old.approval_reference is not null
+     and new.approval_reference is distinct from old.approval_reference
+  then
+    raise exception 'Established Food ingestion batch approval_reference is immutable.' using errcode = '23514';
+  end if;
+
   return new;
 end
 $function$;
@@ -123,6 +162,42 @@ $function$;
 create trigger food_ingestion_batch_identity_immutable
 before update on public.food_ingestion_batches
 for each row execute function public.food_ingestion_batch_identity_immutable_guard();
+
+create or replace function public.food_ingestion_run_audit_immutable_guard()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  if new.batch_id is distinct from old.batch_id
+     or new.execution_mode is distinct from old.execution_mode
+     or new.attempt_number is distinct from old.attempt_number
+     or new.manifest_content_checksum_sha256 is distinct from old.manifest_content_checksum_sha256
+  then
+    raise exception 'Food ingestion run identity is immutable.' using errcode = '23514';
+  end if;
+
+  if old.status in ('completed', 'failed', 'cancelled') then
+    raise exception 'Terminal Food ingestion run audit history is immutable.' using errcode = '23514';
+  end if;
+
+  if new.status is distinct from old.status
+     and not (
+       (old.status = 'prepared' and new.status in ('running', 'cancelled'))
+       or (old.status = 'running' and new.status in ('completed', 'failed', 'cancelled'))
+     )
+  then
+    raise exception 'Invalid Food ingestion run state transition: % -> %.', old.status, new.status
+      using errcode = '23514';
+  end if;
+
+  return new;
+end
+$function$;
+
+create trigger food_ingestion_run_audit_immutable
+before update on public.food_ingestion_runs
+for each row execute function public.food_ingestion_run_audit_immutable_guard();
 
 create or replace function public.food_ingestion_run_production_manifest_guard()
 returns trigger
@@ -218,6 +293,85 @@ create table public.food_ingestion_batch_records (
   unique (batch_id, source_record_id)
 );
 
+create or replace function public.food_source_record_snapshot_immutable_guard()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  if exists (
+    select 1
+    from public.food_ingestion_batch_records
+    where source_record_id = old.id
+  ) and (
+    new.provider is distinct from old.provider
+    or new.source_record_id is distinct from old.source_record_id
+    or new.source_dataset is distinct from old.source_dataset
+    or new.source_version is distinct from old.source_version
+    or new.source_release_date is distinct from old.source_release_date
+    or new.source_record_checksum_sha256 is distinct from old.source_record_checksum_sha256
+    or new.source_reference is distinct from old.source_reference
+    or new.source_nutrition is distinct from old.source_nutrition
+    or new.source_serving is distinct from old.source_serving
+    or new.license_name is distinct from old.license_name
+    or new.license_reference is distinct from old.license_reference
+    or new.retrieved_at is distinct from old.retrieved_at
+  ) then
+    raise exception 'Participating Food source snapshot is immutable.' using errcode = '23514';
+  end if;
+
+  return new;
+end
+$function$;
+
+create trigger food_source_record_snapshot_immutable
+before update on public.food_source_records
+for each row execute function public.food_source_record_snapshot_immutable_guard();
+
+create or replace function public.food_ingestion_batch_membership_guard()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  if tg_op = 'INSERT' then
+    if exists (
+      select 1 from public.food_ingestion_batches
+      where id = new.batch_id and review_state <> 'prepared'
+    ) then
+      raise exception 'Reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
+    end if;
+    return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    if exists (
+      select 1 from public.food_ingestion_batches
+      where id = old.batch_id and review_state <> 'prepared'
+    ) then
+      raise exception 'Reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
+    end if;
+    return old;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    if exists (
+      select 1 from public.food_ingestion_batches
+      where id in (old.batch_id, new.batch_id) and review_state <> 'prepared'
+    ) then
+      raise exception 'Reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
+    end if;
+    return new;
+  end if;
+
+  raise exception 'Unsupported Food ingestion batch membership operation.' using errcode = '23514';
+end
+$function$;
+
+create trigger food_ingestion_batch_membership_immutable
+before insert or update or delete on public.food_ingestion_batch_records
+for each row execute function public.food_ingestion_batch_membership_guard();
+
 create table public.food_barcodes (
   id uuid primary key default gen_random_uuid(),
   food_id uuid not null references public.food_items(id) on delete restrict,
@@ -309,8 +463,15 @@ grant all privileges on table public.food_barcodes to service_role;
 grant all privileges on table public.food_market_relevance to service_role;
 
 revoke all on function public.food_ingestion_batch_identity_immutable_guard() from public, anon, authenticated;
+revoke all on function public.food_ingestion_run_audit_immutable_guard() from public, anon, authenticated;
 revoke all on function public.food_ingestion_run_production_manifest_guard() from public, anon, authenticated;
+revoke all on function public.food_source_record_snapshot_immutable_guard() from public, anon, authenticated;
+revoke all on function public.food_ingestion_batch_membership_guard() from public, anon, authenticated;
+
 grant execute on function public.food_ingestion_batch_identity_immutable_guard() to service_role;
+grant execute on function public.food_ingestion_run_audit_immutable_guard() to service_role;
 grant execute on function public.food_ingestion_run_production_manifest_guard() to service_role;
+grant execute on function public.food_source_record_snapshot_immutable_guard() to service_role;
+grant execute on function public.food_ingestion_batch_membership_guard() to service_role;
 
 commit;
