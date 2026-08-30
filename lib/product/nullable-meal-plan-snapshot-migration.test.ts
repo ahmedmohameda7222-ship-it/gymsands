@@ -21,6 +21,28 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
     expect(source).not.toMatch(/alter\s+column\s+(?:quantity|status|completed_at|food_log_id)/i);
   });
 
+  it("records the authorized Production application as an immutable generated alias", () => {
+    const ledger = JSON.parse(read("supabase/migration-ledger.json")) as {
+      pendingCount: number;
+      unresolvedCount: number;
+      historyRepair: { state: string };
+      entries: Array<Record<string, unknown>>;
+    };
+    const entries = ledger.entries.filter((entry) => entry.localFile === migrationName);
+
+    expect(entries).toEqual([
+      expect.objectContaining({
+        localFile: migrationName,
+        state: "applied_version_alias",
+        productionVersion: "20260830170301",
+        productionName: "nullable_meal_plan_nutrition_snapshots",
+      }),
+    ]);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
+  });
+
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {
     const source = read("services/database/meal-plan.ts");
     const start = source.indexOf("type DirectMealInput");

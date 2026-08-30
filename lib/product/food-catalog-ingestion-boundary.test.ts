@@ -61,7 +61,7 @@ function readableRuntimePaths(paths: string[]): string[] {
 }
 
 describe("Food Catalog Batch 0 ingestion boundary", () => {
-  it("preserves the finalized Batch 0 migration-ledger authority while allowing later forward migrations", () => {
+  it("preserves finalized Batch 0 authority while recording its later authorized Production alias", () => {
     const base = readLedgerAt(APPROVED_BASE_SHA);
     const batch0 = readLedgerAt(BATCH0_FINAL_SHA);
     const current = readCurrentLedger();
@@ -86,10 +86,24 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
       })
     );
 
-    expect(current.entries.slice(0, batch0.entries.length)).toEqual(batch0.entries);
-    expect(currentBatch0Entries).toEqual(batch0Entries);
-    expect(current.pendingCount).toBeGreaterThanOrEqual(batch0.pendingCount);
-    expect(current.unresolvedCount).toBeGreaterThanOrEqual(batch0.unresolvedCount);
+    expect(current.entries.slice(0, historicalEntries.length)).toEqual(historicalEntries);
+    expect(currentBatch0Entries).toEqual([
+      expect.objectContaining({
+        localFile: BATCH0_MIGRATION,
+        state: "applied_version_alias",
+        productionVersion: "20260830170226",
+        productionName: "food_catalog_population_readiness",
+      }),
+    ]);
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
+    expect(current.historyRepair).toEqual(
+      expect.objectContaining({
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
+      })
+    );
   });
 
   it("proves Batch 0 added exactly one migration and that migration remains byte-identical", () => {
