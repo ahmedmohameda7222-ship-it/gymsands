@@ -28,6 +28,16 @@ describe("nullable nutrition compatibility regression guard", () => {
     expect(libraryLogBody).toMatch(/addUserFoodToToday/);
   });
 
+  it("normalizes Catalog Food explicitly instead of asserting an arbitrary row is a FoodItem", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "services/database/nutrition.ts"), "utf8");
+    const normalizeBody = functionBody(source, "function normalizeCatalogFood", "function normalizeFrozenFoodLog");
+
+    expect(normalizeBody).not.toMatch(/as\s+unknown\s+as\s+FoodItem/);
+    expect(normalizeBody).toMatch(/is_global:\s*true/);
+    expect(normalizeBody).toMatch(/is_editable_by_user:\s*false/);
+    expect(normalizeBody).toMatch(/nullableNutrition\(row\.calories/);
+  });
+
   it("does not sum frozen Eat nutrition through the generic zero fallback", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "lib/eat/eat-model.ts"), "utf8");
     const sumBody = functionBody(source, "export function sumEatLogs", "export function progressState");
