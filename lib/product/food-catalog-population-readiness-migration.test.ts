@@ -63,8 +63,8 @@ describe("Food Catalog Batch 0 population-readiness migration contract", () => {
     }
     expect(migration).toMatch(/drop\s+constraint\s+food_source_records_provider_source_record_id_key/);
     expect(migration).not.toMatch(/unique\s*\(\s*provider\s*,\s*source_record_id\s*\)\s*;/);
-    expect(migration).toMatch(/unique\s*\(\s*provider\s*,\s*source_record_id\s*\)[\s\S]*where\s+source_dataset\s+is\s+null\s+and\s+source_version\s+is\s+null/);
-    expect(migration).toMatch(/unique\s*\(\s*provider\s*,\s*source_dataset\s*,\s*source_version\s*,\s*source_record_id\s*\)[\s\S]*where\s+source_dataset\s+is\s+not\s+null\s+and\s+source_version\s+is\s+not\s+null/);
+    expect(migration).toMatch(/create\s+unique\s+index\s+\S+\s+on\s+public\.food_source_records\s*\(\s*provider\s*,\s*source_record_id\s*\)\s*where\s+source_dataset\s+is\s+null\s+and\s+source_version\s+is\s+null/);
+    expect(migration).toMatch(/create\s+unique\s+index\s+\S+\s+on\s+public\.food_source_records\s*\(\s*provider\s*,\s*source_dataset\s*,\s*source_version\s*,\s*source_record_id\s*\)\s*where\s+source_dataset\s+is\s+not\s+null\s+and\s+source_version\s+is\s+not\s+null/);
   });
 
   it("creates GTIN identity and country/region-safe market relevance without changing canonical Food identity", () => {
