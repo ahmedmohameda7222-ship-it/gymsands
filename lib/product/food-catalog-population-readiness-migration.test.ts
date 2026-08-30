@@ -55,6 +55,7 @@ describe("Food Catalog Batch 0 population-readiness migration contract", () => {
     expect(migration).toContain("review_state = 'approved'");
     expect(migration).toContain("approved_at is not null");
     expect(migration).toContain("manifest_content_checksum_sha256");
+    expect(migration).toMatch(/old\.review_state\s*<>\s*'prepared'\s+and\s+new\.review_state\s*=\s*'prepared'/);
   });
 
   it("version-enables source provenance and replaces only the legacy global uniqueness", () => {
