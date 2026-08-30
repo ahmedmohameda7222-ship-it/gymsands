@@ -80,6 +80,9 @@ begin
   end if;
   select lower(pg_get_functiondef('public.food_ingestion_batch_identity_immutable_guard()'::regprocedure))
     into v_definition;
+  if position('old.review_state <> ''prepared'' and new.review_state = ''prepared''' in v_definition) = 0 then
+    raise exception 'Reviewed ingestion batches can return to prepared and repoint semantic identity.';
+  end if;
   foreach v_definition in array array[
     'new.provider is distinct from old.provider',
     'new.dataset_name is distinct from old.dataset_name',
