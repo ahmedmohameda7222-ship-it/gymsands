@@ -1,9 +1,9 @@
 # Plaivra Food Catalog Data Population & Launch Readiness Authority — V2
 
-**Status:** Planner-approved long-term architecture  
-**Approved:** 2026-08-30  
-**Supersedes:** the earlier Population & Launch Readiness draft supplied before this review  
-**Implementation authority:** Separate Batch 0 implementation plan  
+**Status:** Planner-approved long-term architecture
+**Approved:** 2026-08-30
+**Supersedes:** the earlier Population & Launch Readiness draft supplied before this review
+**Implementation authority:** Separate Batch 0 implementation plan
 **Production mutation authority:** Separate explicit Planner/user approval per exact batch
 
 ## 1. Goal
