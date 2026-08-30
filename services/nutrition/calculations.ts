@@ -1,44 +1,46 @@
-import type { FoodItem, FoodLog } from "@/types";
+import type { CoreNutrition, NullableCoreNutrition } from "@/types";
 
-export type MacroTotals = {
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-};
+export type MacroTotals = CoreNutrition;
+export type NullableMacroTotals = NullableCoreNutrition;
 
 export type MacroTargets = MacroTotals & {
   water_ml: number;
 };
 
-export function scaleFoodMacros(food: Pick<FoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">, quantity: number) {
+type NullableNutritionInput = {
+  calories?: number | null;
+  protein_g?: number | null;
+  carbs_g?: number | null;
+  fat_g?: number | null;
+};
+
+export function scaleFoodMacros(food: CoreNutrition, quantity: number): MacroTotals;
+export function scaleFoodMacros(food: NullableNutritionInput, quantity: number): NullableMacroTotals;
+export function scaleFoodMacros(food: NullableNutritionInput, quantity: number): NullableMacroTotals {
   const safeQuantity = Math.max(0, quantity);
   return {
-    calories: Math.round(toNumber(food.calories) * safeQuantity),
-    protein_g: roundMacro(toNumber(food.protein_g) * safeQuantity),
-    carbs_g: roundMacro(toNumber(food.carbs_g) * safeQuantity),
-    fat_g: roundMacro(toNumber(food.fat_g) * safeQuantity)
+    calories: scaleNullableNutrition(food.calories, safeQuantity, "Calories", Math.round),
+    protein_g: scaleNullableNutrition(food.protein_g, safeQuantity, "Protein", roundMacro),
+    carbs_g: scaleNullableNutrition(food.carbs_g, safeQuantity, "Carbs", roundMacro),
+    fat_g: scaleNullableNutrition(food.fat_g, safeQuantity, "Fat", roundMacro)
   };
 }
 
-export function sumFoodLogs(logs: Pick<FoodLog, "calories" | "protein_g" | "carbs_g" | "fat_g">[]): MacroTotals {
-  return logs.reduce(
-    (total, log) => ({
-      calories: total.calories + toNumber(log.calories),
-      protein_g: roundMacro(total.protein_g + toNumber(log.protein_g)),
-      carbs_g: roundMacro(total.carbs_g + toNumber(log.carbs_g)),
-      fat_g: roundMacro(total.fat_g + toNumber(log.fat_g))
-    }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-  );
+export function sumFoodLogs(logs: NullableNutritionInput[]): NullableMacroTotals {
+  return {
+    calories: sumNullableNutrition(logs.map((log) => log.calories), "Calories", Math.round),
+    protein_g: sumNullableNutrition(logs.map((log) => log.protein_g), "Protein", roundMacro),
+    carbs_g: sumNullableNutrition(logs.map((log) => log.carbs_g), "Carbs", roundMacro),
+    fat_g: sumNullableNutrition(logs.map((log) => log.fat_g), "Fat", roundMacro)
+  };
 }
 
-export function remainingMacros(targets: MacroTargets, totals: MacroTotals) {
+export function remainingMacros(targets: MacroTargets, totals: NullableMacroTotals): NullableMacroTotals {
   return {
-    calories: Math.max(0, targets.calories - totals.calories),
-    protein_g: Math.max(0, roundMacro(targets.protein_g - totals.protein_g)),
-    carbs_g: Math.max(0, roundMacro(targets.carbs_g - totals.carbs_g)),
-    fat_g: Math.max(0, roundMacro(targets.fat_g - totals.fat_g))
+    calories: remainingNullable(targets.calories, totals.calories, Math.round),
+    protein_g: remainingNullable(targets.protein_g, totals.protein_g, roundMacro),
+    carbs_g: remainingNullable(targets.carbs_g, totals.carbs_g, roundMacro),
+    fat_g: remainingNullable(targets.fat_g, totals.fat_g, roundMacro)
   };
 }
 
@@ -47,7 +49,8 @@ export function percent(value: number, target: number) {
   return Math.min(100, Math.round((value / target) * 100));
 }
 
-export function nullablePercent(value: number, target: number) {
+export function nullablePercent(value: number | null, target: number) {
+  if (value === null) return null;
   return target > 0 ? Math.round((value / target) * 100) : null;
 }
 
@@ -60,11 +63,40 @@ export function validateFoodLogInput(name: string, quantity: number, macros: Mac
   return null;
 }
 
-function roundMacro(value: number) {
-  return Math.round(value * 10) / 10;
+function scaleNullableNutrition(
+  value: number | null | undefined,
+  quantity: number,
+  label: string,
+  round: (value: number) => number
+) {
+  const parsed = nullableNutritionNumber(value, label);
+  return parsed === null ? null : round(parsed * quantity);
 }
 
-function toNumber(value: unknown) {
+function sumNullableNutrition(
+  values: Array<number | null | undefined>,
+  label: string,
+  round: (value: number) => number
+) {
+  if (!values.length) return 0;
+  const parsed = values.map((value) => nullableNutritionNumber(value, label));
+  if (parsed.some((value) => value === null)) return null;
+  return round(parsed.reduce((sum, value) => sum + (value as number), 0));
+}
+
+function remainingNullable(target: number, actual: number | null, round: (value: number) => number) {
+  return actual === null ? null : Math.max(0, round(target - actual));
+}
+
+function nullableNutritionNumber(value: unknown, label: string): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${label} must be a non-negative number or unknown.`);
+  }
+  return parsed;
+}
+
+function roundMacro(value: number) {
+  return Math.round(value * 10) / 10;
 }
