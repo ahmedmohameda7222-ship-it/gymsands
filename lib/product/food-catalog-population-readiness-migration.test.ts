@@ -83,6 +83,10 @@ describe("Food Catalog Batch 0 population-readiness migration contract", () => {
       "new.approved_at is distinct from old.approved_at",
       "new.approval_reference is distinct from old.approval_reference",
       "old.review_state <> 'prepared' and new.review_state = 'prepared'",
+      "old.review_state = 'approved' and new.review_state = 'superseded'",
+      "execution_mode = 'production'",
+      "status in ('prepared', 'running')",
+      "for update",
       "'prepared'",
       "'reviewed'",
       "'approved'",
@@ -117,18 +121,21 @@ describe("Food Catalog Batch 0 population-readiness migration contract", () => {
     expect(snapshotGuard).not.toContain("new.food_id is distinct from old.food_id");
   });
 
-  it("freezes batch membership after review", () => {
+  it("serializes batch membership against review and source snapshot updates", () => {
     expectGuardContains("food_ingestion_batch_membership_guard", [
       "food_ingestion_batches",
       "review_state <> 'prepared'",
       "tg_op = 'insert'",
       "tg_op = 'update'",
-      "tg_op = 'delete'"
+      "tg_op = 'delete'",
+      "order by id",
+      "for update",
+      "food_source_records"
     ]);
     expect(migration).toMatch(/create\s+trigger\s+food_ingestion_batch_membership_immutable[\s\S]{0,120}before\s+insert\s+or\s+update\s+or\s+delete\s+on\s+public\.food_ingestion_batch_records/);
   });
 
-  it("makes ingestion-run audit identity durable and terminal runs immutable", () => {
+  it("makes ingestion-run audit durable and serializes Production start against supersession", () => {
     expectGuardContains("food_ingestion_run_audit_immutable_guard", [
       "new.batch_id is distinct from old.batch_id",
       "new.execution_mode is distinct from old.execution_mode",
@@ -140,10 +147,17 @@ describe("Food Catalog Batch 0 population-readiness migration contract", () => {
       "old.status = 'running'",
       "new.status in ('completed', 'failed', 'cancelled')"
     ]);
+    expectGuardContains("food_ingestion_run_production_manifest_guard", [
+      "tg_op = 'insert'",
+      "old.status = 'prepared' and new.status = 'running'",
+      "from public.food_ingestion_batches",
+      "for update",
+      "review_state <> 'approved'",
+      "approved_at is null",
+      "manifest_content_checksum_sha256 is null",
+      "new.manifest_content_checksum_sha256 is distinct from v_batch.manifest_content_checksum_sha256"
+    ]);
     expect(migration).toMatch(/create\s+trigger\s+food_ingestion_run_audit_immutable[\s\S]{0,120}before\s+update\s+on\s+public\.food_ingestion_runs/);
-    expect(migration).toContain("food_ingestion_run_production_manifest_guard");
-    expect(migration).toContain("review_state <> 'approved'");
-    expect(migration).toContain("approved_at is null");
   });
 
   it("version-enables source provenance and replaces only the legacy global uniqueness", () => {
