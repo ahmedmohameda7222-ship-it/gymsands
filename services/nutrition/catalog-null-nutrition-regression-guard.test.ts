@@ -17,7 +17,9 @@ describe("nullable nutrition compatibility regression guard", () => {
     const normalizeBody = functionBody(source, "function normalizeFoodItem", "function customMealCategory");
     const unknownBody = functionBody(source, "function hasUnknownMacros", "function nutritionDisplay");
     const logBody = functionBody(source, "async function logFoodNow", "async function addToPlan");
-    const libraryLogBody = functionBody(loggingSource, "export async function addFoodLibraryItemToToday", "}");
+    const libraryLogStart = loggingSource.indexOf("export async function addFoodLibraryItemToToday");
+    expect(libraryLogStart).toBeGreaterThanOrEqual(0);
+    const libraryLogBody = loggingSource.slice(libraryLogStart);
 
     expect(normalizeBody).not.toMatch(/(?:Number|toNumber)\(food\.(?:calories|protein_g|carbs_g|fat_g)\)/);
     expect(unknownBody).not.toMatch(/(?:Number|toNumber)\(value\)\s*===\s*0/);
