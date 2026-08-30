@@ -21,7 +21,8 @@ const db = vi.hoisted(() => {
 
 vi.mock("@/lib/supabase/client", () => ({ supabase: { from: db.from } }));
 
-import { addGlobalFoodToToday, addUserFoodToToday, upsertCustomMeal, upsertUserFood } from "@/services/database/nutrition";
+import { addGlobalFoodToToday, upsertCustomMeal, upsertUserFood } from "@/services/database/nutrition";
+import { addUserFoodToToday } from "@/services/database/food-library-logging";
 import { normalizePersistedMealPlanItem } from "@/services/database/meal-plan";
 import { logFoodFromPreviousLog, quickAddManualFoodLog } from "@/services/meals/food-logging-speed";
 import {
