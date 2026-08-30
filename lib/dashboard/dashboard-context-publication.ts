@@ -2,13 +2,9 @@ import { useEffect, useMemo } from "react";
 import type { QuickPromptContext } from "@/lib/ai/quick-prompts";
 import { remainingMacros } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
+import type { NullableCoreNutrition } from "@/types";
 
-export type DashboardMacroTotals = {
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-};
+export type DashboardMacroTotals = NullableCoreNutrition;
 
 export function useDashboardRemainingMacros(
   targets: SavedTargets | null,
