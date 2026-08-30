@@ -15,9 +15,11 @@ describe("nullable nutrition compatibility regression guard", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "components/meals/food-browser.tsx"), "utf8");
     const normalizeBody = functionBody(source, "function normalizeFoodItem", "function toNumber");
     const unknownBody = functionBody(source, "function hasUnknownMacros", "function sourceLabelForFood");
+    const logBody = functionBody(source, "async function logFoodNow", "async function addToPlan");
 
     expect(normalizeBody).not.toMatch(/toNumber\(food\.(?:calories|protein_g|carbs_g|fat_g)\)/);
     expect(unknownBody).not.toMatch(/toNumber\(value\)\s*===\s*0/);
+    expect(logBody).toMatch(/food\.is_global/);
   });
 
   it("does not sum frozen Eat nutrition through the generic zero fallback", () => {
@@ -34,5 +36,26 @@ describe("nullable nutrition compatibility regression guard", () => {
     const payloadBody = functionBody(source, "function payloadFromRow", "function editableValuesMatch");
 
     expect(payloadBody).not.toMatch(/number\(row\.(?:calories|protein_g|carbs_g|fat_g)\)/);
+  });
+
+  it("keeps nullable planned-meal adjustment fields unknown instead of drafting zero", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "components/meals/eat-planned-meal-adjust.tsx"), "utf8");
+    const draftBody = functionBody(source, "function draft", "export function EatPlannedMealAdjust");
+    const fieldBody = functionBody(source, "function NumberField", "}");
+
+    expect(draftBody).not.toMatch(/Number\(item\.(?:calories|protein_g|carbs_g|fat_g)\)/);
+    expect(draftBody).not.toMatch(/(?:calories|proteinG|carbsG|fatG):[^\n}]*\|\|\s*0/);
+    expect(fieldBody).not.toMatch(/value[^\n}]*:\s*0/);
+  });
+
+  it("keeps Meal Plan nullable snapshots unknown in display and edit paths", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "components/meals/my-meal-plan/my-meal-plan-page-client.tsx"), "utf8");
+    const draftBody = functionBody(source, "function draftFromItem", "function draftErrors");
+    const saveBody = functionBody(source, "async function saveEdit", "async function markDone");
+    const rowBody = functionBody(source, "function MealRow", "function AddMealDialog");
+
+    expect(draftBody).not.toMatch(/String\(item\.(?:calories|protein_g|carbs_g|fat_g)\)/);
+    expect(saveBody).not.toMatch(/Number\(editDraft\.(?:calories|protein|carbs|fat)\)/);
+    expect(rowBody).not.toMatch(/Math\.round\(item\.(?:calories|protein_g|carbs_g|fat_g)\)/);
   });
 });
