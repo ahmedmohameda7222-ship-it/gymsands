@@ -21,7 +21,8 @@ const db = vi.hoisted(() => {
 
 vi.mock("@/lib/supabase/client", () => ({ supabase: { from: db.from } }));
 
-import { addGlobalFoodToToday, upsertUserFood } from "@/services/database/nutrition";
+import { addGlobalFoodToToday, upsertCustomMeal, upsertUserFood } from "@/services/database/nutrition";
+import { normalizePersistedMealPlanItem } from "@/services/database/meal-plan";
 import { logFoodFromPreviousLog, quickAddManualFoodLog } from "@/services/meals/food-logging-speed";
 import {
   nullablePercent,
@@ -183,6 +184,60 @@ describe("nullable aggregate and presentation semantics", () => {
     );
     expect(remaining.protein_g).toBeNull();
     expect(nullablePercent(null as never, 150)).toBeNull();
+  });
+});
+
+describe("Saved Meal and Meal Plan nullable snapshot compatibility", () => {
+  it("keeps a Saved Meal aggregate unknown when a catalog-derived nutrient is unknown", async () => {
+    const meal = await upsertCustomMeal({
+      userId: "offline-user",
+      mealName: "Nullable saved meal",
+      mealCategory: "Lunch",
+      notes: null,
+      isFavorite: false,
+      items: [
+        { food: catalogFood({ protein_g: null, fat_g: 0 }), quantity: 1 },
+        { food: catalogFood({ id: undefined } as never), quantity: 1 },
+      ],
+    });
+
+    expect(meal.totals).toMatchObject({
+      calories: 200,
+      protein_g: null,
+      carbs_g: 40,
+      fat_g: 5,
+    });
+  });
+
+  it("normalizes persisted Meal Plan nullable nutrition without fabricating zero", () => {
+    const item = normalizePersistedMealPlanItem({
+      id: "44444444-4444-4444-8444-444444444444",
+      user_id: userId,
+      plan_date: "2026-08-30",
+      meal_type: "Lunch",
+      food_item_id: foodId,
+      user_food_item_id: null,
+      food_name: "Catalog meal-plan food",
+      serving_size: "100 g",
+      quantity: 1,
+      calories: 100,
+      protein_g: null,
+      carbs_g: 0,
+      fat_g: null,
+      status: "planned",
+      food_log_id: null,
+      completed_at: null,
+      notes: null,
+      created_at: "2026-08-30T00:00:00Z",
+      updated_at: "2026-08-30T00:00:00Z",
+    });
+
+    expect(item).toMatchObject({
+      calories: 100,
+      protein_g: null,
+      carbs_g: 0,
+      fat_g: null,
+    });
   });
 });
 
