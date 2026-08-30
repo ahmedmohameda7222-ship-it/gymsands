@@ -4,10 +4,12 @@ import { supabase } from "@/lib/supabase/client";
 import { isUuid, todayIso } from "@/lib/utils";
 import { egyptianFoods } from "@/data/egyptian-foods";
 import type {
+  CatalogFoodItem,
   CustomMeal,
   DailyNutritionSummary,
   FoodItem,
   FoodKitchen,
+  FoodLibraryItem,
   FoodLog,
   FoodSubcategory,
   MealItem,
@@ -47,6 +49,46 @@ function toNumber(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function nullableNutrition(value: unknown, label: string): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`Invalid persisted ${label}.`);
+  return parsed;
+}
+
+function normalizeCatalogFood(row: Record<string, unknown>): CatalogFoodItem {
+  const base = row as unknown as FoodItem;
+  return {
+    ...base,
+    calories: nullableNutrition(row.calories, "Food calories"),
+    protein_g: nullableNutrition(row.protein_g, "Food protein"),
+    carbs_g: nullableNutrition(row.carbs_g, "Food carbs"),
+    fat_g: nullableNutrition(row.fat_g, "Food fat"),
+    is_global: true,
+    is_editable_by_user: false
+  };
+}
+
+function normalizeFrozenFoodLog(row: Record<string, unknown>): FoodLog {
+  return {
+    ...(row as unknown as FoodLog),
+    calories: nullableNutrition(row.calories, "Food Log calories"),
+    protein_g: nullableNutrition(row.protein_g, "Food Log protein"),
+    carbs_g: nullableNutrition(row.carbs_g, "Food Log carbs"),
+    fat_g: nullableNutrition(row.fat_g, "Food Log fat")
+  };
+}
+
+function normalizeFrozenMealPlanItem(row: Record<string, unknown>): MealPlanItem {
+  return {
+    ...(row as unknown as MealPlanItem),
+    calories: nullableNutrition(row.calories, "Meal Plan calories"),
+    protein_g: nullableNutrition(row.protein_g, "Meal Plan protein"),
+    carbs_g: nullableNutrition(row.carbs_g, "Meal Plan carbs"),
+    fat_g: nullableNutrition(row.fat_g, "Meal Plan fat")
+  };
+}
+
 function normalizeFoodSubcategory(value: string | null | undefined) {
   const clean = value?.trim();
   if (!clean) return "Snack";
@@ -64,7 +106,6 @@ function normalizeMealType(value: string | null | undefined): MealType {
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
 }
-
 
 export function getDefaultFoodCategories() {
   return [...egyptianFoodSubcategories];
@@ -84,15 +125,17 @@ function withTimeout<T>(request: PromiseLike<T>, fallback: T, label: string, tim
   });
 }
 
-function localFoods(query = "") {
+function localFoods(query = ""): CatalogFoodItem[] {
   const normalized = normalizeText(query);
   return egyptianFoods
     .filter((food) => normalizeText(food.food_name).includes(normalized))
-    .map((food) => ({
-      ...food,
-      cuisine: egyptianFoodKitchenName,
-      category: normalizeFoodSubcategory(food.category)
-    }));
+    .map((food) =>
+      normalizeCatalogFood({
+        ...food,
+        cuisine: egyptianFoodKitchenName,
+        category: normalizeFoodSubcategory(food.category)
+      } as unknown as Record<string, unknown>)
+    );
 }
 
 export async function getFoodCategories() {
@@ -121,7 +164,7 @@ export async function getFoodCategories() {
 export async function getGlobalFoods(
   query = "",
   options: { category?: string; kitchen?: string; kitchenId?: string; subcategoryId?: string; limit?: number } = {}
-) {
+): Promise<CatalogFoodItem[]> {
   const limit = options.limit ?? 36;
   const category = options.category;
   const fallback = localFoods(query)
@@ -152,7 +195,7 @@ export async function getGlobalFoods(
         console.warn("Plaivra could not load Supabase foods, using local fallback.", error.message);
         return fallback;
       }
-      return ((data?.length ? data : fallback) ?? []) as FoodItem[];
+      return ((data?.length ? data : fallback) ?? []).map((food) => normalizeCatalogFood(food as Record<string, unknown>));
     }),
     fallback,
     "Foods",
@@ -233,7 +276,7 @@ export async function getTodayFoodLogs(
     if (options?.throwOnError) throw new Error(`Could not load today's food logs. ${error.message}`);
     return [];
   }
-  return (data ?? []) as FoodLog[];
+  return ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
 }
 
 export async function addGlobalFoodToToday({
@@ -244,18 +287,17 @@ export async function addGlobalFoodToToday({
   date = todayIso()
 }: {
   userId: string;
-  food: FoodItem;
+  food: CatalogFoodItem;
   quantity: number;
   mealType?: string;
   date?: string;
 }) {
   const macros = scaleFoodMacros(food, quantity);
   const safeMealType = normalizeMealType(mealType);
-  const isGlobalFood = food.is_global !== false;
   const payload = {
     user_id: userId,
-    food_item_id: isGlobalFood && isUuid(food.id) ? food.id : null,
-    user_food_item_id: !isGlobalFood && isUuid(food.id) ? food.id : null,
+    food_item_id: isUuid(food.id) ? food.id : null,
+    user_food_item_id: null,
     log_date: date,
     meal_type: safeMealType,
     food_name: food.food_name,
@@ -274,7 +316,7 @@ export async function addGlobalFoodToToday({
     console.warn("Plaivra could not add this food log.", error.message);
     throw error;
   }
-  return data as FoodLog;
+  return normalizeFrozenFoodLog(data as Record<string, unknown>);
 }
 
 function normalizeUserFood(row: Record<string, unknown>): UserFoodItem {
@@ -452,13 +494,14 @@ export async function getFoodLibrary(
   userId: string,
   query = "",
   options: { category?: string; kitchen?: string; kitchenId?: string; subcategoryId?: string; limit?: number } = {}
-) {
+): Promise<FoodLibraryItem[]> {
   const [globalFoods, userFoods] = await Promise.all([
     getGlobalFoods(query, { category: options.category, kitchen: options.kitchen, kitchenId: options.kitchenId, subcategoryId: options.subcategoryId, limit: options.limit ?? 60 }),
     getUserFoods(userId)
   ]);
   const normalizedQuery = normalizeText(query);
-  const foods = [...globalFoods, ...userFoods].filter((food) => {
+  const foods: FoodLibraryItem[] = [...globalFoods, ...userFoods];
+  return foods.filter((food) => {
     const matchesQuery = !normalizedQuery || normalizeText(food.food_name).includes(normalizedQuery);
     const matchesCategory = !options.category || food.category === options.category;
     const matchesKitchen =
@@ -468,8 +511,7 @@ export async function getFoodLibrary(
     const matchesLegacyKitchen = !options.kitchen || food.cuisine === options.kitchen || food.kitchen_id === options.kitchen;
     const matchesSubcategory = !options.subcategoryId || food.subcategory_id === options.subcategoryId || food.category === options.category;
     return matchesQuery && matchesCategory && matchesKitchen && matchesLegacyKitchen && matchesSubcategory;
-  });
-  return foods.slice(0, options.limit ?? 80);
+  }).slice(0, options.limit ?? 80);
 }
 
 export async function upsertUserFood(input: UserFoodInput) {
@@ -566,7 +608,7 @@ export async function getNutritionWeek(userId: string, weekStart: string, option
     if (options?.throwOnError) throw new Error(`Could not load weekly water logs. ${waterResult.error.message}`);
   }
 
-  const logs = ((logsResult.data ?? []) as FoodLog[]).reduce<Record<string, FoodLog[]>>((byDate, log) => {
+  const logs = ((logsResult.data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog).reduce<Record<string, FoodLog[]>>((byDate, log) => {
     byDate[log.log_date] = [...(byDate[log.log_date] ?? []), log];
     return byDate;
   }, {});
@@ -599,23 +641,15 @@ export type CustomMealInput = {
   mealCategory?: string | null;
   notes?: string | null;
   isFavorite?: boolean;
-  items: Array<{ food: FoodItem; quantity: number }>;
+  items: Array<{ food: FoodLibraryItem; quantity: number }>;
 };
 
-function mealItemTotals(food: Pick<FoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">, quantity: number) {
+function mealItemTotals(food: FoodLibraryItem, quantity: number) {
   return scaleFoodMacros(food, Math.max(0.1, quantity));
 }
 
 function summarizeMeal(items: MealItem[]) {
-  return items.reduce(
-    (sum, item) => ({
-      calories: sum.calories + toNumber(item.calories),
-      protein_g: Math.round((sum.protein_g + toNumber(item.protein_g)) * 10) / 10,
-      carbs_g: Math.round((sum.carbs_g + toNumber(item.carbs_g)) * 10) / 10,
-      fat_g: Math.round((sum.fat_g + toNumber(item.fat_g)) * 10) / 10
-    }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-  );
+  return sumFoodLogs(items);
 }
 
 async function foodsById(foodIds: string[], userFoodIds: string[]) {
@@ -626,8 +660,8 @@ async function foodsById(foodIds: string[], userFoodIds: string[]) {
   if (globalResult.error) console.warn("Plaivra could not hydrate meal foods.", globalResult.error.message);
   if (userResult.error) console.warn("Plaivra could not hydrate custom meal foods.", userResult.error.message);
 
-  const map = new Map<string, FoodItem>();
-  ((globalResult.data ?? []) as FoodItem[]).forEach((food) => map.set(food.id, food));
+  const map = new Map<string, FoodLibraryItem>();
+  ((globalResult.data ?? []) as Record<string, unknown>[]).map(normalizeCatalogFood).forEach((food) => map.set(food.id, food));
   ((userResult.data ?? []) as Record<string, unknown>[]).map(normalizeUserFood).forEach((food) => map.set(food.id, food));
   return map;
 }
@@ -659,7 +693,7 @@ export async function getCustomMeals(userId: string) {
     const foodId = item.food_item_id || item.user_food_item_id;
     const food = foodId ? foodMap.get(foodId) : null;
     const quantity = toNumber(item.quantity, 1);
-    const macros = food ? mealItemTotals(food, quantity) : { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+    const macros = food ? mealItemTotals(food, quantity) : { calories: null, protein_g: null, carbs_g: null, fat_g: null };
     const nextItem: MealItem = {
       id: item.id,
       meal_id: item.meal_id,
@@ -700,7 +734,7 @@ export async function upsertCustomMeal(input: CustomMealInput) {
   });
 
   if (!canUseUserData(input.userId)) {
-    const items = input.items.map((item) => {
+    const items: MealItem[] = input.items.map((item) => {
       const macros = mealItemTotals(item.food, item.quantity);
       return {
         id: crypto.randomUUID(),
@@ -785,7 +819,7 @@ export async function addCustomMealToLog(userId: string, meal: CustomMeal, date 
   if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) throw error;
-  return data as FoodLog;
+  return normalizeFrozenFoodLog(data as Record<string, unknown>);
 }
 
 export async function addCustomMealToMealPlan(userId: string, meal: CustomMeal, mealType: MealType = "Breakfast", date = todayIso()) {
@@ -813,7 +847,7 @@ export async function addCustomMealToMealPlan(userId: string, meal: CustomMeal, 
 
   const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) throw error;
-  return data as MealPlanItem;
+  return normalizeFrozenMealPlanItem(data as Record<string, unknown>);
 }
 
 export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
@@ -830,7 +864,7 @@ export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
     return [];
   }
 
-  return (data ?? []) as MealPlanItem[];
+  return ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenMealPlanItem);
 }
 
 export async function addFoodToMealPlan({
@@ -840,7 +874,7 @@ export async function addFoodToMealPlan({
   mealType = "Breakfast"
 }: {
   userId: string;
-  food: FoodItem;
+  food: FoodLibraryItem;
   quantity: number;
   mealType?: MealType;
 }) {
@@ -873,7 +907,7 @@ export async function addFoodToMealPlan({
     console.warn("Plaivra could not add this food to My Meal Plan.", error.message);
     throw error;
   }
-  return data as MealPlanItem;
+  return normalizeFrozenMealPlanItem(data as Record<string, unknown>);
 }
 
 export async function markMealPlanItemDone(item: MealPlanItem) {
@@ -900,7 +934,7 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
   if (latestResult.error) throw latestResult.error;
   if (!latestResult.data) throw new Error("Meal plan item not found.");
 
-  const latest = latestResult.data as MealPlanItem;
+  const latest = normalizeFrozenMealPlanItem(latestResult.data as Record<string, unknown>);
   if (latest.status === "skipped") throw new Error("A skipped meal cannot be marked done.");
   if (latest.status === "done" || latest.food_log_id) return { item: latest, log: null as FoodLog | null, already_done: true };
 
@@ -923,10 +957,14 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
       .eq("user_id", latest.user_id)
       .maybeSingle();
     if (reread.error) throw reread.error;
-    return { item: (reread.data as MealPlanItem | null) ?? latest, log: null as FoodLog | null, already_done: true };
+    return {
+      item: reread.data ? normalizeFrozenMealPlanItem(reread.data as Record<string, unknown>) : latest,
+      log: null as FoodLog | null,
+      already_done: true
+    };
   }
 
-  const claimedItem = claimed.data as MealPlanItem;
+  const claimedItem = normalizeFrozenMealPlanItem(claimed.data as Record<string, unknown>);
 
   const logPayload = {
     user_id: claimedItem.user_id,
@@ -956,7 +994,11 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
     .single();
 
   if (updated.error) throw updated.error;
-  return { item: updated.data as MealPlanItem, log: inserted.data as FoodLog, already_done: false };
+  return {
+    item: normalizeFrozenMealPlanItem(updated.data as Record<string, unknown>),
+    log: normalizeFrozenFoodLog(inserted.data as Record<string, unknown>),
+    already_done: false
+  };
 }
 
 export async function deleteMealPlanItem(item: MealPlanItem) {
@@ -974,12 +1016,7 @@ export async function updateMealPlanItem(
   const previousQuantity = Math.max(0.1, toNumber(item.quantity, 1));
   const nextQuantity = Math.max(0.1, toNumber(patch.quantity ?? item.quantity, previousQuantity));
   const ratio = nextQuantity / previousQuantity;
-  const macros = {
-    calories: Math.round(toNumber(item.calories) * ratio),
-    protein_g: Math.round(toNumber(item.protein_g) * ratio * 10) / 10,
-    carbs_g: Math.round(toNumber(item.carbs_g) * ratio * 10) / 10,
-    fat_g: Math.round(toNumber(item.fat_g) * ratio * 10) / 10
-  };
+  const macros = scaleFoodMacros(item, ratio);
   const payload = {
     meal_type: normalizeMealType(patch.mealType ?? item.meal_type),
     quantity: nextQuantity,
@@ -1015,24 +1052,19 @@ export async function updateMealPlanItem(
     if (logUpdate.error) console.warn("Plaivra could not sync the linked calorie log.", logUpdate.error.message);
   }
 
-  return data as MealPlanItem;
+  return normalizeFrozenMealPlanItem(data as Record<string, unknown>);
 }
 
 export async function addCustomFoodLog(payload: Omit<FoodLog, "id">) {
   if (!canUseUserData(payload.user_id)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) throw error;
-  return data as FoodLog;
+  return normalizeFrozenFoodLog(data as Record<string, unknown>);
 }
 
 export async function updateFoodLogQuantity(log: FoodLog, quantity: number) {
-  const unit = {
-    calories: log.calories / log.quantity,
-    protein_g: log.protein_g / log.quantity,
-    carbs_g: log.carbs_g / log.quantity,
-    fat_g: log.fat_g / log.quantity
-  };
-  const macros = scaleFoodMacros(unit, quantity);
+  const ratio = quantity / log.quantity;
+  const macros = scaleFoodMacros(log, ratio);
   if (!supabase) throw new Error("Database not connected");
   const { data, error } = await supabase!
     .from("food_logs")
@@ -1041,7 +1073,7 @@ export async function updateFoodLogQuantity(log: FoodLog, quantity: number) {
     .select("*")
     .single();
   if (error) throw error;
-  return data as FoodLog;
+  return normalizeFrozenFoodLog(data as Record<string, unknown>);
 }
 
 export async function deleteFoodLog(id: string) {
@@ -1068,5 +1100,5 @@ export async function copyYesterdaysMeals(userId: string, targetDate = todayIso(
   if (!copies.length) return [];
   const inserted = await supabase!.from("food_logs").insert(copies).select("*");
   if (inserted.error) throw inserted.error;
-  return inserted.data as FoodLog[];
+  return ((inserted.data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
 }
