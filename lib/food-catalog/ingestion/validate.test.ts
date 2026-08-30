@@ -59,9 +59,10 @@ describe("Food Catalog structural validation/quarantine", () => {
     expect(codes(candidate({ nutrition: { ...candidate().nutrition, basis_amount: null } }))).toContain("invalid_basis");
   });
 
-  it("reports structurally invalid aliases", () => {
+  it("reports structurally invalid aliases and locale tags", () => {
     expect(codes(candidate({ aliases: [{ locale: "", value: "Alias", normalizedValue: "alias" }] }))).toContain("invalid_alias");
     expect(codes(candidate({ aliases: [{ locale: "en", value: "", normalizedValue: "" }] }))).toContain("invalid_alias");
+    expect(codes(candidate({ aliases: [{ locale: "not a locale!", value: "Alias", normalizedValue: "alias" }] }))).toContain("invalid_alias");
   });
 
   it("reports invalid country scope codes", () => {
