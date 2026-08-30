@@ -44,11 +44,21 @@ export type CatalogFoodItem = Omit<
     is_editable_by_user: false;
   };
 
+/** Active Food Library values are either nullable catalog Food or strict numeric My Food. */
 export type FoodLibraryItem = CatalogFoodItem | LegacyUserFoodItem;
+export type FoodItem = FoodLibraryItem;
+
+/** Frozen snapshots preserve nullable catalog-derived nutrition independently per nutrient. */
 export type FoodLog = WithNullableCoreNutrition<LegacyFoodLog>;
 export type MealItem = WithNullableCoreNutrition<LegacyMealItem>;
 export type MealPlanItem = WithNullableCoreNutrition<LegacyMealPlanItem>;
-export type DailyNutritionSummary = WithNullableCoreNutrition<LegacyDailyNutritionSummary>;
+export type DailyNutritionSummary = Omit<
+  LegacyDailyNutritionSummary,
+  keyof NullableCoreNutrition | "logs"
+> &
+  NullableCoreNutrition & {
+    logs: FoodLog[];
+  };
 export type CustomMeal = Omit<LegacyCustomMeal, "items" | "totals"> & {
   items: MealItem[];
   totals: NullableCoreNutrition;
