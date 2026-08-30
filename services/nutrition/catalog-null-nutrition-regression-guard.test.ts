@@ -78,4 +78,24 @@ describe("nullable nutrition compatibility regression guard", () => {
     expect(saveBody).not.toMatch(/Number\(editDraft\.(?:calories|protein|carbs|fat)\)/);
     expect(rowBody).not.toMatch(/Math\.round\(item\.(?:calories|protein_g|carbs_g|fat_g)\)/);
   });
+
+  it("keeps Saved Meal draft preview on nullable-preserving helpers", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "components/meals/custom-nutrition-manager.tsx"), "utf8");
+    const totalsBody = functionBody(source, "const mealTotals = useMemo", "const foodDraftDirty");
+
+    expect(source).not.toMatch(/Number\(food\.(?:calories|protein_g|carbs_g|fat_g)\)/);
+    expect(totalsBody).toMatch(/calculateSavedMealDraftTotals/);
+    expect(source).toMatch(/formatSavedMealNutrition/);
+  });
+
+  it("keeps Meal Plan validation completeness-aware at its nullable boundaries", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "services/meals/meal-validation.ts"), "utf8");
+    const itemBody = functionBody(source, "export function validateMealItem", "export function validateMealPlanDay");
+    const dayStart = source.indexOf("export function validateMealPlanDay");
+    expect(dayStart).toBeGreaterThanOrEqual(0);
+    const dayBody = source.slice(dayStart);
+
+    expect(itemBody).not.toMatch(/Number\(item\.(?:calories|protein_g|carbs_g|fat_g)\)/);
+    expect(dayBody).not.toMatch(/Number\(item\.calories(?:\s*\|\|\s*0)?\)/);
+  });
 });
