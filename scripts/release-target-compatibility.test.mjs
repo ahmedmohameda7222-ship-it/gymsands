@@ -11,7 +11,7 @@ const ledger = JSON.parse(
   readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"),
 );
 
-test("all release target consumers preserve the declared compatibility marker while the pending migration remains fail closed", () => {
+test("all release target consumers preserve the declared compatibility marker while pending migrations remain fail closed", () => {
   const releaseTarget = deriveReleaseTarget(ledger);
   const qualityTarget = deriveQualityLedgerTarget(ledger);
   const environment = qualityLedgerEnvironment(qualityTarget);
@@ -20,10 +20,10 @@ test("all release target consumers preserve the declared compatibility marker wh
   assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260829093401");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
   assert.equal(releaseTarget.reconciliationState, "pending");
-  assert.equal(ledger.pendingCount, 1);
-  assert.equal(releaseTarget.pendingCount, 1);
+  assert.equal(ledger.pendingCount, 2);
+  assert.equal(releaseTarget.pendingCount, 2);
   assert.equal(releaseTarget.schemaAppliedUntrackedCount, 0);
-  assert.equal(releaseTarget.unresolvedCount, 1);
+  assert.equal(releaseTarget.unresolvedCount, 2);
   assert.equal(releaseTarget.releaseReady, false);
   assert.equal(qualityTarget.expectedMigration, releaseTarget.expectedMigration);
   assert.equal(
@@ -31,21 +31,21 @@ test("all release target consumers preserve the declared compatibility marker wh
     releaseTarget.latestAppliedMigrationVersion,
   );
   assert.equal(qualityTarget.reconciliationState, "pending");
-  assert.equal(qualityTarget.pendingCount, 1);
-  assert.equal(qualityTarget.unresolvedCount, 1);
+  assert.equal(qualityTarget.pendingCount, 2);
+  assert.equal(qualityTarget.unresolvedCount, 2);
   assert.equal(qualityTarget.releaseReady, false);
   assert.equal(
     environment.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION,
     releaseTarget.expectedMigration,
   );
   assert.equal(environment.PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE, "pending");
-  assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "1");
-  assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "1");
+  assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "2");
+  assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "2");
   assert.notEqual(releaseTarget.expectedMigration, releaseTarget.latestAppliedMigrationVersion);
   assert.throws(() => deriveReleaseReadyTarget(ledger), /Migration ledger is not release-ready/);
 });
 
-test("preflight validates the declared marker but blocks release while the repository migration is pending", () => {
+test("preflight validates the declared marker but blocks release while repository migrations are pending", () => {
   const expectedCommit = "a".repeat(40);
   const releaseTarget = deriveReleaseTarget(ledger);
   const migrationState = deriveMigrationLedgerState(ledger);

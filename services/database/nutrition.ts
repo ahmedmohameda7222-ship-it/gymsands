@@ -7,7 +7,6 @@ import type {
   CatalogFoodItem,
   CustomMeal,
   DailyNutritionSummary,
-  FoodItem,
   FoodKitchen,
   FoodLibraryItem,
   FoodLog,
@@ -56,14 +55,44 @@ function nullableNutrition(value: unknown, label: string): number | null {
   return parsed;
 }
 
+function persistedText(value: unknown, label: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Invalid persisted ${label}.`);
+  return value;
+}
+
+function nullablePersistedText(value: unknown, label: string): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") throw new Error(`Invalid persisted ${label}.`);
+  return value;
+}
+
+function nullablePersistedTags(value: unknown): string[] | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value) || value.some((tag) => typeof tag !== "string")) {
+    throw new Error("Invalid persisted Food tags.");
+  }
+  return [...value];
+}
+
 function normalizeCatalogFood(row: Record<string, unknown>): CatalogFoodItem {
-  const base = row as unknown as FoodItem;
   return {
-    ...base,
+    id: persistedText(row.id, "Food ID"),
+    food_name: persistedText(row.food_name, "Food name"),
+    serving_size: persistedText(row.serving_size, "Food serving size"),
     calories: nullableNutrition(row.calories, "Food calories"),
     protein_g: nullableNutrition(row.protein_g, "Food protein"),
     carbs_g: nullableNutrition(row.carbs_g, "Food carbs"),
     fat_g: nullableNutrition(row.fat_g, "Food fat"),
+    category: nullablePersistedText(row.category, "Food category"),
+    cuisine: nullablePersistedText(row.cuisine, "Food cuisine"),
+    kitchen_id: nullablePersistedText(row.kitchen_id, "Food kitchen ID"),
+    subcategory_id: nullablePersistedText(row.subcategory_id, "Food subcategory ID"),
+    fiber_g: nullableNutrition(row.fiber_g, "Food fiber"),
+    sugar_g: nullableNutrition(row.sugar_g, "Food sugar"),
+    sodium_mg: nullableNutrition(row.sodium_mg, "Food sodium"),
+    tags: nullablePersistedTags(row.tags),
+    notes: nullablePersistedText(row.notes, "Food notes"),
+    source_type: persistedText(row.source_type, "Food source type"),
     is_global: true,
     is_editable_by_user: false
   };

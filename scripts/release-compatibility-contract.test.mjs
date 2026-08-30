@@ -11,7 +11,7 @@ const contract = JSON.parse(
   readFileSync(new URL("../config/release-compatibility.json", import.meta.url), "utf8"),
 );
 
-test("declared database marker remains distinct from the applied physical head while the repository carries a pending migration", () => {
+test("declared database marker remains distinct from the applied physical head while the repository carries pending migrations", () => {
   const resolved = resolveReleaseCompatibilityContract({ ledger, contract });
 
   assert.equal(resolved.schemaCompatibilityVersion, "2");
@@ -22,10 +22,10 @@ test("declared database marker remains distinct from the applied physical head w
     "fixture must prove that compatible physical migrations may be newer than the release marker",
   );
   assert.equal(resolved.migrationLedgerReconciliationState, "pending");
-  assert.equal(ledger.pendingCount, 1);
-  assert.equal(resolved.pendingMigrationCount, 1);
+  assert.equal(ledger.pendingCount, 2);
+  assert.equal(resolved.pendingMigrationCount, 2);
   assert.equal(resolved.schemaAppliedUntrackedCount, 0);
-  assert.equal(resolved.unresolvedMigrationCount, 1);
+  assert.equal(resolved.unresolvedMigrationCount, 2);
 });
 
 test("Next build metadata binds the declared compatibility marker and exposes the pending repository ledger state", async () => {
@@ -35,9 +35,9 @@ test("Next build metadata binds the declared compatibility marker and exposes th
   assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, "20260724232734");
   assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20260829093401");
   assert.equal(releaseMetadata.migrationLedgerReconciliationState, "pending");
-  assert.equal(releaseMetadata.pendingMigrationCount, "1");
+  assert.equal(releaseMetadata.pendingMigrationCount, "2");
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, "0");
-  assert.equal(releaseMetadata.unresolvedMigrationCount, "1");
+  assert.equal(releaseMetadata.unresolvedMigrationCount, "2");
 });
 
 test("rejects a marker that is not represented by a resolved Production migration", () => {

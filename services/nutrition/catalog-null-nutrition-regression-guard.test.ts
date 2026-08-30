@@ -33,6 +33,11 @@ describe("nullable nutrition compatibility regression guard", () => {
     const normalizeBody = functionBody(source, "function normalizeCatalogFood", "function normalizeFrozenFoodLog");
 
     expect(normalizeBody).not.toMatch(/as\s+unknown\s+as\s+FoodItem/);
+    expect(normalizeBody).not.toMatch(/\.\.\.(?:row|base)\b/);
+    expect(normalizeBody).toMatch(/id:\s*persistedText\(row\.id/);
+    expect(normalizeBody).toMatch(/food_name:\s*persistedText\(row\.food_name/);
+    expect(normalizeBody).toMatch(/serving_size:\s*persistedText\(row\.serving_size/);
+    expect(normalizeBody).toMatch(/source_type:\s*persistedText\(row\.source_type/);
     expect(normalizeBody).toMatch(/is_global:\s*true/);
     expect(normalizeBody).toMatch(/is_editable_by_user:\s*false/);
     expect(normalizeBody).toMatch(/nullableNutrition\(row\.calories/);
