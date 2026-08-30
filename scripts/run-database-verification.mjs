@@ -43,6 +43,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/nutrition-v1-meal-plan-mutation-idempotency.sql",
   "supabase/verification/nutrition-v1-saved-meal-create-idempotency.sql",
   "supabase/verification/food-catalog-population-readiness.sql",
+  "supabase/verification/food-catalog-ingestion-concurrency.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
