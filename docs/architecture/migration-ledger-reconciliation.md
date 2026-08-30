@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-08-29
+**Current reconciliation date:** 2026-08-30
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history reconciled through the latest applied identity; no repository migration remains pending, schema-applied-untracked, or unresolved
+**Status:** Production migration history remains reconciled through the latest applied identity; the repository now contains one intentionally pending Food Catalog Batch 0 migration and no schema-applied-untracked migration
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -11,22 +11,42 @@ Historical PR descriptions, completed implementation reports, and old audit snap
 
 ## Current state
 
-Fresh Plaivra Production inspection after the Nutrition V1 squash merge confirms:
+The last verified Plaivra Production inspection after the Nutrition V1 squash merge established:
 
 - Physical Production migration records: **113**
 - Exact repository-name applications tracked as `state = applied`: **63**
-- Repository-only pending migrations: **0**
-- `pendingCount = 0`
-- `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- migration-ledger `release_ready = true`
-- Released compatibility marker: `20260724232734`
 - Latest physical Production record: `20260829093401_nutrition_v1_final_review_corrections`
 - Corresponding immutable repository migration: `20260829110000_nutrition_v1_final_review_corrections.sql`
+- Released compatibility marker: `20260724232734`
 - Activity Catalog Production remains isolated from the Main Plaivra migration ledger
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Physical Production count is established by Supabase migration history and is currently 113.
+The current repository/machine-ledger state additionally records:
+
+- Repository-only pending migrations: **1**
+- Pending migration: `20260830011407_food_catalog_population_readiness.sql`
+- `pendingCount = 1`
+- `schemaVerifiedUntrackedCount = 0`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- migration-ledger `release_ready = false`
+
+`historyRepair.state = pending` here does **not** mean previously applied Production migration history has regressed. It reflects the single new forward repository migration that has deliberately not been applied to Production. The machine-ledger `productionMigrationCount` still counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Physical Production count was last established as 113.
+
+## Food Catalog Batch 0 repository-only pending migration
+
+Repository migration `20260830011407_food_catalog_population_readiness.sql` is classified as `pending` only.
+
+It exists to make the canonical Food Catalog structurally ready for later versioned ingestion. It has **not** been applied to Plaivra Production and must not be represented as applied until a separate Planner/user-approved Production action is executed and reconciled.
+
+Batch 0 repository state preserves these boundaries:
+
+- zero Food population;
+- zero Production migration application or other Production database mutation;
+- zero provider-specific data import or source adapter execution;
+- zero compatibility-marker promotion;
+- zero Activity Catalog Production mutation.
+
+The released compatibility marker therefore remains `20260724232734`. Do not replay the pending migration or any previously applied migration.
 
 ## Nutrition V1 runtime compatibility baseline
 
@@ -45,7 +65,7 @@ At Nutrition V1 feature closure, Production `/api/version` reported:
 - `schemaCompatible = true`
 - `releaseReady = true`
 
-This is the verified Nutrition V1 closure baseline, not a permanent claim about the latest `main` or Vercel deployment SHA. Documentation-only and later product commits can advance both Git and deployed commit identity. Exact current runtime identity must be verified live from GitHub `main`, Vercel, and Production `/api/version`.
+This is the verified Nutrition V1 closure baseline, not a claim about the current repository ledger after the later Food Catalog Batch 0 pending migration. Documentation-only and later product commits can advance both Git and deployed commit identity. Exact current runtime identity must be verified live from GitHub `main`, Vercel, and Production `/api/version`.
 
 Physical schema advancement and compatibility-marker promotion are separate authorities. Nutrition V1 advanced physical schema without changing the released compatibility marker because the deployed runtime remains compatible with marker `20260724232734`.
 
@@ -136,7 +156,7 @@ The later forward-only Nutrition V1 corrections are represented by these generat
 
 The final identity maps to immutable repository migration `20260829110000_nutrition_v1_final_review_corrections.sql`.
 
-No Nutrition V1 repository migration remains pending or unresolved.
+No Nutrition V1 repository migration remains pending or unresolved. The only current pending repository migration is the later Food Catalog Batch 0 readiness migration identified above.
 
 ## Meal Plan duplicate-history repair
 
