@@ -136,7 +136,7 @@ describe("Food Catalog Batch 0 population-readiness migration contract", () => {
       "new.manifest_content_checksum_sha256 is distinct from old.manifest_content_checksum_sha256",
       "old.status in ('completed', 'failed', 'cancelled')",
       "old.status = 'prepared'",
-      "new.status = 'running'",
+      "new.status in ('running', 'cancelled')",
       "old.status = 'running'",
       "new.status in ('completed', 'failed', 'cancelled')"
     ]);
