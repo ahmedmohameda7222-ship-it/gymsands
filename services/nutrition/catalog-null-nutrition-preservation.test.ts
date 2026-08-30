@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FoodItem, FoodLog } from "@/types";
+import type { CatalogFoodItem, FoodLog, UserFoodItem } from "@/types";
 
 const db = vi.hoisted(() => {
   const inserted: Array<Record<string, unknown>> = [];
@@ -21,7 +21,7 @@ const db = vi.hoisted(() => {
 
 vi.mock("@/lib/supabase/client", () => ({ supabase: { from: db.from } }));
 
-import { addGlobalFoodToToday, upsertCustomMeal, upsertUserFood } from "@/services/database/nutrition";
+import { addGlobalFoodToToday, addUserFoodToToday, upsertCustomMeal, upsertUserFood } from "@/services/database/nutrition";
 import { normalizePersistedMealPlanItem } from "@/services/database/meal-plan";
 import { logFoodFromPreviousLog, quickAddManualFoodLog } from "@/services/meals/food-logging-speed";
 import {
@@ -33,8 +33,9 @@ import {
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const foodId = "22222222-2222-4222-8222-222222222222";
+const userFoodId = "55555555-5555-4555-8555-555555555555";
 
-function catalogFood(overrides: Partial<Record<"calories" | "protein_g" | "carbs_g" | "fat_g", number | null | undefined>> = {}) {
+function catalogFood(overrides: Partial<Pick<CatalogFoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">> = {}): CatalogFoodItem {
   return {
     id: foodId,
     food_name: "Catalog food",
@@ -51,10 +52,31 @@ function catalogFood(overrides: Partial<Record<"calories" | "protein_g" | "carbs
     is_global: true,
     is_editable_by_user: false,
     ...overrides,
-  } as unknown as FoodItem;
+  };
 }
 
-function frozenLog(overrides: Partial<Record<"calories" | "protein_g" | "carbs_g" | "fat_g", number | null>> = {}) {
+function userFood(overrides: Partial<Pick<UserFoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">> = {}): UserFoodItem {
+  return {
+    id: userFoodId,
+    user_id: userId,
+    food_name: "My food",
+    serving_size: "1 serving",
+    calories: 240,
+    protein_g: 22,
+    carbs_g: 18,
+    fat_g: 8,
+    category: "Lunch",
+    cuisine: null,
+    tags: [],
+    notes: null,
+    source_type: "user_created",
+    is_global: false,
+    is_editable_by_user: true,
+    ...overrides,
+  };
+}
+
+function frozenLog(overrides: Partial<Pick<FoodLog, "calories" | "protein_g" | "carbs_g" | "fat_g">> = {}): FoodLog {
   return {
     id: "33333333-3333-4333-8333-333333333333",
     user_id: userId,
@@ -71,7 +93,7 @@ function frozenLog(overrides: Partial<Record<"calories" | "protein_g" | "carbs_g
     fat_g: 5,
     notes: null,
     ...overrides,
-  } as unknown as FoodLog;
+  };
 }
 
 beforeEach(() => {
@@ -106,8 +128,8 @@ describe("catalog-derived nullable nutrition scaling", () => {
     expect(scaleFoodMacros(catalogFood({ protein_g: null }), 2).protein_g).toBeNull();
   });
 
-  it("preserves independently missing nutrients including undefined canonical input", () => {
-    expect(scaleFoodMacros(catalogFood({ calories: null, protein_g: 12, carbs_g: undefined, fat_g: null }), 2)).toEqual({
+  it("preserves independently missing nutrients including undefined compatibility input", () => {
+    expect(scaleFoodMacros({ ...catalogFood({ calories: null, protein_g: 12, fat_g: null }), carbs_g: undefined }, 2)).toEqual({
       calories: null,
       protein_g: 24,
       carbs_g: null,
@@ -116,8 +138,8 @@ describe("catalog-derived nullable nutrition scaling", () => {
   });
 });
 
-describe("catalog Food logging and frozen repeat truth", () => {
-  it("addGlobalFoodToToday persists null instead of fabricated zero", async () => {
+describe("Catalog Food and My Food logging identity", () => {
+  it("Catalog Food persists canonical identity and null nutrition without fabricated zero", async () => {
     await addGlobalFoodToToday({
       userId,
       food: catalogFood({ protein_g: null, fat_g: null }),
@@ -128,10 +150,32 @@ describe("catalog Food logging and frozen repeat truth", () => {
 
     expect(db.inserted).toHaveLength(1);
     expect(db.inserted[0]).toMatchObject({
+      food_item_id: foodId,
+      user_food_item_id: null,
       calories: 200,
       protein_g: null,
       carbs_g: 40,
       fat_g: null,
+    });
+  });
+
+  it("My Food persists user-food identity while keeping its numeric nutrition contract", async () => {
+    await addUserFoodToToday({
+      userId,
+      food: userFood({ protein_g: 0 }),
+      quantity: 2,
+      mealType: "Dinner",
+      date: "2026-08-30",
+    });
+
+    expect(db.inserted).toHaveLength(1);
+    expect(db.inserted[0]).toMatchObject({
+      food_item_id: null,
+      user_food_item_id: userFoodId,
+      calories: 480,
+      protein_g: 0,
+      carbs_g: 36,
+      fat_g: 16,
     });
   });
 
@@ -180,10 +224,10 @@ describe("nullable aggregate and presentation semantics", () => {
   it("does not manufacture remaining or percentage values from an unknown aggregate", () => {
     const remaining = remainingMacros(
       { calories: 2000, protein_g: 150, carbs_g: 220, fat_g: 70, water_ml: 2500 },
-      { calories: 500, protein_g: null, carbs_g: 60, fat_g: 20 } as never,
+      { calories: 500, protein_g: null, carbs_g: 60, fat_g: 20 },
     );
     expect(remaining.protein_g).toBeNull();
-    expect(nullablePercent(null as never, 150)).toBeNull();
+    expect(nullablePercent(null, 150)).toBeNull();
   });
 });
 
@@ -197,7 +241,7 @@ describe("Saved Meal and Meal Plan nullable snapshot compatibility", () => {
       isFavorite: false,
       items: [
         { food: catalogFood({ protein_g: null, fat_g: 0 }), quantity: 1 },
-        { food: catalogFood({ id: undefined } as never), quantity: 1 },
+        { food: catalogFood(), quantity: 1 },
       ],
     });
 
