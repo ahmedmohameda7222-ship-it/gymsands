@@ -100,6 +100,10 @@ language plpgsql
 set search_path = ''
 as $function$
 begin
+  if old.review_state <> 'prepared' and new.review_state = 'prepared' then
+    raise exception 'Reviewed Food ingestion batch cannot return to prepared.' using errcode = '23514';
+  end if;
+
   if old.review_state <> 'prepared' or new.review_state <> 'prepared' then
     if new.provider is distinct from old.provider
        or new.dataset_name is distinct from old.dataset_name
