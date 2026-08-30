@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   assertFoodCatalogOwner,
   deprecateFood,
+  listFoodCatalogCandidates,
   mergeFood,
   publishFood,
   restoreFood,
@@ -14,6 +15,7 @@ import {
 const sourceFoodId = "11111111-1111-4111-8111-111111111111";
 const targetFoodId = "22222222-2222-4222-8222-222222222222";
 const sourceRecordId = "33333333-3333-4333-8333-333333333333";
+const ingestionBatchId = "44444444-4444-4444-8444-444444444444";
 
 type Result = { data: any; error: null | { message: string; code?: string } };
 
@@ -53,6 +55,76 @@ describe("Nutrition V1 Food Catalog curation authorization", () => {
 
   it("allows the existing admin role to act as the bounded Food Catalog owner authority", () => {
     expect(() => assertFoodCatalogOwner(owner)).not.toThrow();
+  });
+});
+
+describe("Nutrition V1 Food Catalog readiness inspection", () => {
+  it("shows brand, versioned provenance, and immutable ingestion batch participation to the privileged curator", async () => {
+    const foods = query({
+      data: [{
+        id: sourceFoodId,
+        food_name: "Greek Yogurt",
+        brand_name: "Plaivra Foods",
+        serving_size: "100 g",
+        category: "Dairy",
+        cuisine: null,
+        calories: 120,
+        protein_g: 10,
+        carbs_g: 12,
+        fat_g: 3,
+        lifecycle_status: "draft",
+        is_verified: false,
+        verified_at: null,
+        verified_source_record_id: null,
+        merged_into_food_id: null,
+      }],
+      error: null,
+    });
+    const provenance = query({
+      data: [{
+        id: sourceRecordId,
+        food_id: sourceFoodId,
+        provider: "reviewed-source",
+        source_record_id: "provider-record-1",
+        source_dataset: "dataset",
+        source_version: "2026.08",
+        source_release_date: "2026-08-01",
+        source_record_checksum_sha256: "a".repeat(64),
+        source_reference: "source-ref",
+        license_name: "Example License",
+        license_reference: "license-ref",
+        retrieved_at: "2026-08-30T00:00:00.000Z",
+      }],
+      error: null,
+    });
+    const participation = query({
+      data: [{ source_record_id: sourceRecordId, batch_id: ingestionBatchId }],
+      error: null,
+    });
+    const db = fakeSupabase({
+      food_items: [foods],
+      food_source_records: [provenance],
+      food_ingestion_batch_records: [participation],
+    });
+
+    const result = await listFoodCatalogCandidates(db.client, owner, { limit: 10 });
+
+    expect(foods.select).toHaveBeenCalledWith(expect.stringContaining("brand_name"));
+    expect(provenance.select).toHaveBeenCalledWith(expect.stringContaining("source_version"));
+    expect(provenance.select).toHaveBeenCalledWith(expect.stringContaining("source_record_checksum_sha256"));
+    expect(participation.select).toHaveBeenCalledWith("source_record_id,batch_id");
+    expect(result.candidates[0]).toMatchObject({
+      id: sourceFoodId,
+      brand_name: "Plaivra Foods",
+      provenance: [{
+        id: sourceRecordId,
+        source_dataset: "dataset",
+        source_version: "2026.08",
+        source_release_date: "2026-08-01",
+        source_record_checksum_sha256: "a".repeat(64),
+        ingestion_batch_ids: [ingestionBatchId],
+      }],
+    });
   });
 });
 
