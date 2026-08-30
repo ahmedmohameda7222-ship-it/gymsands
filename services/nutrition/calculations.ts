@@ -80,8 +80,12 @@ function sumNullableNutrition(
 ) {
   if (!values.length) return 0;
   const parsed = values.map((value) => nullableNutritionNumber(value, label));
-  if (parsed.some((value) => value === null)) return null;
-  return round(parsed.reduce((sum, value) => sum + (value as number), 0));
+  let total = 0;
+  for (const value of parsed) {
+    if (value === null) return null;
+    total += value;
+  }
+  return round(total);
 }
 
 function remainingNullable(target: number, actual: number | null, round: (value: number) => number) {
