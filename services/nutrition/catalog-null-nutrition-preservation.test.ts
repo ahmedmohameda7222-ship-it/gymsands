@@ -24,6 +24,7 @@ vi.mock("@/lib/supabase/client", () => ({ supabase: { from: db.from } }));
 import { addGlobalFoodToToday, upsertCustomMeal, upsertUserFood } from "@/services/database/nutrition";
 import { addUserFoodToToday } from "@/services/database/food-library-logging";
 import { normalizePersistedMealPlanItem } from "@/services/database/meal-plan";
+import { calculateSavedMealDraftTotals } from "@/services/meals/saved-meal-draft";
 import { logFoodFromPreviousLog, quickAddManualFoodLog } from "@/services/meals/food-logging-speed";
 import {
   nullablePercent,
@@ -136,6 +137,48 @@ describe("catalog-derived nullable nutrition scaling", () => {
       carbs_g: null,
       fat_g: null,
     });
+  });
+});
+
+describe("Saved Meal draft preview nullable nutrition", () => {
+  it("keeps a Catalog Food with unknown protein unknown in the preview", () => {
+    expect(calculateSavedMealDraftTotals([
+      { food: catalogFood({ protein_g: null }), quantity: 1 },
+    ])).toEqual({
+      calories: 100,
+      protein_g: null,
+      carbs_g: 20,
+      fat_g: 5,
+    });
+  });
+
+  it("keeps a mixed known and unknown protein aggregate unknown", () => {
+    expect(calculateSavedMealDraftTotals([
+      { food: catalogFood(), quantity: 1 },
+      { food: catalogFood({ protein_g: null }), quantity: 1 },
+    ])).toEqual({
+      calories: 200,
+      protein_g: null,
+      carbs_g: 40,
+      fat_g: 10,
+    });
+  });
+
+  it("keeps the fully known Saved Meal preview unchanged", () => {
+    expect(calculateSavedMealDraftTotals([
+      { food: catalogFood(), quantity: 2 },
+    ])).toEqual({
+      calories: 200,
+      protein_g: 20,
+      carbs_g: 40,
+      fat_g: 10,
+    });
+  });
+
+  it("keeps a known zero protein as a real zero", () => {
+    expect(calculateSavedMealDraftTotals([
+      { food: catalogFood({ protein_g: 0 }), quantity: 2 },
+    ]).protein_g).toBe(0);
   });
 });
 
