@@ -96,7 +96,7 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     expect(migrationChanges).toEqual([`A\t${BATCH0_MIGRATION_PATH}`]);
   });
 
-  it("commits no provider adapter, source download, or large source dataset", () => {
+  it("commits no provider adapter, source download, or source dataset artifact", () => {
     const paths = changedPaths();
     const runtimePaths = readableRuntimePaths(paths).filter((file) =>
       file.startsWith("lib/food-catalog/") || file.startsWith("services/nutrition-v1/server/")
@@ -105,7 +105,7 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
       /(?:usda|fooddata|cofid|open[-_]?food[-_]?facts|sfda|bls[-_]?adapter)/i.test(file)
     );
     const sourceDatasetPaths = paths.filter((file) =>
-      /(?:food[-_]?catalog|food[-_]?source|nutrition).+\.(?:csv|tsv|parquet|ndjson|jsonl|xlsx|zip)$/i.test(file)
+      /\.(?:csv|tsv|parquet|ndjson|jsonl|xlsx|zip)$/i.test(file)
     );
     const ingestionRuntime = runtimePaths
       .filter((file) => file.startsWith("lib/food-catalog/ingestion/"))
