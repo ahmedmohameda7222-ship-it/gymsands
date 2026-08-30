@@ -174,6 +174,7 @@ select set_config('request.jwt.claim.role', 'authenticated', true);
 
 -- The real completion function must copy NULL snapshots into the linked Food Log.
 select public.complete_meal_plan_item('a2300000-0000-4000-8000-000000000010');
+reset role;
 
 select pg_temp.nv1n_assert(
   (
@@ -191,6 +192,7 @@ select pg_temp.nv1n_assert(
 );
 
 -- The real completed-item correction function must preserve NULL rather than fabricate zero.
+set local role authenticated;
 select public.correct_completed_meal_plan_item(
   'a2300000-0000-4000-8000-000000000010',
   date '2026-08-31',
@@ -204,6 +206,7 @@ select public.correct_completed_meal_plan_item(
   8,
   'corrected nullable snapshot'
 );
+reset role;
 
 select pg_temp.nv1n_assert(
   (
@@ -225,6 +228,7 @@ select pg_temp.nv1n_assert(
 );
 
 -- Existing manual/execution-value validation still rejects invalid known nutrition.
+set local role authenticated;
 select pg_temp.nv1n_rejected(
   $$select public.complete_meal_plan_item_with_values(
     'a2300000-0000-4000-8000-000000000011',
@@ -233,6 +237,7 @@ select pg_temp.nv1n_rejected(
   )$$,
   'Manual/direct Meal Plan execution accepted negative known nutrition.'
 );
+reset role;
 
 select pg_temp.nv1n_assert(
   (
