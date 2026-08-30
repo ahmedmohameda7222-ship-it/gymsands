@@ -4,11 +4,11 @@
 
 **Goal:** Make Plaivra's canonical Food Catalog structurally ready for multi-year, replayable, versioned, market-aware ingestion without importing or activating a single Food.
 
-**Architecture:** One forward-only schema-readiness migration adds nullable core nutrition, display brand identity, region-safe market relevance, GTIN identity, versioned provenance, immutable ingestion batches, and separate execution runs. Generic pure TypeScript contracts/normalization/validation/manifest code provide the stable target for later source adapters. No provider adapter or Production population belongs in Batch 0.
+**Architecture:** One forward-only schema-readiness migration adds nullable core nutrition, display brand identity, fail-closed region-safe market relevance, GTIN identity, versioned provenance, immutable reviewed ingestion batches/source snapshots, frozen reviewed membership, and durable execution-run audit history. Generic pure TypeScript contracts/normalization/validation/manifest code provide the stable target for later source adapters. No provider adapter or Production population belongs in Batch 0.
 
 **Tech Stack:** PostgreSQL/Supabase, TypeScript 5.9, Vitest, Node.js 24 `node:crypto`, existing Nutrition V1 Food Catalog services.
 
-**Spec:** `docs/architecture/food-catalog-data-population-launch-readiness-authority.md` must contain the supplied approved V2 authority.
+**Spec:** `docs/architecture/food-catalog-data-population-launch-readiness-authority.md` contains the approved V2 authority. Planner post-phase-close corrections on PR #158 further require fail-closed market classification and durable reviewed-ingestion audit history; where this plan's original wording differed, the corrected wording below is authoritative.
 
 ## Global Constraints
 
@@ -19,9 +19,10 @@
 - No provider dataset download or provider-specific adapter.
 - No Production database mutation or migration application.
 - No compatibility-marker promotion.
-- No rewrite of applied migrations.
+- No rewrite of applied migrations. The Batch 0 readiness migration may be corrected in place only while it remains repository-only/unapplied.
 - No external DB/search/cache/queue/worker/paid dependency.
 - No market-aware runtime ranking or market inference.
+- Global market relevance is explicit and fail-closed: omitted classification must not silently become global.
 - No broader MCP completeness or prompt redesign.
 - Preserve PR #157 canonical Food search/write behavior.
 - Missing nutrition remains `NULL`.
@@ -57,6 +58,7 @@
 - Create: `lib/food-catalog/ingestion/validate.test.ts`
 - Create: `lib/food-catalog/ingestion/manifest.test.ts`
 - Modify/add focused Food curation tests.
+- Register the Batch 0 DB verification SQL in the permanent local-only database verification chain.
 
 ---
 
@@ -84,10 +86,11 @@ git checkout -b feat/food-catalog-batch0-readiness
 
 ## Task 1 — Add approved V2 authority and plan
 
-- [ ] Copy the supplied V2 authority verbatim to `docs/architecture/food-catalog-data-population-launch-readiness-authority.md`.
-- [ ] Copy this V2 plan verbatim to `docs/superpowers/plans/2026-08-30-food-catalog-batch0-schema-ingestion-readiness.md`.
+- [ ] Copy the supplied V2 authority to `docs/architecture/food-catalog-data-population-launch-readiness-authority.md`.
+- [ ] Copy this V2 plan to `docs/superpowers/plans/2026-08-30-food-catalog-batch0-schema-ingestion-readiness.md`.
+- [ ] Apply any later Planner corrections explicitly to stale implementation-plan wording while preserving the approved scope boundary.
 - [ ] Confirm both explicitly prohibit population/Production/provider adapters/ranking changes.
-- [ ] Commit docs only.
+- [ ] Commit docs only when this is the active task stage.
 
 ---
 
@@ -97,13 +100,14 @@ git checkout -b feat/food-catalog-batch0-readiness
 
 - [ ] Test discovers exactly one new migration in the branch diff ending `_food_catalog_population_readiness.sql`; it must not hardcode a timestamp decided before branch creation.
 - [ ] Assert it makes `calories/protein_g/carbs_g/fat_g` nullable.
-- [ ] Assert it adds `brand_name`, `is_market_global`.
+- [ ] Assert it adds `brand_name`, `is_market_global` and that `is_market_global` defaults `false`.
 - [ ] Assert it creates `food_ingestion_batches`, `food_ingestion_runs`, `food_ingestion_batch_records`, `food_barcodes`, `food_market_relevance`.
 - [ ] Assert it version-enables `food_source_records` and removes the legacy global uniqueness `UNIQUE(provider, source_record_id)`.
 - [ ] Assert it introduces version-aware uniqueness for bulk provenance and preserves a bounded legacy/manual uniqueness path.
+- [ ] Assert reviewed-batch semantic authority, source snapshots after participation, reviewed membership, and run audit identity/terminal history are DB-guarded.
 - [ ] Assert internal tables enable RLS and do not grant broad anon/authenticated mutation.
 - [ ] Assert no Food population/COPY/seed and no compatibility-marker change.
-- [ ] Run test and prove RED because migration is absent.
+- [ ] Run test and prove RED before implementation.
 - [ ] Commit RED test.
 
 ---
@@ -118,7 +122,7 @@ Use repository/Supabase convention at execution time:
 supabase migration new food_catalog_population_readiness
 ```
 
-If CLI generation is unavailable, use the current UTC 14-digit migration timestamp after verifying no collision. Do not reuse the old draft's hardcoded timestamp.
+If CLI generation is unavailable, use the current UTC 14-digit migration timestamp after verifying no collision. Do not reuse an old draft's hardcoded timestamp. Once created, keep this same migration while it remains repository-only/unapplied; do not add a follow-up migration for pre-apply corrections.
 
 ### 3.2 Nullable core nutrition
 
@@ -132,20 +136,22 @@ alter table public.food_items
 
 Preserve existing non-negative checks.
 
-### 3.3 Display brand + global market relevance
+### 3.3 Display brand + fail-closed global market relevance
 
 Add:
 
 ```text
 food_items.brand_name text null
-food_items.is_market_global boolean not null default true
+food_items.is_market_global boolean not null default false
 ```
 
 Add nonblank check for non-null `brand_name`.
 
+`is_market_global` is fail-closed. A future adapter or ingestion path that omits market classification must receive `false`; global relevance must be supplied explicitly. This does not authorize market-aware runtime ranking or user-market inference in Batch 0.
+
 Do not create a full Brand domain in Batch 0; `brand_name` is a stable compatibility/display field and future normalization must be additive.
 
-### 3.4 Immutable semantic batch table
+### 3.4 Immutable reviewed semantic batch authority
 
 Create `public.food_ingestion_batches` with at minimum:
 
@@ -176,13 +182,16 @@ created_at timestamptz not null default now()
 updated_at timestamptz not null default now()
 ```
 
-Checks:
+Checks and lifecycle:
 - required text nonblank;
 - SHA-256 fields exactly 64 hex chars when non-null;
 - review_state in `prepared|reviewed|approved|rejected|superseded`;
 - all counts >= 0;
-- `approved_at` allowed only when review_state is approved;
-- `reviewed_at` required for reviewed/approved/rejected states.
+- `reviewed_at` is null while prepared and required for reviewed/approved/rejected/superseded states;
+- `approved_at` is required for approved/superseded states and null before approval;
+- approval reference may exist only with approval proof;
+- conservative forward transitions are `prepared → reviewed → approved → superseded` or `prepared → reviewed → rejected`;
+- rejected and superseded are terminal; reviewed batches do not return to prepared.
 
 Unique semantic identity:
 
@@ -197,7 +206,31 @@ config_checksum_sha256
 
 Execution mode MUST NOT be part of this identity.
 
-### 3.5 Separate execution-attempt table
+Once a batch leaves `prepared`, freeze the complete reviewed semantic authority, including at minimum:
+
+```text
+provider
+dataset_name
+source_version
+source_release_date
+license_name
+license_reference
+source_reference
+source_checksum_sha256
+importer_version
+config_checksum_sha256
+manifest_content_checksum_sha256
+input_count
+accepted_count
+rejected_count
+matched_count
+created_count
+possible_duplicate_count
+```
+
+`reviewed_at` must not be silently rewritten after establishment. Once `approved_at` or `approval_reference` is established, it cannot be erased or rewritten. Superseding an approved batch must retain its historical approval proof.
+
+### 3.5 Separate durable execution-attempt table
 
 Create `public.food_ingestion_runs`:
 
@@ -231,6 +264,17 @@ Checks:
 
 This table allows retries without inventing new semantic batch identities.
 
+Run identity is immutable after creation:
+
+```text
+batch_id
+execution_mode
+attempt_number
+manifest_content_checksum_sha256
+```
+
+Use a conservative lifecycle. Prepared runs may proceed to running or be cancelled. Running runs may complete, fail, or be cancelled. Once a run is `completed|failed|cancelled`, its audit/business fields are immutable. While prepared/running, operational fields may progress without permitting identity repointing.
+
 Add a database trigger/guard for `production` runs that rejects insert/update unless:
 - referenced batch `review_state = 'approved'`;
 - batch `approved_at` is non-null;
@@ -239,9 +283,7 @@ Add a database trigger/guard for `production` runs that rejects insert/update un
 
 Do not rely only on a future executor to enforce this invariant.
 
-Also prevent mutation of semantic batch identity fields (`provider`, dataset/version, source checksum, importer version, config checksum) after the batch leaves `prepared`, so an approved batch cannot be silently repointed to different content.
-
-### 3.6 Versioned source provenance + batch participation
+### 3.6 Versioned source provenance + frozen reviewed participation
 
 Actual current Production constraint is `food_source_records_provider_source_record_id_key = UNIQUE(provider, source_record_id)`.
 
@@ -288,7 +330,11 @@ unique(batch_id, source_record_id)
 
 `outcome` is restricted to `accepted|rejected|matched|created|possible_duplicate`.
 
-This allows the same immutable source snapshot to participate in multiple later batches/configurations without duplicating or overwriting provenance.
+Once a source snapshot is referenced by `food_ingestion_batch_records`, freeze its source identity/content in place, including at minimum provider, source record ID, dataset/version/release date, source-record checksum, source reference, source nutrition, source serving, license identity/reference, and retrieved source timestamp. Do not freeze canonical `food_id` solely because the snapshot entered review lineage; later canonical association remains an allowed matching operation.
+
+Batch membership may be prepared while the parent batch is `prepared`. Once the parent leaves `prepared`, reject INSERT, UPDATE, and DELETE on its `food_ingestion_batch_records`, so review state always refers to exactly the reviewed source-snapshot set.
+
+This allows the same immutable source snapshot to participate in multiple later prepared batches/configurations without duplicating or overwriting provenance, while making each reviewed batch's membership durable.
 
 ### 3.7 GTIN identity
 
@@ -333,7 +379,7 @@ Checks:
 
 Add same-Food provenance FK when source_record_id exists.
 
-This must support future `EU`/`GCC` without a schema rewrite.
+This must support future `EU`/`GCC` without a schema rewrite. Batch 0 still does not implement market-aware runtime ranking.
 
 ### 3.9 Indexes/triggers/security
 
@@ -347,35 +393,51 @@ Add focused indexes for:
 
 Use `public.set_updated_at()` triggers.
 
-Enable RLS on all five new tables (`food_ingestion_batches`, `food_ingestion_runs`, `food_ingestion_batch_records`, `food_barcodes`, `food_market_relevance`). Revoke anon/authenticated broad access; grant internal service-role authority. No broad member policies.
+Enable RLS on all five new tables (`food_ingestion_batches`, `food_ingestion_runs`, `food_ingestion_batch_records`, `food_barcodes`, `food_market_relevance`). Revoke anon/authenticated broad access; grant internal service-role authority. Harden trigger functions and do not create broad member policies.
 
 ### 3.10 Validate migration
 
 - migration contract test passes;
 - migration ledger passes;
-- repository DB lint/preflight on clean local/ephemeral DB;
+- chronological migration replay succeeds;
+- repository DB lint succeeds on clean local/ephemeral DB;
+- Batch 0 DB behavioral verification succeeds against disposable local Supabase;
 - no Production apply.
 
 Commit migration.
 
 ---
 
-## Task 4 — Read-only schema verification SQL
+## Task 4 — Disposable transactional DB verification SQL
 
-Create `supabase/verification/food-catalog-population-readiness.sql` proving:
+Create `supabase/verification/food-catalog-population-readiness.sql` and register it in the permanent local-only database verification chain before release preflight verification.
+
+The verification may create bounded fixture rows only inside a transaction that always rolls back, and the runner must refuse non-local/non-disposable database targets. It must never mutate Production.
+
+Prove structurally and behaviorally:
 
 - four core nutrients nullable;
+- `is_market_global` defaults `false`, including a newly inserted fixture that omits the field;
 - required columns/tables exist;
 - batch/run separation exists;
-- production-run approval/checksum DB guard exists;
-- semantic batch identity becomes immutable after leaving prepared;
+- exact approved-manifest Production-run DB guard still rejects a mismatched checksum;
+- reviewed batch semantic fields cannot mutate;
+- reviewed batch cannot return to prepared;
+- `reviewed_at` cannot be silently rewritten after establishment;
+- approval timestamps/references cannot be erased or rewritten once established;
+- approved→superseded preserves approval history;
+- rejected/superseded terminal lifecycle cannot move backward;
+- source snapshot identity/content cannot mutate after batch participation while canonical `food_id` association remains separately mutable;
+- reviewed batch membership rejects INSERT/UPDATE/DELETE;
+- ingestion-run identity cannot be repointed;
+- prepared/running run lifecycle is bounded and terminal ingestion runs cannot be rewritten;
 - batch↔source-record many-to-many participation exists;
 - legacy provenance uniqueness is gone;
 - partial legacy + versioned bulk uniqueness exists;
 - GTIN constraints and same-Food provenance FK exist;
 - region-safe market constraints exist;
 - RLS/privilege expectations hold;
-- no verification statement mutates data.
+- all fixture DML is rolled back.
 
 ---
 
@@ -563,7 +625,7 @@ Guard must prove:
 
 - no provider-specific runtime adapter/download in Batch 0;
 - no large source datasets committed;
-- no Food Catalog data INSERT/COPY/seed;
+- no Food Catalog data INSERT/COPY/seed in the migration or runtime population paths; disposable verification fixtures are bounded test data and roll back;
 - no ordinary client/public MCP/member API direct access to ingestion batch/run/batch-record/barcode/market tables;
 - no market inference from locale/language/IP/timezone/geolocation;
 - only one new migration for Batch 0;
@@ -597,9 +659,9 @@ npm run test:integration
 npm run build
 ```
 
-Use repository-standard DB lint/preflight against local/ephemeral infrastructure. Do not apply Production migration.
+Use repository-standard chronological migration replay, DB lint, and the registered Batch 0 behavioral verification against local/ephemeral infrastructure. Do not apply Production migration.
 
-Review full diff for prohibited datasets/population.
+Review full diff for prohibited datasets/population and prove Production remains untouched.
 
 ---
 
@@ -612,6 +674,10 @@ PR body reports:
 - exact base/head;
 - migration file selected at execution time;
 - nullable nutrition;
+- fail-closed `is_market_global` default;
+- complete reviewed-batch semantic/lifecycle immutability;
+- source-snapshot and reviewed-membership immutability;
+- durable run identity/terminal history;
 - batch/run schema separation;
 - versioned provenance constraint change;
 - GTIN identity;
@@ -623,7 +689,7 @@ PR body reports:
 
 Run PR Quality. Correct in scope on same branch/PR.
 
-Once final head is stable, run canonical phase-close Quality on that exact head.
+Once final corrected head is stable, prior canonical evidence is superseded. Trigger a new canonical phase-close Quality on that exact head and retain the new run/job/artifact identities.
 
 STOP before merge, deploy, Production migration, source download, or Batch 1.
 
@@ -641,6 +707,12 @@ exact final head SHA
 changed files
 migration filename
 schema changes
+fail-closed market default proof
+reviewed batch semantic/lifecycle immutability proof
+source snapshot immutability proof
+reviewed batch membership immutability proof
+run identity + terminal audit immutability proof
+exact approved-manifest Production guard proof
 legacy provenance uniqueness replacement proof
 batch vs run separation proof
 RLS/privilege proof
@@ -652,6 +724,7 @@ GTIN test evidence
 market country+region test evidence
 manifest determinism evidence including different timestamps = same content checksum
 focused test results
+migration replay / DB lint / DB verification / ledger evidence
 PR Quality evidence
 canonical exact-head Quality run/job/artifacts
 rollback boundary
@@ -662,13 +735,17 @@ confirmation: no merge/deploy/Production migration/Batch 1
 
 ## Plan self-review
 
-This V2 explicitly closes the long-term weaknesses in the earlier plan:
+This V2 plus Planner post-phase-close corrections explicitly closes the long-term weaknesses in the earlier plan:
 
+- market-global classification fails closed and requires explicit global relevance;
 - source records are release-versionable and independent of processing batches;
-- batch↔source-record participation is many-to-many;
-- semantic batches are immutable and retries are separate runs;
-- Production runs are database-gated to the exact approved manifest checksum;
+- participating source snapshot identity/content becomes immutable without freezing later canonical `food_id` association;
+- batch↔source-record participation is many-to-many while reviewed membership is frozen;
+- reviewed semantic batches have a conservative forward-only lifecycle and preserve review/approval history;
+- retries are separate runs with immutable identity and terminal audit history;
+- Production runs remain database-gated to the exact approved manifest checksum;
 - manifest review hashes exclude volatile timestamps;
 - market relevance supports country + region without later schema replacement;
 - migration timestamp is resolved at execution time rather than hardcoded;
-- future Brand normalization remains additive rather than requiring Food identity replacement.
+- future Brand normalization remains additive rather than requiring Food identity replacement;
+- verification fixtures are bounded to disposable local DB transactions and always roll back.
