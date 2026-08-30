@@ -21,6 +21,14 @@ const GTIN = /^(?:\d{8}|\d{12}|\d{13}|\d{14})$/;
 const COUNTRY_SCOPE = /^[A-Z]{2}$/;
 const REGION_SCOPE = /^[A-Z][A-Z0-9_-]{1,15}$/;
 
+function isValidLocaleTag(value: string): boolean {
+  try {
+    return Intl.getCanonicalLocales(value).length === 1;
+  } catch {
+    return false;
+  }
+}
+
 export function validateFoodCatalogCandidate(
   candidate: FoodCatalogNormalizedCandidate
 ): FoodCatalogValidationIssue[] {
@@ -67,7 +75,10 @@ export function validateFoodCatalogCandidate(
 
   if (
     candidate.aliases.some((alias) =>
-      !alias.locale.trim() || !alias.value.trim() || !alias.normalizedValue.trim()
+      !alias.locale.trim()
+      || !isValidLocaleTag(alias.locale)
+      || !alias.value.trim()
+      || !alias.normalizedValue.trim()
     )
   ) {
     addIssue("invalid_alias", "error", "aliases");
