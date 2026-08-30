@@ -9,6 +9,7 @@ import type { FoodLibraryItem, FoodLog, MealType, UserFoodItem } from "@/types";
 function requireUserFoodIdentity(userId: string, food: UserFoodItem) {
   if (!supabase || !isUuid(userId)) throw new Error("User session invalid");
   if (!isUuid(food.id)) throw new Error("Invalid My Food ID.");
+  return supabase;
 }
 
 function requirePositiveQuantity(quantity: number) {
@@ -28,7 +29,7 @@ export async function addUserFoodToToday({
   mealType?: MealType;
   date?: string;
 }): Promise<FoodLog> {
-  requireUserFoodIdentity(userId, food);
+  const client = requireUserFoodIdentity(userId, food);
   requirePositiveQuantity(quantity);
   const macros = scaleFoodMacros(food, quantity);
   const payload = {
@@ -46,7 +47,7 @@ export async function addUserFoodToToday({
     fat_g: macros.fat_g,
     notes: food.notes
   };
-  const { data, error } = await supabase.from("food_logs").insert(payload).select("id").single();
+  const { data, error } = await client.from("food_logs").insert(payload).select("id").single();
   if (error) throw error;
   if (!data?.id) throw new Error("My Food logging returned an invalid result.");
   return { id: String(data.id), ...payload };
