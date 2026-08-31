@@ -34,7 +34,7 @@ function gitLines(args: string[]): string[] {
 }
 
 function changedPaths(): string[] {
-  return gitLines(["diff", "--name-only", `${APPROVED_BASE_SHA}...HEAD`]);
+  return gitLines(["diff", "--name-only", `${APPROVED_BASE_SHA}...${BATCH0_FINAL_SHA}`]);
 }
 
 function readLedgerAt(ref: string): MigrationLedger {
