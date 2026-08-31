@@ -9,7 +9,8 @@ import {
   getString,
   type JsonObject,
 } from "@/lib/mcp/schemas";
-import { fail, ok, sumMacros, type McpToolResult } from "@/lib/mcp/tool-helpers";
+import { fail, ok, type McpToolResult } from "@/lib/mcp/tool-helpers";
+import { sumFoodLogs } from "@/services/nutrition/calculations";
 import { searchCatalogFoodsByName } from "@/services/nutrition-v1/server/food-catalog";
 import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
 
@@ -28,6 +29,15 @@ function nullableNumber(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+export function sumCanonicalFoodMcpTotals(rows: Array<Record<string, unknown>>) {
+  return sumFoodLogs(rows.map((row) => ({
+    calories: nullableNumber(row.calories),
+    protein_g: nullableNumber(row.protein_g),
+    carbs_g: nullableNumber(row.carbs_g),
+    fat_g: nullableNumber(row.fat_g),
+  })));
 }
 
 function normalizeFood(row: Record<string, unknown>, source: "global" | "user"): FoodCandidate {
@@ -150,7 +160,7 @@ export async function executeCanonicalFoodMcpTool(
 
     const { data, error } = await ctx.supabase.from("food_logs").insert(rows).select("*");
     if (error) throw new Error(error.message);
-    return ok({ ok: true, saved_items: data ?? [], totals: sumMacros((data ?? []) as Array<Record<string, unknown>>) });
+    return ok({ ok: true, saved_items: data ?? [], totals: sumCanonicalFoodMcpTotals((data ?? []) as Array<Record<string, unknown>>) });
   } catch (error) {
     console.error(`Plaivra MCP tool execution failed for ${toolName}:`, error instanceof Error ? error.message : "Unknown error");
     return fail("tool_execution_failed", "Plaivra could not complete this tool. No change should be assumed; retry or review the affected record in Plaivra.");

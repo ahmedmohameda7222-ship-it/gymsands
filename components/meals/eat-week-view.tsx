@@ -45,9 +45,11 @@ export function EatWeekView({
     ? et("adherenceUnavailableTargets")
     : weekTargets.status === "loading" && !weekTargets.data
       ? et("loading")
-      : analytics.adherenceDays === null
-        ? et("adherenceNotConfigured")
-        : et("adherenceMatched", { near: analytics.adherenceDays, eligible: analytics.targetEligibleLoggedDays });
+      : analytics.adherenceState === "incomplete"
+        ? et("unavailable")
+        : analytics.adherenceDays === null
+          ? et("adherenceNotConfigured")
+          : et("adherenceMatched", { near: analytics.adherenceDays, eligible: analytics.targetEligibleLoggedDays });
 
   return <div className="space-y-4">
     <Card>

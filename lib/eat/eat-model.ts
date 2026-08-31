@@ -44,6 +44,7 @@ export type WeekNutritionAnalytics = {
   calendarAverageCalories: number | null;
   targetEligibleLoggedDays: number;
   adherenceDays: number | null;
+  adherenceState: "available" | "incomplete" | "not-configured";
   targetsState: "available" | "partial" | "not-configured";
   proteinCalories: number | null;
   carbCalories: number | null;
@@ -250,8 +251,13 @@ export function buildWeekAnalytics(days: DailyNutritionSummary[], tolerance = 0.
   const fatCalories = nullableNutrition(fat, (value) => Math.round(value * 9));
   const targetConfiguredLogged = logged.filter((day) => Boolean(day.has_targets) && finite(day.planned_calories) > 0);
   const targetEligible = targetConfiguredLogged.filter((day) => day.calories !== null);
-  const adherenceDays = targetEligible.length
-    ? targetEligible.filter((day) => Math.abs((day.calories as number) - finite(day.planned_calories)) / finite(day.planned_calories) <= tolerance).length
+  const adherenceState = targetConfiguredLogged.length === 0
+    ? "not-configured"
+    : targetEligible.length === targetConfiguredLogged.length
+      ? "available"
+      : "incomplete";
+  const adherenceDays = adherenceState === "available"
+    ? targetConfiguredLogged.filter((day) => Math.abs((day.calories as number) - finite(day.planned_calories)) / finite(day.planned_calories) <= tolerance).length
     : null;
   const configuredDays = days.filter((day) => Boolean(day.has_targets) && finite(day.planned_calories) > 0).length;
   const targetsState = configuredDays === 0
@@ -270,6 +276,7 @@ export function buildWeekAnalytics(days: DailyNutritionSummary[], tolerance = 0.
     calendarAverageCalories: logged.length && calories !== null ? Math.round(calories / 7) : null,
     targetEligibleLoggedDays: targetEligible.length,
     adherenceDays,
+    adherenceState,
     targetsState,
     proteinCalories,
     carbCalories,

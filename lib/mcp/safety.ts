@@ -33,6 +33,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function schemaAllowsNull(schema: JsonSchema | undefined): boolean {
+  if (!schema) return false;
+  if (schema.type === "null") return true;
+  return Boolean(schema.anyOf?.some((candidate) => schemaAllowsNull(candidate)));
+}
+
 function isValidIsoDate(value: string) {
   if (value === "today") return true;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -93,6 +99,11 @@ function validateNode(value: unknown, schema: JsonSchema, path: string, errors: 
     if (!matchesAny) errors.push(`${path} must match at least one allowed shape.`);
   }
 
+  if (schema.type === "null") {
+    if (value !== null) errors.push(`${path} must be null.`);
+    return;
+  }
+
   if (schema.type === "object") {
     if (!isObject(value)) {
       errors.push(`${path} must be an object.`);
@@ -111,7 +122,7 @@ function validateNode(value: unknown, schema: JsonSchema, path: string, errors: 
       if (
         !(required in value) ||
         requiredValue === undefined ||
-        requiredValue === null ||
+        (requiredValue === null && !schemaAllowsNull(properties[required])) ||
         (typeof requiredValue === "string" && !requiredValue.trim())
       ) {
         errors.push(`${path}.${required} is required.`);
@@ -123,7 +134,7 @@ function validateNode(value: unknown, schema: JsonSchema, path: string, errors: 
       }
     }
     for (const [key, child] of Object.entries(properties)) {
-      if (key in value && value[key] !== undefined && value[key] !== null) {
+      if (key in value && value[key] !== undefined) {
         validateNode(value[key], child, `${path}.${key}`, errors);
       }
     }
@@ -214,16 +225,17 @@ function redactSensitiveText(value: string) {
     .slice(0, MAX_OUTPUT_STRING_LENGTH);
 }
 
-export function minimizeMcpOutput(value: unknown, depth = 0): unknown {
+export function minimizeMcpOutput(value: unknown, depth = 0, schema?: JsonSchema): unknown {
   if (depth > 10) return "[TRUNCATED]";
   if (typeof value === "string") return redactSensitiveText(value);
-  if (Array.isArray(value)) return value.slice(0, MAX_OUTPUT_ARRAY_ITEMS).map((item) => minimizeMcpOutput(item, depth + 1));
+  if (Array.isArray(value)) return value.slice(0, MAX_OUTPUT_ARRAY_ITEMS).map((item) => minimizeMcpOutput(item, depth + 1, schema?.items));
   if (!isObject(value)) return value;
 
+  const properties = schema?.type === "object" ? schema.properties ?? {} : {};
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key, child]) => child !== null && child !== undefined && !PRIVATE_OUTPUT_KEYS.test(key))
-      .map(([key, child]) => [key, minimizeMcpOutput(child, depth + 1)])
+      .filter(([key, child]) => child !== undefined && !PRIVATE_OUTPUT_KEYS.test(key) && (child !== null || schemaAllowsNull(properties[key])))
+      .map(([key, child]) => [key, minimizeMcpOutput(child, depth + 1, properties[key])])
   );
 }
 
@@ -243,8 +255,9 @@ function projectMcpOutputToSchema(value: unknown, schema: JsonSchema | undefined
 }
 
 export function sanitizeMcpToolResult(result: McpToolResult, outputSchema?: Record<string, unknown>): McpToolResult {
-  const minimized = minimizeMcpOutput(result.structuredContent);
-  const structuredContent = projectMcpOutputToSchema(minimized, outputSchema as JsonSchema | undefined) as Record<string, unknown>;
+  const schema = outputSchema as JsonSchema | undefined;
+  const minimized = minimizeMcpOutput(result.structuredContent, 0, schema);
+  const structuredContent = projectMcpOutputToSchema(minimized, schema) as Record<string, unknown>;
   const originalJson = JSON.stringify(result.structuredContent);
   const content = result.content.map((item) => ({
     ...item,

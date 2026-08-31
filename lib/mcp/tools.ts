@@ -216,6 +216,7 @@ export const MCP_IDEMPOTENT_WRITE_TOOL_NAMES = new Set([
 
 const outputString = { type: "string" } as const;
 const outputNumber = { type: "number" } as const;
+const outputNullableNumber = { anyOf: [outputNumber, { type: "null" }] } as const;
 const outputBoolean = { type: "boolean" } as const;
 const outputStringArray = { type: "array", items: outputString } as const;
 
@@ -224,8 +225,8 @@ const publicRecordSchema = {
   additionalProperties: false,
   properties: {
     id: outputString, source: outputString, food_name: outputString, serving_size: outputString,
-    quantity: outputNumber, calories: outputNumber, protein_g: outputNumber, carbs_g: outputNumber,
-    fat_g: outputNumber, fiber_g: outputNumber, sugar_g: outputNumber, sodium_mg: outputNumber,
+    quantity: outputNumber, calories: outputNullableNumber, protein_g: outputNullableNumber, carbs_g: outputNullableNumber,
+    fat_g: outputNullableNumber, fiber_g: outputNumber, sugar_g: outputNumber, sodium_mg: outputNumber,
     category: outputString, cuisine: outputString, kitchen_id: outputString, food_item_id: outputString,
     user_food_item_id: outputString, log_date: outputString, meal_type: outputString, meal_id: outputString,
     meal_name: outputString, meal_category: outputString, is_favorite: outputBoolean, plan_date: outputString,
@@ -255,7 +256,7 @@ const publicRecordSchema = {
 } as const;
 
 const recordArraySchema = { type: "array", items: publicRecordSchema } as const;
-const macroTotalsSchema = { type: "object", additionalProperties: false, required: ["calories", "protein_g", "carbs_g", "fat_g"], properties: { calories: outputNumber, protein_g: outputNumber, carbs_g: outputNumber, fat_g: outputNumber } } as const;
+const macroTotalsSchema = { type: "object", additionalProperties: false, required: ["calories", "protein_g", "carbs_g", "fat_g"], properties: { calories: outputNullableNumber, protein_g: outputNullableNumber, carbs_g: outputNullableNumber, fat_g: outputNullableNumber } } as const;
 const groupedMealsSchema = { type: "object", additionalProperties: false, required: ["breakfast", "lunch", "dinner", "snack"], properties: { breakfast: recordArraySchema, lunch: recordArraySchema, dinner: recordArraySchema, snack: recordArraySchema } } as const;
 
 function closedSuccessOutput(required: string[], properties: Record<string, unknown>) {
