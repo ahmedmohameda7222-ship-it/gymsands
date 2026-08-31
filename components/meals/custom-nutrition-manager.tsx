@@ -26,7 +26,7 @@ import {
   type CustomMealInput,
   type UserFoodInput
 } from "@/services/database/nutrition";
-import { calculateSavedMealDraftTotals, formatSavedMealNutrition } from "@/services/meals/saved-meal-draft";
+import { calculateSavedMealDraftTotals, formatSavedMealNutrition, savedMealSuccessDescription } from "@/services/meals/saved-meal-draft";
 import type { CustomMeal, FoodItem, FoodKitchen, FoodLog, FoodSubcategory, MealType, UserFoodItem } from "@/types";
 
 const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -468,7 +468,7 @@ export function CustomNutritionManager({
       const saved = await upsertCustomMeal(input);
       setMeals((current) => [saved, ...current.filter((meal) => meal.id !== saved.id)].sort((a, b) => a.meal_name.localeCompare(b.meal_name)));
       resetMealDraft();
-      setMealStatus({ type: "success", title: "Custom meal saved.", description: `${saved.meal_name} totals ${saved.totals.calories} kcal.` });
+      setMealStatus({ type: "success", title: "Custom meal saved.", description: savedMealSuccessDescription(saved.meal_name, saved.totals.calories) });
     } catch (error) {
       setMealStatus({ type: "error", title: "Save failed. Your draft is still here.", description: userSafeError(error, "Please add a name and foods.") });
     } finally {
@@ -749,7 +749,7 @@ export function CustomNutritionManager({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-semibold">{meal.meal_name}</p>
-                      <p className="text-sm text-muted-foreground">{meal.totals.calories} kcal | {meal.items.length} foods</p>
+                      <p className="text-sm text-muted-foreground">{formatSavedMealNutrition(meal.totals.calories, " kcal")} | {meal.items.length} foods</p>
                     </div>
                     <Badge variant="outline">{meal.meal_category || "Meal"}</Badge>
                   </div>
