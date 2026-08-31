@@ -232,9 +232,10 @@ export function minimizeMcpOutput(value: unknown, depth = 0, schema?: JsonSchema
   if (!isObject(value)) return value;
 
   const properties = schema?.type === "object" ? schema.properties ?? {} : {};
+  const required = new Set(schema?.type === "object" ? schema.required ?? [] : []);
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key, child]) => child !== undefined && !PRIVATE_OUTPUT_KEYS.test(key) && (child !== null || schemaAllowsNull(properties[key])))
+      .filter(([key, child]) => child !== undefined && !PRIVATE_OUTPUT_KEYS.test(key) && (child !== null || (required.has(key) && schemaAllowsNull(properties[key]))))
       .map(([key, child]) => [key, minimizeMcpOutput(child, depth + 1, properties[key])])
   );
 }
