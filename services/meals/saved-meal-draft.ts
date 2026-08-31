@@ -13,3 +13,9 @@ export function calculateSavedMealDraftTotals(items: SavedMealDraftIngredient[])
 export function formatSavedMealNutrition(value: number | null, suffix: string) {
   return value === null ? "—" : `${value}${suffix}`;
 }
+
+export function savedMealSuccessDescription(mealName: string, calories: number | null) {
+  return calories === null
+    ? `${mealName} was saved. Total calories are unknown.`
+    : `${mealName} totals ${calories} kcal.`;
+}
