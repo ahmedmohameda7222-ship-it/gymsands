@@ -67,7 +67,7 @@ describe("public MCP output contracts", () => {
     }
   });
 
-  it("preserves schema-authorized nullable Food nutrition while keeping real zero numeric", () => {
+  it("preserves required nullable Food totals while keeping real zero numeric", () => {
     const tool = mcpTools.find((candidate) => candidate.name === "add_food_log");
     expect(tool).toBeTruthy();
     const structuredContent = {
@@ -83,9 +83,10 @@ describe("public MCP output contracts", () => {
     const sanitized = sanitizeMcpToolResult(original, tool!.outputSchema);
 
     expect(sanitized.structuredContent).toMatchObject({
-      saved_items: [{ calories: 100, protein_g: null, carbs_g: 0, fat_g: 2 }],
+      saved_items: [{ calories: 100, carbs_g: 0, fat_g: 2 }],
       totals: { calories: 100, protein_g: null, carbs_g: 0, fat_g: 2 }
     });
+    expect((sanitized.structuredContent.saved_items as Array<Record<string, unknown>>)[0]?.protein_g).toBeUndefined();
     expect(validateMcpToolOutput(tool!, sanitized)).toMatchObject({ success: true });
     expect(sanitized.content[0]?.text).toContain('"protein_g":null');
     expect(sanitized.content[0]?.text).toContain('"carbs_g":0');
