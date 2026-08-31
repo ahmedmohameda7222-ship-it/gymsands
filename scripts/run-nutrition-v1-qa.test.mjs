@@ -32,6 +32,22 @@ test("Nutrition V1 rendered QA exports the complete approved scenario and viewpo
   assert.equal(qa.NUTRITION_V1_QA_SCENARIOS.some((scenario) => scenario.offline === true), true);
 });
 
+test("offline Meal Plan conflict scenario stays pinned to the fixture date and fixture week", async () => {
+  const qa = await import("./run-nutrition-v1-qa.mjs");
+  const scenario = qa.NUTRITION_V1_QA_SCENARIOS.find((item) => item.name === "meal-plan-offline-conflict-partial-estimated");
+  assert.ok(scenario, "meal-plan-offline-conflict-partial-estimated");
+  const route = new URL(scenario.route, "https://qa.local");
+  assert.equal(route.pathname, "/my-meal-plan");
+  assert.equal(route.searchParams.get("date"), "2026-08-26");
+
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  const fixtureWeekStart = source.match(/const MEAL_PLAN_QA_WEEK_START = "([^"]+)";/)?.[1];
+  assert.ok(fixtureWeekStart, "MEAL_PLAN_QA_WEEK_START");
+  assert.equal(route.searchParams.get("week"), fixtureWeekStart);
+  assert.equal(scenario.offline, true);
+  assert.notEqual(scenario.route, "/my-meal-plan");
+});
+
 test("approved RTL screenshot scenarios exercise the real Arabic product locale", async () => {
   const qa = await import("./run-nutrition-v1-qa.mjs");
   for (const name of REQUIRED_ARABIC_SCENARIOS) {
