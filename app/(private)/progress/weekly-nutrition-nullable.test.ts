@@ -25,9 +25,9 @@ function loadProductionBuildWeeklyInsights() {
   const compiled = ts.transpileModule(`${match[0]}\nmodule.exports = buildWeeklyInsights;`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const module = { exports: undefined as unknown };
-  new Function("module", "exports", "startOfWeek", "addDays", compiled)(module, {}, startOfWeek, addDays);
-  return module.exports as (input: {
+  const loadedModule = { exports: undefined as unknown };
+  new Function("module", "exports", "startOfWeek", "addDays", compiled)(loadedModule, {}, startOfWeek, addDays);
+  return loadedModule.exports as (input: {
     nutritionWeek: NutritionDay[];
     workoutActivity: never[];
     entries: never[];
