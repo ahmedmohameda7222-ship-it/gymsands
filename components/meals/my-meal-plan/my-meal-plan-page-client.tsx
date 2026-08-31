@@ -764,14 +764,14 @@ function DailyOverview({
       <CardContent className="space-y-3 p-4 pt-1">
         <div className="grid grid-cols-2 gap-2">
           <Metric label={c.target} value={targetCalories === null ? "—" : Math.round(targetCalories)} suffix={targetCalories === null ? "" : " kcal"} />
-          <Metric label={c.scheduled} value={Math.round(summary.scheduled.calories)} suffix=" kcal" />
-          <Metric label={c.consumed} value={Math.round(summary.consumed.calories)} suffix=" kcal" />
-          <Metric label={remainingLabel} value={remainingValue} suffix={summary.remainingCalories === null ? "" : " kcal"} emphasis={summary.overTargetCalories > 0} />
+          <Metric label={c.scheduled} value={summary.scheduled.calories === null ? "—" : Math.round(summary.scheduled.calories)} suffix={summary.scheduled.calories === null ? "" : " kcal"} />
+          <Metric label={c.consumed} value={summary.consumed.calories === null ? "—" : Math.round(summary.consumed.calories)} suffix={summary.consumed.calories === null ? "" : " kcal"} />
+          <Metric label={remainingLabel} value={remainingValue} suffix={summary.remainingCalories === null ? "" : " kcal"} emphasis={summary.overTargetCalories !== null && summary.overTargetCalories > 0} />
         </div>
         <div className="grid grid-cols-3 gap-2 border-t pt-3 text-center">
-          <Metric label={c.protein} value={Math.round(summary.scheduled.protein_g)} suffix=" g" compact />
-          <Metric label={c.carbs} value={Math.round(summary.scheduled.carbs_g)} suffix=" g" compact />
-          <Metric label={c.fat} value={Math.round(summary.scheduled.fat_g)} suffix=" g" compact />
+          <Metric label={c.protein} value={summary.scheduled.protein_g === null ? "—" : Math.round(summary.scheduled.protein_g)} suffix={summary.scheduled.protein_g === null ? "" : " g"} compact />
+          <Metric label={c.carbs} value={summary.scheduled.carbs_g === null ? "—" : Math.round(summary.scheduled.carbs_g)} suffix={summary.scheduled.carbs_g === null ? "" : " g"} compact />
+          <Metric label={c.fat} value={summary.scheduled.fat_g === null ? "—" : Math.round(summary.scheduled.fat_g)} suffix={summary.scheduled.fat_g === null ? "" : " g"} compact />
         </div>
         <div className="flex flex-wrap gap-1.5 border-t pt-3 text-xs">
           <Badge variant="outline">{c.planned}: {summary.counts.planned}</Badge>
@@ -812,7 +812,7 @@ function MealSection(props: {
     <Disclosure
       defaultOpen
       title={<span className="flex items-center gap-2"><Utensils className="h-4 w-4" />{title}<Badge variant="outline">{section.activeCount}</Badge></span>}
-      description={`${Math.round(section.totals.calories)} kcal · ${Math.round(section.totals.protein_g)} g ${props.c.protein.toLowerCase()}`}
+      description={`${formatNullableNutrition(section.totals.calories, "kcal")} · ${formatNullableNutrition(section.totals.protein_g, "g")} ${props.c.protein.toLowerCase()}`}
       toggleLabel={interpolateCopy(props.c.toggleSection, { meal: title })}
       actions={(
         <Button type="button" variant="ghost" size="icon" className="h-11 w-11" aria-label={addLabelForType(props.type, props.c)} onClick={props.onAdd}>
@@ -1077,8 +1077,8 @@ function WeekView({ c, language, weekStart, weekEnd, days, items, targets, selec
                 ) : (
                   <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                     <p>{daySummary.counts.planned} {c.planned.toLowerCase()} · {daySummary.counts.done} {c.done.toLowerCase()} · {daySummary.counts.skipped} {c.skipped.toLowerCase()}</p>
-                    <p>{Math.round(daySummary.scheduled.calories)} / {targetCaloriesForDay ?? "—"} kcal</p>
-                    <p>{c.consumed}: {Math.round(daySummary.consumed.calories)} kcal</p>
+                    <p>{formatNullableNutrition(daySummary.scheduled.calories, "kcal")} / {targetCaloriesForDay === null ? "—" : `${targetCaloriesForDay} kcal`}</p>
+                    <p>{c.consumed}: {formatNullableNutrition(daySummary.consumed.calories, "kcal")}</p>
                     {daySummary.alignmentPercent !== null ? <p>{c.alignment}: {daySummary.alignmentPercent}%</p> : null}
                   </div>
                 )}
