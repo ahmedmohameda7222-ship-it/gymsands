@@ -3,7 +3,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const migrationName = "20260830155245_nullable_meal_plan_nutrition_snapshots.sql";
-const plan1MigrationName = "20260901153000_food_catalog_intelligence_core.sql";
 
 function read(relativePath: string) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
@@ -22,19 +21,14 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
     expect(source).not.toMatch(/alter\s+column\s+(?:quantity|status|completed_at|food_log_id)/i);
   });
 
-  it("records the authorized Production application as an immutable generated alias while preserving the pending Plan 1 migration", () => {
+  it("records the authorized Production application as an immutable generated alias", () => {
     const ledger = JSON.parse(read("supabase/migration-ledger.json")) as {
       pendingCount: number;
       unresolvedCount: number;
-      historyRepair: {
-        state: string;
-        pendingCount: number;
-        unresolvedCount: number;
-      };
+      historyRepair: { state: string };
       entries: Array<Record<string, unknown>>;
     };
     const entries = ledger.entries.filter((entry) => entry.localFile === migrationName);
-    const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
 
     expect(entries).toEqual([
       expect.objectContaining({
@@ -44,21 +38,9 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
         productionName: "nullable_meal_plan_nutrition_snapshots",
       }),
     ]);
-    expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: plan1MigrationName,
-        state: "pending",
-      }),
-    ]);
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair).toEqual(
-      expect.objectContaining({
-        state: "pending",
-        pendingCount: 1,
-        unresolvedCount: 1,
-      }),
-    );
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {

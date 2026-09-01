@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-09-01
+**Current reconciliation date:** 2026-08-30
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history remains reconciled through the latest applied identity; Plan 1 adds one repository-only pending Main Plaivra migration that is not authorized for Production application
+**Status:** Production migration history is reconciled through the latest applied identity; the repository contains no pending or schema-applied-untracked Main Plaivra migration
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -22,23 +22,14 @@ The latest verified Plaivra Production inspection after the authorized 2026-08-3
 
 The current repository/machine-ledger state records:
 
-- Repository-only pending migrations: **1**
-- Pending migration: `20260901153000_food_catalog_intelligence_core.sql`
-- `pendingCount = 1`
+- Repository-only pending migrations: **0**
+- `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 1`
-- `historyRepair.state = pending`
-- migration-ledger `release_ready = false`
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
+- migration-ledger `release_ready = true`
 
-The pending Food Catalog Intelligence core migration exists only in the Plan 1 implementation branch/PR. It has passed disposable local migration replay and database verification, but it has **not** been applied to Plaivra Production. This implementation approval does not authorize Production application. Do not apply or replay it without separate explicit Production authorization.
-
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. The two 2026-08-30 applications use generated Production identities and therefore remain `applied_version_alias` entries. Physical Production count remains 115.
-
-## Food Catalog Intelligence Plan 1 pending migration — 2026-09-01
-
-Repository migration `20260901153000_food_catalog_intelligence_core.sql` is classified as `pending` only. It implements the additive Food Catalog V2 core canonical model and is intentionally not a claim of Production state.
-
-Plan 1 verification is disposable/local-only. No Food population, activation, Catalog Generation promotion, provider ingestion, compatibility-marker promotion, or Production mutation is authorized by this classification.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. The two 2026-08-30 applications use generated Production identities and therefore remain `applied_version_alias` entries. Physical Production count is now 115.
 
 ## Food Catalog and nullable Meal Plan Production applications — 2026-08-30
 
@@ -102,7 +93,6 @@ Physical schema advancement and compatibility-marker promotion are separate auth
 - Repository migration filenames remain immutable after application.
 - Generated Production identities are recorded as aliases in the machine ledger where Supabase applied a repository migration under a different physical timestamp.
 - Do not replay an `applied` or `applied_version_alias` migration.
-- A `pending` repository migration is not evidence of Production application and requires separate explicit Production authorization before any apply.
 - An ambiguous apply result must be reconciled read-only against Production history before any retry.
 - Migration-history repair is metadata-only and allowed only after proving exact duplicate identity/statement conditions; it must never be used to hide schema or application-data divergence.
 - Activity Catalog migrations remain separate from the Main Plaivra migration ledger.
@@ -184,7 +174,7 @@ The later forward-only Nutrition V1 corrections are represented by these generat
 
 The final identity maps to immutable repository migration `20260829110000_nutrition_v1_final_review_corrections.sql`.
 
-No Nutrition V1 repository migration remains pending or unresolved. The only current Main Plaivra repository-only pending migration is `20260901153000_food_catalog_intelligence_core.sql`, introduced by Food Catalog Intelligence Plan 1 and not applied to Production.
+No Nutrition V1 repository migration remains pending or unresolved. No current Main Plaivra repository migration remains pending after the two authorized 2026-08-30 applications.
 
 ## Meal Plan duplicate-history repair
 
@@ -248,3 +238,36 @@ Disposable chronological replay, database lint, verification SQL, integration te
 - identical hydration retry returns the existing water row;
 - reuse of one hydration operation ID with different date/amount is rejected;
 - anonymous execution is denied.
+
+### Privacy/account deletion
+
+- Nutrition V1 user-owned domain rows are included in canonical account purge authority;
+- private Meal Plan and Saved Meal replay ledgers are included in deletion/reconciliation authority;
+- residual-row verification fails closed if owner Nutrition rows remain.
+
+## Nutrition V1 runtime/merge closure
+
+PR #152 was squash-merged into `main` as feature commit `0efddc0d6969487eb4105fccc02f3b629efbab91` after exact-head PR Quality, canonical Quality, Exact Release, and read-only Stage-1 preflight passed.
+
+Vercel Git integration first deployed that exact feature commit to Plaivra Production as `dpl_CsGXokKyNA9HffKtJcVKfL62gTxv`, state `READY`. Production `/api/version` reported the same feature SHA with migration reconciliation healthy and `releaseReady = true` at closure.
+
+Push-triggered Production uptime synthetic run `33250942724` passed after the feature merge. Immediate Vercel runtime-error inspection found no runtime-error cluster.
+
+Later documentation-only or product commits may advance `main` and Vercel Production commit identity. This closure section deliberately preserves the feature baseline rather than pretending it is the permanently current deployment identity.
+
+The Nutrition merge did not promote the released compatibility marker and did not mutate the separate Activity Catalog Production project.
+
+## Authority and verification
+
+Use these current sources in order for migration facts:
+
+1. `supabase/migration-ledger.json` for repository/application identity classification.
+2. Immutable files under `supabase/migrations/` for migration bytes.
+3. Executable contracts under `supabase/verification/` for database invariants.
+4. `scripts/check-migration-ledger.mjs` for ledger validation.
+5. Supabase Production migration history for physical applied records.
+6. Production `/api/version` for live runtime compatibility and reconciliation state.
+7. Vercel Production deployment identity/runtime logs for live deployed application identity.
+8. Exact-head Quality/release workflow artifacts for phase-close evidence.
+
+Do not use historical PR descriptions or completed implementation reports as current migration authority.

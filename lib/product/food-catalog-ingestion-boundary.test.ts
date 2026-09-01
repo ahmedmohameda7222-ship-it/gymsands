@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 const APPROVED_BASE_SHA = "488203fdee566b82c30a51ca9b6cbc050cfaf61f";
 const BATCH0_FINAL_SHA = "53f3cbbd078e82a1d29da20e7d6b126cab6aaa81";
 const BATCH0_MIGRATION = "20260830011407_food_catalog_population_readiness.sql";
-const PLAN1_MIGRATION = "20260901153000_food_catalog_intelligence_core.sql";
 const BATCH0_MIGRATION_PATH = `supabase/migrations/${BATCH0_MIGRATION}`;
 const INTERNAL_TABLES = [
   "food_ingestion_batches",
@@ -69,7 +68,6 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     const batch0Entries = batch0.entries.filter((entry) => entry.localFile === BATCH0_MIGRATION);
     const historicalEntries = batch0.entries.filter((entry) => entry.localFile !== BATCH0_MIGRATION);
     const currentBatch0Entries = current.entries.filter((entry) => entry.localFile === BATCH0_MIGRATION);
-    const currentPendingEntries = current.entries.filter((entry) => entry.state === "pending");
 
     expect(historicalEntries).toEqual(base.entries);
     expect(batch0Entries).toEqual([
@@ -97,19 +95,13 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         productionName: "food_catalog_population_readiness",
       }),
     ]);
-    expect(currentPendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: PLAN1_MIGRATION,
-        state: "pending",
-      }),
-    ]);
-    expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(1);
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "pending",
-        pendingCount: 1,
-        unresolvedCount: 1,
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
       })
     );
   });
@@ -186,5 +178,6 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
 
     expect(runtimeContent).not.toMatch(/accept-language|navigator\.language|navigator\.languages/);
     expect(runtimeContent).not.toMatch(/x-forwarded-for|cf-ipcountry|request\.ip|geoip|geolocation/);
+    expect(runtimeContent).not.toMatch(/resolvedoptions\(\)\.timezone|time_zone|timezone.*market|market.*timezone/);
   });
 });
