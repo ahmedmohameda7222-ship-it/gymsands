@@ -166,7 +166,7 @@ export async function mockHistoryListForRenderedQa(
       ...request,
       from: "2000-01-01T00:00:00.000Z",
       to: "2100-01-01T00:00:00.000Z",
-      cursor: null,
+      cursor: undefined,
       limit: 1,
     }).items[0] ??
     null;
