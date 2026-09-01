@@ -46,6 +46,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/food-catalog-population-readiness.sql",
   "supabase/verification/food-catalog-ingestion-concurrency.sql",
   "supabase/verification/food-catalog-intelligence-core.sql",
+  "supabase/verification/food-catalog-plan1-semantic-corrections.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
