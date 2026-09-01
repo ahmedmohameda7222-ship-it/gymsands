@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const migrationName = "20260830155245_nullable_meal_plan_nutrition_snapshots.sql";
+const plan1CorrectionMigration = "20260901174500_food_catalog_plan1_semantic_corrections.sql";
 
 function read(relativePath: string) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
@@ -21,14 +22,19 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
     expect(source).not.toMatch(/alter\s+column\s+(?:quantity|status|completed_at|food_log_id)/i);
   });
 
-  it("records the authorized Production application as an immutable generated alias", () => {
+  it("records the authorized Production application as an immutable generated alias while preserving the pending Plan 1 correction", () => {
     const ledger = JSON.parse(read("supabase/migration-ledger.json")) as {
       pendingCount: number;
       unresolvedCount: number;
-      historyRepair: { state: string };
+      historyRepair: {
+        state: string;
+        pendingCount: number;
+        unresolvedCount: number;
+      };
       entries: Array<Record<string, unknown>>;
     };
     const entries = ledger.entries.filter((entry) => entry.localFile === migrationName);
+    const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
 
     expect(entries).toEqual([
       expect.objectContaining({
@@ -38,9 +44,21 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
         productionName: "nullable_meal_plan_nutrition_snapshots",
       }),
     ]);
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
-    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(pendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: plan1CorrectionMigration,
+        state: "pending",
+      }),
+    ]);
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair).toEqual(
+      expect.objectContaining({
+        state: "pending",
+        pendingCount: 1,
+        unresolvedCount: 1,
+      }),
+    );
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {
