@@ -160,6 +160,16 @@ export async function mockHistoryListForRenderedQa(
   }
 
   const base = mockHistoryList(userId, request);
+  const renderedQaPrototype =
+    base.items[0] ??
+    mockHistoryList(userId, {
+      ...request,
+      from: "2000-01-01T00:00:00.000Z",
+      to: "2100-01-01T00:00:00.000Z",
+      cursor: null,
+      limit: 1,
+    }).items[0] ??
+    null;
   if (
     scenario === "first-use-empty" ||
     scenario === "filtered-empty"
@@ -219,7 +229,7 @@ export async function mockHistoryListForRenderedQa(
   if (
     (scenario === "long-history" ||
       scenario === "incremental-load") &&
-    base.items[0]
+    renderedQaPrototype
   ) {
     const offset = request.cursor ? 20 : 0;
     const count = request.cursor ? 12 : 20;
@@ -230,7 +240,7 @@ export async function mockHistoryListForRenderedQa(
         ordinal,
       ).padStart(12, "0")}`;
       return {
-        ...base.items[0],
+        ...renderedQaPrototype,
         activityId: `performed:${id}`,
         canonicalSessionId: id,
         title: `Progressive strength session ${ordinal}`,
