@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-08-30
+**Current reconciliation date:** 2026-09-01
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history is reconciled through the latest applied identity; the repository contains no pending or schema-applied-untracked Main Plaivra migration
+**Status:** Production migration history is reconciled through the latest applied identity; no repository migration is pending or unresolved
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -11,12 +11,12 @@ Historical PR descriptions, completed implementation reports, and old audit snap
 
 ## Current state
 
-The latest verified Plaivra Production inspection after the authorized 2026-08-30 migration applications established:
+The latest verified Plaivra Production inspection after the Planner-authorized 2026-09-01 Food Catalog Intelligence Plan 1 semantic correction established:
 
-- Physical Production migration records: **115**
+- Physical Production migration records: **117**
 - Exact repository-name applications tracked as `state = applied`: **63**
-- Latest physical Production record: `20260830170301_nullable_meal_plan_nutrition_snapshots`
-- Corresponding immutable repository migration: `20260830155245_nullable_meal_plan_nutrition_snapshots.sql`
+- Latest physical Production record: `20260901183021_food_catalog_plan1_semantic_corrections`
+- Corresponding immutable repository migration: `20260901174500_food_catalog_plan1_semantic_corrections.sql`
 - Released compatibility marker: `20260724232734`
 - Activity Catalog Production remains isolated from the Main Plaivra migration ledger
 
@@ -29,7 +29,87 @@ The current repository/machine-ledger state records:
 - `historyRepair.state = reconciled`
 - migration-ledger `release_ready = true`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. The two 2026-08-30 applications use generated Production identities and therefore remain `applied_version_alias` entries. Physical Production count is now 115.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is now 117 records.
+
+## Food Catalog Intelligence Plan 1 semantic correction — Production application 2026-09-01
+
+Planner independent QA/QC on PR #162 identified two semantic gaps after the original Plan 1 core migration had already been applied to Production. The forward-only corrective repository migration is:
+
+`20260901174500_food_catalog_plan1_semantic_corrections.sql`
+
+It adds only two database invariants:
+
+- household/non-direct Food serving conversions require source-backed `source_record_id` provenance in addition to their positive gram weight;
+- Food names with `origin = 'source'` or `name_role = 'source_name'` require `source_record_id` provenance.
+
+The existing composite `(source_record_id, food_id)` foreign keys continue to enforce same-Food provenance. Direct `g`/`ml` serving bases remain valid without a source record, and curated aliases/transliterations remain eligible for `source_record_id IS NULL` when they do not claim source semantics.
+
+After independent re-review of exact correction head `51b380019db205dff61505a0fdee54a409ce9657`, the Planner explicitly authorized exact Production application and reconciliation of this migration only. Immediately before apply, read-only Production preflight proved:
+
+- `food_items = 0`;
+- `food_source_records = 0`;
+- `food_serving_options = 0`;
+- `food_names = 0`;
+- `20260901165219_food_catalog_intelligence_core` was present in Production migration history;
+- no `food_catalog_plan1_semantic_corrections` migration identity was present;
+- the repository migration remained at reviewed blob `1e4dff8b5fea6d8d8b60fc78a77033b32e07ff35`.
+
+The exact migration was applied once to Plaivra Production. Supabase generated physical identity:
+
+`20260901183021_food_catalog_plan1_semantic_corrections`
+
+Production read-back then proved:
+
+- exactly one Production migration-history record exists for `food_catalog_plan1_semantic_corrections`;
+- `food_serving_options_source_backed_weight_check` exists with effective authority `unit_code IN ('g','ml') OR (gram_weight IS NOT NULL AND source_record_id IS NOT NULL)`;
+- `food_names_source_provenance_check` exists with effective authority `(origin <> 'source' AND name_role <> 'source_name') OR source_record_id IS NOT NULL`;
+- the composite `(source_record_id, food_id)` foreign keys still reference `food_source_records(id, food_id)` for both `food_serving_options` and `food_names`, preserving same-Food provenance;
+- `food_items = 0`;
+- `food_source_records = 0`;
+- `food_serving_options = 0`;
+- `food_names = 0`;
+- physical Production migration history is 117 records;
+- the released compatibility marker remains `20260724232734`.
+
+The machine ledger therefore records this migration as `state = applied_version_alias` with Production version `20260901183021` and Production name `food_catalog_plan1_semantic_corrections`. No Food population, provider ingestion, activation, Catalog Generation promotion, compatibility-marker promotion, application deployment, Activity Catalog mutation, PR merge, or Plan 2 work was authorized or performed by this reconciliation. Do not replay this migration.
+
+Do not edit or replay the already-applied `20260901153000_food_catalog_intelligence_core.sql` migration.
+
+## Food Catalog Intelligence Plan 1 Production application — 2026-09-01
+
+Repository migration `20260901153000_food_catalog_intelligence_core.sql` was applied exactly once to Plaivra Production after the repository owner explicitly authorized this Production application while closing PR #162. Supabase recorded the generated physical identity:
+
+`20260901165219_food_catalog_intelligence_core`
+
+Before application, read-only Production preflight proved:
+
+- `food_items = 0`;
+- `food_source_records = 0`;
+- the Plan 1 V2 core relations were absent;
+- Production history did not already contain `food_catalog_intelligence_core`.
+
+Immediate read-back after application proved:
+
+- `food_items = 0`;
+- `food_source_records = 0`;
+- `food_nutrition_revisions = 0` rows;
+- `food_serving_options = 0` rows;
+- `food_names = 0` rows;
+- `food_taxonomy_assignments = 0` rows;
+- `food_market_assignments = 0` rows;
+- `food_verification_assertions = 0` rows;
+- `food_merge_events = 0` rows;
+- the six approved taxonomy namespaces exist;
+- the fourteen approved initial `primary_food_group` nodes exist;
+- the nine approved Market Scope Registry rows exist;
+- the three approved memberships `DE → EU`, `SA → GCC`, and `AE → GCC` exist;
+- all eleven new core relations have RLS enabled;
+- `anon` and `authenticated` have no table grants on the new core relations;
+- `service_role` retains the intended internal authority.
+
+The controlled taxonomy and market registry rows are reference authority only; this application did **not** populate any canonical Food, source record, nutrition fact, serving fact, localized Food name, taxonomy assignment, market assignment, verification assertion, or merge event.
+
+The owner authorization was limited to applying and reconciling this Plan 1 migration. It did not authorize Food population, provider ingestion, activation, Catalog Generation promotion, consumer cutover, Plan 2, compatibility-marker promotion, application deployment, or any Activity Catalog mutation. The released compatibility marker remains `20260724232734`. Do not replay this migration.
 
 ## Food Catalog and nullable Meal Plan Production applications — 2026-08-30
 
@@ -85,7 +165,7 @@ At Nutrition V1 feature closure, Production `/api/version` reported:
 
 This is the verified Nutrition V1 closure baseline, not a claim about permanently current physical Production migration identity. Documentation-only and later product/schema commits can advance Git, deployed commit identity, and physical migration history. Exact current runtime identity must be verified live from GitHub `main`, Vercel, and Production `/api/version`.
 
-Physical schema advancement and compatibility-marker promotion are separate authorities. The 2026-08-30 schema applications did not change the released compatibility marker because the runtime compatibility contract remains anchored to marker `20260724232734`.
+Physical schema advancement and compatibility-marker promotion are separate authorities. The 2026-08-30 and 2026-09-01 schema applications did not change the released compatibility marker because the runtime compatibility contract remains anchored to marker `20260724232734`.
 
 ## Immutable migration rules
 
@@ -174,7 +254,7 @@ The later forward-only Nutrition V1 corrections are represented by these generat
 
 The final identity maps to immutable repository migration `20260829110000_nutrition_v1_final_review_corrections.sql`.
 
-No Nutrition V1 repository migration remains pending or unresolved. No current Main Plaivra repository migration remains pending after the two authorized 2026-08-30 applications.
+No Nutrition V1 repository migration remains pending or unresolved. The Main Plaivra repository currently has no pending or unresolved migration after the Planner-authorized Plan 1 semantic correction was applied exactly once as `20260901183021_food_catalog_plan1_semantic_corrections`.
 
 ## Meal Plan duplicate-history repair
 
