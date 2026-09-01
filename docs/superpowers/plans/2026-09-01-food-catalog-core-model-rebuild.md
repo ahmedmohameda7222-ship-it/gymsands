@@ -394,7 +394,7 @@ create index food_names_normalized_idx
 npx vitest run --config vitest.unit.config.mjs lib/product/food-catalog-intelligence-core-migration.test.ts
 ```
 
-Expected: still RED until Tasks 3–4 complete, but failures for these three relations/invariants are gone.
+Expected: still RED until Tasks 3–5 complete, but failures for these three relations/invariants are gone.
 
 - [ ] **Step 9: Commit**
 
@@ -446,7 +446,11 @@ create table public.food_taxonomy_nodes (
 );
 ```
 
-- [ ] **Step 3: Seed only approved stable registry codes**
+- [ ] **Step 3: Add taxonomy cycle protection**
+
+Create a `BEFORE INSERT OR UPDATE` trigger on `food_taxonomy_nodes`. It must reject any `parent_node_code` or `replacement_node_code` assignment that would make the row reachable from itself through the corresponding relation. Use a recursive query over the current graph and raise SQLSTATE `23514` with a bounded domain-specific message.
+
+- [ ] **Step 4: Seed only approved stable registry codes**
 
 Insert namespaces:
 
@@ -480,7 +484,7 @@ other
 
 These are controlled reference rows, not Food population.
 
-- [ ] **Step 4: Create immutable taxonomy assignment facts**
+- [ ] **Step 5: Create immutable taxonomy assignment facts**
 
 ```sql
 create table public.food_taxonomy_assignments (
@@ -498,7 +502,7 @@ create table public.food_taxonomy_assignments (
 
 Attach `food_taxonomy_assignments_immutable` before update/delete.
 
-- [ ] **Step 5: Create market registry**
+- [ ] **Step 6: Create market registry**
 
 ```sql
 create table public.market_scopes (
@@ -531,7 +535,11 @@ SA → GCC
 AE → GCC
 ```
 
-- [ ] **Step 6: Create immutable Food-market assignment facts**
+- [ ] **Step 7: Add market-membership cycle protection**
+
+Create a `BEFORE INSERT OR UPDATE` trigger on `market_scope_memberships` that rejects any membership whose proposed parent already resolves to the proposed child through one or more parent links. Self-membership remains rejected by the table check. Raise SQLSTATE `23514` with `Market scope membership cannot create a cycle.`
+
+- [ ] **Step 8: Create immutable Food-market assignment facts**
 
 ```sql
 create table public.food_market_assignments (
@@ -550,13 +558,13 @@ create table public.food_market_assignments (
 
 Attach `food_market_assignments_immutable` before update/delete.
 
-- [ ] **Step 7: Run the focused migration test**
+- [ ] **Step 9: Run the focused migration test**
 
 ```bash
 npx vitest run --config vitest.unit.config.mjs lib/product/food-catalog-intelligence-core-migration.test.ts
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add supabase/migrations/*_food_catalog_intelligence_core.sql lib/product/food-catalog-intelligence-core-migration.test.ts
@@ -724,7 +732,7 @@ git commit -m "fix(food-catalog): enforce V2 core least privilege"
 
 **Interfaces:**
 - Consumes: the new migration and existing disposable-local verification runner.
-- Produces: executable DB evidence for FK, immutability, same-Food provenance, locale flexibility, market registry, and merge/assertion guards.
+- Produces: executable DB evidence for FK, immutability, same-Food provenance, locale flexibility, hierarchy acyclicity, and merge/assertion guards.
 
 - [ ] **Step 1: Write registry test first**
 
@@ -782,7 +790,9 @@ Create bounded fixture Foods/source records, then prove at minimum:
 8. merge self-target fails;
 9. merge event targeting an already-merged compatibility target fails;
 10. `GLOBAL`, `EU`, `GCC`, and country scopes plus `DE→EU`, `SA→GCC`, `AE→GCC` exist;
-11. no test row survives.
+11. a market-membership cycle is rejected;
+12. taxonomy parent/replacement cycles are rejected;
+13. no test row survives.
 
 End with:
 
@@ -1170,12 +1180,12 @@ Plan 1 is complete only when:
 3. nutrition revisions preserve `NULL` vs explicit zero and are immutable;
 4. household serving conversions require source-backed weight evidence;
 5. names support open BCP-47-style language tags and provenance; Arabizi is an Arabic-context transliteration, not a locale;
-6. taxonomy uses controlled stable registry codes and immutable assignment facts;
-7. market uses a registry/membership model rather than country-specific Food columns;
+6. taxonomy uses controlled stable registry codes, acyclic hierarchy/replacement relations, and immutable assignment facts;
+7. market uses an acyclic registry/membership model rather than country-specific Food columns;
 8. verification is assertion-based and merge decisions have immutable event evidence;
 9. same-Food provenance is DB-enforced for source-backed facts;
 10. new core relations are least-privilege and not member direct-write surfaces;
-11. transactional local DB verification proves immutability and referential guards;
+11. transactional local DB verification proves immutability, referential guards, and hierarchy-cycle rejection;
 12. current Food Library/search/Diary/Recipe/Meal Plan/MCP behavior is unchanged by this plan;
 13. no global Food is populated or activated;
 14. no Production mutation occurs.
