@@ -17,7 +17,7 @@ test("all release target consumers preserve the declared compatibility marker af
   const environment = qualityLedgerEnvironment(qualityTarget);
 
   assert.equal(releaseTarget.expectedMigration, "20260724232734");
-  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260830170301");
+  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260901165219");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
   assert.equal(releaseTarget.reconciliationState, "reconciled");
   assert.equal(ledger.pendingCount, 0);
