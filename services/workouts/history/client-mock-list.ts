@@ -159,7 +159,7 @@ export async function mockHistoryListForRenderedQa(
     );
   }
 
-  const base = mockHistoryList(userId, request);
+  let base = mockHistoryList(userId, request);
   const renderedQaPrototype =
     base.items[0] ??
     mockHistoryList(userId, {
@@ -179,6 +179,21 @@ export async function mockHistoryListForRenderedQa(
       items: [],
       summary: qaSummary([]),
       nextCursor: null,
+    };
+  }
+  if (base.items.length === 0 && renderedQaPrototype) {
+    const fallbackItems = [
+      {
+        ...renderedQaPrototype,
+        effectiveAt: new Date(
+          Date.parse(request.to) - 60 * 60 * 1000,
+        ).toISOString(),
+      },
+    ];
+    base = {
+      ...base,
+      items: fallbackItems,
+      summary: qaSummary(fallbackItems),
     };
   }
   if (
