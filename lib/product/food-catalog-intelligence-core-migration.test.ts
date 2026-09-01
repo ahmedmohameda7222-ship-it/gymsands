@@ -1,19 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const base = execFileSync("git", ["merge-base", "origin/main", "HEAD"], { encoding: "utf8" }).trim();
+const REVIEWED_HEAD = "e3a49312338c4e2e4947e01c14c55c02aa4181c6";
+const MIGRATION_FILE = "20260901153000_food_catalog_intelligence_core.sql";
+const MIGRATION_PATH = `supabase/migrations/${MIGRATION_FILE}`;
 const suffix = "_food_catalog_intelligence_core.sql";
-const files = execFileSync(
-  "git",
-  ["diff", "--name-only", `${base}...HEAD`, "--", "supabase/migrations"],
-  { encoding: "utf8" },
-)
-  .split(/\r?\n/)
-  .map((value) => value.trim())
-  .filter((value) => value.endsWith(suffix));
-const migrationPath = files.length === 1 ? files[0] : null;
-const sql = migrationPath ? readFileSync(migrationPath, "utf8").toLowerCase() : "";
+const files = readdirSync("supabase/migrations").filter((value) => value.endsWith(suffix));
+const sql = readFileSync(MIGRATION_PATH, "utf8").toLowerCase();
 
 const targetTables = [
   "food_nutrition_revisions",
@@ -30,9 +24,14 @@ const targetTables = [
 ] as const;
 
 describe("Food Catalog Intelligence core migration", () => {
-  it("creates exactly one forward core migration", () => {
-    expect(files).toHaveLength(1);
-    expect(migrationPath).toMatch(/^supabase\/migrations\/\d{14}_food_catalog_intelligence_core\.sql$/);
+  it("keeps exactly the approved forward core migration byte-stable", () => {
+    expect(files).toEqual([MIGRATION_FILE]);
+    const reviewedBytes = execFileSync(
+      "git",
+      ["show", `${REVIEWED_HEAD}:${MIGRATION_PATH}`],
+      { encoding: "utf8" },
+    );
+    expect(readFileSync(MIGRATION_PATH, "utf8")).toBe(reviewedBytes);
   });
 
   it("creates the approved additive V2 core relations", () => {
