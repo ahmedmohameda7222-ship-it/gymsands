@@ -16,7 +16,7 @@ test("declared database marker remains distinct from the reconciled applied phys
 
   assert.equal(resolved.schemaCompatibilityVersion, "2");
   assert.equal(resolved.expectedDatabaseMigrationVersion, "20260724232734");
-  assert.equal(resolved.latestAppliedMigrationVersion, "20260830170301");
+  assert.equal(resolved.latestAppliedMigrationVersion, "20260901165219");
   assert.ok(
     resolved.latestAppliedMigrationVersion.localeCompare(resolved.expectedDatabaseMigrationVersion) > 0,
     "fixture must prove that compatible physical migrations may be newer than the release marker",
@@ -33,7 +33,7 @@ test("Next build metadata binds the declared compatibility marker and exposes th
 
   assert.equal(releaseMetadata.schemaCompatibilityVersion, "2");
   assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, "20260724232734");
-  assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20260830170301");
+  assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20260901165219");
   assert.equal(releaseMetadata.migrationLedgerReconciliationState, "reconciled");
   assert.equal(releaseMetadata.pendingMigrationCount, "0");
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, "0");
