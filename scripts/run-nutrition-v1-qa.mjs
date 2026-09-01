@@ -53,7 +53,7 @@ export const NUTRITION_V1_QA_SCENARIOS = Object.freeze([
   scenario("shopping-list-three-states", "/my-meal-plan/shopping", "390x844"),
   scenario("meal-plan-skip-review-remove", "/my-meal-plan", "390x844"),
   scenario("meal-plan-chatgpt-review-stale", "/my-meal-plan", "1024x768"),
-  scenario("meal-plan-offline-conflict-partial-estimated", "/my-meal-plan", "430x932", { offline: true }),
+  scenario("meal-plan-offline-conflict-partial-estimated", `/my-meal-plan?date=2026-08-26&week=${MEAL_PLAN_QA_WEEK_START}`, "430x932", { offline: true }),
 
   scenario("food-library-mobile-default-recent", "/calories/food-hub"),
   scenario("food-library-mobile-new-user", "/calories/food-hub"),

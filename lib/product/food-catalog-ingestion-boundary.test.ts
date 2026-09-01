@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const APPROVED_BASE_SHA = "488203fdee566b82c30a51ca9b6cbc050cfaf61f";
+const BATCH0_FINAL_SHA = "53f3cbbd078e82a1d29da20e7d6b126cab6aaa81";
 const BATCH0_MIGRATION = "20260830011407_food_catalog_population_readiness.sql";
 const BATCH0_MIGRATION_PATH = `supabase/migrations/${BATCH0_MIGRATION}`;
 const INTERNAL_TABLES = [
@@ -33,14 +34,14 @@ function gitLines(args: string[]): string[] {
 }
 
 function changedPaths(): string[] {
-  return gitLines(["diff", "--name-only", `${APPROVED_BASE_SHA}...HEAD`]);
+  return gitLines(["diff", "--name-only", `${APPROVED_BASE_SHA}...${BATCH0_FINAL_SHA}`]);
 }
 
-function readBaseLedger(): MigrationLedger {
+function readLedgerAt(ref: string): MigrationLedger {
   return JSON.parse(
     execFileSync(
       "git",
-      ["show", `${APPROVED_BASE_SHA}:supabase/migration-ledger.json`],
+      ["show", `${ref}:supabase/migration-ledger.json`],
       { encoding: "utf8" }
     )
   ) as MigrationLedger;
@@ -60,11 +61,13 @@ function readableRuntimePaths(paths: string[]): string[] {
 }
 
 describe("Food Catalog Batch 0 ingestion boundary", () => {
-  it("preserves every historical migration-ledger entry and adds only the readiness migration as pending", () => {
-    const base = readBaseLedger();
+  it("preserves finalized Batch 0 authority while recording its later authorized Production alias", () => {
+    const base = readLedgerAt(APPROVED_BASE_SHA);
+    const batch0 = readLedgerAt(BATCH0_FINAL_SHA);
     const current = readCurrentLedger();
-    const batch0Entries = current.entries.filter((entry) => entry.localFile === BATCH0_MIGRATION);
-    const historicalEntries = current.entries.filter((entry) => entry.localFile !== BATCH0_MIGRATION);
+    const batch0Entries = batch0.entries.filter((entry) => entry.localFile === BATCH0_MIGRATION);
+    const historicalEntries = batch0.entries.filter((entry) => entry.localFile !== BATCH0_MIGRATION);
+    const currentBatch0Entries = current.entries.filter((entry) => entry.localFile === BATCH0_MIGRATION);
 
     expect(historicalEntries).toEqual(base.entries);
     expect(batch0Entries).toEqual([
@@ -73,27 +76,52 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         state: "pending"
       })
     ]);
-    expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(1);
-    expect(current.historyRepair).toEqual(
+    expect(batch0.pendingCount).toBe(1);
+    expect(batch0.unresolvedCount).toBe(1);
+    expect(batch0.historyRepair).toEqual(
       expect.objectContaining({
         state: "pending",
         pendingCount: 1,
         unresolvedCount: 1
       })
     );
+
+    expect(current.entries.slice(0, historicalEntries.length)).toEqual(historicalEntries);
+    expect(currentBatch0Entries).toEqual([
+      expect.objectContaining({
+        localFile: BATCH0_MIGRATION,
+        state: "applied_version_alias",
+        productionVersion: "20260830170226",
+        productionName: "food_catalog_population_readiness",
+      }),
+    ]);
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
+    expect(current.historyRepair).toEqual(
+      expect.objectContaining({
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
+      })
+    );
   });
 
-  it("adds exactly one new migration and never rewrites an applied migration", () => {
+  it("proves Batch 0 added exactly one migration and that migration remains byte-identical", () => {
     const migrationChanges = gitLines([
       "diff",
       "--name-status",
-      `${APPROVED_BASE_SHA}...HEAD`,
+      `${APPROVED_BASE_SHA}...${BATCH0_FINAL_SHA}`,
       "--",
       "supabase/migrations",
     ]);
+    const finalizedMigration = execFileSync(
+      "git",
+      ["show", `${BATCH0_FINAL_SHA}:${BATCH0_MIGRATION_PATH}`],
+      { encoding: "utf8" }
+    );
 
     expect(migrationChanges).toEqual([`A\t${BATCH0_MIGRATION_PATH}`]);
+    expect(readFileSync(BATCH0_MIGRATION_PATH, "utf8")).toBe(finalizedMigration);
   });
 
   it("commits no provider adapter, source download, or source dataset artifact", () => {

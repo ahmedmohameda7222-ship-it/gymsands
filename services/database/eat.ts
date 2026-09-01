@@ -7,6 +7,7 @@ import { getCalorieTargets } from "@/services/database/nutrition";
 import { getNutritionTargetProfiles } from "@/services/database/execution-layer";
 import { getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import { resolveEatTargetForDate, type ActiveNutritionTarget } from "@/services/nutrition/active-target";
+import { scaleFoodMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { DailyNutritionSummary, FoodLog, MealPlanItem, MealType, WaterLog } from "@/types";
 
 export const EAT_LINKED_EDIT_CRITICAL_CODE = "EAT_LINKED_EDIT_CRITICAL";
@@ -38,12 +39,39 @@ function number(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function nullableNutrition(value: unknown, label: string): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`Invalid persisted ${label}.`);
+  return parsed;
+}
+
+function normalizeFrozenFoodLog(row: Record<string, unknown>): FoodLog {
+  return {
+    ...(row as unknown as FoodLog),
+    calories: nullableNutrition(row.calories, "food-log calories"),
+    protein_g: nullableNutrition(row.protein_g, "food-log protein"),
+    carbs_g: nullableNutrition(row.carbs_g, "food-log carbs"),
+    fat_g: nullableNutrition(row.fat_g, "food-log fat")
+  };
+}
+
+function normalizeFrozenMealPlanItem(row: Record<string, unknown>): MealPlanItem {
+  return {
+    ...(row as unknown as MealPlanItem),
+    calories: nullableNutrition(row.calories, "meal-plan calories"),
+    protein_g: nullableNutrition(row.protein_g, "meal-plan protein"),
+    carbs_g: nullableNutrition(row.carbs_g, "meal-plan carbs"),
+    fat_g: nullableNutrition(row.fat_g, "meal-plan fat")
+  };
+}
+
 function requirePositive(value: number, label: string) {
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be greater than zero.`);
 }
 
-function requireNonNegative(value: number, label: string) {
-  if (!Number.isFinite(value) || value < 0) throw new Error(`${label} must be zero or higher.`);
+function requireNullableNonNegative(value: number | null, label: string) {
+  if (value !== null && (!Number.isFinite(value) || value < 0)) throw new Error(`${label} must be zero or higher or unknown.`);
 }
 
 export async function getEatFoodLogs(userId: string, date: string) {
@@ -55,7 +83,7 @@ export async function getEatFoodLogs(userId: string, date: string) {
     .eq("log_date", date)
     .order("created_at", { ascending: false });
   if (error) throw new Error(`Could not load food logs. ${error.message}`);
-  return (data ?? []) as FoodLog[];
+  return ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
 }
 
 export async function getEatWaterLogs(userId: string, date: string) {
@@ -79,7 +107,7 @@ export async function getEatMealPlanItems(userId: string, date: string) {
     .eq("plan_date", date)
     .order("created_at", { ascending: true });
   if (error) throw new Error(`Could not load planned meals. ${error.message}`);
-  return (data ?? []) as MealPlanItem[];
+  return ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenMealPlanItem);
 }
 
 export async function getEatRecentFoodLogs(userId: string, limit = 100) {
@@ -91,7 +119,7 @@ export async function getEatRecentFoodLogs(userId: string, limit = 100) {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(`Could not load repeat foods. ${error.message}`);
-  return (data ?? []) as FoodLog[];
+  return ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
 }
 
 export async function getEatWeek(userId: string, selectedDate: string) {
@@ -109,19 +137,15 @@ export async function getEatWeek(userId: string, selectedDate: string) {
     .lte("log_date", weekEnd)
     .order("log_date", { ascending: true });
   if (error) throw new Error(`Could not load week data. ${error.message}`);
-  const byDate = ((data ?? []) as FoodLog[]).reduce<Record<string, FoodLog[]>>((result, log) => {
+  const logs = ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
+  const byDate = logs.reduce<Record<string, FoodLog[]>>((result, log) => {
     result[log.log_date] = [...(result[log.log_date] ?? []), log];
     return result;
   }, {});
   return dates.map((date) => {
-    const logs = byDate[date] ?? [];
-    const totals = logs.reduce((sum, log) => ({
-      calories: sum.calories + number(log.calories),
-      protein_g: Math.round((sum.protein_g + number(log.protein_g)) * 10) / 10,
-      carbs_g: Math.round((sum.carbs_g + number(log.carbs_g)) * 10) / 10,
-      fat_g: Math.round((sum.fat_g + number(log.fat_g)) * 10) / 10
-    }), { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
-    return { date, planned_calories: 0, has_targets: false, ...totals, water_ml: 0, logs } satisfies DailyNutritionSummary;
+    const dayLogs = byDate[date] ?? [];
+    const totals = sumFoodLogs(dayLogs);
+    return { date, planned_calories: 0, has_targets: false, ...totals, water_ml: 0, logs: dayLogs } satisfies DailyNutritionSummary;
   });
 }
 
@@ -163,10 +187,10 @@ export type EatFoodLogPatch = {
   quantity: number;
   servingSize: string;
   mealType: MealType;
-  calories: number;
-  proteinG: number;
-  carbsG: number;
-  fatG: number;
+  calories: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
   notes: string | null;
 };
 
@@ -180,10 +204,10 @@ type EditableNutritionPayload = {
   quantity: number;
   serving_size: string;
   meal_type: MealType;
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
   notes: string | null;
 };
 
@@ -191,10 +215,10 @@ function validateFoodPatch(patch: EatFoodLogPatch) {
   if (!patch.foodName.trim()) throw new Error("Food name is required.");
   if (!patch.servingSize.trim()) throw new Error("Serving is required.");
   requirePositive(patch.quantity, "Quantity");
-  requireNonNegative(patch.calories, "Calories");
-  requireNonNegative(patch.proteinG, "Protein");
-  requireNonNegative(patch.carbsG, "Carbs");
-  requireNonNegative(patch.fatG, "Fat");
+  requireNullableNonNegative(patch.calories, "Calories");
+  requireNullableNonNegative(patch.proteinG, "Protein");
+  requireNullableNonNegative(patch.carbsG, "Carbs");
+  requireNullableNonNegative(patch.fatG, "Fat");
 }
 
 function payloadFromPatch(patch: EatFoodLogPatch): EditableNutritionPayload {
@@ -217,10 +241,10 @@ function payloadFromRow(row: FoodLog | MealPlanItem): EditableNutritionPayload {
     quantity: number(row.quantity),
     serving_size: row.serving_size,
     meal_type: row.meal_type as MealType,
-    calories: number(row.calories),
-    protein_g: number(row.protein_g),
-    carbs_g: number(row.carbs_g),
-    fat_g: number(row.fat_g),
+    calories: row.calories,
+    protein_g: row.protein_g,
+    carbs_g: row.carbs_g,
+    fat_g: row.fat_g,
     notes: row.notes ?? null
   };
 }
@@ -231,10 +255,10 @@ function editableValuesMatch(row: FoodLog | MealPlanItem | null, expected: Edita
     && number(row.quantity) === expected.quantity
     && row.serving_size === expected.serving_size
     && row.meal_type === expected.meal_type
-    && number(row.calories) === expected.calories
-    && number(row.protein_g) === expected.protein_g
-    && number(row.carbs_g) === expected.carbs_g
-    && number(row.fat_g) === expected.fat_g
+    && row.calories === expected.calories
+    && row.protein_g === expected.protein_g
+    && row.carbs_g === expected.carbs_g
+    && row.fat_g === expected.fat_g
     && (row.notes ?? null) === expected.notes;
 }
 
@@ -252,7 +276,7 @@ async function readFoodLog(userId: string, logId: string) {
     .eq("user_id", userId)
     .maybeSingle();
   if (result.error) throw result.error;
-  return result.data as FoodLog | null;
+  return result.data ? normalizeFrozenFoodLog(result.data as Record<string, unknown>) : null;
 }
 
 async function readLinkedMeal(userId: string, logId: string) {
@@ -263,7 +287,7 @@ async function readLinkedMeal(userId: string, logId: string) {
     .eq("user_id", userId)
     .maybeSingle();
   if (result.error) throw result.error;
-  return result.data as MealPlanItem | null;
+  return result.data ? normalizeFrozenMealPlanItem(result.data as Record<string, unknown>) : null;
 }
 
 async function restoreLinkedEdit({
@@ -404,18 +428,21 @@ export async function logRepeatFood(userId: string, source: FoodLog, targetDate:
   if (!canUseUserData(userId)) throw new Error("User session invalid");
   const sourceQuantity = Math.max(0.1, number(source.quantity, 1));
   const ratio = quantity / sourceQuantity;
+  const macros = scaleFoodMacros({
+    calories: source.calories,
+    protein_g: source.protein_g,
+    carbs_g: source.carbs_g,
+    fat_g: source.fat_g
+  }, ratio);
   const payload = {
     user_id: userId, food_item_id: source.food_item_id, user_food_item_id: source.user_food_item_id,
     log_date: targetDate, meal_type: mealType, food_name: source.food_name, serving_size: source.serving_size, quantity,
-    calories: Math.round(number(source.calories) * ratio),
-    protein_g: Math.round(number(source.protein_g) * ratio * 10) / 10,
-    carbs_g: Math.round(number(source.carbs_g) * ratio * 10) / 10,
-    fat_g: Math.round(number(source.fat_g) * ratio * 10) / 10,
+    ...macros,
     notes: source.notes
   };
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) throw error;
-  return data as FoodLog;
+  return normalizeFrozenFoodLog(data as Record<string, unknown>);
 }
 
 export async function copyEatFoodLogs({
@@ -429,10 +456,11 @@ export async function copyEatFoodLogs({
   ]);
   if (sourceResult.error) throw new Error(`Could not load source food logs. ${sourceResult.error.message}`);
   if (targetResult.error) throw new Error(`Could not check target food logs. ${targetResult.error.message}`);
-  const target = (targetResult.data ?? []) as FoodLog[];
+  const target = ((targetResult.data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
   const duplicateKeys = new Set(target.map(foodLogDuplicateKey));
   const markers = new Set(target.map((log) => log.notes ?? "").filter((note) => note.startsWith("Copied from ")));
-  const copies = ((sourceResult.data ?? []) as FoodLog[]).filter((log) => {
+  const source = ((sourceResult.data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
+  const copies = source.filter((log) => {
     const marker = `Copied from ${sourceDate}:${log.id}`;
     return !duplicateKeys.has(foodLogDuplicateKey(log)) && !markers.has(marker);
   }).map((log) => ({
@@ -444,7 +472,7 @@ export async function copyEatFoodLogs({
   if (!copies.length) return [] as FoodLog[];
   const inserted = await supabase!.from("food_logs").insert(copies).select("*");
   if (inserted.error) throw inserted.error;
-  return (inserted.data ?? []) as FoodLog[];
+  return ((inserted.data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
 }
 
 export async function completeMealPlanItemWithDraft({
@@ -461,7 +489,7 @@ export async function completeMealPlanItemWithDraft({
     .maybeSingle();
   if (latest.error) throw latest.error;
   if (!latest.data) throw new Error("Planned meal not found.");
-  const current = latest.data as MealPlanItem;
+  const current = normalizeFrozenMealPlanItem(latest.data as Record<string, unknown>);
   if (current.status === "skipped") throw new Error("A skipped meal cannot be marked eaten.");
   if (current.status === "done" || current.food_log_id) return { item: current, log: null as FoodLog | null, alreadyDone: true };
 
@@ -501,7 +529,15 @@ export async function completeMealPlanItemWithDraft({
       .eq("user_id", current.user_id)
       .maybeSingle();
     if (reread.error) throw reread.error;
-    return { item: (reread.data as MealPlanItem | null) ?? current, log: null as FoodLog | null, alreadyDone: true };
+    return {
+      item: reread.data ? normalizeFrozenMealPlanItem(reread.data as Record<string, unknown>) : current,
+      log: null as FoodLog | null,
+      alreadyDone: true
+    };
   }
-  return { item: completed.data as MealPlanItem, log: inserted.data as FoodLog, alreadyDone: false };
+  return {
+    item: normalizeFrozenMealPlanItem(completed.data as Record<string, unknown>),
+    log: normalizeFrozenFoodLog(inserted.data as Record<string, unknown>),
+    alreadyDone: false
+  };
 }

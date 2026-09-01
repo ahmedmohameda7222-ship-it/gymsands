@@ -2,12 +2,8 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
+import { scaleFoodMacros } from "@/services/nutrition/calculations";
 import type { CustomMeal, FoodLog, MealType } from "@/types";
-
-function finite(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
 
 export async function logSavedMealToEat({
   userId,
@@ -24,6 +20,7 @@ export async function logSavedMealToEat({
 }) {
   if (!supabase || !isUuid(userId)) throw new Error("User session invalid");
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Quantity must be greater than zero.");
+  const macros = scaleFoodMacros(meal.totals, quantity);
   const payload = {
     user_id: userId,
     food_item_id: null,
@@ -33,10 +30,10 @@ export async function logSavedMealToEat({
     food_name: meal.meal_name,
     serving_size: `${meal.items.length} foods`,
     quantity,
-    calories: Math.round(finite(meal.totals.calories) * quantity),
-    protein_g: Math.round(finite(meal.totals.protein_g) * quantity * 10) / 10,
-    carbs_g: Math.round(finite(meal.totals.carbs_g) * quantity * 10) / 10,
-    fat_g: Math.round(finite(meal.totals.fat_g) * quantity * 10) / 10,
+    calories: macros.calories,
+    protein_g: macros.protein_g,
+    carbs_g: macros.carbs_g,
+    fat_g: macros.fat_g,
     notes: meal.notes
   };
   const { data, error } = await supabase.from("food_logs").insert(payload).select("*").single();

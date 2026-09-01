@@ -27,8 +27,13 @@ const foodLog = {
   fat_g: 28,
   quantity: 1
 } as FoodLog;
+const partialFoodLog = {
+  ...foodLog,
+  id: "log-partial",
+  protein_g: null
+} satisfies FoodLog;
 
-type Scenario = "populated" | "empty" | "failed";
+type Scenario = "populated" | "partial" | "empty" | "failed";
 type Counters = {
   renders: number;
   publications: number;
@@ -46,7 +51,7 @@ function DashboardPublisher({
   onRender: () => void;
 }) {
   onRender();
-  const logs = useMemo(() => scenario === "populated" ? [foodLog] : [], [scenario]);
+  const logs = useMemo(() => scenario === "populated" ? [foodLog] : scenario === "partial" ? [partialFoodLog] : [], [scenario]);
   const totals = useMemo(() => scenario === "failed" ? null : sumFoodLogs(logs), [logs, scenario]);
   const activeTargets = scenario === "empty" ? null : targets;
   const remaining = useDashboardRemainingMacros(activeTargets, totals);
@@ -162,6 +167,22 @@ describe("dashboard React publication lifecycle", () => {
     });
     expect(runtime.container.querySelector("output")?.getAttribute("data-remaining-calories")).toBe("1550");
     expect(runtime.counters).toEqual({ renders: 2, publications: 1, providerUpdates: 1, equivalentAttempts: 1 });
+    expect(consoleError).not.toHaveBeenCalled();
+    await runtime.unmount();
+  });
+
+  it("keeps known dashboard nutrition calculable while an unknown nutrient stays unknown", async () => {
+    const runtime = await renderScenario("partial");
+    expect(runtime.context().nutrition).toMatchObject({
+      hasTargets: true,
+      foodLogsState: "loaded",
+      foodLogCount: 1,
+      remainingCalories: 1550,
+      remainingProtein: null,
+      remainingCarbs: 166,
+      remainingFat: 52
+    });
+    expect(runtime.container.querySelector("output")?.getAttribute("data-remaining-calories")).toBe("1550");
     expect(consoleError).not.toHaveBeenCalled();
     await runtime.unmount();
   });

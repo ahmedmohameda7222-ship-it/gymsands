@@ -113,6 +113,10 @@ function emptyDraft(date: string, mealType: MealType): Draft {
   return { date, foodName: "", mealType, quantity: "1", serving: "1 serving", calories: "", protein: "", carbs: "", fat: "", notes: "" };
 }
 
+function nutritionDraftValue(value: number | null) {
+  return value === null ? "" : String(value);
+}
+
 function draftFromItem(item: MealPlanItem): Draft {
   return {
     date: item.plan_date,
@@ -120,10 +124,10 @@ function draftFromItem(item: MealPlanItem): Draft {
     mealType: item.meal_type,
     quantity: String(item.quantity),
     serving: item.serving_size,
-    calories: String(item.calories),
-    protein: String(item.protein_g),
-    carbs: String(item.carbs_g),
-    fat: String(item.fat_g),
+    calories: nutritionDraftValue(item.calories),
+    protein: nutritionDraftValue(item.protein_g),
+    carbs: nutritionDraftValue(item.carbs_g),
+    fat: nutritionDraftValue(item.fat_g),
     notes: item.notes ?? ""
   };
 }
@@ -139,6 +143,25 @@ function draftErrors(draft: Draft, c: MealPlanCopy) {
     if (!draft[field].trim() || !Number.isFinite(value) || value < 0) errors[field] = c.nonNegative;
   });
   return errors;
+}
+
+function editDraftErrors(draft: Draft, item: MealPlanItem, c: MealPlanCopy) {
+  const errors = draftErrors(draft, c);
+  if (item.calories === null && !draft.calories.trim()) delete errors.calories;
+  if (item.protein_g === null && !draft.protein.trim()) delete errors.protein;
+  if (item.carbs_g === null && !draft.carbs.trim()) delete errors.carbs;
+  if (item.fat_g === null && !draft.fat.trim()) delete errors.fat;
+  return errors;
+}
+
+function optionalNutritionPatch(value: string, existing: number | null) {
+  const clean = value.trim();
+  if (!clean && existing === null) return undefined;
+  return Number(clean);
+}
+
+function formatNullableNutrition(value: number | null, unit: string) {
+  return value === null ? "—" : `${Math.round(value)} ${unit}`;
 }
 
 function mergeItem(items: MealPlanItem[], item: MealPlanItem, rangeStart?: string, rangeEnd?: string) {
@@ -351,7 +374,7 @@ export function MyMealPlanPageClient() {
   }
 
   async function saveEdit() {
-    if (!user?.id || !editItem || Object.keys(draftErrors(editDraft, c)).length) return;
+    if (!user?.id || !editItem || Object.keys(editDraftErrors(editDraft, editItem, c)).length) return;
     setBusyId(editItem.id);
     try {
       const item = await updateDirectMealPlanItem(user.id, editItem.id, {
@@ -360,10 +383,10 @@ export function MyMealPlanPageClient() {
         foodName: editDraft.foodName,
         quantity: Number(editDraft.quantity),
         servingInfo: editDraft.serving,
-        calories: Number(editDraft.calories),
-        protein: Number(editDraft.protein),
-        carbs: Number(editDraft.carbs),
-        fat: Number(editDraft.fat),
+        calories: optionalNutritionPatch(editDraft.calories, editItem.calories),
+        protein: optionalNutritionPatch(editDraft.protein, editItem.protein_g),
+        carbs: optionalNutritionPatch(editDraft.carbs, editItem.carbs_g),
+        fat: optionalNutritionPatch(editDraft.fat, editItem.fat_g),
         notes: editDraft.notes
       });
       updateLocal(item, editItem.id);
@@ -741,14 +764,14 @@ function DailyOverview({
       <CardContent className="space-y-3 p-4 pt-1">
         <div className="grid grid-cols-2 gap-2">
           <Metric label={c.target} value={targetCalories === null ? "—" : Math.round(targetCalories)} suffix={targetCalories === null ? "" : " kcal"} />
-          <Metric label={c.scheduled} value={Math.round(summary.scheduled.calories)} suffix=" kcal" />
-          <Metric label={c.consumed} value={Math.round(summary.consumed.calories)} suffix=" kcal" />
-          <Metric label={remainingLabel} value={remainingValue} suffix={summary.remainingCalories === null ? "" : " kcal"} emphasis={summary.overTargetCalories > 0} />
+          <Metric label={c.scheduled} value={summary.scheduled.calories === null ? "—" : Math.round(summary.scheduled.calories)} suffix={summary.scheduled.calories === null ? "" : " kcal"} />
+          <Metric label={c.consumed} value={summary.consumed.calories === null ? "—" : Math.round(summary.consumed.calories)} suffix={summary.consumed.calories === null ? "" : " kcal"} />
+          <Metric label={remainingLabel} value={remainingValue} suffix={summary.remainingCalories === null ? "" : " kcal"} emphasis={summary.overTargetCalories !== null && summary.overTargetCalories > 0} />
         </div>
         <div className="grid grid-cols-3 gap-2 border-t pt-3 text-center">
-          <Metric label={c.protein} value={Math.round(summary.scheduled.protein_g)} suffix=" g" compact />
-          <Metric label={c.carbs} value={Math.round(summary.scheduled.carbs_g)} suffix=" g" compact />
-          <Metric label={c.fat} value={Math.round(summary.scheduled.fat_g)} suffix=" g" compact />
+          <Metric label={c.protein} value={summary.scheduled.protein_g === null ? "—" : Math.round(summary.scheduled.protein_g)} suffix={summary.scheduled.protein_g === null ? "" : " g"} compact />
+          <Metric label={c.carbs} value={summary.scheduled.carbs_g === null ? "—" : Math.round(summary.scheduled.carbs_g)} suffix={summary.scheduled.carbs_g === null ? "" : " g"} compact />
+          <Metric label={c.fat} value={summary.scheduled.fat_g === null ? "—" : Math.round(summary.scheduled.fat_g)} suffix={summary.scheduled.fat_g === null ? "" : " g"} compact />
         </div>
         <div className="flex flex-wrap gap-1.5 border-t pt-3 text-xs">
           <Badge variant="outline">{c.planned}: {summary.counts.planned}</Badge>
@@ -789,7 +812,7 @@ function MealSection(props: {
     <Disclosure
       defaultOpen
       title={<span className="flex items-center gap-2"><Utensils className="h-4 w-4" />{title}<Badge variant="outline">{section.activeCount}</Badge></span>}
-      description={`${Math.round(section.totals.calories)} kcal · ${Math.round(section.totals.protein_g)} g ${props.c.protein.toLowerCase()}`}
+      description={`${formatNullableNutrition(section.totals.calories, "kcal")} · ${formatNullableNutrition(section.totals.protein_g, "g")} ${props.c.protein.toLowerCase()}`}
       toggleLabel={interpolateCopy(props.c.toggleSection, { meal: title })}
       actions={(
         <Button type="button" variant="ghost" size="icon" className="h-11 w-11" aria-label={addLabelForType(props.type, props.c)} onClick={props.onAdd}>
@@ -848,7 +871,7 @@ function MealRow({ item, c, busyId, onDone, onSkip, onEdit, onGrocery, onRemove,
           </div>
           <p className="mt-0.5 text-sm text-muted-foreground">{interpolateCopy(c.quantityServing, { quantity: item.quantity, serving: item.serving_size })}</p>
           <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            {Math.round(item.calories)} kcal · {c.protein} {Math.round(item.protein_g)} g · {c.carbs} {Math.round(item.carbs_g)} g · {c.fat} {Math.round(item.fat_g)} g
+            {formatNullableNutrition(item.calories, "kcal")} · {c.protein} {formatNullableNutrition(item.protein_g, "g")} · {c.carbs} {formatNullableNutrition(item.carbs_g, "g")} · {c.fat} {formatNullableNutrition(item.fat_g, "g")}
           </p>
           {validation.tone !== "success" ? (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-warning"><AlertTriangle className="h-3.5 w-3.5" />{c.validationNeedsReview}</p>
@@ -934,13 +957,13 @@ function EditMealDialog({ item, draft, setDraft, c, busy, onClose, onSave }: {
           <DialogTitle>{item?.status === "done" ? c.completedCorrection : c.edit}</DialogTitle>
           <DialogDescription>{item?.status === "done" ? c.completedCorrectionDesc : c.description}</DialogDescription>
         </DialogHeader>
-        <MealForm draft={draft} setDraft={setDraft} c={c} busy={busy} showDate onSave={onSave} onCancel={onClose} />
+        <MealForm draft={draft} setDraft={setDraft} c={c} busy={busy} showDate onSave={onSave} onCancel={onClose} nullableSource={item} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function MealForm({ draft, setDraft, c, busy, showDate, onSave, onCancel }: {
+function MealForm({ draft, setDraft, c, busy, showDate, onSave, onCancel, nullableSource = null }: {
   draft: Draft;
   setDraft: Dispatch<SetStateAction<Draft>>;
   c: MealPlanCopy;
@@ -948,8 +971,9 @@ function MealForm({ draft, setDraft, c, busy, showDate, onSave, onCancel }: {
   showDate: boolean;
   onSave: () => void;
   onCancel: () => void;
+  nullableSource?: MealPlanItem | null;
 }) {
-  const errors = draftErrors(draft, c);
+  const errors = nullableSource ? editDraftErrors(draft, nullableSource, c) : draftErrors(draft, c);
   const valid = Object.keys(errors).length === 0;
   const field = (key: keyof Draft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
   return (
@@ -1053,8 +1077,8 @@ function WeekView({ c, language, weekStart, weekEnd, days, items, targets, selec
                 ) : (
                   <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                     <p>{daySummary.counts.planned} {c.planned.toLowerCase()} · {daySummary.counts.done} {c.done.toLowerCase()} · {daySummary.counts.skipped} {c.skipped.toLowerCase()}</p>
-                    <p>{Math.round(daySummary.scheduled.calories)} / {targetCaloriesForDay ?? "—"} kcal</p>
-                    <p>{c.consumed}: {Math.round(daySummary.consumed.calories)} kcal</p>
+                    <p>{formatNullableNutrition(daySummary.scheduled.calories, "kcal")} / {targetCaloriesForDay === null ? "—" : `${targetCaloriesForDay} kcal`}</p>
+                    <p>{c.consumed}: {formatNullableNutrition(daySummary.consumed.calories, "kcal")}</p>
                     {daySummary.alignmentPercent !== null ? <p>{c.alignment}: {daySummary.alignmentPercent}%</p> : null}
                   </div>
                 )}

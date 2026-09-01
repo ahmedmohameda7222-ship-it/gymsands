@@ -196,7 +196,7 @@ export function TodaysWorkout() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-foreground">{item.food_name}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.meal_type} | {item.calories} kcal</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{item.meal_type} | {item.calories === null ? "—" : item.calories} kcal</p>
                   </div>
                   <Badge variant={item.status === "done" ? "success" : item.status === "skipped" ? "warning" : "outline"}>{item.status === "done" ? t("mealPlan.statusDone") : item.status === "skipped" ? t("mealPlan.statusSkipped") : t("mealPlan.statusPlanned")}</Badge>
                 </div>

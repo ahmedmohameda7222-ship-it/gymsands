@@ -77,6 +77,13 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function nullableNutrition(value: unknown, label: string): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`Invalid persisted Food Log ${label}.`);
+  return parsed;
+}
+
 function normalizeMealType(value: string | null | undefined): MealType {
   const clean = String(value ?? "Breakfast").toLowerCase();
   if (clean === "breakfast") return "Breakfast";
@@ -101,10 +108,10 @@ function normalizeFoodLog(row: Record<string, unknown>): FoodLog {
     food_name: String(row.food_name || "Food"),
     serving_size: String(row.serving_size || "1 serving"),
     quantity: toNumber(row.quantity) || 1,
-    calories: toNumber(row.calories),
-    protein_g: toNumber(row.protein_g),
-    carbs_g: toNumber(row.carbs_g),
-    fat_g: toNumber(row.fat_g),
+    calories: nullableNutrition(row.calories, "calories"),
+    protein_g: nullableNutrition(row.protein_g, "protein"),
+    carbs_g: nullableNutrition(row.carbs_g, "carbs"),
+    fat_g: nullableNutrition(row.fat_g, "fat"),
     notes: typeof row.notes === "string" ? row.notes : null
   };
 }
@@ -134,10 +141,10 @@ export async function logFoodFromPreviousLog(userId: string, source: FoodLog, da
     food_name: source.food_name,
     serving_size: source.serving_size,
     quantity: Math.max(0.1, toNumber(source.quantity) || 1),
-    calories: Math.max(0, toNumber(source.calories)),
-    protein_g: Math.max(0, toNumber(source.protein_g)),
-    carbs_g: Math.max(0, toNumber(source.carbs_g)),
-    fat_g: Math.max(0, toNumber(source.fat_g)),
+    calories: nullableNutrition(source.calories, "calories"),
+    protein_g: nullableNutrition(source.protein_g, "protein"),
+    carbs_g: nullableNutrition(source.carbs_g, "carbs"),
+    fat_g: nullableNutrition(source.fat_g, "fat"),
     notes: source.notes || "Logged again from a real previous food log."
   };
   if (!canUseUserData(userId)) return { ...payload, id: crypto.randomUUID() } as FoodLog;

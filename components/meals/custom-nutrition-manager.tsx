@@ -26,6 +26,7 @@ import {
   type CustomMealInput,
   type UserFoodInput
 } from "@/services/database/nutrition";
+import { calculateSavedMealDraftTotals, formatSavedMealNutrition, savedMealSuccessDescription } from "@/services/meals/saved-meal-draft";
 import type { CustomMeal, FoodItem, FoodKitchen, FoodLog, FoodSubcategory, MealType, UserFoodItem } from "@/types";
 
 const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -78,15 +79,6 @@ function numberOrNull(value: string) {
 function numberOrZero(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function foodMacros(food: FoodItem, quantity: number) {
-  return {
-    calories: Math.round(Number(food.calories) * quantity),
-    protein_g: Math.round(Number(food.protein_g) * quantity * 10) / 10,
-    carbs_g: Math.round(Number(food.carbs_g) * quantity * 10) / 10,
-    fat_g: Math.round(Number(food.fat_g) * quantity * 10) / 10
-  };
 }
 
 export function CustomNutritionManager({
@@ -206,20 +198,10 @@ export function CustomNutritionManager({
     return Array.from(byId.values()).sort((a, b) => a.food_name.localeCompare(b.food_name));
   }, [foodLibrary, foods]);
   const mealTotals = useMemo(() => {
-    return mealItems.reduce(
-      (sum, item) => {
-        const food = allFoods.find((candidate) => candidate.id === item.foodId);
-        if (!food) return sum;
-        const macros = foodMacros(food, Math.max(0.1, numberOrZero(item.quantity) || 1));
-        return {
-          calories: sum.calories + macros.calories,
-          protein_g: Math.round((sum.protein_g + macros.protein_g) * 10) / 10,
-          carbs_g: Math.round((sum.carbs_g + macros.carbs_g) * 10) / 10,
-          fat_g: Math.round((sum.fat_g + macros.fat_g) * 10) / 10
-        };
-      },
-      { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-    );
+    const items = mealItems
+      .map((item) => ({ food: allFoods.find((food) => food.id === item.foodId), quantity: Math.max(0.1, numberOrZero(item.quantity) || 1) }))
+      .filter((item): item is { food: FoodItem; quantity: number } => Boolean(item.food));
+    return calculateSavedMealDraftTotals(items);
   }, [allFoods, mealItems]);
 
   const foodDraftDirty = isFoodDraftDirty(foodDraft);
@@ -486,7 +468,7 @@ export function CustomNutritionManager({
       const saved = await upsertCustomMeal(input);
       setMeals((current) => [saved, ...current.filter((meal) => meal.id !== saved.id)].sort((a, b) => a.meal_name.localeCompare(b.meal_name)));
       resetMealDraft();
-      setMealStatus({ type: "success", title: "Custom meal saved.", description: `${saved.meal_name} totals ${saved.totals.calories} kcal.` });
+      setMealStatus({ type: "success", title: "Custom meal saved.", description: savedMealSuccessDescription(saved.meal_name, saved.totals.calories) });
     } catch (error) {
       setMealStatus({ type: "error", title: "Save failed. Your draft is still here.", description: userSafeError(error, "Please add a name and foods.") });
     } finally {
@@ -736,7 +718,7 @@ export function CustomNutritionManager({
               <div className="rounded-md border border-border/70 bg-card p-3 text-sm">
                 <p className="font-semibold">Totals</p>
                 <p className="mt-1 text-muted-foreground">
-                  {mealTotals.calories} kcal | {mealTotals.protein_g}g protein | {mealTotals.carbs_g}g carbs | {mealTotals.fat_g}g fat
+                  {formatSavedMealNutrition(mealTotals.calories, " kcal")} | {formatSavedMealNutrition(mealTotals.protein_g, "g")} protein | {formatSavedMealNutrition(mealTotals.carbs_g, "g")} carbs | {formatSavedMealNutrition(mealTotals.fat_g, "g")} fat
                 </p>
               </div>
               <ValidationList errors={mealSubmitted ? mealValidationErrors : []} />
@@ -767,7 +749,7 @@ export function CustomNutritionManager({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-semibold">{meal.meal_name}</p>
-                      <p className="text-sm text-muted-foreground">{meal.totals.calories} kcal | {meal.items.length} foods</p>
+                      <p className="text-sm text-muted-foreground">{formatSavedMealNutrition(meal.totals.calories, " kcal")} | {meal.items.length} foods</p>
                     </div>
                     <Badge variant="outline">{meal.meal_category || "Meal"}</Badge>
                   </div>

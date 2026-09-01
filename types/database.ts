@@ -1,9 +1,16 @@
 export * from "./database-legacy";
 
 import type {
+  CustomMeal as LegacyCustomMeal,
+  DailyNutritionSummary as LegacyDailyNutritionSummary,
   ExerciseAlternativeReason as LegacyExerciseAlternativeReason,
   ExerciseLog as LegacyExerciseLog,
+  FoodItem as LegacyFoodItem,
+  FoodLog as LegacyFoodLog,
+  MealItem as LegacyMealItem,
+  MealPlanItem as LegacyMealPlanItem,
   UserExerciseAlternative as LegacyUserExerciseAlternative,
+  UserFoodItem as LegacyUserFoodItem,
   WorkoutSession as LegacyWorkoutSession,
   WorkoutSessionSummary as LegacyWorkoutSessionSummary
 } from "./database-legacy";
@@ -14,6 +21,48 @@ import type {
   WorkoutSetSegmentRow,
   WorkoutSetType
 } from "./workout-set-details";
+
+/** Numeric nutrition remains the contract for manual/user-entered Food data and targets. */
+export type CoreNutrition = Pick<LegacyFoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">;
+
+/** Catalog-derived and frozen nutrition keeps unknown values distinct from measured zero. */
+export type NullableCoreNutrition = {
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+};
+
+type WithNullableCoreNutrition<T> = Omit<T, keyof NullableCoreNutrition> & NullableCoreNutrition;
+
+export type CatalogFoodItem = Omit<
+  LegacyFoodItem,
+  keyof NullableCoreNutrition | "is_global" | "is_editable_by_user"
+> &
+  NullableCoreNutrition & {
+    is_global: true;
+    is_editable_by_user: false;
+  };
+
+/** Active Food Library values are either nullable catalog Food or strict numeric My Food. */
+export type FoodLibraryItem = CatalogFoodItem | LegacyUserFoodItem;
+export type FoodItem = FoodLibraryItem;
+
+/** Frozen snapshots preserve nullable catalog-derived nutrition independently per nutrient. */
+export type FoodLog = WithNullableCoreNutrition<LegacyFoodLog>;
+export type MealItem = WithNullableCoreNutrition<LegacyMealItem>;
+export type MealPlanItem = WithNullableCoreNutrition<LegacyMealPlanItem>;
+export type DailyNutritionSummary = Omit<
+  LegacyDailyNutritionSummary,
+  keyof NullableCoreNutrition | "logs"
+> &
+  NullableCoreNutrition & {
+    logs: FoodLog[];
+  };
+export type CustomMeal = Omit<LegacyCustomMeal, "items" | "totals"> & {
+  items: MealItem[];
+  totals: NullableCoreNutrition;
+};
 
 /**
  * Additive persistence contract. Historical V1 values remain readable while new

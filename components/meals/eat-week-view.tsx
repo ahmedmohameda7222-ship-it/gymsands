@@ -37,15 +37,19 @@ export function EatWeekView({
 
   const days = applyWeekTargets(week.data ?? [], weekTargets.data ?? []);
   const analytics = buildWeekAnalytics(days);
-  const maxCalories = Math.max(1, ...days.map((day) => day.calories));
-  const maxProtein = Math.max(1, ...days.map((day) => day.protein_g));
+  const knownCalories = days.map((day) => day.calories).filter((value): value is number => value !== null);
+  const knownProtein = days.map((day) => day.protein_g).filter((value): value is number => value !== null);
+  const maxCalories = Math.max(1, ...knownCalories);
+  const maxProtein = Math.max(1, ...knownProtein);
   const adherenceValue = weekTargets.status === "failed"
     ? et("adherenceUnavailableTargets")
     : weekTargets.status === "loading" && !weekTargets.data
       ? et("loading")
-      : analytics.adherenceDays === null
-        ? et("adherenceNotConfigured")
-        : et("adherenceMatched", { near: analytics.adherenceDays, eligible: analytics.targetEligibleLoggedDays });
+      : analytics.adherenceState === "incomplete"
+        ? et("unavailable")
+        : analytics.adherenceDays === null
+          ? et("adherenceNotConfigured")
+          : et("adherenceMatched", { near: analytics.adherenceDays, eligible: analytics.targetEligibleLoggedDays });
 
   return <div className="space-y-4">
     <Card>
@@ -66,16 +70,16 @@ export function EatWeekView({
         <Metric label={et("adherence")} value={adherenceValue} />
       </div>
       {weekTargets.status === "failed" ? <Card className="border-warning/30 bg-warning/5"><CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">{et("adherenceUnavailableTargets")}</p><Button type="button" variant="outline" onClick={onRetryTargets}><RefreshCcw className="h-4 w-4" />{et("retry")}</Button></CardContent></Card> : analytics.targetsState === "partial" ? <p className="text-sm text-muted-foreground">{et("targetCoveragePartial")}</p> : null}
-      <Card><CardHeader className="pb-2"><CardTitle className="text-base">{ert("macroContributionLogged")}</CardTitle></CardHeader><CardContent className="space-y-2"><MacroLine label={et("protein")} value={analytics.proteinCalories} total={analytics.macroCaloriesTotal} display={formatEatEnergy(analytics.proteinCalories, energyUnit, locale)} /><MacroLine label={et("carbs")} value={analytics.carbCalories} total={analytics.macroCaloriesTotal} display={formatEatEnergy(analytics.carbCalories, energyUnit, locale)} /><MacroLine label={et("fat")} value={analytics.fatCalories} total={analytics.macroCaloriesTotal} display={formatEatEnergy(analytics.fatCalories, energyUnit, locale)} /></CardContent></Card>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-base">{ert("macroContributionLogged")}</CardTitle></CardHeader><CardContent className="space-y-2"><MacroLine label={et("protein")} value={analytics.proteinCalories} total={analytics.macroCaloriesTotal} display={analytics.proteinCalories === null ? "—" : formatEatEnergy(analytics.proteinCalories, energyUnit, locale)} /><MacroLine label={et("carbs")} value={analytics.carbCalories} total={analytics.macroCaloriesTotal} display={analytics.carbCalories === null ? "—" : formatEatEnergy(analytics.carbCalories, energyUnit, locale)} /><MacroLine label={et("fat")} value={analytics.fatCalories} total={analytics.macroCaloriesTotal} display={analytics.fatCalories === null ? "—" : formatEatEnergy(analytics.fatCalories, energyUnit, locale)} /></CardContent></Card>
     </>}
 
     <Button asChild variant="outline" className="min-h-12 w-full"><Link href="/progress"><BarChart3 className="h-4 w-4" />{et("openReports")}</Link></Button>
   </div>;
 }
 
-function TrendCard({ title, days, max, value, format }: { title: string; days: DailyNutritionSummary[]; max: number; value: (day: DailyNutritionSummary) => number; format: (value: number) => string }) {
+function TrendCard({ title, days, max, value, format }: { title: string; days: DailyNutritionSummary[]; max: number; value: (day: DailyNutritionSummary) => number | null; format: (value: number) => string }) {
   const { formatDate } = useEatTranslation();
-  return <Card><CardHeader className="pb-2"><CardTitle className="text-base">{title}</CardTitle></CardHeader><CardContent className="space-y-2">{days.map((day) => { const amount = value(day); return <div key={day.date} className="grid grid-cols-[52px_1fr_minmax(72px,auto)] items-center gap-2 text-xs"><span>{formatDate(day.date, { weekday: "short" })}</span><div className="h-2 rounded-full bg-muted"><div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(100, amount / max * 100)}%` }} /></div><span className="text-end tabular-nums">{day.logs.length ? format(amount) : "—"}</span></div>; })}</CardContent></Card>;
+  return <Card><CardHeader className="pb-2"><CardTitle className="text-base">{title}</CardTitle></CardHeader><CardContent className="space-y-2">{days.map((day) => { const amount = value(day); return <div key={day.date} className="grid grid-cols-[52px_1fr_minmax(72px,auto)] items-center gap-2 text-xs"><span>{formatDate(day.date, { weekday: "short" })}</span><div className="h-2 rounded-full bg-muted">{amount === null ? null : <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(100, amount / max * 100)}%` }} />}</div><span className="text-end tabular-nums">{day.logs.length && amount !== null ? format(amount) : "—"}</span></div>; })}</CardContent></Card>;
 }
 function Metric({ label, value }: { label: string; value: string }) { return <Card><CardContent className="flex min-h-24 flex-col items-center justify-center gap-1.5 p-4 text-center"><p className="max-w-full text-xs text-muted-foreground">{label}</p><p className="max-w-full whitespace-normal break-words text-sm font-bold leading-5">{value}</p></CardContent></Card>; }
-function MacroLine({ label, value, total, display }: { label: string; value: number; total: number; display: string }) { const percent = total ? Math.round(value / total * 100) : 0; return <div><div className="flex justify-between gap-3 text-sm"><span>{label}</span><span>{display} · {percent}%</span></div><div className="mt-1 h-2 rounded-full bg-muted"><div className="h-2 rounded-full bg-primary" style={{ width: `${percent}%` }} /></div></div>; }
+function MacroLine({ label, value, total, display }: { label: string; value: number | null; total: number | null; display: string }) { const percent = value === null || total === null || total <= 0 ? null : Math.round(value / total * 100); return <div><div className="flex justify-between gap-3 text-sm"><span>{label}</span><span>{display}{percent === null ? "" : ` · ${percent}%`}</span></div><div className="mt-1 h-2 rounded-full bg-muted">{percent === null ? null : <div className="h-2 rounded-full bg-primary" style={{ width: `${percent}%` }} />}</div></div>; }

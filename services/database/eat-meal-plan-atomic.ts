@@ -14,7 +14,7 @@ function validatePatch(patch: EatFoodLogPatch) {
   if (!patch.servingSize.trim()) throw new Error("Serving is required.");
   if (!Number.isFinite(patch.quantity) || patch.quantity <= 0) throw new Error("Quantity must be greater than zero.");
   for (const [label, value] of [["Calories", patch.calories], ["Protein", patch.proteinG], ["Carbs", patch.carbsG], ["Fat", patch.fatG]] as const) {
-    if (!Number.isFinite(value) || value < 0) throw new Error(`${label} must be zero or higher.`);
+    if (value !== null && (!Number.isFinite(value) || value < 0)) throw new Error(`${label} must be zero or higher or unknown.`);
   }
 }
 

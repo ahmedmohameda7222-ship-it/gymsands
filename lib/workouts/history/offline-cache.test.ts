@@ -1,5 +1,5 @@
 import { IDBFactory } from "fake-indexeddb";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   clearWorkoutHistoryOwnerCache,
@@ -59,10 +59,15 @@ async function corruptSchemaVersion(key: string): Promise<void> {
 
 describe("Workout History offline cache", () => {
   beforeEach(() => {
+    vi.spyOn(Date, "now").mockReturnValue(now);
     Object.defineProperty(globalThis, "indexedDB", {
       configurable: true,
       value: new IDBFactory(),
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("returns a compatible offline hit without sharing mutable response state", async () => {

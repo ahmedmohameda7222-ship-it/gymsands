@@ -44,11 +44,12 @@ export type WeekNutritionAnalytics = {
   calendarAverageCalories: number | null;
   targetEligibleLoggedDays: number;
   adherenceDays: number | null;
+  adherenceState: "available" | "incomplete" | "not-configured";
   targetsState: "available" | "partial" | "not-configured";
-  proteinCalories: number;
-  carbCalories: number;
-  fatCalories: number;
-  macroCaloriesTotal: number;
+  proteinCalories: number | null;
+  carbCalories: number | null;
+  fatCalories: number | null;
+  macroCaloriesTotal: number | null;
 };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -132,13 +133,26 @@ function finite(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function nullableNutrition(value: number | null, round: (value: number) => number = (value) => value) {
+  return value === null ? null : round(value);
+}
+
+function sumNullable(values: Array<number | null>, round: (value: number) => number = (value) => value) {
+  let total = 0;
+  for (const value of values) {
+    if (value === null) return null;
+    total += value;
+  }
+  return round(total);
+}
+
 export function sumEatLogs(logs: FoodLog[]) {
-  return logs.reduce((total, log) => ({
-    calories: total.calories + finite(log.calories),
-    protein_g: Math.round((total.protein_g + finite(log.protein_g)) * 10) / 10,
-    carbs_g: Math.round((total.carbs_g + finite(log.carbs_g)) * 10) / 10,
-    fat_g: Math.round((total.fat_g + finite(log.fat_g)) * 10) / 10
-  }), { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+  return {
+    calories: sumNullable(logs.map((log) => log.calories), Math.round),
+    protein_g: sumNullable(logs.map((log) => log.protein_g), (value) => Math.round(value * 10) / 10),
+    carbs_g: sumNullable(logs.map((log) => log.carbs_g), (value) => Math.round(value * 10) / 10),
+    fat_g: sumNullable(logs.map((log) => log.fat_g), (value) => Math.round(value * 10) / 10)
+  };
 }
 
 export function progressState(consumed: number | null, target: number | null, tolerance = 0.05): NutritionProgressState {
@@ -164,7 +178,7 @@ export function buildNutritionMetrics({
   targetsAvailable: boolean;
   tolerance?: number;
 }): NutritionMetric[] {
-  const definitions: Array<[NutritionMetricKey, number]> = [
+  const definitions: Array<[NutritionMetricKey, number | null]> = [
     ["calories", consumed.calories], ["protein_g", consumed.protein_g], ["carbs_g", consumed.carbs_g], ["fat_g", consumed.fat_g]
   ];
   return definitions.map(([key, value]) => {
@@ -228,33 +242,45 @@ export function applyWeekTargets(days: DailyNutritionSummary[], targets: EatWeek
 
 export function buildWeekAnalytics(days: DailyNutritionSummary[], tolerance = 0.05): WeekNutritionAnalytics {
   const logged = days.filter((day) => day.logs.length > 0);
-  const calories = logged.reduce((sum, day) => sum + finite(day.calories), 0);
-  const protein = logged.reduce((sum, day) => sum + finite(day.protein_g), 0);
-  const proteinCalories = logged.reduce((sum, day) => sum + finite(day.protein_g) * 4, 0);
-  const carbCalories = logged.reduce((sum, day) => sum + finite(day.carbs_g) * 4, 0);
-  const fatCalories = logged.reduce((sum, day) => sum + finite(day.fat_g) * 9, 0);
-  const targetEligible = logged.filter((day) => Boolean(day.has_targets) && finite(day.planned_calories) > 0);
-  const adherenceDays = targetEligible.length
-    ? targetEligible.filter((day) => Math.abs(finite(day.calories) - finite(day.planned_calories)) / finite(day.planned_calories) <= tolerance).length
+  const calories = sumNullable(logged.map((day) => day.calories));
+  const protein = sumNullable(logged.map((day) => day.protein_g));
+  const carbs = sumNullable(logged.map((day) => day.carbs_g));
+  const fat = sumNullable(logged.map((day) => day.fat_g));
+  const proteinCalories = nullableNutrition(protein, (value) => Math.round(value * 4));
+  const carbCalories = nullableNutrition(carbs, (value) => Math.round(value * 4));
+  const fatCalories = nullableNutrition(fat, (value) => Math.round(value * 9));
+  const targetConfiguredLogged = logged.filter((day) => Boolean(day.has_targets) && finite(day.planned_calories) > 0);
+  const targetEligible = targetConfiguredLogged.filter((day) => day.calories !== null);
+  const adherenceState = targetConfiguredLogged.length === 0
+    ? "not-configured"
+    : targetEligible.length === targetConfiguredLogged.length
+      ? "available"
+      : "incomplete";
+  const adherenceDays = adherenceState === "available"
+    ? targetConfiguredLogged.filter((day) => Math.abs((day.calories as number) - finite(day.planned_calories)) / finite(day.planned_calories) <= tolerance).length
     : null;
   const configuredDays = days.filter((day) => Boolean(day.has_targets) && finite(day.planned_calories) > 0).length;
   const targetsState = configuredDays === 0
     ? "not-configured"
-    : targetEligible.length === logged.length
+    : targetConfiguredLogged.length === logged.length
       ? "available"
       : "partial";
+  const macroCaloriesTotal = proteinCalories === null || carbCalories === null || fatCalories === null
+    ? null
+    : Math.round(proteinCalories + carbCalories + fatCalories);
   return {
     loggedDays: logged.length,
     coverageLabel: logged.length === 0 ? "empty" : logged.length === 7 ? "complete" : "partial",
-    averageCaloriesLoggedDays: logged.length ? Math.round(calories / logged.length) : null,
-    averageProteinLoggedDays: logged.length ? Math.round((protein / logged.length) * 10) / 10 : null,
-    calendarAverageCalories: logged.length ? Math.round(calories / 7) : null,
+    averageCaloriesLoggedDays: logged.length && calories !== null ? Math.round(calories / logged.length) : null,
+    averageProteinLoggedDays: logged.length && protein !== null ? Math.round((protein / logged.length) * 10) / 10 : null,
+    calendarAverageCalories: logged.length && calories !== null ? Math.round(calories / 7) : null,
     targetEligibleLoggedDays: targetEligible.length,
     adherenceDays,
+    adherenceState,
     targetsState,
-    proteinCalories: Math.round(proteinCalories),
-    carbCalories: Math.round(carbCalories),
-    fatCalories: Math.round(fatCalories),
-    macroCaloriesTotal: Math.round(proteinCalories + carbCalories + fatCalories)
+    proteinCalories,
+    carbCalories,
+    fatCalories,
+    macroCaloriesTotal
   };
 }

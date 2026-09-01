@@ -36,7 +36,12 @@ export function formatDate(value: string) { return formatIsoDate(value); }
 
 function dateOfSession(session: WorkoutSession) { return (session.completed_at || session.skipped_at || session.started_at || "").slice(0, 10); }
 function inRange(date: string | null | undefined, range: ReportRange) { return Boolean(date && date >= range.start && date <= range.end); }
-function average(values: number[]) { const valid = values.filter((value) => Number.isFinite(value)); return valid.length ? Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length) : null; }
+function average(values: Array<number | null>) {
+  if (!values.length) return null;
+  if (values.some((value) => value === null || !Number.isFinite(value))) return null;
+  const known = values as number[];
+  return Math.round(known.reduce((sum, value) => sum + value, 0) / known.length);
+}
 function round(value: number) { return Math.round(value * 10) / 10; }
 function firstLastNumber<T>(items: T[], getValue: (item: T) => number | null | undefined) { const values = items.map(getValue).filter((value): value is number => typeof value === "number" && Number.isFinite(value)); if (values.length < 2) return null; return round(values[values.length - 1] - values[0]); }
 function measurementValue(entry: ProgressEntry, key: keyof BodyMeasurement) { const value = entry.measurements?.[key]; return typeof value === "number" && Number.isFinite(value) ? value : null; }

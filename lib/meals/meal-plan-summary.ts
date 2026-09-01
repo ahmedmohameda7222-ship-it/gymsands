@@ -1,10 +1,11 @@
+import { sumFoodLogs } from "@/services/nutrition/calculations";
 import type { MealPlanItem, MealPlanItemStatus, MealType } from "@/types";
 
 export type MealMacroTotals = {
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
 };
 export type MealPlanCounts = Record<MealPlanItemStatus, number>;
 export type MealPlanSummary = {
@@ -13,35 +14,15 @@ export type MealPlanSummary = {
   skipped: MealMacroTotals;
   counts: MealPlanCounts;
   remainingCalories: number | null;
-  overTargetCalories: number;
+  overTargetCalories: number | null;
   alignmentPercent: number | null;
 };
-
-const zeroTotals = (): MealMacroTotals => ({
-  calories: 0,
-  protein_g: 0,
-  carbs_g: 0,
-  fat_g: 0,
-});
-
-function finite(value: unknown, field: string) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`Invalid persisted meal value: ${field}.`);
-  }
-  return parsed;
-}
 
 export function addMealTotals(
   total: MealMacroTotals,
   item: Pick<MealPlanItem, "calories" | "protein_g" | "carbs_g" | "fat_g">,
 ): MealMacroTotals {
-  return {
-    calories: total.calories + finite(item.calories, "calories"),
-    protein_g: total.protein_g + finite(item.protein_g, "protein_g"),
-    carbs_g: total.carbs_g + finite(item.carbs_g, "carbs_g"),
-    fat_g: total.fat_g + finite(item.fat_g, "fat_g"),
-  };
+  return sumFoodLogs([total, item]);
 }
 
 export function mealItemsForStatus(items: MealPlanItem[], status: MealPlanItemStatus) {
@@ -60,8 +41,8 @@ export function skippedItems(items: MealPlanItem[]) {
   return mealItemsForStatus(items, "skipped");
 }
 
-export function totalsForItems(items: MealPlanItem[]) {
-  return items.reduce(addMealTotals, zeroTotals());
+export function totalsForItems(items: MealPlanItem[]): MealMacroTotals {
+  return sumFoodLogs(items);
 }
 
 export function summarizeMealPlanDay(
@@ -77,7 +58,8 @@ export function summarizeMealPlanDay(
     effectiveTargetCalories > 0
       ? effectiveTargetCalories
       : null;
-  const remainingCalories = target === null ? null : target - consumed.calories;
+  const remainingCalories =
+    target === null || consumed.calories === null ? null : target - consumed.calories;
   return {
     scheduled,
     consumed,
@@ -89,9 +71,11 @@ export function summarizeMealPlanDay(
     },
     remainingCalories,
     overTargetCalories:
-      remainingCalories !== null && remainingCalories < 0 ? Math.abs(remainingCalories) : 0,
+      remainingCalories === null ? null : remainingCalories < 0 ? Math.abs(remainingCalories) : 0,
     alignmentPercent:
-      target === null ? null : Math.round((scheduled.calories / target) * 1000) / 10,
+      target === null || scheduled.calories === null
+        ? null
+        : Math.round((scheduled.calories / target) * 1000) / 10,
   };
 }
 

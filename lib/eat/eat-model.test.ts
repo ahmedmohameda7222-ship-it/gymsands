@@ -11,15 +11,21 @@ import {
   progressState,
   rankRepeatFoods,
   selectNextPlannedMeal,
+  sumEatLogs,
   supportedServingOptions
 } from "@/lib/eat/eat-model";
+import { sumFoodLogs } from "@/services/nutrition/calculations";
 import type { DailyNutritionSummary, FoodItem, FoodLog, MealPlanItem } from "@/types";
 
 const log = (patch: Partial<FoodLog> = {}): FoodLog => ({
   id: patch.id ?? "log-1", user_id: "user", food_item_id: null, user_food_item_id: null, log_date: patch.log_date ?? "2026-07-12",
   meal_type: patch.meal_type ?? "Lunch", food_name: patch.food_name ?? "Rice", serving_size: patch.serving_size ?? "1 bowl",
-  quantity: patch.quantity ?? 1, calories: patch.calories ?? 500, protein_g: patch.protein_g ?? 20, carbs_g: patch.carbs_g ?? 70,
-  fat_g: patch.fat_g ?? 10, notes: patch.notes ?? null
+  quantity: patch.quantity ?? 1,
+  calories: patch.calories === undefined ? 500 : patch.calories,
+  protein_g: patch.protein_g === undefined ? 20 : patch.protein_g,
+  carbs_g: patch.carbs_g === undefined ? 70 : patch.carbs_g,
+  fat_g: patch.fat_g === undefined ? 10 : patch.fat_g,
+  notes: patch.notes ?? null
 });
 const plan = (patch: Partial<MealPlanItem> = {}): MealPlanItem => ({
   id: patch.id ?? "plan-1", user_id: "user", plan_date: patch.plan_date ?? "2026-07-12", meal_type: patch.meal_type ?? "Lunch",
@@ -27,17 +33,17 @@ const plan = (patch: Partial<MealPlanItem> = {}): MealPlanItem => ({
   calories: 600, protein_g: 45, carbs_g: 70, fat_g: 15, status: patch.status ?? "planned", food_log_id: patch.food_log_id ?? null,
   completed_at: patch.completed_at ?? null, notes: null, created_at: patch.created_at ?? "2026-07-12T10:00:00Z", updated_at: "2026-07-12T10:00:00Z"
 });
-const day = (date: string, logs: FoodLog[] = [], target?: number): DailyNutritionSummary => ({
-  date,
-  planned_calories: target ?? 0,
-  has_targets: Boolean(target),
-  calories: logs.reduce((sum, item) => sum + item.calories, 0),
-  protein_g: logs.reduce((sum, item) => sum + item.protein_g, 0),
-  carbs_g: logs.reduce((sum, item) => sum + item.carbs_g, 0),
-  fat_g: logs.reduce((sum, item) => sum + item.fat_g, 0),
-  water_ml: 0,
-  logs
-});
+const day = (date: string, logs: FoodLog[] = [], target?: number): DailyNutritionSummary => {
+  const totals = sumFoodLogs(logs);
+  return {
+    date,
+    planned_calories: target ?? 0,
+    has_targets: Boolean(target),
+    ...totals,
+    water_ml: 0,
+    logs
+  };
+};
 
 describe("Eat URL state", () => {
   it("defaults invalid views to day and validates real ISO dates", () => {
@@ -67,6 +73,13 @@ describe("Eat day truthfulness", () => {
     expect(unknownLogs.every((metric) => metric.consumed === null && metric.remaining === null)).toBe(true);
     const unknownTargets = buildNutritionMetrics({ consumed: { calories: 500, protein_g: 20, carbs_g: 70, fat_g: 10 }, targets: null, logsAvailable: true, targetsAvailable: false });
     expect(unknownTargets[0]).toMatchObject({ consumed: 500, target: null, remaining: null, state: "no-target" });
+  });
+
+  it("keeps an independently unknown frozen nutrient unknown in Eat totals", () => {
+    expect(sumEatLogs([
+      log({ id: "known", calories: 500, protein_g: 20, carbs_g: 70, fat_g: 10 }),
+      log({ id: "unknown-protein", calories: 200, protein_g: null, carbs_g: 20, fat_g: 0 })
+    ])).toEqual({ calories: 700, protein_g: null, carbs_g: 90, fat_g: 10 });
   });
 
   it("selects only unfinished planned meals and excludes skipped or done items", () => {
@@ -110,6 +123,22 @@ describe("Eat week analytics", () => {
     expect(analytics.proteinCalories).toBe(1200);
     expect(analytics.carbCalories).toBe(1200);
     expect(analytics.fatCalories).toBe(540);
+  });
+
+  it("keeps weekly nutrient analytics unknown when any contributing frozen value is unknown", () => {
+    const days = [
+      day("2026-07-06", [log({ calories: 1000, protein_g: 100, carbs_g: 100, fat_g: 20 })]),
+      day("2026-07-07", [log({ id: "2", calories: 2000, protein_g: null, carbs_g: 200, fat_g: 40 })]),
+      ...Array.from({ length: 5 }, (_, index) => day(`2026-07-${String(8 + index).padStart(2, "0")}`))
+    ];
+    expect(buildWeekAnalytics(days)).toMatchObject({
+      averageCaloriesLoggedDays: 1500,
+      averageProteinLoggedDays: null,
+      proteinCalories: null,
+      carbCalories: 1200,
+      fatCalories: 540,
+      macroCaloriesTotal: null
+    });
   });
 
   it("uses each logged day's own training or rest target", () => {

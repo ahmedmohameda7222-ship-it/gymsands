@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InlineFeedback } from "@/components/motion";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { EAT_MEAL_GROUPS, groupFoodLogs, type EatMealGroup } from "@/lib/eat/eat-model";
+import { EAT_MEAL_GROUPS, groupFoodLogs, sumEatLogs, type EatMealGroup } from "@/lib/eat/eat-model";
 import { eatEnergyDisplayValue, eatEnergyInputToKcal, formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
 import { deleteEatFoodLog, getEatFoodLogs, getEatMealPlanItems, isEatLinkedEditConsistencyError, type EatFoodLogPatch } from "@/services/database/eat";
@@ -17,11 +17,18 @@ import { updateEatFoodLogAtomic } from "@/services/database/eat-meal-plan-atomic
 import type { UserAppSettings } from "@/services/database/user-settings";
 import type { FoodLog, MealPlanItem, MealType } from "@/types";
 
-type FoodLogEditForm = Omit<EatFoodLogPatch, "calories"> & { energy: number };
+type FoodLogEditForm = Omit<EatFoodLogPatch, "calories"> & { energy: number | null };
 
-function numberInput(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? String(parsed) : "0";
+function numberInput(value: number | null | undefined) {
+  return value !== null && value !== undefined && Number.isFinite(value) ? String(value) : "";
+}
+
+function nullableEnergy(value: number | null, energyUnit: UserAppSettings["energyUnit"], locale: string) {
+  return value === null ? "—" : formatEatEnergy(value, energyUnit, locale);
+}
+
+function nullableMacro(value: number | null) {
+  return value === null ? "—" : `${Math.round(value * 10) / 10} g`;
 }
 
 function editState(log: FoodLog, energyUnit: UserAppSettings["energyUnit"]): FoodLogEditForm {
@@ -30,10 +37,10 @@ function editState(log: FoodLog, energyUnit: UserAppSettings["energyUnit"]): Foo
     quantity: Number(log.quantity) || 1,
     servingSize: log.serving_size,
     mealType: (["Breakfast", "Lunch", "Dinner", "Snack"] as string[]).includes(log.meal_type) ? log.meal_type as MealType : "Lunch",
-    energy: eatEnergyDisplayValue(Number(log.calories) || 0, energyUnit),
-    proteinG: Number(log.protein_g) || 0,
-    carbsG: Number(log.carbs_g) || 0,
-    fatG: Number(log.fat_g) || 0,
+    energy: log.calories === null ? null : eatEnergyDisplayValue(log.calories, energyUnit),
+    proteinG: log.protein_g,
+    carbsG: log.carbs_g,
+    fatG: log.fat_g,
     notes: log.notes
   };
 }
@@ -91,11 +98,20 @@ export function EatFoodLog({
 
   async function save() {
     if (!editing || !form || pending) return;
+    if (
+      (editing.calories !== null && form.energy === null) ||
+      (editing.protein_g !== null && form.proteinG === null) ||
+      (editing.carbs_g !== null && form.carbsG === null) ||
+      (editing.fat_g !== null && form.fatG === null)
+    ) {
+      setFeedback({ type: "error", message: et("saveFailed") });
+      return;
+    }
     setPending("save");
     setFeedback({ type: "info", message: `${et("saveChanges")}…` });
     const patch: EatFoodLogPatch = {
       ...form,
-      calories: eatEnergyInputToKcal(form.energy, energyUnit)
+      calories: form.energy === null ? null : eatEnergyInputToKcal(form.energy, energyUnit)
     };
     try {
       const result = await updateEatFoodLogAtomic(userId, editing.id, patch);
@@ -226,18 +242,18 @@ export function EatFoodLog({
 
 function MealGroup({ group, logs, label, energyUnit, locale, onAdd, onOpen }: { group: EatMealGroup; logs: FoodLog[]; label: string; energyUnit: UserAppSettings["energyUnit"]; locale: string; onAdd: () => void; onOpen: (log: FoodLog) => void }) {
   const { et } = useEatTranslation();
-  const calories = logs.reduce((sum, log) => sum + Number(log.calories || 0), 0);
+  const totals = sumEatLogs(logs);
   return (
     <section aria-labelledby={`eat-group-${group}`} className="space-y-2">
       <div className="flex items-center gap-2">
         <h3 id={`eat-group-${group}`} className="text-sm font-semibold">{label}</h3>
-        <span className="text-xs text-muted-foreground">{logs.length ? formatEatEnergy(calories, energyUnit, locale) : ""}</span>
+        <span className="text-xs text-muted-foreground">{logs.length ? nullableEnergy(totals.calories, energyUnit, locale) : ""}</span>
         <div className="flex-1 border-t border-border/70" />
         <Button type="button" variant="ghost" size="sm" className="min-h-11" onClick={onAdd}><Plus className="h-4 w-4" />{et("add")}</Button>
       </div>
       {logs.length ? logs.map((log) => (
         <button key={log.id} type="button" onClick={() => onOpen(log)} className="flex min-h-16 w-full items-center justify-between gap-3 rounded-[14px] border border-border/70 bg-card p-3 text-start transition hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <div className="min-w-0"><p className="truncate text-sm font-semibold">{log.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{log.quantity} × {log.serving_size}</p><p className="mt-1 text-xs text-muted-foreground">{formatEatEnergy(log.calories, energyUnit, locale)} · P {Math.round(log.protein_g * 10) / 10} g · C {Math.round(log.carbs_g * 10) / 10} g · F {Math.round(log.fat_g * 10) / 10} g</p></div>
+          <div className="min-w-0"><p className="truncate text-sm font-semibold">{log.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{log.quantity} × {log.serving_size}</p><p className="mt-1 text-xs text-muted-foreground">{nullableEnergy(log.calories, energyUnit, locale)} · P {nullableMacro(log.protein_g)} · C {nullableMacro(log.carbs_g)} · F {nullableMacro(log.fat_g)}</p></div>
           <Edit3 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       )) : <div className="rounded-[14px] border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground">—</div>}
@@ -249,6 +265,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   return <div className="space-y-2"><Label>{label}</Label>{children}</div>;
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return <Field label={label}><Input type="number" min="0" step="0.1" inputMode="decimal" value={numberInput(value)} onChange={(event) => onChange(Number(event.target.value))} /></Field>;
+function NumberField({ label, value, onChange }: { label: string; value: number | null; onChange: (value: number | null) => void }) {
+  return <Field label={label}><Input type="number" min="0" step="0.1" inputMode="decimal" value={numberInput(value)} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))} /></Field>;
 }

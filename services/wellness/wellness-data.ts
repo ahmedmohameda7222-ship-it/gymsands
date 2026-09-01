@@ -257,7 +257,12 @@ export function buildDailyChecklist({
 }) {
   const today = todayIso();
   const todayWorkout = workoutActivity.find((session) => (session.completed_at ?? session.skipped_at ?? session.started_at)?.slice(0, 10) === today);
-  const proteinLogged = nutrition && nutrition.protein_g > 0;
+  const proteinLogged = nutrition?.protein_g !== null && nutrition?.protein_g !== undefined && nutrition.protein_g > 0;
+  const proteinDetail = !nutrition
+    ? "No meal logs today"
+    : nutrition.protein_g === null
+      ? `${nutrition.logs.length} food logs, protein unknown`
+      : `${nutrition.logs.length} food logs, ${Math.round(nutrition.protein_g)}g protein`;
   return [
     { label: "Water", complete: Boolean(nutrition && nutrition.water_ml > 0), detail: nutrition ? `${nutrition.water_ml} ml logged today` : "No water log today" },
     { label: "Supplements", complete: supplements.length > 0 && supplements.every((item) => item.taken_today), detail: supplements.length ? `${supplements.filter((item) => item.taken_today).length}/${supplements.length} taken` : "No supplement schedule for today" },
@@ -265,7 +270,7 @@ export function buildDailyChecklist({
     { label: "Habits", complete: habits.length > 0 && habits.every((item) => item.completed), detail: habits.length ? `${habits.filter((item) => item.completed).length}/${habits.length} habits done` : "No habits set for today" },
     { label: "Steps", complete: false, detail: "Step tracking is not connected yet" },
     { label: "Workout", complete: todayWorkout?.status === "completed", detail: todayWorkout ? `${todayWorkout.workout_name}: ${todayWorkout.status}` : "No workout activity today" },
-    { label: "Meals / protein", complete: Boolean(nutrition && nutrition.logs.length > 0 && proteinLogged), detail: nutrition ? `${nutrition.logs.length} food logs, ${Math.round(nutrition.protein_g)}g protein` : "No meal logs today" }
+    { label: "Meals / protein", complete: Boolean(nutrition && nutrition.logs.length > 0 && proteinLogged), detail: proteinDetail }
   ];
 }
 

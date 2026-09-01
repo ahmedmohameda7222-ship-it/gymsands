@@ -13,13 +13,13 @@ import {
   addCustomMealToLog,
   addCustomMealToMealPlan,
   addFoodToMealPlan,
-  addGlobalFoodToToday,
   egyptianFoodKitchenName,
   egyptianFoodSubcategories,
   getCustomMeals,
   getFoodKitchens,
   getFoodLibrary
 } from "@/services/database/nutrition";
+import { addFoodLibraryItemToToday } from "@/services/database/food-library-logging";
 import {
   favoriteKeyForFood,
   getFavoriteFoodKeysAsync,
@@ -29,7 +29,7 @@ import {
 import { scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
 import { userSafeError } from "@/lib/error-formatting";
 import { egyptianFoods } from "@/data/egyptian-foods";
-import type { CustomMeal, FoodItem, FoodKitchen, FoodLog, FoodSubcategory, MealPlanItem, MealType } from "@/types";
+import type { CustomMeal, FoodKitchen, FoodLibraryItem, FoodLog, FoodSubcategory, MealPlanItem, MealType } from "@/types";
 
 const pageSize = 12;
 const mealOptions: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -128,7 +128,7 @@ function FoodBrowserInner({
   const [kitchens, setKitchens] = useState<FoodKitchen[]>([]);
   const [subcategories, setSubcategories] = useState<FoodSubcategory[]>([]);
   const [customMeals, setCustomMeals] = useState<CustomMeal[]>([]);
-  const [foods, setFoods] = useState<FoodItem[]>([]);
+  const [foods, setFoods] = useState<FoodLibraryItem[]>([]);
   const [favoriteKeys, setFavoriteKeys] = useState<string[]>([]);
   const [selectedKitchenId, setSelectedKitchenId] = useState("");
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
@@ -304,7 +304,7 @@ function FoodBrowserInner({
     return mealActions[actionKey(id, action)];
   }
 
-  async function logFoodNow(food: FoodItem) {
+  async function logFoodNow(food: FoodLibraryItem) {
     if (isPending(foodAction(food.id, "log"))) return;
     const quantity = quantities[food.id] ?? 1;
     const macros = scaleFoodMacros(food, quantity);
@@ -320,7 +320,7 @@ function FoodBrowserInner({
     setFoodAction(food.id, "log", { status: "pending", label: "Logging food..." });
     try {
       const selectedUnit = units[food.id] ?? "serving";
-      const log = await addGlobalFoodToToday({
+      const log = await addFoodLibraryItemToToday({
         userId: user.id,
         food: { ...food, serving_size: `${food.serving_size} (${selectedUnit})` },
         quantity,
@@ -329,7 +329,7 @@ function FoodBrowserInner({
       });
       pushLoggedFood(log);
       const message = `Added to today as ${displayMealType(mealType)}.`;
-      setFoodAction(food.id, "log", { status: "success", label: message, description: `${macros.calories} kcal logged.` });
+      setFoodAction(food.id, "log", { status: "success", label: message, description: `${nutritionDisplay(macros.calories, " kcal")} logged.` });
       setNotice({ type: "success", title: "Food logged", description: message });
     } catch (error) {
       setFoodAction(food.id, "log", { status: "error", label: "Could not add food.", description: userSafeError(error) });
@@ -337,7 +337,7 @@ function FoodBrowserInner({
     }
   }
 
-  async function addToPlan(food: FoodItem) {
+  async function addToPlan(food: FoodLibraryItem) {
     if (isPending(foodAction(food.id, "plan"))) return;
     const quantity = quantities[food.id] ?? 1;
     const macros = scaleFoodMacros(food, quantity);
@@ -535,8 +535,8 @@ function FoodBrowserInner({
                       <Badge>{customMealCategory(meal)}</Badge>
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-2 text-center">
-                      <Macro label="kcal" value={meal.totals.calories} />
-                      <Macro label="protein" value={`${meal.totals.protein_g}g`} />
+                      <Macro label="kcal" value={nutritionDisplay(meal.totals.calories)} />
+                      <Macro label="protein" value={nutritionDisplay(meal.totals.protein_g, "g")} />
                     </div>
                     <div className="mt-4 grid gap-2 sm:grid-cols-3">
                       <Button className="min-h-12" variant="outline" onClick={() => addCustomMealPlan(meal)} disabled={isPending(planAction)}>
@@ -596,10 +596,10 @@ function FoodBrowserInner({
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">{food.cuisine || selectedKitchen?.name || egyptianFoodKitchenName}</p>
                   <div className="mt-4 grid grid-cols-4 gap-2 text-center">
-                    <Macro label="kcal" value={macros.calories} />
-                    <Macro label="protein" value={`${macros.protein_g}g`} />
-                    <Macro label="carbs" value={`${macros.carbs_g}g`} />
-                    <Macro label="fat" value={`${macros.fat_g}g`} />
+                    <Macro label="kcal" value={nutritionDisplay(macros.calories)} />
+                    <Macro label="protein" value={nutritionDisplay(macros.protein_g, "g")} />
+                    <Macro label="carbs" value={nutritionDisplay(macros.carbs_g, "g")} />
+                    <Macro label="fat" value={nutritionDisplay(macros.fat_g, "g")} />
                   </div>
                   <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_140px]">
                     <div>
@@ -752,7 +752,7 @@ function ConfidenceBadge({ source }: { source: string }) {
   return <Badge variant={source === "verified" ? "success" : source === "imported" || source.includes("library") || source === "admin-reviewed" ? "default" : "outline"}>{source}</Badge>;
 }
 
-function FoodAccuracyBadges({ food }: { food: FoodItem }) {
+function FoodAccuracyBadges({ food }: { food: FoodLibraryItem }) {
   const source = sourceLabelForFood(food);
   return (
     <>
@@ -766,25 +766,16 @@ function displayMealType(type: MealType) {
   return type === "Snack" ? "Snacks" : type;
 }
 
-function normalizeFoodItem(food: FoodItem): FoodItem {
+function normalizeFoodItem(food: FoodLibraryItem): FoodLibraryItem {
   const fallbackId = `food-${food.food_name || "item"}-${food.serving_size || "serving"}-${food.category || "general"}`;
   return {
     ...food,
     id: String(food.id || fallbackId),
     food_name: String(food.food_name || "Unnamed food"),
     serving_size: String(food.serving_size || "1 serving"),
-    calories: toNumber(food.calories),
-    protein_g: toNumber(food.protein_g),
-    carbs_g: toNumber(food.carbs_g),
-    fat_g: toNumber(food.fat_g),
     category: food.category || "Food",
     cuisine: food.cuisine || egyptianFoodKitchenName
   };
-}
-
-function toNumber(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function customMealCategory(meal: CustomMeal) {
@@ -792,7 +783,7 @@ function customMealCategory(meal: CustomMeal) {
   return typeof category === "string" && category.trim() ? category : "Meal";
 }
 
-function confidenceForFood(food: FoodItem) {
+function confidenceForFood(food: FoodLibraryItem) {
   const source = String(food.source_type || "").toLowerCase();
   if (source.includes("verified")) return "verified";
   if (source.includes("admin")) return "admin-reviewed";
@@ -802,11 +793,15 @@ function confidenceForFood(food: FoodItem) {
   return food.is_global ? "unverified library" : "estimated";
 }
 
-function hasUnknownMacros(food: Pick<FoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">) {
-  return [food.calories, food.protein_g, food.carbs_g, food.fat_g].every((value) => toNumber(value) === 0);
+function hasUnknownMacros(food: Pick<FoodLibraryItem, "calories" | "protein_g" | "carbs_g" | "fat_g">) {
+  return [food.calories, food.protein_g, food.carbs_g, food.fat_g].some((value) => value === null);
 }
 
-function sourceLabelForFood(food: Pick<FoodItem, "source_type" | "is_global">) {
+function nutritionDisplay(value: number | null, suffix = "") {
+  return value === null ? "—" : `${value}${suffix}`;
+}
+
+function sourceLabelForFood(food: Pick<FoodLibraryItem, "source_type" | "is_global">) {
   const source = String(food.source_type || "").trim();
   if (!source) return "unknown source";
   if (source.toLowerCase().includes("admin")) return "admin review";
@@ -817,7 +812,7 @@ function sourceLabelForFood(food: Pick<FoodItem, "source_type" | "is_global">) {
   return food.is_global ? "library source" : "estimated source";
 }
 
-function isApproximateFallbackFood(food: Pick<FoodItem, "id" | "source_type" | "cuisine">) {
+function isApproximateFallbackFood(food: Pick<FoodLibraryItem, "id" | "source_type" | "cuisine">) {
   const source = String(food.source_type || "").toLowerCase();
   return source.includes("approximate_macro_table") || String(food.id).startsWith("egyptian-") || food.cuisine === egyptianFoodKitchenName;
 }

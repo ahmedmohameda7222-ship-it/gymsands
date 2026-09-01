@@ -11,7 +11,7 @@ import { clearClientErrorDiagnosticState, setClientErrorDiagnosticState } from "
 import { cn } from "@/lib/utils";
 import type { SavedTargets } from "@/services/nutrition/targets";
 
-type MacroTotals = { calories: number; protein_g: number; carbs_g: number; fat_g: number };
+type MacroTotals = { calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null };
 
 type MetricDefinition = {
   key: "calories" | "protein" | "carbs" | "fat" | "water";

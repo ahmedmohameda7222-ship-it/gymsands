@@ -179,19 +179,6 @@ function applyMealCompletion(
   };
 }
 
-function completeNutritionTotals(
-  value: TodayProjectionResponseV1["nutrition"]["logs"] extends infer _T
-    ? { calories: number | null; proteinG: number | null; carbsG: number | null; fatG: number | null }
-    : never,
-) {
-  return (
-    value.calories !== null &&
-    value.proteinG !== null &&
-    value.carbsG !== null &&
-    value.fatG !== null
-  );
-}
-
 export function TodayDashboard() {
   const { user, profile, session } = useAuth();
   const { language, dir } = useTranslation();
@@ -430,12 +417,12 @@ export function TodayDashboard() {
       ? visibleProjection.nutrition.targets.value
       : null;
   const totals =
-    nutritionLogs && completeNutritionTotals(nutritionLogs.totals)
+    nutritionLogs
       ? {
-          calories: nutritionLogs.totals.calories as number,
-          protein_g: nutritionLogs.totals.proteinG as number,
-          carbs_g: nutritionLogs.totals.carbsG as number,
-          fat_g: nutritionLogs.totals.fatG as number,
+          calories: nutritionLogs.totals.calories,
+          protein_g: nutritionLogs.totals.proteinG,
+          carbs_g: nutritionLogs.totals.carbsG,
+          fat_g: nutritionLogs.totals.fatG,
         }
       : null;
   const targets: SavedTargets | null =

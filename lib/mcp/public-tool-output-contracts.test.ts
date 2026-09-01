@@ -13,6 +13,7 @@ type Schema = {
   properties?: Record<string, Schema>;
   items?: Schema;
   additionalProperties?: boolean;
+  anyOf?: Schema[];
 };
 
 const DATE_FIELD = /^(?:date|start_date|end_date|record_date|measured_at|plan_date|log_date)$/;
@@ -20,6 +21,7 @@ const DATE_FIELD = /^(?:date|start_date|end_date|record_date|measured_at|plan_da
 function sample(schema: Schema, field = ""): unknown {
   if (Object.prototype.hasOwnProperty.call(schema, "const")) return schema.const;
   if (schema.enum?.length) return schema.enum[0];
+  if (schema.anyOf?.length) return sample(schema.anyOf.find((candidate) => candidate.type !== "null") ?? schema.anyOf[0], field);
   if (schema.type === "object") {
     const properties = schema.properties ?? {};
     return Object.fromEntries((schema.required ?? []).map((key) => [key, sample(properties[key] ?? {}, key)]));
@@ -33,6 +35,7 @@ function sample(schema: Schema, field = ""): unknown {
     if (DATE_FIELD.test(field)) return "2026-07-11";
     return "sample";
   }
+  if (schema.type === "null") return null;
   return {};
 }
 
@@ -42,6 +45,7 @@ function resultFor(tool: McpToolDefinition): McpToolResult {
 }
 
 function assertClosedObjects(schema: Schema, path: string) {
+  if (schema.anyOf?.length) schema.anyOf.forEach((candidate, index) => assertClosedObjects(candidate, `${path}.anyOf[${index}]`));
   if (schema.type === "object") {
     expect((schema as Schema & { additionalProperties?: boolean }).additionalProperties, path).toBe(false);
     for (const [key, child] of Object.entries(schema.properties ?? {})) assertClosedObjects(child, `${path}.${key}`);
@@ -61,6 +65,31 @@ describe("public MCP output contracts", () => {
         value: result.structuredContent
       });
     }
+  });
+
+  it("preserves required nullable Food totals while keeping real zero numeric", () => {
+    const tool = mcpTools.find((candidate) => candidate.name === "add_food_log");
+    expect(tool).toBeTruthy();
+    const structuredContent = {
+      ok: true,
+      saved_items: [{ food_name: "Known calories, unknown protein", calories: 100, protein_g: null, carbs_g: 0, fat_g: 2 }],
+      totals: { calories: 100, protein_g: null, carbs_g: 0, fat_g: 2 }
+    };
+    const original: McpToolResult = {
+      structuredContent,
+      content: [{ type: "text", text: JSON.stringify(structuredContent) }]
+    };
+
+    const sanitized = sanitizeMcpToolResult(original, tool!.outputSchema);
+
+    expect(sanitized.structuredContent).toMatchObject({
+      saved_items: [{ calories: 100, carbs_g: 0, fat_g: 2 }],
+      totals: { calories: 100, protein_g: null, carbs_g: 0, fat_g: 2 }
+    });
+    expect((sanitized.structuredContent.saved_items as Array<Record<string, unknown>>)[0]?.protein_g).toBeUndefined();
+    expect(validateMcpToolOutput(tool!, sanitized)).toMatchObject({ success: true });
+    expect(sanitized.content[0]?.text).toContain('"protein_g":null');
+    expect(sanitized.content[0]?.text).toContain('"carbs_g":0');
   });
 
   it("omits unavailable optional context values before contract validation", () => {
