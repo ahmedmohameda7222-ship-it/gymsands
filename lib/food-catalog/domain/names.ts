@@ -19,5 +19,11 @@ export function validateFoodNameFact(value: FoodNameFact): FoodNameFact {
   if (!value.text.trim()) throw new Error("Food name text must be nonblank.");
   if (!value.normalizedText.trim()) throw new Error("Food name normalized text must be nonblank.");
   if (!value.policyVersion.trim()) throw new Error("Food name policy version must be nonblank.");
+  if (
+    (value.origin === "source" || value.role === "source_name")
+    && (value.sourceRecordId === null || !value.sourceRecordId.trim())
+  ) {
+    throw new Error("Source-derived Food names require source provenance.");
+  }
   return value;
 }
