@@ -23,6 +23,13 @@ export function validateFoodServingOption(value: FoodServingOption): FoodServing
   if (value.gramWeight === null && value.unitCode !== "g" && value.unitCode !== "ml") {
     throw new Error("Food serving household units require an exact Food gram weight.");
   }
+  if (
+    value.unitCode !== "g"
+    && value.unitCode !== "ml"
+    && (value.sourceRecordId === null || !value.sourceRecordId.trim())
+  ) {
+    throw new Error("Food serving household conversions require source-backed provenance.");
+  }
   if (value.evidenceClass !== "exact_source" && value.evidenceClass !== "source_estimated") {
     throw new Error("Food serving evidence class is not approved.");
   }
