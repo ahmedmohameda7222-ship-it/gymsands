@@ -181,7 +181,7 @@ export async function mockHistoryListForRenderedQa(
       nextCursor: null,
     };
   }
-  if (base.items.length === 0 && renderedQaPrototype) {
+  if (scenario && base.items.length === 0 && renderedQaPrototype) {
     const fallbackItems = [
       {
         ...renderedQaPrototype,
