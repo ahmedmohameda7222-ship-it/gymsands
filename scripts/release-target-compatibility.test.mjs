@@ -11,41 +11,41 @@ const ledger = JSON.parse(
   readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"),
 );
 
-test("all release target consumers preserve the declared compatibility marker while the corrective migration is pending", () => {
+test("all release target consumers preserve the declared compatibility marker after Production migration reconciliation", () => {
   const releaseTarget = deriveReleaseTarget(ledger);
   const qualityTarget = deriveQualityLedgerTarget(ledger);
   const environment = qualityLedgerEnvironment(qualityTarget);
 
   assert.equal(releaseTarget.expectedMigration, "20260724232734");
-  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260901165219");
+  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20260901183021");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
-  assert.equal(releaseTarget.reconciliationState, "pending");
-  assert.equal(ledger.pendingCount, 1);
-  assert.equal(releaseTarget.pendingCount, 1);
+  assert.equal(releaseTarget.reconciliationState, "reconciled");
+  assert.equal(ledger.pendingCount, 0);
+  assert.equal(releaseTarget.pendingCount, 0);
   assert.equal(releaseTarget.schemaAppliedUntrackedCount, 0);
-  assert.equal(releaseTarget.unresolvedCount, 1);
-  assert.equal(releaseTarget.releaseReady, false);
+  assert.equal(releaseTarget.unresolvedCount, 0);
+  assert.equal(releaseTarget.releaseReady, true);
   assert.equal(qualityTarget.expectedMigration, releaseTarget.expectedMigration);
   assert.equal(
     qualityTarget.latestAppliedMigrationVersion,
     releaseTarget.latestAppliedMigrationVersion,
   );
-  assert.equal(qualityTarget.reconciliationState, "pending");
-  assert.equal(qualityTarget.pendingCount, 1);
-  assert.equal(qualityTarget.unresolvedCount, 1);
-  assert.equal(qualityTarget.releaseReady, false);
+  assert.equal(qualityTarget.reconciliationState, "reconciled");
+  assert.equal(qualityTarget.pendingCount, 0);
+  assert.equal(qualityTarget.unresolvedCount, 0);
+  assert.equal(qualityTarget.releaseReady, true);
   assert.equal(
     environment.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION,
     releaseTarget.expectedMigration,
   );
-  assert.equal(environment.PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE, "pending");
-  assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "1");
-  assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "1");
+  assert.equal(environment.PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE, "reconciled");
+  assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "0");
+  assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "0");
   assert.notEqual(releaseTarget.expectedMigration, releaseTarget.latestAppliedMigrationVersion);
-  assert.throws(() => deriveReleaseReadyTarget(ledger), /not release-ready/);
+  assert.doesNotThrow(() => deriveReleaseReadyTarget(ledger));
 });
 
-test("preflight preserves the declared marker but blocks release while migration reconciliation is pending", () => {
+test("preflight validates the declared marker without a migration-ledger blocker after reconciliation", () => {
   const expectedCommit = "a".repeat(40);
   const releaseTarget = deriveReleaseTarget(ledger);
   const migrationState = deriveMigrationLedgerState(ledger);
@@ -80,8 +80,8 @@ test("preflight preserves the declared marker but blocks release while migration
 
   const markerResult = evaluateReleasePreflight({ ...baseInput, manifest });
   assert.equal(markerResult.failures.includes("release_manifest_migration_mismatch"), false);
-  assert.equal(markerResult.failures.includes("migration_ledger_not_reconciled"), true);
-  assert.equal(markerResult.releaseBlockers.includes("migration_ledger_not_reconciled"), true);
+  assert.equal(markerResult.failures.includes("migration_ledger_not_reconciled"), false);
+  assert.equal(markerResult.releaseBlockers.includes("migration_ledger_not_reconciled"), false);
 
   const physicalHeadResult = evaluateReleasePreflight({
     ...baseInput,
@@ -94,8 +94,8 @@ test("preflight preserves the declared marker but blocks release while migration
     },
   });
   assert.equal(physicalHeadResult.failures.includes("release_manifest_migration_mismatch"), true);
-  assert.equal(physicalHeadResult.failures.includes("migration_ledger_not_reconciled"), true);
-  assert.equal(physicalHeadResult.releaseBlockers.includes("migration_ledger_not_reconciled"), true);
+  assert.equal(physicalHeadResult.failures.includes("migration_ledger_not_reconciled"), false);
+  assert.equal(physicalHeadResult.releaseBlockers.includes("migration_ledger_not_reconciled"), false);
 });
 
 test("release authority fails closed when the declared marker is absent", () => {
