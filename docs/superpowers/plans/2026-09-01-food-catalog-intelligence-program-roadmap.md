@@ -1,6 +1,6 @@
 # Food Catalog Intelligence Implementation Roadmap
 
-**Status:** implementation-planning authority; runtime implementation not started  
+**Status:** implementation-planning authority; Plan 1 integrated, Plan 2 at Planner review gate  
 **Spec:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
 
 ## Purpose
@@ -18,19 +18,45 @@ The approved Food Catalog Intelligence spec spans several independently reviewab
 - Keep PostgreSQL/Supabase as the initial physical backend. No paid search/provider/cache dependency is introduced by these plans.
 - Each implementation plan uses TDD, focused commits, independent review, and the verification chain.
 
+## Current execution state
+
+### Plan 1 — Core Canonical Model Rebuild — COMPLETE
+
+Plan 1 is integrated on authoritative `main` through squash-equivalent commit:
+
+`93524c2b162ee832d12b9e2a46c92bdced6fdac9`
+
+The Plan 1 Production schema and semantic correction were separately authorized, applied exactly once, and reconciled. The latest physical Plan 1 correction identity is:
+
+`20260901183021_food_catalog_plan1_semantic_corrections`
+
+The released compatibility marker remains `20260724232734`. No Food population, provider ingestion, activation, Catalog Generation promotion, or Activity Catalog mutation occurred. The global Food Catalog remains unpopulated.
+
+### Plan 2 — Food Catalog Domain Service V2 + Compatibility Projection — CURRENT REVIEW GATE
+
+The implementation plan is:
+
+`docs/superpowers/plans/2026-09-01-food-catalog-domain-service-v2.md`
+
+Plan 2 has not been implemented. Planner/user approval of the written Plan 2 is required before implementation begins.
+
+### Plan 3 — Activation, Verification, Trust, and Catalog Generations — NOT STARTED
+
+Plan 3 is not authorized and must not be pulled into Plan 2 implementation.
+
 ## Plan sequence
 
 ### Plan 1 — Core Canonical Model Rebuild
 
 Introduce the target versioned domain structures while keeping current consumers intact: nutrition revisions, source-backed serving options, localized/provenance-aware names, taxonomy registry, market registry, verification assertions, immutable merge events, and database invariants. Existing `food_items` remains the stable root/compatibility anchor during migration, but its flat name/nutrition/serving/category/verification fields cease to be future authority.
 
-**Exit condition:** target core schema and pure domain contracts exist and are locally verified; no consumer cutover and no Production population.
+**Exit condition:** target core schema and pure domain contracts exist and are locally verified; no consumer cutover and no Production population. **Satisfied.**
 
 ### Plan 2 — Food Catalog Domain Service V2 + Compatibility Projection
 
-Build focused server-only read/persistence modules over the new domain model. Add compatibility projection from the new model to the current Food Catalog service contract so Nutrition consumers can migrate without direct-table coupling.
+Build focused server-only read/persistence modules over the new domain model. Add compatibility projection from explicitly selected V2 domain facts to the current Food Catalog service contract so Nutrition consumers can migrate without direct-table coupling. Plan 2 intentionally does not select current promoted facts before Catalog Generations exist.
 
-**Exit condition:** current consumers can be served from V2 domain facts in tests while legacy physical fields remain compatibility-only.
+**Exit condition:** V2 domain facts can be read/written through dedicated server persistence ports and projected into the current compatibility shape in tests, while existing member runtime remains on the legacy compatibility adapter and legacy physical fields remain compatibility-only.
 
 ### Plan 3 — Activation, Verification, Trust, and Catalog Generations
 
@@ -81,9 +107,9 @@ Created only after Foundation is healthy. Implement FNDDS-specific portion/compo
 ## Dependency order
 
 ```text
-Plan 1 Core Model
+Plan 1 Core Model — COMPLETE
   ↓
-Plan 2 Domain Service V2
+Plan 2 Domain Service V2 — CURRENT
   ↓
 Plan 3 Activation / Verification / Generations
   ↓
@@ -106,4 +132,4 @@ Plans 5 and 6 may overlap in implementation only after their prerequisite contra
 
 ## Current best next move
 
-Execute **Plan 1 — Core Canonical Model Rebuild** first. It is additive, keeps current Nutrition consumers functioning, creates the clean long-term data foundation, and avoids prematurely coupling source adapters or search behavior to transitional `food_items` columns.
+Approve the written **Plan 2 — Food Catalog Domain Service V2 + Compatibility Projection**. After approval, implement Plan 2 only on one branch/PR using TDD and stop for independent Planner QA/QC. Do not start Plan 3 and do not mutate Production under Plan 2 authority.
