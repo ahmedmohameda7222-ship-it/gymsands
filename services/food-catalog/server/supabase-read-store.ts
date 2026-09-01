@@ -76,9 +76,19 @@ function throwDbError(context: string, error: { message?: string } | null): void
   if (error) throw new Error(`Food Catalog V2 read: ${context} failed: ${error.message ?? "database error"}`);
 }
 
+function validatePersisted<T>(context: string, validate: () => T): T {
+  try {
+    return validate();
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Food Catalog V2 read:")) throw error;
+    const message = error instanceof Error ? error.message : "persisted value is invalid";
+    throw new Error(`Food Catalog V2 read: ${context}: ${message}`);
+  }
+}
+
 function mapNutrition(rowValue: unknown): StoredFoodNutritionRevision {
   const row = asRecord(rowValue, "nutrition");
-  const value = validateFoodNutritionRevision({
+  const value = validatePersisted("nutrition", () => validateFoodNutritionRevision({
     foodId: requiredString(row.food_id, "nutrition food_id"),
     revisionNumber: requiredNumber(row.revision_number, "nutrition revision_number"),
     calories: nullableNumber(row.calories, "nutrition calories"),
@@ -93,13 +103,13 @@ function mapNutrition(rowValue: unknown): StoredFoodNutritionRevision {
     basisUnit: requiredString(row.basis_unit, "nutrition basis_unit") as "g" | "ml",
     nutrientMappingVersion: requiredString(row.nutrient_mapping_version, "nutrition nutrient_mapping_version"),
     sourceRecordId: nullableString(row.source_record_id, "nutrition source_record_id"),
-  });
+  }));
   return { ...value, id: requiredString(row.id, "nutrition id"), createdAt: requiredString(row.created_at, "nutrition created_at") };
 }
 
 function mapServing(rowValue: unknown): StoredFoodServingOption {
   const row = asRecord(rowValue, "serving");
-  const value = validateFoodServingOption({
+  const value = validatePersisted("serving", () => validateFoodServingOption({
     foodId: requiredString(row.food_id, "serving food_id"),
     label: requiredString(row.label, "serving label"),
     amount: requiredNumber(row.amount, "serving amount"),
@@ -109,13 +119,13 @@ function mapServing(rowValue: unknown): StoredFoodServingOption {
     sourcePortionCode: nullableString(row.source_portion_code, "serving source_portion_code"),
     evidenceClass: requiredString(row.evidence_class, "serving evidence_class") as "exact_source" | "source_estimated",
     sourcePrimary: requiredBoolean(row.source_primary, "serving source_primary"),
-  });
+  }));
   return { ...value, id: requiredString(row.id, "serving id"), createdAt: requiredString(row.created_at, "serving created_at") };
 }
 
 function mapName(rowValue: unknown): StoredFoodNameFact {
   const row = asRecord(rowValue, "name");
-  const value = validateFoodNameFact({
+  const value = validatePersisted("name", () => validateFoodNameFact({
     foodId: requiredString(row.food_id, "name food_id"),
     languageTag: requiredString(row.language_tag, "name language_tag"),
     role: requiredString(row.name_role, "name name_role") as never,
@@ -125,38 +135,38 @@ function mapName(rowValue: unknown): StoredFoodNameFact {
     origin: requiredString(row.origin, "name origin") as never,
     sourceRecordId: nullableString(row.source_record_id, "name source_record_id"),
     policyVersion: requiredString(row.policy_version, "name policy_version"),
-  });
+  }));
   return { ...value, id: requiredString(row.id, "name id"), createdAt: requiredString(row.created_at, "name created_at") };
 }
 
 function mapTaxonomy(rowValue: unknown): StoredFoodTaxonomyAssignment {
   const row = asRecord(rowValue, "taxonomy assignment");
-  const value = validateFoodTaxonomyAssignment({
+  const value = validatePersisted("taxonomy assignment", () => validateFoodTaxonomyAssignment({
     foodId: requiredString(row.food_id, "taxonomy food_id"),
     nodeCode: requiredString(row.node_code, "taxonomy node_code"),
     sourceRecordId: nullableString(row.source_record_id, "taxonomy source_record_id"),
     action: requiredString(row.assignment_action, "taxonomy assignment_action") as never,
     policyVersion: requiredString(row.policy_version, "taxonomy policy_version"),
-  });
+  }));
   return { ...value, id: requiredString(row.id, "taxonomy id"), createdAt: requiredString(row.created_at, "taxonomy created_at") };
 }
 
 function mapMarket(rowValue: unknown): StoredFoodMarketAssignment {
   const row = asRecord(rowValue, "market assignment");
-  const value = validateFoodMarketAssignment({
+  const value = validatePersisted("market assignment", () => validateFoodMarketAssignment({
     foodId: requiredString(row.food_id, "market food_id"),
     scopeCode: requiredString(row.scope_code, "market scope_code"),
     relevance: requiredString(row.relevance_level, "market relevance_level") as never,
     sourceRecordId: nullableString(row.source_record_id, "market source_record_id"),
     action: requiredString(row.assignment_action, "market assignment_action") as never,
     policyVersion: requiredString(row.policy_version, "market policy_version"),
-  });
+  }));
   return { ...value, id: requiredString(row.id, "market id"), createdAt: requiredString(row.created_at, "market created_at") };
 }
 
 function mapVerification(rowValue: unknown): StoredFoodVerificationAssertion {
   const row = asRecord(rowValue, "verification assertion");
-  const value = validateFoodVerificationAssertion({
+  const value = validatePersisted("verification assertion", () => validateFoodVerificationAssertion({
     foodId: requiredString(row.food_id, "verification food_id"),
     scope: requiredString(row.assertion_scope, "verification assertion_scope") as never,
     state: requiredString(row.assertion_state, "verification assertion_state") as never,
@@ -165,20 +175,20 @@ function mapVerification(rowValue: unknown): StoredFoodVerificationAssertion {
     supersedesAssertionId: nullableString(row.supersedes_assertion_id, "verification supersedes_assertion_id"),
     reasonCode: requiredString(row.reason_code, "verification reason_code"),
     authorityReference: requiredString(row.authority_reference, "verification authority_reference"),
-  });
+  }));
   return { ...value, id: requiredString(row.id, "verification id"), createdAt: requiredString(row.created_at, "verification created_at") };
 }
 
 function mapMerge(rowValue: unknown): StoredFoodMergeEvent {
   const row = asRecord(rowValue, "merge event");
-  const value = validateFoodMergeEvent({
+  const value = validatePersisted("merge event", () => validateFoodMergeEvent({
     sourceFoodId: requiredString(row.source_food_id, "merge source_food_id"),
     targetFoodId: requiredString(row.target_food_id, "merge target_food_id"),
     policyVersion: requiredString(row.policy_version, "merge policy_version"),
     reasonCode: requiredString(row.reason_code, "merge reason_code"),
     evidenceReference: nullableString(row.evidence_reference, "merge evidence_reference"),
     authorityReference: requiredString(row.authority_reference, "merge authority_reference"),
-  });
+  }));
   return { ...value, id: requiredString(row.id, "merge id"), createdAt: requiredString(row.created_at, "merge created_at") };
 }
 
