@@ -18,10 +18,10 @@ describe("Workout History rendered month-boundary fixture", () => {
     expect(source).toMatch(/\.\.\.renderedQaPrototype,/);
   });
 
-  it("rehydrates non-empty rendered scenarios inside the requested month before scenario-specific transforms", () => {
+  it("rehydrates only active rendered scenarios inside the requested month", () => {
     expect(source).toMatch(/let base = mockHistoryList\(userId, request\);/);
     expect(source).toMatch(
-      /scenario === "first-use-empty" \|\|[\s\S]*scenario === "filtered-empty"[\s\S]*return \{[\s\S]*items: \[\],[\s\S]*nextCursor: null,[\s\S]*\};[\s\S]*if \(base\.items\.length === 0 && renderedQaPrototype\) \{/,
+      /scenario === "first-use-empty" \|\|[\s\S]*scenario === "filtered-empty"[\s\S]*return \{[\s\S]*items: \[\],[\s\S]*nextCursor: null,[\s\S]*\};[\s\S]*if \(scenario && base\.items\.length === 0 && renderedQaPrototype\) \{/,
     );
     expect(source).toMatch(
       /const fallbackItems = \[[\s\S]*\.\.\.renderedQaPrototype,[\s\S]*effectiveAt: new Date\([\s\S]*Date\.parse\(request\.to\) - 60 \* 60 \* 1000,[\s\S]*\)\.toISOString\(\),[\s\S]*\}\];/,
