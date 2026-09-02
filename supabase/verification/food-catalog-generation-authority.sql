@@ -146,7 +146,7 @@ select pg_temp.plan3_rejected(
  'Verification predecessor fork was accepted.'
 );
 
--- Create activation set and prove global operation replay semantics.
+-- Create activation set and prove trusted semantic operation replay semantics.
 select public.food_catalog_create_activation_set_v1(jsonb_build_object(
  'operation_id','d3100000-0000-4000-8000-000000000001',
  'command_checksum_sha256',repeat('a',64),
@@ -161,17 +161,49 @@ select public.food_catalog_create_activation_set_v1(jsonb_build_object(
  )
 ));
 
+-- Identical semantic retry must converge to the original immutable result.
 select public.food_catalog_create_activation_set_v1(jsonb_build_object(
- 'operation_id','d3100000-0000-4000-8000-000000000001','command_checksum_sha256',repeat('a',64),
- 'activation_set_id','d3200000-0000-4000-8000-000000000001','manifest_schema_version','activation-manifest-v1',
- 'activation_policy_version','activation-policy-v1','manifest_checksum_sha256',repeat('b',64),
+ 'operation_id','d3100000-0000-4000-8000-000000000001',
+ 'command_checksum_sha256',repeat('a',64),
+ 'activation_set_id','d3200000-0000-4000-8000-000000000001',
+ 'manifest_schema_version','activation-manifest-v1',
+ 'activation_policy_version','activation-policy-v1',
+ 'manifest_checksum_sha256',repeat('b',64),
  'actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','fixture','policy_version','control-v1'),
- 'members','[]'::jsonb
+ 'members',jsonb_build_array(
+   jsonb_build_object('id','d3300000-0000-4000-8000-000000000001','food_id','d3000000-0000-4000-8000-000000000001','expected_precondition_lifecycle','draft','evidence_reference','fixture:a','evidence_checksum_sha256',repeat('c',64),'source_legal_accepted',true,'identity_resolved',true,'nutrition_basis_valid',true,'display_identity_valid',true,'blocking_condition_count',0,'eligibility','eligible','member_checksum_sha256',repeat('d',64)),
+   jsonb_build_object('id','d3300000-0000-4000-8000-000000000002','food_id','d3000000-0000-4000-8000-000000000002','expected_precondition_lifecycle','draft','evidence_reference','fixture:b','evidence_checksum_sha256',repeat('e',64),'source_legal_accepted',true,'identity_resolved',true,'nutrition_basis_valid',true,'display_identity_valid',true,'blocking_condition_count',0,'eligibility','eligible','member_checksum_sha256',repeat('f',64))
+ )
 ));
 select pg_temp.plan3_assert((select count(*)=1 from public.food_catalog_control_operations where operation_id='d3100000-0000-4000-8000-000000000001'), 'Identical operation retry did not converge.');
+
+-- Same operation ID and same caller checksum with a changed semantic payload must conflict.
+select pg_temp.plan3_rejected(
+ $$select public.food_catalog_create_activation_set_v1(jsonb_build_object(
+   'operation_id','d3100000-0000-4000-8000-000000000001','command_checksum_sha256',repeat('a',64),
+   'activation_set_id','d3200000-0000-4000-8000-000000000001','manifest_schema_version','activation-manifest-v1',
+   'activation_policy_version','activation-policy-v1','manifest_checksum_sha256',repeat('b',64),
+   'actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','fixture','policy_version','control-v1'),
+   'members','[]'::jsonb
+ ))$$,
+ 'Changed semantic command reused an operation ID by trusting the caller checksum.'
+);
 select pg_temp.plan3_rejected(
  $$select public.food_catalog_create_activation_set_v1('{"operation_id":"d3100000-0000-4000-8000-000000000001","command_checksum_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","activation_set_id":"d3200000-0000-4000-8000-000000000001"}'::jsonb)$$,
  'Conflicting operation-ID reuse was accepted.'
+);
+
+-- Every Plan 3 RPC must derive replay identity through the same trusted DB helper.
+select pg_temp.plan3_assert(
+  position('private.food_catalog_plan3_command_fingerprint_v1' in pg_get_functiondef('public.food_catalog_create_activation_set_v1(jsonb)'::regprocedure)) > 0
+  and position('private.food_catalog_plan3_command_fingerprint_v1' in pg_get_functiondef('public.food_catalog_grant_activation_set_v1(jsonb)'::regprocedure)) > 0
+  and position('private.food_catalog_plan3_command_fingerprint_v1' in pg_get_functiondef('public.food_catalog_invalidate_activation_grant_v1(jsonb)'::regprocedure)) > 0
+  and position('private.food_catalog_plan3_command_fingerprint_v1' in pg_get_functiondef('public.food_catalog_create_generation_v1(jsonb)'::regprocedure)) > 0
+  and position('private.food_catalog_plan3_command_fingerprint_v1' in pg_get_functiondef('public.food_catalog_record_generation_validation_v1(jsonb)'::regprocedure)) > 0
+  and position('private.food_catalog_plan3_command_fingerprint_v1' in pg_get_functiondef('public.food_catalog_promote_generation_v1(jsonb)'::regprocedure)) > 0
+  and position('private.food_catalog_plan3_command_fingerprint_v1' in pg_get_functiondef('public.food_catalog_rollback_generation_v1(jsonb)'::regprocedure)) > 0
+  and position('private.food_catalog_plan3_command_fingerprint_v1' in pg_get_functiondef('public.food_catalog_revoke_generation_v1(jsonb)'::regprocedure)) > 0,
+  'Plan 3 RPCs do not share the trusted DB semantic fingerprint helper.'
 );
 
 select public.food_catalog_grant_activation_set_v1(jsonb_build_object(
