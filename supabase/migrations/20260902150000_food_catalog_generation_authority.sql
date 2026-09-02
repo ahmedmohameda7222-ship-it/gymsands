@@ -405,6 +405,25 @@ insert into public.food_catalog_current_generation (
   singleton_key, current_generation_id, current_event_id, current_validation_report_id, pointer_revision
 ) values (true, null, null, null, 0);
 
+create or replace function private.food_catalog_plan3_command_fingerprint_v1(p_command jsonb)
+returns text
+language sql
+immutable
+strict
+set search_path = ''
+as $function$
+  select encode(
+    extensions.digest(
+      pg_catalog.convert_to(
+        (p_command - 'operation_id' - 'command_checksum_sha256' - 'event_id')::text,
+        'UTF8'
+      ),
+      'sha256'
+    ),
+    'hex'
+  );
+$function$;
+
 create or replace function public.food_catalog_create_activation_set_v1(p_command jsonb)
 returns jsonb
 language plpgsql
@@ -413,7 +432,8 @@ set search_path = pg_catalog, public, private, extensions
 as $function$
 declare
   p_operation_id uuid := (p_command->>'operation_id')::uuid;
-  v_command_checksum text := p_command->>'command_checksum_sha256';
+  v_caller_checksum text := p_command->>'command_checksum_sha256';
+  v_command_checksum text := private.food_catalog_plan3_command_fingerprint_v1(p_command);
   v_existing_kind text;
   v_existing_checksum text;
   v_existing_result jsonb;
@@ -423,7 +443,7 @@ declare
   v_member jsonb;
   v_result jsonb;
 begin
-  if p_operation_id is null or v_command_checksum !~ '^[0-9a-f]{64}$' then
+  if p_operation_id is null or v_caller_checksum !~ '^[0-9a-f]{64}$' then
     raise exception 'CONTROL_PLANE_REJECTED: valid operation_id and command checksum are required.';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_operation_id::text, 0));
@@ -520,7 +540,8 @@ set search_path = pg_catalog, public, private, extensions
 as $function$
 declare
   p_operation_id uuid := (p_command->>'operation_id')::uuid;
-  v_command_checksum text := p_command->>'command_checksum_sha256';
+  v_caller_checksum text := p_command->>'command_checksum_sha256';
+  v_command_checksum text := private.food_catalog_plan3_command_fingerprint_v1(p_command);
   v_existing_kind text;
   v_existing_checksum text;
   v_existing_result jsonb;
@@ -532,7 +553,7 @@ declare
   v_precondition integer;
   v_result jsonb;
 begin
-  if p_operation_id is null or v_command_checksum !~ '^[0-9a-f]{64}$' then
+  if p_operation_id is null or v_caller_checksum !~ '^[0-9a-f]{64}$' then
     raise exception 'CONTROL_PLANE_REJECTED: valid operation_id and command checksum are required.';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_operation_id::text, 0));
@@ -600,7 +621,8 @@ set search_path = pg_catalog, public, private, extensions
 as $function$
 declare
   p_operation_id uuid := (p_command->>'operation_id')::uuid;
-  v_command_checksum text := p_command->>'command_checksum_sha256';
+  v_caller_checksum text := p_command->>'command_checksum_sha256';
+  v_command_checksum text := private.food_catalog_plan3_command_fingerprint_v1(p_command);
   v_existing_kind text;
   v_existing_checksum text;
   v_existing_result jsonb;
@@ -610,7 +632,7 @@ declare
   v_actor jsonb := p_command->'actor';
   v_result jsonb;
 begin
-  if p_operation_id is null or v_command_checksum !~ '^[0-9a-f]{64}$' then
+  if p_operation_id is null or v_caller_checksum !~ '^[0-9a-f]{64}$' then
     raise exception 'CONTROL_PLANE_REJECTED: valid operation_id and command checksum are required.';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_operation_id::text, 0));
@@ -673,7 +695,8 @@ set search_path = pg_catalog, public, private, extensions
 as $function$
 declare
   p_operation_id uuid := (p_command->>'operation_id')::uuid;
-  v_command_checksum text := p_command->>'command_checksum_sha256';
+  v_caller_checksum text := p_command->>'command_checksum_sha256';
+  v_command_checksum text := private.food_catalog_plan3_command_fingerprint_v1(p_command);
   v_existing_kind text;
   v_existing_checksum text;
   v_existing_result jsonb;
@@ -689,7 +712,7 @@ declare
   v_grant_created_at timestamptz;
   v_result jsonb;
 begin
-  if p_operation_id is null or v_command_checksum !~ '^[0-9a-f]{64}$' then
+  if p_operation_id is null or v_caller_checksum !~ '^[0-9a-f]{64}$' then
     raise exception 'CONTROL_PLANE_REJECTED: valid operation_id and command checksum are required.';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_operation_id::text, 0));
@@ -884,7 +907,8 @@ set search_path = pg_catalog, public, private, extensions
 as $function$
 declare
   p_operation_id uuid := (p_command->>'operation_id')::uuid;
-  v_command_checksum text := p_command->>'command_checksum_sha256';
+  v_caller_checksum text := p_command->>'command_checksum_sha256';
+  v_command_checksum text := private.food_catalog_plan3_command_fingerprint_v1(p_command);
   v_existing_kind text;
   v_existing_checksum text;
   v_existing_result jsonb;
@@ -899,7 +923,7 @@ declare
   v_infos integer;
   v_result jsonb;
 begin
-  if p_operation_id is null or v_command_checksum !~ '^[0-9a-f]{64}$' then
+  if p_operation_id is null or v_caller_checksum !~ '^[0-9a-f]{64}$' then
     raise exception 'CONTROL_PLANE_REJECTED: valid operation_id and command checksum are required.';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_operation_id::text, 0));
@@ -1006,7 +1030,8 @@ set search_path = pg_catalog, public, private, extensions
 as $function$
 declare
   p_operation_id uuid := (p_command->>'operation_id')::uuid;
-  v_command_checksum text := p_command->>'command_checksum_sha256';
+  v_caller_checksum text := p_command->>'command_checksum_sha256';
+  v_command_checksum text := private.food_catalog_plan3_command_fingerprint_v1(p_command);
   v_existing_kind text;
   v_existing_checksum text;
   v_existing_result jsonb;
@@ -1020,7 +1045,7 @@ declare
   v_new_revision bigint;
   v_result jsonb;
 begin
-  if p_operation_id is null or v_command_checksum !~ '^[0-9a-f]{64}$' then
+  if p_operation_id is null or v_caller_checksum !~ '^[0-9a-f]{64}$' then
     raise exception 'CONTROL_PLANE_REJECTED: valid operation_id and command checksum are required.';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_operation_id::text, 0));
@@ -1169,7 +1194,8 @@ set search_path = pg_catalog, public, private, extensions
 as $function$
 declare
   p_operation_id uuid := (p_command->>'operation_id')::uuid;
-  v_command_checksum text := p_command->>'command_checksum_sha256';
+  v_caller_checksum text := p_command->>'command_checksum_sha256';
+  v_command_checksum text := private.food_catalog_plan3_command_fingerprint_v1(p_command);
   v_existing_kind text;
   v_existing_checksum text;
   v_existing_result jsonb;
@@ -1184,7 +1210,7 @@ declare
   v_new_revision bigint;
   v_result jsonb;
 begin
-  if p_operation_id is null or v_command_checksum !~ '^[0-9a-f]{64}$' then
+  if p_operation_id is null or v_caller_checksum !~ '^[0-9a-f]{64}$' then
     raise exception 'CONTROL_PLANE_REJECTED: valid operation_id and command checksum are required.';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_operation_id::text, 0));
@@ -1299,7 +1325,8 @@ set search_path = pg_catalog, public, private, extensions
 as $function$
 declare
   p_operation_id uuid := (p_command->>'operation_id')::uuid;
-  v_command_checksum text := p_command->>'command_checksum_sha256';
+  v_caller_checksum text := p_command->>'command_checksum_sha256';
+  v_command_checksum text := private.food_catalog_plan3_command_fingerprint_v1(p_command);
   v_existing_kind text;
   v_existing_checksum text;
   v_existing_result jsonb;
@@ -1310,7 +1337,7 @@ declare
   v_pointer_revision bigint;
   v_result jsonb;
 begin
-  if p_operation_id is null or v_command_checksum !~ '^[0-9a-f]{64}$' then
+  if p_operation_id is null or v_caller_checksum !~ '^[0-9a-f]{64}$' then
     raise exception 'CONTROL_PLANE_REJECTED: valid operation_id and command checksum are required.';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_operation_id::text, 0));
@@ -1477,6 +1504,8 @@ grant select on public.food_catalog_generation_validation_reports to service_rol
 grant select on public.food_catalog_generation_validation_findings to service_role;
 grant select on public.food_catalog_generation_events to service_role;
 grant select on public.food_catalog_current_generation to service_role;
+
+revoke all on function private.food_catalog_plan3_command_fingerprint_v1(jsonb) from public, anon, authenticated, service_role;
 
 revoke all on function public.food_catalog_create_activation_set_v1(jsonb) from public, anon, authenticated;
 revoke all on function public.food_catalog_grant_activation_set_v1(jsonb) from public, anon, authenticated;
