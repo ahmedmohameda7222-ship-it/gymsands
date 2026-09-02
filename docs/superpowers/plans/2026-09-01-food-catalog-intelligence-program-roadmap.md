@@ -1,6 +1,6 @@
 # Food Catalog Intelligence Implementation Roadmap
 
-**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 written architecture complete and detailed implementation plan authored/self-reviewed awaiting execution approval  
+**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 implementation complete on review branch; independent Planner QA/QC and canonical phase-close Quality pending  
 **Spec:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
 
 ## Purpose
@@ -50,7 +50,7 @@ Squash merge commit:
 
 Plan 2 established the V2 domain/service boundary without member runtime V2 cutover, Production mutation, Food population, activation, or generation promotion.
 
-### Plan 3 — Activation, Verification, Trust, and Catalog Generations — DESIGN/SPEC COMPLETE / IMPLEMENTATION PLAN AWAITING APPROVAL
+### Plan 3 — Activation, Verification, Trust, and Catalog Generations — IMPLEMENTATION COMPLETE ON REVIEW BRANCH / PLANNER QA/QC PENDING
 
 Formal Plan 3 design spec:
 
@@ -60,11 +60,35 @@ Detailed implementation plan:
 
 `docs/superpowers/plans/2026-09-02-food-catalog-plan3-activation-verification-generations.md`
 
-The architecture and written specification are approved. The user instructed the Planner to proceed through Superpowers `writing-plans`; the 12-task implementation plan is now authored and self-reviewed. Implementation has **not started** and is not authorized until that detailed plan receives explicit approval.
+Implementation review branch:
 
-Implementation plan self-review closed three material ambiguities: reuse existing `FoodVerificationScope`; bind the singleton pointer to exact current validation evidence so rollback remains unambiguous; and use transaction advisory locking for race-safe operation-id idempotency.
+`feat/food-catalog-generation-authority-v3`
 
-Production migration apply, activation execution, generation promotion, Food population, provider ingestion, member runtime cutover, deployment, Activity Catalog mutation, and Plan 4 remain unauthorized.
+Draft PR:
+
+`#165 — Food Catalog Plan 3 — Activation, Verification, Trust + Catalog Generations`
+
+Recorded implementation base:
+
+`96dbe4c42f908737e5701df83d8f47356dea6096`
+
+Task 1–11 implementation evidence head:
+
+`03a498e4ef6cce1f5460479a6a381795a5c8b067`
+
+Exact-head PR Quality:
+
+`33679147523` — PASS, including scope/integrity, lint, typecheck, full unit suite, build, chronological migration replay, DB lint, registered Plan 3 verification SQL, migration ledger, database integration tests, and Workout History integration tests.
+
+Plan 3 adds exactly one repository-only pending migration:
+
+`supabase/migrations/20260902150000_food_catalog_generation_authority.sql`
+
+Migration ledger remains truthful with `pending=1`, `unresolved=1`, `historyRepair.state=pending`; latest applied Production identity remains `20260901183021_food_catalog_plan1_semantic_corrections`. The released compatibility marker remains `20260724232734`.
+
+Applied Plan 1 migration blobs remain byte-identical to the implementation base. No Production migration apply, Food population, provider ingestion, Production activation execution, Production generation promotion, member runtime V2 cutover, deployment, Activity Catalog mutation, or Plan 4 work occurred.
+
+Independent Planner QA/QC and canonical phase-close `.github/workflows/quality.yml` on the final exact head remain required before merge approval.
 
 ## Plan sequence
 
@@ -98,7 +122,7 @@ Binding design principles include:
 - merged source IDs are direct generation redirects to active survivors;
 - no fake Generation 0; current pointer may remain `NULL` before real promotion.
 
-**Exit condition:** drafts can exist without visibility; activation remains separate; current reads are generation-authoritative; promotion is audited/atomic; rollback can restore an explicitly selected previous healthy generation without destructive rewriting.
+**Exit condition:** drafts can exist without visibility; activation remains separate; current reads are generation-authoritative; promotion is audited/atomic; rollback can restore an explicitly selected previous healthy generation without destructive rewriting. **Implementation satisfied on review branch; merge approval pending independent Planner QA/QC and canonical phase-close Quality.**
 
 ### Plan 4 — Ingestion V2, Quarantine, and Release-Diff Operations
 
@@ -147,7 +171,7 @@ Plan 1 Core Model — COMPLETE
   ↓
 Plan 2 Domain Service V2 — COMPLETE / MERGED
   ↓
-Plan 3 Activation / Verification / Generations — IMPLEMENTATION PLAN AWAITING APPROVAL
+Plan 3 Activation / Verification / Generations — IMPLEMENTATION COMPLETE ON REVIEW BRANCH / QA-QC PENDING
   ↓
 Plan 4 Ingestion V2 / Quarantine
   ↓
@@ -168,8 +192,10 @@ Plans 5 and 6 may overlap only after prerequisite contracts from Plans 2–4 are
 
 ## Current best next move
 
-Review and explicitly approve the detailed Plan 3 implementation plan:
+Keep PR #165 unmerged and perform independent Planner QA/QC on the exact final implementation/docs head. Then transition the Draft PR to Ready and require canonical `.github/workflows/quality.yml` on that exact head before any merge approval.
 
-`docs/superpowers/plans/2026-09-02-food-catalog-plan3-activation-verification-generations.md`
+The GitHub connector used for implementation cannot perform the Ready-for-review GraphQL transition. If that remains true at phase close, the required blocker is:
 
-Implementation must not start until that plan is explicitly approved. After approval, create/use `feat/food-catalog-generation-authority-v3` from the then-current exact `origin/main`, record `PLAN3_BASE_SHA`, and execute Task 1 with RED/GREEN evidence. Do not mutate Production under implementation-plan authority.
+`Manual Ready-for-review transition required for Plan 3 phase-close Quality.`
+
+No Production mutation is authorized by implementation completion or merge approval.
