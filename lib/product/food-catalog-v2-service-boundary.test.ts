@@ -10,6 +10,7 @@ const RAW_ADAPTER_IMPORT = /@\/services\/food-catalog\/server\/supabase-(?:read|
 const ALLOWED_V2_TABLE_ACCESS = new Set([
   "services/food-catalog/server/supabase-read-store.ts",
   "services/food-catalog/server/supabase-write-store.ts",
+  "services/food-catalog/server/supabase-generation-read-store.ts",
 ]);
 
 function normalizedRelative(path: string) {
@@ -36,7 +37,7 @@ describe("Food Catalog V2 service persistence boundary", () => {
     .flatMap(productionTypescriptFiles)
     .map((path) => ({ path: normalizedRelative(path), source: readFileSync(path, "utf8") }));
 
-  it("keeps direct V2 canonical-table access inside the two Supabase adapters", () => {
+  it("keeps direct V2 canonical-table access inside dedicated Supabase adapters", () => {
     const violations = productionFiles
       .filter(({ path, source }) => !ALLOWED_V2_TABLE_ACCESS.has(path) && V2_CANONICAL_TABLE.test(source))
       .map(({ path }) => path)
