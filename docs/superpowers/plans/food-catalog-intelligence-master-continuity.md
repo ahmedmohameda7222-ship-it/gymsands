@@ -2,41 +2,38 @@
 
 **Purpose:** living project-continuity authority for future Plaivra Planner chats.  
 **Repository:** `ahmedmohameda7222-ship-it/gymsands`  
-**Created from authoritative `main`:** `2883e077f1fdc159330c29b1dc6124ec905738e2`  
-**Current program:** Food Catalog Intelligence architectural rebuild-in-place  
+**Checkpoint source `main` before this continuity update:** `ac1fe71cf7592f239716c1091be767f050827e64`  
+**Current program:** Food Catalog Intelligence architectural clean rebuild-in-place  
 **Total roadmap plans:** 10  
-**Completed plans at this checkpoint:** Plan 1, Plan 2  
+**Completed plans:** Plan 1, Plan 2  
 **Current plan:** Plan 3 — Activation, Verification, Trust, and Catalog Generations  
+**Plan 3 state:** architecture design approved; formal written spec created/self-reviewed; user written-spec review pending  
 **Plans remaining including Plan 3:** 8  
-**Plans remaining after Plan 3 completes:** 7  
+**Plans remaining after Plan 3 completes:** 7
 
 ---
 
-## 0. How a new Planner chat must use this file
+## 0. Recovery instructions for a new Plaivra Planner chat
 
-If the previous Plaivra Planner chat reaches its conversation limit, the next Planner chat must **continue from this file and the linked authoritative documents rather than restart the Food Catalog architecture discussion**.
+If a previous Planner chat reaches its limit, **do not restart the Food Catalog architecture discussion**.
 
-Required recovery sequence:
+Do this in order:
 
-1. Fetch current `origin/main` and compare it with the checkpoint/state recorded here.
+1. Fetch current `origin/main`.
 2. Read this file completely.
-3. Read the Food Catalog architecture specification completely.
-4. Read the program roadmap completely.
-5. Read the implementation plans for every already-completed plan that materially affects the current plan.
-6. Verify completed PRs/merge SHAs and Production state instead of trusting stale chat summaries.
-7. Continue from the exact current design/implementation gate recorded in **Current Next Move** below.
-8. Do not reopen already-approved architecture unless new repository/Production evidence creates a real contradiction.
-
-This file is a **continuity index and recovery handoff**, not a replacement for the architecture specification. If this file conflicts with the architecture specification, the architecture specification wins unless a later explicit Planner decision supersedes it.
+3. Read `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md` completely.
+4. Read `docs/superpowers/plans/2026-09-01-food-catalog-intelligence-program-roadmap.md` completely.
+5. Read the current Plan-specific spec/plan listed below.
+6. Verify repository/PR/Production state from GitHub/Supabase rather than trusting stale chat text.
+7. Continue from **Current Next Move** at the end of this file.
+8. Do not reopen already-approved architecture unless new evidence creates a real contradiction.
 
 ### Authority order
 
-Use this order when resolving conflicts:
-
-1. Explicit latest user/Planner decision.
-2. `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
-3. Current Plan-specific approved design/implementation plan.
-4. `docs/superpowers/plans/2026-09-01-food-catalog-intelligence-program-roadmap.md`
+1. Latest explicit user/Planner decision.
+2. `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`.
+3. Current Plan-specific approved design/spec/implementation plan.
+4. `docs/superpowers/plans/2026-09-01-food-catalog-intelligence-program-roadmap.md`.
 5. This continuity file.
 6. Existing runtime implementation.
 
@@ -44,99 +41,81 @@ Use this order when resolving conflicts:
 
 ---
 
-# 1. Governing architectural principle
+# 1. Governing architecture
 
-The binding Food Catalog principle is:
+Binding principle:
 
 > Design the Plaivra Food Catalog we want to own for years, then migrate current development code toward it. Existing implementation does not constrain the target architecture.
 
-The selected strategy is:
+Selected strategy:
 
 > **Clean-slate architecture, not clean-slate repository.**
 
-More specifically:
+More precisely:
 
 > **Architectural Clean Rebuild-in-Place.**
 
-Keep repository history, useful tests, CI, migration knowledge, stable product contracts, and sound boundaries. Replace transitional implementation progressively rather than performing a big-bang repository rewrite.
+Keep repository history, useful tests, CI, migration knowledge, stable product contracts, and sound boundaries. Replace transitional implementation progressively; no big-bang rewrite.
 
----
+### Global invariants
 
-# 2. Global invariants that remain binding across every remaining plan
-
-These rules do not expire when moving between plans:
-
-- Stable canonical Food identity is Plaivra-owned and source-independent.
-- Provider IDs, names, barcodes, taxonomy, market, and search labels are evidence/presentation facts, not canonical identity.
-- Canonical matching outcome is exactly one of `MATCH`, `CREATE`, `POSSIBLE_DUPLICATE`, `REJECT`.
-- Never merge canonical Foods from name similarity alone or nutrition similarity alone.
-- Confirmed canonical duplicate merge uses survivor + immutable merge history.
-- Old Food IDs redirect; historical consumer snapshots are never rewritten.
-- Redirect chains must be flattened; accumulated chains are not target architecture.
+- Stable canonical Food ID is Plaivra-owned and source-independent.
+- Provider IDs/names/barcodes/taxonomy/market/search labels are evidence/presentation, not canonical identity.
+- Ingestion matching outcome is `MATCH | CREATE | POSSIBLE_DUPLICATE | REJECT`.
+- Name similarity or nutrition similarity alone never authorizes canonical merge.
+- Confirmed duplicate merge uses survivor + immutable merge history.
+- Old IDs redirect; historical Diary/Recipe/Saved Meal/Meal Plan snapshots are never rewritten.
+- Redirect chains must be flattened.
 - Unknown nutrition is `NULL`; known source zero is `0`.
-- Never silently convert missing nutrition to zero.
-- Never invent or impute nutrition to replace missing source facts.
-- No generic household serving conversion.
-- No generic `ml ↔ g` conversion without exact Food-specific evidence.
-- Names are localized/provenance-aware facts using open BCP-47-style language tags.
-- Arabizi is Arabic-context Latin-script transliteration/search aliasing, not a separate language/locale.
-- Taxonomy is Plaivra-owned, stable, multidimensional, and independent of canonical Food identity.
-- Market, language, source, and canonical Food identity are separate concepts.
-- User market context must be explicit; do not infer canonical market from locale/IP/timezone/GPS.
-- Verification assertions, lifecycle, source freshness, completeness, and user-facing trust are separate concepts.
-- A mutable `is_verified` boolean is not final authority.
-- Successful ingestion does not imply activation.
-- Activation does not imply Catalog Generation promotion.
-- Code merge, deployment, migration deployment, ingestion, activation, and generation promotion are separate authorities.
-- Production mutation always requires separate exact authority when the current plan says so.
-- Search remains a derived/rebuildable projection.
-- Member plane and privileged control plane remain separate.
-- Generic member/admin code must not receive a generic privileged Supabase client.
-- My Foods and user-owned state remain isolated from global Food Catalog truth.
-- No paid provider/search/cache dependency is introduced without measured need and separate approval.
-- Applied historical migrations are immutable. Corrections use forward migrations.
-- Destructive legacy retirement requires live precondition verification.
-- Recovery/rollback is lifecycle/generation driven, not destructive deletion.
+- No silent imputation, no generic household conversion, no generic `ml ↔ g` without exact Food-specific evidence.
+- Names are localized/provenance-aware; BCP-47-style language tags remain open-ended.
+- Arabizi is Arabic-context Latin transliteration/search aliasing, not a locale.
+- Taxonomy is Plaivra-owned, stable, multidimensional, identity-independent.
+- Market, language, source, and Food identity are separate.
+- Market context is explicit; never infer canonical market from locale/IP/timezone/GPS without separate product authority.
+- Lifecycle, verification assertions, completeness, freshness, and trust are distinct concepts.
+- Mutable `is_verified` is not final authority.
+- Ingestion, activation, generation promotion, deployment, and Production mutation are separate authorities.
+- Search is derived/rebuildable.
+- Member plane and privileged control plane remain separated.
+- No generic privileged Supabase client for member/browser surfaces.
+- My Foods/personal state remain isolated from global catalog truth.
+- Applied migrations are immutable; corrections are forward migrations.
+- Rollback/recovery is generation/lifecycle driven, not destructive deletion.
+- No paid provider/search/cache dependency without measured need and separate approval.
 
 ---
 
-# 3. Repository / Production anchors
+# 2. Repository and Production anchors
 
-## Main repository
+## GitHub
 
 `ahmedmohameda7222-ship-it/gymsands`
 
 ## Plaivra Main Supabase Production
 
-Project:
-
-`bkwezjxvapaeasfvlhvv`
-
-Region:
-
-`eu-central-1`
+Project: `bkwezjxvapaeasfvlhvv`  
+Region: `eu-central-1`
 
 ## Separate Activity Catalog Supabase
 
-Project:
+Project: `khlcctuefiuhunqymkbp`
 
-`khlcctuefiuhunqymkbp`
-
-Food Catalog plans must not mutate Activity Catalog unless a future exact authority explicitly says otherwise.
+Food Catalog work must not mutate Activity Catalog without separate exact authority.
 
 ## Released compatibility marker
 
-At this checkpoint:
+Last verified marker remained:
 
 `20260724232734`
 
-Plan 1/Plan 2 did not promote it.
+Plan 1 and Plan 2 did not promote it.
 
 ---
 
-# 4. Authoritative documents
+# 3. Authoritative Food Catalog documents
 
-## Architecture specification — highest Food Catalog architecture authority
+## Parent architecture
 
 `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
 
@@ -152,27 +131,29 @@ Plan 1/Plan 2 did not promote it.
 
 `docs/superpowers/plans/2026-09-01-food-catalog-domain-service-v2.md`
 
-Future approved Plan 3+ design/implementation documents must be added to this section as they are created.
+## Plan 3 formal design spec — current Plan-specific document
+
+`docs/superpowers/specs/2026-09-02-food-catalog-plan3-activation-verification-generations-design.md`
+
+Status of Plan 3 spec: **architecture-approved and self-reviewed; written-spec user review pending. Implementation plan does not yet exist.**
 
 ---
 
-# 5. Program state at this checkpoint
+# 4. Plan 1 — Core Canonical Model Rebuild
 
-## Plan 1 — Core Canonical Model Rebuild
+**Status:** COMPLETE / integrated / Production schema applied and reconciled under separate explicit authority.
 
-**Status:** COMPLETE / integrated / Production schema reconciled.
+## Repository authority
 
-### Repository history
-
-Plan 1 final integrated repository authority:
+Integrated Plan 1 authority:
 
 `93524c2b162ee832d12b9e2a46c92bdced6fdac9`
 
-The original core implementation was reviewed through PR #162 and integrated using the approved repository procedure.
+PR #162 was reviewed; due connector/Draft constraints, integration used the approved exact squash-equivalent fallback. Do not claim GitHub technically marked PR #162 as merged.
 
-### Production migrations
+## Plan 1 migrations
 
-Original Plan 1 repository migration:
+Repository core migration:
 
 `supabase/migrations/20260901153000_food_catalog_intelligence_core.sql`
 
@@ -180,7 +161,7 @@ Production identity:
 
 `20260901165219_food_catalog_intelligence_core`
 
-Semantic correction repository migration:
+Repository semantic correction migration:
 
 `supabase/migrations/20260901174500_food_catalog_plan1_semantic_corrections.sql`
 
@@ -188,42 +169,34 @@ Production identity:
 
 `20260901183021_food_catalog_plan1_semantic_corrections`
 
-Both were applied exactly once under explicit authority. Historical applied migration files must never be edited/replayed.
+Both applied exactly once. Never edit/replay the historical files.
 
-### Plan 1 capabilities established
+## Core capabilities introduced
 
-Plan 1 introduced the additive canonical/versioned model needed for:
-
-- stable Food root identity;
-- source records/provenance;
-- nullable immutable nutrition revisions;
+- stable Food root/identity anchor;
+- source provenance records;
+- immutable nullable nutrition revisions;
 - source-backed serving options;
-- localized/provenance-aware Food names;
-- stable taxonomy namespaces/nodes/assignments;
+- localized/provenance-aware names;
+- taxonomy registry/assignments;
 - Market Scope registry/memberships/assignments;
-- immutable/superseding verification assertions;
+- scoped immutable verification assertions;
 - immutable merge events;
-- same-Food source-provenance constraints;
-- RLS / least-privilege core table posture.
+- same-Food provenance FKs/constraints;
+- RLS/least-privilege core-table posture.
 
-Plan 1 intentionally did **not** perform consumer cutover, provider ingestion, Food population, activation, generation promotion, or search migration.
+## Plan 1 semantic correction
 
-### Important semantic correction closed during Plan 1
+QA found and corrected:
 
-Two QA blockers were corrected with a forward migration:
+1. household/non-direct serving conversions require positive gram evidence **and** source provenance;
+2. source-origin/source-name facts require source provenance.
 
-1. Non-direct/household serving conversions require both positive gram evidence and source provenance.
-2. Source-origin/source-name facts require source provenance.
+No generic serving assumptions were introduced.
 
-The effective serving authority is equivalent to:
+## Last verified Production data state through Plan 2 QA
 
-`unit_code IN ('g','ml') OR (gram_weight IS NOT NULL AND source_record_id IS NOT NULL)`
-
-Same-Food composite foreign keys remain part of the provenance defense.
-
-### Plan 1 Production data state
-
-At the last independently verified state after Plan 1 and through Plan 2 review:
+All global Food/fact tables remained zero-row, including:
 
 - `food_items = 0`
 - `food_source_records = 0`
@@ -235,51 +208,49 @@ At the last independently verified state after Plan 1 and through Plan 2 review:
 - `food_verification_assertions = 0`
 - `food_merge_events = 0`
 
-No USDA/provider Food population has occurred.
+No provider/USDA population occurred.
 
 ---
 
-## Plan 2 — Food Catalog Domain Service V2 + Compatibility Projection
+# 5. Plan 2 — Food Catalog Domain Service V2 + Compatibility Projection
 
-**Status:** COMPLETE / squash-merged.
+**Status:** COMPLETE / QA-approved / squash-merged by user.
 
-### PR / merge authority
+## PR / merge authority
 
-PR:
+PR #164:
 
-`#164 — Food Catalog V2 — Domain Service + Compatibility Projection`
+`Food Catalog V2 — Domain Service + Compatibility Projection`
 
-Final approved implementation head before squash merge:
+Final approved branch head before squash merge:
 
 `3badad0704565f31f92476e94047f3ce131ab6cc`
 
-Squash merge commit currently on `main`:
+Squash merge commit on `main`:
 
 `2883e077f1fdc159330c29b1dc6124ec905738e2`
 
-Plan 2 passed Planner QA/QC, corrective QA, canonical phase-close Quality, and was then squash-merged by the user.
+Plan 2 passed corrective Planner QA/QC and canonical phase-close Quality before merge.
 
-### Plan 2 capabilities established
+## Plan 2 capabilities
 
-Plan 2 created the server-only Food Catalog V2 domain/service boundary, including:
+Plan 2 introduced the server-only Food Catalog V2 service boundary:
 
 - V2 server contracts;
 - Supabase-independent read/write ports;
-- strict internal Supabase read adapter;
-- validated append-only Supabase write adapter;
-- canonical root resolution;
-- raw `FoodCatalogDomainBundle` reads;
-- evidence-safe compatibility projection;
-- relocation of legacy `food_items` compatibility reads into Food Catalog ownership;
-- thin Nutrition compatibility façade;
-- architecture guards restricting direct V2 physical-table access;
-- runtime validation for persisted domain enums/facts.
+- strict Supabase read adapter;
+- validated append-only write adapter;
+- canonical root resolver;
+- raw `FoodCatalogDomainBundle`;
+- pure evidence-safe compatibility projector;
+- legacy `food_items` compatibility reads relocated into Food Catalog ownership;
+- thin Nutrition façade;
+- V2 physical-table boundary tests;
+- strict enum/persisted fact validation.
 
-Plan 2 deliberately returns raw V2 fact arrays rather than guessing which fact is current.
+## Critical Plan 2 rule
 
-### Critical Plan 2 rule that Plan 3 now resolves
-
-Plan 2 MUST NOT infer current/promoted facts from:
+Plan 2 must not select current facts using:
 
 - highest revision number;
 - latest timestamp;
@@ -288,18 +259,16 @@ Plan 2 MUST NOT infer current/promoted facts from:
 - arbitrary first row;
 - guessed source priority.
 
-The missing authority is **Catalog Generation composition**, which belongs to Plan 3.
+Plan 2 intentionally exposes raw immutable fact arrays. **Plan 3 supplies current authority through Catalog Generations.**
 
-### Plan 2 side-effect state
+## Plan 2 side effects
 
-Plan 2 performed:
-
-- database migration: NO
+- migration: NO
 - Production mutation: NO
 - Food population: NO
 - provider ingestion: NO
 - activation: NO
-- Catalog Generation promotion: NO
+- generation promotion: NO
 - member runtime V2 cutover: NO
 - Activity Catalog mutation: NO
 
@@ -307,507 +276,397 @@ Plan 2 performed:
 
 # 6. Plan 3 — Activation, Verification, Trust, and Catalog Generations
 
-**Status:** ARCHITECTURE DESIGN IN PROGRESS. Implementation is NOT authorized yet.
+**Status:** ARCHITECTURE DESIGN APPROVED. FORMAL SPEC CREATED + SELF-REVIEWED. USER WRITTEN-SPEC REVIEW PENDING. IMPLEMENTATION NOT AUTHORIZED.
 
-This is the current plan. A future chat must continue here, not restart Plan 1/2.
+Formal spec:
 
-## Plan 3 roadmap scope
+`docs/superpowers/specs/2026-09-02-food-catalog-plan3-activation-verification-generations-design.md`
 
-Plan 3 must implement the architecture necessary for:
+## Approved Plan 3 architecture
 
-- assertion-based verification;
-- exact deterministic activation sets;
-- Catalog Generation composition;
-- Catalog Generation promotion;
-- Catalog Generation revocation/rollback;
-- current-generation reads;
-- flattened redirect projection as current identity authority;
-- derived Trust Profile output.
+### A. Catalog Generation is sole current-effective authority
 
-Roadmap exit condition:
+Never infer current authority from row order, `MAX`, timestamp, revision number, root compatibility fields, provider priority, or importer behavior.
 
-> ingestion can create drafts without making them user-visible, and promotion is a separate audited operation with rollback to a previous healthy generation.
+A promoted Catalog Generation defines the exact effective composition.
 
-## Plan 3 — already-approved design decision: Section 1 / Authority Model
+### B. Full immutable generation composition
 
-The user explicitly approved the following Plan 3 authority model before this continuity file was created:
+Chosen model: **full immutable snapshot per generation**.
 
-### Catalog Generation is the sole authority for “what is currently effective”
+- Candidate may be constructed from explicit base + exact changes.
+- Result is full self-contained composition.
+- Runtime does not walk deltas.
+- Composition references immutable fact IDs; it does not duplicate fact values.
+- Optional human ordinal is diagnostic only, never current authority.
+- Deterministic composition checksum covers semantic selections/policy versions.
 
-Do **not** use:
+### C. Single current pointer + immutable event history
 
-- latest row;
-- max revision;
-- latest timestamp;
-- mutable current fields on `food_items`;
-- arbitrary source ordering;
-- importer choice
+- one singleton current-generation pointer;
+- pointer may be `NULL` before initialization;
+- promotion uses exact candidate/checksum/validation report and CAS expected-current authority;
+- promotion event append + pointer switch are atomic;
+- stale concurrent promotion fails;
+- rollback names an explicit healthy target generation;
+- no `latest/previous by time` rollback inference;
+- no generation/fact/event deletion.
 
-as current catalog authority.
+### D. Activation Sets / Grants are separate from promotion
 
-A Catalog Generation is an immutable logical composition that identifies the promoted/effective state for each included Food.
+Binding sequence:
 
-At minimum, generation composition must be capable of defining:
+```text
+draft ≠ activation
+activation ≠ visibility
+activation ≠ generation promotion
+promoted current generation = visibility authority
+```
 
-- current canonical Food survivor/lifecycle state;
-- effective nutrition revision;
-- effective serving facts;
-- effective naming/localization state;
-- effective taxonomy assignments;
-- effective market assignments;
-- verification/trust-policy state;
-- generation-aware search/projection version where architecture requires it.
+Activation Set is an immutable deterministic manifest. Active generation members require an **exact immutable activation grant/event reference**.
 
-Draft facts remain outside the current generation and therefore remain invisible to normal member discovery.
+Later activation invalidation does not retroactively mutate a sealed/promoted generation. It prevents reuse in future candidate construction; current effective state changes only through a new generation/rollback or later separately designed emergency path.
 
-### Promotion model
+### E. Verification assertions are linear scoped chains
 
-Generation promotion is a separate privileged, audited operation.
+- same Food + same scope only;
+- successor supersedes current chain head only;
+- no forks;
+- no cross-Food/scope supersession;
+- no cycles/self-supersession;
+- immutable rows;
+- generation selects exact assertion ID per scope;
+- never choose latest assertion by time.
 
-Promotion changes the current effective catalog pointer/state; it does not destructively rewrite canonical historical facts.
+Later assertions do not retroactively alter an existing generation.
 
-A failed/unhealthy generation can be revoked and the current pointer returned to a previous healthy generation without deleting source history, revisions, assertions, or generation history.
+### F. Trust Profile is pure derived projection
 
-### Plan 3 Production boundary
+No opaque score.
 
-Plan 3 architecture/implementation does **not automatically authorize**:
+`Verified` requires at minimum:
+
+1. active in current generation;
+2. identity scope verified;
+3. nutrition scope verified;
+4. selected activation/source evidence approved under generation policy;
+5. exact promotion validation evidence has no blocker.
+
+Serving verification is **not** required for overall Verified. Completeness remains separate from trust. Missing optional nutrients stay `NULL`.
+
+### G. Blocking validation interface without Plan 4 quarantine
+
+Plan 3 defines stable validation findings/reason codes and immutable validation reports. It does **not** implement quarantine/case management.
+
+Promotion must reference an **exact validation report ID** for the exact candidate/checksum. Never select validation evidence by `latest` ordering.
+
+### H. Current-generation read service
+
+Target flow:
+
+```text
+current pointer
+→ exact generation redirect resolution
+→ exact generation Food entry
+→ exact selected fact IDs
+→ hydrate immutable facts
+→ same-Food validation
+→ Trust Profile
+→ optional Plan 2 compatibility projection
+```
+
+No scanning raw arrays to infer current facts.
+
+Plan 3 does not yet cut member runtime to this path.
+
+### I. Flattened redirects and lifecycle representation
+
+Within promoted generation:
+
+- non-merged Food rows use `active | deprecated | withdrawn` effective lifecycle;
+- draft Foods are outside promoted composition;
+- merged source IDs are represented by direct generation redirects;
+- redirect target must be an active non-redirecting survivor in same generation;
+- A→B→D must materialize A→D and B→D.
+
+Legacy root merge fields remain transitional migration input only.
+
+### J. Control-plane boundary
+
+- internal server-only command services;
+- explicit principal/authority/operation/reason context;
+- no permanent `role === admin` architecture introduced;
+- Plan 6 remains authority for final capability security;
+- no generic service-role client exported to member/browser/MCP surfaces.
+
+### K. Proposed forward schema
+
+Plan 3 expects an additive forward migration with architecture equivalent to:
+
+Activation:
+- `food_catalog_activation_sets`
+- `food_catalog_activation_set_members`
+- `food_catalog_activation_events`
+
+Generation:
+- `food_catalog_generations`
+- `food_catalog_generation_foods`
+- `food_catalog_generation_servings`
+- `food_catalog_generation_names`
+- `food_catalog_generation_taxonomy`
+- `food_catalog_generation_markets`
+- `food_catalog_generation_verification`
+- `food_catalog_generation_redirects`
+
+Validation/audit/current:
+- `food_catalog_generation_validation_reports`
+- normalized findings child table if useful
+- `food_catalog_generation_events`
+- `food_catalog_current_generation` singleton
+
+Current fact composition is normalized/FK-backed, not JSON-array authority.
+
+All manifests/composition/reports/events are immutable. The singleton current pointer is the sole intentionally mutable Plan 3 authority row and changes only through narrow atomic command paths.
+
+### L. Bootstrap behavior
+
+- no fake Generation 0;
+- schema supports zero Foods and `current_generation_id = NULL`;
+- current-generation service returns explicit not-initialized/unavailable state;
+- it must not fall back to latest generation/root/raw arrays;
+- legacy member runtime remains stable until explicit cutover later.
+
+### M. Plan 3 Production boundary
+
+Plan 3 implementation may include a forward migration in the repository.
+
+**Merge does not authorize Production migration apply.**
+
+Even after a separately approved schema apply, the following remain separate exact authorities:
 
 - Food population;
 - provider ingestion;
-- Production activation set execution;
-- Production Catalog Generation promotion;
-- USDA Production canary;
-- application deployment.
+- activation execution;
+- generation promotion;
+- member runtime V2 cutover;
+- USDA canary;
+- deployment;
+- Activity Catalog mutation.
 
-Those remain separately authorized operations.
+## Plan 3 mandatory acceptance themes
 
-## Plan 3 design work still to be completed
+Implementation must prove:
 
-The next Planner chat must continue the architecture brainstorming from **Section 2**, because Section 1 above is already approved.
-
-Plan 3 still needs explicit design decisions/specification for at least:
-
-1. generation identity/version model and immutable composition representation;
-2. candidate-generation construction and validation;
-3. exact activation-set manifest structure and lifecycle transitions;
-4. verification assertion supersession/revocation semantics;
-5. Trust Profile derivation rules and user-facing `Verified` projection;
-6. blocking anomaly interface needed by activation/trust without pulling Plan 4 quarantine implementation forward;
-7. current-generation read service contract over the Plan 2 raw bundle;
-8. generation promotion/revocation audit model;
-9. rollback semantics and previous-healthy-generation recovery;
-10. merge/redirect projection rules inside generation composition;
-11. transaction/concurrency/single-current-generation invariants;
-12. control-plane authority boundary for Plan 3 without prematurely implementing Plan 6 capability security;
-13. schema additions/migrations required by the final Plan 3 model;
-14. no-current-generation/bootstrap behavior while the global catalog remains empty;
-15. exact QA/acceptance criteria and Production-safety gates.
-
-These are **design topics**, not pre-approved implementation details. They must be resolved through the architectural brainstorming/spec process before implementation.
+- no latest-row authority;
+- deterministic immutable full composition/checksum;
+- same-Food FKs/validation;
+- active member requires exact activation grant;
+- verification chains no forks/non-head supersession;
+- exact assertion selection;
+- Trust rule exact;
+- exact validation report referenced at promotion;
+- no retroactive semantic mutation from later activation/verification events;
+- flattened redirects only;
+- CAS/concurrency safety;
+- idempotent operation IDs;
+- explicit rollback target;
+- RLS/no anon-auth direct CRUD;
+- no member runtime cutover;
+- no Production population/activation/promotion during implementation.
 
 ---
 
 # 7. Remaining roadmap after Plan 3
 
-## Plan 4 — Ingestion V2, Quarantine, and Release-Diff Operations
+## Plan 4 — Ingestion V2, Quarantine, Release-Diff Operations
 
 **Status:** NOT STARTED.
 
-### Goal
+Build structured ingestion into draft canonical evidence:
 
-Upgrade ingestion from flat Food candidates into structured canonical evidence/facts.
-
-### Planned scope
-
-- structured identity facts;
-- nutrition facts;
-- serving facts;
-- localized/name facts;
-- taxonomy facts;
-- market facts;
-- barcode facts when applicable;
-- deterministic ingestion manifests;
+- identity/nutrition/serving/name/taxonomy/market/barcode facts;
+- deterministic manifests;
 - quarantine/resolution;
 - run heartbeat/lease;
 - single-writer Production execution;
 - expected-vs-observed reconciliation;
-- release-diff classifications;
-- structured operational events.
+- release-diff classification;
+- operational events.
 
-### Key invariant
-
-A source adapter may create safe draft mutations, but must not directly edit arbitrary canonical truth.
-
-### Exit condition
-
-A provider/source adapter can produce deterministic manifests and safe draft mutations without direct canonical-row editing.
-
----
+Exit: provider adapter can create deterministic safe draft mutations without direct arbitrary canonical editing.
 
 ## Plan 5 — Rebuildable Search Projection + Consumer Search Migration
 
 **Status:** NOT STARTED.
 
-### Goal
+Build generation-aware SearchDocument/projection and migrate Food Library search:
 
-Move Food Library/global Food search to a generation-aware, rebuildable projection behind the Food Catalog service boundary.
-
-### Planned scope
-
-- generation-aware SearchDocument/projection;
-- PostgreSQL search adapter first;
-- deterministic/objective ranking pipeline;
+- PostgreSQL first;
+- deterministic ranking;
+- market/language handling;
 - versioned nutrition-filter policies;
-- language/market handling;
-- deterministic keyset cursor semantics;
+- keyset cursor semantics;
 - bounded hydration;
-- personalization overlay separated from global truth;
-- Food Library search migration away from direct global-table dependencies.
+- personalization overlay separate from global truth.
 
-### Important existing product decisions to preserve
+Existing approved UX concepts such as **High Protein + Low Carb filters together** and derived Food-card labels remain presentation/search policies, not taxonomy identity.
 
-Nutrition/filter UX may support combinations such as High Protein + Low Carb, with derived labels on Food cards, but these are derived search/filter presentation facts rather than canonical taxonomy identity.
+Exit: Food Library search uses V2 projection/service boundary and benchmark passes.
 
-### Exit condition
-
-Food Library search uses the V2 projection/service contract and passes the versioned search benchmark without direct global-table search dependencies.
-
----
-
-## Plan 6 — Curation, Corrections, Capability Security, and Observability
+## Plan 6 — Curation, Corrections, Capability Security, Observability
 
 **Status:** NOT STARTED.
 
-### Goal
-
-Build the durable privileged control plane and evidence-based correction workflow.
-
-### Planned scope
+Build durable privileged control plane:
 
 - correction cases/reports/evidence;
-- member issue reporting without direct global mutation;
+- member issue reports without direct global mutation;
 - personal override semantics;
-- capability-based privileged commands;
-- explicit human/service principals;
+- capability-based commands;
+- human/service principals;
 - immutable audit events;
-- privileged operation gates;
 - operational metrics;
-- emergency withdrawal;
-- break-glass recovery paths.
+- withdrawal/break-glass paths.
 
-### Security direction
-
-The target is capability-based authority, not generic `role === admin` row editing.
-
-### Exit condition
-
-Member feedback cannot mutate global truth directly, and privileged curation/release operations no longer depend on generic admin row editors.
-
----
+Exit: global truth can only change through audited privileged workflows; no generic admin row editor authority.
 
 ## Plan 7 — Backup/Export/Restore Verification + Legacy Retirement
 
 **Status:** NOT STARTED.
 
-### Goal
+Build:
 
-Prove provider-neutral portability/recovery and then remove transitional legacy authorities safely.
-
-### Planned scope
-
-- Food Catalog export contracts;
-- backup verification;
+- provider-neutral Food Catalog export;
 - restore verification;
-- provider-neutral portability;
-- search rebuild verification;
-- final compatibility-retirement migration;
-- removal of obsolete flat name/nutrition/serving/category/market/verification authorities after all consumers migrate;
-- live precondition gates before destructive retirement.
+- generation/search rebuild verification;
+- final compatibility retirement;
+- destructive cleanup only after live preconditions/consumer migration.
 
-### Exit condition
-
-The catalog can be restored/moved while preserving Plaivra Food IDs, and obsolete transitional authorities are actually removed rather than carried indefinitely.
-
----
+Exit: catalog can be restored/moved preserving Plaivra Food IDs; obsolete transitional authority removed.
 
 ## Plan 8 — USDA Foundation Batch 1A Adapter + Full Dry Run
 
 **Status:** NOT STARTED.
 
-### Source authority
+Implement exact USDA Foundation April 2026 adapter:
 
-USDA FoodData Central Foundation Foods — exact approved April 2026 release.
-
-### Goal
-
-Implement the exact Foundation source adapter and prove deterministic full-release behavior offline/dry-run before any Production ingestion.
-
-### Planned scope
-
-- exact release adapter;
-- explicit nutrient-ID mapping;
-- source portion extraction;
-- source name preservation and safe naming policy;
+- explicit nutrient mapping;
+- source portions;
+- naming policy;
 - taxonomy/market evidence mapping;
 - semantic matching;
 - deterministic full-release dry run;
-- benchmark artifacts;
-- exact manifest and QA report.
+- QA/benchmark artifacts.
 
-### Batch identity
+`1A0` is offline/full dry run. No Production ingestion authority.
 
-`1A0` = full Foundation release dry run only.
+## Plan 9 — USDA Foundation Production Canary + Full Promotion
 
-### Production authority
+**Status:** NOT STARTED.
 
-Plan 8 does **not** authorize Production ingestion.
+Only after Plan 8 evidence approval.
 
-### Exit condition
+Stages:
 
-Batch `1A0` produces an exact deterministic manifest and QA report ready for Planner review.
-
----
-
-## Plan 9 — USDA Foundation Production Canary and Full Promotion
-
-**Status:** NOT STARTED. Created/executed only after Plan 8 evidence is approved.
-
-### Goal
-
-Safely introduce Foundation Foods to Production through deterministic canary → QA → activation → promotion stages.
-
-### Planned rollout
-
-`1A1`:
-
-- deterministic representative Production canary;
-- approximately 50–100 Foods;
-- draft-only initial ingestion;
+- `1A1`: deterministic representative Production canary (~50–100 Foods), draft-only ingestion first;
 - post-ingestion QA;
-- separately approved activation subset;
-- separately approved generation promotion.
+- exact activation subset;
+- exact generation promotion;
+- `1A2`: full Foundation promotion only after canary health and new exact approvals.
 
-The canary must intentionally cover multiple food groups, complete/incomplete nutrition, raw/cooked variants, similar names, multiple/no household portions, and anomaly edge cases. It is not a random sample.
-
-`1A2`:
-
-- full Foundation ingestion/promotion only after canary health gates pass;
-- every Production ingestion, activation set, and generation promotion needs exact separate approval.
-
-### Exit direction
-
-Foundation becomes healthy promoted catalog data with rollback/reconciliation evidence intact.
-
----
+Every Production ingestion/activation/promotion requires separate explicit authority.
 
 ## Plan 10 — USDA FNDDS Batch 1B
 
-**Status:** NOT STARTED. Begins only after Foundation is healthy.
+**Status:** NOT STARTED.
 
-### Source authority
+After Foundation is healthy:
 
-USDA FNDDS 2021–2023 — exact approved October 2024 release.
+- `1B0`: full FNDDS 2021–2023 dry run;
+- `1B1`: deterministic representative Production canary (~150–250 records);
+- `1B2`: full FNDDS promotion under separate approval.
 
-### Goal
-
-Add FNDDS-specific handling and reconcile it against the already-established Foundation canonical catalog.
-
-### Planned scope
-
-- FNDDS portion/composite-food handling;
-- mixed dishes;
-- preparation variants;
-- official portion weights;
-- Foundation reconciliation;
-- deterministic dry run;
-- representative Production canary;
-- later full promotion under separate approvals.
-
-### Planned rollout
-
-- `1B0`: full FNDDS dry run;
-- `1B1`: deterministic representative Production canary, approximately 150–250 records;
-- `1B2`: full FNDDS ingestion/promotion after canary gates and exact approvals.
-
-### Exit direction
-
-Batch 1 Core Food Catalog contains healthy Foundation + FNDDS canonical coverage under generation authority.
+Emphasis: mixed dishes, composite foods, portion weights, preparation variants, and reconciliation with Foundation identities.
 
 ---
 
-# 8. Full roadmap dependency chain
+# 8. Roadmap count / sequencing
 
 ```text
-Plan 1 — Core Canonical Model — COMPLETE
-  ↓
-Plan 2 — Domain Service V2 — COMPLETE / MERGED
-  ↓
-Plan 3 — Activation / Verification / Trust / Catalog Generations — CURRENT DESIGN PHASE
-  ↓
-Plan 4 — Ingestion V2 / Quarantine / Release-Diff Operations
-  ↓
-Plan 5 — Search Projection / Consumer Search Migration
-  ↓
-Plan 6 — Curation / Capability Security / Observability
-  ↓
-Plan 7 — Backup / Export / Restore / Legacy Retirement
-  ↓
-Plan 8 — USDA Foundation 1A0 Dry Run
-  ↓
-Plan 9 — Foundation 1A1 Canary / 1A2 Full Promotion
-  ↓
-Plan 10 — FNDDS 1B0 / 1B1 / 1B2
+Plan 1 — Core Canonical Model                         COMPLETE
+Plan 2 — Domain Service V2                           COMPLETE
+Plan 3 — Activation / Verification / Generations     DESIGN APPROVED; SPEC REVIEW PENDING
+Plan 4 — Ingestion V2 / Quarantine                   NOT STARTED
+Plan 5 — Search Projection / Consumer Search         NOT STARTED
+Plan 6 — Curation / Security / Observability         NOT STARTED
+Plan 7 — DR / Export / Legacy Retirement             NOT STARTED
+Plan 8 — USDA Foundation Dry Run                     NOT STARTED
+Plan 9 — Foundation Production Canary / Promotion    NOT STARTED
+Plan 10 — FNDDS                                      NOT STARTED
 ```
 
-Plans 5 and 6 may overlap only after prerequisite contracts from Plans 2–4 are stable and each still has its own review gate.
+There are **8 plans remaining including Plan 3**. After Plan 3 is completely implemented/QA'd/integrated, **7 plans remain (Plans 4–10)**.
+
+Do not skip prerequisite order. Plans 5/6 may overlap only after prerequisite contracts from Plans 2–4 are stable and still require separate review gates.
 
 ---
 
-# 9. Planner / implementation workflow that must continue
+# 9. Execution workflow
 
-For architectural plans:
+For architecture work use Superpowers:
 
-1. Use Superpowers `using-superpowers`.
-2. Use `brainstorming`.
-3. Treat major subsystem plans as Architectural work.
-4. Explore current repository/Production state before design.
-5. Ask/resolve architectural decisions sequentially.
-6. Present design in sections and get user approval.
-7. Write/update the formal design/spec.
-8. Self-review the spec for placeholders, contradictions, scope creep, and ambiguity.
-9. Get explicit user approval of the written spec.
-10. Use `writing-plans` to create the implementation plan.
-11. Do not implement before that approval gate.
+1. `using-superpowers`
+2. `brainstorming`
+3. after written spec user approval: `writing-plans`
+4. implementation only after implementation-plan approval.
 
-For implementation:
+Implementation uses TDD and exact-head verification. Under Classic ChatGPT, if true worktree/subagent primitives are absent, use the explicitly approved Classic execution mode rather than pretending unavailable tools exist:
 
-- TDD is mandatory.
-- Use one Plan-specific branch and one Plan-specific PR.
-- Exact-head RED/GREEN evidence matters.
-- Run task-level compliance/code-quality review where tooling permits.
-- Run final whole-branch review.
-- Run fresh exact-head repository Quality.
-- Do not trust CI evidence from an older SHA.
-- Stop for independent Planner QA/QC before merge.
+- one dedicated implementation branch/PR;
+- task-by-task RED/GREEN evidence;
+- focused commits;
+- exact-head GitHub Quality/CI;
+- explicit spec-compliance/code-quality review;
+- Planner independent QA/QC before merge.
 
-### Classic ChatGPT environment adaptation
-
-Classic ChatGPT may not expose local git worktrees or Superpowers multi-agent primitives. When that environment limitation exists, the approved fallback is:
-
-- connected GitHub repository operations;
-- task-by-task commits;
-- explicit RED/GREEN evidence through CI where possible;
-- visible task ledger;
-- task-level spec/code review performed explicitly;
-- exact-head CI;
-- independent Planner QA/QC.
-
-The fallback changes only unavailable execution mechanics. It does **not** weaken architecture, TDD, Production-safety, or review gates.
-
-### Ready-for-review Quality gate
-
-The repository has canonical phase-close Quality behavior associated with PR Ready-for-review state. Previous connector sessions encountered a GitHub GraphQL `fullDatabaseId` limitation when attempting Draft → Ready automatically.
-
-If that connector defect recurs:
-
-- do not treat it as a repository failure;
-- manually mark the PR Ready for review in GitHub UI;
-- wait for canonical Quality on the exact final SHA;
-- verify script contracts, migration ledger, database jobs, and required summaries as applicable;
-- only then issue merge approval.
+Never silently downgrade architectural or Production gates because tooling is unavailable.
 
 ---
 
 # 10. Production authority protocol
 
-Never infer Production mutation authority from implementation completion or merge.
+Always distinguish:
 
-Separate exact approval is required whenever the applicable plan introduces a real Production operation, especially:
+1. documentation/spec merge;
+2. implementation merge;
+3. migration file existing in repo;
+4. Production migration apply;
+5. ingestion execution;
+6. activation-set execution;
+7. generation promotion;
+8. member-runtime cutover;
+9. application deployment.
 
-- schema migration apply;
-- ingestion batch;
-- activation set;
-- Catalog Generation promotion;
-- withdrawal/revocation with Production effect;
-- full provider rollout.
+Authority for one does not grant the next.
 
-Before an approved Production mutation:
-
-1. perform fresh preflight;
-2. verify exact repository head/file checksum/manifest;
-3. verify current Production state;
-4. stop on drift;
-5. perform only the exact authorized action;
-6. read back Production state;
-7. reconcile migration/batch/generation ledger truthfully;
-8. run fresh exact-head QA after reconciliation;
-9. stop for Planner final review.
-
-Never replay an already-applied migration merely because repository and generated Production identities differ.
+If a future chat is uncertain whether Production mutation was authorized, default to **NO** and stop before mutating.
 
 ---
 
-# 11. Food Catalog user/product direction already established
+# 11. Current Next Move
 
-The Food Catalog target is trust-first and identity-first rather than row-count-first.
+**Do not write the Plan 3 implementation plan yet. Do not implement Plan 3 yet.**
 
-Important user-facing direction already approved in Food Library design discussions includes:
+The approved Plan 3 architecture has been written and self-reviewed at:
 
-- strong filtering rather than a generic list;
-- numeric macro comparisons such as protein/carbs/fat `<`, `>`, `=` a chosen threshold;
-- derived convenience filters such as **High Protein** and **Low Carb**;
-- combining filters with AND semantics when the user selects both;
-- Food cards may show compact derived labels such as High Protein / Low Carb when applicable;
-- these labels are derived presentation/search facts, not canonical identity or taxonomy authority;
-- Food Library V2 search migration itself remains Plan 5, not Plan 3.
+`docs/superpowers/specs/2026-09-02-food-catalog-plan3-activation-verification-generations-design.md`
 
-Do not pull Food Library visual/search implementation into Plan 3 merely because these product decisions already exist.
+The next gate is:
 
----
+> **User/Planner written-spec review and explicit approval.**
 
-# 12. Current Next Move — exact continuity point
+If the user says the written Plan 3 spec is approved, then invoke Superpowers `writing-plans` and create the detailed Plan 3 implementation plan from the then-current authoritative `main`.
 
-**Do not restart Plan 3 from the beginning.**
+After creating the implementation plan, stop again for explicit user approval before implementation.
 
-Plan 3 brainstorming has started and the user already approved:
-
-> **Section 1 — Authority Model:** Catalog Generation is the sole authority for what is currently effective; generations are immutable promoted compositions; promotion is separately privileged/audited; rollback returns to a previous healthy generation without destructive history rewriting; Plan 3 itself does not authorize Production population/activation/promotion.
-
-The next Planner chat should:
-
-1. verify `main` contains Plan 2 squash merge `2883e077f1fdc159330c29b1dc6124ec905738e2` or a strict descendant;
-2. verify no new Food Catalog authority has superseded this file;
-3. continue **Plan 3 architecture brainstorming at Section 2**;
-4. resolve Plan 3 generation/activation/verification/trust design sequentially;
-5. write the Plan 3 design/spec only after the design sections are approved;
-6. get explicit written-spec approval;
-7. then create the detailed Plan 3 implementation plan with `writing-plans`;
-8. do not start Plan 3 implementation before that gate.
-
----
-
-# 13. Mandatory maintenance of this continuity file
-
-This is a living project-backup file.
-
-Update it whenever any of the following happens:
-
-- a Plan design becomes approved;
-- a Plan implementation plan is approved;
-- a Plan implementation PR reaches Planner QA/QC;
-- a Plan is merged;
-- Production schema/data/generation state changes;
-- an exact Production batch/activation/generation promotion occurs;
-- roadmap sequencing changes;
-- a binding architecture decision supersedes anything recorded here.
-
-At minimum update:
-
-- current `main` SHA;
-- completed/current Plan status;
-- exact PR/head/merge SHA;
-- Production mutation identities/manifests;
-- next continuation point;
-- number of remaining plans.
-
-The goal is that a fresh Plaivra Planner chat can recover the exact Food Catalog program state from the repository itself even if prior chat history is unavailable.
+No Production mutation is authorized at this checkpoint.
