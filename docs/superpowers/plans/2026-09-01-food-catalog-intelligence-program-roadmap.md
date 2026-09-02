@@ -1,6 +1,6 @@
 # Food Catalog Intelligence Implementation Roadmap
 
-**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 implementation complete on review branch; independent Planner QA/QC and canonical phase-close Quality pending  
+**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 implementation complete on review branch; independent Planner QA/QC and canonical phase-close Quality pending
 **Spec:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
 
 ## Purpose
