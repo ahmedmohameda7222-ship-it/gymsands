@@ -30,6 +30,17 @@ import type {
   StoredFoodVerificationAssertion,
 } from "./contracts";
 
+export interface StoredGenerationValidationHydration {
+  selectionsByFoodId: Record<string, StoredGenerationSelections>;
+  nutritionRevisions: Array<Pick<StoredFoodNutritionRevision, "id" | "foodId">>;
+  servingOptions: Array<Pick<StoredFoodServingOption, "id" | "foodId">>;
+  names: Array<Pick<StoredFoodNameFact, "id" | "foodId" | "role">>;
+  taxonomyAssignments: Array<Pick<StoredFoodTaxonomyAssignment, "id" | "foodId" | "action">>;
+  marketAssignments: Array<Pick<StoredFoodMarketAssignment, "id" | "foodId" | "action">>;
+  verificationAssertions: Array<Pick<StoredFoodVerificationAssertion, "id" | "foodId" | "scope" | "state">>;
+  activationAuthorities: StoredActivationAuthority[];
+}
+
 export interface FoodCatalogGenerationReadStore {
   readCurrentPointer(): Promise<StoredCurrentGenerationPointer>;
   readGeneration(generationId: string): Promise<StoredCatalogGeneration | null>;
@@ -37,6 +48,10 @@ export interface FoodCatalogGenerationReadStore {
   readGenerationFood(generationId: string, foodId: string): Promise<StoredGenerationFood | null>;
   readGenerationRedirects?(generationId: string): Promise<StoredGenerationRedirect[]>;
   readGenerationRedirect(generationId: string, sourceFoodId: string): Promise<StoredGenerationRedirect | null>;
+  readGenerationValidationHydration?(
+    generationId: string,
+    foods: readonly StoredGenerationFood[],
+  ): Promise<StoredGenerationValidationHydration>;
   readGenerationSelections(generationId: string, foodId: string): Promise<StoredGenerationSelections>;
   readNutritionRevision(foodId: string, revisionId: string): Promise<StoredFoodNutritionRevision | null>;
   readServingOptions(foodId: string, ids: readonly string[]): Promise<StoredFoodServingOption[]>;
@@ -56,6 +71,10 @@ export interface FoodCatalogGenerationReadStore {
 export interface FoodCatalogGenerationValidationReadStore extends FoodCatalogGenerationReadStore {
   readGenerationFoods(generationId: string): Promise<StoredGenerationFood[]>;
   readGenerationRedirects(generationId: string): Promise<StoredGenerationRedirect[]>;
+  readGenerationValidationHydration(
+    generationId: string,
+    foods: readonly StoredGenerationFood[],
+  ): Promise<StoredGenerationValidationHydration>;
 }
 
 export interface FoodCatalogGenerationCommandStore {
