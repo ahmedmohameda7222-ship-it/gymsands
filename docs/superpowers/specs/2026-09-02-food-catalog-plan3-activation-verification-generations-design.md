@@ -1,6 +1,6 @@
 # Plaivra Food Catalog Plan 3 — Activation, Verification, Trust, and Catalog Generations Design
 
-Status: **Implementation complete on review branch; Planner QA/QC and canonical phase-close Quality pending**  
+Status: **Implementation complete on review branch; Planner QA/QC and canonical phase-close Quality pending**
 Date: **2026-09-02**  
 Architecture class: **Architectural / long-term target design**  
 Parent architecture: `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`  
