@@ -87,7 +87,7 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
 
   it("defines exactly the eight narrow service-role RPC authorities", () => {
     for (const rpc of rpcs) {
-      expect(sql).toMatch(new RegExp(`create\\s+or\\s+replace\\s+function\\s+public\\.${rpc}\\s*\\(\\s*jsonb\\s*\\)`, "i"));
+      expect(sql).toMatch(new RegExp(`create\\s+or\\s+replace\\s+function\\s+public\\.${rpc}\\s*\\(\\s*(?:p_command\\s+)?jsonb\\s*\\)`, "i"));
       expect(sql).toMatch(new RegExp(`revoke\\s+all\\s+on\\s+function\\s+public\\.${rpc}\\s*\\(\\s*jsonb\\s*\\)\\s+from\\s+public\\s*,\\s*anon\\s*,\\s*authenticated`, "i"));
       expect(sql).toMatch(new RegExp(`grant\\s+execute\\s+on\\s+function\\s+public\\.${rpc}\\s*\\(\\s*jsonb\\s*\\)\\s+to\\s+service_role`, "i"));
     }
