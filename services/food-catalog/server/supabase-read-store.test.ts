@@ -24,6 +24,23 @@ function makeSupabase(rowsByTable: Record<string, unknown>) {
   return { supabase: { from } as unknown as SupabaseClient, queries, from };
 }
 
+function nameRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "55555555-5555-4555-8555-555555555555",
+    food_id: FOOD_ID,
+    language_tag: "en",
+    name_role: "synonym",
+    name_text: "Test Food",
+    normalized_text: "test food",
+    script_code: "Latn",
+    origin: "curated",
+    source_record_id: null,
+    policy_version: "name-v1",
+    created_at: "2026-09-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 describe("Food Catalog V2 Supabase read store", () => {
   it("reads only compatibility identity/lifecycle fields from the Food root", async () => {
     const { supabase, queries } = makeSupabase({
@@ -100,6 +117,24 @@ describe("Food Catalog V2 Supabase read store", () => {
       },
     });
     await expect(createSupabaseFoodCatalogReadStore(nutrition.supabase).readNutritionRevisions(FOOD_ID)).rejects.toThrow(/Food Catalog V2 read.*non-negative/i);
+  });
+
+  it("rejects a persisted Food name with an invalid name_role", async () => {
+    const { supabase } = makeSupabase({
+      food_names: { data: [nameRow({ name_role: "invalid_role" })], error: null },
+    });
+
+    await expect(createSupabaseFoodCatalogReadStore(supabase).readNames(FOOD_ID))
+      .rejects.toThrow(/Food Catalog V2 read.*role/i);
+  });
+
+  it("rejects a persisted Food name with an invalid origin", async () => {
+    const { supabase } = makeSupabase({
+      food_names: { data: [nameRow({ origin: "invalid_origin" })], error: null },
+    });
+
+    await expect(createSupabaseFoodCatalogReadStore(supabase).readNames(FOOD_ID))
+      .rejects.toThrow(/Food Catalog V2 read.*origin/i);
   });
 
   it("reads merge events where the Food is source or target with deterministic transport ordering", async () => {

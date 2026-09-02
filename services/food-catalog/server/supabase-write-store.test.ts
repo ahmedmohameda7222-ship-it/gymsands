@@ -70,6 +70,44 @@ describe("Food Catalog V2 Supabase write store", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
+  it("rejects an invalid Food name role before any database access", async () => {
+    const { supabase, from } = makeSupabase();
+    const store = createSupabaseFoodCatalogWriteStore(supabase);
+
+    await expect(store.appendName({
+      foodId: FOOD_ID,
+      languageTag: "en",
+      role: "invalid_role" as never,
+      text: "Test Food",
+      normalizedText: "test food",
+      scriptCode: "Latn",
+      origin: "curated",
+      sourceRecordId: null,
+      policyVersion: "name-v1",
+    })).rejects.toThrow(/role/i);
+
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid Food name origin before any database access", async () => {
+    const { supabase, from } = makeSupabase();
+    const store = createSupabaseFoodCatalogWriteStore(supabase);
+
+    await expect(store.appendName({
+      foodId: FOOD_ID,
+      languageTag: "en",
+      role: "synonym",
+      text: "Test Food",
+      normalizedText: "test food",
+      scriptCode: "Latn",
+      origin: "invalid_origin" as never,
+      sourceRecordId: null,
+      policyVersion: "name-v1",
+    })).rejects.toThrow(/origin/i);
+
+    expect(from).not.toHaveBeenCalled();
+  });
+
   it("uses insert-only persistence for all seven immutable fact APIs", async () => {
     const { supabase, from, inserts, update, remove, upsert } = makeSupabase();
     const store = createSupabaseFoodCatalogWriteStore(supabase);
