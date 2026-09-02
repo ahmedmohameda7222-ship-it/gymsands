@@ -39,6 +39,16 @@ const tables = [
 ] as const;
 
 const immutableTables = tables.filter((table) => table !== "food_catalog_current_generation");
+const rpcs = [
+  "food_catalog_create_activation_set_v1",
+  "food_catalog_grant_activation_set_v1",
+  "food_catalog_invalidate_activation_grant_v1",
+  "food_catalog_create_generation_v1",
+  "food_catalog_record_generation_validation_v1",
+  "food_catalog_promote_generation_v1",
+  "food_catalog_rollback_generation_v1",
+  "food_catalog_revoke_generation_v1",
+] as const;
 
 describe("Food Catalog Plan 3 generation-authority migration", () => {
   it("keeps exactly one forward Plan 3 generation-authority migration", () => {
@@ -72,6 +82,20 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
     expect(sql).toContain("food_catalog_generation_markets_same_food_fkey");
     expect(sql).toContain("food_catalog_generation_verification_same_food_fkey");
     expect(sql).toContain("food_catalog_generation_redirects_set_integrity");
+  });
+
+  it("defines exactly the eight narrow service-role RPC authorities", () => {
+    for (const rpc of rpcs) {
+      expect(sql).toMatch(new RegExp(`create\\s+or\\s+replace\\s+function\\s+public\\.${rpc}\\s*\\(\\s*jsonb\\s*\\)`, "i"));
+      expect(sql).toMatch(new RegExp(`revoke\\s+all\\s+on\\s+function\\s+public\\.${rpc}\\s*\\(\\s*jsonb\\s*\\)\\s+from\\s+public\\s*,\\s*anon\\s*,\\s*authenticated`, "i"));
+      expect(sql).toMatch(new RegExp(`grant\\s+execute\\s+on\\s+function\\s+public\\.${rpc}\\s*\\(\\s*jsonb\\s*\\)\\s+to\\s+service_role`, "i"));
+    }
+    expect(sql.match(/security\s+definer/g)?.length).toBeGreaterThanOrEqual(rpcs.length);
+    expect(sql.match(/set\s+search_path\s*=\s*pg_catalog\s*,\s*public\s*,\s*private\s*,\s*extensions/g)?.length)
+      .toBeGreaterThanOrEqual(rpcs.length);
+    expect(sql).toMatch(/pg_advisory_xact_lock\s*\(\s*hashtextextended\s*\(\s*p_operation_id::text\s*,\s*0\s*\)\s*\)/i);
+    expect(sql).toMatch(/for\s+update/i);
+    expect(sql).toContain("current_validation_report_id");
   });
 
   it("seeds only the nullable singleton pointer and no Food or generation facts", () => {
