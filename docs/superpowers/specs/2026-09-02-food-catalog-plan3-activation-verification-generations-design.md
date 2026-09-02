@@ -6,368 +6,285 @@ Architecture class: **Architectural / long-term target design**
 Parent architecture: `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`  
 Program roadmap: `docs/superpowers/plans/2026-09-01-food-catalog-intelligence-program-roadmap.md`  
 Implementation authority: **Not granted by this document**  
-Production mutation authority: **Not granted by this document**  
-Production migration apply, activation execution, Catalog Generation promotion, Food population, provider ingestion, deployment, and Plan 4 remain separately authorized operations.
+Production mutation authority: **Not granted by this document**
+
+Production migration apply, Food population, provider ingestion, Production activation execution, Catalog Generation promotion, member runtime V2 cutover, deployment, Activity Catalog mutation, and Plan 4 remain separately authorized operations.
 
 ## 1. Purpose
 
-Plan 3 introduces the missing authority that Plan 2 intentionally refused to invent: a deterministic, auditable answer to **which canonical Food facts are currently effective**.
+Plan 3 introduces the authority that Plan 2 intentionally refused to guess: a deterministic, auditable answer to **which canonical Food facts are currently effective**.
 
-Plan 1 created immutable/versioned Food facts. Plan 2 created strict server persistence boundaries and deliberately returned raw V2 fact arrays without choosing a current revision, current name, current serving, current verification state, or current canonical survivor from timestamp/order heuristics.
+Plan 1 created immutable/versioned Food facts. Plan 2 created strict Food Catalog server persistence boundaries and deliberately returned raw V2 fact arrays without choosing a current revision, name, serving, verification assertion, or canonical survivor from row ordering.
 
 Plan 3 establishes:
 
 - exact deterministic activation authority;
-- assertion-based verification supersession/revocation authority;
+- linear assertion-based verification supersession/revocation authority;
 - full immutable Catalog Generation composition;
 - a single current-generation pointer;
 - current-generation reads;
 - flattened generation redirect projection;
 - structured derived Trust Profile output;
+- immutable validation evidence;
 - atomic promotion and rollback semantics;
-- validation/blocking interfaces needed before Plan 4 quarantine exists.
+- concurrency and idempotency guarantees.
 
 The Plan 3 exit condition is:
 
-> Draft facts may exist without becoming member-visible; activation is separate from visibility; generation promotion is a separate audited operation; current reads are generation-authoritative; and the current pointer can be rolled back to an explicitly selected previous healthy generation without destructive deletion or rewriting.
+> Draft facts can exist without becoming member-visible; activation is separate from visibility; generation promotion is a separate audited operation; current reads are generation-authoritative; and the current pointer can be rolled back to an explicitly selected previous healthy generation without destructive deletion or rewriting.
 
 ## 2. Authority and non-goals
 
-This document refines the parent Food Catalog architecture only for Plan 3. If it conflicts with the parent architecture, the parent architecture wins unless an explicit later Planner decision supersedes it.
+This document refines the parent Food Catalog architecture only for Plan 3. The parent architecture remains higher authority unless a later explicit Planner/user decision supersedes it.
 
-### 2.1 Plan 3 owns
+### Plan 3 owns
 
-Plan 3 owns the long-term authority for:
+Plan 3 owns the target architecture for:
 
 - activation eligibility;
-- candidate generation composition;
+- candidate generation construction;
 - promoted generation composition;
 - verification assertion chain rules;
 - derived trust projection;
+- generation validation reports;
 - current generation pointer semantics;
-- generation promotion, revocation, and rollback event semantics;
-- current effective Food reads over exact generation selections;
+- promotion/revocation/rollback event semantics;
+- current effective Food reads;
 - generation-level canonical redirect projection.
 
-### 2.2 Plan 3 does not own
+### Plan 3 does not own
 
-Plan 3 does **not** implement or authorize:
+Plan 3 does not implement or authorize:
 
 - provider-specific ingestion adapters;
-- USDA release parsing;
+- USDA parsing/import;
 - Production Food population;
 - quarantine/case-management implementation;
-- release-diff execution machinery;
+- release-diff operations;
 - search projection migration;
 - Food Library V2 search cutover;
-- full capability/RBAC control-plane architecture;
+- permanent capability/RBAC control-plane architecture;
 - correction-case workflows;
 - backup/export/restore tooling;
-- legacy-retirement migration;
+- legacy retirement;
 - Production activation execution;
 - Production generation promotion;
 - member runtime V2 cutover;
 - application deployment.
 
-Those remain in later plans and/or separate explicit Production authorities.
+Those remain later-plan or separately approved operations.
 
-## 3. Governing invariants
-
-The following are hard requirements.
+## 3. Binding invariants
 
 1. **Catalog Generation is the sole authority for what is currently effective.**
-2. No current fact may be selected from `MAX(revision)`, latest timestamp, insertion order, maximum ID, arbitrary first row, importer preference, or guessed source priority.
-3. Catalog Generation content is immutable after construction.
-4. Generation composition references immutable canonical facts; it does not duplicate nutrition/name/serving values as a new truth store.
-5. There is at most one current generation pointer for the catalog.
-6. Successful ingestion does not imply activation.
-7. Activation does not imply member visibility.
-8. Activation does not imply Catalog Generation promotion.
+2. No current fact is selected from `MAX(revision)`, latest timestamp, insertion order, maximum ID, arbitrary first row, importer preference, or guessed source priority.
+3. Generation composition is immutable after sealing.
+4. Generations reference immutable canonical fact IDs; they do not duplicate nutrition/name/serving values into a second truth store.
+5. There is exactly one singleton current-generation pointer, which may be `NULL` before catalog initialization.
+6. Ingestion does not imply activation.
+7. Activation does not imply visibility.
+8. Activation does not imply generation promotion.
 9. Promotion is a separate privileged audited operation.
-10. Rollback changes the current pointer; it does not destructively rewrite generations or canonical facts.
-11. Unknown nutrition remains `NULL`; known source zero remains `0`.
-12. No generic household or `ml ↔ g` conversion is introduced.
-13. Verification is assertion-based, scoped, immutable, and superseding/revoking; mutable `is_verified` is not final authority.
-14. Trust is derived and explainable; no opaque numeric score is introduced.
-15. Redirects in a generation are flattened direct mappings to a current active survivor; chains are rejected.
-16. Historical Diary/Recipe/Saved Meal/Meal Plan snapshots are never rewritten.
-17. My Foods and personal state are not mutated by Plan 3.
-18. Physical Plan 3 control-plane tables are server-only; anon/authenticated direct CRUD is denied.
-19. Plan 3 implementation may add a forward schema migration, but merging code/migration does not authorize applying it to Production.
+10. Rollback changes the current pointer; it does not rewrite generation/fact history.
+11. Verification is assertion-based and scoped; mutable `is_verified` is not authority.
+12. Trust is derived and explainable; no opaque numeric trust score is introduced.
+13. Unknown nutrition remains `NULL`; known source zero remains `0`.
+14. No generic household or `ml ↔ g` conversion is introduced.
+15. Generation redirects are direct/flattened to an active survivor; chains are invalid.
+16. Historical consumer snapshots are never rewritten.
+17. My Foods/personal state are not mutated by Plan 3.
+18. Plan 3 physical control-plane tables are server-only with no anon/authenticated direct CRUD.
+19. A Plan 3 implementation PR may add a new forward migration, but merge does not authorize Production apply.
 20. Plan 4 is not started by Plan 3.
 
-## 4. Current-effective authority model
-
-### 4.1 Sole authority
+## 4. Current-effective authority
 
 A promoted Catalog Generation is the only long-term authority for current effective catalog state.
 
-The generation composition determines, for each included canonical Food, the exact effective:
+The generation determines, through normalized references, the exact effective:
 
-- lifecycle/survivor state;
+- canonical non-merged Food lifecycle state;
 - nutrition revision;
 - serving fact set;
 - name/localization fact set;
-- taxonomy assignment fact set;
-- market assignment fact set;
+- taxonomy assignment set;
+- market assignment set;
 - verification assertion selection;
-- activation authority;
-- flattened redirect state where relevant;
-- policy/projection versions required to interpret that generation.
+- activation grant reference for active Foods;
+- flattened merge redirect map;
+- interpretation/policy versions.
 
-The existing mutable compatibility fields on `food_items` remain transitional implementation during migration. They are not allowed to become parallel current authority for Plan 3 current reads.
+Existing mutable compatibility fields on `food_items` remain transitional migration input only. Plan 3 current reads must not treat them as parallel current authority.
 
-### 4.2 Draft invisibility
-
-Draft facts can be stored and reviewed without appearing in the current generation. Therefore their existence does not make them member-visible.
+Draft facts remain outside the promoted generation and therefore outside normal member visibility.
 
 The intended flow is:
 
 ```text
-source/curation facts
+source/curation evidence
   → draft canonical facts
   → deterministic validation
   → immutable Activation Set / Grant
   → candidate generation
-  → generation validation
+  → immutable generation validation report
   → explicit promotion
   → current-generation visibility
 ```
 
-No earlier step authorizes a later step automatically.
+No step automatically authorizes the next.
 
 ## 5. Full immutable generation composition
 
-### 5.1 Chosen representation
+Plan 3 uses **full immutable snapshots**, not runtime delta inheritance.
 
-Plan 3 uses **full immutable generation composition**, not runtime delta inheritance.
+A candidate may be constructed from an explicitly selected base generation plus exact changes, but the resulting candidate is materialized as a complete self-contained composition. Runtime reads never walk a base/delta chain.
 
-Each generation contains the exact effective composition for all Foods included in that generation. A generation may record its base generation as construction/audit metadata, but current reads never reconstruct authority by walking a base/delta chain.
+This model is chosen for deterministic audit, rollback, replay, debugging, DR interpretation, and later search-generation versioning.
 
-This is chosen because it gives deterministic:
+### Fact references
 
-- auditability;
-- rollback;
-- replay;
-- debugging;
-- disaster-recovery interpretation;
-- search-generation versioning later;
-- exact-head QA.
+Generation composition references canonical immutable fact IDs:
 
-### 5.2 No value duplication
-
-Generation composition references existing immutable fact IDs. It does not copy nutrition values or localized name text into generation rows as a second canonical source of truth.
-
-For example:
-
-- a generation Food row references one exact nutrition revision ID;
-- generation-serving rows reference exact serving option IDs;
-- generation-name rows reference exact name fact IDs;
-- generation-taxonomy rows reference exact assignment IDs;
-- generation-market rows reference exact assignment IDs;
-- generation-verification rows reference exact assertion IDs.
+- one exact nutrition revision ID per Food when nutrition is part of the promoted composition;
+- exact serving option IDs;
+- exact name fact IDs;
+- exact taxonomy assignment IDs;
+- exact market assignment IDs;
+- exact verification assertion IDs by scope.
 
 Every selected fact must belong to the same Food represented by the generation entry.
 
-### 5.3 Generation identity
+### Generation identity
 
-A generation uses a stable opaque UUID as identity.
-
-It may also carry a human-readable monotonic ordinal/version for diagnostics and operator UX, but that ordinal is **never** current authority. Code must never select the current generation using `MAX(generation_number)`.
+A generation has an opaque UUID identity. It may also have a human-readable ordinal for diagnostics, but that ordinal is never authority. `MAX(generation_number)` must never select current state.
 
 A generation records at minimum:
 
-- `generation_id`;
-- optional `base_generation_id` construction provenance;
-- `composition_schema_version`;
-- `generation_policy_version`;
-- relevant trust/activation policy versions;
-- search/projection version metadata reserved for Plan 5 integration;
-- deterministic `composition_checksum`;
-- immutable creation metadata;
-- authority/reference context used to construct it.
+- generation ID;
+- optional base generation ID for construction provenance;
+- composition schema version;
+- generation policy version;
+- activation/trust policy versions;
+- generation-aware projection/search version metadata reserved for Plan 5;
+- deterministic composition checksum;
+- immutable creation/sealing metadata;
+- authority/reference context.
+
+### Composition checksum
+
+The semantic checksum is calculated from canonical ordering/serialization of all authority-bearing composition and interpretation versions.
+
+It includes at least:
+
+- composition/policy versions;
+- Food IDs and effective lifecycle states;
+- selected nutrition, serving, name, taxonomy, market, and verification IDs;
+- exact activation grant references;
+- redirect pairs;
+- relevant generation-aware projection version metadata.
+
+Insertion timestamps and other non-semantic storage metadata must not alter the checksum.
 
 ## 6. Candidate generation construction
 
-### 6.1 Explicit base plus exact changes
+A candidate is built from:
 
-A candidate generation is constructed from:
-
-1. an explicitly selected base generation, or `NULL` for the first/bootstrap candidate;
+1. an explicitly selected base generation, or `NULL` for bootstrap;
 2. an exact change manifest;
-3. explicitly selected fact IDs and lifecycle results;
+3. explicit selected fact IDs/lifecycle results;
 4. deterministic validation rules.
 
-Construction may use the base generation as input to make planning efficient, but the output is always a full immutable snapshot.
+Candidate construction is not publication. It does not switch the pointer, activate Foods, make Foods visible, revoke a prior generation, deploy the app, or authorize Production mutation.
 
-### 6.2 Candidate creation is not publication
+The candidate is immutable after sealing/checksum finalization. If implementation requires temporary staging rows, those rows are not promotable authority and must not be exposed as a generation until sealing succeeds.
 
-Creating a candidate generation does not:
+## 7. Activation Sets and Grants
 
-- switch the current pointer;
-- activate Foods;
-- modify `food_items` lifecycle authority;
-- make Foods member-visible;
-- revoke any prior generation;
-- deploy the app;
-- mutate Production unless separately authorized.
+### Separation from promotion
 
-### 6.3 Composition checksum
-
-Generation content must have a deterministic semantic checksum calculated over a canonical ordering and canonical serialization of all authority-bearing composition elements and interpretation versions.
-
-The checksum must change when any effective selection or interpretation authority changes.
-
-At minimum the checksum includes:
-
-- generation composition schema version;
-- policy versions;
-- Food IDs and effective lifecycle states;
-- selected nutrition revision IDs;
-- selected serving option IDs;
-- selected name fact IDs;
-- selected taxonomy assignment IDs;
-- selected market assignment IDs;
-- selected verification assertion IDs/scopes;
-- activation authority references;
-- redirect pairs;
-- relevant projection/search version metadata.
-
-Metadata that is not semantically part of the current catalog, such as database row insertion timestamps, must not accidentally change the checksum.
-
-## 7. Activation Set / Grant authority
-
-### 7.1 Separation from generation promotion
-
-Plan 3 models activation as immutable evidence that a deterministic set of Foods passed activation gates and became **eligible** to appear as active in a candidate generation.
-
-Activation by itself does not make a Food visible.
-
-The binding sequence is:
+Activation means a deterministic Food/member set passed activation gates and became **eligible** to appear as `active` in a later generation. Activation itself does not make the Food visible.
 
 ```text
-ingestion/draft
-  ≠ activation
-activation
-  ≠ generation promotion
-promotion
-  = current member-visible authority
+draft ≠ activated
+activated ≠ promoted
+promoted current generation = visibility authority
 ```
 
-### 7.2 Activation Set structure
+### Activation Set
 
-An Activation Set is an immutable manifest with a stable ID and deterministic checksum.
+An Activation Set is an immutable manifest with:
 
-It records at minimum:
-
-- `activation_set_id`;
-- activation policy version;
+- stable activation-set ID;
 - manifest schema version;
+- activation policy version;
 - deterministic manifest checksum;
 - authority reference;
 - creation metadata;
 - exact member set.
 
-Each activation member records at minimum:
+Each member records at least:
 
-- canonical `food_id`;
-- expected precondition lifecycle/state, normally draft;
-- exact evidence/validation reference or member evidence checksum;
-- source/legal/provenance acceptance result required by the activation policy;
+- canonical Food ID;
+- expected precondition state, normally draft;
+- exact evidence/validation reference or evidence checksum;
+- approved source/legal/provenance result required by the activation policy;
 - identity-resolution status;
 - nutrition-basis validation status where nutrition exists;
 - display-identity validation status;
-- unresolved-duplicate/blocking result;
-- target eligibility for active composition;
-- member checksum if used by the implementation.
+- unresolved duplicate/blocking result;
+- eligibility outcome;
+- member checksum where useful.
 
-### 7.3 Immutable activation events
+### Immutable activation events
 
-Execution/approval/result history is represented through immutable activation events rather than mutating the activation manifest into arbitrary states.
+Approval/execution/invalidation history is append-only. Exact event vocabulary is implementation-level, but the architecture requires immutable event history and exact grant references.
 
-Events may represent concepts such as:
+A generation entry for an active Food references an **exact immutable activation grant/event authority**, not merely an activation-set ID chosen by latest timestamp.
 
-- created;
-- approved;
-- execution-accepted;
-- execution-rejected;
-- revoked/invalidated when later evidence requires it.
+### Non-retroactivity clarification
 
-The exact event vocabulary belongs in the implementation plan, but the core requirement is immutable event history plus deterministic current eligibility derivation.
+Later activation invalidation/revocation evidence does **not** mutate the semantics of an already sealed/promoted generation retroactively. It prevents the old grant from being used in future candidate construction and requires a new generation, explicit rollback, or later emergency-withdrawal path to change current effective state.
 
-### 7.4 Generation activation precondition
+This preserves the invariant that a generation is the sole current-effective authority.
 
-A Food may appear as `active` in a generation only if the generation entry references valid activation authority for that Food under the generation's activation policy.
-
-A generation must not infer activation eligibility from:
-
-- root lifecycle fields alone;
-- provider status;
-- ingestion success;
-- lack of errors;
-- verification status alone.
-
-### 7.5 Rollback does not erase activation evidence
-
-Moving the current pointer to a previous healthy generation does not delete or rewrite activation evidence. Activation authority and publication authority remain separate historical facts.
+Rollback to an older generation does not delete activation history.
 
 ## 8. Verification assertion chains
 
-### 8.1 Existing model retained and strengthened
+Plan 1 already stores immutable scoped assertions with Food ID, scope, `verified | revoked`, policy version, optional source record, predecessor assertion ID, reason code, and authority reference.
 
-Plan 1 already stores scoped immutable verification assertions with:
+Plan 3 defines effective-state semantics and strengthens chain integrity.
 
-- Food ID;
-- scope;
-- `verified | revoked` state;
-- policy version;
-- optional source record;
-- optional superseded assertion ID;
-- reason code;
-- authority reference.
+For each `(food_id, assertion_scope)`:
 
-Plan 3 defines the missing effective-state semantics.
-
-### 8.2 Linear same-Food/same-scope chains
-
-For each `(food_id, assertion_scope)`, assertions form a linear immutable chain.
-
-Rules:
-
-- an initial assertion has no predecessor;
-- a subsequent assertion may supersede only the current chain head of the same Food and same scope;
+- the first assertion has no predecessor;
+- a successor may supersede only the current chain head for the same Food/scope;
 - cross-Food supersession is invalid;
 - cross-scope supersession is invalid;
 - self-supersession is invalid;
-- forked successors from the same predecessor are invalid;
+- forked successors are invalid;
 - cycles are invalid;
-- previously written assertion rows are immutable.
+- prior assertions remain immutable.
 
-Plan 1 already enforces same-Food/same-scope supersession on insert. Plan 3 must add the missing no-fork/current-head invariant at the database/service boundary without rewriting historical Plan 1 migrations.
+Plan 1 already checks same Food/scope on insert. Plan 3 adds forward-only no-fork/current-head enforcement without editing historical migrations.
 
-### 8.3 Current verification is generation-selected
+### Effective verification
 
-The effective verification state for a promoted Food is not `latest assertion by time`.
+Generation verification authority is **exact assertion selection**, not latest assertion discovery.
 
-A generation explicitly selects the effective assertion ID for each relevant verification scope.
+For every relevant scope, the generation explicitly references one assertion ID. The validator ensures it exists, belongs to the same Food/scope, and is chain-consistent.
 
-If the selected assertion state is `revoked`, that scope is not verified in that generation.
+A selected `revoked` assertion means that scope is not verified in that generation.
 
-The generation validator must ensure selected assertions:
+### Non-retroactivity clarification
 
-- exist;
-- belong to the same Food;
-- match the declared scope;
-- satisfy chain consistency;
-- are interpretable under the generation policy.
+A verification assertion created after a generation is sealed does not change that generation retroactively. A future generation may select the new assertion. Current verification changes only through generation promotion/rollback (or a future separately designed emergency control-plane operation that still preserves generation authority).
 
 ## 9. Trust Profile
 
-### 9.1 Explainable structured output
+Plan 3 introduces a pure derived `TrustProfile`; it is not a mutable truth row and does not use an opaque score.
 
-Plan 3 introduces a pure derived `TrustProfile`. It is not an independently mutable truth object and does not use an opaque numeric score.
-
-A Trust Profile should expose enough structured state to explain the user-facing result, including at minimum:
+The profile exposes at minimum:
 
 - generation ID;
 - canonical Food ID;
@@ -376,355 +293,273 @@ A Trust Profile should expose enough structured state to explain the user-facing
 - nutrition verification state;
 - serving verification state;
 - barcode/localization verification when applicable;
-- activation/source-evidence acceptance state;
-- blocking-condition state;
+- activation/source-evidence acceptance;
+- generation validation/blocking state;
 - completeness indicators separate from verification;
 - final `verified` boolean;
-- policy version(s) used for derivation.
+- policy versions used.
 
-### 9.2 User-facing Verified rule
+### User-facing Verified rule
 
-The minimum rule for `verified === true` is:
+`verified === true` requires all of:
 
-1. Food is `active` in the current promoted generation;
+1. the Food is `active` in the current promoted generation;
 2. effective identity scope is verified;
 3. effective nutrition scope is verified;
-4. the Food has approved activation/source evidence under the active policy;
-5. no unresolved blocking condition applies to that effective composition.
+4. the exact activation grant/source evidence selected by the generation is approved under the generation policy;
+5. the exact promotion validation evidence contains no blocking condition for that composition.
 
-Serving verification is **not** required for the final Verified label. A Food may be verified while exposing only grams/ml or otherwise limited authoritative serving options.
+Serving verification is **not** required for overall Verified. A Food can be verified while exposing only authoritative gram/ml serving behavior.
 
-### 9.3 Completeness is separate
+Completeness is separate. Missing optional nutrients remain `NULL`, not zero.
 
-Completeness must not be conflated with correctness or trust.
+Plan 2's compatibility projector stays pure. The Plan 3 current-generation service derives Trust Profile and supplies only the derived compatibility trust boolean to that projector.
 
-Examples:
+## 10. Blocking validation interface
 
-- a Food may have accurate verified nutrition with some optional nutrients `NULL`;
-- a Food may be verified but have no household serving;
-- a Food may have localization incomplete while identity/nutrition trust remains valid.
+Plan 3 requires a deterministic blocker interface without pulling Plan 4 quarantine/case management forward.
 
-Unknown nutrient values remain `NULL`, never converted to zero to improve completeness.
-
-### 9.4 Compatibility projection
-
-Plan 2's compatibility projector accepts externally supplied trust input. Plan 3 current-generation service derives the authoritative Trust Profile and passes only the resulting compatibility boolean/projection into the legacy compatibility shape.
-
-The compatibility projector must remain pure and must not independently query assertions or guess trust.
-
-## 10. Blocking validation boundary
-
-### 10.1 Plan 3 does not pull Plan 4 quarantine forward
-
-Plan 3 needs a deterministic way to prevent unsafe activation/promotion before Plan 4's full quarantine/case-management system exists.
-
-Therefore Plan 3 defines a stable validation interface, not a quarantine workflow.
-
-A validation finding contains at minimum:
+A validation finding contains at least:
 
 - stable reason code;
 - optional Food ID;
 - severity;
-- blocking boolean;
+- blocking flag;
 - evidence/reference context;
 - validator/policy version;
 - deterministic details payload where needed.
 
-### 10.2 Immutable validation report
+Candidate validation produces an immutable report containing:
 
-Candidate generation validation produces an immutable report with:
-
-- generation ID;
-- generation checksum;
-- validator set/policy version;
+- validation report ID;
+- exact generation ID;
+- exact generation checksum;
+- validator-set/policy version;
 - deterministic report checksum;
 - counts by severity/reason;
-- exact blocking findings;
-- created metadata.
+- exact findings;
+- creation metadata.
 
-Promotion requires zero unresolved blocking findings under the exact candidate checksum being promoted.
+A validation report is evidence about one exact generation checksum. It does not mutate the generation.
 
-Plan 4 may later attach quarantine cases/resolutions to the same reason codes and evidence interfaces without changing Plan 3 generation authority.
+If policy/evidence changes materially, the appropriate outcome is a new candidate/generation or a new explicitly referenced validation report under an unchanged deterministic composition where policy permits; promotion never chooses a report by `latest` ordering.
+
+Plan 4 may later attach quarantine cases/resolutions to the same reason codes without changing generation authority.
 
 ## 11. Current-generation read service
 
-### 11.1 Purpose
-
-Plan 3 adds a server-only current read path over Plan 2's raw domain storage.
-
-The logical flow is:
+Plan 3 adds a server-only current read path over the Plan 2 raw persistence layer.
 
 ```text
-read current-generation pointer
-  → resolve requested Food through generation redirect map
+read singleton current pointer
+  → resolve requested Food through exact generation redirect map
   → load exact generation Food entry
   → load exact selected immutable fact IDs
   → hydrate canonical facts
-  → validate same-Food consistency
-  → derive TrustProfile
-  → optionally project through Plan 2 compatibility projector
+  → validate same-Food integrity
+  → derive TrustProfile from exact generation/promotion evidence
+  → optionally use Plan 2 compatibility projector
 ```
 
-### 11.2 No scanning for authority
+The service must never fetch all revisions/names/servings and choose one by ordering.
 
-The current read service must never fetch all revisions/names/servings and then choose a current fact by ordering.
+Plan 2 raw bundles remain available for control-plane diagnostics. Current authority comes only from generation composition.
 
-It may use Plan 2 raw store capabilities for control-plane diagnostics, but member/current authority comes from explicit generation composition rows.
+The safe Food Catalog server index may export domain-safe current-generation contracts/services, but raw Supabase adapters and generic privileged clients remain internal.
 
-### 11.3 Public boundary
+Member runtime cutover is deferred. Plan 3 can implement/test this service while current Nutrition/Food Library runtime stays on the legacy compatibility path until a later exact authority.
 
-The safe Food Catalog server index may expose domain-safe current-generation contracts/services, but it must not export raw Supabase control-plane adapters or a generic privileged client.
+## 12. Lifecycle and flattened redirect representation
 
-### 11.4 Member runtime cutover is deferred
+To avoid duplicated lifecycle authority inside one generation:
 
-Plan 3 may fully implement and test the current-generation service while normal member Nutrition/Food Library runtime remains on the legacy compatibility adapter until a later explicit cutover authority.
+- promoted-generation Food composition rows represent **non-merged canonical identities** with effective lifecycle values such as `active`, `deprecated`, or `withdrawn`;
+- `draft` Foods are outside promoted generation composition;
+- `merged` source identities are represented by `food_catalog_generation_redirects`, not by a second ambiguous merged lifecycle row.
 
-This is important because Production currently has no populated global Food Catalog and no promoted generation.
+Each redirect is:
 
-## 12. Flattened redirect projection
+`source_food_id → active_survivor_food_id`
 
-### 12.1 Generation redirect authority
+Rules:
 
-Each generation contains a direct redirect projection for merged canonical IDs:
+- no self redirect;
+- target must be an `active` non-merged generation member;
+- target must not itself redirect;
+- chains are invalid;
+- one source has at most one redirect per generation.
 
-`old_food_id → active_survivor_food_id`
+If evidence historically contains `A→B` and then `B→D`, a new generation materializes `A→D` and `B→D`.
 
-Generation redirect projection is the current-effective identity authority for generation-aware reads.
-
-### 12.2 No chains
-
-Redirect chains are invalid.
-
-If historical merge evidence implies:
-
-```text
-A → B
-B → D
-```
-
-the new generation must materialize:
-
-```text
-A → D
-B → D
-```
-
-The survivor must be an active canonical member of the same generation and must not itself redirect.
-
-### 12.3 Transitional root redirect fields
-
-`food_items.merged_into_food_id` and Plan 2's one-hop resolver remain compatibility/migration input while consumers migrate.
-
-Plan 3 does not extend that legacy resolver into arbitrary chain walking. The generation projection is the target current authority.
+`food_items.merged_into_food_id` remains transitional compatibility/evidence while migration continues. Plan 3 does not extend the legacy Plan 2 resolver into arbitrary chain walking; generation redirects are the target current authority.
 
 ## 13. Promotion, revocation, and rollback
 
-### 13.1 Single current pointer
+### Single current pointer
 
-A singleton catalog-current row contains the only mutable operational pointer to the current promoted generation.
+A singleton row contains the only mutable operational pointer to the current generation. It may be `NULL` before initialization.
 
-The pointer may be `NULL` before the catalog is initialized.
+Current must never be inferred from creation order or ordinal.
 
-No code may infer current state from generation creation order or generation ordinal.
+### Exact promotion command
 
-### 13.2 Atomic promotion
-
-Promotion is an atomic privileged command with optimistic concurrency / compare-and-swap semantics.
-
-The command must provide at minimum:
+Promotion requires explicit input including at minimum:
 
 - candidate generation ID;
 - expected current generation ID, including explicit `NULL` for bootstrap;
 - expected candidate checksum;
+- **exact validation report ID**;
+- expected validation-report checksum where appropriate;
 - operation/idempotency ID;
 - authority/principal context;
 - reason/approval reference.
 
-Within one database transaction, promotion must:
+Within one transaction, promotion:
 
-1. lock/read the singleton current pointer;
-2. verify it matches `expected_current_generation_id`;
-3. verify candidate identity/checksum;
-4. verify immutable validation report belongs to the same candidate checksum and has zero blockers;
-5. verify generation composition/activation/verification/redirect invariants;
-6. append a promotion event;
-7. switch the singleton current pointer to the candidate;
-8. commit atomically.
+1. locks/reads the singleton pointer;
+2. verifies it equals the expected current generation;
+3. verifies exact candidate ID/checksum;
+4. verifies the explicitly supplied validation report belongs to that exact candidate/checksum and has zero blockers;
+5. verifies activation, verification, lifecycle, same-Food, and redirect invariants;
+6. appends a promotion event that records the exact validation report authority;
+7. switches the pointer;
+8. commits atomically.
 
-A stale concurrent promotion must fail. Last-write-wins is not acceptable.
+Stale concurrent promotion fails. Last-write-wins is prohibited.
 
-### 13.3 Immutable generation events
+### Immutable generation events
 
-Promotion/revocation/rollback history is append-only.
-
-Each event records at least:
+Promotion/rollback/revocation history is append-only and records at least:
 
 - operation ID;
 - event type;
 - from generation ID;
-- to generation ID when relevant;
-- generation checksum(s) needed for audit;
+- to generation ID;
+- generation checksum(s);
+- exact validation report ID for a promotion when applicable;
 - authority/principal context;
 - policy version;
 - reason/approval reference;
 - timestamp.
 
-### 13.4 Rollback
+### Rollback
 
-Rollback explicitly selects a known previous healthy generation; it does not mean "previous ordinal" or "latest before current" unless that exact ID is supplied and validated.
+Rollback explicitly names the target healthy generation. It must not choose `previous` through timestamp/ordinal heuristics.
 
-Rollback is atomic:
+Within one transaction it verifies the expected current pointer, validates the explicit target, appends the rollback/revocation event, changes the pointer, and commits.
 
-1. verify current expected generation;
-2. verify target rollback generation is immutable and structurally valid;
-3. append rollback/revocation event;
-4. switch current pointer;
-5. commit.
-
-No generation/fact/event is deleted.
+No generation/fact/event is deleted or rewritten.
 
 ## 14. Concurrency and idempotency
 
-### 14.1 Candidate construction
+Privileged mutating commands use unique operation IDs.
 
-Generation construction must either complete as one coherent immutable composition or fail without leaving a partially authoritative generation.
+- Repeating the same operation ID with identical semantic input reconciles/returns the original result.
+- Reusing an operation ID for different semantic input is rejected.
 
-If implementation needs a staged internal construction state, staged rows must not be eligible for promotion until a final sealed/checksummed generation record exists. The implementation plan must prefer transactional construction where practical.
+Promotion/rollback serialize on the singleton pointer with row locking and expected-current comparison.
 
-### 14.2 Operation IDs
-
-Privileged mutating commands use unique operation IDs for safe retries.
-
-Repeating an already-completed operation ID with identical semantic input returns/reconciles the same result. Reusing the operation ID for different semantic input is rejected.
-
-### 14.3 Current pointer serialization
-
-Promotion/rollback commands serialize on the singleton pointer using a row lock and explicit expected-current comparison. There must never be two current generation rows/pointers.
+A generation is promotable only after it is fully sealed/checksummed. Partial/staging state can never become current authority.
 
 ## 15. Control-plane boundary
 
-### 15.1 Server-only command surface
+Plan 3 privileged commands are internal, server-only command surfaces—not generic member/admin CRUD endpoints.
 
-Plan 3 privileged operations are implemented as internal server-only commands/services.
+Commands carry audited context conceptually including:
 
-They are not exposed directly as generic member/admin CRUD endpoints.
+- principal ID;
+- principal type;
+- authority reference;
+- operation ID;
+- reason code;
+- policy versions.
 
-### 15.2 Authority context
+Plan 3 does not invent permanent `role === admin` security. Plan 6 remains authority for capability-based control-plane permissions and break-glass policy.
 
-Commands carry explicit audited authority context, conceptually including:
+Privileged Supabase credentials remain server-only and must never be exported to browser/mobile/member MCP/log/analytics surfaces.
 
-- `principalId`;
-- `principalType`;
-- `authorityReference`;
-- `operationId`;
-- `reasonCode`;
-- policy version(s).
+## 16. Proposed additive schema
 
-This gives Plan 3 durable audit semantics without prematurely implementing Plan 6's final capability security model.
+Plan 3 is expected to require a new forward migration. Historical Plan 1 migrations remain byte-immutable.
 
-### 15.3 Plan 6 remains authority for capabilities
+Exact names may be refined in the implementation plan if semantics stay identical.
 
-Plan 3 must not invent a new permanent `role === admin` authorization scheme.
-
-Plan 6 will implement capability-based curation/verification/activation/generation-promotion authority and stronger break-glass policy.
-
-Until then, Plan 3 commands remain internal, server-only, and inaccessible from member surfaces.
-
-### 15.4 Credentials
-
-Privileged Supabase credentials remain server-only. No generic service-role client may be exported to browser code, mobile clients, member MCP tokens, logs, analytics, or broad product utilities.
-
-## 16. Proposed forward schema
-
-Plan 3 is expected to require one additive forward migration. Historical Plan 1 migrations remain byte-immutable.
-
-The exact implementation plan may refine names while preserving this architecture, but the target physical model is:
-
-### 16.1 Activation authority
+### Activation authority
 
 `food_catalog_activation_sets`
-
 - immutable set identity;
-- manifest schema/policy versions;
+- manifest/policy versions;
 - manifest checksum;
 - authority reference;
 - creation metadata.
 
 `food_catalog_activation_set_members`
-
 - activation set ID;
 - Food ID;
 - expected precondition state;
-- evidence/validation reference or checksum;
-- activation eligibility result fields required by policy;
-- uniqueness per activation set/Food;
-- same-Food evidence constraints where references exist.
+- evidence/validation reference/checksum;
+- source/legal/provenance acceptance result;
+- identity/nutrition/display/blocking results;
+- immutable eligibility result;
+- uniqueness per activation set/Food.
 
 `food_catalog_activation_events`
-
-- immutable event log;
-- operation ID unique;
-- activation set ID;
+- append-only event log;
+- unique operation ID;
+- activation set/member authority as applicable;
 - event type;
 - authority/principal context;
 - reason/reference;
-- created timestamp.
+- timestamp.
 
-### 16.2 Generation authority
+Generation entries must reference an exact immutable activation grant/event authority for active Foods.
+
+### Generation authority
 
 `food_catalog_generations`
-
 - generation ID;
 - optional base generation ID;
 - optional human ordinal;
 - composition schema version;
 - policy versions;
 - composition checksum;
-- immutable sealed creation metadata.
+- immutable sealed metadata.
 
 `food_catalog_generation_foods`
-
 - generation ID;
 - Food ID;
-- effective lifecycle;
-- selected nutrition revision ID where required;
-- activation set/member authority for active Foods;
-- per-Food interpretation/checksum metadata if needed;
+- effective non-merged lifecycle (`active | deprecated | withdrawn`);
+- exact selected nutrition revision ID where applicable;
+- exact activation grant/member authority for active Foods;
 - unique generation/Food;
-- composite/same-Food foreign-key enforcement.
+- same-Food relational enforcement.
 
 `food_catalog_generation_servings`
-
 - generation ID;
 - Food ID;
-- serving option ID;
-- deterministic role/order metadata only where product semantics require it;
+- exact serving option ID;
 - same-Food FK.
 
 `food_catalog_generation_names`
-
 - generation ID;
 - Food ID;
-- name fact ID;
-- explicit selection/presentation role where needed;
+- exact name fact ID;
+- explicit selection/presentation role only where required;
 - same-Food FK.
 
 `food_catalog_generation_taxonomy`
-
 - generation ID;
 - Food ID;
-- taxonomy assignment ID;
+- exact taxonomy assignment ID;
 - same-Food FK.
 
 `food_catalog_generation_markets`
-
 - generation ID;
 - Food ID;
-- market assignment ID;
+- exact market assignment ID;
 - same-Food FK.
 
 `food_catalog_generation_verification`
-
 - generation ID;
 - Food ID;
 - verification scope;
@@ -733,216 +568,136 @@ The exact implementation plan may refine names while preserving this architectur
 - same-Food/scope enforcement.
 
 `food_catalog_generation_redirects`
-
 - generation ID;
 - source Food ID;
 - target active survivor Food ID;
 - unique generation/source;
 - no self redirect;
-- validator/DB guard rejects target redirects/chains.
+- DB/domain validation rejects redirect targets and chains.
 
-### 16.3 Validation/audit/current pointer
+### Validation/audit/current pointer
 
 `food_catalog_generation_validation_reports`
-
-- immutable report identity;
+- report ID;
 - generation ID;
 - exact generation checksum;
 - validator/policy version;
 - report checksum;
-- summary counts/details needed for audit;
-- created metadata.
+- immutable summary metadata.
 
-Blocking findings may be normalized into a child table if that gives stronger relational integrity and queryability. A JSON details payload is acceptable only as supporting evidence, not as replacement for core authority fields.
+A normalized child findings table is preferred when it improves relational integrity/queryability. JSON is allowed only for supporting details, not core authority.
 
 `food_catalog_generation_events`
-
 - immutable promotion/rollback/revocation event log;
 - unique operation ID;
-- from/to generations;
+- from/to generation IDs;
+- exact validation report reference where relevant;
 - authority/principal context;
 - reason/reference;
 - policy version;
-- timestamps.
+- timestamp.
 
 `food_catalog_current_generation`
-
 - singleton row;
-- nullable `current_generation_id`;
-- minimal operational metadata needed for concurrency/audit;
-- this pointer is the only intentionally mutable Plan 3 catalog-authority row.
+- nullable current generation ID;
+- minimal operational metadata needed for CAS/audit;
+- the only intentionally mutable Plan 3 catalog-authority row.
 
-### 16.4 Relational authority over JSON
+### Relational authority
 
-Current fact composition must be normalized and foreign-key-backed. JSON arrays must not become the authoritative representation of selected nutrition/name/serving/taxonomy/market/verification facts.
+Current fact composition is normalized and foreign-key-backed. JSON arrays must not become authoritative selected nutrition/name/serving/taxonomy/market/verification state.
 
-JSON may be used for immutable supporting manifests, evidence details, or validation diagnostics when relational columns/FKs still carry core authority.
+JSON may hold immutable supporting manifests or diagnostics when core authority remains relational.
 
 ## 17. Immutability and database enforcement
 
-### 17.1 Immutable tables
+Activation manifests/members, generations, generation composition, validation reports/findings, and audit events are immutable.
 
-All Plan 3 activation manifests, activation members, generations, generation composition rows, validation reports/findings, and audit events are immutable after insertion/sealing.
+The singleton current pointer is the sole mutable Plan 3 authority row and may be changed only through the narrow promotion/rollback command path—not generic CRUD.
 
-They use the existing private immutable-row rejection pattern or a Plan 3 equivalent.
+The forward migration strengthens verification supersession to reject forks/non-head supersession without modifying the already-applied Plan 1 migration.
 
-### 17.2 Mutable exception
+Selected generation fact IDs must be DB-enforced to belong to the same Food wherever relational structure permits. Composite uniqueness/FKs are preferred over application-only casts.
 
-`food_catalog_current_generation` is the sole intentionally mutable current-authority row.
-
-Its mutation is not available through generic table CRUD. It is changed only through narrowly scoped server/database promotion/rollback commands that enforce compare-and-swap and audit insertion.
-
-### 17.3 Verification-chain hardening
-
-The Plan 3 migration adds forward-only constraints/guards so verification supersession cannot fork or supersede a non-current predecessor for the same Food/scope.
-
-Existing applied Plan 1 migration files are not edited.
-
-### 17.4 Same-Food integrity
-
-Selected generation fact IDs must be database-enforced to belong to the generation Food wherever relational structure permits.
-
-The migration/implementation plan should add composite uniqueness/FKs on canonical fact tables where needed rather than depending only on application casts.
-
-## 18. RLS and privileges
+## 18. RLS and privilege posture
 
 Every new Plan 3 table enables RLS.
 
-Default member posture:
-
 - `anon`: no direct CRUD;
 - `authenticated`: no direct CRUD;
-- privileged server/control-plane execution: explicit narrowly scoped access.
+- privileged server/control plane: only explicit approved adapter/command paths.
 
-Member/product code reads current catalog only through Food Catalog server contracts, not direct generation tables.
+Architecture boundary tests must prevent Plan 3 physical table access outside approved Food Catalog persistence/control-plane modules, migrations, and focused tests.
 
-The implementation must update architecture-boundary tests so direct references to Plan 3 physical tables are allowed only inside approved Food Catalog persistence/control-plane modules and migration/tests.
+## 19. Bootstrap / empty catalog
 
-## 19. Bootstrap / no-current-generation behavior
+Plan 3 does not create fake Generation 0.
 
-### 19.1 No fake Generation 0
+If there is no separately promoted real generation, `current_generation_id` is `NULL`.
 
-Plan 3 migration does not create an artificial promoted generation merely to avoid `NULL`.
+The current-generation service must return an explicit not-initialized/unavailable result; it must not silently fall back to latest generation, mutable root fields, or raw Plan 2 arrays.
 
-The singleton current pointer starts with `current_generation_id = NULL` if no real catalog generation has been separately promoted.
+Legacy member runtime remains stable because Plan 3 does not cut it over under this authority.
 
-### 19.2 Current service behavior
+## 20. Production authority
 
-When no current generation exists, the generation-aware current read service returns an explicit typed/unambiguous unavailable/not-initialized result or error. It must not silently fall back to `latest generation`, root fields, or raw Plan 2 arrays.
+A Plan 3 implementation PR may include the additive forward migration plus code/tests.
 
-### 19.3 Legacy runtime continuity
+Merging that PR does **not** authorize Production migration apply.
 
-Normal member runtime may remain on the existing legacy compatibility path until a later exact cutover authority. Plan 3 therefore does not break the development app simply because the new current-generation pointer is `NULL`.
+After independent QA/QC, Production schema apply requires separate exact approval identifying the exact migration/head.
 
-## 20. Production and migration authority
-
-### 20.1 Repository implementation
-
-A Plan 3 implementation PR may contain an additive forward migration and all required domain/service/tests.
-
-### 20.2 No automatic Production apply
-
-Merging that PR does **not** authorize applying the migration to Production.
-
-After implementation is independently QA/QC approved, Production schema apply requires a separate exact Planner/user authorization identifying the exact migration/head.
-
-### 20.3 Production schema apply still does not authorize data operations
-
-Even after a separately approved Production schema migration, the following remain `NO` until separately authorized:
+Even after a separately approved schema apply, the following remain separately gated:
 
 - Food population;
 - provider ingestion;
 - activation-set execution;
-- Catalog Generation promotion;
+- generation promotion;
 - member runtime V2 cutover;
 - USDA canary;
-- application deployment;
+- deployment;
 - Activity Catalog mutation.
 
-## 21. Required services and contracts
+## 21. Service boundaries
 
-The implementation plan should create focused modules rather than one monolithic generation service.
+The implementation plan should keep focused modules for:
 
-Expected logical units include:
+1. Plan 3 domain contracts/validators;
+2. generation/activation persistence ports and strict adapters;
+3. activation validation/grant service;
+4. full generation builder/checksum service;
+5. generation validator + immutable report builder;
+6. pure Trust Profile projector;
+7. current-generation read/hydration service;
+8. atomic promotion/rollback command service.
 
-1. **Plan 3 domain contracts/validators**
-   - activation set/member contracts;
-   - generation contracts;
-   - validation findings/report contracts;
-   - Trust Profile contracts;
-   - promotion/rollback authority context.
+Raw Plan 3 Supabase adapters remain internal and are not broadly re-exported.
 
-2. **Generation persistence ports/adapters**
-   - read current pointer;
-   - read exact generation composition;
-   - append activation/generation/validation/event artifacts;
-   - controlled pointer transition.
+## 22. Error categories
 
-3. **Activation validator/service**
-   - deterministic activation-member validation;
-   - activation grant eligibility derivation;
-   - no visibility side effects.
-
-4. **Generation builder**
-   - explicit base/change input;
-   - full immutable composition output;
-   - deterministic checksum.
-
-5. **Generation validator**
-   - same-Food selections;
-   - activation authority;
-   - verification selection;
-   - redirects;
-   - blocking findings.
-
-6. **Trust projector**
-   - pure function from effective generated selections/activation/validation state to `TrustProfile`.
-
-7. **Current-generation read service**
-   - current pointer read;
-   - generation redirect resolution;
-   - exact fact hydration;
-   - Trust Profile;
-   - compatibility projection integration.
-
-8. **Promotion/rollback command service**
-   - compare-and-swap pointer;
-   - exact validation/checksum preconditions;
-   - append-only event audit;
-   - idempotency.
-
-Raw Plan 3 Supabase adapters remain internal and must not be re-exported from the broad product surface.
-
-## 22. Error handling
-
-Errors must distinguish operational categories without leaking privileged internals to member surfaces.
-
-Plan 3 should have stable failure classes/codes for at least:
+Stable error classes/codes should distinguish at least:
 
 - no current generation;
 - generation not found;
 - generation checksum mismatch;
-- generation not fully sealed/valid;
-- blocking validation findings;
+- generation not sealed/valid;
+- validation report mismatch;
+- blocking findings;
 - stale expected-current pointer;
-- invalid activation authority;
+- invalid activation grant;
 - selected fact belongs to another Food;
 - invalid verification chain/selection;
 - redirect chain/non-active survivor;
-- duplicate/reused operation ID with conflicting payload;
-- unauthorized control-plane invocation at the command boundary.
+- conflicting operation-ID reuse;
+- unauthorized control-plane invocation.
 
-Member-compatible errors remain bounded and non-sensitive. Control-plane diagnostics preserve exact reason/evidence references.
+Member-facing errors remain bounded/non-sensitive; control-plane diagnostics preserve exact reason/evidence references.
 
-## 23. Observability required now vs later
+## 23. Observability now vs Plan 6
 
-Plan 3 records enough immutable events/metadata to audit generation state transitions.
+Plan 3 records enough immutable evidence to audit state transitions:
 
-It does not build the full Plan 6 observability platform.
-
-Minimum Plan 3 evidence includes:
-
-- activation set/checksum;
+- activation set/grant/checksum;
 - generation/checksum;
 - validation report/checksum;
 - promotion/rollback event IDs;
@@ -950,118 +705,110 @@ Minimum Plan 3 evidence includes:
 - operation ID;
 - policy versions;
 - authority reference;
-- deterministic blocker counts/reason codes.
+- blocker counts/reason codes.
 
-Plan 6 may later aggregate metrics/dashboards without changing this authority model.
+Plan 6 later adds capability security, richer operational metrics, curation/correction workflows, and break-glass operations without changing this authority model.
 
-## 24. Testing and QA acceptance criteria
+## 24. Required QA / acceptance criteria
 
-Plan 3 implementation is not complete until all of the following are proven.
+Plan 3 implementation is incomplete until all are proven.
 
-### 24.1 Generation authority
+### Generation authority
 
-- current facts are selected only through generation composition;
-- no latest-row/max-revision/timestamp heuristic exists in generation-aware current reads;
-- full generation composition is immutable;
-- generation checksum is deterministic across canonical ordering;
-- semantic composition change changes checksum;
-- non-semantic insertion metadata does not change checksum.
+- no latest-row/max-revision/timestamp authority exists in generation-aware reads;
+- full composition is immutable;
+- checksum is deterministic under canonical ordering;
+- semantic selection change changes checksum;
+- non-semantic storage metadata does not.
 
-### 24.2 Same-Food integrity
+### Same-Food integrity
 
-- selected nutrition revision belongs to the generation Food;
-- selected serving belongs to the generation Food;
-- selected name belongs to the generation Food;
-- taxonomy/market assignment selections belong to the generation Food;
-- selected verification assertion belongs to the same Food/scope;
-- cross-Food selections are rejected at both domain and database boundaries where possible.
+- nutrition/serving/name/taxonomy/market/verification selections belong to the same Food;
+- cross-Food selection is rejected at domain and DB boundaries where possible.
 
-### 24.3 Activation
+### Activation
 
-- ingestion/draft alone cannot make a Food active in a valid generation;
-- active generation member requires exact activation authority;
-- invalid/revoked activation authority blocks validation/promotion;
-- activation does not mutate current-generation pointer;
-- activation alone does not create member visibility.
+- draft/ingestion alone cannot create a valid active generation member;
+- active member requires an exact activation grant;
+- a grant invalidated before candidate sealing cannot be used for new candidate construction;
+- later invalidation does not retroactively mutate an already sealed/promoted generation;
+- activation never switches current pointer.
 
-### 24.4 Verification
+### Verification
 
-- same-Food/same-scope supersession is allowed;
-- cross-Food/scope supersession is rejected;
-- forked assertion chain is rejected;
-- superseding a non-current predecessor is rejected;
-- selected revoked assertion does not project that scope as verified;
-- generation never derives verification by timestamp order.
+- same-Food/scope head supersession works;
+- cross-Food/scope supersession fails;
+- fork/non-head supersession fails;
+- selected revoked assertion is not verified;
+- later assertion does not retroactively alter an existing generation.
 
-### 24.5 Trust
+### Trust
 
-- Verified formula exactly follows the approved minimum gates;
+- Verified formula matches Section 9 exactly;
 - serving verification is not required for overall Verified;
-- blocking condition makes Verified false;
+- blocking promotion validation prevents Verified/current promotion;
 - lifecycle other than active makes Verified false;
-- missing optional nutrients remain `NULL` and do not become zero;
-- completeness is reported separately from trust.
+- missing optional nutrients remain `NULL`;
+- completeness stays separate.
 
-### 24.6 Redirects
+### Redirects/lifecycle
 
-- direct old-ID → active survivor works;
-- self redirect is rejected;
-- target that redirects again is rejected;
-- target not active in same generation is rejected;
-- A→B and B→D cannot survive as a chain; candidate must materialize A→D and B→D;
+- merged sources are represented by redirects rather than duplicate merged lifecycle rows;
+- direct old ID → active survivor works;
+- self/chain/non-active target fails;
+- A→B→D must flatten to A→D and B→D;
 - historical snapshots remain unchanged.
 
-### 24.7 Promotion/concurrency
+### Promotion/concurrency
 
-- promotion requires exact expected-current pointer;
+- exact expected-current pointer required;
+- exact candidate checksum required;
+- exact validation report ID required;
 - stale concurrent promotion fails;
-- candidate checksum mismatch fails;
-- candidate with blocking findings fails;
-- candidate without required activation authority fails;
-- successful promotion appends audit event and switches pointer in one transaction;
-- repeated identical operation ID is idempotent/reconcilable;
-- conflicting reuse of an operation ID is rejected.
+- blocker/report mismatch fails;
+- missing activation authority fails;
+- successful promotion appends audit and switches pointer in one transaction;
+- idempotent retry semantics proven;
+- conflicting operation-ID reuse rejected.
 
-### 24.8 Rollback
+### Rollback
 
-- rollback requires explicit target generation ID;
-- rollback does not infer a target from max/ordinal/time;
-- rollback appends audit event and atomically changes pointer;
-- no generation/fact/event is deleted;
-- previous/current generation composition remains byte/semantic immutable.
+- exact target generation ID required;
+- no target is inferred from ordinal/time;
+- rollback atomically appends audit and changes pointer;
+- no generation/fact/event is deleted.
 
-### 24.9 Bootstrap
+### Bootstrap
 
-- Plan 3 schema can exist with zero Foods and `NULL` current generation;
-- no fake generation is inserted by migration;
-- current-generation service handles `NULL` pointer explicitly;
-- legacy member runtime remains stable because Plan 3 does not cut it over.
+- schema supports zero Foods and `NULL` current pointer;
+- no fake generation inserted by migration;
+- current service handles `NULL` explicitly;
+- legacy member runtime remains unchanged.
 
-### 24.10 Security/boundary
+### Security
 
-- RLS is enabled on every new Plan 3 table;
-- anon/authenticated direct CRUD is revoked;
-- physical Plan 3 table access is restricted to approved persistence/control-plane modules;
-- no generic service-role client is exported;
-- no member/browser surface gains privileged generation mutation capability.
+- RLS on every new Plan 3 table;
+- anon/authenticated direct CRUD revoked;
+- physical table access restricted to approved internal modules;
+- no generic service-role client exported;
+- no member/browser privileged generation mutations.
 
-### 24.11 Migration/repository safety
+### Migration/repository safety
 
-- only a new forward migration is created;
+- only forward migration(s), never rewrite Plan 1 migrations;
 - Plan 1 migration blobs remain unchanged;
-- migration is transactional and has local verification/rollback fixtures;
-- migration ledger is reconciled only under the repository's approved migration workflow;
-- compatibility marker is not promoted by Plan 3 implementation;
-- Production migration is not applied without separate exact approval.
+- migration transactional verifier/rollback fixtures exist;
+- compatibility marker not promoted by Plan 3 implementation;
+- Production migration not applied without separate exact approval.
 
-### 24.12 Scope
+### Scope ledger at implementation handoff
 
-At final implementation handoff, all must be true unless separately authorized later:
+Unless separately authorized later:
 
 - Production Food population: **NO**
 - provider ingestion: **NO**
 - Production activation execution: **NO**
-- Production Catalog Generation promotion: **NO**
+- Production generation promotion: **NO**
 - member runtime V2 cutover: **NO**
 - Activity Catalog mutation: **NO**
 - application deployment: **NO**
@@ -1070,76 +817,64 @@ At final implementation handoff, all must be true unless separately authorized l
 
 ## 25. Implementation sequencing constraints
 
-The implementation plan must preserve dependency order.
-
-Recommended internal sequence:
+Recommended internal dependency order:
 
 1. domain contracts and pure validators;
-2. migration/schema + migration verifier;
-3. generation/activation persistence ports and strict adapters;
+2. additive schema migration + transactional verifier;
+3. strict generation/activation persistence ports/adapters;
 4. verification-chain hardening;
-5. activation-set service;
-6. full generation builder/checksum;
-7. generation validator/blocking report;
+5. activation-set/grant service;
+6. full generation builder + canonical checksum;
+7. generation validator + immutable report/findings;
 8. Trust Profile projector;
 9. current-generation read/hydration service;
 10. promotion/rollback CAS command path;
 11. boundary/security tests;
-12. roadmap/continuity reconciliation and exact-head verification.
+12. roadmap/continuity reconciliation + exact-head verification.
 
-Every task uses TDD with explicit RED/GREEN evidence under the available execution mode.
+Every task uses TDD with explicit RED/GREEN evidence under the approved execution mode.
 
-## 26. Relationship to Plan 4
+## 26. Relationship to later plans
 
-Plan 4 builds deterministic provider ingestion, quarantine/resolution, release-diff operations, run leases, and execution reconciliation **on top of** Plan 3 authority.
+### Plan 4
 
-Plan 4 may create draft facts and feed validation/quarantine evidence, but it must not replace:
+Plan 4 builds deterministic provider ingestion, quarantine/resolution, release-diff operations, run leases, and execution reconciliation on top of Plan 3. It may create drafts and produce blocker evidence, but does not replace activation/generation/promotion authority.
 
-- activation authority;
-- generation composition authority;
-- promotion authority;
-- current pointer authority;
-- Trust Profile derivation authority.
+### Plan 5
 
-The Plan 3 validation finding/reason-code interface is intentionally stable so Plan 4 quarantine can attach cases to blockers without redesigning generation logic.
+Plan 5 search documents are generation-aware derived state. Plan 3 reserves generation/projection identity but does not implement search migration.
 
-## 27. Relationship to Plan 5
+### Plan 6
 
-Plan 5 search documents/projections are generation-aware derived state.
+Plan 6 adds durable capability-based privileged authorization, curation/correction cases, full observability, emergency withdrawal, and break-glass behavior. Plan 3 preserves authority/principal/audit fields so Plan 6 strengthens authorization without redefining generation semantics.
 
-A search document identifies its source generation/projection version. Generation promotion later invalidates/rebuilds derived search state deterministically.
+### Plan 7+
 
-Plan 3 does not implement the search projection itself.
+Plan 7 adds provider-neutral export/restore and legacy retirement. Plans 8–10 then execute USDA dry-run/canary/promotion stages under separate exact approvals.
 
-## 28. Relationship to Plan 6
+## 27. Recovery semantics
 
-Plan 6 replaces temporary/internal command authorization with the durable capability-based privileged control plane and adds correction/curation cases, observability, emergency withdrawal, and break-glass recovery.
-
-Plan 3's authority/principal/audit fields are designed so Plan 6 can strengthen who may execute commands without changing what generation/activation events mean.
-
-## 29. Recovery semantics
-
-Plan 3 rollback protects against a bad promoted generation at the logical catalog layer.
-
-It is not a substitute for database disaster recovery.
+Plan 3 rollback protects against a logically bad promoted generation. It is not database disaster recovery.
 
 The model preserves:
 
 - immutable source/canonical facts;
-- immutable generation compositions;
+- immutable activation evidence;
+- immutable verification assertions;
+- immutable generation composition;
 - immutable validation reports;
 - immutable promotion/rollback history;
 - explicit current pointer state.
 
-Plan 7 later adds provider-neutral export/restore verification and search rebuild verification.
+Plan 7 later verifies portable restore/export/search rebuild.
 
-## 30. Planner implementation gate
+## 28. Planner gate
 
-This design is approved at the architecture level, but implementation remains blocked until:
+This design is architecture-approved, but implementation remains blocked until:
 
-1. this written specification is reviewed/approved by the user/Planner;
-2. a formal implementation plan is created using the Superpowers `writing-plans` workflow;
-3. that plan is explicitly approved;
+1. the user/Planner approves this written specification;
+2. the Superpowers `writing-plans` workflow creates the formal Plan 3 implementation plan;
+3. that implementation plan is explicitly approved;
 4. implementation starts from the then-current authoritative `main` under the approved execution workflow.
 
 No Production mutation is authorized by approval of this design/spec.
