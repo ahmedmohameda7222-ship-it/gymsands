@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const ROOT = process.cwd();
 const DIRECT_FOOD_ITEMS_ACCESS = /\.from\(\s*["']food_items["']\s*\)/;
 const ALLOWED_DIRECT_ACCESS = new Set([
-  "services/nutrition-v1/server/food-catalog.ts",
+  "services/food-catalog/server/legacy-compatibility.ts",
   "services/nutrition-v1/server/food-curation.ts",
 ]);
 
@@ -29,6 +29,7 @@ describe("Nutrition V1 Food Catalog persistence boundary", () => {
   it("keeps direct global food_items access inside approved catalog persistence internals", () => {
     const roots = [
       join(ROOT, "services/nutrition-v1/server"),
+      join(ROOT, "services/food-catalog/server"),
       join(ROOT, "app/api/nutrition/v1"),
       join(ROOT, "lib/mcp"),
       join(ROOT, "app/api/mcp"),
@@ -42,6 +43,11 @@ describe("Nutrition V1 Food Catalog persistence boundary", () => {
       .sort();
 
     expect(violations).toEqual([]);
+  });
+
+  it("keeps the Nutrition Food Catalog façade free of direct food_items access", () => {
+    const source = readFileSync(join(ROOT, "services/nutrition-v1/server/food-catalog.ts"), "utf8");
+    expect(source).not.toMatch(DIRECT_FOOD_ITEMS_ACCESS);
   });
 
   it("keeps the Food Library API delegated to the server domain layer", () => {
