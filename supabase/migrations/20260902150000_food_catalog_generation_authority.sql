@@ -21,6 +21,9 @@ alter table public.food_verification_assertions
 alter table public.food_verification_assertions
   add constraint food_verification_assertions_supersedes_once_key
   unique (supersedes_assertion_id);
+create unique index food_verification_assertions_one_root_per_food_scope
+  on public.food_verification_assertions(food_id, assertion_scope)
+  where supersedes_assertion_id is null;
 
 create table public.food_catalog_control_operations (
   operation_id uuid primary key,
