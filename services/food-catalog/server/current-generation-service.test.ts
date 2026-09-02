@@ -193,7 +193,7 @@ function makeStore(overrides: Partial<FoodCatalogGenerationReadStore> = {}): Foo
       validationReportId: WRONG_REPORT_ID,
       actor: {
         principalId: "operator",
-        principalType: "service",
+        principalType: "service" as const,
         authorityReference: "rollback-authority",
         reasonCode: "rollback",
         policyVersion: "control-v1",
