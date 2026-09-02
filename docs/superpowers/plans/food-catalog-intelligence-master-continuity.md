@@ -7,7 +7,7 @@
 **Total roadmap plans:** 10  
 **Completed plans:** Plan 1, Plan 2  
 **Current plan:** Plan 3 — Activation, Verification, Trust, and Catalog Generations  
-**Current Plan 3 state:** implementation complete on Draft PR #165 review branch through Task 11; Task 12 documentation/final exact-head verification in progress; independent Planner QA/QC and canonical phase-close Quality pending
+**Current Plan 3 state:** implementation and Planner correction pass complete on Ready-for-review PR #165; all three P1 correction threads resolved after exact-head GREEN evidence; final status-only docs head PR Quality and canonical phase-close Quality pending before independent Planner correction re-review
 **Plans remaining including Plan 3:** 8  
 **Plans remaining after Plan 3 completes:** 7
 
@@ -252,7 +252,7 @@ Self-reviewed plan commit:
 Implementation branch:
 `feat/food-catalog-generation-authority-v3`
 
-Draft PR:
+Ready-for-review PR:
 `#165 — Food Catalog Plan 3 — Activation, Verification, Trust + Catalog Generations`
 
 Recorded implementation base:
@@ -264,23 +264,15 @@ Task 1–11 implementation evidence head:
 Exact-head Task 11 / full-regression PR Quality:
 `33679147523` — PASS.
 
-That run passed:
-- scope classification;
-- exact-head integrity;
-- repository/telemetry contracts;
-- lint;
-- typecheck;
-- full unit suite;
-- production build;
-- chronological migration replay;
-- database lint;
-- registered Plan 3 database verification SQL;
-- migration ledger check;
-- database integration tests;
-- Workout History integration tests;
-- required-summary.
+Planner correction pass then fixed three P1 blockers with causal RED/GREEN evidence:
 
-Task 12 then began status-only documentation reconciliation and final exact-head verification. Independent Planner QA/QC and canonical phase-close `.github/workflows/quality.yml` remain mandatory before merge approval.
+1. generation validation pagination/bulk enumeration — GREEN `297c756e85e03b277c5de800c7c4b86d0892ee6`, PR Quality `33689372475`;
+2. trusted PostgreSQL semantic replay identity — RED `00ff1f0f573d1a9181fc4d2a651c4eb657575677`, PR Quality `33689990781`, database job `100446350218`; GREEN `58098f9e3311ce3f6f90a575acbcb04d2893de77`, PR Quality `33692020607`, database job `100452649351`;
+3. single verification-chain root per `(food_id, assertion_scope)` — RED `2ab5dc1cff8ccc53ebc6458869bc09fd6dcd6056`, PR Quality `33692433014`, database job `100454013274`; GREEN `444d706efecb8b33220cd2de4fc31f7300974c00`, PR Quality `33693069181`, database job `100456022708`.
+
+The exact corrected implementation head `444d706efecb8b33220cd2de4fc31f7300974c00` passed the full PR Quality regression: scope classification, exact-head integrity, repository/telemetry contracts, lint, typecheck, full unit suite, production build, chronological migration replay, database lint, registered database verification SQL, migration ledger, database integration tests, Workout History integration tests, and required-summary. The three P1 review threads were replied to with exact GREEN evidence and resolved only after this run passed.
+
+Status-only documentation reconciliation is now the only SHA-changing phase-close work. Independent Planner correction re-review and canonical phase-close `.github/workflows/quality.yml` remain mandatory before merge approval.
 
 Implemented forward migration:
 `supabase/migrations/20260902150000_food_catalog_generation_authority.sql`
@@ -308,7 +300,7 @@ It remains repository-only `pending`; it has **not** been applied to Production.
 9. Exact current-generation read/hydration + compatibility bridge — PASS.
 10. Typed promote/rollback/revoke command services — PASS.
 11. Physical-table / privileged-command / no-implicit-current boundary tests — PASS.
-12. Full regression + documentation reconciliation + final exact-head phase-close gates — IN PROGRESS; PR Quality must pass on the final docs head, then canonical Quality requires Ready-for-review.
+12. Full regression + correction pass + documentation reconciliation + final exact-head phase-close gates — IN PROGRESS; corrected implementation regression is GREEN, final docs-head PR Quality and canonical Quality remain required.
 
 ### Implemented schema authority
 
@@ -362,9 +354,17 @@ Current repository ledger truth:
 - `unresolvedCount = 1`;
 - `historyRepair.state = pending`;
 - `schemaVerifiedUntrackedCount = 0`;
+- derived `release_ready = false`;
 - no `productionVersion`/`productionName` is invented for Plan 3;
 - latest applied Production identity remains `20260901183021_food_catalog_plan1_semantic_corrections`;
 - compatibility marker remains `20260724232734`.
+
+Corrected Plan 3 migration blob at implementation correction head:
+`65aa6fe1eb77a60c141e01174f128611f36f7958`
+
+Protected applied Plan 1 blobs remain:
+- core `3ea9a95b818068dbe03d080fb205dfcdf5af07ab`;
+- semantic correction `1e4dff8b5fea6d8b60fc78a77033b32e07ff35`.
 
 ### Plan 3 implementation STOP gates — CURRENT TRUTH
 
@@ -381,7 +381,7 @@ Current repository ledger truth:
 - applied Plan 1 migration bytes changed: NO
 - PR merged: NO
 
-Final implementation handoff must remain unmerged for independent Planner QA/QC. Canonical phase-close Quality must run on the exact final head after Ready-for-review transition.
+Final implementation handoff must remain unmerged for independent Planner correction re-review. PR #165 is already Ready for review. Canonical phase-close Quality must run on the exact final status-only documentation head.
 
 Even after code merge, Production schema application requires separate exact authority. Even schema application does not authorize Food activation or generation promotion.
 
@@ -443,17 +443,10 @@ Do **not** merge, deploy, apply the pending migration, populate Foods, ingest pr
 
 Required next sequence:
 
-1. finish Task 12 status-only documentation reconciliation;
-2. require exact-head PR Quality on the resulting final review head;
-3. perform final independent code/diff review against the recorded base;
-4. keep PR #165 Draft until implementation evidence is frozen;
-5. transition PR #165 to Ready-for-review;
-6. require canonical `.github/workflows/quality.yml` on that exact final head;
-7. hand the exact final head to independent Planner QA/QC;
-8. merge only after explicit Planner approval.
+1. require exact-head PR Quality on the final status-only documentation head;
+2. independently re-check final PR head, correction diff, protected Plan 1 blobs, pending ledger state, resolved review threads, and absence of new blockers;
+3. require canonical `.github/workflows/quality.yml` on that same exact final head;
+4. hand the frozen exact head and correction evidence to independent Planner correction re-review;
+5. merge only after explicit Planner approval.
 
-The connected GitHub action surface used during implementation does not expose the Draft → Ready GraphQL transition. If that remains true after final PR Quality, report exactly:
-
-`Manual Ready-for-review transition required for Plan 3 phase-close Quality.`
-
-Do not waive the canonical Quality gate.
+PR #165 is already Ready for review. Do not move it back to Draft and do not waive the canonical Quality gate.
