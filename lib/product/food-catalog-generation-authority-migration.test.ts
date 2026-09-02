@@ -10,7 +10,13 @@ const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")
   pendingCount: number;
   unresolvedCount: number;
   historyRepair: { state: string; pendingCount: number; unresolvedCount: number };
-  entries: Array<{ localFile: string; state: string; productionVersion?: string; productionName?: string }>;
+  entries: Array<{
+    localFile: string;
+    state: string;
+    note?: string;
+    productionVersion?: string;
+    productionName?: string;
+  }>;
 };
 
 const tables = [
@@ -78,10 +84,10 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
   it("classifies the repository migration as pending without inventing Production identity", () => {
     expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(1);
     expect(ledger.historyRepair.state).toBe("pending");
     expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
 
     const entry = ledger.entries.find((item) => item.localFile === "20260902150000_food_catalog_generation_authority.sql");
     expect(entry).toEqual({
