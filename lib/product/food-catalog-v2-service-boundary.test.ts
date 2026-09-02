@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = process.cwd();
 const V2_CANONICAL_TABLE = /\.from\(\s*["'](?:food_nutrition_revisions|food_serving_options|food_names|food_taxonomy_assignments|food_market_assignments|food_verification_assertions|food_merge_events)["']\s*\)/;
-const RAW_ADAPTER_IMPORT = /@\/services\/food-catalog\/server\/supabase-(?:read|write|generation-(?:read|command))-store/;
+const RAW_ADAPTER_IMPORT = /@\/services\/food-catalog\/server\/supabase-(?:read|write|generation-(?:read|validation-read|command))-store/;
 
 const ALLOWED_V2_TABLE_ACCESS = new Set([
   "services/food-catalog/server/supabase-read-store.ts",
