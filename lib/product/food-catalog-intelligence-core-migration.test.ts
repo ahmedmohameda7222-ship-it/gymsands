@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const REVIEWED_HEAD = "e3a49312338c4e2e4947e01c14c55c02aa4181c6";
+const PLAN1_INTEGRATION_AUTHORITY = "93524c2b162ee832d12b9e2a46c92bdced6fdac9";
 const MIGRATION_FILE = "20260901153000_food_catalog_intelligence_core.sql";
 const MIGRATION_PATH = `supabase/migrations/${MIGRATION_FILE}`;
 const suffix = "_food_catalog_intelligence_core.sql";
@@ -28,7 +28,7 @@ describe("Food Catalog Intelligence core migration", () => {
     expect(files).toEqual([MIGRATION_FILE]);
     const reviewedBytes = execFileSync(
       "git",
-      ["show", `${REVIEWED_HEAD}:${MIGRATION_PATH}`],
+      ["show", `${PLAN1_INTEGRATION_AUTHORITY}:${MIGRATION_PATH}`],
       { encoding: "utf8" },
     );
     expect(readFileSync(MIGRATION_PATH, "utf8")).toBe(reviewedBytes);

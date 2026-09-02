@@ -2,8 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const REVIEWED_HEAD = "e3a49312338c4e2e4947e01c14c55c02aa4181c6";
-const REVIEWED_CORRECTION_HEAD = "51b380019db205dff61505a0fdee54a409ce9657";
+const PLAN1_INTEGRATION_AUTHORITY = "93524c2b162ee832d12b9e2a46c92bdced6fdac9";
 const APPLIED_CORE_MIGRATION = "supabase/migrations/20260901153000_food_catalog_intelligence_core.sql";
 const CORRECTIVE_MIGRATION = "supabase/migrations/20260901174500_food_catalog_plan1_semantic_corrections.sql";
 const CORRECTION_SUFFIX = "_food_catalog_plan1_semantic_corrections.sql";
@@ -15,7 +14,7 @@ describe("Food Catalog Plan 1 semantic correction migration", () => {
   it("keeps the already-applied Plan 1 core migration byte-stable", () => {
     const reviewedBytes = execFileSync(
       "git",
-      ["show", `${REVIEWED_HEAD}:${APPLIED_CORE_MIGRATION}`],
+      ["show", `${PLAN1_INTEGRATION_AUTHORITY}:${APPLIED_CORE_MIGRATION}`],
       { encoding: "utf8" },
     );
     expect(readFileSync(APPLIED_CORE_MIGRATION, "utf8")).toBe(reviewedBytes);
@@ -27,7 +26,7 @@ describe("Food Catalog Plan 1 semantic correction migration", () => {
     ]);
     const reviewedBytes = execFileSync(
       "git",
-      ["show", `${REVIEWED_CORRECTION_HEAD}:${CORRECTIVE_MIGRATION}`],
+      ["show", `${PLAN1_INTEGRATION_AUTHORITY}:${CORRECTIVE_MIGRATION}`],
       { encoding: "utf8" },
     );
     expect(readFileSync(CORRECTIVE_MIGRATION, "utf8")).toBe(reviewedBytes);
