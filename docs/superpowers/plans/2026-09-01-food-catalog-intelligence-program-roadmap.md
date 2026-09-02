@@ -64,7 +64,7 @@ Implementation review branch:
 
 `feat/food-catalog-generation-authority-v3`
 
-Draft PR:
+Ready-for-review PR:
 
 `#165 — Food Catalog Plan 3 — Activation, Verification, Trust + Catalog Generations`
 
@@ -76,19 +76,27 @@ Task 1–11 implementation evidence head:
 
 `03a498e4ef6cce1f5460479a6a381795a5c8b067`
 
-Exact-head PR Quality:
+Task 1–11 exact-head PR Quality:
 
-`33679147523` — PASS, including scope/integrity, lint, typecheck, full unit suite, build, chronological migration replay, DB lint, registered Plan 3 verification SQL, migration ledger, database integration tests, and Workout History integration tests.
+`33679147523` — PASS.
+
+Planner correction review then identified three P1 blockers. All three were corrected with causal RED/GREEN evidence without reopening the architecture:
+
+1. generation validation pagination/bulk enumeration — GREEN at `297c756e85e03b277c5de800c7c4b86d0892ee6`, PR Quality `33689372475`;
+2. trusted PostgreSQL semantic replay identity — RED `00ff1f0f573d1a9181fc4d2a651c4eb657575677` / `33689990781`, GREEN `58098f9e3311ce3f6f90a575acbcb04d2893de77` / `33692020607`;
+3. single verification-chain root per `(food_id, assertion_scope)` — RED `2ab5dc1cff8ccc53ebc6458869bc09fd6dcd6056` / `33692433014`, GREEN `444d706efecb8b33220cd2de4fc31f7300974c00` / `33693069181`.
+
+The exact corrected implementation head `444d706efecb8b33220cd2de4fc31f7300974c00` passed PR Quality `33693069181`, including scope/integrity, repository contracts, lint, typecheck, full unit suite, build, chronological migration replay, DB lint, registered database verification SQL, migration ledger, database integration tests, Workout History integration tests, and required-summary. Database job `100456022708` was GREEN. The three P1 review threads were replied to with exact evidence and resolved only after this final correction regression passed.
 
 Plan 3 adds exactly one repository-only pending migration:
 
 `supabase/migrations/20260902150000_food_catalog_generation_authority.sql`
 
-Migration ledger remains truthful with `pending=1`, `unresolved=1`, `historyRepair.state=pending`; latest applied Production identity remains `20260901183021_food_catalog_plan1_semantic_corrections`. The released compatibility marker remains `20260724232734`.
+Migration ledger remains truthful with `productionMigrationCount=63`, `pending=1`, `unresolved=1`, `historyRepair.state=pending`, and derived `release_ready=false`; latest applied Production identity remains `20260901183021_food_catalog_plan1_semantic_corrections`. The released compatibility marker remains `20260724232734`.
 
-Applied Plan 1 migration blobs remain byte-identical to the implementation base. No Production migration apply, Food population, provider ingestion, Production activation execution, Production generation promotion, member runtime V2 cutover, deployment, Activity Catalog mutation, or Plan 4 work occurred.
+Applied Plan 1 migration blobs remain byte-identical: core `3ea9a95b818068dbe03d080fb205dfcdf5af07ab`, semantic correction `1e4dff8b5fea6d8d8b60fc78a77033b32e07ff35`. No Production migration apply, Food population, provider ingestion, Production activation execution, Production generation promotion, member runtime V2 cutover, deployment, Activity Catalog mutation, or Plan 4 work occurred.
 
-Independent Planner QA/QC and canonical phase-close `.github/workflows/quality.yml` on the final exact head remain required before merge approval.
+Independent Planner QA/QC and canonical phase-close `.github/workflows/quality.yml` on the final exact documentation head remain required before merge approval.
 
 ## Plan sequence
 
@@ -192,10 +200,6 @@ Plans 5 and 6 may overlap only after prerequisite contracts from Plans 2–4 are
 
 ## Current best next move
 
-Keep PR #165 unmerged and perform independent Planner QA/QC on the exact final implementation/docs head. Then transition the Draft PR to Ready and require canonical `.github/workflows/quality.yml` on that exact head before any merge approval.
+Keep Ready-for-review PR #165 unmerged. Require PR Quality on the final status-only documentation head, then require canonical `.github/workflows/quality.yml` on that same exact head. After exact-head canonical Quality passes, hand the frozen head to independent Planner correction re-review. Merge only after explicit Planner approval.
 
-The GitHub connector used for implementation cannot perform the Ready-for-review GraphQL transition. If that remains true at phase close, the required blocker is:
-
-`Manual Ready-for-review transition required for Plan 3 phase-close Quality.`
-
-No Production mutation is authorized by implementation completion or merge approval.
+No Production mutation is authorized by implementation completion, canonical Quality, Planner review, or merge approval.
