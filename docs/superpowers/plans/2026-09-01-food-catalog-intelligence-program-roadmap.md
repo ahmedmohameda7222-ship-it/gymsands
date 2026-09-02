@@ -1,6 +1,6 @@
 # Food Catalog Intelligence Implementation Roadmap
 
-**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 architecture approved with written-spec review pending  
+**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 written architecture complete and detailed implementation plan authored/self-reviewed awaiting execution approval  
 **Spec:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
 
 ## Purpose
@@ -50,15 +50,21 @@ Squash merge commit:
 
 Plan 2 established the V2 domain/service boundary without member runtime V2 cutover, Production mutation, Food population, activation, or generation promotion.
 
-### Plan 3 — Activation, Verification, Trust, and Catalog Generations — DESIGN APPROVED / WRITTEN-SPEC REVIEW PENDING
+### Plan 3 — Activation, Verification, Trust, and Catalog Generations — DESIGN/SPEC COMPLETE / IMPLEMENTATION PLAN AWAITING APPROVAL
 
 Formal Plan 3 design spec:
 
 `docs/superpowers/specs/2026-09-02-food-catalog-plan3-activation-verification-generations-design.md`
 
-The architecture design has been approved and self-reviewed. The user/Planner must explicitly approve the written spec before the Superpowers `writing-plans` workflow creates the Plan 3 implementation plan.
+Detailed implementation plan:
 
-Implementation is **not authorized yet**. Production migration apply, activation execution, generation promotion, Food population, provider ingestion, member runtime cutover, deployment, and Plan 4 remain unauthorized.
+`docs/superpowers/plans/2026-09-02-food-catalog-plan3-activation-verification-generations.md`
+
+The architecture and written specification are approved. The user instructed the Planner to proceed through Superpowers `writing-plans`; the 12-task implementation plan is now authored and self-reviewed. Implementation has **not started** and is not authorized until that detailed plan receives explicit approval.
+
+Implementation plan self-review closed three material ambiguities: reuse existing `FoodVerificationScope`; bind the singleton pointer to exact current validation evidence so rollback remains unambiguous; and use transaction advisory locking for race-safe operation-id idempotency.
+
+Production migration apply, activation execution, generation promotion, Food population, provider ingestion, member runtime cutover, deployment, Activity Catalog mutation, and Plan 4 remain unauthorized.
 
 ## Plan sequence
 
@@ -87,6 +93,8 @@ Binding design principles include:
 - verification uses exact scoped assertion selection and linear chains;
 - later activation/assertion events do not retroactively mutate an existing generation;
 - promotion references an exact validation report and uses expected-current CAS;
+- the current pointer carries exact generation/transition/validation evidence so rollback is deterministic;
+- operation-id retries are serialized race-safely;
 - merged source IDs are direct generation redirects to active survivors;
 - no fake Generation 0; current pointer may remain `NULL` before real promotion.
 
@@ -139,7 +147,7 @@ Plan 1 Core Model — COMPLETE
   ↓
 Plan 2 Domain Service V2 — COMPLETE / MERGED
   ↓
-Plan 3 Activation / Verification / Generations — DESIGN APPROVED / SPEC REVIEW PENDING
+Plan 3 Activation / Verification / Generations — IMPLEMENTATION PLAN AWAITING APPROVAL
   ↓
 Plan 4 Ingestion V2 / Quarantine
   ↓
@@ -160,8 +168,8 @@ Plans 5 and 6 may overlap only after prerequisite contracts from Plans 2–4 are
 
 ## Current best next move
 
-Review and explicitly approve the written Plan 3 design spec:
+Review and explicitly approve the detailed Plan 3 implementation plan:
 
-`docs/superpowers/specs/2026-09-02-food-catalog-plan3-activation-verification-generations-design.md`
+`docs/superpowers/plans/2026-09-02-food-catalog-plan3-activation-verification-generations.md`
 
-After that approval, invoke Superpowers `writing-plans` to create the detailed Plan 3 implementation plan. Do not implement Plan 3 and do not mutate Production before the implementation plan is separately approved.
+Implementation must not start until that plan is explicitly approved. After approval, create/use `feat/food-catalog-generation-authority-v3` from the then-current exact `origin/main`, record `PLAN3_BASE_SHA`, and execute Task 1 with RED/GREEN evidence. Do not mutate Production under implementation-plan authority.
