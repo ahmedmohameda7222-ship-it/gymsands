@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-09-01
+**Current reconciliation date:** 2026-09-02
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history is reconciled through the latest applied identity; no repository migration is pending or unresolved
+**Status:** Production migration history remains reconciled through the latest applied identity; one Plan 3 repository migration is pending and unapplied
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -22,14 +22,16 @@ The latest verified Plaivra Production inspection after the Planner-authorized 2
 
 The current repository/machine-ledger state records:
 
-- Repository-only pending migrations: **0**
-- `pendingCount = 0`
+- Repository-only pending migrations: **1** — `20260902150000_food_catalog_generation_authority.sql`
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- migration-ledger `release_ready = true`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- migration-ledger `release_ready = false`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is now 117 records.
+The Plan 3 migration is repository-only and has not been applied to Production. It has no Production migration identity. No Food population, provider ingestion, Production Activation Set execution, Catalog Generation promotion, member runtime cutover, application deployment, compatibility-marker update, or Activity Catalog mutation is authorized or performed by this pending classification.
+
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is still 117 records.
 
 ## Food Catalog Intelligence Plan 1 semantic correction — Production application 2026-09-01
 
@@ -254,7 +256,7 @@ The later forward-only Nutrition V1 corrections are represented by these generat
 
 The final identity maps to immutable repository migration `20260829110000_nutrition_v1_final_review_corrections.sql`.
 
-No Nutrition V1 repository migration remains pending or unresolved. The Main Plaivra repository currently has no pending or unresolved migration after the Planner-authorized Plan 1 semantic correction was applied exactly once as `20260901183021_food_catalog_plan1_semantic_corrections`.
+No Nutrition V1 repository migration remains pending or unresolved. The Main Plaivra repository now additionally contains the repository-only pending `20260902150000_food_catalog_generation_authority.sql`; it has not been applied to Production and does not alter the latest applied identity `20260901183021_food_catalog_plan1_semantic_corrections`.
 
 ## Meal Plan duplicate-history repair
 
