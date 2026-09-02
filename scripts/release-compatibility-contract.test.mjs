@@ -23,9 +23,6 @@ test("declared database marker remains distinct from the applied physical head w
     resolved.latestAppliedMigrationVersion.localeCompare(resolved.expectedDatabaseMigrationVersion) > 0,
     "fixture must prove that compatible physical migrations may be newer than the release marker",
   );
-  assert.deepEqual(pendingEntries, [
-    assert.partialDeepStrictEqual ? pendingEntries[0] : pendingEntries[0],
-  ]);
   assert.equal(pendingEntries.length, 1);
   assert.equal(pendingEntries[0].localFile, PLAN3_PENDING_MIGRATION);
   assert.equal(resolved.migrationLedgerReconciliationState, "pending");
