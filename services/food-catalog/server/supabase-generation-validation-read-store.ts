@@ -13,6 +13,8 @@ import type {
 import type { FoodCatalogGenerationValidationReadStore } from "./generation-store";
 import { createSupabaseFoodCatalogGenerationReadStore } from "./supabase-generation-read-store";
 
+const GENERATION_ENUMERATION_PAGE_SIZE = 1000;
+
 function rows(value: unknown, context: string): Record<string, unknown>[] {
   if (!Array.isArray(value)) {
     throw new Error(`Food Catalog Plan 3 validation read: ${context} result must be an array.`);
@@ -72,20 +74,34 @@ export function createSupabaseFoodCatalogGenerationValidationReadStore(
   return {
     ...base,
     async readGenerationFoods(generationId) {
-      const result = await supabase
-        .from("food_catalog_generation_foods")
-        .select("generation_id,food_id,lifecycle,nutrition_revision_id,activation_set_id,activation_set_member_id,activation_grant_event_id")
-        .eq("generation_id", generationId);
-      throwDbError("generation Foods", result.error);
-      return rows(result.data, "generation Foods").map(mapFood);
+      const resultRows: StoredGenerationFood[] = [];
+      for (let offset = 0; ; offset += GENERATION_ENUMERATION_PAGE_SIZE) {
+        const result = await supabase
+          .from("food_catalog_generation_foods")
+          .select("generation_id,food_id,lifecycle,nutrition_revision_id,activation_set_id,activation_set_member_id,activation_grant_event_id")
+          .eq("generation_id", generationId)
+          .order("food_id", { ascending: true })
+          .range(offset, offset + GENERATION_ENUMERATION_PAGE_SIZE - 1);
+        throwDbError("generation Foods", result.error);
+        const page = rows(result.data, "generation Foods");
+        resultRows.push(...page.map(mapFood));
+        if (page.length < GENERATION_ENUMERATION_PAGE_SIZE) return resultRows;
+      }
     },
     async readGenerationRedirects(generationId) {
-      const result = await supabase
-        .from("food_catalog_generation_redirects")
-        .select("generation_id,source_food_id,target_food_id")
-        .eq("generation_id", generationId);
-      throwDbError("generation redirects", result.error);
-      return rows(result.data, "generation redirects").map(mapRedirect);
+      const resultRows: StoredGenerationRedirect[] = [];
+      for (let offset = 0; ; offset += GENERATION_ENUMERATION_PAGE_SIZE) {
+        const result = await supabase
+          .from("food_catalog_generation_redirects")
+          .select("generation_id,source_food_id,target_food_id")
+          .eq("generation_id", generationId)
+          .order("source_food_id", { ascending: true })
+          .range(offset, offset + GENERATION_ENUMERATION_PAGE_SIZE - 1);
+        throwDbError("generation redirects", result.error);
+        const page = rows(result.data, "generation redirects");
+        resultRows.push(...page.map(mapRedirect));
+        if (page.length < GENERATION_ENUMERATION_PAGE_SIZE) return resultRows;
+      }
     },
   };
 }
