@@ -115,14 +115,13 @@ function requireValidationReadStore(readStore: FoodCatalogGenerationReadStore): 
   }
 }
 
-function selectedFacts<T extends StoredFact>(
+function selectedFactsFromMap<T extends StoredFact>(
   selectedIds: readonly string[],
-  rows: readonly T[],
+  byId: ReadonlyMap<string, T>,
   foodId: string,
   kind: string,
   findings: FindingDraft[],
 ): T[] {
-  const byId = new Map(rows.map((row) => [row.id, row]));
   const hydrated: T[] = [];
   for (const id of selectedIds) {
     const row = byId.get(id);
@@ -137,6 +136,16 @@ function selectedFacts<T extends StoredFact>(
     hydrated.push(row);
   }
   return hydrated;
+}
+
+function selectedFacts<T extends StoredFact>(
+  selectedIds: readonly string[],
+  rows: readonly T[],
+  foodId: string,
+  kind: string,
+  findings: FindingDraft[],
+): T[] {
+  return selectedFactsFromMap(selectedIds, new Map(rows.map((row) => [row.id, row])), foodId, kind, findings);
 }
 
 function reportSemanticPayload(report: Omit<GenerationValidationReport, "id" | "reportChecksumSha256">) {
@@ -167,6 +176,20 @@ export async function validateStoredGeneration(
 
   const foods = await readStore.readGenerationFoods(generationId);
   const redirects = await readStore.readGenerationRedirects(generationId);
+  const bulkHydration = typeof readStore.readGenerationValidationHydration === "function"
+    ? await readStore.readGenerationValidationHydration(generationId, foods)
+    : null;
+  const nutritionById = new Map((bulkHydration?.nutritionRevisions ?? []).map((row) => [row.id, row]));
+  const servingById = new Map((bulkHydration?.servingOptions ?? []).map((row) => [row.id, row]));
+  const nameById = new Map((bulkHydration?.names ?? []).map((row) => [row.id, row]));
+  const taxonomyById = new Map((bulkHydration?.taxonomyAssignments ?? []).map((row) => [row.id, row]));
+  const marketById = new Map((bulkHydration?.marketAssignments ?? []).map((row) => [row.id, row]));
+  const verificationById = new Map((bulkHydration?.verificationAssertions ?? []).map((row) => [row.id, row]));
+  const activationByKey = new Map((bulkHydration?.activationAuthorities ?? []).map((row) => [
+    `${row.activationSetMemberId}:${row.grantEventId}`,
+    row,
+  ]));
+
   const findings: FindingDraft[] = [];
   const verificationStates: GenerationVerificationStateRecord[] = [];
   const servingSelections: GenerationServingSelection[] = [];
@@ -180,7 +203,12 @@ export async function validateStoredGeneration(
     if (food.generationId !== generationId) {
       throw new FoodCatalogGenerationError("CONTROL_PLANE_REJECTED", "Generation Food escaped exact generation scope.");
     }
-    const selections = await readStore.readGenerationSelections(generationId, food.foodId);
+    const selections = bulkHydration === null
+      ? await readStore.readGenerationSelections(generationId, food.foodId)
+      : bulkHydration.selectionsByFoodId[food.foodId];
+    if (!selections) {
+      throw new FoodCatalogGenerationError("CONTROL_PLANE_REJECTED", `Bulk validation hydration omitted generation Food ${food.foodId}.`);
+    }
     servingSelections.push(...selections.servingOptionIds.map((servingOptionId) => ({ foodId: food.foodId, servingOptionId })));
     nameSelections.push(...selections.nameFactIds.map((nameFactId) => ({ foodId: food.foodId, nameFactId })));
     taxonomySelections.push(...selections.taxonomyAssignmentIds.map((assignmentId) => ({ foodId: food.foodId, assignmentId })));
@@ -188,7 +216,9 @@ export async function validateStoredGeneration(
     verificationSelections.push(...selections.verification);
 
     if (food.nutritionRevisionId !== null) {
-      const nutrition = await readStore.readNutritionRevision(food.foodId, food.nutritionRevisionId);
+      const nutrition = bulkHydration === null
+        ? await readStore.readNutritionRevision(food.foodId, food.nutritionRevisionId)
+        : nutritionById.get(food.nutritionRevisionId) ?? null;
       if (!nutrition) {
         findings.push(finding("SELECTED_FACT_MISSING", food.foodId, food.nutritionRevisionId, { kind: "nutrition", selectedId: food.nutritionRevisionId }));
       } else if (nutrition.foodId !== food.foodId) {
@@ -200,17 +230,26 @@ export async function validateStoredGeneration(
       }
     }
 
-    const [servings, names, taxonomy, markets] = await Promise.all([
-      readStore.readServingOptions(food.foodId, selections.servingOptionIds),
-      readStore.readNames(food.foodId, selections.nameFactIds),
-      readStore.readTaxonomyAssignments(food.foodId, selections.taxonomyAssignmentIds),
-      readStore.readMarketAssignments(food.foodId, selections.marketAssignmentIds),
-    ]);
-
-    selectedFacts<StoredFoodServingOption>(selections.servingOptionIds, servings, food.foodId, "serving", findings);
-    const selectedNames = selectedFacts<StoredFoodNameFact>(selections.nameFactIds, names, food.foodId, "name", findings);
-    const selectedTaxonomy = selectedFacts<StoredFoodTaxonomyAssignment>(selections.taxonomyAssignmentIds, taxonomy, food.foodId, "taxonomy", findings);
-    const selectedMarkets = selectedFacts<StoredFoodMarketAssignment>(selections.marketAssignmentIds, markets, food.foodId, "market", findings);
+    let selectedNames: Array<Pick<StoredFoodNameFact, "id" | "foodId" | "role">>;
+    let selectedTaxonomy: Array<Pick<StoredFoodTaxonomyAssignment, "id" | "foodId" | "action">>;
+    let selectedMarkets: Array<Pick<StoredFoodMarketAssignment, "id" | "foodId" | "action">>;
+    if (bulkHydration === null) {
+      const [servings, names, taxonomy, markets] = await Promise.all([
+        readStore.readServingOptions(food.foodId, selections.servingOptionIds),
+        readStore.readNames(food.foodId, selections.nameFactIds),
+        readStore.readTaxonomyAssignments(food.foodId, selections.taxonomyAssignmentIds),
+        readStore.readMarketAssignments(food.foodId, selections.marketAssignmentIds),
+      ]);
+      selectedFacts<StoredFoodServingOption>(selections.servingOptionIds, servings, food.foodId, "serving", findings);
+      selectedNames = selectedFacts<StoredFoodNameFact>(selections.nameFactIds, names, food.foodId, "name", findings);
+      selectedTaxonomy = selectedFacts<StoredFoodTaxonomyAssignment>(selections.taxonomyAssignmentIds, taxonomy, food.foodId, "taxonomy", findings);
+      selectedMarkets = selectedFacts<StoredFoodMarketAssignment>(selections.marketAssignmentIds, markets, food.foodId, "market", findings);
+    } else {
+      selectedFactsFromMap(selections.servingOptionIds, servingById, food.foodId, "serving", findings);
+      selectedNames = selectedFactsFromMap(selections.nameFactIds, nameById, food.foodId, "name", findings);
+      selectedTaxonomy = selectedFactsFromMap(selections.taxonomyAssignmentIds, taxonomyById, food.foodId, "taxonomy", findings);
+      selectedMarkets = selectedFactsFromMap(selections.marketAssignmentIds, marketById, food.foodId, "market", findings);
+    }
 
     for (const assignment of selectedTaxonomy) {
       if (assignment.action === "remove") {
@@ -224,11 +263,31 @@ export async function validateStoredGeneration(
     }
 
     if (selections.verification.length > 0) {
-      try {
-        const assertions = await readStore.readVerificationAssertions(food.foodId, selections.verification);
-        const byId = new Map(assertions.map((assertion) => [assertion.id, assertion]));
+      if (bulkHydration === null) {
+        try {
+          const assertions = await readStore.readVerificationAssertions(food.foodId, selections.verification);
+          const byId = new Map(assertions.map((assertion) => [assertion.id, assertion]));
+          for (const selection of selections.verification) {
+            const assertion = byId.get(selection.assertionId);
+            if (!assertion || assertion.foodId !== food.foodId || assertion.scope !== selection.scope) {
+              findings.push(finding("INVALID_VERIFICATION_SELECTION", food.foodId, selection.assertionId, {
+                scope: selection.scope,
+                assertionId: selection.assertionId,
+                actualFoodId: assertion?.foodId ?? null,
+                actualScope: assertion?.scope ?? null,
+              }));
+              continue;
+            }
+            verificationStates.push({ foodId: food.foodId, scope: selection.scope, assertionId: selection.assertionId, state: assertion.state });
+          }
+        } catch (error) {
+          findings.push(finding("INVALID_VERIFICATION_SELECTION", food.foodId, null, {
+            message: error instanceof Error ? error.message : "verification selection could not be hydrated",
+          }));
+        }
+      } else {
         for (const selection of selections.verification) {
-          const assertion = byId.get(selection.assertionId);
+          const assertion = verificationById.get(selection.assertionId);
           if (!assertion || assertion.foodId !== food.foodId || assertion.scope !== selection.scope) {
             findings.push(finding("INVALID_VERIFICATION_SELECTION", food.foodId, selection.assertionId, {
               scope: selection.scope,
@@ -238,17 +297,8 @@ export async function validateStoredGeneration(
             }));
             continue;
           }
-          verificationStates.push({
-            foodId: food.foodId,
-            scope: selection.scope,
-            assertionId: selection.assertionId,
-            state: assertion.state,
-          });
+          verificationStates.push({ foodId: food.foodId, scope: selection.scope, assertionId: selection.assertionId, state: assertion.state });
         }
-      } catch (error) {
-        findings.push(finding("INVALID_VERIFICATION_SELECTION", food.foodId, null, {
-          message: error instanceof Error ? error.message : "verification selection could not be hydrated",
-        }));
       }
     }
 
@@ -256,7 +306,9 @@ export async function validateStoredGeneration(
       if (!selectedNames.some((name) => name.role === "preferred_display")) {
         findings.push(finding("ACTIVE_FOOD_MISSING_DISPLAY_NAME", food.foodId, null, { selectedNameFactIds: selections.nameFactIds }));
       }
-      const authority = await readStore.readActivationAuthority(food.activationSetMemberId as string, food.activationGrantEventId as string);
+      const authority = bulkHydration === null
+        ? await readStore.readActivationAuthority(food.activationSetMemberId as string, food.activationGrantEventId as string)
+        : activationByKey.get(`${food.activationSetMemberId}:${food.activationGrantEventId}`) ?? null;
       let validActivation = authority !== null;
       if (authority) {
         validActivation = authority.foodId === food.foodId
