@@ -13,10 +13,8 @@ import { sha256Canonical } from "./canonical-hash";
 import type {
   StoredFoodMarketAssignment,
   StoredFoodNameFact,
-  StoredFoodNutritionRevision,
   StoredFoodServingOption,
   StoredFoodTaxonomyAssignment,
-  StoredFoodVerificationAssertion,
 } from "./contracts";
 import { FoodCatalogGenerationError } from "./generation-errors";
 import {
@@ -29,6 +27,7 @@ import type { GenerationCommandResult } from "./generation-contracts";
 import type {
   FoodCatalogGenerationCommandStore,
   FoodCatalogGenerationReadStore,
+  FoodCatalogGenerationValidationReadStore,
 } from "./generation-store";
 
 export const GENERATION_BLOCKING_REASONS = [
@@ -45,7 +44,6 @@ export const GENERATION_BLOCKING_REASONS = [
 ] as const;
 
 export type GenerationBlockingReason = (typeof GENERATION_BLOCKING_REASONS)[number];
-
 export const GENERATION_VALIDATOR_SET_VERSION = "food-catalog-generation-validator-set-v1";
 
 export type GenerationValidationFindingRecord = GenerationValidationFinding & {
@@ -76,15 +74,9 @@ export type GenerationValidationReport = {
 };
 
 type FindingDraft = GenerationValidationFinding;
-
 type StoredFact = { id: string; foodId: string };
 
-function finding(
-  reasonCode: GenerationBlockingReason,
-  foodId: string | null,
-  evidenceReference: string | null,
-  details: unknown,
-): FindingDraft {
+function finding(reasonCode: GenerationBlockingReason, foodId: string | null, evidenceReference: string | null, details: unknown): FindingDraft {
   return {
     reasonCode,
     foodId,
@@ -114,6 +106,15 @@ function parseTimestamp(value: string, label: string): number {
   return timestamp;
 }
 
+function requireValidationReadStore(readStore: FoodCatalogGenerationReadStore): asserts readStore is FoodCatalogGenerationValidationReadStore {
+  if (typeof readStore.readGenerationFoods !== "function" || typeof readStore.readGenerationRedirects !== "function") {
+    throw new FoodCatalogGenerationError(
+      "CONTROL_PLANE_REJECTED",
+      "Generation validation requires exact generation-scoped Food and redirect enumeration capability.",
+    );
+  }
+}
+
 function selectedFacts<T extends StoredFact>(
   selectedIds: readonly string[],
   rows: readonly T[],
@@ -126,21 +127,11 @@ function selectedFacts<T extends StoredFact>(
   for (const id of selectedIds) {
     const row = byId.get(id);
     if (!row) {
-      findings.push(finding(
-        "SELECTED_FACT_MISSING",
-        foodId,
-        id,
-        { kind, selectedId: id },
-      ));
+      findings.push(finding("SELECTED_FACT_MISSING", foodId, id, { kind, selectedId: id }));
       continue;
     }
     if (row.foodId !== foodId) {
-      findings.push(finding(
-        "SELECTED_FACT_CROSS_FOOD",
-        foodId,
-        id,
-        { kind, selectedId: id, actualFoodId: row.foodId },
-      ));
+      findings.push(finding("SELECTED_FACT_CROSS_FOOD", foodId, id, { kind, selectedId: id, actualFoodId: row.foodId }));
       continue;
     }
     hydrated.push(row);
@@ -168,6 +159,7 @@ export async function validateStoredGeneration(
   generationId: string,
   expectedChecksum: string,
 ): Promise<GenerationValidationReport> {
+  requireValidationReadStore(readStore);
   const generation = await readStore.readGeneration(generationId);
   if (!generation) {
     throw new FoodCatalogGenerationError("GENERATION_NOT_FOUND", `Catalog Generation ${generationId} does not exist.`);
@@ -182,7 +174,6 @@ export async function validateStoredGeneration(
   const taxonomySelections: GenerationAssignmentSelection[] = [];
   const marketSelections: GenerationAssignmentSelection[] = [];
   const verificationSelections: Array<{ foodId: string; scope: FoodVerificationScope; assertionId: string }> = [];
-
   const sealedAt = parseTimestamp(generation.sealedAt, "Generation sealedAt");
 
   for (const food of foods) {
@@ -199,10 +190,7 @@ export async function validateStoredGeneration(
     if (food.nutritionRevisionId !== null) {
       const nutrition = await readStore.readNutritionRevision(food.foodId, food.nutritionRevisionId);
       if (!nutrition) {
-        findings.push(finding("SELECTED_FACT_MISSING", food.foodId, food.nutritionRevisionId, {
-          kind: "nutrition",
-          selectedId: food.nutritionRevisionId,
-        }));
+        findings.push(finding("SELECTED_FACT_MISSING", food.foodId, food.nutritionRevisionId, { kind: "nutrition", selectedId: food.nutritionRevisionId }));
       } else if (nutrition.foodId !== food.foodId) {
         findings.push(finding("SELECTED_FACT_CROSS_FOOD", food.foodId, food.nutritionRevisionId, {
           kind: "nutrition",
@@ -226,18 +214,12 @@ export async function validateStoredGeneration(
 
     for (const assignment of selectedTaxonomy) {
       if (assignment.action === "remove") {
-        findings.push(finding("SELECTED_TAXONOMY_REMOVAL", food.foodId, assignment.id, {
-          assignmentId: assignment.id,
-          action: assignment.action,
-        }));
+        findings.push(finding("SELECTED_TAXONOMY_REMOVAL", food.foodId, assignment.id, { assignmentId: assignment.id, action: assignment.action }));
       }
     }
     for (const assignment of selectedMarkets) {
       if (assignment.action === "remove") {
-        findings.push(finding("SELECTED_MARKET_REMOVAL", food.foodId, assignment.id, {
-          assignmentId: assignment.id,
-          action: assignment.action,
-        }));
+        findings.push(finding("SELECTED_MARKET_REMOVAL", food.foodId, assignment.id, { assignmentId: assignment.id, action: assignment.action }));
       }
     }
 
@@ -272,15 +254,9 @@ export async function validateStoredGeneration(
 
     if (food.lifecycle === "active") {
       if (!selectedNames.some((name) => name.role === "preferred_display")) {
-        findings.push(finding("ACTIVE_FOOD_MISSING_DISPLAY_NAME", food.foodId, null, {
-          selectedNameFactIds: selections.nameFactIds,
-        }));
+        findings.push(finding("ACTIVE_FOOD_MISSING_DISPLAY_NAME", food.foodId, null, { selectedNameFactIds: selections.nameFactIds }));
       }
-
-      const authority = await readStore.readActivationAuthority(
-        food.activationSetMemberId as string,
-        food.activationGrantEventId as string,
-      );
+      const authority = await readStore.readActivationAuthority(food.activationSetMemberId as string, food.activationGrantEventId as string);
       let validActivation = authority !== null;
       if (authority) {
         validActivation = authority.foodId === food.foodId
@@ -348,11 +324,7 @@ export async function validateStoredGeneration(
     }));
   }
 
-  const normalizedFindings = sortFindings(findings).map((entry, index) => ({
-    ...entry,
-    id: randomUUID(),
-    findingOrdinal: index + 1,
-  }));
+  const normalizedFindings = sortFindings(findings).map((entry, index) => ({ ...entry, id: randomUUID(), findingOrdinal: index + 1 }));
   verificationStates.sort((left, right) => left.foodId.localeCompare(right.foodId)
     || left.scope.localeCompare(right.scope)
     || left.assertionId.localeCompare(right.assertionId));
