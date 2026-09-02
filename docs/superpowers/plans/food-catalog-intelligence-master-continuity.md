@@ -2,12 +2,12 @@
 
 **Purpose:** living project-continuity authority for future Plaivra Planner chats.  
 **Repository:** `ahmedmohameda7222-ship-it/gymsands`  
-**Checkpoint source `main` before this update:** `b9b3d18f78765ed47f346413aa3800af801b1899`  
+**Plan 3 implementation base `main`:** `96dbe4c42f908737e5701df83d8f47356dea6096`  
 **Program:** Food Catalog Intelligence — Architectural Clean Rebuild-in-Place  
 **Total roadmap plans:** 10  
 **Completed plans:** Plan 1, Plan 2  
 **Current plan:** Plan 3 — Activation, Verification, Trust, and Catalog Generations  
-**Current Plan 3 state:** architecture + written specification approved; detailed implementation plan authored and self-reviewed; implementation **NOT STARTED / NOT AUTHORIZED YET**  
+**Current Plan 3 state:** implementation complete on Draft PR #165 review branch through Task 11; Task 12 documentation/final exact-head verification in progress; independent Planner QA/QC and canonical phase-close Quality pending  
 **Plans remaining including Plan 3:** 8  
 **Plans remaining after Plan 3 completes:** 7
 
@@ -19,7 +19,7 @@ If the previous Plaivra Planner chat reaches its limit, do **not** restart the F
 
 Required recovery sequence:
 
-1. Fetch current `origin/main`.
+1. Fetch current `origin/main` and PR #165 head independently.
 2. Read this file completely.
 3. Read `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`.
 4. Read `docs/superpowers/specs/2026-09-02-food-catalog-plan3-activation-verification-generations-design.md`.
@@ -106,7 +106,7 @@ Food Catalog work must not mutate Activity Catalog without separate exact author
 
 Still: `20260724232734`
 
-Plan 1 and Plan 2 did not promote it. Plan 3 implementation plan explicitly prohibits changing it.
+Plan 1 and Plan 2 did not promote it. Plan 3 implementation leaves it byte-identical to the recorded base.
 
 ---
 
@@ -139,6 +139,8 @@ Production generated identity:
 
 Correction blob:
 `1e4dff8b5fea6d8d8b60fc78a77033b32e07ff35`
+
+Plan 3 exact-base/final-scope verification confirms both applied Plan 1 migration blobs remain unchanged.
 
 ### Plan 1 established
 
@@ -202,13 +204,13 @@ Plan 2 side effects:
 
 ---
 
-## 5. Plan 3 — CURRENT
+## 5. Plan 3 — CURRENT / IMPLEMENTATION REVIEW
 
 ### Approved written specification
 
 `docs/superpowers/specs/2026-09-02-food-catalog-plan3-activation-verification-generations-design.md`
 
-Plan 3 architecture is approved. The user then instructed the Planner to proceed to `writing-plans`, so the written-spec gate is considered cleared for planning. **This does not authorize implementation.**
+Plan 3 architecture and the formal 12-task implementation plan were explicitly approved before implementation. Implementation was separately authorized and executed on the dedicated review branch. The design/spec itself still grants **no Production mutation authority**.
 
 ### Approved design decisions
 
@@ -236,7 +238,7 @@ Plan 3 architecture is approved. The user then instructed the Planner to proceed
 
 ---
 
-## 6. Plan 3 detailed implementation plan — AUTHORED / SELF-REVIEWED / AWAITING APPROVAL
+## 6. Plan 3 implementation — EXECUTED ON REVIEW BRANCH / PLANNER QA/QC PENDING
 
 **Plan path:**
 `docs/superpowers/plans/2026-09-02-food-catalog-plan3-activation-verification-generations.md`
@@ -247,37 +249,68 @@ Initial plan commit:
 Self-reviewed plan commit:
 `b9b3d18f78765ed47f346413aa3800af801b1899`
 
-Implementation branch planned:
+Implementation branch:
 `feat/food-catalog-generation-authority-v3`
 
-Planned forward migration:
+Draft PR:
+`#165 — Food Catalog Plan 3 — Activation, Verification, Trust + Catalog Generations`
+
+Recorded implementation base:
+`96dbe4c42f908737e5701df83d8f47356dea6096`
+
+Task 1–11 implementation evidence head:
+`03a498e4ef6cce1f5460479a6a381795a5c8b067`
+
+Exact-head Task 11 / full-regression PR Quality:
+`33679147523` — PASS.
+
+That run passed:
+- scope classification;
+- exact-head integrity;
+- repository/telemetry contracts;
+- lint;
+- typecheck;
+- full unit suite;
+- production build;
+- chronological migration replay;
+- database lint;
+- registered Plan 3 database verification SQL;
+- migration ledger check;
+- database integration tests;
+- Workout History integration tests;
+- required-summary.
+
+Task 12 then began status-only documentation reconciliation and final exact-head verification. Independent Planner QA/QC and canonical phase-close `.github/workflows/quality.yml` remain mandatory before merge approval.
+
+Implemented forward migration:
 `supabase/migrations/20260902150000_food_catalog_generation_authority.sql`
 
-### Important plan self-review corrections
+It remains repository-only `pending`; it has **not** been applied to Production.
+
+### Important plan self-review corrections implemented
 
 1. Reuse existing `FoodVerificationScope`; no parallel `GenerationVerificationScope`.
 2. Singleton pointer includes `current_validation_report_id` in addition to generation/event because after rollback the transition event is a rollback event, not a promotion event.
 3. Operation-id idempotency is race-safe using transaction advisory lock before immutable operation lookup/insert.
 4. Rollback requires exact target generation/checksum + prior target promotion event + exact target validation report/checksum; no inferred previous generation/report.
-5. Placeholder base SHA was removed; implementation records `PLAN3_BASE_SHA` from exact authoritative `origin/main` once before work.
-6. Placeholder scan: no `TBD`, `TODO`, or unresolved exact-base placeholder remains.
+5. Implementation used exact recorded base `96dbe4c42f908737e5701df83d8f47356dea6096` and verified the Plan 2 squash ancestor.
 
 ### Plan 3 implementation tasks
 
-1. Domain contracts, stable error codes, canonical hashing.
-2. One normalized Plan 3 schema migration + truthful pending-ledger classification.
-3. Atomic service-role-only PostgreSQL RPCs + disposable database verifier.
-4. Supabase-independent Plan 3 ports + strict read/RPC adapters.
-5. Deterministic Activation Set create/grant/invalidate service.
-6. Full immutable generation builder + deterministic composition checksum.
-7. Deterministic generation validator + immutable validation report.
-8. Pure structured Trust Profile.
-9. Exact current-generation read/hydration + compatibility bridge.
-10. Typed promote/rollback/revoke command services.
-11. Physical-table / privileged-command / no-implicit-current boundary tests.
-12. Full regression + canonical phase-close Quality + docs reconciliation + STOP for Planner QA/QC.
+1. Domain contracts, stable error codes, canonical hashing — PASS.
+2. One normalized Plan 3 schema migration + truthful pending-ledger classification — PASS.
+3. Atomic service-role-only PostgreSQL RPCs + disposable database verifier — PASS.
+4. Supabase-independent Plan 3 ports + strict read/RPC adapters — PASS.
+5. Deterministic Activation Set create/grant/invalidate service — PASS.
+6. Full immutable generation builder + deterministic composition checksum — PASS.
+7. Deterministic generation validator + immutable validation report — PASS.
+8. Pure structured Trust Profile — PASS.
+9. Exact current-generation read/hydration + compatibility bridge — PASS.
+10. Typed promote/rollback/revoke command services — PASS.
+11. Physical-table / privileged-command / no-implicit-current boundary tests — PASS.
+12. Full regression + documentation reconciliation + final exact-head phase-close gates — IN PROGRESS; PR Quality must pass on the final docs head, then canonical Quality requires Ready-for-review.
 
-### Planned schema authority
+### Implemented schema authority
 
 Normalized tables include:
 
@@ -306,7 +339,7 @@ The singleton pointer contains:
 
 It is seeded with all current references `NULL`; no generation or Food data is seeded.
 
-### Planned privileged RPCs
+### Implemented privileged RPCs
 
 - `food_catalog_create_activation_set_v1(jsonb)`
 - `food_catalog_grant_activation_set_v1(jsonb)`
@@ -317,28 +350,24 @@ It is seeded with all current references `NULL`; no generation or Food data is s
 - `food_catalog_rollback_generation_v1(jsonb)`
 - `food_catalog_revoke_generation_v1(jsonb)`
 
-All are service-role-only. No browser/member/admin generic RPC access.
+All are service-role-only. No browser/member/admin generic RPC access is exported.
 
-### Migration-ledger rule
+### Migration-ledger state
 
-When implementation creates the new migration file, it must be classified `pending` in `supabase/migration-ledger.json`; otherwise the existing ledger validator rejects an unclassified migration.
+The new migration is classified `pending` in `supabase/migration-ledger.json`.
 
-That pending classification is **not** Production apply. While pending:
-- no `productionVersion`/`productionName` is invented;
-- `productionMigrationCount` stays unchanged;
-- latest applied Production identity stays Plan 1 semantic corrections;
-- pending/unresolved counts truthfully become 1;
-- compatibility marker remains unchanged.
+Current repository ledger truth:
+- `productionMigrationCount = 63`;
+- `pendingCount = 1`;
+- `unresolvedCount = 1`;
+- `historyRepair.state = pending`;
+- `schemaVerifiedUntrackedCount = 0`;
+- no `productionVersion`/`productionName` is invented for Plan 3;
+- latest applied Production identity remains `20260901183021_food_catalog_plan1_semantic_corrections`;
+- compatibility marker remains `20260724232734`.
 
-### Plan 3 implementation STOP gates
+### Plan 3 implementation STOP gates — CURRENT TRUTH
 
-Before implementation approval:
-- branch does not exist for implementation work;
-- runtime code changes: NO;
-- migration file: NOT CREATED;
-- Production mutation: NO.
-
-During implementation:
 - Production migration apply: NO
 - Food population: NO
 - provider ingestion: NO
@@ -348,8 +377,11 @@ During implementation:
 - deployment: NO
 - Activity Catalog mutation: NO
 - Plan 4: NO
+- compatibility marker changed: NO
+- applied Plan 1 migration bytes changed: NO
+- PR merged: NO
 
-Final implementation handoff must stop unmerged for independent Planner QA/QC after exact-head canonical `Quality` passes.
+Final implementation handoff must remain unmerged for independent Planner QA/QC. Canonical phase-close Quality must run on the exact final head after Ready-for-review transition.
 
 Even after code merge, Production schema application requires separate exact authority. Even schema application does not authorize Food activation or generation promotion.
 
@@ -407,24 +439,21 @@ Do not assume these values remain true forever. Re-read Production before any de
 
 # Current Next Move
 
-**Do not start implementation yet.**
+Do **not** merge, deploy, apply the pending migration, populate Foods, ingest providers, execute activation, promote a generation, cut member runtime over, mutate Activity Catalog, or start Plan 4.
 
-The Plan 3 detailed implementation plan has been authored and self-reviewed at:
+Required next sequence:
 
-`docs/superpowers/plans/2026-09-02-food-catalog-plan3-activation-verification-generations.md`
+1. finish Task 12 status-only documentation reconciliation;
+2. require exact-head PR Quality on the resulting final review head;
+3. perform final independent code/diff review against the recorded base;
+4. keep PR #165 Draft until implementation evidence is frozen;
+5. transition PR #165 to Ready-for-review;
+6. require canonical `.github/workflows/quality.yml` on that exact final head;
+7. hand the exact final head to independent Planner QA/QC;
+8. merge only after explicit Planner approval.
 
-The next gate is explicit user/Planner approval of that implementation plan.
+The connected GitHub action surface used during implementation does not expose the Draft → Ready GraphQL transition. If that remains true after final PR Quality, report exactly:
 
-Expected approval phrase:
+`Manual Ready-for-review transition required for Plan 3 phase-close Quality.`
 
-`approved Plan 3 implementation plan`
-
-Only after that approval:
-
-1. fetch exact authoritative `origin/main`;
-2. create/use `feat/food-catalog-generation-authority-v3` from that exact SHA;
-3. record `PLAN3_BASE_SHA`;
-4. execute Task 1 first with RED/GREEN evidence;
-5. continue task-by-task under the approved plan;
-6. do not mutate Production;
-7. stop unmerged for independent Planner QA/QC after canonical exact-head Quality.
+Do not waive the canonical Quality gate.
