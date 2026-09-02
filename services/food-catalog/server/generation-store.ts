@@ -33,9 +33,9 @@ import type {
 export interface FoodCatalogGenerationReadStore {
   readCurrentPointer(): Promise<StoredCurrentGenerationPointer>;
   readGeneration(generationId: string): Promise<StoredCatalogGeneration | null>;
-  readGenerationFoods(generationId: string): Promise<StoredGenerationFood[]>;
+  readGenerationFoods?(generationId: string): Promise<StoredGenerationFood[]>;
   readGenerationFood(generationId: string, foodId: string): Promise<StoredGenerationFood | null>;
-  readGenerationRedirects(generationId: string): Promise<StoredGenerationRedirect[]>;
+  readGenerationRedirects?(generationId: string): Promise<StoredGenerationRedirect[]>;
   readGenerationRedirect(generationId: string, sourceFoodId: string): Promise<StoredGenerationRedirect | null>;
   readGenerationSelections(generationId: string, foodId: string): Promise<StoredGenerationSelections>;
   readNutritionRevision(foodId: string, revisionId: string): Promise<StoredFoodNutritionRevision | null>;
@@ -51,6 +51,11 @@ export interface FoodCatalogGenerationReadStore {
   readGenerationEvent(eventId: string): Promise<StoredGenerationEvent | null>;
   readValidationReport(reportId: string): Promise<StoredGenerationValidationReport | null>;
   readValidationFindings(reportId: string): Promise<StoredGenerationValidationFinding[]>;
+}
+
+export interface FoodCatalogGenerationValidationReadStore extends FoodCatalogGenerationReadStore {
+  readGenerationFoods(generationId: string): Promise<StoredGenerationFood[]>;
+  readGenerationRedirects(generationId: string): Promise<StoredGenerationRedirect[]>;
 }
 
 export interface FoodCatalogGenerationCommandStore {
