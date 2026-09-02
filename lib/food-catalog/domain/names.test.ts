@@ -14,6 +14,20 @@ const base: FoodNameFact = {
 };
 
 describe("validateFoodNameFact", () => {
+  it("rejects a runtime role outside the approved Food name enum", () => {
+    expect(() => validateFoodNameFact({
+      ...base,
+      role: "invalid_role" as FoodNameFact["role"],
+    })).toThrow(/role/i);
+  });
+
+  it("rejects a runtime origin outside the approved Food name enum", () => {
+    expect(() => validateFoodNameFact({
+      ...base,
+      origin: "invalid_origin" as FoodNameFact["origin"],
+    })).toThrow(/origin/i);
+  });
+
   it("accepts an open non-three-locale language tag when source provenance is present", () => {
     const value = validateFoodNameFact({
       ...base,

@@ -1,39 +1,35 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const REVIEWED_HEAD = "e3a49312338c4e2e4947e01c14c55c02aa4181c6";
+const PLAN1_INTEGRATION_AUTHORITY = "93524c2b162ee832d12b9e2a46c92bdced6fdac9";
 const APPLIED_CORE_MIGRATION = "supabase/migrations/20260901153000_food_catalog_intelligence_core.sql";
+const CORRECTIVE_MIGRATION = "supabase/migrations/20260901174500_food_catalog_plan1_semantic_corrections.sql";
 const CORRECTION_SUFFIX = "_food_catalog_plan1_semantic_corrections.sql";
-const base = execFileSync("git", ["merge-base", "origin/main", "HEAD"], { encoding: "utf8" }).trim();
-const correctiveMigrations = execFileSync(
-  "git",
-  ["diff", "--name-only", `${base}...HEAD`, "--", "supabase/migrations"],
-  { encoding: "utf8" },
-)
-  .split(/\r?\n/)
-  .map((value) => value.trim())
+const correctiveMigrations = readdirSync("supabase/migrations")
   .filter((value) => value.endsWith(CORRECTION_SUFFIX));
-const correctiveMigrationPath = correctiveMigrations.length === 1 ? correctiveMigrations[0] : null;
-const correctiveSql = correctiveMigrationPath
-  ? readFileSync(correctiveMigrationPath, "utf8").toLowerCase()
-  : "";
+const correctiveSql = readFileSync(CORRECTIVE_MIGRATION, "utf8").toLowerCase();
 
 describe("Food Catalog Plan 1 semantic correction migration", () => {
   it("keeps the already-applied Plan 1 core migration byte-stable", () => {
     const reviewedBytes = execFileSync(
       "git",
-      ["show", `${REVIEWED_HEAD}:${APPLIED_CORE_MIGRATION}`],
+      ["show", `${PLAN1_INTEGRATION_AUTHORITY}:${APPLIED_CORE_MIGRATION}`],
       { encoding: "utf8" },
     );
     expect(readFileSync(APPLIED_CORE_MIGRATION, "utf8")).toBe(reviewedBytes);
   });
 
-  it("adds exactly one new forward semantic correction migration", () => {
-    expect(correctiveMigrations).toHaveLength(1);
-    expect(correctiveMigrationPath).toMatch(
-      /^supabase\/migrations\/\d{14}_food_catalog_plan1_semantic_corrections\.sql$/,
+  it("keeps exactly the approved forward semantic correction migration", () => {
+    expect(correctiveMigrations).toEqual([
+      "20260901174500_food_catalog_plan1_semantic_corrections.sql",
+    ]);
+    const reviewedBytes = execFileSync(
+      "git",
+      ["show", `${PLAN1_INTEGRATION_AUTHORITY}:${CORRECTIVE_MIGRATION}`],
+      { encoding: "utf8" },
     );
+    expect(readFileSync(CORRECTIVE_MIGRATION, "utf8")).toBe(reviewedBytes);
   });
 
   it("requires source-backed evidence for non-direct serving conversions", () => {

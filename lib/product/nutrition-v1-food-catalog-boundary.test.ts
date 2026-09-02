@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = process.cwd();
 const DIRECT_FOOD_ITEMS_ACCESS = /\.from\(\s*["']food_items["']\s*\)/;
+const V2_ROOT_IDENTITY_ACCESS = /\.from\(\s*["']food_items["']\s*\)\s*\.select\(\s*["']id,lifecycle_status,merged_into_food_id["']\s*\)/;
+const V2_ROOT_ADAPTER = "services/food-catalog/server/supabase-read-store.ts";
 const ALLOWED_DIRECT_ACCESS = new Set([
-  "services/nutrition-v1/server/food-catalog.ts",
+  "services/food-catalog/server/legacy-compatibility.ts",
   "services/nutrition-v1/server/food-curation.ts",
 ]);
 
@@ -25,10 +27,23 @@ function productionTypescriptFiles(directory: string): string[] {
   });
 }
 
+function regexMatchCount(source: string, pattern: RegExp) {
+  return source.match(new RegExp(pattern.source, "g"))?.length ?? 0;
+}
+
+function hasApprovedFoodItemsAccess(path: string, source: string) {
+  if (ALLOWED_DIRECT_ACCESS.has(path)) return true;
+  if (path !== V2_ROOT_ADAPTER) return false;
+
+  return regexMatchCount(source, DIRECT_FOOD_ITEMS_ACCESS) === 1
+    && regexMatchCount(source, V2_ROOT_IDENTITY_ACCESS) === 1;
+}
+
 describe("Nutrition V1 Food Catalog persistence boundary", () => {
   it("keeps direct global food_items access inside approved catalog persistence internals", () => {
     const roots = [
       join(ROOT, "services/nutrition-v1/server"),
+      join(ROOT, "services/food-catalog/server"),
       join(ROOT, "app/api/nutrition/v1"),
       join(ROOT, "lib/mcp"),
       join(ROOT, "app/api/mcp"),
@@ -37,11 +52,16 @@ describe("Nutrition V1 Food Catalog persistence boundary", () => {
     const violations = roots
       .flatMap(productionTypescriptFiles)
       .map((path) => ({ path: normalizedRelative(path), source: readFileSync(path, "utf8") }))
-      .filter(({ path, source }) => !ALLOWED_DIRECT_ACCESS.has(path) && DIRECT_FOOD_ITEMS_ACCESS.test(source))
+      .filter(({ path, source }) => DIRECT_FOOD_ITEMS_ACCESS.test(source) && !hasApprovedFoodItemsAccess(path, source))
       .map(({ path }) => path)
       .sort();
 
     expect(violations).toEqual([]);
+  });
+
+  it("keeps the Nutrition Food Catalog façade free of direct food_items access", () => {
+    const source = readFileSync(join(ROOT, "services/nutrition-v1/server/food-catalog.ts"), "utf8");
+    expect(source).not.toMatch(DIRECT_FOOD_ITEMS_ACCESS);
   });
 
   it("keeps the Food Library API delegated to the server domain layer", () => {

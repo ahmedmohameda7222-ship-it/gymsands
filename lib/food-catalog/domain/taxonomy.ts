@@ -26,3 +26,23 @@ export const PRIMARY_FOOD_GROUP_CODES = [
 ] as const;
 
 export type PrimaryFoodGroupCode = (typeof PRIMARY_FOOD_GROUP_CODES)[number];
+
+export type FoodTaxonomyAssignment = {
+  foodId: string;
+  nodeCode: string;
+  sourceRecordId: string | null;
+  action: FoodTaxonomyAssignmentAction;
+  policyVersion: string;
+};
+
+export function validateFoodTaxonomyAssignment(value: FoodTaxonomyAssignment): FoodTaxonomyAssignment {
+  if (!value.foodId.trim()) throw new Error("Food taxonomy assignment food ID must be nonblank.");
+  if (!value.nodeCode.trim()) throw new Error("Food taxonomy assignment node code must be nonblank.");
+  if (value.action !== "assign" && value.action !== "remove") {
+    throw new Error("Food taxonomy assignment action is invalid.");
+  }
+  if (!value.policyVersion.trim()) {
+    throw new Error("Food taxonomy assignment policy version must be nonblank.");
+  }
+  return value;
+}
