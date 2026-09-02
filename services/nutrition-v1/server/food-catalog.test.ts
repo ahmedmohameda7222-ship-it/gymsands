@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -37,6 +38,12 @@ const mergedId = "11111111-1111-4111-8111-111111111111";
 const activeId = "22222222-2222-4222-8222-222222222222";
 
 describe("Nutrition V1 Food Catalog read boundary", () => {
+  it("delegates legacy Food root reads through the Food Catalog compatibility boundary", () => {
+    const source = readFileSync("services/nutrition-v1/server/food-catalog.ts", "utf8");
+    expect(source).toContain("@/services/food-catalog/server/legacy-compatibility");
+    expect(source).not.toMatch(/\.from\(\s*["']food_items["']\s*\)/);
+  });
+
   it("follows merged redirects to the active canonical Food and preserves null nutrients", async () => {
     const db = fakeSupabase([
       { data: { id: mergedId, lifecycle_status: "merged", merged_into_food_id: activeId }, error: null },
