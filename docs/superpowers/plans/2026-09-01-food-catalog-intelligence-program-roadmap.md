@@ -1,6 +1,6 @@
 # Food Catalog Intelligence Implementation Roadmap
 
-**Status:** implementation-planning authority; Plan 1 integrated, Plan 2 at Planner review gate  
+**Status:** implementation-planning authority; Plan 1 integrated, Plan 2 implementation complete on review PR awaiting Planner QA/QC  
 **Spec:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
 
 ## Purpose
@@ -32,17 +32,17 @@ The Plan 1 Production schema and semantic correction were separately authorized,
 
 The released compatibility marker remains `20260724232734`. No Food population, provider ingestion, activation, Catalog Generation promotion, or Activity Catalog mutation occurred. The global Food Catalog remains unpopulated.
 
-### Plan 2 — Food Catalog Domain Service V2 + Compatibility Projection — CURRENT REVIEW GATE
+### Plan 2 — Food Catalog Domain Service V2 + Compatibility Projection — IMPLEMENTATION COMPLETE / PLANNER QA/QC
 
 The implementation plan is:
 
 `docs/superpowers/plans/2026-09-01-food-catalog-domain-service-v2.md`
 
-Plan 2 has not been implemented. Planner/user approval of the written Plan 2 is required before implementation begins.
+Plan 2 implementation is complete on the dedicated review branch/PR and is awaiting independent Planner QA/QC. The V2 server boundary and compatibility projection are implemented without member runtime V2 cutover, database migration, Food population, Production mutation, or Catalog Generation promotion.
 
 ### Plan 3 — Activation, Verification, Trust, and Catalog Generations — NOT STARTED
 
-Plan 3 is not authorized and must not be pulled into Plan 2 implementation.
+Plan 3 is not authorized and has not been started. It must not be pulled into Plan 2 implementation or review corrections.
 
 ## Plan sequence
 
@@ -109,9 +109,9 @@ Created only after Foundation is healthy. Implement FNDDS-specific portion/compo
 ```text
 Plan 1 Core Model — COMPLETE
   ↓
-Plan 2 Domain Service V2 — CURRENT
+Plan 2 Domain Service V2 — PLANNER QA/QC
   ↓
-Plan 3 Activation / Verification / Generations
+Plan 3 Activation / Verification / Generations — NOT STARTED / NOT AUTHORIZED
   ↓
 Plan 4 Ingestion V2 / Quarantine
   ↓
@@ -132,4 +132,4 @@ Plans 5 and 6 may overlap in implementation only after their prerequisite contra
 
 ## Current best next move
 
-Approve the written **Plan 2 — Food Catalog Domain Service V2 + Compatibility Projection**. After approval, implement Plan 2 only on one branch/PR using TDD and stop for independent Planner QA/QC. Do not start Plan 3 and do not mutate Production under Plan 2 authority.
+Perform independent Planner QA/QC on the completed **Plan 2 — Food Catalog Domain Service V2 + Compatibility Projection** implementation PR. Do not start Plan 3 and do not mutate Production under Plan 2 authority.
