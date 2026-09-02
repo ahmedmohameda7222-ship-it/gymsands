@@ -20,10 +20,20 @@ export type {
   CurrentGenerationCompatibilitySelection,
   CurrentGenerationFoodView,
 } from "./current-generation-service";
+export type {
+  PromoteCatalogGenerationInput,
+  RevokeCatalogGenerationInput,
+  RollbackCatalogGenerationInput,
+} from "./generation-command-service";
 export { projectFoodCatalogCompatibility } from "./compatibility-projection";
 export {
   getCurrentGenerationFood,
   projectCurrentGenerationCompatibility,
   resolveCurrentGenerationFoodForNewUse,
 } from "./current-generation-service";
+export {
+  promoteCatalogGeneration,
+  revokeCatalogGeneration,
+  rollbackCatalogGeneration,
+} from "./generation-command-service";
 export { getFoodCatalogDomainBundle, resolveCanonicalRootForNewUse } from "./read-service";
