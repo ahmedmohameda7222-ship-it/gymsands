@@ -1,6 +1,6 @@
 # Plaivra Food Catalog Plan 3 — Activation, Verification, Trust, and Catalog Generations Design
 
-Status: **Planner-approved design; written-spec review pending**  
+Status: **Implementation complete on review branch; Planner QA/QC and canonical phase-close Quality pending**  
 Date: **2026-09-02**  
 Architecture class: **Architectural / long-term target design**  
 Parent architecture: `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`  
@@ -870,11 +870,12 @@ Plan 7 later verifies portable restore/export/search rebuild.
 
 ## 28. Planner gate
 
-This design is architecture-approved, but implementation remains blocked until:
+Implementation has been executed on review branch `feat/food-catalog-generation-authority-v3` in Draft PR #165 under the separately approved formal implementation plan. The recorded implementation base is `96dbe4c42f908737e5701df83d8f47356dea6096`.
 
-1. the user/Planner approves this written specification;
-2. the Superpowers `writing-plans` workflow creates the formal Plan 3 implementation plan;
-3. that implementation plan is explicitly approved;
-4. implementation starts from the then-current authoritative `main` under the approved execution workflow.
+Task 1–11 implementation evidence at `03a498e4ef6cce1f5460479a6a381795a5c8b067` passed exact-head PR Quality `33679147523`, including lint, typecheck, full unit suite, build, chronological migration replay, DB lint, registered Plan 3 verification SQL, migration ledger, database integration tests, Workout History integration tests, scope/integrity, and required-summary.
 
-No Production mutation is authorized by approval of this design/spec.
+Task 12 reconciles status-only documentation and requires a fresh exact-head PR Quality on the final review head. Merge remains blocked until independent Planner QA/QC explicitly approves that exact final head and canonical `.github/workflows/quality.yml` passes after Ready-for-review transition.
+
+The Plan 3 migration `supabase/migrations/20260902150000_food_catalog_generation_authority.sql` remains repository-only pending and unapplied. Production migration apply, Food population, provider ingestion, Production activation execution, Catalog Generation promotion, member runtime V2 cutover, deployment, Activity Catalog mutation, and Plan 4 remain **NO**.
+
+No Production mutation is authorized by this design/spec, implementation completion, review, or merge approval.
