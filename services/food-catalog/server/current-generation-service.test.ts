@@ -176,7 +176,7 @@ function makeStore(overrides: Partial<FoodCatalogGenerationReadStore> = {}): Foo
       activationSetMemberId: ACTIVATION_MEMBER_ID,
       foodId: FOOD_ID,
       activationPolicyVersion: "activation-v1",
-      eligibility: "eligible",
+      eligibility: "eligible" as const,
       sourceLegalAccepted: true,
       grantEventId: ACTIVATION_GRANT_ID,
       grantCreatedAt: "2026-09-02T09:30:00.000Z",
@@ -185,7 +185,7 @@ function makeStore(overrides: Partial<FoodCatalogGenerationReadStore> = {}): Foo
     readGenerationEvent: vi.fn(async () => ({
       id: EVENT_ID,
       operationId: "9c000000-0000-4000-8000-000000000001",
-      eventType: "rollback",
+      eventType: "rollback" as const,
       fromGenerationId: "91000000-0000-4000-8000-000000000009",
       toGenerationId: GENERATION_ID,
       revokedGenerationId: null,
@@ -314,7 +314,7 @@ describe("Food Catalog Plan 3 exact current-generation service", () => {
 
   it("derives trust only from selected assertions and the pointer-bound validation report", async () => {
     const store = makeStore({
-      readVerificationAssertions: vi.fn(async (_foodId: string, selected) => {
+      readVerificationAssertions: vi.fn(async (_foodId: string, selected: StoredGenerationSelections["verification"]) => {
         expect(selected.map((item) => item.assertionId)).not.toContain(NEWER_ASSERTION_ID);
         return assertions();
       }),
