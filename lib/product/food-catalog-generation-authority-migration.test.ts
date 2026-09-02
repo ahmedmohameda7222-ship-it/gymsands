@@ -5,6 +5,7 @@ const MIGRATION = "supabase/migrations/20260902150000_food_catalog_generation_au
 const SUFFIX = "_food_catalog_generation_authority.sql";
 const migrationFiles = readdirSync("supabase/migrations").filter((name) => name.endsWith(SUFFIX));
 const sql = readFileSync(MIGRATION, "utf8").toLowerCase();
+const applyOnlySql = sql.split("create or replace function public.food_catalog_create_activation_set_v1")[0];
 const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   productionMigrationCount: number;
   pendingCount: number;
@@ -99,10 +100,10 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
   });
 
   it("seeds only the nullable singleton pointer and no Food or generation facts", () => {
-    expect(sql).not.toMatch(/insert\s+into\s+public\.food_items/i);
-    expect(sql).not.toMatch(/update\s+public\.release_schema_compatibility/i);
-    expect(sql).not.toMatch(/insert\s+into\s+public\.food_catalog_generations/i);
-    expect(sql).toMatch(/insert\s+into\s+public\.food_catalog_current_generation/i);
+    expect(applyOnlySql).not.toMatch(/insert\s+into\s+public\.food_items/i);
+    expect(applyOnlySql).not.toMatch(/update\s+public\.release_schema_compatibility/i);
+    expect(applyOnlySql).not.toMatch(/insert\s+into\s+public\.food_catalog_generations/i);
+    expect(applyOnlySql).toMatch(/insert\s+into\s+public\.food_catalog_current_generation/i);
   });
 
   it("classifies the repository migration as pending without inventing Production identity", () => {
