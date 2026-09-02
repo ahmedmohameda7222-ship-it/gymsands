@@ -16,5 +16,14 @@ export type {
 } from "./contracts";
 export type { FoodCatalogReadStore, FoodCatalogWriteStore } from "./store";
 export type { FoodCatalogCompatibilitySelection } from "./compatibility-projection";
+export type {
+  CurrentGenerationCompatibilitySelection,
+  CurrentGenerationFoodView,
+} from "./current-generation-service";
 export { projectFoodCatalogCompatibility } from "./compatibility-projection";
+export {
+  getCurrentGenerationFood,
+  projectCurrentGenerationCompatibility,
+  resolveCurrentGenerationFoodForNewUse,
+} from "./current-generation-service";
 export { getFoodCatalogDomainBundle, resolveCanonicalRootForNewUse } from "./read-service";
