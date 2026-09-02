@@ -151,7 +151,21 @@ describe("Food Catalog Plan 3 Supabase generation read store", () => {
       food_names: { data: [], error: null },
       food_taxonomy_assignments: { data: [], error: null },
       food_market_assignments: { data: [], error: null },
-      food_verification_assertions: { data: [], error: null },
+      food_verification_assertions: {
+        data: [{
+          id: ASSERTION_ID,
+          food_id: FOOD_ID,
+          assertion_scope: "identity",
+          assertion_state: "verified",
+          policy_version: "verification-v1",
+          source_record_id: null,
+          supersedes_assertion_id: null,
+          reason_code: "fixture",
+          authority_reference: "fixture-authority",
+          created_at: "2026-09-02T00:00:00.000Z",
+        }],
+        error: null,
+      },
     });
     const store = createSupabaseFoodCatalogGenerationReadStore(supabase);
 
