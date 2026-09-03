@@ -83,6 +83,10 @@ export function runDatabaseVerification({
   for (const file of DATABASE_VERIFICATION_FILES.slice(0, -1)) {
     run("psql", [localUrl, "-X", "-v", "ON_ERROR_STOP=1", "-f", file], executionEnv);
   }
+  run(process.execPath, ["scripts/test-food-catalog-grant-promotion-concurrency.mjs"], {
+    ...executionEnv,
+    PLAIVRA_GRANT_PROMOTION_CONCURRENCY_TEST_DATABASE_URL: localUrl,
+  });
   run(process.execPath, ["scripts/test-database-preflight-control.mjs"], {
     ...executionEnv,
     PLAIVRA_PREFLIGHT_TEST_DATABASE_URL: localUrl,
