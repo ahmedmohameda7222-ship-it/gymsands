@@ -1,6 +1,6 @@
 # Food Catalog Intelligence Implementation Roadmap
 
-**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 implementation + five-blocker correction pass complete on review branch; all P1 review threads resolved; canonical phase-close Quality pending
+**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 implementation + six-P1-and-one-P2 correction pass complete on review branch; all correctness review threads resolved; canonical phase-close Quality pending
 **Spec:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
 
 ## Purpose
@@ -80,19 +80,21 @@ Task 1–11 exact-head PR Quality:
 
 `33679147523` — PASS.
 
-Independent correction review identified five P1 blockers. All five were corrected with causal RED/GREEN evidence without reopening the approved architecture:
+Independent correction review identified six P1 blockers plus one P2 persistence-contract mismatch. All were corrected with causal RED/GREEN evidence without reopening the approved architecture:
 
 1. **Generation validation pagination/bulk hydration.** RED `4e1158caad7e88741666220914b959aaa505e857`, PR Quality `33688136654`, core job `100440427269`: the >1,000-row verifier received only 1,000 of 1,002 Foods and 1,000 of 1,001 redirects. GREEN `297c756e85e03b277c5de800c7c4b86d0892ee6`, PR Quality `33689372475`, core job `100444385557`, database job `100444385568`.
 2. **Trusted PostgreSQL semantic replay identity.** RED `00ff1f0f573d1a9181fc4d2a651c4eb657575677`, PR Quality `33689990781`, database job `100446350218`: `Changed semantic command reused an operation ID by trusting the caller checksum.` GREEN `58098f9e3311ce3f6f90a575acbcb04d2893de77`, PR Quality `33692020607`, database job `100452649351`.
 3. **Single verification-chain root per `(food_id, assertion_scope)`.** RED `2ab5dc1cff8ccc53ebc6458869bc09fd6dcd6056`, PR Quality `33692433014`, database job `100454013274`: `Second verification root for the same Food/scope was accepted.` GREEN `444d706efecb8b33220cd2de4fc31f7300974c00`, PR Quality `33693069181`, database job `100456022708`.
 4. **Activation eligibility integrity.** RED `ed618552e240e9eb95b1b480acba9c31d8cd587b`, PR Quality `33736327808`, rerun database job `100589039339`: `Activation eligibility contradictions were accepted: blockers, display_identity, grant_independent_identity, identity, nutrition_basis, source_legal`. GREEN `e2cb8d760d5ec3e9d2729e74e31f649589c2c991`, PR Quality `33737691329`, database job `100592092120`. One immutable trusted eligibility predicate is reused by the member-row structural invariant, grant validation, active candidate sealing, and promotion validation.
 5. **Promotion/invalidation concurrency.** Causal RED `29c61e3d969fea5d1f5d937b05679e47ae99caf4`, PR Quality `33740908113`, database job `100602525629`: `Grant invalidation committed before promotion, but the invalidated-grant candidate still became current.` SQL fix `7f1b2c930c22ace3586fe2d62a9d848b7cc283f7` serializes exact grant invalidation/promotion authority with grant-row locks and deterministic multi-grant lock order. First GREEN attempt `33742228444`, database job `100606599934`, exposed observer/test-harness skew only. Harness-only correction `724e70bb76b533f93d2dfad0fa6a45f230b3e8c9` changes one concurrency verifier file (`+24/-18`) and no production SQL. Exact-head PR Quality `33742679692`, database job `100608255066`, PASS.
+6. **Trusted validation-report checksum at the persistence boundary.** RED `a0a9df7be448206eb092a4fe673532af4a2f557e`, PR Quality `33755929647`, database job `100650528589`: registered verification failed `Validation report checksum mismatch was accepted at the trusted persistence boundary.` SQL correction `0bc30953c77f32cb0c89a640f9561cc32a2322a9` recomputes normalized validation-report SHA-256 from trusted DB semantics, derives verification states from sealed DB authority, requires exact generation checksum/policy binding, and rejects caller checksum mismatch before persistence. Fixture alignment `42b8b504d53ce5d1ae604ed1156aa53975c98556` and focused verifier strengthening `57e5e4cf4e418eace5d3864a23e481382ed0077a` preserve positive acceptance and stale-semantic rejection coverage. GREEN `57e5e4cf4e418eace5d3864a23e481382ed0077a`, PR Quality `33759467874`, database job `100662554948`, PASS.
+7. **P2 lowercase activation checksum contract.** RED `6c3d82983fb0afc01863c310357f803a2c84320d`, PR Quality `33760908165`, core job `100666750397`: unit test `rejects uppercase SHA-256 checksums before the persistence boundary` failed because uppercase input was accepted. GREEN fix `51a68a049742b4bd83801bfaf47cb3d737c6bab2` changes only `lib/food-catalog/domain/activation.ts` (`+1/-1`) so activation evidence/member checksums use lowercase-only `^[0-9a-f]{64}$`, matching PostgreSQL persistence constraints. PR Quality `33761128693`, core job `100667707557`, database job `100667707407`, PASS.
 
-The exact corrected implementation head before status-only reconciliation is:
+The exact corrected implementation head before final status-only reconciliation is:
 
-`724e70bb76b533f93d2dfad0fa6a45f230b3e8c9`
+`51a68a049742b4bd83801bfaf47cb3d737c6bab2`
 
-PR Quality `33742679692` passed on that exact head, including scope/integrity, repository contracts, lint, typecheck, full units, production build, chronological migration replay, DB lint, registered database verification including the concurrency verifier, migration ledger, database integrations, Workout History integrations, rendered QA/CI contracts where required, and required-summary. All five P1 review threads were replied to with exact evidence and are resolved; a complete thread re-fetch found zero additional unresolved P0/P1 correctness findings.
+PR Quality `33761128693` passed on that exact head, including scope/integrity, repository contracts, lint, typecheck, full units, production build, chronological migration replay, DB lint, registered database verification, migration ledger, database integrations, Workout History integrations, rendered QA, and required-summary. Same-head Phase A `33761128687`, Exercise Detail Runtime QA `33761128713`, and Exercise Library Locale Runtime QA `33761128708` also passed. All six P1 threads and the P2 thread were replied to with exact evidence and resolved; a complete thread re-fetch found zero unresolved correctness threads.
 
 Plan 3 adds exactly one repository-only pending migration:
 
@@ -100,7 +102,7 @@ Plan 3 adds exactly one repository-only pending migration:
 
 Current Plan 3 migration blob after all code corrections:
 
-`cce378bac1e08b470bac7ebcb510734f28110178`
+`555099adf93eef1db3f29e660dc76b7cfa148d86`
 
 Migration ledger remains truthful with `productionMigrationCount=63`, `pendingCount=1`, `unresolvedCount=1`, `historyRepair.state=pending`, `schemaVerifiedUntrackedCount=0`, and derived `release_ready=false`; latest applied Production identity remains `20260901183021_food_catalog_plan1_semantic_corrections`. The released compatibility marker remains `20260724232734`.
 
@@ -140,7 +142,7 @@ Binding design principles include:
 - merged source IDs are direct generation redirects to active survivors;
 - no fake Generation 0; current pointer may remain `NULL` before real promotion.
 
-**Exit condition:** drafts can exist without visibility; activation remains separate; current reads are generation-authoritative; promotion is audited/atomic; rollback can restore an explicitly selected previous healthy generation without destructive rewriting. **Implementation and five-blocker correction pass satisfied on review branch; merge approval remains pending canonical phase-close Quality and independent Planner final re-review.**
+**Exit condition:** drafts can exist without visibility; activation remains separate; current reads are generation-authoritative; promotion is audited/atomic; rollback can restore an explicitly selected previous healthy generation without destructive rewriting. **Implementation and six-P1-plus-one-P2 correction pass satisfied on review branch; merge approval remains pending canonical phase-close Quality and independent Planner final re-review.**
 
 ### Plan 4 — Ingestion V2, Quarantine, and Release-Diff Operations
 
