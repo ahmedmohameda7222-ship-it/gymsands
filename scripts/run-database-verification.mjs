@@ -50,6 +50,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/food-catalog-generation-authority.sql",
   "supabase/verification/food-catalog-verification-chain-roots.sql",
   "supabase/verification/food-catalog-activation-eligibility.sql",
+  "supabase/verification/food-catalog-validation-report-checksum.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
