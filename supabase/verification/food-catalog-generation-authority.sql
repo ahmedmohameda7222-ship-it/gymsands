@@ -286,32 +286,32 @@ select pg_temp.plan3_rejected(
  'Market remove fact was selected.'
 );
 
--- Validation report bound to exact generation checksum, with one blocking report first.
+-- Validation report bound to exact generation checksum and deterministic report semantics, with one blocking report first.
 select public.food_catalog_record_generation_validation_v1(jsonb_build_object(
  'operation_id','d3100000-0000-4000-8000-000000000008','command_checksum_sha256',repeat('e',64),
- 'report_id','d3700000-0000-4000-8000-000000000001','generation_id','d3500000-0000-4000-8000-000000000001','generation_checksum_sha256',repeat('d',64),'validator_set_version','validator-v1','policy_version','validation-v1','report_checksum_sha256',repeat('f',64),'blocker_count',1,'error_count',1,'warning_count',0,'info_count',0,'event_id','d3600000-0000-4000-8000-000000000002',
+ 'report_id','d3700000-0000-4000-8000-000000000001','generation_id','d3500000-0000-4000-8000-000000000001','generation_checksum_sha256',repeat('d',64),'validator_set_version','validator-v1','policy_version','generation-v1','report_checksum_sha256','e6a6ca21cc5fffb9c50312d668a4a2c00291b50241b2680390a571c6cb712402','blocker_count',1,'error_count',1,'warning_count',0,'info_count',0,'event_id','d3600000-0000-4000-8000-000000000002',
  'actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','validate','policy_version','control-v1'),
  'findings',jsonb_build_array(jsonb_build_object('id','d3800000-0000-4000-8000-000000000001','finding_ordinal',1,'reason_code','BLOCKER','food_id','d3000000-0000-4000-8000-000000000001','severity','error','blocking',true,'evidence_reference','fixture:blocker','validator_policy_version','validation-v1','details',jsonb_build_object('fixture',true)))
 ));
 select pg_temp.plan3_rejected(
- $$select public.food_catalog_promote_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000009','command_checksum_sha256',repeat('1',64),'candidate_generation_id','d3500000-0000-4000-8000-000000000001','expected_current_generation_id',null,'candidate_checksum_sha256',repeat('d',64),'validation_report_id','d3700000-0000-4000-8000-000000000001','validation_report_checksum_sha256',repeat('f',64),'event_id','d3600000-0000-4000-8000-000000000003','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote','policy_version','control-v1')))$$,
+ $$select public.food_catalog_promote_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000009','command_checksum_sha256',repeat('1',64),'candidate_generation_id','d3500000-0000-4000-8000-000000000001','expected_current_generation_id',null,'candidate_checksum_sha256',repeat('d',64),'validation_report_id','d3700000-0000-4000-8000-000000000001','validation_report_checksum_sha256','e6a6ca21cc5fffb9c50312d668a4a2c00291b50241b2680390a571c6cb712402','event_id','d3600000-0000-4000-8000-000000000003','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote','policy_version','control-v1')))$$,
  'Blocking validation report allowed promotion.'
 );
 
 select public.food_catalog_record_generation_validation_v1(jsonb_build_object(
  'operation_id','d3100000-0000-4000-8000-000000000010','command_checksum_sha256',repeat('2',64),
- 'report_id','d3700000-0000-4000-8000-000000000002','generation_id','d3500000-0000-4000-8000-000000000001','generation_checksum_sha256',repeat('d',64),'validator_set_version','validator-v1','policy_version','validation-v1','report_checksum_sha256',repeat('3',64),'blocker_count',0,'error_count',0,'warning_count',0,'info_count',0,'event_id','d3600000-0000-4000-8000-000000000004',
+ 'report_id','d3700000-0000-4000-8000-000000000002','generation_id','d3500000-0000-4000-8000-000000000001','generation_checksum_sha256',repeat('d',64),'validator_set_version','validator-v1','policy_version','generation-v1','report_checksum_sha256','878ba5ee0f18ff5396a31d8901515f68296368595aae09ed2d73238b400290ff','blocker_count',0,'error_count',0,'warning_count',0,'info_count',0,'event_id','d3600000-0000-4000-8000-000000000004',
  'actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','validate','policy_version','control-v1'),'findings','[]'::jsonb
 ));
 
 select pg_temp.plan3_rejected(
- $$select public.food_catalog_promote_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000011','command_checksum_sha256',repeat('4',64),'candidate_generation_id','d3500000-0000-4000-8000-000000000001','expected_current_generation_id',null,'candidate_checksum_sha256',repeat('0',64),'validation_report_id','d3700000-0000-4000-8000-000000000002','validation_report_checksum_sha256',repeat('3',64),'event_id','d3600000-0000-4000-8000-000000000005','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote','policy_version','control-v1')))$$,
+ $$select public.food_catalog_promote_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000011','command_checksum_sha256',repeat('4',64),'candidate_generation_id','d3500000-0000-4000-8000-000000000001','expected_current_generation_id',null,'candidate_checksum_sha256',repeat('0',64),'validation_report_id','d3700000-0000-4000-8000-000000000002','validation_report_checksum_sha256','878ba5ee0f18ff5396a31d8901515f68296368595aae09ed2d73238b400290ff','event_id','d3600000-0000-4000-8000-000000000005','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote','policy_version','control-v1')))$$,
  'Wrong candidate checksum allowed promotion.'
 );
 
 select public.food_catalog_promote_generation_v1(jsonb_build_object(
  'operation_id','d3100000-0000-4000-8000-000000000012','command_checksum_sha256',repeat('5',64),
- 'candidate_generation_id','d3500000-0000-4000-8000-000000000001','expected_current_generation_id',null,'candidate_checksum_sha256',repeat('d',64),'validation_report_id','d3700000-0000-4000-8000-000000000002','validation_report_checksum_sha256',repeat('3',64),'event_id','d3600000-0000-4000-8000-000000000006',
+ 'candidate_generation_id','d3500000-0000-4000-8000-000000000001','expected_current_generation_id',null,'candidate_checksum_sha256',repeat('d',64),'validation_report_id','d3700000-0000-4000-8000-000000000002','validation_report_checksum_sha256','878ba5ee0f18ff5396a31d8901515f68296368595aae09ed2d73238b400290ff','event_id','d3600000-0000-4000-8000-000000000006',
  'actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote','policy_version','control-v1')
 ));
 select pg_temp.plan3_assert(
@@ -322,7 +322,7 @@ select pg_temp.plan3_assert(
  'Promotion did not atomically switch all current pointer evidence.'
 );
 select pg_temp.plan3_rejected(
- $$select public.food_catalog_promote_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000013','command_checksum_sha256',repeat('6',64),'candidate_generation_id','d3500000-0000-4000-8000-000000000001','expected_current_generation_id',null,'candidate_checksum_sha256',repeat('d',64),'validation_report_id','d3700000-0000-4000-8000-000000000002','validation_report_checksum_sha256',repeat('3',64),'event_id','d3600000-0000-4000-8000-000000000007','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote','policy_version','control-v1')))$$,
+ $$select public.food_catalog_promote_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000013','command_checksum_sha256',repeat('6',64),'candidate_generation_id','d3500000-0000-4000-8000-000000000001','expected_current_generation_id',null,'candidate_checksum_sha256',repeat('d',64),'validation_report_id','d3700000-0000-4000-8000-000000000002','validation_report_checksum_sha256','878ba5ee0f18ff5396a31d8901515f68296368595aae09ed2d73238b400290ff','event_id','d3600000-0000-4000-8000-000000000007','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote','policy_version','control-v1')))$$,
  'Stale expected-current CAS was accepted.'
 );
 
@@ -372,12 +372,12 @@ select public.food_catalog_create_generation_v1(jsonb_build_object(
 set constraints all immediate;
 select public.food_catalog_record_generation_validation_v1(jsonb_build_object(
  'operation_id','d3100000-0000-4000-8000-000000000018','command_checksum_sha256',repeat('2',64),
- 'report_id','d3700000-0000-4000-8000-000000000003','generation_id','d3500000-0000-4000-8000-000000000002','generation_checksum_sha256',repeat('8',64),'validator_set_version','validator-v1','policy_version','validation-v1','report_checksum_sha256',repeat('9',64),'blocker_count',0,'error_count',0,'warning_count',0,'info_count',0,'event_id','d3600000-0000-4000-8000-000000000009',
+ 'report_id','d3700000-0000-4000-8000-000000000003','generation_id','d3500000-0000-4000-8000-000000000002','generation_checksum_sha256',repeat('8',64),'validator_set_version','validator-v1','policy_version','generation-v1','report_checksum_sha256','94c4c08b53fe253b168fdbb63ec1b430c2bd9c22e0d3f04421a90ef80cfe725c','blocker_count',0,'error_count',0,'warning_count',0,'info_count',0,'event_id','d3600000-0000-4000-8000-000000000009',
  'actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','validate-b','policy_version','control-v1'),'findings','[]'::jsonb
 ));
 select public.food_catalog_promote_generation_v1(jsonb_build_object(
  'operation_id','d3100000-0000-4000-8000-000000000019','command_checksum_sha256',repeat('3',64),
- 'candidate_generation_id','d3500000-0000-4000-8000-000000000002','expected_current_generation_id','d3500000-0000-4000-8000-000000000001','candidate_checksum_sha256',repeat('8',64),'validation_report_id','d3700000-0000-4000-8000-000000000003','validation_report_checksum_sha256',repeat('9',64),'event_id','d3600000-0000-4000-8000-000000000010',
+ 'candidate_generation_id','d3500000-0000-4000-8000-000000000002','expected_current_generation_id','d3500000-0000-4000-8000-000000000001','candidate_checksum_sha256',repeat('8',64),'validation_report_id','d3700000-0000-4000-8000-000000000003','validation_report_checksum_sha256','94c4c08b53fe253b168fdbb63ec1b430c2bd9c22e0d3f04421a90ef80cfe725c','event_id','d3600000-0000-4000-8000-000000000010',
  'actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote-b','policy_version','control-v1')
 ));
 select pg_temp.plan3_assert(
@@ -397,7 +397,7 @@ select pg_temp.plan3_rejected(
 -- Rollback names generation A and its exact prior promotion evidence, never a heuristic previous row.
 select public.food_catalog_rollback_generation_v1(jsonb_build_object(
  'operation_id','d3100000-0000-4000-8000-000000000021','command_checksum_sha256',repeat('5',64),
- 'expected_current_generation_id','d3500000-0000-4000-8000-000000000002','target_generation_id','d3500000-0000-4000-8000-000000000001','target_checksum_sha256',repeat('d',64),'target_promotion_event_id','d3600000-0000-4000-8000-000000000006','target_validation_report_id','d3700000-0000-4000-8000-000000000002','target_validation_report_checksum_sha256',repeat('3',64),'event_id','d3600000-0000-4000-8000-000000000011',
+ 'expected_current_generation_id','d3500000-0000-4000-8000-000000000002','target_generation_id','d3500000-0000-4000-8000-000000000001','target_checksum_sha256',repeat('d',64),'target_promotion_event_id','d3600000-0000-4000-8000-000000000006','target_validation_report_id','d3700000-0000-4000-8000-000000000002','target_validation_report_checksum_sha256','878ba5ee0f18ff5396a31d8901515f68296368595aae09ed2d73238b400290ff','event_id','d3600000-0000-4000-8000-000000000011',
  'actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','rollback-a','policy_version','control-v1')
 ));
 select pg_temp.plan3_assert(
@@ -415,11 +415,11 @@ select public.food_catalog_revoke_generation_v1(jsonb_build_object(
  'actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','revoke-b','policy_version','control-v1')
 ));
 select pg_temp.plan3_rejected(
- $$select public.food_catalog_promote_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000023','command_checksum_sha256',repeat('7',64),'candidate_generation_id','d3500000-0000-4000-8000-000000000002','expected_current_generation_id','d3500000-0000-4000-8000-000000000001','candidate_checksum_sha256',repeat('8',64),'validation_report_id','d3700000-0000-4000-8000-000000000003','validation_report_checksum_sha256',repeat('9',64),'event_id','d3600000-0000-4000-8000-000000000013','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote-revoked','policy_version','control-v1')))$$,
+ $$select public.food_catalog_promote_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000023','command_checksum_sha256',repeat('7',64),'candidate_generation_id','d3500000-0000-4000-8000-000000000002','expected_current_generation_id','d3500000-0000-4000-8000-000000000001','candidate_checksum_sha256',repeat('8',64),'validation_report_id','d3700000-0000-4000-8000-000000000003','validation_report_checksum_sha256','94c4c08b53fe253b168fdbb63ec1b430c2bd9c22e0d3f04421a90ef80cfe725c','event_id','d3600000-0000-4000-8000-000000000013','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','promote-revoked','policy_version','control-v1')))$$,
  'Revoked generation was promotable.'
 );
 select pg_temp.plan3_rejected(
- $$select public.food_catalog_rollback_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000024','command_checksum_sha256',repeat('a',64),'expected_current_generation_id','d3500000-0000-4000-8000-000000000001','target_generation_id','d3500000-0000-4000-8000-000000000002','target_checksum_sha256',repeat('8',64),'target_promotion_event_id','d3600000-0000-4000-8000-000000000010','target_validation_report_id','d3700000-0000-4000-8000-000000000003','target_validation_report_checksum_sha256',repeat('9',64),'event_id','d3600000-0000-4000-8000-000000000014','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','rollback-revoked','policy_version','control-v1')))$$,
+ $$select public.food_catalog_rollback_generation_v1(jsonb_build_object('operation_id','d3100000-0000-4000-8000-000000000024','command_checksum_sha256',repeat('a',64),'expected_current_generation_id','d3500000-0000-4000-8000-000000000001','target_generation_id','d3500000-0000-4000-8000-000000000002','target_checksum_sha256',repeat('8',64),'target_promotion_event_id','d3600000-0000-4000-8000-000000000010','target_validation_report_id','d3700000-0000-4000-8000-000000000003','target_validation_report_checksum_sha256','94c4c08b53fe253b168fdbb63ec1b430c2bd9c22e0d3f04421a90ef80cfe725c','event_id','d3600000-0000-4000-8000-000000000014','actor',jsonb_build_object('principal_id','planner-fixture','principal_type','human','authority_reference','fixture-authority','reason_code','rollback-revoked','policy_version','control-v1')))$$,
  'Revoked generation was a rollback target.'
 );
 
