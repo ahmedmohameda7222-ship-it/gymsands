@@ -1556,22 +1556,22 @@ alter table public.food_catalog_generation_validation_findings enable row level 
 alter table public.food_catalog_generation_events enable row level security;
 alter table public.food_catalog_current_generation enable row level security;
 
-revoke all on public.food_catalog_control_operations from anon, authenticated;
-revoke all on public.food_catalog_activation_sets from anon, authenticated;
-revoke all on public.food_catalog_activation_set_members from anon, authenticated;
-revoke all on public.food_catalog_activation_events from anon, authenticated;
-revoke all on public.food_catalog_generations from anon, authenticated;
-revoke all on public.food_catalog_generation_foods from anon, authenticated;
-revoke all on public.food_catalog_generation_servings from anon, authenticated;
-revoke all on public.food_catalog_generation_names from anon, authenticated;
-revoke all on public.food_catalog_generation_taxonomy from anon, authenticated;
-revoke all on public.food_catalog_generation_markets from anon, authenticated;
-revoke all on public.food_catalog_generation_verification from anon, authenticated;
-revoke all on public.food_catalog_generation_redirects from anon, authenticated;
-revoke all on public.food_catalog_generation_validation_reports from anon, authenticated;
-revoke all on public.food_catalog_generation_validation_findings from anon, authenticated;
-revoke all on public.food_catalog_generation_events from anon, authenticated;
-revoke all on public.food_catalog_current_generation from anon, authenticated;
+revoke all on public.food_catalog_control_operations from anon, authenticated, service_role;
+revoke all on public.food_catalog_activation_sets from anon, authenticated, service_role;
+revoke all on public.food_catalog_activation_set_members from anon, authenticated, service_role;
+revoke all on public.food_catalog_activation_events from anon, authenticated, service_role;
+revoke all on public.food_catalog_generations from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_foods from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_servings from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_names from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_taxonomy from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_markets from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_verification from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_redirects from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_validation_reports from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_validation_findings from anon, authenticated, service_role;
+revoke all on public.food_catalog_generation_events from anon, authenticated, service_role;
+revoke all on public.food_catalog_current_generation from anon, authenticated, service_role;
 
 grant select on public.food_catalog_control_operations to service_role;
 grant select on public.food_catalog_activation_sets to service_role;
