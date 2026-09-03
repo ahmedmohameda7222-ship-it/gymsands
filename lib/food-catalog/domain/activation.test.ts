@@ -57,4 +57,14 @@ describe("Plan 3 activation contracts", () => {
       validateActivationSetMemberDraft(eligibleMember({ blockingConditionCount: -1 })),
     ).toThrow(/blocking/i);
   });
+
+  it("rejects uppercase SHA-256 checksums before the persistence boundary", () => {
+    const uppercaseSha256 = "A".repeat(64);
+    expect(() =>
+      validateActivationSetMemberDraft(eligibleMember({ evidenceChecksumSha256: uppercaseSha256 })),
+    ).toThrow(/checksum/i);
+    expect(() =>
+      validateActivationSetMemberDraft(eligibleMember({ memberChecksumSha256: uppercaseSha256 })),
+    ).toThrow(/checksum/i);
+  });
 });
