@@ -1,6 +1,6 @@
 # Food Catalog Intelligence Implementation Roadmap
 
-**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 implementation complete on review branch; independent Planner QA/QC and canonical phase-close Quality pending
+**Status:** implementation-planning authority; Plan 1 complete, Plan 2 complete/merged, Plan 3 implementation + five-blocker correction pass complete on review branch; all P1 review threads resolved; canonical phase-close Quality pending
 **Spec:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
 
 ## Purpose
@@ -50,7 +50,7 @@ Squash merge commit:
 
 Plan 2 established the V2 domain/service boundary without member runtime V2 cutover, Production mutation, Food population, activation, or generation promotion.
 
-### Plan 3 — Activation, Verification, Trust, and Catalog Generations — IMPLEMENTATION COMPLETE ON REVIEW BRANCH / PLANNER QA/QC PENDING
+### Plan 3 — Activation, Verification, Trust, and Catalog Generations — IMPLEMENTATION + CORRECTION PASS COMPLETE / CANONICAL PHASE-CLOSE QUALITY PENDING
 
 Formal Plan 3 design spec:
 
@@ -80,23 +80,33 @@ Task 1–11 exact-head PR Quality:
 
 `33679147523` — PASS.
 
-Planner correction review then identified three P1 blockers. All three were corrected with causal RED/GREEN evidence without reopening the architecture:
+Independent correction review identified five P1 blockers. All five were corrected with causal RED/GREEN evidence without reopening the approved architecture:
 
-1. generation validation pagination/bulk enumeration — GREEN at `297c756e85e03b277c5de800c7c4b86d0892ee6`, PR Quality `33689372475`;
-2. trusted PostgreSQL semantic replay identity — RED `00ff1f0f573d1a9181fc4d2a651c4eb657575677` / `33689990781`, GREEN `58098f9e3311ce3f6f90a575acbcb04d2893de77` / `33692020607`;
-3. single verification-chain root per `(food_id, assertion_scope)` — RED `2ab5dc1cff8ccc53ebc6458869bc09fd6dcd6056` / `33692433014`, GREEN `444d706efecb8b33220cd2de4fc31f7300974c00` / `33693069181`.
+1. **Generation validation pagination/bulk hydration.** RED `4e1158caad7e88741666220914b959aaa505e857`, PR Quality `33688136654`, core job `100440427269`: the >1,000-row verifier received only 1,000 of 1,002 Foods and 1,000 of 1,001 redirects. GREEN `297c756e85e03b277c5de800c7c4b86d0892ee6`, PR Quality `33689372475`, core job `100444385557`, database job `100444385568`.
+2. **Trusted PostgreSQL semantic replay identity.** RED `00ff1f0f573d1a9181fc4d2a651c4eb657575677`, PR Quality `33689990781`, database job `100446350218`: `Changed semantic command reused an operation ID by trusting the caller checksum.` GREEN `58098f9e3311ce3f6f90a575acbcb04d2893de77`, PR Quality `33692020607`, database job `100452649351`.
+3. **Single verification-chain root per `(food_id, assertion_scope)`.** RED `2ab5dc1cff8ccc53ebc6458869bc09fd6dcd6056`, PR Quality `33692433014`, database job `100454013274`: `Second verification root for the same Food/scope was accepted.` GREEN `444d706efecb8b33220cd2de4fc31f7300974c00`, PR Quality `33693069181`, database job `100456022708`.
+4. **Activation eligibility integrity.** RED `ed618552e240e9eb95b1b480acba9c31d8cd587b`, PR Quality `33736327808`, rerun database job `100589039339`: `Activation eligibility contradictions were accepted: blockers, display_identity, grant_independent_identity, identity, nutrition_basis, source_legal`. GREEN `e2cb8d760d5ec3e9d2729e74e31f649589c2c991`, PR Quality `33737691329`, database job `100592092120`. One immutable trusted eligibility predicate is reused by the member-row structural invariant, grant validation, active candidate sealing, and promotion validation.
+5. **Promotion/invalidation concurrency.** Causal RED `29c61e3d969fea5d1f5d937b05679e47ae99caf4`, PR Quality `33740908113`, database job `100602525629`: `Grant invalidation committed before promotion, but the invalidated-grant candidate still became current.` SQL fix `7f1b2c930c22ace3586fe2d62a9d848b7cc283f7` serializes exact grant invalidation/promotion authority with grant-row locks and deterministic multi-grant lock order. First GREEN attempt `33742228444`, database job `100606599934`, exposed observer/test-harness skew only. Harness-only correction `724e70bb76b533f93d2dfad0fa6a45f230b3e8c9` changes one concurrency verifier file (`+24/-18`) and no production SQL. Exact-head PR Quality `33742679692`, database job `100608255066`, PASS.
 
-The exact corrected implementation head `444d706efecb8b33220cd2de4fc31f7300974c00` passed PR Quality `33693069181`, including scope/integrity, repository contracts, lint, typecheck, full unit suite, build, chronological migration replay, DB lint, registered database verification SQL, migration ledger, database integration tests, Workout History integration tests, and required-summary. Database job `100456022708` was GREEN. The three P1 review threads were replied to with exact evidence and resolved only after this final correction regression passed.
+The exact corrected implementation head before status-only reconciliation is:
+
+`724e70bb76b533f93d2dfad0fa6a45f230b3e8c9`
+
+PR Quality `33742679692` passed on that exact head, including scope/integrity, repository contracts, lint, typecheck, full units, production build, chronological migration replay, DB lint, registered database verification including the concurrency verifier, migration ledger, database integrations, Workout History integrations, rendered QA/CI contracts where required, and required-summary. All five P1 review threads were replied to with exact evidence and are resolved; a complete thread re-fetch found zero additional unresolved P0/P1 correctness findings.
 
 Plan 3 adds exactly one repository-only pending migration:
 
 `supabase/migrations/20260902150000_food_catalog_generation_authority.sql`
 
-Migration ledger remains truthful with `productionMigrationCount=63`, `pending=1`, `unresolved=1`, `historyRepair.state=pending`, and derived `release_ready=false`; latest applied Production identity remains `20260901183021_food_catalog_plan1_semantic_corrections`. The released compatibility marker remains `20260724232734`.
+Current Plan 3 migration blob after all code corrections:
+
+`cce378bac1e08b470bac7ebcb510734f28110178`
+
+Migration ledger remains truthful with `productionMigrationCount=63`, `pendingCount=1`, `unresolvedCount=1`, `historyRepair.state=pending`, `schemaVerifiedUntrackedCount=0`, and derived `release_ready=false`; latest applied Production identity remains `20260901183021_food_catalog_plan1_semantic_corrections`. The released compatibility marker remains `20260724232734`.
 
 Applied Plan 1 migration blobs remain byte-identical: core `3ea9a95b818068dbe03d080fb205dfcdf5af07ab`, semantic correction `1e4dff8b5fea6d8d8b60fc78a77033b32e07ff35`. No Production migration apply, Food population, provider ingestion, Production activation execution, Production generation promotion, member runtime V2 cutover, deployment, Activity Catalog mutation, or Plan 4 work occurred.
 
-Independent Planner QA/QC and canonical phase-close `.github/workflows/quality.yml` on the final exact documentation head remain required before merge approval.
+A fresh canonical phase-close `.github/workflows/quality.yml` is still mandatory on the ultimate exact final status-only documentation head before independent Planner final re-review. PR #165 remains unmerged.
 
 ## Plan sequence
 
@@ -130,7 +140,7 @@ Binding design principles include:
 - merged source IDs are direct generation redirects to active survivors;
 - no fake Generation 0; current pointer may remain `NULL` before real promotion.
 
-**Exit condition:** drafts can exist without visibility; activation remains separate; current reads are generation-authoritative; promotion is audited/atomic; rollback can restore an explicitly selected previous healthy generation without destructive rewriting. **Implementation satisfied on review branch; merge approval pending independent Planner QA/QC and canonical phase-close Quality.**
+**Exit condition:** drafts can exist without visibility; activation remains separate; current reads are generation-authoritative; promotion is audited/atomic; rollback can restore an explicitly selected previous healthy generation without destructive rewriting. **Implementation and five-blocker correction pass satisfied on review branch; merge approval remains pending canonical phase-close Quality and independent Planner final re-review.**
 
 ### Plan 4 — Ingestion V2, Quarantine, and Release-Diff Operations
 
@@ -179,7 +189,7 @@ Plan 1 Core Model — COMPLETE
   ↓
 Plan 2 Domain Service V2 — COMPLETE / MERGED
   ↓
-Plan 3 Activation / Verification / Generations — IMPLEMENTATION COMPLETE ON REVIEW BRANCH / QA-QC PENDING
+Plan 3 Activation / Verification / Generations — IMPLEMENTATION + CORRECTION PASS COMPLETE / CANONICAL QUALITY PENDING
   ↓
 Plan 4 Ingestion V2 / Quarantine
   ↓
@@ -200,6 +210,6 @@ Plans 5 and 6 may overlap only after prerequisite contracts from Plans 2–4 are
 
 ## Current best next move
 
-Keep Ready-for-review PR #165 unmerged. Require PR Quality on the final status-only documentation head, then require canonical `.github/workflows/quality.yml` on that same exact head. After exact-head canonical Quality passes, hand the frozen head to independent Planner correction re-review. Merge only after explicit Planner approval.
+Keep Ready-for-review PR #165 unmerged. Freeze status-only documentation, obtain a fresh canonical `.github/workflows/quality.yml` on the ultimate exact final head, then independently re-fetch the PR head/review threads/protected migration blobs/ledger and hand that frozen exact head to the Planner for final re-review. Merge only after explicit Planner approval.
 
 No Production mutation is authorized by implementation completion, canonical Quality, Planner review, or merge approval.
