@@ -23,7 +23,7 @@ const ACTIVATION_PRECONDITION_LIFECYCLES = new Set<ActivationPreconditionLifecyc
   "deprecated",
   "withdrawn",
 ]);
-const SHA256_HEX = /^[0-9a-f]{64}$/i;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 function requireNonblank(value: string, label: string): void {
   if (typeof value !== "string" || !value.trim()) {
