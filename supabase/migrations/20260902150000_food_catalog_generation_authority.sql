@@ -1611,4 +1611,252 @@ grant execute on function public.food_catalog_promote_generation_v1(jsonb) to se
 grant execute on function public.food_catalog_rollback_generation_v1(jsonb) to service_role;
 grant execute on function public.food_catalog_revoke_generation_v1(jsonb) to service_role;
 
+-- Trusted validation-report integrity: mirror the server canonical JSON contract at
+-- the persistence boundary and recompute report identity from normalized contents.
+create or replace function private.food_catalog_plan3_canonical_json_v1(p_value jsonb)
+returns text
+language plpgsql
+immutable
+strict
+set search_path = ''
+as $function$
+declare
+  v_type text := jsonb_typeof(p_value);
+  v_result text;
+begin
+  if v_type = 'object' then
+    select '{' || coalesce(
+      string_agg(
+        to_jsonb(entry.key)::text || ':' || private.food_catalog_plan3_canonical_json_v1(entry.value),
+        ',' order by entry.key collate "C"
+      ),
+      ''
+    ) || '}'
+      into v_result
+    from jsonb_each(p_value) as entry(key, value);
+    return v_result;
+  end if;
+
+  if v_type = 'array' then
+    select '[' || coalesce(
+      string_agg(
+        private.food_catalog_plan3_canonical_json_v1(entry.value),
+        ',' order by entry.ordinality
+      ),
+      ''
+    ) || ']'
+      into v_result
+    from jsonb_array_elements(p_value) with ordinality as entry(value, ordinality);
+    return v_result;
+  end if;
+
+  if v_type = 'number' then
+    v_result := p_value #>> '{}';
+    if v_result = '-0' then
+      return '0';
+    end if;
+    if v_result ~ '^-?[0-9]+\.[0-9]+$' then
+      v_result := regexp_replace(v_result, '0+$', '');
+      v_result := regexp_replace(v_result, '\.$', '');
+    end if;
+    return v_result;
+  end if;
+
+  return p_value::text;
+end
+$function$;
+
+create or replace function public.food_catalog_record_generation_validation_v1(p_command jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, extensions
+as $function$
+declare
+  p_operation_id uuid := (p_command->>'operation_id')::uuid;
+  v_caller_checksum text := p_command->>'command_checksum_sha256';
+  v_command_checksum text := private.food_catalog_plan3_command_fingerprint_v1(p_command);
+  v_existing_kind text;
+  v_existing_checksum text;
+  v_existing_result jsonb;
+  v_report_id uuid := (p_command->>'report_id')::uuid;
+  v_generation_id uuid := (p_command->>'generation_id')::uuid;
+  v_event_id uuid := coalesce(nullif(p_command->>'event_id', '')::uuid, gen_random_uuid());
+  v_actor jsonb := p_command->'actor';
+  v_item jsonb;
+  v_blockers integer;
+  v_errors integer;
+  v_warnings integer;
+  v_infos integer;
+  v_report_findings jsonb;
+  v_verification_states jsonb;
+  v_report_semantic_payload jsonb;
+  v_trusted_report_checksum text;
+  v_result jsonb;
+begin
+  if p_operation_id is null or v_caller_checksum !~ '^[0-9a-f]{64}$' then
+    raise exception 'CONTROL_PLANE_REJECTED: valid operation_id and command checksum are required.';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_operation_id::text, 0));
+  select operation_kind, command_checksum_sha256, result_json
+    into v_existing_kind, v_existing_checksum, v_existing_result
+  from public.food_catalog_control_operations where operation_id = p_operation_id;
+  if found then
+    if v_existing_kind = 'record_generation_validation' and v_existing_checksum = v_command_checksum then
+      return v_existing_result;
+    end if;
+    raise exception 'OPERATION_ID_CONFLICT: operation_id already belongs to another semantic command.';
+  end if;
+  if jsonb_typeof(v_actor) <> 'object'
+     or nullif(btrim(v_actor->>'principal_id'), '') is null
+     or coalesce(v_actor->>'principal_type', '') not in ('human', 'service')
+     or nullif(btrim(v_actor->>'authority_reference'), '') is null
+     or nullif(btrim(v_actor->>'reason_code'), '') is null
+     or nullif(btrim(v_actor->>'policy_version'), '') is null then
+    raise exception 'CONTROL_PLANE_REJECTED: complete actor context is required.';
+  end if;
+  if not exists (
+    select 1 from public.food_catalog_generations
+    where id = v_generation_id
+      and composition_checksum_sha256 = p_command->>'generation_checksum_sha256'
+      and generation_policy_version = p_command->>'policy_version'
+      and sealed_at is not null
+  ) then
+    raise exception 'GENERATION_CHECKSUM_MISMATCH: validation must bind the exact sealed generation checksum and policy.';
+  end if;
+  if jsonb_typeof(coalesce(p_command->'findings', '[]'::jsonb)) <> 'array' then
+    raise exception 'CONTROL_PLANE_REJECTED: findings must be a JSON array.';
+  end if;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'findingOrdinal', (entry.value->>'finding_ordinal')::integer,
+        'reasonCode', entry.value->>'reason_code',
+        'foodId', nullif(entry.value->>'food_id', ''),
+        'severity', entry.value->>'severity',
+        'blocking', (entry.value->>'blocking')::boolean,
+        'evidenceReference', nullif(entry.value->>'evidence_reference', ''),
+        'validatorPolicyVersion', entry.value->>'validator_policy_version',
+        'details', coalesce(entry.value->'details', '{}'::jsonb)
+      ) order by entry.ordinality
+    ),
+    '[]'::jsonb
+  )
+    into v_report_findings
+  from jsonb_array_elements(coalesce(p_command->'findings', '[]'::jsonb))
+    with ordinality as entry(value, ordinality);
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'foodId', selection.food_id::text,
+        'scope', selection.assertion_scope,
+        'assertionId', selection.assertion_id::text,
+        'state', assertion.assertion_state
+      ) order by selection.food_id::text collate "C", selection.assertion_scope collate "C", selection.assertion_id::text collate "C"
+    ),
+    '[]'::jsonb
+  )
+    into v_verification_states
+  from public.food_catalog_generation_verification selection
+  join public.food_verification_assertions assertion
+    on assertion.id = selection.assertion_id
+   and assertion.food_id = selection.food_id
+   and assertion.assertion_scope = selection.assertion_scope
+  where selection.generation_id = v_generation_id;
+
+  v_report_semantic_payload := jsonb_build_object(
+    'generationId', v_generation_id::text,
+    'generationChecksumSha256', p_command->>'generation_checksum_sha256',
+    'validatorSetVersion', p_command->>'validator_set_version',
+    'policyVersion', p_command->>'policy_version',
+    'blockerCount', (p_command->>'blocker_count')::integer,
+    'errorCount', (p_command->>'error_count')::integer,
+    'warningCount', (p_command->>'warning_count')::integer,
+    'infoCount', (p_command->>'info_count')::integer,
+    'findings', v_report_findings,
+    'verificationStates', v_verification_states
+  );
+
+  v_trusted_report_checksum := encode(
+    extensions.digest(
+      pg_catalog.convert_to(private.food_catalog_plan3_canonical_json_v1(v_report_semantic_payload), 'UTF8'),
+      'sha256'
+    ),
+    'hex'
+  );
+  if coalesce(p_command->>'report_checksum_sha256', '') !~ '^[0-9a-f]{64}$'
+     or p_command->>'report_checksum_sha256' is distinct from v_trusted_report_checksum then
+    raise exception 'VALIDATION_REPORT_MISMATCH: report checksum does not match normalized validation contents.';
+  end if;
+
+  insert into public.food_catalog_generation_validation_reports (
+    id, generation_id, generation_checksum_sha256, validator_set_version,
+    policy_version, report_checksum_sha256, blocker_count, error_count,
+    warning_count, info_count
+  ) values (
+    v_report_id, v_generation_id, p_command->>'generation_checksum_sha256',
+    p_command->>'validator_set_version', p_command->>'policy_version',
+    v_trusted_report_checksum, (p_command->>'blocker_count')::integer,
+    (p_command->>'error_count')::integer, (p_command->>'warning_count')::integer,
+    (p_command->>'info_count')::integer
+  );
+
+  for v_item in select value from jsonb_array_elements(coalesce(p_command->'findings', '[]'::jsonb)) loop
+    insert into public.food_catalog_generation_validation_findings (
+      id, report_id, finding_ordinal, reason_code, food_id, severity,
+      blocking, evidence_reference, validator_policy_version, details
+    ) values (
+      (v_item->>'id')::uuid, v_report_id, (v_item->>'finding_ordinal')::integer,
+      v_item->>'reason_code', nullif(v_item->>'food_id', '')::uuid,
+      v_item->>'severity', (v_item->>'blocking')::boolean,
+      nullif(v_item->>'evidence_reference', ''), v_item->>'validator_policy_version',
+      coalesce(v_item->'details', '{}'::jsonb)
+    );
+  end loop;
+
+  select count(*) filter (where blocking)::integer,
+         count(*) filter (where severity = 'error')::integer,
+         count(*) filter (where severity = 'warning')::integer,
+         count(*) filter (where severity = 'info')::integer
+    into v_blockers, v_errors, v_warnings, v_infos
+  from public.food_catalog_generation_validation_findings
+  where report_id = v_report_id;
+  if v_blockers <> (p_command->>'blocker_count')::integer
+     or v_errors <> (p_command->>'error_count')::integer
+     or v_warnings <> (p_command->>'warning_count')::integer
+     or v_infos <> (p_command->>'info_count')::integer then
+    raise exception 'VALIDATION_REPORT_MISMATCH: submitted validation counts do not match exact findings.';
+  end if;
+
+  v_result := jsonb_build_object(
+    'operation_id', p_operation_id,
+    'event_id', v_event_id,
+    'generation_id', v_generation_id,
+    'validation_report_id', v_report_id,
+    'validation_report_checksum_sha256', v_trusted_report_checksum,
+    'pointer_revision', null
+  );
+  insert into public.food_catalog_control_operations (
+    operation_id, operation_kind, command_checksum_sha256, result_json
+  ) values (p_operation_id, 'record_generation_validation', v_command_checksum, v_result);
+  insert into public.food_catalog_generation_events (
+    id, event_type, operation_id, command_checksum_sha256,
+    from_generation_id, to_generation_id, revoked_generation_id,
+    generation_checksum_sha256, validation_report_id,
+    principal_id, principal_type, authority_reference, reason_code, policy_version
+  ) values (
+    v_event_id, 'validated', p_operation_id, v_command_checksum,
+    null, v_generation_id, null,
+    p_command->>'generation_checksum_sha256', v_report_id,
+    v_actor->>'principal_id', v_actor->>'principal_type', v_actor->>'authority_reference',
+    v_actor->>'reason_code', v_actor->>'policy_version'
+  );
+  return v_result;
+end
+$function$;
+
+revoke all on function private.food_catalog_plan3_canonical_json_v1(jsonb) from public, anon, authenticated, service_role;
+
 commit;
