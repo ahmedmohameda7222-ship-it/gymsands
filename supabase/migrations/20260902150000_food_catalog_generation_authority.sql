@@ -701,12 +701,14 @@ begin
      or nullif(btrim(v_actor->>'policy_version'), '') is null then
     raise exception 'CONTROL_PLANE_REJECTED: complete actor context is required.';
   end if;
-  if not exists (
-    select 1 from public.food_catalog_activation_events
-    where id = v_target_grant_event_id
-      and activation_set_id = v_activation_set_id
-      and event_type = 'grant'
-  ) then
+
+  perform 1
+  from public.food_catalog_activation_events
+  where id = v_target_grant_event_id
+    and activation_set_id = v_activation_set_id
+    and event_type = 'grant'
+  for update;
+  if not found then
     raise exception 'INVALID_ACTIVATION_GRANT: invalidation must name an exact grant in the same activation set.';
   end if;
 
@@ -1097,6 +1099,7 @@ declare
   v_actor jsonb := p_command->'actor';
   v_current_generation_id uuid;
   v_pointer_revision bigint;
+  v_grant_lock_id uuid;
   v_new_revision bigint;
   v_result jsonb;
 begin
@@ -1160,6 +1163,25 @@ begin
   ) then
     raise exception 'CONTROL_PLANE_REJECTED: revoked generation cannot be promoted.';
   end if;
+
+  for v_grant_lock_id in
+    select distinct gf.activation_grant_event_id
+    from public.food_catalog_generation_foods gf
+    where gf.generation_id = v_candidate_generation_id
+      and gf.lifecycle = 'active'
+      and gf.activation_grant_event_id is not null
+    order by gf.activation_grant_event_id
+  loop
+    perform 1
+    from public.food_catalog_activation_events grant_event
+    where grant_event.id = v_grant_lock_id
+      and grant_event.event_type = 'grant'
+    for update;
+    if not found then
+      raise exception 'INVALID_ACTIVATION_GRANT: candidate references an invalid activation grant.';
+    end if;
+  end loop;
+
   if exists (
     select 1
     from public.food_catalog_generation_foods gf
