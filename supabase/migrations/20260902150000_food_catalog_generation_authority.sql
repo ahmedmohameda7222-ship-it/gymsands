@@ -50,6 +50,31 @@ create table public.food_catalog_activation_sets (
   created_at timestamptz not null default now()
 );
 
+create or replace function private.food_catalog_activation_member_is_eligible_v1(
+  p_eligibility text,
+  p_source_legal_accepted boolean,
+  p_identity_resolved boolean,
+  p_nutrition_basis_valid boolean,
+  p_display_identity_valid boolean,
+  p_blocking_condition_count integer
+)
+returns boolean
+language sql
+immutable
+parallel safe
+set search_path = ''
+as $function$
+  select coalesce(
+    p_eligibility = 'eligible'
+    and p_source_legal_accepted
+    and p_identity_resolved
+    and p_nutrition_basis_valid
+    and p_display_identity_valid
+    and p_blocking_condition_count = 0,
+    false
+  );
+$function$;
+
 create table public.food_catalog_activation_set_members (
   id uuid primary key,
   activation_set_id uuid not null references public.food_catalog_activation_sets(id) on delete restrict,
@@ -68,7 +93,18 @@ create table public.food_catalog_activation_set_members (
   member_checksum_sha256 text not null check (member_checksum_sha256 ~ '^[0-9a-f]{64}$'),
   created_at timestamptz not null default now(),
   unique (activation_set_id, food_id),
-  unique (id, activation_set_id, food_id)
+  unique (id, activation_set_id, food_id),
+  constraint food_catalog_activation_set_members_eligible_evidence_check check (
+    eligibility = 'rejected'
+    or private.food_catalog_activation_member_is_eligible_v1(
+      eligibility,
+      source_legal_accepted,
+      identity_resolved,
+      nutrition_basis_valid,
+      display_identity_valid,
+      blocking_condition_count
+    )
+  )
 );
 
 create table public.food_catalog_activation_events (
@@ -582,7 +618,16 @@ begin
   end if;
 
   select count(*)::integer,
-         count(*) filter (where m.eligibility = 'eligible')::integer,
+         count(*) filter (
+           where private.food_catalog_activation_member_is_eligible_v1(
+             m.eligibility,
+             m.source_legal_accepted,
+             m.identity_resolved,
+             m.nutrition_basis_valid,
+             m.display_identity_valid,
+             m.blocking_condition_count
+           )
+         )::integer,
          count(*) filter (where f.lifecycle_status::text = m.expected_precondition_lifecycle)::integer
     into v_total, v_eligible, v_precondition
   from public.food_catalog_activation_set_members m
@@ -789,7 +834,14 @@ begin
       where m.id = v_activation_set_member_id
         and m.activation_set_id = v_activation_set_id
         and m.food_id = (v_item->>'food_id')::uuid
-        and m.eligibility = 'eligible'
+        and private.food_catalog_activation_member_is_eligible_v1(
+          m.eligibility,
+          m.source_legal_accepted,
+          m.identity_resolved,
+          m.nutrition_basis_valid,
+          m.display_identity_valid,
+          m.blocking_condition_count
+        )
         and s.activation_policy_version = p_command->>'activation_policy_version'
         and f.lifecycle_status::text = m.expected_precondition_lifecycle;
       if not found or v_grant_created_at > v_sealed_at then
@@ -1122,7 +1174,15 @@ begin
      and grant_event.event_type = 'grant'
     where gf.generation_id = v_candidate_generation_id
       and gf.lifecycle = 'active'
-      and (m.id is null or m.eligibility <> 'eligible'
+      and (m.id is null
+        or not private.food_catalog_activation_member_is_eligible_v1(
+          m.eligibility,
+          m.source_legal_accepted,
+          m.identity_resolved,
+          m.nutrition_basis_valid,
+          m.display_identity_valid,
+          m.blocking_condition_count
+        )
         or s.activation_policy_version is distinct from (
           select activation_policy_version from public.food_catalog_generations where id = v_candidate_generation_id
         )
@@ -1509,6 +1569,7 @@ grant select on public.food_catalog_generation_events to service_role;
 grant select on public.food_catalog_current_generation to service_role;
 
 revoke all on function private.food_catalog_plan3_command_fingerprint_v1(jsonb) from public, anon, authenticated, service_role;
+revoke all on function private.food_catalog_activation_member_is_eligible_v1(text, boolean, boolean, boolean, boolean, integer) from public, anon, authenticated, service_role;
 
 revoke all on function public.food_catalog_create_activation_set_v1(jsonb) from public, anon, authenticated;
 revoke all on function public.food_catalog_grant_activation_set_v1(jsonb) from public, anon, authenticated;
