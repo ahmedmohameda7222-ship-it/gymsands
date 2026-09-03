@@ -173,7 +173,7 @@ function setupFixture(databaseUrl) {
     as $function$
     begin
       if new.current_generation_id = '${GENERATION_ID}'::uuid then
-        perform pg_catalog.pg_sleep(5);
+        perform pg_catalog.pg_sleep(8);
       end if;
       return new;
     end
@@ -278,20 +278,26 @@ async function waitForPromotionPause(databaseUrl) {
   throw new Error("Promotion session never reached the post-authority-check pointer pause.");
 }
 
-async function invalidationCommittedWhilePromotionPaused(databaseUrl) {
-  for (;;) {
-    const state = psqlSync(
-      databaseUrl,
-      `select coalesce(wait_event, '') from pg_catalog.pg_stat_activity where application_name = '${PROMOTION_APP}' and state = 'active' limit 1;`,
-    );
-    const invalidationVisible = psqlSync(
-      databaseUrl,
-      `select exists(select 1 from public.food_catalog_activation_events where id = '${INVALIDATION_EVENT_ID}' and event_type = 'invalidate' and target_grant_event_id = '${GRANT_EVENT_ID}');`,
-    );
-    if (invalidationVisible === "t") return true;
-    if (state !== "PgSleep") return false;
-    await delay(100);
+async function observeEarlyInvalidation(invalidation, databaseUrl) {
+  const outcome = await Promise.race([
+    invalidation.done.then((result) => ({ kind: "completed", result })),
+    delay(1000).then(() => ({ kind: "blocked" })),
+  ]);
+
+  if (outcome.kind === "completed") {
+    requireSuccess("invalidation session", outcome.result);
+    return { completedEarly: true, result: outcome.result };
   }
+
+  const promotionWaitEvent = psqlSync(
+    databaseUrl,
+    `select coalesce(wait_event, '') from pg_catalog.pg_stat_activity where application_name = '${PROMOTION_APP}' and state = 'active' limit 1;`,
+  );
+  if (promotionWaitEvent !== "PgSleep") {
+    throw new Error("Promotion left the controlled post-authority-check pause before the invalidation blocking observation completed.");
+  }
+
+  return { completedEarly: false, result: null };
 }
 
 export async function verifyGrantInvalidationPromotionSerialization({
@@ -304,9 +310,9 @@ export async function verifyGrantInvalidationPromotionSerialization({
     await waitForPromotionPause(localUrl);
     const invalidation = spawnPsql(localUrl, invalidationSql(), INVALIDATION_APP);
 
-    const invalidationWonRace = await invalidationCommittedWhilePromotionPaused(localUrl);
+    const earlyInvalidation = await observeEarlyInvalidation(invalidation, localUrl);
     const promotionResult = await promotion.done;
-    const invalidationResult = await invalidation.done;
+    const invalidationResult = earlyInvalidation.result ?? await invalidation.done;
     requireSuccess("promotion session", promotionResult);
     requireSuccess("invalidation session", invalidationResult);
 
@@ -318,12 +324,12 @@ export async function verifyGrantInvalidationPromotionSerialization({
       );`,
     );
 
-    if (invalidationWonRace && finalState === `${GENERATION_ID}|true`) {
+    if (earlyInvalidation.completedEarly && finalState === `${GENERATION_ID}|true`) {
       throw new Error(
         "Grant invalidation committed before promotion, but the invalidated-grant candidate still became current.",
       );
     }
-    if (invalidationWonRace) {
+    if (earlyInvalidation.completedEarly) {
       throw new Error(`Grant invalidation committed during promotion without a serialized outcome: ${finalState}`);
     }
     if (finalState !== `${GENERATION_ID}|true`) {
