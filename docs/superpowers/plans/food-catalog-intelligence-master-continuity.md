@@ -7,7 +7,7 @@
 **Total roadmap plans:** 10  
 **Completed plans:** Plan 1, Plan 2  
 **Current plan:** Plan 3 — Activation, Verification, Trust, and Catalog Generations  
-**Current Plan 3 state:** implementation and six-P1-plus-one-P2 Planner correction pass complete on Ready-for-review PR #165; all correctness threads resolved after exact RED/GREEN evidence; corrected implementation head `51a68a049742b4bd83801bfaf47cb3d737c6bab2` passed PR Quality `33761128693`; final status-only documentation is being frozen and fresh canonical phase-close Quality is required on the ultimate exact head before independent Planner final re-review
+**Current Plan 3 state:** implementation and seven-P1-plus-one-P2 Planner correction pass complete on Ready-for-review PR #165; all correctness threads resolved after exact RED/GREEN evidence; code-complete correction head `13b2cd6008cfd831ed108d3333f3d9b669f77335` passed PR Quality `33766974778`; final status-only documentation is being frozen and exact-head PR regression plus fresh canonical phase-close Quality are required on the resulting ultimate head before independent Planner final re-review
 **Plans remaining including Plan 3:** 8  
 **Plans remaining after Plan 3 completes:** 7
 
@@ -238,7 +238,7 @@ Plan 3 architecture and the formal 12-task implementation plan were explicitly a
 
 ---
 
-## 6. Plan 3 implementation — IMPLEMENTATION + SIX-P1-PLUS-ONE-P2 CORRECTION PASS COMPLETE / CANONICAL QUALITY PENDING
+## 6. Plan 3 implementation — IMPLEMENTATION + SEVEN-P1-PLUS-ONE-P2 CORRECTION PASS COMPLETE / FINAL EXACT-HEAD PHASE-CLOSE PENDING
 
 **Plan path:**
 `docs/superpowers/plans/2026-09-02-food-catalog-plan3-activation-verification-generations.md`
@@ -264,7 +264,7 @@ Task 1–11 implementation evidence head:
 Exact-head Task 11 / full-regression PR Quality:
 `33679147523` — PASS.
 
-Independent correction review identified six P1 blockers plus one P2 persistence-contract mismatch. All were corrected with causal RED/GREEN evidence without reopening the architecture:
+Independent correction review identified seven P1 blockers plus one P2 persistence-contract mismatch. All were corrected with causal RED/GREEN evidence without reopening the architecture:
 
 1. **Generation validation pagination/bulk hydration.** RED `4e1158caad7e88741666220914b959aaa505e857`, PR Quality `33688136654`, core job `100440427269`: >1,000-row validation received only 1,000 of 1,002 Foods and 1,000 of 1,001 redirects. GREEN `297c756e85e03b277c5de800c7c4b86d0892ee6`, PR Quality `33689372475`, core job `100444385557`, database job `100444385568`.
 2. **Trusted PostgreSQL semantic replay identity.** RED `00ff1f0f573d1a9181fc4d2a651c4eb657575677`, PR Quality `33689990781`, database job `100446350218`: `Changed semantic command reused an operation ID by trusting the caller checksum.` GREEN `58098f9e3311ce3f6f90a575acbcb04d2893de77`, PR Quality `33692020607`, database job `100452649351`.
@@ -272,18 +272,23 @@ Independent correction review identified six P1 blockers plus one P2 persistence
 4. **Activation eligibility integrity.** RED `ed618552e240e9eb95b1b480acba9c31d8cd587b`, PR Quality `33736327808`, rerun database job `100589039339`: `Activation eligibility contradictions were accepted: blockers, display_identity, grant_independent_identity, identity, nutrition_basis, source_legal`. GREEN `e2cb8d760d5ec3e9d2729e74e31f649589c2c991`, PR Quality `33737691329`, database job `100592092120`. The trusted immutable eligibility predicate requires `eligibility='eligible'`, accepted source/legal evidence, resolved identity, valid nutrition basis, valid display identity, and zero blockers; it is reused by the immutable member-row structural authority, grant validation, active candidate sealing, and promotion validation.
 5. **Promotion/invalidation concurrency.** Causal RED `29c61e3d969fea5d1f5d937b05679e47ae99caf4`, PR Quality `33740908113`, database job `100602525629`: `Grant invalidation committed before promotion, but the invalidated-grant candidate still became current.` Production SQL fix `7f1b2c930c22ace3586fe2d62a9d848b7cc283f7` adds shared exact-grant locking, promotion invalidation re-check under lock, and deterministic multi-grant lock order. First GREEN attempt PR Quality `33742228444`, database job `100606599934`, exposed an observer/test-harness race only. Harness-only correction `724e70bb76b533f93d2dfad0fa6a45f230b3e8c9` changes exactly one concurrency-verifier file (`+24/-18`) and no production SQL. Final exact-head PR Quality `33742679692`, database job `100608255066`, PASS.
 6. **Trusted validation-report checksum at the persistence boundary.** RED `a0a9df7be448206eb092a4fe673532af4a2f557e`, PR Quality `33755929647`, database job `100650528589`: `Validation report checksum mismatch was accepted at the trusted persistence boundary.` Production SQL correction `0bc30953c77f32cb0c89a640f9561cc32a2322a9` recomputes normalized validation-report SHA-256 at the trusted DB boundary, derives verification states from sealed DB authority, requires exact generation checksum/policy binding, rejects caller checksum mismatch before report persistence, and stores/returns the trusted checksum. Existing verifier fixtures were aligned at `42b8b504d53ce5d1ae604ed1156aa53975c98556`; focused positive/stale-semantic checksum coverage was strengthened at `57e5e4cf4e418eace5d3864a23e481382ed0077a`. GREEN PR Quality `33759467874`, database job `100662554948`, PASS.
-7. **P2 lowercase activation checksum contract.** RED `6c3d82983fb0afc01863c310357f803a2c84320d`, PR Quality `33760908165`, core job `100666750397`: unit test `rejects uppercase SHA-256 checksums before the persistence boundary` failed because uppercase checksum input was accepted. GREEN `51a68a049742b4bd83801bfaf47cb3d737c6bab2` changes only `lib/food-catalog/domain/activation.ts` (`+1/-1`) so evidence/member checksums use lowercase-only `^[0-9a-f]{64}$`, matching persistence authority. PR Quality `33761128693`, core job `100667707557`, database job `100667707407`, PASS.
+7. **Service-role direct Plan 3 table-write isolation.** RED `c67374e105801f88e0b4d8f57c64ab021a6a5c81`, PR Quality `33765997956`, database job `100684166797`: migration replay and DB lint passed, then registered database verification failed because `service_role` retained forbidden direct `TRUNCATE` authority on `public.food_catalog_control_operations`; failure artifact `9897657771`. GREEN `13b2cd6008cfd831ed108d3333f3d9b669f77335` changes only the existing unapplied Plan 3 migration: all 16 Plan 3 table revocations include `service_role`, and only the explicitly approved `SELECT` grants are added back. Exact-head PR Quality `33766974778`, database job `100687555354`, PASS through replay, DB lint, all registered database verification including the privilege-boundary verifier, migration ledger, database integrations, and Workout History integrations. Core `100687555450`, integrity `100687555525`, build `100687555582`, CI contracts `100687555591`, rendered QA/i18n `100687555577`, and required-summary `100690963900` also passed.
+8. **P2 lowercase activation checksum contract.** RED `6c3d82983fb0afc01863c310357f803a2c84320d`, PR Quality `33760908165`, core job `100666750397`: unit test `rejects uppercase SHA-256 checksums before the persistence boundary` failed because uppercase checksum input was accepted. GREEN `51a68a049742b4bd83801bfaf47cb3d737c6bab2` changes only `lib/food-catalog/domain/activation.ts` (`+1/-1`) so evidence/member checksums use lowercase-only `^[0-9a-f]{64}$`, matching persistence authority. PR Quality `33761128693`, core job `100667707557`, database job `100667707407`, PASS.
 
-The corrected implementation head before status-only reconciliation is:
-`51a68a049742b4bd83801bfaf47cb3d737c6bab2`
+The code-complete correction head before status-only reconciliation is:
+`13b2cd6008cfd831ed108d3333f3d9b669f77335`
 
-PR Quality `33761128693` passed on that exact head. Its database job passed chronological migration replay, DB lint, registered database verification, migration ledger, database integrations, and Workout History integrations; core passed lint/typecheck/full units; build, CI contracts, integrity, rendered QA, and required-summary were also GREEN. Same-head Phase A `33761128687`, Exercise Detail Runtime QA `33761128713`, and Exercise Library Locale Runtime QA `33761128708` passed.
+PR Quality `33766974778` passed on that exact head. Database job `100687555354` passed chronological migration replay, DB lint, full registered database verification, migration ledger, database integrations, and Workout History integrations; core `100687555450` passed lint/typecheck/full units; integrity `100687555525`, build `100687555582`, CI contracts `100687555591`, rendered QA/i18n `100687555577`, and required-summary `100690963900` were also GREEN.
 
-All six P1 review threads and the P2 thread were replied to with exact evidence and resolved. A full review-thread re-fetch found zero unresolved correctness threads.
+All seven P1 review threads and the P2 thread were replied to with exact evidence and resolved. A full review-thread re-fetch after Blocker 7 closure found unresolved P0 = 0 and unresolved P1 = 0.
 
 The Blocker 5 GREEN authority proves invalidation-first rejection, promotion-first success, no retroactive rewrite from later invalidation, shared exact-grant row locking, invalidation re-check under lock, deterministic multi-grant lock order, no deadlock in the covered multi-grant case, no global serialization of unrelated grants, preserved stale-current-generation CAS, and preserved trusted operation-id semantic replay.
 
-Status-only roadmap/master-continuity reconciliation is the final SHA-changing work. A fresh canonical `.github/workflows/quality.yml` must then pass on the ultimate exact final head before independent Planner final re-review.
+The Blocker 6 GREEN authority proves the trusted PostgreSQL persistence boundary recomputes and verifies deterministic validation-report checksum semantics rather than trusting the caller-provided checksum.
+
+The Blocker 7 GREEN authority proves `service_role` retains the required Plan 3 read path while direct table mutation privileges are removed, keeping mutations confined to the approved security-definer command/RPC boundary.
+
+Status-only roadmap/master-continuity reconciliation is the final SHA-changing work. The resulting ultimate exact documentation head must pass exact-head PR regression and then a fresh canonical `.github/workflows/quality.yml` before independent Planner final re-review.
 
 Implemented forward migration:
 `supabase/migrations/20260902150000_food_catalog_generation_authority.sql`
@@ -311,7 +316,7 @@ It remains repository-only `pending`; it has **not** been applied to Production.
 9. Exact current-generation read/hydration + compatibility bridge — PASS.
 10. Typed promote/rollback/revoke command services — PASS.
 11. Physical-table / privileged-command / no-implicit-current boundary tests — PASS.
-12. Full regression + six-P1-plus-one-P2 correction pass + documentation reconciliation + final exact-head phase-close gates — IN PROGRESS; corrected implementation regression is GREEN and status metadata is reconciled; fresh canonical Quality on the ultimate exact head remains required.
+12. Full regression + seven-P1-plus-one-P2 correction pass + documentation reconciliation + final exact-head phase-close gates — IN PROGRESS; code-complete correction regression is GREEN, all correctness threads are resolved, and final status metadata is being frozen; exact-head PR regression and fresh canonical Quality on the ultimate documentation head remain required.
 
 ### Implemented schema authority
 
@@ -353,7 +358,7 @@ It is seeded with all current references `NULL`; no generation or Food data is s
 - `food_catalog_rollback_generation_v1(jsonb)`
 - `food_catalog_revoke_generation_v1(jsonb)`
 
-All are service-role-only. No browser/member/admin generic RPC access is exported.
+All are service-role-only. No browser/member/admin generic RPC access is exported. Plan 3 service-role table access is read-only after Blocker 7; mutations remain confined to these approved security-definer command services.
 
 ### Migration-ledger state
 
@@ -367,11 +372,12 @@ Current repository ledger truth:
 - `schemaVerifiedUntrackedCount = 0`;
 - derived `release_ready = false`;
 - no `productionVersion`/`productionName` is invented for Plan 3;
+- sole pending migration is `20260902150000_food_catalog_generation_authority.sql`;
 - latest applied Production identity remains `20260901183021_food_catalog_plan1_semantic_corrections`;
 - compatibility marker remains `20260724232734`.
 
-Final corrected Plan 3 migration blob before/after status-only documentation reconciliation:
-`555099adf93eef1db3f29e660dc76b7cfa148d86`
+Final corrected Plan 3 migration blob after all implementation corrections:
+`65cd33d5a6e8bc7af08ba8079fff8e9da6a68122`
 
 Protected applied Plan 1 blobs remain:
 - core `3ea9a95b818068dbe03d080fb205dfcdf5af07ab`;
@@ -393,7 +399,7 @@ Protected applied Plan 1 blobs remain:
 - applied Plan 1 migration bytes changed: NO
 - PR merged: NO
 
-Final implementation handoff must remain unmerged for independent Planner final re-review. PR #165 must finish Ready for review. Canonical phase-close Quality must run on the exact ultimate status-only documentation head.
+Final implementation handoff must remain unmerged for independent Planner final re-review. PR #165 must finish Ready for review. Exact-head PR regression and canonical phase-close Quality must both run on the ultimate status-only documentation head.
 
 Even after code merge, Production schema application requires separate exact authority. Even schema application does not authorize Food activation or generation promotion.
 
@@ -455,11 +461,12 @@ Do **not** merge, deploy, apply the pending migration, populate Foods, ingest pr
 
 Required next sequence:
 
-1. freeze the ultimate status-only documentation head and verify its diff contains no code/schema change after `51a68a049742b4bd83801bfaf47cb3d737c6bab2`;
-2. obtain a fresh canonical `.github/workflows/quality.yml` on that exact final SHA; if the workflow trigger requires `pull_request: ready_for_review`, a metadata-only Draft → Ready transition may be used solely to retrigger it and must end Ready;
-3. after canonical Quality succeeds, independently re-fetch PR #165, confirm head equals the tested SHA, re-check all review threads, correction scope, protected Plan 1 blobs, Plan 3 pending migration blob/state, ledger truth, compatibility marker, and all Production NO gates;
-4. update PR status/evidence metadata with the frozen head and canonical run/job evidence without changing repository SHA;
-5. hand the frozen exact head and complete correction evidence to independent Planner final re-review;
-6. merge only after explicit Planner approval.
+1. freeze the ultimate status-only documentation head and verify its diff from code-complete head `13b2cd6008cfd831ed108d3333f3d9b669f77335` contains only the two approved status/continuity documents;
+2. obtain exact-head PR verification on that ultimate SHA, including Phase A, PR Quality, all registered Plan 3 DB verifiers, ledger, integrations, lint/typecheck/full units, build, rendered QA, and required-summary;
+3. obtain a fresh canonical `.github/workflows/quality.yml` on that same exact final SHA; if the workflow trigger requires `pull_request: ready_for_review`, a metadata-only Draft → Ready transition may be used solely to retrigger it and must end Ready;
+4. after canonical Quality succeeds, independently re-fetch PR #165, confirm head equals the tested SHA, re-check all review threads, correction scope, protected Plan 1 blobs, Plan 3 pending migration blob/state, ledger truth, compatibility marker, and all Production NO gates;
+5. update PR status/evidence metadata with the frozen head and canonical run/job evidence without changing repository SHA;
+6. hand the frozen exact head and complete correction evidence to independent Planner final re-review;
+7. merge only after explicit Planner approval.
 
-Do not waive the canonical Quality gate.
+Do not waive the exact-head PR regression or canonical Quality gate.
