@@ -207,18 +207,18 @@ describe("Food Catalog Plan 4 draft-only ingestion executor", () => {
 
   it("renews the Production lease between candidate mutations", async () => {
     const { store, calls } = makeStore();
-    const first = {
+    const first = manifest({
       candidate: candidate("create-heartbeat-1"),
       issues: [],
-      decision: { kind: "create" } as const,
-      disposition: { kind: "accept", reasonCodes: [] } as const,
-    };
-    const second = {
+      decision: { kind: "create" },
+      disposition: { kind: "accept", reasonCodes: [] },
+    }).candidates[0]!;
+    const second = manifest({
       candidate: candidate("create-heartbeat-2"),
       issues: [],
-      decision: { kind: "create" } as const,
-      disposition: { kind: "accept", reasonCodes: [] } as const,
-    };
+      decision: { kind: "create" },
+      disposition: { kind: "accept", reasonCodes: [] },
+    }).candidates[0]!;
     const content: FoodCatalogDryRunManifestContent = {
       ...manifest(first),
       candidates: [first, second],
