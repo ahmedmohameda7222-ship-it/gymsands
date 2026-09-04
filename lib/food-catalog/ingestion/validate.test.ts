@@ -108,6 +108,60 @@ describe("Food Catalog structural validation/quarantine", () => {
     expect(codes(candidate({ gtins: ["4006381333931", "4006381333931"] }))).toContain("duplicate_gtin_in_candidate");
   });
 
+  it("rejects serving facts that cannot be represented without inventing amount or unit", () => {
+    const invalidAmount = candidate({
+      servings: [{
+        servingKey: "portion-1",
+        amount: null,
+        unit: "piece",
+        gramWeight: 42,
+        milliliterVolume: null,
+        label: "1 piece",
+        sourceEvidence: { providerAmount: null }
+      }]
+    });
+    const invalidUnit = candidate({
+      servings: [{
+        servingKey: "portion-2",
+        amount: 1,
+        unit: "   ",
+        gramWeight: 42,
+        milliliterVolume: null,
+        label: "1 piece",
+        sourceEvidence: { providerUnit: null }
+      }]
+    });
+
+    expect(codes(invalidAmount)).toContain("invalid_serving");
+    expect(codes(invalidUnit)).toContain("invalid_serving");
+  });
+
+  it("accepts representable mass and explicit-volume serving facts", () => {
+    const value = candidate({
+      servings: [
+        {
+          servingKey: "portion-g",
+          amount: 1,
+          unit: "piece",
+          gramWeight: 42,
+          milliliterVolume: null,
+          label: "1 piece",
+          sourceEvidence: { exact: true }
+        },
+        {
+          servingKey: "portion-ml",
+          amount: 1,
+          unit: "cup",
+          gramWeight: null,
+          milliliterVolume: 240,
+          label: "1 cup",
+          sourceEvidence: { exact: true }
+        }
+      ]
+    });
+    expect(codes(value)).not.toContain("invalid_serving");
+  });
+
   it("accepts null nutrient values without fabricating zero", () => {
     const value = candidate({ nutrition: { ...candidate().nutrition, sugars_g: null, fiber_g: null } });
     expect(codes(value)).not.toContain("invalid_nutrition");
