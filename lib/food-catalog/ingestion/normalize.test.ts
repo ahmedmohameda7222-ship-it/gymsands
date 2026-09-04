@@ -88,7 +88,7 @@ describe("Food Catalog ingestion normalization", () => {
   it("keeps malformed GTINs on the normalized candidate so validation rejects them", () => {
     const normalized = normalizeFoodCatalogCandidate(candidate({ gtins: ["4006 3813-339x 1"] }));
 
-    expect(normalized.gtins).toEqual(["4006381339x1"]);
+    expect(normalized.gtins).toEqual(["40063813339x1"]);
     expect(validateFoodCatalogCandidate(normalized).map((issue) => issue.code)).toContain("invalid_gtin");
   });
 
