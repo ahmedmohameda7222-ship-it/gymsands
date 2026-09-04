@@ -119,6 +119,7 @@ export type FoodCatalogValidationIssueCode =
   | "invalid_nutrition"
   | "invalid_basis"
   | "invalid_alias"
+  | "invalid_serving"
   | "invalid_gtin"
   | "invalid_gtin_check_digit"
   | "invalid_market_scope"
