@@ -62,7 +62,7 @@ function normalizeAliases(candidate: FoodCatalogCandidateInput): FoodCatalogAlia
     candidate.aliases.map((alias) => {
       const locale = collapseWhitespace(alias.locale).toLowerCase();
       const value = collapseWhitespace(alias.value);
-      return { locale, value, normalizedValue: value.toLocaleLowerCase(locale || undefined) };
+      return { locale, value, normalizedValue: value.toLowerCase() };
     }),
     (alias) => `${alias.locale}\u0000${alias.normalizedValue}`
   );
@@ -78,7 +78,7 @@ function normalizeNames(candidate: FoodCatalogCandidateInput): FoodCatalogNameEv
         script: nullableCollapsed(name.script),
         role: name.role,
         value,
-        normalizedValue: value.toLocaleLowerCase(locale || undefined)
+        normalizedValue: value.toLowerCase()
       };
     }),
     (name) => `${name.locale}\u0000${name.script ?? ""}\u0000${name.role}\u0000${name.normalizedValue}`
@@ -121,8 +121,7 @@ function normalizeTaxonomy(candidate: FoodCatalogCandidateInput): FoodCatalogTax
 
 export function normalizeGtin(value: string): string | null {
   const collapsed = value.replace(/[\s-]/g, "");
-  if (!/^\d+$/.test(collapsed) || !GTIN_LENGTHS.has(collapsed.length)) return null;
-  return collapsed;
+  return collapsed.length > 0 ? collapsed : null;
 }
 
 export function isValidGtinCheckDigit(value: string): boolean {
