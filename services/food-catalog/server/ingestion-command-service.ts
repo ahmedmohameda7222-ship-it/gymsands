@@ -141,6 +141,7 @@ async function persistEntry(
     dispositionKind: entry.disposition.kind,
     decision: entry.decision,
     disposition: entry.disposition,
+    issues: entry.issues,
     candidate: entry.candidate,
   };
   if (foodId) persistPayload.foodId = foodId;
