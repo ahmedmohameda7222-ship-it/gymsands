@@ -40,6 +40,7 @@ const releaseCompatibility = JSON.parse(readFileSync("config/release-compatibili
 const authorityTables = [
   "food_ingestion_control_operations",
   "food_ingestion_manifest_records",
+  "food_ingestion_materialized_results",
   "food_ingestion_quarantines",
   "food_ingestion_quarantine_resolutions",
   "food_ingestion_reconciliations",
@@ -158,6 +159,29 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     }
 
     expect(sql).toMatch(/execution_mode\s*=\s*'dry_run'[\s\S]{0,300}status\s+not\s+in\s*\(\s*'prepared'\s*,\s*'running'\s*\)/i);
+  });
+
+  it("serializes cross-attempt leases, resumes materialized writes, and preserves explicit serving evidence", () => {
+    expect(sql).toMatch(/alter\s+table\s+public\.food_items\s+alter\s+column\s+serving_size\s+drop\s+not\s+null/i);
+    expect(sql).toMatch(/create\s+table\s+public\.food_ingestion_materialized_results/i);
+    expect(sql).toMatch(/unique\s*\(\s*batch_id\s*,\s*source_record_key\s*\)/i);
+    expect(sql).toMatch(/food_catalog_ingestion_acquire_lease_v2[\s\S]*food_ingestion_batches[\s\S]*for\s+update/i);
+    expect(sql).toMatch(/execution_mode\s*=\s*'production'[\s\S]{0,400}lease_expires_at\s*>\s*clock_timestamp\(\)/i);
+    expect(sql).toContain("'lease_takeover'");
+    expect(sql).toContain("'lease_lost'");
+    expect(sql).toMatch(/food_catalog_ingestion_acquire_lease_v2[\s\S]*insert\s+into\s+public\.food_ingestion_operational_events/i);
+    expect(sql).toMatch(/food_catalog_ingestion_heartbeat_lease_v2[\s\S]*insert\s+into\s+public\.food_ingestion_operational_events/i);
+    expect(sql).toMatch(/millilitervolume[\s\S]{0,800}'ml'/i);
+
+    for (const evidence of [
+      "cross-attempt live lease",
+      "cross-attempt materialized resume",
+      "lease lifecycle events",
+      "nullable serving label",
+      "explicit milliliter serving evidence",
+    ]) {
+      expect(verificationSql).toContain(evidence);
+    }
   });
 
   it("exposes only narrow service-role command RPCs with pinned security-definer boundaries", () => {
