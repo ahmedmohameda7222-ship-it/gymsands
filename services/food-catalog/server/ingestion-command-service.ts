@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import { stableJson } from "@/lib/food-catalog/ingestion/manifest";
+import { checksumManifestContent, stableJson } from "@/lib/food-catalog/ingestion/manifest";
 import type {
   FoodCatalogDryRunManifestCandidate,
   FoodCatalogDryRunManifestContent,
@@ -14,6 +14,8 @@ import type {
   FoodCatalogIngestionCommandResult,
   FoodCatalogIngestionCommandStore,
 } from "./ingestion-store";
+
+const SHA256 = /^[0-9a-f]{64}$/;
 
 function deterministicUuid(...parts: readonly unknown[]): string {
   const bytes = createHash("sha256")
@@ -93,6 +95,19 @@ function commandOperationId(
   );
 }
 
+function assertExactManifest(input: ExecuteApprovedFoodCatalogDraftMutationInput): void {
+  if (!SHA256.test(input.manifestContentChecksumSha256)) {
+    throw new Error("Plan 4 ingestion manifest checksum must be lowercase SHA-256 hex.");
+  }
+  if (!SHA256.test(input.semanticIdentityChecksumSha256)) {
+    throw new Error("Plan 4 ingestion semantic identity checksum must be lowercase SHA-256 hex.");
+  }
+  const computedManifestChecksum = checksumManifestContent(input.manifestContent);
+  if (computedManifestChecksum !== input.manifestContentChecksumSha256) {
+    throw new Error("Plan 4 ingestion manifest checksum does not match the exact manifest content.");
+  }
+}
+
 async function persistEntry(
   store: FoodCatalogIngestionCommandStore,
   input: ExecuteApprovedFoodCatalogDraftMutationInput,
@@ -142,6 +157,7 @@ export async function executeApprovedFoodCatalogDraftMutation(
   store: FoodCatalogIngestionCommandStore,
   input: ExecuteApprovedFoodCatalogDraftMutationInput,
 ): Promise<ExecuteApprovedFoodCatalogDraftMutationResult> {
+  assertExactManifest(input);
   if (!Number.isInteger(input.attemptNumber) || input.attemptNumber < 1) {
     throw new Error("Plan 4 ingestion attemptNumber must be a positive integer.");
   }
