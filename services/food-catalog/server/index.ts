@@ -25,6 +25,14 @@ export type {
   RevokeCatalogGenerationInput,
   RollbackCatalogGenerationInput,
 } from "./generation-command-service";
+export type {
+  ExecuteApprovedFoodCatalogDraftMutationInput,
+  ExecuteApprovedFoodCatalogDraftMutationResult,
+} from "./ingestion-contracts";
+export type {
+  FoodCatalogIngestionCommandResult,
+  FoodCatalogIngestionCommandStore,
+} from "./ingestion-store";
 export { projectFoodCatalogCompatibility } from "./compatibility-projection";
 export {
   getCurrentGenerationFood,
@@ -36,4 +44,5 @@ export {
   revokeCatalogGeneration,
   rollbackCatalogGeneration,
 } from "./generation-command-service";
+export { executeApprovedFoodCatalogDraftMutation } from "./ingestion-command-service";
 export { getFoodCatalogDomainBundle, resolveCanonicalRootForNewUse } from "./read-service";

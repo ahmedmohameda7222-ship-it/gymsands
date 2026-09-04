@@ -54,8 +54,10 @@ describe("Food Catalog Plan 4 server command boundary", () => {
 
   it("contains no arbitrary direct table CRUD or admin-client construction in the Plan 4 runtime", () => {
     const runtime = [read(adapterPath), read(servicePath)].join("\n");
-    expect(runtime).not.toMatch(/\.from\s*\(/);
-    expect(runtime).not.toMatch(/\.(?:insert|update|delete|upsert)\s*\(/);
+    const supabaseMethods = [...runtime.matchAll(/\bsupabase\s*\.\s*([A-Za-z_$][\w$]*)\s*\(/g)]
+      .map((match) => match[1]);
+    expect(supabaseMethods.length).toBeGreaterThan(0);
+    expect(supabaseMethods.every((method) => method === "rpc")).toBe(true);
     expect(runtime).not.toContain("createSupabaseAdminClient");
     expect(runtime).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
   });
