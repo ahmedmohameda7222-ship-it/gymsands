@@ -75,6 +75,16 @@ describe("Food Catalog structural validation/quarantine", () => {
     expect(codes(candidate({ aliases: [{ locale: "not a locale!", value: "Alias", normalizedValue: "alias" }] }))).toContain("invalid_alias");
   });
 
+  it("reports structurally invalid name evidence and locale tags", () => {
+    expect(codes(candidate({ names: [{
+      locale: "not a locale!",
+      script: null,
+      role: "source",
+      value: "Source name",
+      normalizedValue: "source name"
+    }] }))).toContain("invalid_alias");
+  });
+
   it("reports invalid country scope codes", () => {
     expect(codes(candidate({ marketScopes: [{ type: "country", code: "DEU", relevanceLevel: "primary" }] }))).toContain("invalid_market_scope");
     expect(codes(candidate({ marketScopes: [{ type: "country", code: "de", relevanceLevel: "primary" }] }))).toContain("invalid_market_scope");
