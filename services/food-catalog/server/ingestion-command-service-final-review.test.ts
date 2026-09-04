@@ -183,6 +183,7 @@ describe("Food Catalog Plan 4 final independent-review hardening", () => {
         unit: " G ",
         gramWeight: null,
         milliliterVolume: null,
+        sourceEvidence: { source: "fixture" },
       }],
     }));
 
