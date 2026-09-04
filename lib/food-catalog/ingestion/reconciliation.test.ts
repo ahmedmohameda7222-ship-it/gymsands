@@ -57,7 +57,7 @@ describe("Food Catalog Plan 4 expected-vs-observed reconciliation", () => {
     expect(report).toEqual({ ok: true, issueCodes: [] });
   });
 
-  it("fails closed on manifest mismatch, missing/extra/duplicate results, idempotency mismatch, partial execution, quarantine divergence and counts", () => {
+  it("fails closed on the approved manifest/write/idempotency/completion/quarantine/count mismatch classes", () => {
     const input: FoodCatalogExecutionReconciliationInput = {
       expected: expected(),
       observed: {
@@ -76,13 +76,13 @@ describe("Food Catalog Plan 4 expected-vs-observed reconciliation", () => {
     expect(report.ok).toBe(false);
     expect(report.issueCodes).toEqual([
       "manifest_checksum_mismatch",
-      "missing_result",
-      "extra_result",
-      "duplicate_result",
+      "missing_expected_write",
+      "unexpected_extra_write",
+      "duplicate_semantic_result",
       "idempotency_mismatch",
       "partial_execution",
       "quarantine_divergence",
-      "count_mismatch"
+      "outcome_count_mismatch"
     ]);
     expect(reconcileFoodCatalogExecution({
       ...input,
@@ -124,7 +124,7 @@ describe("Food Catalog Plan 4 expected-vs-observed reconciliation", () => {
       }
     });
 
-    expect(report.issueCodes).toContain("duplicate_result");
+    expect(report.issueCodes).toContain("duplicate_semantic_result");
     expect(report.issueCodes).not.toContain("idempotency_mismatch");
   });
 });

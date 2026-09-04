@@ -60,6 +60,17 @@ const rpcs = [
   "food_catalog_ingestion_complete_run_v2",
 ] as const;
 
+const reconciliationCodes = [
+  "manifest_checksum_mismatch",
+  "missing_expected_write",
+  "unexpected_extra_write",
+  "duplicate_semantic_result",
+  "idempotency_mismatch",
+  "partial_execution",
+  "quarantine_divergence",
+  "outcome_count_mismatch",
+] as const;
+
 describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
   it("defines exactly one forward Plan 4 migration without activation, promotion, or compatibility-marker mutation", () => {
     expect(migrationFiles).toEqual([MIGRATION_FILE]);
@@ -114,8 +125,11 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(sql).toContain("possible_duplicate");
     expect(sql).toContain("barcode_conflict");
     expect(sql).toContain("suspicious_material_change");
-    expect(sql).toContain("manifest_checksum_mismatch");
-    expect(sql).toContain("quarantine_divergence");
+    for (const code of reconciliationCodes) expect(sql).toContain(`'${code}'`);
+    expect(sql).not.toContain("'missing_result'");
+    expect(sql).not.toContain("'extra_result'");
+    expect(sql).not.toContain("'duplicate_result'");
+    expect(sql).not.toContain("'count_mismatch'");
     expect(sql).toContain("source_record_added");
     expect(sql).toContain("quarantine_resolved");
     expect(sql).toMatch(/command_checksum_sha256/i);
@@ -142,13 +156,14 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(sql).toContain("food_catalog_ingestion_assert_active_lease_v2");
   });
 
-  it("registers executable lease, immutability, reconciliation and privilege verification", () => {
+  it("registers executable lease, immutability, semantic reconciliation and privilege verification", () => {
     expect(existsSync(VERIFICATION_PATH)).toBe(true);
     expect(verificationSql).toContain("live lease");
     expect(verificationSql).toContain("stale takeover");
     expect(verificationSql).toContain("immutable");
     expect(verificationSql).toContain("quarantine");
-    expect(verificationSql).toContain("reconciliation");
+    expect(verificationSql).toContain("duplicate_semantic_result");
+    expect(verificationSql).toContain("partial_execution");
     expect(verificationSql).toContain("service_role");
     expect(verificationSql).toContain("rollback");
   });

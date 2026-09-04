@@ -163,13 +163,27 @@ select public.food_catalog_ingestion_append_event_v2(jsonb_build_object(
 ));
 select pg_temp.plan4_rejected('delete from public.food_ingestion_operational_events where event_type=''lease_heartbeat''', 'immutable operational event');
 
--- Reconciliation must fail closed on count divergence before completion.
+-- Inject a balanced duplicate semantic result as database owner. Run counters stay exact;
+-- reconciliation must detect the per-source duplication independently of aggregate counts.
+insert into public.food_ingestion_operational_events(
+  batch_id, run_id, source_record_key, event_type, payload_json, event_checksum_sha256
+) values (
+  (select batch_id from plan4_ids), (select production_run_id from plan4_ids),
+  'fixture-create-1', 'candidate_persisted', jsonb_build_object('verificationInjection', true), repeat('f',64)
+);
+
+-- Reconciliation must fail closed on semantic duplication and partial execution before completion.
 select public.food_catalog_ingestion_record_reconciliation_v2(jsonb_build_object(
   'operationId','44000000-0000-4000-8000-000000000012','commandChecksumSha256',repeat('d',64),
   'runId',(select production_run_id from plan4_ids),'leaseToken','44000000-0000-4000-8000-000000000102','leaseEpoch',2,
   'manifestContentChecksumSha256',repeat('a',64),'semanticIdentityChecksumSha256',repeat('b',64),'completed',false
 ));
-select pg_temp.plan4_assert((select not reconciled from public.food_ingestion_reconciliations where run_id=(select production_run_id from plan4_ids)), 'reconciliation fails closed');
+select pg_temp.plan4_assert((
+  select not reconciled
+    and mismatch_codes @> array['duplicate_semantic_result','partial_execution']::text[]
+  from public.food_ingestion_reconciliations
+  where run_id=(select production_run_id from plan4_ids)
+), 'semantic duplicate and partial execution fail reconciliation');
 select pg_temp.plan4_rejected(format(
   'select public.food_catalog_ingestion_complete_run_v2(%L::jsonb)',
   jsonb_build_object('operationId','44000000-0000-4000-8000-000000000013','commandChecksumSha256',repeat('e',64),'runId',(select production_run_id from plan4_ids),'leaseToken','44000000-0000-4000-8000-000000000102','leaseEpoch',2)::text
