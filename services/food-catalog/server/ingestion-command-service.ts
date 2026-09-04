@@ -79,19 +79,34 @@ function preparePayload(
   };
 }
 
-function commandOperationId(
+function semanticOperationId(
   input: ExecuteApprovedFoodCatalogDraftMutationInput,
   command: string,
   sourceRecordId?: string,
 ): string {
   return deterministicUuid(
-    "food-catalog-plan4-operation-v2",
-    input.operationNamespace,
+    "food-catalog-plan4-semantic-operation-v2",
     input.semanticIdentityChecksumSha256,
     input.manifestContentChecksumSha256,
     input.attemptNumber,
     command,
     sourceRecordId ?? null,
+  );
+}
+
+function leaseOperationId(
+  input: ExecuteApprovedFoodCatalogDraftMutationInput,
+  command: string,
+  discriminator?: string,
+): string {
+  return deterministicUuid(
+    "food-catalog-plan4-lease-operation-v2",
+    input.operationNamespace,
+    input.semanticIdentityChecksumSha256,
+    input.manifestContentChecksumSha256,
+    input.attemptNumber,
+    command,
+    discriminator ?? null,
   );
 }
 
@@ -124,18 +139,20 @@ async function persistEntry(
     leaseEpoch,
     decisionKind: entry.decision.kind,
     dispositionKind: entry.disposition.kind,
+    decision: entry.decision,
+    disposition: entry.disposition,
     candidate: entry.candidate,
   };
   if (foodId) persistPayload.foodId = foodId;
 
   await store.persistCandidate(
-    commandOperationId(input, "persist-candidate", sourceRecordId),
+    semanticOperationId(input, "persist-candidate", sourceRecordId),
     persistPayload,
   );
 
   if (entry.disposition.kind === "quarantine") {
     await store.recordQuarantine(
-      commandOperationId(input, "record-quarantine", sourceRecordId),
+      semanticOperationId(input, "record-quarantine", sourceRecordId),
       {
         runId,
         leaseToken,
@@ -168,7 +185,7 @@ export async function executeApprovedFoodCatalogDraftMutation(
   if (!input.operationNamespace.trim()) throw new Error("Plan 4 ingestion operationNamespace is required.");
 
   const prepared = await store.prepareExecution(
-    commandOperationId(input, "prepare-execution"),
+    semanticOperationId(input, "prepare-execution"),
     preparePayload(input),
   );
   const batchId = requiredString(prepared, "batchId");
@@ -188,7 +205,7 @@ export async function executeApprovedFoodCatalogDraftMutation(
     input.attemptNumber,
   );
   const lease = await store.acquireLease(
-    commandOperationId(input, "acquire-lease"),
+    leaseOperationId(input, "acquire-lease"),
     {
       runId,
       leaseOwner: input.leaseOwner,
@@ -202,7 +219,7 @@ export async function executeApprovedFoodCatalogDraftMutation(
   for (const [index, entry] of input.manifestContent.candidates.entries()) {
     if (index > 0) {
       await store.heartbeatLease(
-        commandOperationId(input, "heartbeat-lease", entry.candidate.sourceRecordId),
+        leaseOperationId(input, "heartbeat-lease", entry.candidate.sourceRecordId),
         {
           runId,
           leaseToken: activeLeaseToken,
@@ -215,7 +232,7 @@ export async function executeApprovedFoodCatalogDraftMutation(
   }
 
   const reconciliation = await store.recordReconciliation(
-    commandOperationId(input, "record-reconciliation"),
+    semanticOperationId(input, "record-reconciliation"),
     {
       runId,
       leaseToken: activeLeaseToken,
@@ -234,7 +251,7 @@ export async function executeApprovedFoodCatalogDraftMutation(
   const reconciliationId = requiredString(reconciliation, "reconciliationId");
 
   const completed = await store.completeRun(
-    commandOperationId(input, "complete-run"),
+    semanticOperationId(input, "complete-run"),
     {
       runId,
       leaseToken: activeLeaseToken,
