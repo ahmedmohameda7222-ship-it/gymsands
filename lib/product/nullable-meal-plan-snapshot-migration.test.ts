@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const migrationName = "20260830155245_nullable_meal_plan_nutrition_snapshots.sql";
+const plan4MigrationName = "20260904100000_food_catalog_ingestion_v2_authority.sql";
 
 function read(relativePath: string) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
@@ -39,10 +40,17 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
         productionName: "nullable_meal_plan_nutrition_snapshots",
       }),
     ]);
-    expect(pendingEntries).toEqual([]);
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
-    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(pendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: plan4MigrationName,
+        state: "pending",
+      }),
+    ]);
+    expect(pendingEntries[0]?.productionVersion).toBeUndefined();
+    expect(pendingEntries[0]?.productionName).toBeUndefined();
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.state).toBe("pending");
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {
