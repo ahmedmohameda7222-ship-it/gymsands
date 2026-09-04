@@ -101,7 +101,7 @@ function normalizeServings(candidate: FoodCatalogCandidateInput): FoodCatalogSer
     (candidate.servings ?? []).map((serving) => ({
       ...serving,
       servingKey: collapseWhitespace(serving.servingKey),
-      unit: collapseWhitespace(serving.unit),
+      unit: collapseWhitespace(serving.unit).toLowerCase(),
       label: nullableCollapsed(serving.label)
     })),
     stableKey
