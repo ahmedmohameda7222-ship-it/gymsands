@@ -103,6 +103,23 @@ describe("Food Catalog ingestion normalization", () => {
     expect(validateFoodCatalogCandidate(normalized).map((issue) => issue.code)).toContain("invalid_alias");
   });
 
+  it("canonicalizes serving units before validation and structured materialization", () => {
+    const normalized = normalizeFoodCatalogCandidate(candidate({
+      servings: [{
+        servingKey: "100-g",
+        amount: 100,
+        unit: " G ",
+        gramWeight: null,
+        milliliterVolume: null,
+        label: "100 g",
+        sourceEvidence: { exact: true }
+      }]
+    }));
+
+    expect(normalized.servings[0]?.unit).toBe("g");
+    expect(validateFoodCatalogCandidate(normalized).map((issue) => issue.code)).not.toContain("invalid_serving");
+  });
+
   it("validates GS1 Mod-10 check digits for GTIN-8/12/13/14", () => {
     for (const gtin of ["96385074", "036000291452", "4006381333931", "10012345000017"]) {
       expect(isValidGtinCheckDigit(gtin)).toBe(true);
