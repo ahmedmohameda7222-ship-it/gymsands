@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { buildSemanticBatchIdentity } from "@/lib/food-catalog/ingestion/engine";
 import type { FoodCatalogDryRunManifestContent } from "@/lib/food-catalog/ingestion/contracts";
 import { checksumManifestContent } from "@/lib/food-catalog/ingestion/manifest";
 import { executeApprovedFoodCatalogDraftMutation } from "./ingestion-command-service";
@@ -7,7 +8,6 @@ const RUN_ID = "56000000-0000-4000-8000-000000000001";
 const BATCH_ID = "56000000-0000-4000-8000-000000000002";
 const LEASE_TOKEN = "56000000-0000-4000-8000-000000000003";
 const MATCH_FOOD_ID = "56000000-0000-4000-8000-000000000004";
-const SEMANTIC_CHECKSUM = "b".repeat(64);
 
 function candidate(sourceRecordId: string) {
   return {
@@ -121,12 +121,12 @@ function makeStore(reviewState = "approved") {
       recordReleaseDiff: method("recordReleaseDiff", {}),
       appendEvent: method("appendEvent", {}),
       completeRun: method("completeRun", { runId: RUN_ID, status: "completed" }),
+      failRun: method("failRun", { runId: RUN_ID, status: "failed" }),
     },
   };
 }
 
 const commonInput = {
-  semanticIdentityChecksumSha256: SEMANTIC_CHECKSUM,
   attemptNumber: 1,
   leaseOwner: "plan4-executor",
   leaseSeconds: 120,
@@ -134,10 +134,16 @@ const commonInput = {
 };
 
 function executionInput(content: FoodCatalogDryRunManifestContent) {
+  const manifestContentChecksumSha256 = checksumManifestContent(content);
   return {
     ...commonInput,
     manifestContent: content,
-    manifestContentChecksumSha256: checksumManifestContent(content),
+    manifestContentChecksumSha256,
+    semanticIdentityChecksumSha256: buildSemanticBatchIdentity({
+      source: content.source,
+      manifestContentChecksumSha256,
+      expectedMutations: content.expectedMutations,
+    }),
   };
 }
 
