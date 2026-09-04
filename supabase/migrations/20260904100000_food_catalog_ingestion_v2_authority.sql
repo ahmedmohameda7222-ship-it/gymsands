@@ -664,7 +664,7 @@ begin
   if v_run.execution_mode = 'production' then
     perform private.food_catalog_ingestion_assert_active_lease_v2(v_run_id, (p_command->>'leaseToken')::uuid, (p_command->>'leaseEpoch')::bigint);
   end if;
-  select source_record_id into v_source_record_id
+  select membership.source_record_id into v_source_record_id
   from public.food_ingestion_batch_records membership
   join public.food_source_records source on source.id = membership.source_record_id
   where membership.batch_id = v_run.batch_id and source.source_record_id = p_command->>'sourceRecordId';
