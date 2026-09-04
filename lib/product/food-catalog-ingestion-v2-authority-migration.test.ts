@@ -70,7 +70,15 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(sql).not.toMatch(/insert\s+into\s+public\.food_catalog_generations/i);
     expect(sql).not.toMatch(/food_catalog_promote_generation/i);
     expect(sql).not.toMatch(/update\s+public\.release_schema_compatibility/i);
-    expect(sql).toMatch(/lifecycle_status[\s\S]{0,240}['"]draft['"]/i);
+
+    const draftInsert = sql.match(
+      /insert\s+into\s+public\.food_items\s*\(([\s\S]*?)\)\s*values\s*\(([\s\S]*?)\);/i,
+    );
+    expect(draftInsert).not.toBeNull();
+    expect(draftInsert?.[1]).toMatch(/\blifecycle_status\b/i);
+    expect(draftInsert?.[2]).toMatch(/'catalog_ingestion_v2'[\s\S]*false\s*,\s*false\s*,\s*false\s*,\s*'draft'\s*$/i);
+    expect(sql).not.toMatch(/update\s+public\.food_items[\s\S]{0,160}\blifecycle_status\s*=/i);
+    expect(sql).not.toMatch(/\bis_verified\s*=\s*true\b/i);
   });
 
   it("strengthens semantic batch identity and durable Production lease authority additively", () => {
