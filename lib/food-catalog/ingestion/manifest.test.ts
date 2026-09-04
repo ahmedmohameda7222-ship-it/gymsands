@@ -52,6 +52,16 @@ const normalizedCandidate = (
     { locale: "en", value: "Zulu", normalizedValue: "zulu" },
     { locale: "de", value: "Alpha", normalizedValue: "alpha" }
   ],
+  names: [],
+  identityEvidence: {
+    semanticSignature: null,
+    preparation: null,
+    state: null,
+    form: null,
+    structuredEvidenceKey: null
+  },
+  servings: [],
+  taxonomyEvidence: [],
   gtins: ["4006381333931", "036000291452"],
   marketScopes: [
     { type: "region", code: "GCC", relevanceLevel: "secondary" },

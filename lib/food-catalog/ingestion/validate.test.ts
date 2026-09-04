@@ -24,6 +24,16 @@ const candidate = (overrides: Partial<FoodCatalogNormalizedCandidate> = {}): Foo
     basis_unit: "g"
   },
   aliases: [{ locale: "en", value: "Greek yoghurt", normalizedValue: "greek yoghurt" }],
+  names: [],
+  identityEvidence: {
+    semanticSignature: null,
+    preparation: null,
+    state: null,
+    form: null,
+    structuredEvidenceKey: null
+  },
+  servings: [],
+  taxonomyEvidence: [],
   gtins: ["4006381333931"],
   marketScopes: [{ type: "country", code: "DE", relevanceLevel: "primary" }],
   globallyRelevant: false,
