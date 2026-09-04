@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { buildSemanticBatchIdentity } from "@/lib/food-catalog/ingestion/engine";
 import { checksumManifestContent, stableJson } from "@/lib/food-catalog/ingestion/manifest";
 import type {
   FoodCatalogDryRunManifestCandidate,
@@ -120,6 +121,14 @@ function assertExactManifest(input: ExecuteApprovedFoodCatalogDraftMutationInput
   const computedManifestChecksum = checksumManifestContent(input.manifestContent);
   if (computedManifestChecksum !== input.manifestContentChecksumSha256) {
     throw new Error("Plan 4 ingestion manifest checksum does not match the exact manifest content.");
+  }
+  const computedSemanticIdentity = buildSemanticBatchIdentity({
+    source: input.manifestContent.source,
+    manifestContentChecksumSha256: computedManifestChecksum,
+    expectedMutations: input.manifestContent.expectedMutations,
+  });
+  if (computedSemanticIdentity !== input.semanticIdentityChecksumSha256) {
+    throw new Error("Plan 4 ingestion semantic identity does not match the exact manifest content.");
   }
 }
 
@@ -243,13 +252,23 @@ export async function executeApprovedFoodCatalogDraftMutation(
       completed: true,
     },
   );
+  const reconciliationId = requiredString(reconciliation, "reconciliationId");
   if (reconciliation.ok !== true) {
     const mismatchCodes = Array.isArray(reconciliation.mismatchCodes)
-      ? reconciliation.mismatchCodes.join(",")
-      : "unknown";
-    throw new Error(`Plan 4 ingestion reconciliation failed closed: ${mismatchCodes}.`);
+      ? reconciliation.mismatchCodes.map(String)
+      : ["unknown"];
+    await store.failRun(
+      semanticOperationId(input, "fail-run"),
+      {
+        runId,
+        leaseToken: activeLeaseToken,
+        leaseEpoch,
+        reconciliationId,
+        mismatchCodes,
+      },
+    );
+    throw new Error(`Plan 4 ingestion reconciliation failed closed: ${mismatchCodes.join(",")}.`);
   }
-  const reconciliationId = requiredString(reconciliation, "reconciliationId");
 
   const completed = await store.completeRun(
     semanticOperationId(input, "complete-run"),
