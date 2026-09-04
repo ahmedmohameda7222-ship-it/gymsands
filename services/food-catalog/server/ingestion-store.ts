@@ -13,4 +13,5 @@ export interface FoodCatalogIngestionCommandStore {
   recordReleaseDiff(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
   appendEvent(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
   completeRun(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
+  failRun(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
 }
