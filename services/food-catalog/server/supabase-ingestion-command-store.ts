@@ -33,6 +33,7 @@ const RPC = {
   recordReleaseDiff: "food_catalog_ingestion_record_release_diff_v2",
   appendEvent: "food_catalog_ingestion_append_event_v2",
   completeRun: "food_catalog_ingestion_complete_run_v2",
+  failRun: "food_catalog_ingestion_fail_run_v2",
 } as const;
 
 function requiredOperationId(value: string): string {
@@ -135,5 +136,6 @@ export function createSupabaseFoodCatalogIngestionCommandStore(
     recordReleaseDiff: (operationId, payload) => invoke(supabase, RPC.recordReleaseDiff, operationId, payload),
     appendEvent: (operationId, payload) => invoke(supabase, RPC.appendEvent, operationId, payload),
     completeRun: (operationId, payload) => invoke(supabase, RPC.completeRun, operationId, payload),
+    failRun: (operationId, payload) => invoke(supabase, RPC.failRun, operationId, payload),
   };
 }
