@@ -78,6 +78,22 @@ function resolveRedirectRoot(foodId: string, redirects: readonly FoodCatalogRedi
   }
 }
 
+function resolveOwnerRoots(
+  ownerFoodIds: readonly string[],
+  redirects: readonly FoodCatalogRedirect[]
+): { roots: string[]; unresolved: boolean } {
+  let unresolved = false;
+  const roots = ownerFoodIds.map((foodId) => {
+    const root = resolveRedirectRoot(foodId, redirects);
+    if (root === null) {
+      unresolved = true;
+      return foodId;
+    }
+    return root;
+  });
+  return { roots: uniqueSorted(roots), unresolved };
+}
+
 function decideFromOwners(
   ownerFoodIds: readonly string[],
   redirects: readonly FoodCatalogRedirect[]
@@ -85,21 +101,91 @@ function decideFromOwners(
   const owners = uniqueSorted(ownerFoodIds);
   if (owners.length === 0) return null;
 
-  let unresolvedRedirect = false;
-  const resolved = owners.map((foodId) => {
-    const root = resolveRedirectRoot(foodId, redirects);
-    if (root === null) {
-      unresolvedRedirect = true;
-      return foodId;
-    }
-    return root;
-  });
-  const candidateFoodIds = uniqueSorted(resolved);
-
-  if (!unresolvedRedirect && candidateFoodIds.length === 1) {
-    return { kind: "match", foodId: candidateFoodIds[0]! };
+  const { roots, unresolved } = resolveOwnerRoots(owners, redirects);
+  if (!unresolved && roots.length === 1) {
+    return { kind: "match", foodId: roots[0]! };
   }
-  return { kind: "possible_duplicate", candidateFoodIds };
+  return { kind: "possible_duplicate", candidateFoodIds: roots };
+}
+
+function sourceOwnerFoodIds({ source, candidate, index }: DecideCanonicalMatchInput): string[] {
+  return index.sourceIdentities
+    .filter((identity) =>
+      identity.provider === source.provider &&
+      identity.dataset === source.dataset &&
+      identity.sourceVersion === source.sourceVersion &&
+      identity.sourceRecordId === candidate.sourceRecordId
+    )
+    .map((identity) => identity.foodId);
+}
+
+function gtinOwnerFoodIds({ candidate, index }: DecideCanonicalMatchInput): string[] {
+  const candidateGtins = new Set(candidate.gtins);
+  return index.gtinOwners
+    .filter((owner) => candidateGtins.has(owner.gtin))
+    .map((owner) => owner.foodId);
+}
+
+function semanticOwnerFoodIds({ candidate, index }: DecideCanonicalMatchInput): string[] {
+  if (candidate.identityEvidence.semanticSignature === null) return [];
+  return index.semanticIdentities
+    .filter((identity) =>
+      identity.semanticSignature === candidate.identityEvidence.semanticSignature
+    )
+    .map((identity) => identity.foodId);
+}
+
+function qualifiedAliasOwnerFoodIds({ candidate, index }: DecideCanonicalMatchInput): string[] {
+  const { state, preparation, form } = candidate.identityEvidence;
+  if (state === null || preparation === null || form === null) return [];
+  const aliases = new Set(candidate.aliases.map((alias) => alias.normalizedValue));
+  return index.qualifiedAliases
+    .filter((owner) =>
+      aliases.has(owner.normalizedAlias) &&
+      owner.state === state &&
+      owner.preparation === preparation &&
+      owner.form === form
+    )
+    .map((owner) => owner.foodId);
+}
+
+export function deriveCanonicalConflictReasons(input: DecideCanonicalMatchInput): string[] {
+  const sourceRoots = resolveOwnerRoots(sourceOwnerFoodIds(input), input.index.redirects);
+  const gtinRoots = resolveOwnerRoots(gtinOwnerFoodIds(input), input.index.redirects);
+  const semanticRoots = resolveOwnerRoots(semanticOwnerFoodIds(input), input.index.redirects);
+  const aliasRoots = resolveOwnerRoots(qualifiedAliasOwnerFoodIds(input), input.index.redirects);
+  const reasons = new Set<string>();
+
+  if (gtinRoots.unresolved || gtinRoots.roots.length > 1) {
+    reasons.add("barcode_conflict");
+    reasons.add("identity_conflict");
+  }
+
+  if (
+    sourceRoots.roots.length > 0 &&
+    gtinRoots.roots.length > 0 &&
+    uniqueSorted([...sourceRoots.roots, ...gtinRoots.roots]).length > 1
+  ) {
+    reasons.add("barcode_conflict");
+    reasons.add("identity_conflict");
+  }
+
+  const authoritativeRoots = uniqueSorted([
+    ...sourceRoots.roots,
+    ...gtinRoots.roots,
+    ...semanticRoots.roots,
+    ...aliasRoots.roots
+  ]);
+  if (
+    authoritativeRoots.length > 1 ||
+    sourceRoots.unresolved ||
+    semanticRoots.unresolved ||
+    aliasRoots.unresolved
+  ) {
+    reasons.add("identity_conflict");
+  }
+
+  return [...reasons].sort((left, right) => left.localeCompare(right));
 }
 
 function normalizedNameEvidence(candidate: FoodCatalogNormalizedCandidate): Set<string> {
@@ -111,61 +197,19 @@ function normalizedNameEvidence(candidate: FoodCatalogNormalizedCandidate): Set<
   return new Set(values);
 }
 
-export function decideCanonicalMatch({
-  source,
-  candidate,
-  index
-}: DecideCanonicalMatchInput): FoodCatalogCanonicalDecision {
-  const sourceDecision = decideFromOwners(
-    index.sourceIdentities
-      .filter((identity) =>
-        identity.provider === source.provider &&
-        identity.dataset === source.dataset &&
-        identity.sourceVersion === source.sourceVersion &&
-        identity.sourceRecordId === candidate.sourceRecordId
-      )
-      .map((identity) => identity.foodId),
-    index.redirects
-  );
+export function decideCanonicalMatch(input: DecideCanonicalMatchInput): FoodCatalogCanonicalDecision {
+  const { candidate, index } = input;
+  const sourceDecision = decideFromOwners(sourceOwnerFoodIds(input), index.redirects);
   if (sourceDecision !== null) return sourceDecision;
 
-  const candidateGtins = new Set(candidate.gtins);
-  const gtinDecision = decideFromOwners(
-    index.gtinOwners
-      .filter((owner) => candidateGtins.has(owner.gtin))
-      .map((owner) => owner.foodId),
-    index.redirects
-  );
+  const gtinDecision = decideFromOwners(gtinOwnerFoodIds(input), index.redirects);
   if (gtinDecision !== null) return gtinDecision;
 
-  if (candidate.identityEvidence.semanticSignature !== null) {
-    const semanticDecision = decideFromOwners(
-      index.semanticIdentities
-        .filter((identity) =>
-          identity.semanticSignature === candidate.identityEvidence.semanticSignature
-        )
-        .map((identity) => identity.foodId),
-      index.redirects
-    );
-    if (semanticDecision !== null) return semanticDecision;
-  }
+  const semanticDecision = decideFromOwners(semanticOwnerFoodIds(input), index.redirects);
+  if (semanticDecision !== null) return semanticDecision;
 
-  const { state, preparation, form } = candidate.identityEvidence;
-  if (state !== null && preparation !== null && form !== null) {
-    const aliases = new Set(candidate.aliases.map((alias) => alias.normalizedValue));
-    const aliasDecision = decideFromOwners(
-      index.qualifiedAliases
-        .filter((owner) =>
-          aliases.has(owner.normalizedAlias) &&
-          owner.state === state &&
-          owner.preparation === preparation &&
-          owner.form === form
-        )
-        .map((owner) => owner.foodId),
-      index.redirects
-    );
-    if (aliasDecision !== null) return aliasDecision;
-  }
+  const aliasDecision = decideFromOwners(qualifiedAliasOwnerFoodIds(input), index.redirects);
+  if (aliasDecision !== null) return aliasDecision;
 
   const names = normalizedNameEvidence(candidate);
   const possibleDuplicateFoodIds = uniqueSorted(
