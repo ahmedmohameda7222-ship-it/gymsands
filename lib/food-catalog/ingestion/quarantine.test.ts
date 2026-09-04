@@ -11,9 +11,9 @@ const disposition = (
 describe("Food Catalog Plan 4 processing disposition", () => {
   it("keeps structural invalidity as canonical REJECT plus disposition REJECT", () => {
     expect(disposition(
-      { kind: "reject", reasonCodes: ["invalid_source_identity"] },
+      { kind: "reject", issueCodes: ["invalid_source_checksum"] },
       [{ code: "missing_source_id", severity: "error", field: "sourceRecordId" }]
-    )).toEqual({ kind: "reject", reasonCodes: ["invalid_source_identity", "missing_source_id"] });
+    )).toEqual({ kind: "reject", reasonCodes: ["invalid_source_checksum", "missing_source_id"] });
   });
 
   it("rejects validation errors even if the provisional canonical decision was CREATE", () => {
