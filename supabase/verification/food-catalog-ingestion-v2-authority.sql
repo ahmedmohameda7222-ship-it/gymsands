@@ -176,6 +176,6 @@ select pg_temp.plan4_rejected(format(
 ), 'failed reconciliation blocks completion');
 
 -- Quarantine remains first-class and distinct from reject; verification stays rollback-only.
-select pg_temp.plan4_assert((select count(*)=0 from public.food_catalog_current_generation where generation_id is not null), 'current generation remains untouched');
+select pg_temp.plan4_assert((select count(*)=0 from public.food_catalog_current_generation where current_generation_id is not null), 'current generation remains untouched');
 
 rollback;
