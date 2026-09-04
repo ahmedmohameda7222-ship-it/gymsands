@@ -38,6 +38,47 @@ export type FoodCatalogAlias = {
 
 export type FoodCatalogAliasInput = Omit<FoodCatalogAlias, "normalizedValue">;
 
+export type FoodCatalogNameEvidenceRole =
+  | "source"
+  | "normalized"
+  | "alias"
+  | "transliteration";
+
+export type FoodCatalogNameEvidenceInput = {
+  locale: string;
+  script: string | null;
+  role: FoodCatalogNameEvidenceRole;
+  value: string;
+};
+
+export type FoodCatalogNameEvidence = FoodCatalogNameEvidenceInput & {
+  normalizedValue: string;
+};
+
+export type FoodCatalogIdentityEvidence = {
+  semanticSignature: string | null;
+  preparation: string | null;
+  state: string | null;
+  form: string | null;
+  structuredEvidenceKey?: string | null;
+};
+
+export type FoodCatalogServingEvidence = {
+  servingKey: string;
+  amount: number | null;
+  unit: string;
+  gramWeight: number | null;
+  milliliterVolume: number | null;
+  label: string | null;
+  sourceEvidence: unknown;
+};
+
+export type FoodCatalogTaxonomyEvidence = {
+  taxonomy: string;
+  sourceCode: string | null;
+  mappedTaxonomyId: string | null;
+};
+
 export type FoodCatalogCandidateInput = {
   sourceRecordId: string;
   sourceReference: string | null;
@@ -49,6 +90,10 @@ export type FoodCatalogCandidateInput = {
   cuisine: string | null;
   nutrition: FoodCatalogNutrition;
   aliases: FoodCatalogAliasInput[];
+  names?: FoodCatalogNameEvidenceInput[];
+  identityEvidence?: FoodCatalogIdentityEvidence;
+  servings?: FoodCatalogServingEvidence[];
+  taxonomyEvidence?: FoodCatalogTaxonomyEvidence[];
   gtins: string[];
   marketScopes: FoodCatalogMarketScope[];
   globallyRelevant: boolean;
@@ -56,8 +101,15 @@ export type FoodCatalogCandidateInput = {
   sourceServing: unknown;
 };
 
-export type FoodCatalogNormalizedCandidate = Omit<FoodCatalogCandidateInput, "aliases"> & {
+export type FoodCatalogNormalizedCandidate = Omit<
+  FoodCatalogCandidateInput,
+  "aliases" | "names" | "identityEvidence" | "servings" | "taxonomyEvidence"
+> & {
   aliases: FoodCatalogAlias[];
+  names: FoodCatalogNameEvidence[];
+  identityEvidence: FoodCatalogIdentityEvidence;
+  servings: FoodCatalogServingEvidence[];
+  taxonomyEvidence: FoodCatalogTaxonomyEvidence[];
 };
 
 export type FoodCatalogValidationIssueCode =
