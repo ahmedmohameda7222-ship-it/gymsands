@@ -164,7 +164,7 @@ export async function executeApprovedFoodCatalogDraftMutation(
     throw new Error("Plan 4 draft mutation requires the exact approved ingestion manifest.");
   }
 
-  const leaseToken = deterministicUuid(
+  const requestedLeaseToken = deterministicUuid(
     "food-catalog-plan4-lease-token-v2",
     input.operationNamespace,
     input.semanticIdentityChecksumSha256,
@@ -176,15 +176,12 @@ export async function executeApprovedFoodCatalogDraftMutation(
     {
       runId,
       leaseOwner: input.leaseOwner,
-      leaseToken,
+      leaseToken: requestedLeaseToken,
       leaseSeconds: input.leaseSeconds,
     },
   );
   const activeLeaseToken = requiredString(lease, "leaseToken");
   const leaseEpoch = requiredPositiveInteger(lease, "leaseEpoch");
-  if (activeLeaseToken !== leaseToken) {
-    throw new Error("Plan 4 ingestion lease token does not match the requested deterministic lease.");
-  }
 
   for (const entry of input.manifestContent.candidates) {
     await persistEntry(store, input, entry, runId, activeLeaseToken, leaseEpoch);
