@@ -26,10 +26,14 @@ describe("Food Catalog Plan 4 independent-review hardening", () => {
   });
 
   it("binds quarantine outcome, reasons, candidates and evidence to the reviewed manifest record", () => {
-    expect(sql).toMatch(
-      /food_catalog_ingestion_record_quarantine_v2[\s\S]*from\s+public\.food_ingestion_manifest_records[\s\S]*decision_json[\s\S]*disposition_json[\s\S]*issues_json/i,
-    );
-    expect(sql).toContain("quarantine command conflicts with reviewed manifest authority");
+    const quarantineRpc = sql.match(
+      /create\s+or\s+replace\s+function\s+public\.food_catalog_ingestion_record_quarantine_v2[\s\S]*?\nend\n\$function\$;/i,
+    )?.[0] ?? "";
+    expect(quarantineRpc).toMatch(/from\s+public\.food_ingestion_manifest_records/i);
+    expect(quarantineRpc).toContain("decision_json");
+    expect(quarantineRpc).toContain("disposition_json");
+    expect(quarantineRpc).toContain("issues_json");
+    expect(quarantineRpc).toContain("quarantine command conflicts with reviewed manifest authority");
   });
 
   it("recomputes release-diff checksum from exact batch identities and canonical records before insertion", () => {
