@@ -12,7 +12,11 @@ import {
   checksumManifestContent,
   stableJson
 } from "./manifest";
-import { decideCanonicalMatch, type FoodCatalogMatchIndex } from "./matching";
+import {
+  decideCanonicalMatch,
+  deriveCanonicalConflictReasons,
+  type FoodCatalogMatchIndex
+} from "./matching";
 import { normalizeFoodCatalogCandidate } from "./normalize";
 import { deriveProcessingDisposition } from "./quarantine";
 import { validateFoodCatalogCandidate } from "./validate";
@@ -98,13 +102,17 @@ export function buildFoodCatalogDryRun<TArtifact>(
         .filter((issue) => issue.severity === "error")
         .map((issue) => issue.code)
     );
+    const matchInput = { source, candidate, index };
     const decision: FoodCatalogCanonicalDecision = errorIssueCodes.length > 0
       ? { kind: "reject", issueCodes: errorIssueCodes }
-      : decideCanonicalMatch({ source, candidate, index });
+      : decideCanonicalMatch(matchInput);
+    const conflictReasons = errorIssueCodes.length > 0
+      ? []
+      : deriveCanonicalConflictReasons(matchInput);
     const disposition = deriveProcessingDisposition({
       decision,
       issues,
-      conflictReasons: []
+      conflictReasons
     });
     return { candidate, issues, decision, disposition };
   });
