@@ -184,6 +184,12 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     }
   });
 
+  it("revalidates the target Production run after the batch/run locks are acquired", () => {
+    expect(sql).toMatch(
+      /select\s+\*\s+into\s+v_run\s+from\s+public\.food_ingestion_runs\s+where\s+id\s*=\s*v_run_id\s+for\s+update;[\s\S]{0,320}if\s+not\s+found\s+or\s+v_run\.execution_mode\s*<>\s*'production'\s+or\s+v_run\.status\s+not\s+in\s*\(\s*'prepared'\s*,\s*'running'\s*\)/i,
+    );
+  });
+
   it("exposes only narrow service-role command RPCs with pinned security-definer boundaries", () => {
     for (const rpc of rpcs) {
       expect(sql).toMatch(
