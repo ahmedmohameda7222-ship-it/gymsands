@@ -14,6 +14,8 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/active-workout-aw3b-integration.sql",
   "supabase/verification/active-workout-aw3c-immutable-prescription-snapshots.sql",
   "supabase/verification/active-workout-aw3c-integration.sql",
+  "supabase/verification/active-workout-aw4-session-engine.sql",
+  "supabase/verification/active-workout-aw4-integration.sql",
   "supabase/verification/active-workout-aw9-offline-multi-device.sql",
   "supabase/verification/workout-history-verified-records.sql",
   "supabase/verification/workout-history-correction-delete.sql",
@@ -66,24 +68,39 @@ export function assertDisposableLocalDatabaseUrl(value) {
 }
 
 function run(command, args, env) {
-  const result = spawnSync(command, args, { env, encoding: "utf8", stdio: "inherit" });
+  const result = spawnSync(command, args, {
+    env,
+    encoding: "utf8",
+    stdio: "inherit",
+  });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status}.`);
 }
 
-export function runDatabaseVerification({ databaseUrl = process.env.PLAIVRA_LOCAL_DATABASE_URL, env = process.env } = {}) {
+export function runDatabaseVerification({
+  databaseUrl = process.env.PLAIVRA_LOCAL_DATABASE_URL,
+  env = process.env,
+} = {}) {
   const localUrl = assertDisposableLocalDatabaseUrl(databaseUrl);
   const executionEnv = { ...env, PGPASSWORD: "postgres" };
   for (const file of DATABASE_VERIFICATION_FILES.slice(0, -1)) {
     run("psql", [localUrl, "-X", "-v", "ON_ERROR_STOP=1", "-f", file], executionEnv);
   }
-  run(process.execPath, ["scripts/test-food-catalog-grant-promotion-concurrency.mjs"], { ...executionEnv, PLAIVRA_GRANT_PROMOTION_CONCURRENCY_TEST_DATABASE_URL: localUrl });
-  run(process.execPath, ["scripts/test-database-preflight-control.mjs"], { ...executionEnv, PLAIVRA_PREFLIGHT_TEST_DATABASE_URL: localUrl });
+  run(process.execPath, ["scripts/test-food-catalog-grant-promotion-concurrency.mjs"], {
+    ...executionEnv,
+    PLAIVRA_GRANT_PROMOTION_CONCURRENCY_TEST_DATABASE_URL: localUrl,
+  });
+  run(process.execPath, ["scripts/test-database-preflight-control.mjs"], {
+    ...executionEnv,
+    PLAIVRA_PREFLIGHT_TEST_DATABASE_URL: localUrl,
+  });
   run("psql", [localUrl, "-X", "-v", "ON_ERROR_STOP=1", "-f", DATABASE_VERIFICATION_FILES.at(-1)], executionEnv);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { runDatabaseVerification(); } catch (error) {
+  try {
+    runDatabaseVerification();
+  } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
     process.exitCode = 1;
   }
