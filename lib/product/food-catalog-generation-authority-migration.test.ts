@@ -8,6 +8,7 @@ const sql = readFileSync(MIGRATION, "utf8").toLowerCase();
 const applyOnlySql = sql.split("create or replace function public.food_catalog_create_activation_set_v1")[0];
 const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   productionMigrationCount: number;
+  productionRecordCount: number;
   pendingCount: number;
   unresolvedCount: number;
   historyRepair: { state: string; pendingCount: number; unresolvedCount: number };
@@ -106,21 +107,22 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
     expect(applyOnlySql).toMatch(/insert\s+into\s+public\.food_catalog_current_generation/i);
   });
 
-  it("classifies the repository migration as pending without inventing Production identity", () => {
+  it("records the verified Production application under the generated immutable alias", () => {
     expect(ledger.productionMigrationCount).toBe(63);
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.productionRecordCount).toBe(118);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(ledger.historyRepair.pendingCount).toBe(0);
+    expect(ledger.historyRepair.unresolvedCount).toBe(0);
 
     const entry = ledger.entries.find((item) => item.localFile === "20260902150000_food_catalog_generation_authority.sql");
     expect(entry).toEqual({
       localFile: "20260902150000_food_catalog_generation_authority.sql",
-      state: "pending",
-      note: "Food Catalog Plan 3 additive generation-authority migration. Repository-only pending; Production apply requires separate exact Planner/user approval.",
+      state: "applied_version_alias",
+      note: "differs; repository migration applied exactly once to Plaivra Production on 2026-09-03 as generated identity 20260903210503_food_catalog_generation_authority from frozen Git blob 65cd33d5a6e8bc7af08ba8079fff8e9da6a68122 after exact target/history/schema-drift preflight. Read-back proved Plan 3 table, RLS, privilege, RPC, verification-root, activation-eligibility, trusted-checksum, and promotion/invalidation locking authority while Food and Plan 3 operational data remained unpopulated. No activation, generation promotion, runtime cutover, deployment, or Activity Catalog mutation occurred. Do not replay.",
+      productionVersion: "20260903210503",
+      productionName: "food_catalog_generation_authority",
     });
-    expect(entry).not.toHaveProperty("productionVersion");
-    expect(entry).not.toHaveProperty("productionName");
   });
 });

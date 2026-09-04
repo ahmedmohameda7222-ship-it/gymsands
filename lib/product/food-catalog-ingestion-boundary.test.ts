@@ -6,7 +6,7 @@ const APPROVED_BASE_SHA = "488203fdee566b82c30a51ca9b6cbc050cfaf61f";
 const BATCH0_FINAL_SHA = "53f3cbbd078e82a1d29da20e7d6b126cab6aaa81";
 const BATCH0_MIGRATION = "20260830011407_food_catalog_population_readiness.sql";
 const BATCH0_MIGRATION_PATH = `supabase/migrations/${BATCH0_MIGRATION}`;
-const PLAN3_PENDING_MIGRATION = "20260902150000_food_catalog_generation_authority.sql";
+const PLAN3_MIGRATION = "20260902150000_food_catalog_generation_authority.sql";
 const INTERNAL_TABLES = [
   "food_ingestion_batches",
   "food_ingestion_runs",
@@ -69,6 +69,7 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     const batch0Entries = batch0.entries.filter((entry) => entry.localFile === BATCH0_MIGRATION);
     const historicalEntries = batch0.entries.filter((entry) => entry.localFile !== BATCH0_MIGRATION);
     const currentBatch0Entries = current.entries.filter((entry) => entry.localFile === BATCH0_MIGRATION);
+    const currentPlan3Entries = current.entries.filter((entry) => entry.localFile === PLAN3_MIGRATION);
     const currentPendingEntries = current.entries.filter((entry) => entry.state === "pending");
 
     expect(historicalEntries).toEqual(base.entries);
@@ -97,19 +98,22 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         productionName: "food_catalog_population_readiness",
       }),
     ]);
-    expect(currentPendingEntries).toEqual([
+    expect(currentPlan3Entries).toEqual([
       expect.objectContaining({
-        localFile: PLAN3_PENDING_MIGRATION,
-        state: "pending",
+        localFile: PLAN3_MIGRATION,
+        state: "applied_version_alias",
+        productionVersion: "20260903210503",
+        productionName: "food_catalog_generation_authority",
       }),
     ]);
-    expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(1);
+    expect(currentPendingEntries).toEqual([]);
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "pending",
-        pendingCount: 1,
-        unresolvedCount: 1,
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
       })
     );
   });
