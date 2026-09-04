@@ -81,9 +81,9 @@ describe("Food Catalog Plan 4 provider-neutral adapter contract", () => {
     expect(first[0]?.nutrition.protein_g).toBe(0);
     expect(first[0]?.nutrition.carbs_g).toBeNull();
     expect(first[0]?.names).toEqual(fixture.candidates[0]?.names);
-    expect(first[0]?.identityEvidence.semanticSignature).toBe("reference-food:raw");
-    expect(first[0]?.servings[0]?.gramWeight).toBe(100);
-    expect(first[0]?.taxonomyEvidence[0]?.mappedTaxonomyId).toBe("taxonomy-1");
+    expect(first[0]?.identityEvidence?.semanticSignature).toBe("reference-food:raw");
+    expect(first[0]?.servings?.[0]?.gramWeight).toBe(100);
+    expect(first[0]?.taxonomyEvidence?.[0]?.mappedTaxonomyId).toBe("taxonomy-1");
   });
 
   it("does not expose persistence, activation, verification, or generation authority through the adapter", () => {

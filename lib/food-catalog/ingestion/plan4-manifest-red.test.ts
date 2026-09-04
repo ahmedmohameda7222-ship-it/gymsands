@@ -93,9 +93,9 @@ describe("Food Catalog Plan 4 ManifestContent determinism", () => {
       .map((entry) => normalizeCandidate({
         ...entry,
         aliases: [...entry.aliases].reverse(),
-        names: [...entry.names].reverse(),
-        servings: [...entry.servings].reverse(),
-        taxonomyEvidence: [...entry.taxonomyEvidence].reverse()
+        names: [...(entry.names ?? [])].reverse(),
+        servings: [...(entry.servings ?? [])].reverse(),
+        taxonomyEvidence: [...(entry.taxonomyEvidence ?? [])].reverse()
       }));
 
     const first = buildPlan4ManifestContent(source, firstCandidates);
