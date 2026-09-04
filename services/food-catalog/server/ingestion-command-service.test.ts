@@ -316,4 +316,34 @@ describe("Food Catalog Plan 4 draft-only ingestion executor", () => {
     const secondPersist = second.calls.find((call) => call.method === "persistCandidate")!;
     expect(secondPersist.payload.foodId).toBe(firstPersist.payload.foodId);
   });
+
+  it("refreshes lease acquisition independently while keeping semantic operation IDs stable across takeover workers", async () => {
+    const content = manifest({
+      candidate: candidate("create-takeover"),
+      issues: [],
+      decision: { kind: "create" },
+      disposition: { kind: "accept", reasonCodes: [] },
+    });
+    const first = makeStore();
+    const second = makeStore();
+
+    await executeApprovedFoodCatalogDraftMutation(first.store, executionInput(content));
+    await executeApprovedFoodCatalogDraftMutation(second.store, {
+      ...executionInput(content),
+      leaseOwner: "plan4-executor-b",
+      operationNamespace: "plan4-fixture-takeover-worker-b",
+    });
+
+    const firstAcquire = first.calls.find((call) => call.method === "acquireLease")!;
+    const secondAcquire = second.calls.find((call) => call.method === "acquireLease")!;
+    expect(secondAcquire.operationId).not.toBe(firstAcquire.operationId);
+
+    for (const method of ["prepareExecution", "persistCandidate", "recordReconciliation", "completeRun"] as const) {
+      expect(second.calls.find((call) => call.method === method)?.operationId)
+        .toBe(first.calls.find((call) => call.method === method)?.operationId);
+    }
+
+    expect(second.calls.find((call) => call.method === "persistCandidate")?.payload.foodId)
+      .toBe(first.calls.find((call) => call.method === "persistCandidate")?.payload.foodId);
+  });
 });
