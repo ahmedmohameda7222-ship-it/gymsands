@@ -514,6 +514,9 @@ begin
   -- Serialize lease authority at semantic-batch scope before locking the individual run.
   perform 1 from public.food_ingestion_batches where id = v_batch_id for update;
   select * into v_run from public.food_ingestion_runs where id = v_run_id for update;
+  if not found or v_run.execution_mode <> 'production' or v_run.status not in ('prepared', 'running') then
+    raise exception 'Lease acquisition target changed before authority could be locked.' using errcode = '55000';
+  end if;
 
   if exists (
     select 1 from public.food_ingestion_runs other_run
