@@ -1,9 +1,13 @@
 # Food Catalog Plan 4 — Ingestion V2, Quarantine, and Release-Diff Design
 
-**Status:** Plan 4 implementation authority under the owner-approved master execution authority  
-**Date:** 2026-09-04  
-**Parent architecture:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`  
-**Frozen base:** `main@7dde8c1166d255da493f6a5f0440c9078e5abd9a`  
+**Status:** Plan 4 implementation authority under the owner-approved master execution authority
+
+**Date:** 2026-09-04
+
+**Parent architecture:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
+
+**Frozen base:** `main@7dde8c1166d255da493f6a5f0440c9078e5abd9a`
+
 **Scope:** Plan 4 only; provider-neutral engine plus synthetic/reference adapter for tests. No real provider ingestion.
 
 ## Purpose

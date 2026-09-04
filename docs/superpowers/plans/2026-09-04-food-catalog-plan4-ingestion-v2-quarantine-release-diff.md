@@ -4,10 +4,14 @@
 
 **Goal:** Build the provider-neutral Plan 4 ingestion platform from deterministic adapter output through dry-run, canonical decision + quarantine disposition, privileged draft-only mutation, reconciliation, release diff and immutable operational evidence.
 
-**Spec:** `docs/superpowers/specs/2026-09-04-food-catalog-plan4-ingestion-v2-quarantine-release-diff-design.md`  
-**Parent:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`  
-**Frozen base:** `7dde8c1166d255da493f6a5f0440c9078e5abd9a`  
-**Branch:** `feat/food-catalog-ingestion-v2`  
+**Spec:** `docs/superpowers/specs/2026-09-04-food-catalog-plan4-ingestion-v2-quarantine-release-diff-design.md`
+
+**Parent:** `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
+
+**Frozen base:** `7dde8c1166d255da493f6a5f0440c9078e5abd9a`
+
+**Branch:** `feat/food-catalog-ingestion-v2`
+
 **Migration:** `supabase/migrations/20260904100000_food_catalog_ingestion_v2_authority.sql`
 
 ## Constraints
