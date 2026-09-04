@@ -39,6 +39,7 @@ const releaseCompatibility = JSON.parse(readFileSync("config/release-compatibili
 
 const authorityTables = [
   "food_ingestion_control_operations",
+  "food_ingestion_manifest_records",
   "food_ingestion_quarantines",
   "food_ingestion_quarantine_resolutions",
   "food_ingestion_reconciliations",
@@ -136,6 +137,29 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(sql).toMatch(/result_json/i);
   });
 
+  it("binds Production writes to reviewed per-record manifest authority and persists Plan 1 structured facts", () => {
+    expect(sql).toMatch(/create\s+table\s+public\.food_ingestion_manifest_records/i);
+    expect(sql).toMatch(/candidate_json\s+jsonb\s+not\s+null/i);
+    expect(sql).toMatch(/decision_json\s+jsonb\s+not\s+null/i);
+    expect(sql).toMatch(/disposition_json\s+jsonb\s+not\s+null/i);
+    expect(sql).toMatch(/planned_food_id\s+uuid/i);
+    expect(sql).toMatch(/manifest_content_checksum_sha256\s+text\s+not\s+null/i);
+    expect(sql).toMatch(/production candidate[\s\S]{0,500}approved[\s\S]{0,500}manifest/i);
+
+    for (const relation of [
+      "food_nutrition_revisions",
+      "food_names",
+      "food_serving_options",
+      "food_barcodes",
+      "food_taxonomy_assignments",
+      "food_market_assignments",
+    ]) {
+      expect(sql).toMatch(new RegExp(`insert\\s+into\\s+public\\.${relation}\\b`, "i"));
+    }
+
+    expect(sql).toMatch(/execution_mode\s*=\s*'dry_run'[\s\S]{0,300}status\s+not\s+in\s*\(\s*'prepared'\s*,\s*'running'\s*\)/i);
+  });
+
   it("exposes only narrow service-role command RPCs with pinned security-definer boundaries", () => {
     for (const rpc of rpcs) {
       expect(sql).toMatch(
@@ -164,6 +188,9 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(verificationSql).toContain("quarantine");
     expect(verificationSql).toContain("duplicate_semantic_result");
     expect(verificationSql).toContain("partial_execution");
+    expect(verificationSql).toContain("manifest tamper");
+    expect(verificationSql).toContain("structured plan 1 facts");
+    expect(verificationSql).toContain("completed dry-run rejects candidate");
     expect(verificationSql).toContain("service_role");
     expect(verificationSql).toContain("rollback");
   });
