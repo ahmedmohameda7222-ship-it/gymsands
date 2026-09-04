@@ -127,8 +127,12 @@ select pg_temp.plan4_rejected(format(
   jsonb_build_object('operationId','44000000-0000-4000-8000-000000000007','commandChecksumSha256',repeat('7',64),'runId',(select production_run_id from plan4_ids),'leaseOwner','worker-b','leaseToken','44000000-0000-4000-8000-000000000102','leaseSeconds',120)::text
 ), 'live lease cannot be stolen');
 
--- stale takeover: expire fixture lease as database owner, then acquire a new token/epoch.
-update public.food_ingestion_runs set lease_expires_at=clock_timestamp()-interval '1 second' where id=(select production_run_id from plan4_ids);
+-- stale takeover: expire fixture lease as database owner while preserving the lease-shape CHECK.
+update public.food_ingestion_runs
+set lease_acquired_at=clock_timestamp()-interval '3 seconds',
+    lease_heartbeat_at=clock_timestamp()-interval '2 seconds',
+    lease_expires_at=clock_timestamp()-interval '1 second'
+where id=(select production_run_id from plan4_ids);
 select public.food_catalog_ingestion_acquire_lease_v2(jsonb_build_object(
   'operationId','44000000-0000-4000-8000-000000000008','commandChecksumSha256',repeat('8',64),
   'runId',(select production_run_id from plan4_ids),'leaseOwner','worker-b','leaseToken','44000000-0000-4000-8000-000000000102','leaseSeconds',120
