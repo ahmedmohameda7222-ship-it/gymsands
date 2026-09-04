@@ -2,6 +2,8 @@ begin;
 
 -- Plan 4 disposable verification: live lease, stale takeover, immutable audit,
 -- reviewed per-record manifest authority, structured Plan 1 facts and fail-closed reconciliation.
+-- Added correction evidence: cross-attempt live lease, cross-attempt materialized resume,
+-- lease lifecycle events, nullable serving label, explicit milliliter serving evidence.
 -- Everything is rollback-only.
 
 create or replace function pg_temp.plan4_assert(p_condition boolean, p_message text)
@@ -30,9 +32,9 @@ declare
   v_rpc text;
 begin
   foreach v_table in array array[
-    'food_ingestion_control_operations','food_ingestion_manifest_records','food_ingestion_quarantines',
-    'food_ingestion_quarantine_resolutions','food_ingestion_reconciliations','food_ingestion_release_diffs',
-    'food_ingestion_release_diff_records','food_ingestion_operational_events'
+    'food_ingestion_control_operations','food_ingestion_manifest_records','food_ingestion_materialized_results',
+    'food_ingestion_quarantines','food_ingestion_quarantine_resolutions','food_ingestion_reconciliations',
+    'food_ingestion_release_diffs','food_ingestion_release_diff_records','food_ingestion_operational_events'
   ] loop
     perform pg_temp.plan4_assert(has_table_privilege('service_role', 'public.' || v_table, 'SELECT'), v_table || ' service_role SELECT');
     perform pg_temp.plan4_assert(not has_table_privilege('service_role', 'public.' || v_table, 'INSERT,UPDATE,DELETE,TRUNCATE'), v_table || ' no direct service_role mutation');
@@ -67,7 +69,7 @@ insert into plan4_fixture values (
     'sourceRecordChecksumSha256',repeat('e',64),
     'canonicalName','Plan 4 Fixture Food',
     'brandName',null,
-    'servingLabel','100 g',
+    'servingLabel',null,
     'category',null,
     'cuisine',null,
     'nutrition',jsonb_build_object(
@@ -85,8 +87,8 @@ insert into plan4_fixture values (
       'semanticSignature',null,'preparation',null,'state',null,'form',null,'structuredEvidenceKey',null
     ),
     'servings',jsonb_build_array(jsonb_build_object(
-      'servingKey','100-g','amount',100,'unit','g','gramWeight',100,'milliliterVolume',null,
-      'label','100 g','sourceEvidence',jsonb_build_object('fixture',true)
+      'servingKey','cup-1','amount',1,'unit','cup','gramWeight',null,'milliliterVolume',240,
+      'label','1 cup','sourceEvidence',jsonb_build_object('fixture',true,'milliliters',240)
     )),
     'taxonomyEvidence',jsonb_build_array(jsonb_build_object(
       'taxonomy','primary_food_group','sourceCode','fixture-dairy','mappedTaxonomyId','dairy'
@@ -97,7 +99,7 @@ insert into plan4_fixture values (
     )),
     'globallyRelevant',false,
     'sourceNutrition',jsonb_build_object('fixture',true),
-    'sourceServing',jsonb_build_object('label','100 g')
+    'sourceServing',jsonb_build_object('label','1 cup','milliliterVolume',240)
   ),
   jsonb_build_object('kind','create'),
   jsonb_build_object('kind','accept','reasonCodes',jsonb_build_array()),
@@ -178,6 +180,7 @@ where id=(select batch_id from plan4_ids);
 update public.food_ingestion_batches set review_state='approved', approved_at=clock_timestamp(), approval_reference='plan4-disposable-verifier'
 where id=(select batch_id from plan4_ids);
 
+-- Prepare Production attempt 1.
 select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
   'operationId','44000000-0000-4000-8000-000000000005','commandChecksumSha256',repeat('5',64),
   'executionMode','production','attemptNumber',1,'manifestContentChecksumSha256',repeat('a',64),
@@ -191,6 +194,7 @@ select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
 ));
 
 alter table plan4_ids add column production_run_id uuid;
+alter table plan4_ids add column production_run2_id uuid;
 update plan4_ids set production_run_id = (
   select id from public.food_ingestion_runs where batch_id=plan4_ids.batch_id and execution_mode='production' and attempt_number=1
 );
@@ -209,7 +213,31 @@ select pg_temp.plan4_rejected(format(
   )::text
 ), 'live lease cannot be stolen');
 
--- stale takeover: expire fixture lease as database owner while preserving the lease-shape CHECK.
+-- Prepare attempt 2 while attempt 1 is live; batch-wide authority must reject it.
+select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
+  'operationId','44000000-0000-4000-8000-000000000016','commandChecksumSha256',repeat('1',64),
+  'executionMode','production','attemptNumber',2,'manifestContentChecksumSha256',repeat('a',64),
+  'semanticIdentityChecksumSha256',repeat('b',64),
+  'source',jsonb_build_object(
+    'provider','synthetic-reference','dataset','fixture-v2','sourceVersion','2026.09','sourceReleaseDate','2026-09-04',
+    'licenseName','Fixture License','licenseReference','fixture-license','sourceReference','fixture://plan4',
+    'sourceChecksumSha256',repeat('c',64),'importerVersion','plan4-test','configChecksumSha256',repeat('d',64)
+  ),
+  'expectedMutations',jsonb_build_object('input',1,'accepted',1,'rejected',0,'matched',0,'created',1,'possibleDuplicate',0,'quarantined',0)
+));
+update plan4_ids set production_run2_id = (
+  select id from public.food_ingestion_runs where batch_id=plan4_ids.batch_id and execution_mode='production' and attempt_number=2
+);
+select pg_temp.plan4_rejected(format(
+  'select public.food_catalog_ingestion_acquire_lease_v2(%L::jsonb)',
+  jsonb_build_object(
+    'operationId','44000000-0000-4000-8000-000000000017','commandChecksumSha256',repeat('2',64),
+    'runId',(select production_run2_id from plan4_ids),'leaseOwner','worker-c',
+    'leaseToken','44000000-0000-4000-8000-000000000103','leaseSeconds',120
+  )::text
+), 'cross-attempt live lease');
+
+-- stale takeover on the same attempt increments epoch and records loss/takeover history.
 update public.food_ingestion_runs
 set lease_acquired_at=clock_timestamp()-interval '3 seconds',
     lease_heartbeat_at=clock_timestamp()-interval '2 seconds',
@@ -228,6 +256,11 @@ select public.food_catalog_ingestion_heartbeat_lease_v2(jsonb_build_object(
   'operationId','44000000-0000-4000-8000-000000000009','commandChecksumSha256',repeat('9',64),
   'runId',(select production_run_id from plan4_ids),'leaseToken','44000000-0000-4000-8000-000000000102','leaseEpoch',2,'leaseSeconds',120
 ));
+select pg_temp.plan4_assert((
+  select count(*) >= 4 from public.food_ingestion_operational_events
+  where batch_id=(select batch_id from plan4_ids)
+    and event_type in ('lease_acquired','lease_lost','lease_takeover','lease_heartbeat')
+), 'lease lifecycle events');
 
 -- manifest tamper: same source identity with altered reviewed candidate bytes must fail closed.
 select pg_temp.plan4_rejected(format(
@@ -255,9 +288,9 @@ select public.food_catalog_ingestion_persist_candidate_v2(jsonb_build_object(
   'candidate',(select candidate from plan4_fixture)
 ));
 select pg_temp.plan4_assert((
-  select lifecycle_status='draft' and is_verified=false
+  select lifecycle_status='draft' and is_verified=false and serving_size is null
   from public.food_items where id=(select planned_food_id from plan4_fixture)
-), 'Production create remains draft and unverified');
+), 'nullable serving label');
 select pg_temp.plan4_assert((select count(*)=0 from public.food_catalog_generations), 'Plan 4 does not create generations');
 
 -- structured Plan 1 facts are source-backed instead of being discarded after legacy-row creation.
@@ -271,8 +304,8 @@ select pg_temp.plan4_assert((
 ), 'structured Plan 1 facts include source name and alias');
 select pg_temp.plan4_assert((
   select count(*)=1 from public.food_serving_options
-  where food_id=(select planned_food_id from plan4_fixture)
-), 'structured Plan 1 facts include serving evidence');
+  where food_id=(select planned_food_id from plan4_fixture) and amount=240 and unit_code='ml' and gram_weight is null
+), 'explicit milliliter serving evidence');
 select pg_temp.plan4_assert((
   select count(*)=1 from public.food_barcodes
   where food_id=(select planned_food_id from plan4_fixture) and gtin='4006381333931'
@@ -285,12 +318,57 @@ select pg_temp.plan4_assert((
   select count(*)=1 from public.food_market_assignments
   where food_id=(select planned_food_id from plan4_fixture) and scope_code='DE'
 ), 'structured Plan 1 facts include explicit market evidence');
+select pg_temp.plan4_assert((
+  select count(*)=1 from public.food_ingestion_materialized_results
+  where batch_id=(select batch_id from plan4_ids) and source_record_key='fixture-create-1'
+), 'materialized accepted mutation recorded once');
 
--- Immutable event authority rejects direct mutation.
+-- Expire attempt 1 and let attempt 2 take over the semantic batch.
+update public.food_ingestion_runs
+set lease_acquired_at=clock_timestamp()-interval '3 seconds',
+    lease_heartbeat_at=clock_timestamp()-interval '2 seconds',
+    lease_expires_at=clock_timestamp()-interval '1 second'
+where id=(select production_run_id from plan4_ids);
+select public.food_catalog_ingestion_acquire_lease_v2(jsonb_build_object(
+  'operationId','44000000-0000-4000-8000-000000000018','commandChecksumSha256',repeat('3',64),
+  'runId',(select production_run2_id from plan4_ids),'leaseOwner','worker-c','leaseToken','44000000-0000-4000-8000-000000000103','leaseSeconds',120
+));
+
+-- New attempt acknowledges the already materialized write without duplicating canonical facts.
+select public.food_catalog_ingestion_persist_candidate_v2(jsonb_build_object(
+  'operationId','44000000-0000-4000-8000-000000000019','commandChecksumSha256',repeat('4',64),
+  'runId',(select production_run2_id from plan4_ids),'leaseToken','44000000-0000-4000-8000-000000000103','leaseEpoch',1,
+  'foodId',(select planned_food_id from plan4_fixture),
+  'decisionKind','create','dispositionKind','accept',
+  'decision',(select decision from plan4_fixture),
+  'disposition',(select disposition from plan4_fixture),
+  'candidate',(select candidate from plan4_fixture)
+));
+select pg_temp.plan4_assert((
+  select count(*)=1 from public.food_items where id=(select planned_food_id from plan4_fixture)
+), 'cross-attempt materialized resume');
+select pg_temp.plan4_assert((
+  select count(*)=1 from public.food_nutrition_revisions where food_id=(select planned_food_id from plan4_fixture)
+), 'cross-attempt materialized resume keeps nutrition single');
+select pg_temp.plan4_assert((
+  select count(*)=2 from public.food_names where food_id=(select planned_food_id from plan4_fixture)
+), 'cross-attempt materialized resume keeps names single');
+select pg_temp.plan4_assert((
+  select count(*)=1 from public.food_serving_options where food_id=(select planned_food_id from plan4_fixture)
+), 'cross-attempt materialized resume keeps serving single');
+select pg_temp.plan4_assert((
+  select observed_input_count=1 and observed_accepted_count=1 and observed_created_count=1
+  from public.food_ingestion_runs where id=(select production_run2_id from plan4_ids)
+), 'cross-attempt materialized resume counts current attempt exactly');
+
+-- Continue final fail-closed evidence on attempt 2, which now owns the live batch lease.
+update plan4_ids set production_run_id=production_run2_id;
+
+-- Immutable event/materialized authority rejects direct mutation.
 select public.food_catalog_ingestion_append_event_v2(jsonb_build_object(
   'operationId','44000000-0000-4000-8000-000000000011','commandChecksumSha256',repeat('b',64),
   'batchId',(select batch_id from plan4_ids),'runId',(select production_run_id from plan4_ids),
-  'leaseToken','44000000-0000-4000-8000-000000000102','leaseEpoch',2,
+  'leaseToken','44000000-0000-4000-8000-000000000103','leaseEpoch',1,
   'eventType','lease_heartbeat','eventChecksumSha256',repeat('c',64),'payload',jsonb_build_object('fixture',true)
 ));
 select pg_temp.plan4_rejected(
@@ -300,6 +378,10 @@ select pg_temp.plan4_rejected(
 select pg_temp.plan4_rejected(
   'delete from public.food_ingestion_manifest_records where source_record_key=''fixture-create-1''',
   'immutable reviewed manifest record'
+);
+select pg_temp.plan4_rejected(
+  'delete from public.food_ingestion_materialized_results where source_record_key=''fixture-create-1''',
+  'immutable materialized result'
 );
 
 -- Inject a balanced duplicate semantic result as database owner. Run counters stay exact;
@@ -314,7 +396,7 @@ insert into public.food_ingestion_operational_events(
 -- Reconciliation must fail closed on semantic duplication and partial execution before completion.
 select public.food_catalog_ingestion_record_reconciliation_v2(jsonb_build_object(
   'operationId','44000000-0000-4000-8000-000000000012','commandChecksumSha256',repeat('d',64),
-  'runId',(select production_run_id from plan4_ids),'leaseToken','44000000-0000-4000-8000-000000000102','leaseEpoch',2,
+  'runId',(select production_run_id from plan4_ids),'leaseToken','44000000-0000-4000-8000-000000000103','leaseEpoch',1,
   'manifestContentChecksumSha256',repeat('a',64),'semanticIdentityChecksumSha256',repeat('b',64),'completed',false
 ));
 select pg_temp.plan4_assert((
@@ -328,7 +410,7 @@ select pg_temp.plan4_rejected(format(
   jsonb_build_object(
     'operationId','44000000-0000-4000-8000-000000000013','commandChecksumSha256',repeat('e',64),
     'runId',(select production_run_id from plan4_ids),
-    'leaseToken','44000000-0000-4000-8000-000000000102','leaseEpoch',2
+    'leaseToken','44000000-0000-4000-8000-000000000103','leaseEpoch',1
   )::text
 ), 'failed reconciliation blocks completion');
 
