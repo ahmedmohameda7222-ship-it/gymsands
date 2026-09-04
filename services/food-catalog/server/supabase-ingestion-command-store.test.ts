@@ -57,6 +57,7 @@ const cases = [
   ["recordReleaseDiff", "food_catalog_ingestion_record_release_diff_v2"],
   ["appendEvent", "food_catalog_ingestion_append_event_v2"],
   ["completeRun", "food_catalog_ingestion_complete_run_v2"],
+  ["failRun", "food_catalog_ingestion_fail_run_v2"],
 ] as const;
 
 describe("Food Catalog Plan 4 Supabase ingestion command store", () => {
