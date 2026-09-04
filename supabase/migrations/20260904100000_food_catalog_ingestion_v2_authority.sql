@@ -151,6 +151,26 @@ create table public.food_ingestion_control_operations (
   created_at timestamptz not null default clock_timestamp()
 );
 
+-- Immutable deterministic per-record authority captured during the reviewed dry run.
+create table public.food_ingestion_manifest_records (
+  id uuid primary key default gen_random_uuid(),
+  batch_id uuid not null references public.food_ingestion_batches(id) on delete restrict,
+  source_record_key text not null check (length(btrim(source_record_key)) > 0),
+  source_record_id uuid not null references public.food_source_records(id) on delete restrict,
+  manifest_content_checksum_sha256 text not null check (manifest_content_checksum_sha256 ~ '^[0-9A-Fa-f]{64}$'),
+  candidate_json jsonb not null,
+  decision_json jsonb not null check (decision_json->>'kind' in ('match', 'create', 'possible_duplicate', 'reject')),
+  disposition_json jsonb not null check (disposition_json->>'kind' in ('accept', 'quarantine', 'reject')),
+  planned_food_id uuid,
+  created_at timestamptz not null default clock_timestamp(),
+  unique (batch_id, source_record_key),
+  unique (batch_id, source_record_id),
+  check (
+    (disposition_json->>'kind' = 'accept' and decision_json->>'kind' in ('match', 'create') and planned_food_id is not null)
+    or not (disposition_json->>'kind' = 'accept' and decision_json->>'kind' in ('match', 'create'))
+  )
+);
+
 create table public.food_ingestion_quarantines (
   id uuid primary key default gen_random_uuid(),
   batch_id uuid not null references public.food_ingestion_batches(id) on delete restrict,
@@ -252,6 +272,7 @@ create table public.food_ingestion_operational_events (
   check (batch_id is not null or run_id is not null)
 );
 
+create index food_ingestion_manifest_records_batch_idx on public.food_ingestion_manifest_records(batch_id, source_record_key, id);
 create index food_ingestion_quarantines_batch_run_idx on public.food_ingestion_quarantines(batch_id, run_id, created_at, id);
 create index food_ingestion_release_diffs_batch_idx on public.food_ingestion_release_diffs(batch_id, previous_batch_id, created_at, id);
 create index food_ingestion_operational_events_run_idx on public.food_ingestion_operational_events(run_id, created_at, id);
@@ -267,6 +288,7 @@ end
 $function$;
 
 create trigger food_ingestion_control_operations_immutable before update or delete on public.food_ingestion_control_operations for each row execute function private.reject_food_catalog_ingestion_authority_mutation_v2();
+create trigger food_ingestion_manifest_records_immutable before update or delete on public.food_ingestion_manifest_records for each row execute function private.reject_food_catalog_ingestion_authority_mutation_v2();
 create trigger food_ingestion_quarantines_immutable before update or delete on public.food_ingestion_quarantines for each row execute function private.reject_food_catalog_ingestion_authority_mutation_v2();
 create trigger food_ingestion_quarantine_resolutions_immutable before update or delete on public.food_ingestion_quarantine_resolutions for each row execute function private.reject_food_catalog_ingestion_authority_mutation_v2();
 create trigger food_ingestion_reconciliations_immutable before update or delete on public.food_ingestion_reconciliations for each row execute function private.reject_food_catalog_ingestion_authority_mutation_v2();
@@ -459,11 +481,9 @@ begin
   if not found or v_run.execution_mode <> 'production' or v_run.status not in ('prepared', 'running') then
     raise exception 'Lease acquisition requires a nonterminal Production ingestion run.' using errcode = '55000';
   end if;
-  -- live lease: a non-expired owner cannot be stolen.
   if v_run.lease_token is not null and v_run.lease_expires_at > clock_timestamp() then
     raise exception 'Food Catalog ingestion run already has a live lease.' using errcode = '55P03';
   end if;
-  -- stale takeover: the locked row may be reacquired only after expiry.
   update public.food_ingestion_runs
   set status = 'running',
       started_at = coalesce(started_at, clock_timestamp()),
@@ -519,40 +539,83 @@ declare
   v_replay jsonb;
   v_run_id uuid := (p_command->>'runId')::uuid;
   v_candidate jsonb := p_command->'candidate';
+  v_decision_json jsonb := p_command->'decision';
+  v_disposition_json jsonb := p_command->'disposition';
   v_decision text := p_command->>'decisionKind';
   v_disposition text := p_command->>'dispositionKind';
   v_run public.food_ingestion_runs%rowtype;
   v_batch public.food_ingestion_batches%rowtype;
   v_source_record public.food_source_records%rowtype;
-  v_food_id uuid;
+  v_manifest_record public.food_ingestion_manifest_records%rowtype;
+  v_food_id uuid := nullif(p_command->>'foodId', '')::uuid;
   v_membership_outcome text;
+  v_revision_number integer;
+  v_fact jsonb;
+  v_gtin text;
   v_result jsonb;
 begin
   v_replay := private.food_catalog_ingestion_replay_operation_v2(p_command, 'food_catalog_ingestion_persist_candidate_v2');
   if v_replay is not null then return v_replay; end if;
-  if v_decision not in ('match', 'create', 'possible_duplicate', 'reject') or v_disposition not in ('accept', 'quarantine', 'reject') then
-    raise exception 'Invalid candidate decision/disposition.' using errcode = '22023';
+
+  if jsonb_typeof(v_candidate) <> 'object'
+     or jsonb_typeof(v_decision_json) <> 'object'
+     or jsonb_typeof(v_disposition_json) <> 'object'
+     or v_decision not in ('match', 'create', 'possible_duplicate', 'reject')
+     or v_disposition not in ('accept', 'quarantine', 'reject')
+     or v_decision <> v_decision_json->>'kind'
+     or v_disposition <> v_disposition_json->>'kind'
+  then
+    raise exception 'Invalid candidate decision/disposition authority.' using errcode = '22023';
   end if;
+
+  if v_disposition = 'accept' and v_decision in ('match', 'create') and v_food_id is null then
+    raise exception 'Accepted MATCH/CREATE candidate requires planned canonical foodId.' using errcode = '22023';
+  end if;
+  if v_decision = 'match' and nullif(v_decision_json->>'foodId', '')::uuid is distinct from v_food_id then
+    raise exception 'MATCH decision and planned canonical foodId disagree.' using errcode = '23514';
+  end if;
+
   select * into v_run from public.food_ingestion_runs where id = v_run_id for update;
   if not found then raise exception 'Unknown Food Catalog ingestion run.' using errcode = '23503'; end if;
   select * into v_batch from public.food_ingestion_batches where id = v_run.batch_id for update;
 
+  if v_run.execution_mode = 'dry_run' and v_run.status not in ('prepared', 'running') then
+    raise exception 'Completed dry-run rejects candidate mutation; dry-run run must be prepared or running.' using errcode = '55000';
+  end if;
+
   if v_run.execution_mode = 'production' then
     perform private.food_catalog_ingestion_assert_active_lease_v2(v_run_id, (p_command->>'leaseToken')::uuid, (p_command->>'leaseEpoch')::bigint);
-    select source.* into v_source_record
-    from public.food_source_records source
-    join public.food_ingestion_batch_records membership on membership.source_record_id = source.id
-    where membership.batch_id = v_batch.id
+
+    -- Production candidate authority must equal the exact approved per-record manifest.
+    select manifest.* into v_manifest_record
+    from public.food_ingestion_manifest_records manifest
+    join public.food_source_records source on source.id = manifest.source_record_id
+    where manifest.batch_id = v_batch.id
+      and manifest.source_record_key = v_candidate->>'sourceRecordId'
       and source.provider = v_batch.provider
       and source.source_dataset = v_batch.dataset_name
       and source.source_version = v_batch.source_version
-      and source.source_record_id = v_candidate->>'sourceRecordId'
-    for update of source;
-    if not found then raise exception 'Production candidate is absent from the approved dry-run batch membership.' using errcode = '23514'; end if;
+    for share of manifest;
+
+    if not found
+       or v_batch.review_state <> 'approved'
+       or v_batch.approved_at is null
+       or lower(v_manifest_record.manifest_content_checksum_sha256) <> lower(v_batch.manifest_content_checksum_sha256)
+       or lower(v_manifest_record.manifest_content_checksum_sha256) <> lower(v_run.manifest_content_checksum_sha256)
+       or v_manifest_record.candidate_json is distinct from v_candidate
+       or v_manifest_record.decision_json is distinct from v_decision_json
+       or v_manifest_record.disposition_json is distinct from v_disposition_json
+       or v_manifest_record.planned_food_id is distinct from v_food_id
+    then
+      raise exception 'Production candidate does not match the exact approved per-record manifest authority.' using errcode = '23514';
+    end if;
+
+    select source.* into v_source_record
+    from public.food_source_records source
+    where source.id = v_manifest_record.source_record_id
+    for update;
 
     if v_disposition = 'accept' and v_decision in ('match', 'create') then
-      v_food_id := (p_command->>'foodId')::uuid;
-      if v_food_id is null then raise exception 'Accepted Production candidate requires canonical foodId.' using errcode = '22023'; end if;
       if v_decision = 'create' then
         insert into public.food_items(
           id, food_name, serving_size, calories, protein_g, carbs_g, fat_g,
@@ -581,10 +644,134 @@ begin
         perform 1 from public.food_items where id = v_food_id and merged_into_food_id is null for update;
         if not found then raise exception 'MATCH target must be a current canonical Food root.' using errcode = '23514'; end if;
       end if;
+
       if v_source_record.food_id is not null and v_source_record.food_id <> v_food_id then
         raise exception 'Source evidence is already associated with a different canonical Food.' using errcode = '23514';
       end if;
       update public.food_source_records set food_id = v_food_id where id = v_source_record.id and food_id is null;
+
+      -- Persist source-backed Plan 1 structured nutrition facts.
+      if v_candidate->'nutrition' is not null
+         and coalesce(nullif(v_candidate->'nutrition'->>'basis_amount', '')::numeric, 0) > 0
+         and v_candidate->'nutrition'->>'basis_unit' in ('g', 'ml')
+         and (
+           v_candidate->'nutrition'->>'calories' is not null
+           or v_candidate->'nutrition'->>'protein_g' is not null
+           or v_candidate->'nutrition'->>'carbs_g' is not null
+           or v_candidate->'nutrition'->>'fat_g' is not null
+           or v_candidate->'nutrition'->>'saturated_fat_g' is not null
+           or v_candidate->'nutrition'->>'fiber_g' is not null
+           or v_candidate->'nutrition'->>'sugars_g' is not null
+           or v_candidate->'nutrition'->>'sodium_mg' is not null
+         )
+      then
+        select coalesce(max(revision_number), 0) + 1 into v_revision_number
+        from public.food_nutrition_revisions
+        where food_id = v_food_id;
+        insert into public.food_nutrition_revisions(
+          food_id, revision_number, calories, protein_g, carbs_g, fat_g,
+          saturated_fat_g, fiber_g, sugars_g, sodium_mg, basis_amount, basis_unit,
+          source_record_id, nutrient_mapping_version, authority_reference
+        ) values (
+          v_food_id, v_revision_number,
+          nullif(v_candidate->'nutrition'->>'calories', '')::numeric,
+          nullif(v_candidate->'nutrition'->>'protein_g', '')::numeric,
+          nullif(v_candidate->'nutrition'->>'carbs_g', '')::numeric,
+          nullif(v_candidate->'nutrition'->>'fat_g', '')::numeric,
+          nullif(v_candidate->'nutrition'->>'saturated_fat_g', '')::numeric,
+          nullif(v_candidate->'nutrition'->>'fiber_g', '')::numeric,
+          nullif(v_candidate->'nutrition'->>'sugars_g', '')::numeric,
+          nullif(v_candidate->'nutrition'->>'sodium_mg', '')::numeric,
+          (v_candidate->'nutrition'->>'basis_amount')::numeric,
+          v_candidate->'nutrition'->>'basis_unit',
+          v_source_record.id, v_batch.importer_version,
+          v_batch.id::text || ':' || v_batch.manifest_content_checksum_sha256
+        );
+      end if;
+
+      -- Persist structured source names and aliases without inventing locale evidence.
+      for v_fact in select value from jsonb_array_elements(coalesce(v_candidate->'names', '[]'::jsonb)) loop
+        insert into public.food_names(
+          food_id, language_tag, name_role, name_text, normalized_text, script_code,
+          origin, source_record_id, policy_version
+        ) values (
+          v_food_id,
+          v_fact->>'locale',
+          case v_fact->>'role'
+            when 'source' then 'source_name'
+            when 'normalized' then 'preferred_display'
+            when 'alias' then 'search_alias'
+            when 'transliteration' then 'transliteration'
+            else 'source_name'
+          end,
+          v_fact->>'value', v_fact->>'normalizedValue', nullif(v_fact->>'script', ''),
+          'source', v_source_record.id, 'food_catalog_ingestion_v2'
+        );
+      end loop;
+      for v_fact in select value from jsonb_array_elements(coalesce(v_candidate->'aliases', '[]'::jsonb)) loop
+        insert into public.food_names(
+          food_id, language_tag, name_role, name_text, normalized_text,
+          origin, source_record_id, policy_version
+        ) values (
+          v_food_id, v_fact->>'locale', 'search_alias', v_fact->>'value', v_fact->>'normalizedValue',
+          'source', v_source_record.id, 'food_catalog_ingestion_v2'
+        );
+      end loop;
+
+      -- Persist source serving facts where the normalized evidence is structurally usable.
+      for v_fact in select value from jsonb_array_elements(coalesce(v_candidate->'servings', '[]'::jsonb)) loop
+        if coalesce(nullif(v_fact->>'amount', '')::numeric, 0) > 0
+           and length(btrim(coalesce(v_fact->>'unit', ''))) > 0
+           and (nullif(v_fact->>'gramWeight', '') is not null or v_fact->>'unit' in ('g', 'ml'))
+        then
+          insert into public.food_serving_options(
+            food_id, label, amount, unit_code, gram_weight, source_record_id,
+            source_portion_code, evidence_class, source_primary, authority_reference
+          ) values (
+            v_food_id, coalesce(nullif(v_fact->>'label', ''), v_fact->>'servingKey'),
+            (v_fact->>'amount')::numeric, v_fact->>'unit', nullif(v_fact->>'gramWeight', '')::numeric,
+            v_source_record.id, nullif(v_fact->>'servingKey', ''), 'exact_source', false,
+            v_batch.id::text || ':' || v_batch.manifest_content_checksum_sha256
+          );
+        end if;
+      end loop;
+
+      -- Persist normalized GTIN ownership, failing closed on an existing different owner.
+      for v_gtin in select jsonb_array_elements_text(coalesce(v_candidate->'gtins', '[]'::jsonb)) loop
+        insert into public.food_barcodes(food_id, gtin, source_record_id)
+        values (v_food_id, v_gtin, v_source_record.id)
+        on conflict (gtin) do nothing;
+        if exists (select 1 from public.food_barcodes where gtin = v_gtin and food_id <> v_food_id) then
+          raise exception 'GTIN is already owned by a different canonical Food.' using errcode = '23514';
+        end if;
+      end loop;
+
+      -- Persist provider-mapped taxonomy only; no locale/provider inference is permitted.
+      for v_fact in select value from jsonb_array_elements(coalesce(v_candidate->'taxonomyEvidence', '[]'::jsonb)) loop
+        if nullif(v_fact->>'mappedTaxonomyId', '') is not null then
+          insert into public.food_taxonomy_assignments(
+            food_id, node_code, source_record_id, assignment_action, policy_version
+          ) values (
+            v_food_id, v_fact->>'mappedTaxonomyId', v_source_record.id, 'assign', 'food_catalog_ingestion_v2'
+          );
+        end if;
+      end loop;
+
+      -- Persist only explicit market evidence from the reviewed manifest.
+      for v_fact in select value from jsonb_array_elements(coalesce(v_candidate->'marketScopes', '[]'::jsonb)) loop
+        insert into public.food_market_assignments(
+          food_id, scope_code, relevance_level, source_record_id, assignment_action, policy_version
+        ) values (
+          v_food_id, v_fact->>'code', v_fact->>'relevanceLevel', v_source_record.id, 'assign', 'food_catalog_ingestion_v2'
+        );
+      end loop;
+      if coalesce((v_candidate->>'globallyRelevant')::boolean, false) then
+        insert into public.food_market_assignments(
+          food_id, scope_code, relevance_level, source_record_id, assignment_action, policy_version
+        ) values (
+          v_food_id, 'GLOBAL', 'primary', v_source_record.id, 'assign', 'food_catalog_ingestion_v2'
+        );
+      end if;
     end if;
   else
     if v_batch.review_state <> 'prepared' then raise exception 'Dry-run staging requires a prepared semantic batch.' using errcode = '23514'; end if;
@@ -601,6 +788,7 @@ begin
     on conflict (provider, source_dataset, source_version, source_record_id)
       where source_dataset is not null and source_version is not null
     do nothing;
+
     select * into v_source_record
     from public.food_source_records
     where provider = v_batch.provider and source_dataset = v_batch.dataset_name
@@ -609,6 +797,7 @@ begin
     if lower(coalesce(v_source_record.source_record_checksum_sha256, '')) is distinct from lower(coalesce(v_candidate->>'sourceRecordChecksumSha256', '')) then
       raise exception 'Dry-run source snapshot conflicts with existing immutable source evidence.' using errcode = '23514';
     end if;
+
     v_membership_outcome := case
       when v_disposition = 'reject' then 'rejected'
       when v_disposition = 'quarantine' and v_decision = 'possible_duplicate' then 'possible_duplicate'
@@ -618,13 +807,24 @@ begin
       else 'accepted'
     end;
     insert into public.food_ingestion_batch_records(batch_id, source_record_id, outcome)
-    values (v_batch.id, v_source_record.id, v_membership_outcome)
-    on conflict (batch_id, source_record_id) do nothing;
+    values (v_batch.id, v_source_record.id, v_membership_outcome);
+
+    insert into public.food_ingestion_manifest_records(
+      batch_id, source_record_key, source_record_id, manifest_content_checksum_sha256,
+      candidate_json, decision_json, disposition_json, planned_food_id
+    ) values (
+      v_batch.id, v_candidate->>'sourceRecordId', v_source_record.id, v_run.manifest_content_checksum_sha256,
+      v_candidate, v_decision_json, v_disposition_json, v_food_id
+    );
   end if;
 
   if v_run.status = 'prepared' and v_run.execution_mode = 'dry_run' then
-    update public.food_ingestion_runs set status = 'running', started_at = coalesce(started_at, clock_timestamp()) where id = v_run.id returning * into v_run;
+    update public.food_ingestion_runs
+    set status = 'running', started_at = coalesce(started_at, clock_timestamp())
+    where id = v_run.id
+    returning * into v_run;
   end if;
+
   update public.food_ingestion_runs
   set observed_input_count = coalesce(observed_input_count, 0) + 1,
       observed_accepted_count = coalesce(observed_accepted_count, 0) + case when v_disposition = 'accept' then 1 else 0 end,
@@ -635,10 +835,17 @@ begin
   where id = v_run.id;
 
   insert into public.food_ingestion_operational_events(batch_id, run_id, source_record_key, event_type, payload_json, event_checksum_sha256)
-  values (v_batch.id, v_run.id, v_candidate->>'sourceRecordId', case when v_run.execution_mode = 'production' and v_disposition = 'accept' then 'candidate_persisted' else 'candidate_recorded' end,
-    jsonb_build_object('decisionKind', v_decision, 'dispositionKind', v_disposition, 'foodId', v_food_id), lower(p_command->>'commandChecksumSha256'));
+  values (
+    v_batch.id, v_run.id, v_candidate->>'sourceRecordId',
+    case when v_run.execution_mode = 'production' and v_disposition = 'accept' then 'candidate_persisted' else 'candidate_recorded' end,
+    jsonb_build_object('decisionKind', v_decision, 'dispositionKind', v_disposition, 'foodId', v_food_id),
+    lower(p_command->>'commandChecksumSha256')
+  );
 
-  v_result := jsonb_build_object('runId', v_run.id, 'sourceRecordId', v_candidate->>'sourceRecordId', 'foodId', v_food_id, 'decisionKind', v_decision, 'dispositionKind', v_disposition);
+  v_result := jsonb_build_object(
+    'runId', v_run.id, 'sourceRecordId', v_candidate->>'sourceRecordId', 'foodId', v_food_id,
+    'decisionKind', v_decision, 'dispositionKind', v_disposition
+  );
   return private.food_catalog_ingestion_finish_operation_v2(p_command, 'food_catalog_ingestion_persist_candidate_v2', v_run.id, v_result);
 end
 $function$;
@@ -663,6 +870,8 @@ begin
   if not found then raise exception 'Unknown Food Catalog ingestion run.' using errcode = '23503'; end if;
   if v_run.execution_mode = 'production' then
     perform private.food_catalog_ingestion_assert_active_lease_v2(v_run_id, (p_command->>'leaseToken')::uuid, (p_command->>'leaseEpoch')::bigint);
+  elsif v_run.status not in ('prepared', 'running') then
+    raise exception 'Dry-run quarantine mutation requires a nonterminal run.' using errcode = '55000';
   end if;
   select membership.source_record_id into v_source_record_id
   from public.food_ingestion_batch_records membership
@@ -737,7 +946,10 @@ begin
   select * into v_batch from public.food_ingestion_batches where id = v_run.batch_id for update;
   if v_run.execution_mode = 'production' then
     perform private.food_catalog_ingestion_assert_active_lease_v2(v_run_id, (p_command->>'leaseToken')::uuid, (p_command->>'leaseEpoch')::bigint);
+  elsif v_run.status not in ('prepared', 'running') then
+    raise exception 'Dry-run reconciliation requires a nonterminal run.' using errcode = '55000';
   end if;
+
   v_expected := jsonb_build_object(
     'input', v_batch.input_count, 'accepted', v_batch.accepted_count, 'rejected', v_batch.rejected_count,
     'matched', v_batch.matched_count, 'created', v_batch.created_count,
@@ -756,15 +968,14 @@ begin
 
   if exists (
     select 1
-    from public.food_ingestion_batch_records membership
-    join public.food_source_records source on source.id = membership.source_record_id
-    where membership.batch_id = v_batch.id
+    from public.food_ingestion_manifest_records manifest
+    where manifest.batch_id = v_batch.id
       and not exists (
         select 1
         from public.food_ingestion_operational_events event
         where event.run_id = v_run.id
           and event.event_type in ('candidate_recorded', 'candidate_persisted')
-          and event.source_record_key = source.source_record_id
+          and event.source_record_key = manifest.source_record_key
       )
   ) then
     v_mismatches := array_append(v_mismatches, 'missing_expected_write');
@@ -778,10 +989,9 @@ begin
       and event.source_record_key is not null
       and not exists (
         select 1
-        from public.food_ingestion_batch_records membership
-        join public.food_source_records source on source.id = membership.source_record_id
-        where membership.batch_id = v_batch.id
-          and source.source_record_id = event.source_record_key
+        from public.food_ingestion_manifest_records manifest
+        where manifest.batch_id = v_batch.id
+          and manifest.source_record_key = event.source_record_key
       )
   ) then
     v_mismatches := array_append(v_mismatches, 'unexpected_extra_write');
@@ -920,6 +1130,7 @@ end
 $function$;
 
 alter table public.food_ingestion_control_operations enable row level security;
+alter table public.food_ingestion_manifest_records enable row level security;
 alter table public.food_ingestion_quarantines enable row level security;
 alter table public.food_ingestion_quarantine_resolutions enable row level security;
 alter table public.food_ingestion_reconciliations enable row level security;
@@ -928,6 +1139,7 @@ alter table public.food_ingestion_release_diff_records enable row level security
 alter table public.food_ingestion_operational_events enable row level security;
 
 revoke all on table public.food_ingestion_control_operations from public, anon, authenticated, service_role;
+revoke all on table public.food_ingestion_manifest_records from public, anon, authenticated, service_role;
 revoke all on table public.food_ingestion_quarantines from public, anon, authenticated, service_role;
 revoke all on table public.food_ingestion_quarantine_resolutions from public, anon, authenticated, service_role;
 revoke all on table public.food_ingestion_reconciliations from public, anon, authenticated, service_role;
@@ -936,6 +1148,7 @@ revoke all on table public.food_ingestion_release_diff_records from public, anon
 revoke all on table public.food_ingestion_operational_events from public, anon, authenticated, service_role;
 
 grant select on table public.food_ingestion_control_operations to service_role;
+grant select on table public.food_ingestion_manifest_records to service_role;
 grant select on table public.food_ingestion_quarantines to service_role;
 grant select on table public.food_ingestion_quarantine_resolutions to service_role;
 grant select on table public.food_ingestion_reconciliations to service_role;
