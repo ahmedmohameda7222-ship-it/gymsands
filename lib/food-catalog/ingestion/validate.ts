@@ -20,6 +20,8 @@ const SHA256 = /^[a-f0-9]{64}$/i;
 const GTIN = /^(?:\d{8}|\d{12}|\d{13}|\d{14})$/;
 const COUNTRY_SCOPE = /^[A-Z]{2}$/;
 const REGION_SCOPE = /^[A-Z][A-Z0-9_-]{1,15}$/;
+const CONTROLLED_COUNTRY_SCOPES = new Set(["US", "DE", "EG", "GB", "SA", "AE"]);
+const CONTROLLED_REGION_SCOPES = new Set(["EU", "GCC"]);
 
 function isValidLocaleTag(value: string): boolean {
   try {
@@ -113,8 +115,12 @@ export function validateFoodCatalogCandidate(
   if (
     candidate.marketScopes.some((scope) => {
       if (scope.relevanceLevel !== "primary" && scope.relevanceLevel !== "secondary") return true;
-      if (scope.type === "country") return !COUNTRY_SCOPE.test(scope.code);
-      if (scope.type === "region") return !REGION_SCOPE.test(scope.code);
+      if (scope.type === "country") {
+        return !COUNTRY_SCOPE.test(scope.code) || !CONTROLLED_COUNTRY_SCOPES.has(scope.code);
+      }
+      if (scope.type === "region") {
+        return !REGION_SCOPE.test(scope.code) || !CONTROLLED_REGION_SCOPES.has(scope.code);
+      }
       return true;
     })
   ) {
