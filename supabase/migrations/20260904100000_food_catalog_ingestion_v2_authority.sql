@@ -90,6 +90,25 @@ begin
       using errcode = '23514';
   end if;
 
+  if old.review_state = 'reviewed' and new.review_state = 'approved' then
+    if not exists (
+      select 1
+      from public.food_ingestion_runs run
+      join public.food_ingestion_reconciliations reconciliation on reconciliation.run_id = run.id
+      where run.batch_id = old.id
+        and run.execution_mode = 'dry_run'
+        and run.status = 'completed'
+        and lower(run.manifest_content_checksum_sha256) = lower(old.manifest_content_checksum_sha256)
+        and reconciliation.batch_id = old.id
+        and reconciliation.reconciled
+        and lower(reconciliation.manifest_content_checksum_sha256) = lower(old.manifest_content_checksum_sha256)
+        and lower(reconciliation.semantic_identity_checksum_sha256) = lower(old.semantic_identity_checksum_sha256)
+    ) then
+      raise exception 'Food Catalog ingestion approval requires completed reconciled dry run for the exact semantic batch and manifest.'
+        using errcode = '23514';
+    end if;
+  end if;
+
   if old.review_state = 'approved' and new.review_state = 'superseded' then
     perform 1
     from public.food_ingestion_batches
@@ -163,6 +182,7 @@ create table public.food_ingestion_manifest_records (
   source_record_id uuid not null references public.food_source_records(id) on delete restrict,
   manifest_content_checksum_sha256 text not null check (manifest_content_checksum_sha256 ~ '^[0-9A-Fa-f]{64}$'),
   candidate_json jsonb not null,
+  issues_json jsonb not null default '[]'::jsonb check (jsonb_typeof(issues_json) = 'array'),
   decision_json jsonb not null check (decision_json->>'kind' in ('match', 'create', 'possible_duplicate', 'reject')),
   disposition_json jsonb not null check (disposition_json->>'kind' in ('accept', 'quarantine', 'reject')),
   planned_food_id uuid,
@@ -630,6 +650,7 @@ declare
   v_replay jsonb;
   v_run_id uuid := (p_command->>'runId')::uuid;
   v_candidate jsonb := p_command->'candidate';
+  v_issues_json jsonb := coalesce(p_command->'issues', '[]'::jsonb);
   v_decision_json jsonb := p_command->'decision';
   v_disposition_json jsonb := p_command->'disposition';
   v_decision text := p_command->>'decisionKind';
@@ -641,6 +662,7 @@ declare
   v_materialized public.food_ingestion_materialized_results%rowtype;
   v_food_id uuid := nullif(p_command->>'foodId', '')::uuid;
   v_membership_outcome text;
+  v_existing_membership_outcome text;
   v_revision_number integer;
   v_fact jsonb;
   v_gtin text;
@@ -651,6 +673,7 @@ begin
   if v_replay is not null then return v_replay; end if;
 
   if jsonb_typeof(v_candidate) <> 'object'
+     or jsonb_typeof(v_issues_json) <> 'array'
      or jsonb_typeof(v_decision_json) <> 'object'
      or jsonb_typeof(v_disposition_json) <> 'object'
      or v_decision not in ('match', 'create', 'possible_duplicate', 'reject')
@@ -696,6 +719,7 @@ begin
        or lower(v_manifest_record.manifest_content_checksum_sha256) <> lower(v_batch.manifest_content_checksum_sha256)
        or lower(v_manifest_record.manifest_content_checksum_sha256) <> lower(v_run.manifest_content_checksum_sha256)
        or v_manifest_record.candidate_json is distinct from v_candidate
+       or v_manifest_record.issues_json is distinct from v_issues_json
        or v_manifest_record.decision_json is distinct from v_decision_json
        or v_manifest_record.disposition_json is distinct from v_disposition_json
        or v_manifest_record.planned_food_id is distinct from v_food_id
@@ -949,15 +973,40 @@ begin
       else 'accepted'
     end;
     insert into public.food_ingestion_batch_records(batch_id, source_record_id, outcome)
-    values (v_batch.id, v_source_record.id, v_membership_outcome);
+    values (v_batch.id, v_source_record.id, v_membership_outcome)
+    on conflict (batch_id, source_record_id) do nothing;
+
+    select membership.outcome into v_existing_membership_outcome
+    from public.food_ingestion_batch_records membership
+    where membership.batch_id = v_batch.id and membership.source_record_id = v_source_record.id;
+    if not found or v_existing_membership_outcome is distinct from v_membership_outcome then
+      raise exception 'Dry-run staged membership conflicts with reviewed authority.' using errcode = '23514';
+    end if;
 
     insert into public.food_ingestion_manifest_records(
       batch_id, source_record_key, source_record_id, manifest_content_checksum_sha256,
-      candidate_json, decision_json, disposition_json, planned_food_id
+      candidate_json, issues_json, decision_json, disposition_json, planned_food_id
     ) values (
       v_batch.id, v_candidate->>'sourceRecordId', v_source_record.id, v_run.manifest_content_checksum_sha256,
-      v_candidate, v_decision_json, v_disposition_json, v_food_id
-    );
+      v_candidate, v_issues_json, v_decision_json, v_disposition_json, v_food_id
+    )
+    on conflict (batch_id, source_record_key) do nothing;
+
+    select * into v_manifest_record
+    from public.food_ingestion_manifest_records manifest
+    where manifest.batch_id = v_batch.id and manifest.source_record_key = v_candidate->>'sourceRecordId'
+    for share;
+    if not found
+       or v_manifest_record.source_record_id <> v_source_record.id
+       or lower(v_manifest_record.manifest_content_checksum_sha256) <> lower(v_run.manifest_content_checksum_sha256)
+       or v_manifest_record.candidate_json is distinct from v_candidate
+       or v_manifest_record.issues_json is distinct from v_issues_json
+       or v_manifest_record.decision_json is distinct from v_decision_json
+       or v_manifest_record.disposition_json is distinct from v_disposition_json
+       or v_manifest_record.planned_food_id is distinct from v_food_id
+    then
+      raise exception 'Dry-run staged manifest conflicts with reviewed authority.' using errcode = '23514';
+    end if;
   end if;
 
   if v_run.status = 'prepared' and v_run.execution_mode = 'dry_run' then
@@ -1002,7 +1051,9 @@ declare
   v_replay jsonb;
   v_run_id uuid := (p_command->>'runId')::uuid;
   v_run public.food_ingestion_runs%rowtype;
-  v_source_record_id uuid;
+  v_manifest_record public.food_ingestion_manifest_records%rowtype;
+  v_expected_candidate_food_ids jsonb;
+  v_expected_evidence jsonb;
   v_quarantine_id uuid;
   v_result jsonb;
 begin
@@ -1015,22 +1066,47 @@ begin
   elsif v_run.status not in ('prepared', 'running') then
     raise exception 'Dry-run quarantine mutation requires a nonterminal run.' using errcode = '55000';
   end if;
-  select membership.source_record_id into v_source_record_id
-  from public.food_ingestion_batch_records membership
-  join public.food_source_records source on source.id = membership.source_record_id
-  where membership.batch_id = v_run.batch_id and source.source_record_id = p_command->>'sourceRecordId';
+
+  select * into v_manifest_record
+  from public.food_ingestion_manifest_records manifest
+  where manifest.batch_id = v_run.batch_id and manifest.source_record_key = p_command->>'sourceRecordId'
+  for share;
+  if not found or lower(v_manifest_record.manifest_content_checksum_sha256) <> lower(v_run.manifest_content_checksum_sha256) then
+    raise exception 'Quarantine command conflicts with reviewed manifest authority.' using errcode = '23514';
+  end if;
+
+  v_expected_candidate_food_ids := case
+    when v_manifest_record.decision_json->>'kind' = 'possible_duplicate'
+      then coalesce(v_manifest_record.decision_json->'candidateFoodIds', '[]'::jsonb)
+    else '[]'::jsonb
+  end;
+  v_expected_evidence := jsonb_build_object(
+    'issues', v_manifest_record.issues_json,
+    'identityEvidence', coalesce(v_manifest_record.candidate_json->'identityEvidence', 'null'::jsonb)
+  );
+
+  if v_manifest_record.disposition_json->>'kind' <> 'quarantine'
+     or p_command->>'decisionKind' is distinct from v_manifest_record.decision_json->>'kind'
+     or coalesce(p_command->'reasonCodes', '[]'::jsonb) is distinct from coalesce(v_manifest_record.disposition_json->'reasonCodes', '[]'::jsonb)
+     or coalesce(p_command->'candidateFoodIds', '[]'::jsonb) is distinct from v_expected_candidate_food_ids
+     or coalesce(p_command->'evidence', '{}'::jsonb) is distinct from v_expected_evidence
+  then
+    raise exception 'Quarantine command conflicts with reviewed manifest authority.' using errcode = '23514';
+  end if;
+
   insert into public.food_ingestion_quarantines(
     batch_id, run_id, source_record_key, source_record_id, manifest_content_checksum_sha256,
     canonical_outcome, reason_codes, candidate_food_ids, evidence_json
   ) values (
-    v_run.batch_id, v_run.id, p_command->>'sourceRecordId', v_source_record_id, v_run.manifest_content_checksum_sha256,
-    p_command->>'decisionKind', array(select jsonb_array_elements_text(p_command->'reasonCodes')),
-    coalesce(array(select value::uuid from jsonb_array_elements_text(coalesce(p_command->'candidateFoodIds', '[]'::jsonb)) value), '{}'::uuid[]),
-    coalesce(p_command->'evidence', '{}'::jsonb)
+    v_run.batch_id, v_run.id, v_manifest_record.source_record_key, v_manifest_record.source_record_id,
+    v_run.manifest_content_checksum_sha256, v_manifest_record.decision_json->>'kind',
+    array(select jsonb_array_elements_text(v_manifest_record.disposition_json->'reasonCodes')),
+    coalesce(array(select value::uuid from jsonb_array_elements_text(v_expected_candidate_food_ids) value), '{}'::uuid[]),
+    v_expected_evidence
   ) returning id into v_quarantine_id;
   update public.food_ingestion_runs set observed_quarantine_count = coalesce(observed_quarantine_count, 0) + 1 where id = v_run.id;
   insert into public.food_ingestion_operational_events(batch_id, run_id, source_record_key, event_type, payload_json, event_checksum_sha256)
-  values (v_run.batch_id, v_run.id, p_command->>'sourceRecordId', 'quarantine_recorded', jsonb_build_object('quarantineId', v_quarantine_id), lower(p_command->>'commandChecksumSha256'));
+  values (v_run.batch_id, v_run.id, v_manifest_record.source_record_key, 'quarantine_recorded', jsonb_build_object('quarantineId', v_quarantine_id), lower(p_command->>'commandChecksumSha256'));
   v_result := jsonb_build_object('quarantineId', v_quarantine_id, 'runId', v_run.id);
   return private.food_catalog_ingestion_finish_operation_v2(p_command, 'food_catalog_ingestion_record_quarantine_v2', v_run.id, v_result);
 end
@@ -1186,25 +1262,88 @@ set search_path = pg_catalog, public, private, extensions
 as $function$
 declare
   v_replay jsonb;
+  v_batch_id uuid := (p_command->>'batchId')::uuid;
+  v_previous_batch_id uuid := nullif(p_command->>'previousBatchId', '')::uuid;
+  v_next_identity text;
+  v_previous_identity text := '';
+  v_entries_text text := '';
+  v_classifications_text text;
+  v_canonical_text text;
+  v_expected_checksum text;
   v_diff_id uuid;
   v_record jsonb;
   v_result jsonb;
 begin
   v_replay := private.food_catalog_ingestion_replay_operation_v2(p_command, 'food_catalog_ingestion_record_release_diff_v2');
   if v_replay is not null then return v_replay; end if;
+  if jsonb_typeof(coalesce(p_command->'records', '[]'::jsonb)) <> 'array' then
+    raise exception 'Release diff records must be a JSON array.' using errcode = '22023';
+  end if;
+
+  select batch.semantic_identity_checksum_sha256 into v_next_identity
+  from public.food_ingestion_batches batch where batch.id = v_batch_id for share;
+  if not found or v_next_identity is null then
+    raise exception 'Release diff requires a Plan 4 semantic next batch.' using errcode = '23514';
+  end if;
+  if v_previous_batch_id is not null then
+    select batch.semantic_identity_checksum_sha256 into v_previous_identity
+    from public.food_ingestion_batches batch where batch.id = v_previous_batch_id for share;
+    if not found or v_previous_identity is null then
+      raise exception 'Release diff requires a Plan 4 semantic previous batch.' using errcode = '23514';
+    end if;
+  end if;
+
+  -- Reproduce the pure TypeScript stable JSON checksum exactly: object keys are sorted,
+  -- entries are source-record sorted, classification array order is preserved, and JSON
+  -- string escaping comes from PostgreSQL's JSON encoder without trusting caller identity.
+  for v_record in
+    select value from jsonb_array_elements(coalesce(p_command->'records', '[]'::jsonb))
+    order by value->>'sourceRecordId'
+  loop
+    if length(btrim(coalesce(v_record->>'sourceRecordId', ''))) = 0
+       or jsonb_typeof(coalesce(v_record->'classifications', 'null'::jsonb)) <> 'array'
+       or v_record ? 'before'
+       or v_record ? 'after'
+    then
+      raise exception 'Release diff command contains noncanonical record evidence.' using errcode = '22023';
+    end if;
+
+    select coalesce(
+      '[' || string_agg(to_jsonb(classification)::text, ',' order by ordinality) || ']',
+      '[]'
+    ) into v_classifications_text
+    from jsonb_array_elements_text(v_record->'classifications') with ordinality as classified(classification, ordinality);
+
+    if v_entries_text <> '' then v_entries_text := v_entries_text || ','; end if;
+    v_entries_text := v_entries_text
+      || '{"classifications":' || v_classifications_text
+      || ',"sourceRecordId":' || to_jsonb(v_record->>'sourceRecordId')::text || '}';
+  end loop;
+
+  v_canonical_text := '{"entries":[' || v_entries_text
+    || '],"nextBatchIdentity":' || to_jsonb(v_next_identity)::text
+    || ',"previousBatchIdentity":' || to_jsonb(v_previous_identity)::text || '}';
+  v_expected_checksum := encode(extensions.digest(convert_to(v_canonical_text, 'UTF8'), 'sha256'), 'hex');
+  if v_expected_checksum <> lower(coalesce(p_command->>'diffChecksumSha256', '')) then
+    raise exception 'Release diff checksum does not match canonical batch identities and records.' using errcode = '23514';
+  end if;
+
   insert into public.food_ingestion_release_diffs(batch_id, previous_batch_id, diff_checksum_sha256)
-  values ((p_command->>'batchId')::uuid, nullif(p_command->>'previousBatchId', '')::uuid, lower(p_command->>'diffChecksumSha256'))
+  values (v_batch_id, v_previous_batch_id, v_expected_checksum)
   returning id into v_diff_id;
-  for v_record in select value from jsonb_array_elements(coalesce(p_command->'records', '[]'::jsonb)) loop
+  for v_record in
+    select value from jsonb_array_elements(coalesce(p_command->'records', '[]'::jsonb))
+    order by value->>'sourceRecordId'
+  loop
     insert into public.food_ingestion_release_diff_records(release_diff_id, source_record_key, classifications, before_json, after_json)
     values (
       v_diff_id, v_record->>'sourceRecordId', array(select jsonb_array_elements_text(v_record->'classifications')),
-      v_record->'before', v_record->'after'
+      null, null
     );
   end loop;
   insert into public.food_ingestion_operational_events(batch_id, event_type, payload_json, event_checksum_sha256)
-  values ((p_command->>'batchId')::uuid, 'release_diff_recorded', jsonb_build_object('releaseDiffId', v_diff_id), lower(p_command->>'commandChecksumSha256'));
-  v_result := jsonb_build_object('releaseDiffId', v_diff_id);
+  values (v_batch_id, 'release_diff_recorded', jsonb_build_object('releaseDiffId', v_diff_id, 'diffChecksumSha256', v_expected_checksum), lower(p_command->>'commandChecksumSha256'));
+  v_result := jsonb_build_object('releaseDiffId', v_diff_id, 'diffChecksumSha256', v_expected_checksum);
   return private.food_catalog_ingestion_finish_operation_v2(p_command, 'food_catalog_ingestion_record_release_diff_v2', null, v_result);
 end
 $function$;
