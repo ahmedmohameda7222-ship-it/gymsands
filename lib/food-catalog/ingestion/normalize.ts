@@ -11,6 +11,12 @@ import type {
 
 const GTIN_LENGTHS = new Set([8, 12, 13, 14]);
 
+function compareStableStrings(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 function collapseWhitespace(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
@@ -26,7 +32,7 @@ function stableValue(value: unknown): unknown {
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .sort(([left], [right]) => compareStableStrings(left, right))
         .map(([key, entry]) => [key, stableValue(entry)])
     );
   }
@@ -39,9 +45,15 @@ function stableKey(value: unknown): string {
 
 function uniqueSorted<T>(values: readonly T[], key: (value: T) => string): T[] {
   const entries = new Map<string, T>();
-  for (const value of values) entries.set(key(value), value);
+  for (const value of values) {
+    const semanticKey = key(value);
+    const existing = entries.get(semanticKey);
+    if (existing === undefined || compareStableStrings(stableKey(value), stableKey(existing)) < 0) {
+      entries.set(semanticKey, value);
+    }
+  }
   return [...entries.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => compareStableStrings(left, right))
     .map(([, value]) => value);
 }
 
@@ -138,7 +150,7 @@ export function normalizeFoodCatalogCandidate(
   candidate: FoodCatalogCandidateInput
 ): FoodCatalogNormalizedCandidate {
   const gtins = [...new Set(candidate.gtins.map(normalizeGtin).filter((value): value is string => value !== null))]
-    .sort((left, right) => left.localeCompare(right));
+    .sort(compareStableStrings);
 
   return {
     ...candidate,
