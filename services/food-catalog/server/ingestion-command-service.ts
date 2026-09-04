@@ -199,7 +199,18 @@ export async function executeApprovedFoodCatalogDraftMutation(
   const activeLeaseToken = requiredString(lease, "leaseToken");
   const leaseEpoch = requiredPositiveInteger(lease, "leaseEpoch");
 
-  for (const entry of input.manifestContent.candidates) {
+  for (const [index, entry] of input.manifestContent.candidates.entries()) {
+    if (index > 0) {
+      await store.heartbeatLease(
+        commandOperationId(input, "heartbeat-lease", entry.candidate.sourceRecordId),
+        {
+          runId,
+          leaseToken: activeLeaseToken,
+          leaseEpoch,
+          leaseSeconds: input.leaseSeconds,
+        },
+      );
+    }
     await persistEntry(store, input, entry, runId, activeLeaseToken, leaseEpoch);
   }
 
