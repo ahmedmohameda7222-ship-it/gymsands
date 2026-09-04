@@ -262,13 +262,14 @@ insert into public.food_ingestion_batches (
   id, provider, dataset_name, source_version, source_release_date,
   license_name, license_reference, source_reference,
   source_checksum_sha256, importer_version, config_checksum_sha256,
-  manifest_content_checksum_sha256, input_count, accepted_count, rejected_count,
+  manifest_content_checksum_sha256, semantic_identity_checksum_sha256,
+  input_count, accepted_count, rejected_count,
   matched_count, created_count, possible_duplicate_count
 ) values (
   'b0300000-0000-4000-8000-000000000020',
   'fixture-provider', 'fixture-dataset', 'v1', '2026-08-01',
   'Fixture License', 'license-ref', 'source-release-ref',
-  repeat('a', 64), 'importer-v1', repeat('b', 64), repeat('c', 64),
+  repeat('a', 64), 'importer-v1', repeat('b', 64), repeat('c', 64), repeat('9', 64),
   1, 1, 0, 0, 1, 0
 );
 
@@ -357,6 +358,33 @@ select pg_temp.food_catalog_rejected(
   'Reviewed batch membership still accepts deletes.'
 );
 
+insert into public.food_ingestion_runs (
+  id, batch_id, execution_mode, attempt_number, status, started_at, completed_at,
+  manifest_content_checksum_sha256,
+  observed_input_count, observed_accepted_count, observed_rejected_count,
+  observed_created_count, observed_matched_count,
+  observed_possible_duplicate_count, observed_quarantine_count
+) values (
+  'b0300000-0000-4000-8000-000000000030',
+  'b0300000-0000-4000-8000-000000000020', 'dry_run', 1, 'completed',
+  '2026-08-30T01:10:00Z', '2026-08-30T01:15:00Z', repeat('c', 64),
+  1, 1, 0, 1, 0, 0, 0
+);
+
+insert into public.food_ingestion_reconciliations (
+  id, run_id, batch_id, manifest_content_checksum_sha256,
+  semantic_identity_checksum_sha256, expected_counts, observed_counts,
+  mismatch_codes, reconciled
+) values (
+  'b0300000-0000-4000-8000-000000000031',
+  'b0300000-0000-4000-8000-000000000030',
+  'b0300000-0000-4000-8000-000000000020',
+  repeat('c', 64), repeat('9', 64),
+  '{"input":1,"accepted":1,"rejected":0,"matched":0,"created":1,"possibleDuplicate":0,"quarantined":0}'::jsonb,
+  '{"input":1,"accepted":1,"rejected":0,"matched":0,"created":1,"possibleDuplicate":0,"quarantined":0}'::jsonb,
+  '{}'::text[], true
+);
+
 update public.food_ingestion_batches
 set review_state = 'approved',
     approved_at = '2026-08-30T02:00:00Z',
@@ -421,15 +449,43 @@ select pg_temp.food_catalog_rejected(
 insert into public.food_ingestion_batches (
   id, provider, dataset_name, source_version, license_name,
   source_checksum_sha256, importer_version, config_checksum_sha256,
-  manifest_content_checksum_sha256
+  manifest_content_checksum_sha256, semantic_identity_checksum_sha256
 ) values (
   'b0300000-0000-4000-8000-000000000022',
   'fixture-provider', 'fixture-dataset-production', 'v1', 'Fixture License',
-  repeat('0', 64), 'importer-v1', repeat('3', 64), repeat('4', 64)
+  repeat('0', 64), 'importer-v1', repeat('3', 64), repeat('4', 64), repeat('8', 64)
 );
 update public.food_ingestion_batches
 set review_state = 'reviewed', reviewed_at = '2026-08-30T01:00:00Z'
 where id = 'b0300000-0000-4000-8000-000000000022';
+
+insert into public.food_ingestion_runs (
+  id, batch_id, execution_mode, attempt_number, status, started_at, completed_at,
+  manifest_content_checksum_sha256,
+  observed_input_count, observed_accepted_count, observed_rejected_count,
+  observed_created_count, observed_matched_count,
+  observed_possible_duplicate_count, observed_quarantine_count
+) values (
+  'b0300000-0000-4000-8000-000000000032',
+  'b0300000-0000-4000-8000-000000000022', 'dry_run', 1, 'completed',
+  '2026-08-30T01:10:00Z', '2026-08-30T01:15:00Z', repeat('4', 64),
+  0, 0, 0, 0, 0, 0, 0
+);
+
+insert into public.food_ingestion_reconciliations (
+  id, run_id, batch_id, manifest_content_checksum_sha256,
+  semantic_identity_checksum_sha256, expected_counts, observed_counts,
+  mismatch_codes, reconciled
+) values (
+  'b0300000-0000-4000-8000-000000000033',
+  'b0300000-0000-4000-8000-000000000032',
+  'b0300000-0000-4000-8000-000000000022',
+  repeat('4', 64), repeat('8', 64),
+  '{"input":0,"accepted":0,"rejected":0,"matched":0,"created":0,"possibleDuplicate":0,"quarantined":0}'::jsonb,
+  '{"input":0,"accepted":0,"rejected":0,"matched":0,"created":0,"possibleDuplicate":0,"quarantined":0}'::jsonb,
+  '{}'::text[], true
+);
+
 update public.food_ingestion_batches
 set review_state = 'approved', approved_at = '2026-08-30T02:00:00Z', approval_reference = 'planner-approval-prod'
 where id = 'b0300000-0000-4000-8000-000000000022';
