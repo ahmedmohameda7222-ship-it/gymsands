@@ -174,7 +174,6 @@ create table public.food_ingestion_control_operations (
   created_at timestamptz not null default clock_timestamp()
 );
 
--- Immutable deterministic per-record authority captured during the reviewed dry run.
 create table public.food_ingestion_manifest_records (
   id uuid primary key default gen_random_uuid(),
   batch_id uuid not null references public.food_ingestion_batches(id) on delete restrict,
@@ -195,9 +194,6 @@ create table public.food_ingestion_manifest_records (
   )
 );
 
--- One materialized accepted canonical write per semantic batch/source record. This table
--- is intentionally run-attempt independent so a later attempt can acknowledge an already
--- committed mutation without re-inserting canonical facts.
 create table public.food_ingestion_materialized_results (
   id uuid primary key default gen_random_uuid(),
   batch_id uuid not null references public.food_ingestion_batches(id) on delete restrict,
@@ -531,7 +527,6 @@ begin
     raise exception 'Lease acquisition requires a nonterminal Production ingestion run.' using errcode = '55000';
   end if;
 
-  -- Serialize lease authority at semantic-batch scope before locking the individual run.
   perform 1 from public.food_ingestion_batches where id = v_batch_id for update;
   select * into v_run from public.food_ingestion_runs where id = v_run_id for update;
   if not found or v_run.execution_mode <> 'production' or v_run.status not in ('prepared', 'running') then
@@ -561,7 +556,6 @@ begin
       and stale_run.lease_expires_at <= clock_timestamp()
   );
 
-  -- Record each expired lease epoch once before replacing batch authority.
   insert into public.food_ingestion_operational_events(batch_id, run_id, event_type, payload_json, event_checksum_sha256)
   select stale_run.batch_id, stale_run.id, 'lease_lost',
          jsonb_build_object('leaseOwner', stale_run.lease_owner, 'leaseToken', stale_run.lease_token, 'leaseEpoch', stale_run.lease_epoch, 'leaseExpiresAt', stale_run.lease_expires_at),
@@ -649,6 +643,7 @@ as $function$
 declare
   v_replay jsonb;
   v_run_id uuid := (p_command->>'runId')::uuid;
+  v_batch_id uuid;
   v_candidate jsonb := p_command->'candidate';
   v_issues_json jsonb := coalesce(p_command->'issues', '[]'::jsonb);
   v_decision_json jsonb := p_command->'decision';
@@ -691,9 +686,15 @@ begin
     raise exception 'MATCH decision and planned canonical foodId disagree.' using errcode = '23514';
   end if;
 
-  select * into v_run from public.food_ingestion_runs where id = v_run_id for update;
+  select run.batch_id into v_batch_id
+  from public.food_ingestion_runs run
+  where run.id = v_run_id;
   if not found then raise exception 'Unknown Food Catalog ingestion run.' using errcode = '23503'; end if;
-  select * into v_batch from public.food_ingestion_batches where id = v_run.batch_id for update;
+  select * into v_batch from public.food_ingestion_batches where id = v_batch_id for update;
+  select * into v_run from public.food_ingestion_runs where id = v_run_id for update;
+  if not found or v_run.batch_id <> v_batch.id then
+    raise exception 'Food Catalog ingestion run authority changed while acquiring batch/run locks.' using errcode = '55000';
+  end if;
 
   if v_run.execution_mode = 'dry_run' and v_run.status not in ('prepared', 'running') then
     raise exception 'Completed dry-run rejects candidate mutation; dry-run run must be prepared or running.' using errcode = '55000';
@@ -702,7 +703,6 @@ begin
   if v_run.execution_mode = 'production' then
     perform private.food_catalog_ingestion_assert_active_lease_v2(v_run_id, (p_command->>'leaseToken')::uuid, (p_command->>'leaseEpoch')::bigint);
 
-    -- Production candidate authority must equal the exact approved per-record manifest.
     select manifest.* into v_manifest_record
     from public.food_ingestion_manifest_records manifest
     join public.food_source_records source on source.id = manifest.source_record_id
@@ -784,7 +784,6 @@ begin
         end if;
         update public.food_source_records set food_id = v_food_id where id = v_source_record.id and food_id is null;
 
-        -- Persist source-backed Plan 1 structured nutrition facts.
         if v_candidate->'nutrition' is not null
            and coalesce(nullif(v_candidate->'nutrition'->>'basis_amount', '')::numeric, 0) > 0
            and v_candidate->'nutrition'->>'basis_unit' in ('g', 'ml')
@@ -823,7 +822,6 @@ begin
           );
         end if;
 
-        -- Persist structured source names and aliases without inventing locale evidence.
         for v_fact in select value from jsonb_array_elements(coalesce(v_candidate->'names', '[]'::jsonb)) loop
           insert into public.food_names(
             food_id, language_tag, name_role, name_text, normalized_text, script_code,
@@ -852,8 +850,6 @@ begin
           );
         end loop;
 
-        -- Persist explicit serving evidence without density inference. Household portions
-        -- carrying a source milliliter volume are materialized as that exact ml amount.
         for v_fact in select value from jsonb_array_elements(coalesce(v_candidate->'servings', '[]'::jsonb)) loop
           if coalesce(nullif(v_fact->>'amount', '')::numeric, 0) > 0
              and length(btrim(coalesce(v_fact->>'unit', ''))) > 0
@@ -889,7 +885,6 @@ begin
           end if;
         end loop;
 
-        -- Persist normalized GTIN ownership, failing closed on an existing different owner.
         for v_gtin in select jsonb_array_elements_text(coalesce(v_candidate->'gtins', '[]'::jsonb)) loop
           insert into public.food_barcodes(food_id, gtin, source_record_id)
           values (v_food_id, v_gtin, v_source_record.id)
@@ -899,7 +894,6 @@ begin
           end if;
         end loop;
 
-        -- Persist provider-mapped taxonomy only; no locale/provider inference is permitted.
         for v_fact in select value from jsonb_array_elements(coalesce(v_candidate->'taxonomyEvidence', '[]'::jsonb)) loop
           if nullif(v_fact->>'mappedTaxonomyId', '') is not null then
             insert into public.food_taxonomy_assignments(
@@ -910,7 +904,6 @@ begin
           end if;
         end loop;
 
-        -- Persist only explicit market evidence from the reviewed manifest.
         for v_fact in select value from jsonb_array_elements(coalesce(v_candidate->'marketScopes', '[]'::jsonb)) loop
           insert into public.food_market_assignments(
             food_id, scope_code, relevance_level, source_record_id, assignment_action, policy_version
@@ -960,7 +953,14 @@ begin
     where provider = v_batch.provider and source_dataset = v_batch.dataset_name
       and source_version = v_batch.source_version and source_record_id = v_candidate->>'sourceRecordId'
     for update;
-    if lower(coalesce(v_source_record.source_record_checksum_sha256, '')) is distinct from lower(coalesce(v_candidate->>'sourceRecordChecksumSha256', '')) then
+    if lower(coalesce(v_source_record.source_record_checksum_sha256, '')) is distinct from lower(coalesce(v_candidate->>'sourceRecordChecksumSha256', ''))
+       or v_source_record.source_reference is distinct from nullif(v_candidate->>'sourceReference', '')
+       or v_source_record.license_name is distinct from v_batch.license_name
+       or v_source_record.license_reference is distinct from v_batch.license_reference
+       or v_source_record.source_nutrition is distinct from v_candidate->'sourceNutrition'
+       or v_source_record.source_serving is distinct from v_candidate->'sourceServing'
+       or v_source_record.source_release_date is distinct from v_batch.source_release_date
+    then
       raise exception 'Dry-run source snapshot conflicts with existing immutable source evidence.' using errcode = '23514';
     end if;
 
@@ -1149,6 +1149,7 @@ as $function$
 declare
   v_replay jsonb;
   v_run_id uuid := (p_command->>'runId')::uuid;
+  v_batch_id uuid;
   v_run public.food_ingestion_runs%rowtype;
   v_batch public.food_ingestion_batches%rowtype;
   v_expected jsonb;
@@ -1159,9 +1160,13 @@ declare
 begin
   v_replay := private.food_catalog_ingestion_replay_operation_v2(p_command, 'food_catalog_ingestion_record_reconciliation_v2');
   if v_replay is not null then return v_replay; end if;
-  select * into v_run from public.food_ingestion_runs where id = v_run_id for update;
+  select run.batch_id into v_batch_id from public.food_ingestion_runs run where run.id = v_run_id;
   if not found then raise exception 'Unknown Food Catalog ingestion run.' using errcode = '23503'; end if;
-  select * into v_batch from public.food_ingestion_batches where id = v_run.batch_id for update;
+  select * into v_batch from public.food_ingestion_batches where id = v_batch_id for update;
+  select * into v_run from public.food_ingestion_runs where id = v_run_id for update;
+  if not found or v_run.batch_id <> v_batch.id then
+    raise exception 'Food Catalog ingestion run authority changed while acquiring batch/run locks.' using errcode = '55000';
+  end if;
   if v_run.execution_mode = 'production' then
     perform private.food_catalog_ingestion_assert_active_lease_v2(v_run_id, (p_command->>'leaseToken')::uuid, (p_command->>'leaseEpoch')::bigint);
   elsif v_run.status not in ('prepared', 'running') then
@@ -1293,9 +1298,6 @@ begin
     end if;
   end if;
 
-  -- Reproduce the pure TypeScript stable JSON checksum exactly: object keys are sorted,
-  -- entries are source-record sorted, classification array order is preserved, and JSON
-  -- string escaping comes from PostgreSQL's JSON encoder without trusting caller identity.
   for v_record in
     select value from jsonb_array_elements(coalesce(p_command->'records', '[]'::jsonb))
     order by value->>'sourceRecordId'
@@ -1410,6 +1412,65 @@ begin
 end
 $function$;
 
+create or replace function public.food_catalog_ingestion_fail_run_v2(p_command jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, extensions
+as $function$
+declare
+  v_replay jsonb;
+  v_run_id uuid := (p_command->>'runId')::uuid;
+  v_batch_id uuid;
+  v_run public.food_ingestion_runs%rowtype;
+  v_reconciliation public.food_ingestion_reconciliations%rowtype;
+  v_mismatch_codes jsonb := coalesce(p_command->'mismatchCodes', '[]'::jsonb);
+  v_result jsonb;
+begin
+  v_replay := private.food_catalog_ingestion_replay_operation_v2(p_command, 'food_catalog_ingestion_fail_run_v2');
+  if v_replay is not null then return v_replay; end if;
+
+  select run.batch_id into v_batch_id from public.food_ingestion_runs run where run.id = v_run_id;
+  if not found then raise exception 'Unknown Food Catalog ingestion run.' using errcode = '23503'; end if;
+  perform 1 from public.food_ingestion_batches where id = v_batch_id for update;
+  select * into v_run from public.food_ingestion_runs where id = v_run_id for update;
+  if not found or v_run.batch_id <> v_batch_id or v_run.status <> 'running' then
+    raise exception 'Only a running ingestion attempt can fail after reconciliation.' using errcode = '55000';
+  end if;
+  if v_run.execution_mode = 'production' then
+    perform private.food_catalog_ingestion_assert_active_lease_v2(v_run_id, (p_command->>'leaseToken')::uuid, (p_command->>'leaseEpoch')::bigint);
+  end if;
+
+  select * into v_reconciliation
+  from public.food_ingestion_reconciliations
+  where run_id = v_run.id;
+  if not found
+     or v_reconciliation.reconciled
+     or v_reconciliation.id is distinct from (p_command->>'reconciliationId')::uuid
+     or lower(v_reconciliation.manifest_content_checksum_sha256) <> lower(v_run.manifest_content_checksum_sha256)
+     or to_jsonb(v_reconciliation.mismatch_codes) is distinct from v_mismatch_codes
+  then
+    raise exception 'Food Catalog ingestion failure requires the exact immutable failed reconciliation.' using errcode = '23514';
+  end if;
+
+  update public.food_ingestion_runs
+  set status = 'failed', completed_at = clock_timestamp(),
+      error_summary = 'reconciliation_failed:' || array_to_string(v_reconciliation.mismatch_codes, ','),
+      lease_owner = null, lease_token = null, lease_acquired_at = null,
+      lease_heartbeat_at = null, lease_expires_at = null
+  where id = v_run.id;
+
+  insert into public.food_ingestion_operational_events(batch_id, run_id, event_type, payload_json, event_checksum_sha256)
+  values (
+    v_run.batch_id, v_run.id, 'execution_failed',
+    jsonb_build_object('reconciliationId', v_reconciliation.id, 'mismatchCodes', v_reconciliation.mismatch_codes),
+    lower(p_command->>'commandChecksumSha256')
+  );
+  v_result := jsonb_build_object('runId', v_run.id, 'status', 'failed', 'reconciliationId', v_reconciliation.id);
+  return private.food_catalog_ingestion_finish_operation_v2(p_command, 'food_catalog_ingestion_fail_run_v2', v_run.id, v_result);
+end
+$function$;
+
 alter table public.food_ingestion_control_operations enable row level security;
 alter table public.food_ingestion_manifest_records enable row level security;
 alter table public.food_ingestion_materialized_results enable row level security;
@@ -1450,6 +1511,7 @@ revoke all on function public.food_catalog_ingestion_record_reconciliation_v2(js
 revoke all on function public.food_catalog_ingestion_record_release_diff_v2(jsonb) from public, anon, authenticated;
 revoke all on function public.food_catalog_ingestion_append_event_v2(jsonb) from public, anon, authenticated;
 revoke all on function public.food_catalog_ingestion_complete_run_v2(jsonb) from public, anon, authenticated;
+revoke all on function public.food_catalog_ingestion_fail_run_v2(jsonb) from public, anon, authenticated;
 
 grant execute on function public.food_catalog_ingestion_prepare_execution_v2(jsonb) to service_role;
 grant execute on function public.food_catalog_ingestion_acquire_lease_v2(jsonb) to service_role;
@@ -1461,6 +1523,7 @@ grant execute on function public.food_catalog_ingestion_record_reconciliation_v2
 grant execute on function public.food_catalog_ingestion_record_release_diff_v2(jsonb) to service_role;
 grant execute on function public.food_catalog_ingestion_append_event_v2(jsonb) to service_role;
 grant execute on function public.food_catalog_ingestion_complete_run_v2(jsonb) to service_role;
+grant execute on function public.food_catalog_ingestion_fail_run_v2(jsonb) to service_role;
 
 revoke all on function private.food_catalog_ingestion_replay_operation_v2(jsonb, text) from public, anon, authenticated, service_role;
 revoke all on function private.food_catalog_ingestion_finish_operation_v2(jsonb, text, uuid, jsonb) from public, anon, authenticated, service_role;
