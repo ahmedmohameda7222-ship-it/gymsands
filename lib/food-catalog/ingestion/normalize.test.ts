@@ -67,6 +67,14 @@ describe("Food Catalog ingestion normalization", () => {
     ]);
   });
 
+  it("selects the same display alias when duplicate normalized aliases arrive in reverse order", () => {
+    const forward = normalizeFoodCatalogCandidate(candidate());
+    const reversed = normalizeFoodCatalogCandidate(candidate({ aliases: [...candidate().aliases].reverse() }));
+
+    expect(reversed.aliases).toEqual(forward.aliases);
+    expect(reversed.aliases.find((alias) => alias.locale === "en")?.value).toBe("Greek yoghurt");
+  });
+
   it("normalizes ordinary GTIN spaces/hyphens, rejects arbitrary characters, and limits accepted shapes", () => {
     expect(normalizeGtin("4006 3813-3393 1")).toBe("4006381333931");
     expect(normalizeGtin("036000291452")).toBe("036000291452");
