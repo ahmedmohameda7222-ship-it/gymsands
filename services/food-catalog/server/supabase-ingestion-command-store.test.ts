@@ -109,6 +109,35 @@ describe("Food Catalog Plan 4 Supabase ingestion command store", () => {
     })).rejects.toMatchObject({ code: "OPERATION_ID_CONFLICT" });
   });
 
+  it("keeps candidate semantic replay stable across lease-token and epoch changes", async () => {
+    const { supabase, rpc } = makeSupabase();
+    const store = createSupabaseFoodCatalogIngestionCommandStore(supabase);
+    const semantic = {
+      runId: "55000000-0000-4000-8000-000000000102",
+      decisionKind: "create",
+      dispositionKind: "accept",
+      decision: { kind: "create" },
+      disposition: { kind: "accept", reasonCodes: [] },
+      candidate: { sourceRecordId: "fixture-1", canonicalName: "Fixture" },
+      foodId: "55000000-0000-4000-8000-000000000201",
+    };
+
+    await store.persistCandidate(OPERATION_ID, {
+      ...semantic,
+      leaseToken: "55000000-0000-4000-8000-000000000301",
+      leaseEpoch: 1,
+    });
+    await expect(store.persistCandidate(OPERATION_ID, {
+      ...semantic,
+      leaseToken: "55000000-0000-4000-8000-000000000302",
+      leaseEpoch: 2,
+    })).resolves.toBeDefined();
+
+    const first = (rpc.mock.calls[0]?.[1] as { p_command: Record<string, unknown> }).p_command;
+    const second = (rpc.mock.calls[1]?.[1] as { p_command: Record<string, unknown> }).p_command;
+    expect(second.commandChecksumSha256).toBe(first.commandChecksumSha256);
+  });
+
   it("does not let caller payload override operation identity or computed checksum", async () => {
     const { supabase, rpc } = makeSupabase();
     const store = createSupabaseFoodCatalogIngestionCommandStore(supabase);
