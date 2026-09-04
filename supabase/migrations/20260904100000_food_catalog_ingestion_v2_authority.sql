@@ -197,8 +197,8 @@ create table public.food_ingestion_reconciliations (
   observed_counts jsonb not null,
   mismatch_codes text[] not null default '{}'::text[] check (
     mismatch_codes <@ array[
-      'manifest_checksum_mismatch', 'missing_result', 'extra_result', 'duplicate_result',
-      'idempotency_mismatch', 'partial_execution', 'quarantine_divergence', 'count_mismatch'
+      'manifest_checksum_mismatch', 'missing_expected_write', 'unexpected_extra_write', 'duplicate_semantic_result',
+      'idempotency_mismatch', 'partial_execution', 'quarantine_divergence', 'outcome_count_mismatch'
     ]::text[]
   ),
   reconciled boolean not null,
@@ -749,11 +749,69 @@ begin
     'created', coalesce(v_run.observed_created_count, 0), 'possibleDuplicate', coalesce(v_run.observed_possible_duplicate_count, 0),
     'quarantined', coalesce(v_run.observed_quarantine_count, 0)
   );
-  if lower(v_run.manifest_content_checksum_sha256) <> lower(coalesce(p_command->>'manifestContentChecksumSha256', '')) then v_mismatches := array_append(v_mismatches, 'manifest_checksum_mismatch'); end if;
-  if lower(coalesce(v_batch.semantic_identity_checksum_sha256, '')) <> lower(coalesce(p_command->>'semanticIdentityChecksumSha256', '')) then v_mismatches := array_append(v_mismatches, 'idempotency_mismatch'); end if;
-  if coalesce((v_observed->>'quarantined')::integer, 0) <> v_batch.expected_quarantine_count then v_mismatches := array_append(v_mismatches, 'quarantine_divergence'); end if;
-  if v_expected <> v_observed then v_mismatches := array_append(v_mismatches, 'count_mismatch'); end if;
-  if coalesce(p_command->>'completed', 'false') <> 'true' then v_mismatches := array_append(v_mismatches, 'partial_execution'); end if;
+
+  if lower(v_run.manifest_content_checksum_sha256) <> lower(coalesce(p_command->>'manifestContentChecksumSha256', '')) then
+    v_mismatches := array_append(v_mismatches, 'manifest_checksum_mismatch');
+  end if;
+
+  if exists (
+    select 1
+    from public.food_ingestion_batch_records membership
+    join public.food_source_records source on source.id = membership.source_record_id
+    where membership.batch_id = v_batch.id
+      and not exists (
+        select 1
+        from public.food_ingestion_operational_events event
+        where event.run_id = v_run.id
+          and event.event_type in ('candidate_recorded', 'candidate_persisted')
+          and event.source_record_key = source.source_record_id
+      )
+  ) then
+    v_mismatches := array_append(v_mismatches, 'missing_expected_write');
+  end if;
+
+  if exists (
+    select 1
+    from public.food_ingestion_operational_events event
+    where event.run_id = v_run.id
+      and event.event_type in ('candidate_recorded', 'candidate_persisted')
+      and event.source_record_key is not null
+      and not exists (
+        select 1
+        from public.food_ingestion_batch_records membership
+        join public.food_source_records source on source.id = membership.source_record_id
+        where membership.batch_id = v_batch.id
+          and source.source_record_id = event.source_record_key
+      )
+  ) then
+    v_mismatches := array_append(v_mismatches, 'unexpected_extra_write');
+  end if;
+
+  if exists (
+    select event.source_record_key
+    from public.food_ingestion_operational_events event
+    where event.run_id = v_run.id
+      and event.event_type in ('candidate_recorded', 'candidate_persisted')
+      and event.source_record_key is not null
+    group by event.source_record_key
+    having count(*) > 1
+  ) then
+    v_mismatches := array_append(v_mismatches, 'duplicate_semantic_result');
+  end if;
+
+  if lower(coalesce(v_batch.semantic_identity_checksum_sha256, '')) <> lower(coalesce(p_command->>'semanticIdentityChecksumSha256', '')) then
+    v_mismatches := array_append(v_mismatches, 'idempotency_mismatch');
+  end if;
+  if coalesce(p_command->>'completed', 'false') <> 'true' then
+    v_mismatches := array_append(v_mismatches, 'partial_execution');
+  end if;
+  if coalesce((v_observed->>'quarantined')::integer, 0) <> v_batch.expected_quarantine_count then
+    v_mismatches := array_append(v_mismatches, 'quarantine_divergence');
+  end if;
+  if v_expected <> v_observed then
+    v_mismatches := array_append(v_mismatches, 'outcome_count_mismatch');
+  end if;
+
   insert into public.food_ingestion_reconciliations(
     run_id, batch_id, manifest_content_checksum_sha256, semantic_identity_checksum_sha256,
     expected_counts, observed_counts, mismatch_codes, reconciled
