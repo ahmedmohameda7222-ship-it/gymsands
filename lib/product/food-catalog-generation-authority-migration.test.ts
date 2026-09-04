@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const MIGRATION = "supabase/migrations/20260902150000_food_catalog_generation_authority.sql";
 const SUFFIX = "_food_catalog_generation_authority.sql";
+const PLAN4_MIGRATION = "20260904100000_food_catalog_ingestion_v2_authority.sql";
 const migrationFiles = readdirSync("supabase/migrations").filter((name) => name.endsWith(SUFFIX));
 const sql = readFileSync(MIGRATION, "utf8").toLowerCase();
 const applyOnlySql = sql.split("create or replace function public.food_catalog_create_activation_set_v1")[0];
@@ -110,11 +111,11 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
   it("records the verified Production application under the generated immutable alias", () => {
     expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.productionRecordCount).toBe(118);
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
-    expect(ledger.historyRepair.state).toBe("reconciled");
-    expect(ledger.historyRepair.pendingCount).toBe(0);
-    expect(ledger.historyRepair.unresolvedCount).toBe(0);
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.state).toBe("pending");
+    expect(ledger.historyRepair.pendingCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
 
     const entry = ledger.entries.find((item) => item.localFile === "20260902150000_food_catalog_generation_authority.sql");
     expect(entry).toEqual({
@@ -124,5 +125,15 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
       productionVersion: "20260903210503",
       productionName: "food_catalog_generation_authority",
     });
+
+    const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
+    expect(pendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: PLAN4_MIGRATION,
+        state: "pending",
+      }),
+    ]);
+    expect(pendingEntries[0]?.productionVersion).toBeUndefined();
+    expect(pendingEntries[0]?.productionName).toBeUndefined();
   });
 });
