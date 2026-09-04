@@ -138,6 +138,40 @@ describe("Food Catalog Plan 4 ingestion engine", () => {
     expect(result.semanticBatchIdentityChecksumSha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("quarantines conflicting canonical authorities instead of accepting precedence-only matches", () => {
+    const adapter = createSyntheticFoodCatalogAdapter();
+    const index = emptyIndex();
+    index.sourceIdentities.push({
+      provider: "reference-provider",
+      dataset: "reference-dataset",
+      sourceVersion: "2026.09",
+      sourceRecordId: "conflict",
+      foodId: "food-source-owner"
+    });
+    index.gtinOwners.push({ gtin: "4006381333931", foodId: "food-barcode-owner" });
+
+    const result = buildFoodCatalogDryRun(adapter, {
+      source: source(),
+      candidates: [candidate("conflict", { gtins: ["4006381333931"] })]
+    }, index);
+    const entry = result.manifestContent.candidates[0]!;
+
+    expect(entry.decision).toEqual({ kind: "match", foodId: "food-source-owner" });
+    expect(entry.disposition).toEqual({
+      kind: "quarantine",
+      reasonCodes: ["barcode_conflict", "identity_conflict"]
+    });
+    expect(result.manifestContent.expectedMutations).toEqual({
+      input: 1,
+      accepted: 0,
+      rejected: 0,
+      matched: 0,
+      created: 0,
+      possibleDuplicate: 0,
+      quarantined: 1
+    });
+  });
+
   it("changes semantic batch identity for source/config/release/manifest/expected-count changes", () => {
     const baseInput = {
       source: source(),
