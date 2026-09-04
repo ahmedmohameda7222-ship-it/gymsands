@@ -91,6 +91,26 @@ export function validateFoodCatalogCandidate(
   }
 
   if (
+    candidate.servings.some((serving) => {
+      if (!serving.servingKey.trim()) return true;
+      if (serving.amount === null || !Number.isFinite(serving.amount) || serving.amount <= 0) return true;
+      const unit = serving.unit.trim().toLocaleLowerCase();
+      if (!unit) return true;
+      if (serving.gramWeight !== null && (!Number.isFinite(serving.gramWeight) || serving.gramWeight <= 0)) return true;
+      if (
+        serving.milliliterVolume !== null
+        && (!Number.isFinite(serving.milliliterVolume) || serving.milliliterVolume <= 0)
+      ) return true;
+      return serving.gramWeight === null
+        && serving.milliliterVolume === null
+        && unit !== "g"
+        && unit !== "ml";
+    })
+  ) {
+    addIssue("invalid_serving", "error", "servings");
+  }
+
+  if (
     candidate.marketScopes.some((scope) => {
       if (scope.relevanceLevel !== "primary" && scope.relevanceLevel !== "secondary") return true;
       if (scope.type === "country") return !COUNTRY_SCOPE.test(scope.code);
