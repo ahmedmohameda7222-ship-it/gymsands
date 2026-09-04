@@ -3,8 +3,8 @@ begin;
 -- Plan 4 disposable verification: live lease, stale takeover, immutable audit,
 -- reviewed per-record manifest authority, structured Plan 1 facts and fail-closed reconciliation.
 -- Added correction evidence: cross-attempt live lease, cross-attempt materialized resume,
--- lease lifecycle events, nullable serving label, explicit milliliter serving evidence.
--- Everything is rollback-only.
+-- lease lifecycle events, nullable serving label, explicit milliliter serving evidence,
+-- failed reconciliation terminalization. Everything is rollback-only.
 
 create or replace function pg_temp.plan4_assert(p_condition boolean, p_message text)
 returns void language plpgsql as $$
@@ -47,7 +47,8 @@ begin
     'food_catalog_ingestion_heartbeat_lease_v2','food_catalog_ingestion_persist_candidate_v2',
     'food_catalog_ingestion_record_quarantine_v2','food_catalog_ingestion_resolve_quarantine_v2',
     'food_catalog_ingestion_record_reconciliation_v2','food_catalog_ingestion_record_release_diff_v2',
-    'food_catalog_ingestion_append_event_v2','food_catalog_ingestion_complete_run_v2'
+    'food_catalog_ingestion_append_event_v2','food_catalog_ingestion_complete_run_v2',
+    'food_catalog_ingestion_fail_run_v2'
   ] loop
     perform pg_temp.plan4_assert(has_function_privilege('service_role', 'public.' || v_rpc || '(jsonb)', 'EXECUTE'), v_rpc || ' service_role execute');
     perform pg_temp.plan4_assert(not has_function_privilege('anon', 'public.' || v_rpc || '(jsonb)', 'EXECUTE'), v_rpc || ' anon denied');
@@ -413,6 +414,26 @@ select pg_temp.plan4_rejected(format(
     'leaseToken','44000000-0000-4000-8000-000000000103','leaseEpoch',1
   )::text
 ), 'failed reconciliation blocks completion');
+
+select public.food_catalog_ingestion_fail_run_v2(jsonb_build_object(
+  'operationId','44000000-0000-4000-8000-000000000020','commandChecksumSha256',repeat('0',64),
+  'runId',(select production_run_id from plan4_ids),
+  'leaseToken','44000000-0000-4000-8000-000000000103','leaseEpoch',1,
+  'reconciliationId',(
+    select id from public.food_ingestion_reconciliations where run_id=(select production_run_id from plan4_ids)
+  ),
+  'mismatchCodes',(
+    select to_jsonb(mismatch_codes) from public.food_ingestion_reconciliations where run_id=(select production_run_id from plan4_ids)
+  )
+));
+select pg_temp.plan4_assert((
+  select status='failed' and completed_at is not null and lease_token is null and lease_owner is null and lease_expires_at is null
+  from public.food_ingestion_runs where id=(select production_run_id from plan4_ids)
+), 'failed reconciliation terminalization');
+select pg_temp.plan4_assert((
+  select count(*)=1 from public.food_ingestion_operational_events
+  where run_id=(select production_run_id from plan4_ids) and event_type='execution_failed'
+), 'failed reconciliation terminalization event');
 
 -- Quarantine remains first-class and distinct from reject; verification stays rollback-only.
 select pg_temp.plan4_assert((
