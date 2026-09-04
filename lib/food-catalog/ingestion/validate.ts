@@ -80,6 +80,12 @@ export function validateFoodCatalogCandidate(
       || !alias.value.trim()
       || !alias.normalizedValue.trim()
     )
+    || candidate.names.some((name) =>
+      !name.locale.trim()
+      || !isValidLocaleTag(name.locale)
+      || !name.value.trim()
+      || !name.normalizedValue.trim()
+    )
   ) {
     addIssue("invalid_alias", "error", "aliases");
   }
