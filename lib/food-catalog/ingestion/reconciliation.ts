@@ -29,13 +29,13 @@ export type FoodCatalogExecutionReconciliationInput = {
 
 export type FoodCatalogReconciliationIssueCode =
   | "manifest_checksum_mismatch"
-  | "missing_result"
-  | "extra_result"
-  | "duplicate_result"
+  | "missing_expected_write"
+  | "unexpected_extra_write"
+  | "duplicate_semantic_result"
   | "idempotency_mismatch"
   | "partial_execution"
   | "quarantine_divergence"
-  | "count_mismatch";
+  | "outcome_count_mismatch";
 
 export type FoodCatalogExecutionReconciliationReport = {
   ok: boolean;
@@ -44,13 +44,13 @@ export type FoodCatalogExecutionReconciliationReport = {
 
 const ISSUE_ORDER: readonly FoodCatalogReconciliationIssueCode[] = [
   "manifest_checksum_mismatch",
-  "missing_result",
-  "extra_result",
-  "duplicate_result",
+  "missing_expected_write",
+  "unexpected_extra_write",
+  "duplicate_semantic_result",
   "idempotency_mismatch",
   "partial_execution",
   "quarantine_divergence",
-  "count_mismatch"
+  "outcome_count_mismatch"
 ];
 
 function sortedUnique(values: readonly string[]): string[] {
@@ -103,10 +103,10 @@ export function reconcileFoodCatalogExecution({
   const observedIdSet = new Set(observedIds);
   const expectedIdSet = new Set(expectedIds);
   if (expectedIds.some((sourceRecordId) => !observedIdSet.has(sourceRecordId))) {
-    issues.add("missing_result");
+    issues.add("missing_expected_write");
   }
   if (observedIds.some((sourceRecordId) => !expectedIdSet.has(sourceRecordId))) {
-    issues.add("extra_result");
+    issues.add("unexpected_extra_write");
   }
 
   const resultsBySource = new Map<string, FoodCatalogObservedExecutionResult[]>();
@@ -116,7 +116,7 @@ export function reconcileFoodCatalogExecution({
     resultsBySource.set(result.sourceRecordId, group);
   }
   if ([...resultsBySource.values()].some((group) => group.length > 1)) {
-    issues.add("duplicate_result");
+    issues.add("duplicate_semantic_result");
   }
 
   const changedDuplicateIdempotency = [...resultsBySource.values()].some((group) =>
@@ -147,7 +147,7 @@ export function reconcileFoodCatalogExecution({
   }
 
   if (!sameCounts(expected.expectedMutations, observedCounts(observed.results))) {
-    issues.add("count_mismatch");
+    issues.add("outcome_count_mismatch");
   }
 
   const issueCodes = ISSUE_ORDER.filter((issue) => issues.has(issue));
