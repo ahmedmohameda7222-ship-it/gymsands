@@ -68,14 +68,30 @@ function countExpectedMutations(
   };
 }
 
+function assertUniqueNormalizedSourceIdentities(
+  candidates: ReturnType<typeof normalizeFoodCatalogCandidate>[]
+): void {
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (!candidate.sourceRecordId) continue;
+    if (seen.has(candidate.sourceRecordId)) {
+      throw new Error(`Duplicate normalized source identity: ${candidate.sourceRecordId}.`);
+    }
+    seen.add(candidate.sourceRecordId);
+  }
+}
+
 export function buildFoodCatalogDryRun<TArtifact>(
   adapter: FoodCatalogSourceAdapter<TArtifact>,
   artifact: TArtifact,
   index: FoodCatalogMatchIndex
 ): FoodCatalogDryRunResult {
   const source = adapter.describeSource(artifact);
-  const entries = adapter.toCandidates(artifact).map((candidateInput) => {
-    const candidate = normalizeFoodCatalogCandidate(candidateInput);
+  const normalizedCandidates = adapter.toCandidates(artifact)
+    .map((candidateInput) => normalizeFoodCatalogCandidate(candidateInput));
+  assertUniqueNormalizedSourceIdentities(normalizedCandidates);
+
+  const entries = normalizedCandidates.map((candidate) => {
     const issues = validateFoodCatalogCandidate(candidate);
     const errorIssueCodes = uniqueSortedIssueCodes(
       issues
