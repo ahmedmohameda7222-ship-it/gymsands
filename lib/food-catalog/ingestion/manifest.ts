@@ -5,6 +5,7 @@ import type {
   FoodCatalogDryRunManifestContent,
   FoodCatalogDryRunManifestEnvelope,
   FoodCatalogNormalizedCandidate,
+  FoodCatalogProcessingDisposition,
   FoodCatalogSourceDescriptor,
   FoodCatalogValidationIssue
 } from "./contracts";
@@ -37,6 +38,15 @@ function canonicalizeDecision(decision: FoodCatalogCanonicalDecision): FoodCatal
   };
 }
 
+function canonicalizeDisposition(
+  disposition: FoodCatalogProcessingDisposition
+): FoodCatalogProcessingDisposition {
+  return {
+    ...disposition,
+    reasonCodes: [...new Set(disposition.reasonCodes)].sort((left, right) => left.localeCompare(right))
+  };
+}
+
 function canonicalizeIssues(issues: FoodCatalogValidationIssue[]): FoodCatalogValidationIssue[] {
   return sortStable(issues);
 }
@@ -59,11 +69,12 @@ function canonicalizeManifestCandidate(
   return {
     candidate: canonicalizeCandidate(entry.candidate),
     issues: canonicalizeIssues(entry.issues),
-    decision: canonicalizeDecision(entry.decision)
+    decision: canonicalizeDecision(entry.decision),
+    disposition: canonicalizeDisposition(entry.disposition)
   };
 }
 
-function canonicalizeManifestContent(
+export function canonicalizeManifestContent(
   content: FoodCatalogDryRunManifestContent
 ): FoodCatalogDryRunManifestContent {
   return {
@@ -86,7 +97,7 @@ export function checksumManifestContent(content: FoodCatalogDryRunManifestConten
 
 /**
  * Task-1 semantic-content builder for deterministic adapter/normalization
- * verification. The full Plan 4 engine later replaces the provisional CREATE
+ * verification. The full Plan 4 engine replaces the provisional CREATE
  * decisions with validated matching decisions before Production authority.
  */
 export function buildPlan4ManifestContent(
@@ -96,7 +107,8 @@ export function buildPlan4ManifestContent(
   const entries = candidates.map((candidate): FoodCatalogDryRunManifestCandidate => ({
     candidate,
     issues: [],
-    decision: { kind: "create" }
+    decision: { kind: "create" },
+    disposition: { kind: "accept", reasonCodes: [] }
   }));
 
   return canonicalizeManifestContent({
@@ -108,7 +120,8 @@ export function buildPlan4ManifestContent(
       rejected: 0,
       matched: 0,
       created: entries.length,
-      possibleDuplicate: 0
+      possibleDuplicate: 0,
+      quarantined: 0
     }
   });
 }

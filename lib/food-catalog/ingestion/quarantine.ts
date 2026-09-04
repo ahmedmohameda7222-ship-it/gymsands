@@ -1,12 +1,10 @@
 import type {
   FoodCatalogCanonicalDecision,
+  FoodCatalogProcessingDisposition,
   FoodCatalogValidationIssue
 } from "./contracts";
 
-export type FoodCatalogProcessingDisposition =
-  | { kind: "accept"; reasonCodes: string[] }
-  | { kind: "quarantine"; reasonCodes: string[] }
-  | { kind: "reject"; reasonCodes: string[] };
+export type { FoodCatalogProcessingDisposition } from "./contracts";
 
 export type DeriveProcessingDispositionInput = {
   decision: FoodCatalogCanonicalDecision;

@@ -137,10 +137,16 @@ export type FoodCatalogCanonicalDecision =
   | { kind: "possible_duplicate"; candidateFoodIds: string[] }
   | { kind: "reject"; issueCodes: FoodCatalogValidationIssueCode[] };
 
+export type FoodCatalogProcessingDisposition =
+  | { kind: "accept"; reasonCodes: string[] }
+  | { kind: "quarantine"; reasonCodes: string[] }
+  | { kind: "reject"; reasonCodes: string[] };
+
 export type FoodCatalogDryRunManifestCandidate = {
   candidate: FoodCatalogNormalizedCandidate;
   issues: FoodCatalogValidationIssue[];
   decision: FoodCatalogCanonicalDecision;
+  disposition: FoodCatalogProcessingDisposition;
 };
 
 export type FoodCatalogExpectedMutationCounts = {
@@ -150,6 +156,7 @@ export type FoodCatalogExpectedMutationCounts = {
   matched: number;
   created: number;
   possibleDuplicate: number;
+  quarantined: number;
 };
 
 export type FoodCatalogDryRunManifestContent = {

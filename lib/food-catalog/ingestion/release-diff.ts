@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import type {
   FoodCatalogCanonicalDecision,
-  FoodCatalogNormalizedCandidate
+  FoodCatalogNormalizedCandidate,
+  FoodCatalogProcessingDisposition
 } from "./contracts";
-import type { FoodCatalogProcessingDisposition } from "./quarantine";
 
 export type FoodCatalogReleaseDiffClassification =
   | "unchanged"
