@@ -54,6 +54,19 @@ function semanticPayload(payload: Record<string, unknown>): Record<string, unkno
   return rest;
 }
 
+function checksumPayload(
+  rpcName: string,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (rpcName === RPC.acquireLease || rpcName === RPC.heartbeatLease) return payload;
+  const {
+    leaseToken: _leaseAuthorizationToken,
+    leaseEpoch: _leaseAuthorizationEpoch,
+    ...semantic
+  } = payload;
+  return semantic;
+}
+
 function commandChecksum(
   rpcName: string,
   operationId: string,
@@ -64,7 +77,7 @@ function commandChecksum(
       schemaVersion: "food-catalog-ingestion-command-v2",
       rpcName,
       operationId,
-      payload,
+      payload: checksumPayload(rpcName, payload),
     }))
     .digest("hex");
 }
