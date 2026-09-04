@@ -104,7 +104,12 @@ function makeStore(reviewState = "approved") {
         leaseEpoch: 1,
         leaseExpiresAt: "2026-09-04T13:00:00.000Z",
       }),
-      heartbeatLease: method("heartbeatLease", {}),
+      heartbeatLease: method("heartbeatLease", {
+        runId: RUN_ID,
+        leaseToken: LEASE_TOKEN,
+        leaseEpoch: 1,
+        leaseExpiresAt: "2026-09-04T13:02:00.000Z",
+      }),
       persistCandidate: method("persistCandidate", { runId: RUN_ID }),
       recordQuarantine: method("recordQuarantine", { quarantineId: "56000000-0000-4000-8000-000000000005" }),
       resolveQuarantine: method("resolveQuarantine", {}),
@@ -198,6 +203,53 @@ describe("Food Catalog Plan 4 draft-only ingestion executor", () => {
     });
     expect(calls.findIndex((call) => call.method === "recordReconciliation"))
       .toBeLessThan(calls.findIndex((call) => call.method === "completeRun"));
+  });
+
+  it("renews the Production lease between candidate mutations", async () => {
+    const { store, calls } = makeStore();
+    const first = {
+      candidate: candidate("create-heartbeat-1"),
+      issues: [],
+      decision: { kind: "create" } as const,
+      disposition: { kind: "accept", reasonCodes: [] } as const,
+    };
+    const second = {
+      candidate: candidate("create-heartbeat-2"),
+      issues: [],
+      decision: { kind: "create" } as const,
+      disposition: { kind: "accept", reasonCodes: [] } as const,
+    };
+    const content: FoodCatalogDryRunManifestContent = {
+      ...manifest(first),
+      candidates: [first, second],
+      expectedMutations: {
+        input: 2,
+        accepted: 2,
+        rejected: 0,
+        matched: 0,
+        created: 2,
+        possibleDuplicate: 0,
+        quarantined: 0,
+      },
+    };
+
+    await executeApprovedFoodCatalogDraftMutation(store, executionInput(content));
+
+    expect(calls.map((call) => call.method)).toEqual([
+      "prepareExecution",
+      "acquireLease",
+      "persistCandidate",
+      "heartbeatLease",
+      "persistCandidate",
+      "recordReconciliation",
+      "completeRun",
+    ]);
+    expect(calls.find((call) => call.method === "heartbeatLease")?.payload).toMatchObject({
+      runId: RUN_ID,
+      leaseToken: LEASE_TOKEN,
+      leaseEpoch: 1,
+      leaseSeconds: 120,
+    });
   });
 
   it("uses the matched canonical Food ID so provenance attaches to the resolved root", async () => {
