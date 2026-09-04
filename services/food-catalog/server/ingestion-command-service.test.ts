@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FoodCatalogDryRunManifestContent } from "@/lib/food-catalog/ingestion/contracts";
+import { checksumManifestContent } from "@/lib/food-catalog/ingestion/manifest";
 import { executeApprovedFoodCatalogDraftMutation } from "./ingestion-command-service";
 
 const RUN_ID = "56000000-0000-4000-8000-000000000001";
 const BATCH_ID = "56000000-0000-4000-8000-000000000002";
 const LEASE_TOKEN = "56000000-0000-4000-8000-000000000003";
 const MATCH_FOOD_ID = "56000000-0000-4000-8000-000000000004";
-const MANIFEST_CHECKSUM = "a".repeat(64);
 const SEMANTIC_CHECKSUM = "b".repeat(64);
 
 function candidate(sourceRecordId: string) {
@@ -121,7 +121,6 @@ function makeStore(reviewState = "approved") {
 }
 
 const commonInput = {
-  manifestContentChecksumSha256: MANIFEST_CHECKSUM,
   semanticIdentityChecksumSha256: SEMANTIC_CHECKSUM,
   attemptNumber: 1,
   leaseOwner: "plan4-executor",
@@ -129,7 +128,31 @@ const commonInput = {
   operationNamespace: "plan4-fixture-execution",
 };
 
+function executionInput(content: FoodCatalogDryRunManifestContent) {
+  return {
+    ...commonInput,
+    manifestContent: content,
+    manifestContentChecksumSha256: checksumManifestContent(content),
+  };
+}
+
 describe("Food Catalog Plan 4 draft-only ingestion executor", () => {
+  it("rejects manifest content that does not match the approved checksum before any command", async () => {
+    const { store, calls } = makeStore();
+    const content = manifest({
+      candidate: candidate("tampered-create"),
+      issues: [],
+      decision: { kind: "create" },
+      disposition: { kind: "accept", reasonCodes: [] },
+    });
+
+    await expect(executeApprovedFoodCatalogDraftMutation(store, {
+      ...executionInput(content),
+      manifestContentChecksumSha256: "0".repeat(64),
+    })).rejects.toThrow(/manifest.*checksum/i);
+    expect(calls).toEqual([]);
+  });
+
   it("requires the exact approved manifest before acquiring a Production lease", async () => {
     const { store, calls } = makeStore("reviewed");
     const content = manifest({
@@ -139,10 +162,7 @@ describe("Food Catalog Plan 4 draft-only ingestion executor", () => {
       disposition: { kind: "accept", reasonCodes: [] },
     });
 
-    await expect(executeApprovedFoodCatalogDraftMutation(store, {
-      ...commonInput,
-      manifestContent: content,
-    })).rejects.toThrow(/approved/i);
+    await expect(executeApprovedFoodCatalogDraftMutation(store, executionInput(content))).rejects.toThrow(/approved/i);
 
     expect(calls.map((call) => call.method)).toEqual(["prepareExecution"]);
   });
@@ -156,10 +176,8 @@ describe("Food Catalog Plan 4 draft-only ingestion executor", () => {
       disposition: { kind: "accept", reasonCodes: [] },
     });
 
-    await expect(executeApprovedFoodCatalogDraftMutation(store, {
-      ...commonInput,
-      manifestContent: content,
-    })).resolves.toMatchObject({ runId: RUN_ID, status: "completed" });
+    await expect(executeApprovedFoodCatalogDraftMutation(store, executionInput(content)))
+      .resolves.toMatchObject({ runId: RUN_ID, status: "completed" });
 
     expect(calls.map((call) => call.method)).toEqual([
       "prepareExecution",
@@ -191,10 +209,7 @@ describe("Food Catalog Plan 4 draft-only ingestion executor", () => {
       disposition: { kind: "accept", reasonCodes: [] },
     });
 
-    await executeApprovedFoodCatalogDraftMutation(store, {
-      ...commonInput,
-      manifestContent: content,
-    });
+    await executeApprovedFoodCatalogDraftMutation(store, executionInput(content));
 
     const persist = calls.find((call) => call.method === "persistCandidate")!;
     expect(persist.payload).toMatchObject({
@@ -213,10 +228,7 @@ describe("Food Catalog Plan 4 draft-only ingestion executor", () => {
       disposition: { kind: "quarantine", reasonCodes: ["possible_duplicate"] },
     });
 
-    await executeApprovedFoodCatalogDraftMutation(store, {
-      ...commonInput,
-      manifestContent: content,
-    });
+    await executeApprovedFoodCatalogDraftMutation(store, executionInput(content));
 
     expect(calls.map((call) => call.method)).toEqual([
       "prepareExecution",
@@ -244,14 +256,8 @@ describe("Food Catalog Plan 4 draft-only ingestion executor", () => {
     const first = makeStore();
     const second = makeStore();
 
-    await executeApprovedFoodCatalogDraftMutation(first.store, {
-      ...commonInput,
-      manifestContent: content,
-    });
-    await executeApprovedFoodCatalogDraftMutation(second.store, {
-      ...commonInput,
-      manifestContent: content,
-    });
+    await executeApprovedFoodCatalogDraftMutation(first.store, executionInput(content));
+    await executeApprovedFoodCatalogDraftMutation(second.store, executionInput(content));
 
     expect(second.calls.map((call) => call.operationId)).toEqual(first.calls.map((call) => call.operationId));
     const firstPersist = first.calls.find((call) => call.method === "persistCandidate")!;
