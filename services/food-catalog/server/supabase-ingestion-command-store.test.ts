@@ -34,7 +34,6 @@ function makeSupabase() {
         ok: true,
         mismatchCodes: [],
         releaseDiffId: "55000000-0000-4000-8000-000000000107",
-        eventId: "55000000-0000-4000-8000-000000000108",
         status: "completed",
       },
       error: null,
@@ -55,10 +54,16 @@ const cases = [
   ["resolveQuarantine", "food_catalog_ingestion_resolve_quarantine_v2"],
   ["recordReconciliation", "food_catalog_ingestion_record_reconciliation_v2"],
   ["recordReleaseDiff", "food_catalog_ingestion_record_release_diff_v2"],
-  ["appendEvent", "food_catalog_ingestion_append_event_v2"],
   ["completeRun", "food_catalog_ingestion_complete_run_v2"],
   ["failRun", "food_catalog_ingestion_fail_run_v2"],
 ] as const;
+
+const releaseDiffPayload = (fixture: number | boolean = true) => ({
+  batchId: "batch-1",
+  previousBatchId: null,
+  records: [{ sourceRecordId: "fixture-1", classifications: ["unchanged"], fixture }],
+  diffChecksumSha256: "a".repeat(64),
+});
 
 describe("Food Catalog Plan 4 Supabase ingestion command store", () => {
   it.each(cases)("%s invokes only exact RPC %s with a store-computed checksum", async (method, rpcName) => {
@@ -81,33 +86,27 @@ describe("Food Catalog Plan 4 Supabase ingestion command store", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("uses the same checksum for an identical replay", async () => {
+  it("uses the same checksum for an identical narrow-command replay", async () => {
     const { supabase, rpc } = makeSupabase();
     const store = createSupabaseFoodCatalogIngestionCommandStore(supabase);
-    const payload = { batchId: "batch-1", eventType: "release_diff_recorded", payload: { fixture: true } };
+    const payload = releaseDiffPayload();
 
-    await store.appendEvent(OPERATION_ID, payload);
-    await store.appendEvent(OPERATION_ID, payload);
+    await store.recordReleaseDiff(OPERATION_ID, payload);
+    await store.recordReleaseDiff(OPERATION_ID, payload);
 
     const first = (rpc.mock.calls[0]?.[1] as { p_command: Record<string, unknown> }).p_command;
     const second = (rpc.mock.calls[1]?.[1] as { p_command: Record<string, unknown> }).p_command;
     expect(second.commandChecksumSha256).toBe(first.commandChecksumSha256);
   });
 
-  it("rejects changed semantic command reuse under the same operation ID", async () => {
+  it("rejects changed semantic narrow-command reuse under the same operation ID", async () => {
     const { supabase } = makeSupabase();
     const store = createSupabaseFoodCatalogIngestionCommandStore(supabase);
 
-    await store.appendEvent(OPERATION_ID, {
-      batchId: "batch-1",
-      eventType: "release_diff_recorded",
-      payload: { fixture: 1 },
+    await store.recordReleaseDiff(OPERATION_ID, releaseDiffPayload(1));
+    await expect(store.recordReleaseDiff(OPERATION_ID, releaseDiffPayload(2))).rejects.toMatchObject({
+      code: "OPERATION_ID_CONFLICT",
     });
-    await expect(store.appendEvent(OPERATION_ID, {
-      batchId: "batch-1",
-      eventType: "release_diff_recorded",
-      payload: { fixture: 2 },
-    })).rejects.toMatchObject({ code: "OPERATION_ID_CONFLICT" });
   });
 
   it("keeps candidate semantic replay stable across lease-token and epoch changes", async () => {
@@ -142,7 +141,7 @@ describe("Food Catalog Plan 4 Supabase ingestion command store", () => {
   it("does not let caller payload override operation identity or computed checksum", async () => {
     const { supabase, rpc } = makeSupabase();
     const store = createSupabaseFoodCatalogIngestionCommandStore(supabase);
-    const invoke = store.appendEvent as unknown as (
+    const invoke = store.recordReleaseDiff as unknown as (
       operationId: string,
       payload: Record<string, unknown>,
     ) => Promise<unknown>;
@@ -150,8 +149,7 @@ describe("Food Catalog Plan 4 Supabase ingestion command store", () => {
     await invoke(OPERATION_ID, {
       operationId: "attacker-operation",
       commandChecksumSha256: "0".repeat(64),
-      batchId: "batch-1",
-      eventType: "release_diff_recorded",
+      ...releaseDiffPayload(),
     });
 
     const command = (rpc.mock.calls[0]?.[1] as { p_command: Record<string, unknown> }).p_command;
