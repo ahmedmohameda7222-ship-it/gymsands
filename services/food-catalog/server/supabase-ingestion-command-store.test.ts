@@ -58,11 +58,11 @@ const cases = [
   ["failRun", "food_catalog_ingestion_fail_run_v2"],
 ] as const;
 
-const releaseDiffPayload = (fixture: number | boolean = true) => ({
+const releaseDiffPayload = (checksumCharacter = "a") => ({
   batchId: "batch-1",
   previousBatchId: null,
-  records: [{ sourceRecordId: "fixture-1", classifications: ["unchanged"], fixture }],
-  diffChecksumSha256: "a".repeat(64),
+  records: [{ sourceRecordId: "fixture-1", classifications: ["unchanged"] }],
+  diffChecksumSha256: checksumCharacter.repeat(64),
 });
 
 describe("Food Catalog Plan 4 Supabase ingestion command store", () => {
@@ -103,8 +103,8 @@ describe("Food Catalog Plan 4 Supabase ingestion command store", () => {
     const { supabase } = makeSupabase();
     const store = createSupabaseFoodCatalogIngestionCommandStore(supabase);
 
-    await store.recordReleaseDiff(OPERATION_ID, releaseDiffPayload(1));
-    await expect(store.recordReleaseDiff(OPERATION_ID, releaseDiffPayload(2))).rejects.toMatchObject({
+    await store.recordReleaseDiff(OPERATION_ID, releaseDiffPayload("a"));
+    await expect(store.recordReleaseDiff(OPERATION_ID, releaseDiffPayload("b"))).rejects.toMatchObject({
       code: "OPERATION_ID_CONFLICT",
     });
   });
