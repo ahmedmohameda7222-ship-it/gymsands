@@ -111,7 +111,6 @@ function noCommandStore(): FoodCatalogIngestionCommandStore {
     resolveQuarantine: unexpected,
     recordReconciliation: unexpected,
     recordReleaseDiff: unexpected,
-    appendEvent: unexpected,
     completeRun: unexpected,
     failRun: unexpected,
   };
@@ -212,7 +211,7 @@ describe("Food Catalog Plan 4 second final independent-review hardening", () => 
     ).toLowerCase();
     const releaseFunction = migration.slice(
       migration.indexOf("create or replace function public.food_catalog_ingestion_record_release_diff_v2"),
-      migration.indexOf("create or replace function public.food_catalog_ingestion_append_event_v2"),
+      migration.indexOf("create or replace function public.food_catalog_ingestion_complete_run_v2"),
     );
 
     expect(releaseFunction).toContain("food_ingestion_manifest_records");
