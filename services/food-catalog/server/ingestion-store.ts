@@ -11,7 +11,6 @@ export interface FoodCatalogIngestionCommandStore {
   resolveQuarantine(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
   recordReconciliation(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
   recordReleaseDiff(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
-  appendEvent(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
   completeRun(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
   failRun(operationId: string, payload: Record<string, unknown>): Promise<FoodCatalogIngestionCommandResult>;
 }
