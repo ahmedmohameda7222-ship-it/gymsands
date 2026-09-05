@@ -492,6 +492,26 @@ begin
     raise exception 'Execution attempt manifest checksum conflict.' using errcode = '23514';
   end if;
 
+  insert into public.food_ingestion_operational_events(batch_id, run_id, event_type, payload_json, event_checksum_sha256)
+  select
+    v_batch.id,
+    v_run.id,
+    'execution_prepared',
+    jsonb_build_object(
+      'executionMode', v_mode,
+      'attemptNumber', v_attempt,
+      'reviewState', v_batch.review_state,
+      'manifestContentChecksumSha256', v_manifest,
+      'semanticIdentityChecksumSha256', v_semantic
+    ),
+    lower(p_command->>'commandChecksumSha256')
+  where not exists (
+    select 1
+    from public.food_ingestion_operational_events prepared_event
+    where prepared_event.run_id = v_run.id
+      and prepared_event.event_type = 'execution_prepared'
+  );
+
   v_result := jsonb_build_object('batchId', v_batch.id, 'runId', v_run.id, 'reviewState', v_batch.review_state, 'executionMode', v_mode);
   return private.food_catalog_ingestion_finish_operation_v2(p_command, 'food_catalog_ingestion_prepare_execution_v2', v_run.id, v_result);
 end
@@ -910,7 +930,10 @@ begin
 
             if nullif(v_fact->>'gramWeight', '') is not null
                and coalesce(nullif(v_fact->>'milliliterVolume', '')::numeric, 0) > 0
-               and v_fact->>'unit' <> 'ml'
+               and (
+                 v_fact->>'unit' <> 'ml'
+                 or (v_fact->>'amount')::numeric <> (v_fact->>'milliliterVolume')::numeric
+               )
             then
               insert into public.food_serving_options(
                 food_id, label, amount, unit_code, gram_weight, source_record_id,
