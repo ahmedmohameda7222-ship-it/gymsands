@@ -31,7 +31,6 @@ const RPC = {
   resolveQuarantine: "food_catalog_ingestion_resolve_quarantine_v2",
   recordReconciliation: "food_catalog_ingestion_record_reconciliation_v2",
   recordReleaseDiff: "food_catalog_ingestion_record_release_diff_v2",
-  appendEvent: "food_catalog_ingestion_append_event_v2",
   completeRun: "food_catalog_ingestion_complete_run_v2",
   failRun: "food_catalog_ingestion_fail_run_v2",
 } as const;
@@ -134,7 +133,6 @@ export function createSupabaseFoodCatalogIngestionCommandStore(
     resolveQuarantine: (operationId, payload) => invoke(supabase, RPC.resolveQuarantine, operationId, payload),
     recordReconciliation: (operationId, payload) => invoke(supabase, RPC.recordReconciliation, operationId, payload),
     recordReleaseDiff: (operationId, payload) => invoke(supabase, RPC.recordReleaseDiff, operationId, payload),
-    appendEvent: (operationId, payload) => invoke(supabase, RPC.appendEvent, operationId, payload),
     completeRun: (operationId, payload) => invoke(supabase, RPC.completeRun, operationId, payload),
     failRun: (operationId, payload) => invoke(supabase, RPC.failRun, operationId, payload),
   };
