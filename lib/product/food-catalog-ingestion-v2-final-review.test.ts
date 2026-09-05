@@ -38,4 +38,30 @@ describe("Food Catalog Plan 4 final independent-review regressions", () => {
     expect(supabaseStore).not.toContain("food_catalog_ingestion_append_event_v2");
     expect(verification).toContain("generic append event unavailable");
   });
+
+  it("records preparation transactionally from the narrow prepare command", () => {
+    const prepareFunction = migration
+      .split(
+        "create or replace function public.food_catalog_ingestion_prepare_execution_v2",
+      )[1]
+      ?.split(
+        "create or replace function public.food_catalog_ingestion_acquire_lease_v2",
+      )[0];
+
+    expect(prepareFunction).toBeDefined();
+    expect(prepareFunction).toContain(
+      "insert into public.food_ingestion_operational_events",
+    );
+    expect(prepareFunction).toContain("'execution_prepared'");
+    expect(verification).toContain("execution preparation event");
+  });
+
+  it("preserves a distinct explicit milliliter measurement for an ml serving", () => {
+    expect(migration).toMatch(
+      /v_fact->>'unit'\s*<>\s*'ml'\s+or\s+\(v_fact->>'amount'\)::numeric\s*<>\s*\(v_fact->>'millilitervolume'\)::numeric/,
+    );
+    expect(verification).toContain(
+      "distinct explicit milliliter serving evidence",
+    );
+  });
 });
