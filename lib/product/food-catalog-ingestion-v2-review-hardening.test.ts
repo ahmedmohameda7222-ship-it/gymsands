@@ -36,10 +36,17 @@ describe("Food Catalog Plan 4 independent-review hardening", () => {
     expect(quarantineRpc).toContain("quarantine command conflicts with reviewed manifest authority");
   });
 
-  it("recomputes release-diff checksum from exact batch identities and canonical records before insertion", () => {
-    expect(sql).toMatch(
-      /food_catalog_ingestion_record_release_diff_v2[\s\S]*semantic_identity_checksum_sha256[\s\S]*extensions\.digest[\s\S]*sha256/i,
+  it("derives release-diff classifications from immutable manifests and recomputes the checksum before insertion", () => {
+    const releaseDiffRpc = sql.match(
+      /create\s+or\s+replace\s+function\s+public\.food_catalog_ingestion_record_release_diff_v2[\s\S]*?\nend\n\$function\$;/i,
+    )?.[0] ?? "";
+    expect(releaseDiffRpc).toMatch(/from\s+public\.food_ingestion_manifest_records/i);
+    expect(releaseDiffRpc).toMatch(
+      /semantic_identity_checksum_sha256[\s\S]*extensions\.digest[\s\S]*sha256/i,
     );
-    expect(sql).toContain("release diff checksum does not match canonical batch identities and records");
+    expect(releaseDiffRpc).toContain(
+      "release diff claimed classifications do not match immutable manifest classification authority",
+    );
+    expect(releaseDiffRpc).toContain("release diff checksum does not match immutable manifest authority");
   });
 });
