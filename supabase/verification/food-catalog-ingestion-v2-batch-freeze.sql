@@ -432,7 +432,9 @@ select pg_temp.plan4_freeze_assert((
 
 -- Entire verifier is rollback-only and exercises no Catalog activation/generation authority.
 select pg_temp.plan4_freeze_assert((select count(*)=0 from public.food_items), 'batch-freeze verifier creates no Food rows');
+select pg_temp.plan4_freeze_assert((select count(*)=0 from public.food_catalog_control_operations), 'batch-freeze verifier exercises no Catalog control operation');
+select pg_temp.plan4_freeze_assert((select count(*)=0 from public.food_catalog_activation_sets), 'batch-freeze verifier creates no activation set');
 select pg_temp.plan4_freeze_assert((select count(*)=0 from public.food_catalog_generations), 'batch-freeze verifier creates no generations');
-select pg_temp.plan4_freeze_assert((select count(*)=0 from public.food_catalog_generation_members), 'batch-freeze verifier creates no generation membership');
+select pg_temp.plan4_freeze_assert((select count(*)=0 from public.food_catalog_generation_foods), 'batch-freeze verifier creates no generation Food membership');
 
 rollback;
