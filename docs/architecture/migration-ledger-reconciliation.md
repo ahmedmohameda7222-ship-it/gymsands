@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-09-03
+**Current reconciliation date:** 2026-09-04
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history is reconciled through the applied Plan 3 generation-authority migration; no repository migration remains pending or unresolved
+**Status:** Physical Production migration history remains reconciled through the applied Plan 3 generation-authority migration; Food Catalog Plan 4 is repository-only pending and is not applied to Plaivra Production
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -23,14 +23,26 @@ The latest verified Plaivra Production inspection after the authorized 2026-09-0
 
 The current repository/machine-ledger state records:
 
-- Repository-only pending migrations: **0**
-- `pendingCount = 0`
+- Repository-only pending migrations: **1**
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- migration-ledger `release_ready = true`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- migration-ledger `release_ready = false`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is now 118 records.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history remains 118 records. The pending repository classification does not claim a new Production migration identity or a fresh Production inspection.
+
+## Food Catalog Plan 4 ingestion V2 — repository-only pending
+
+The forward-only repository migration:
+
+`20260904100000_food_catalog_ingestion_v2_authority.sql`
+
+is currently classified as `state = pending`. It has **not** been applied to Plaivra Production and therefore has no Production version/name mapping. The physically verified Production head remains `20260903210503_food_catalog_generation_authority`, with **118** physical Production migration records at the latest verified inspection.
+
+Plan 4 may be applied only after PR #168 is merged and a fresh exact-target/history/schema-drift Production preflight succeeds under the standing migration authority. Until then, do not apply or replay this pending migration.
+
+The Plan 4 repository work does not authorize or claim Food population, a real provider import, activation, verification, Catalog Generation creation/promotion, current-generation mutation, compatibility-marker promotion, application deployment, or Activity Catalog mutation. The released compatibility marker remains `20260724232734`.
 
 ## Food Catalog Plan 3 generation authority — Production application 2026-09-03
 
@@ -287,7 +299,7 @@ The later forward-only Nutrition V1 corrections are represented by these generat
 
 The final identity maps to immutable repository migration `20260829110000_nutrition_v1_final_review_corrections.sql`.
 
-No Nutrition V1 repository migration remains pending or unresolved. The Main Plaivra repository contains the applied Plan 3 migration `20260902150000_food_catalog_generation_authority.sql`, represented by generated Production identity `20260903210503_food_catalog_generation_authority`. No prior-Plan repository migration remains pending or unresolved.
+No Nutrition V1 repository migration remains pending or unresolved. The Main Plaivra repository contains the applied Plan 3 migration `20260902150000_food_catalog_generation_authority.sql`, represented by generated Production identity `20260903210503_food_catalog_generation_authority`. No prior-Plan repository migration remains pending or unresolved; only Plan 4 `20260904100000_food_catalog_ingestion_v2_authority.sql` is repository-only pending.
 
 ## Meal Plan duplicate-history repair
 

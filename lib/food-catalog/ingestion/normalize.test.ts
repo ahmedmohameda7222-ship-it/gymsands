@@ -5,6 +5,7 @@ import {
   normalizeFoodCatalogCandidate,
   normalizeGtin
 } from "./normalize";
+import { validateFoodCatalogCandidate } from "./validate";
 
 const candidate = (overrides: Partial<FoodCatalogCandidateInput> = {}): FoodCatalogCandidateInput => ({
   sourceRecordId: " source-1 ",
@@ -67,13 +68,56 @@ describe("Food Catalog ingestion normalization", () => {
     ]);
   });
 
-  it("normalizes ordinary GTIN spaces/hyphens, rejects arbitrary characters, and limits accepted shapes", () => {
+  it("selects the same display alias when duplicate normalized aliases arrive in reverse order", () => {
+    const forward = normalizeFoodCatalogCandidate(candidate());
+    const reversed = normalizeFoodCatalogCandidate(candidate({ aliases: [...candidate().aliases].reverse() }));
+
+    expect(reversed.aliases).toEqual(forward.aliases);
+    expect(reversed.aliases.find((alias) => alias.locale === "en")?.value).toBe("Greek yoghurt");
+  });
+
+  it("normalizes ordinary GTIN formatting while preserving malformed evidence for validation", () => {
     expect(normalizeGtin("4006 3813-3393 1")).toBe("4006381333931");
     expect(normalizeGtin("036000291452")).toBe("036000291452");
     expect(normalizeGtin("96385074")).toBe("96385074");
     expect(normalizeGtin("10012345000017")).toBe("10012345000017");
-    expect(normalizeGtin("400638133393x")).toBeNull();
-    expect(normalizeGtin("123456789")).toBeNull();
+    expect(normalizeGtin("400638133393x")).toBe("400638133393x");
+    expect(normalizeGtin("123456789")).toBe("123456789");
+  });
+
+  it("keeps malformed GTINs on the normalized candidate so validation rejects them", () => {
+    const normalized = normalizeFoodCatalogCandidate(candidate({ gtins: ["4006 3813-339x 1"] }));
+
+    expect(normalized.gtins).toEqual(["40063813339x1"]);
+    expect(validateFoodCatalogCandidate(normalized).map((issue) => issue.code)).toContain("invalid_gtin");
+  });
+
+  it("does not let an invalid provider locale abort normalization", () => {
+    const normalized = normalizeFoodCatalogCandidate(candidate({
+      aliases: [{ locale: "en_US", value: " Fixture Alias " }],
+      names: [{ locale: "not a locale!", script: null, role: "source", value: " Fixture Name " }]
+    }));
+
+    expect(normalized.aliases[0]?.normalizedValue).toBe("fixture alias");
+    expect(normalized.names[0]?.normalizedValue).toBe("fixture name");
+    expect(validateFoodCatalogCandidate(normalized).map((issue) => issue.code)).toContain("invalid_alias");
+  });
+
+  it("canonicalizes serving units before validation and structured materialization", () => {
+    const normalized = normalizeFoodCatalogCandidate(candidate({
+      servings: [{
+        servingKey: "100-g",
+        amount: 100,
+        unit: " G ",
+        gramWeight: null,
+        milliliterVolume: null,
+        label: "100 g",
+        sourceEvidence: { exact: true }
+      }]
+    }));
+
+    expect(normalized.servings[0]?.unit).toBe("g");
+    expect(validateFoodCatalogCandidate(normalized).map((issue) => issue.code)).not.toContain("invalid_serving");
   });
 
   it("validates GS1 Mod-10 check digits for GTIN-8/12/13/14", () => {
