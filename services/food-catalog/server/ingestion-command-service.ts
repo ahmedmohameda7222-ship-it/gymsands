@@ -189,8 +189,8 @@ export async function executeApprovedFoodCatalogDraftMutation(
     throw new Error("Plan 4 ingestion attemptNumber must be a positive integer.");
   }
   if (!input.leaseOwner.trim()) throw new Error("Plan 4 ingestion leaseOwner is required.");
-  if (!Number.isInteger(input.leaseSeconds) || input.leaseSeconds < 1) {
-    throw new Error("Plan 4 ingestion leaseSeconds must be a positive integer.");
+  if (!Number.isInteger(input.leaseSeconds) || input.leaseSeconds < 15 || input.leaseSeconds > 900) {
+    throw new Error("Plan 4 ingestion leaseSeconds must be an integer between 15 and 900 seconds.");
   }
   if (!input.operationNamespace.trim()) throw new Error("Plan 4 ingestion operationNamespace is required.");
 
