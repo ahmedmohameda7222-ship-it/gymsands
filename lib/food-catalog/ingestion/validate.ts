@@ -22,6 +22,22 @@ const COUNTRY_SCOPE = /^[A-Z]{2}$/;
 const REGION_SCOPE = /^[A-Z][A-Z0-9_-]{1,15}$/;
 const CONTROLLED_COUNTRY_SCOPES = new Set(["US", "DE", "EG", "GB", "SA", "AE"]);
 const CONTROLLED_REGION_SCOPES = new Set(["EU", "GCC"]);
+const CONTROLLED_TAXONOMY_NODES = new Set([
+  "protein_foods",
+  "dairy",
+  "grains",
+  "vegetables",
+  "fruits",
+  "legumes",
+  "nuts_seeds",
+  "fats_oils",
+  "beverages",
+  "mixed_dishes",
+  "snacks",
+  "desserts",
+  "condiments",
+  "other",
+]);
 
 function isValidLocaleTag(value: string): boolean {
   try {
@@ -125,6 +141,15 @@ export function validateFoodCatalogCandidate(
     })
   ) {
     addIssue("invalid_market_scope", "error", "marketScopes");
+  }
+
+  if (
+    candidate.taxonomyEvidence.some((evidence) =>
+      evidence.mappedTaxonomyId !== null
+      && !CONTROLLED_TAXONOMY_NODES.has(evidence.mappedTaxonomyId)
+    )
+  ) {
+    addIssue("invalid_taxonomy_mapping", "error", "taxonomyEvidence");
   }
 
   const gtinCounts = new Map<string, number>();
