@@ -99,12 +99,22 @@ select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
 create temporary table plan4_freeze_ids as
 select
   batch.id batch_id,
-  max(run.id) filter (where run.attempt_number=1) attempt1_id,
-  max(run.id) filter (where run.attempt_number=2) attempt2_id
+  (
+    select run.id
+    from public.food_ingestion_runs run
+    where run.batch_id = batch.id
+      and run.execution_mode = 'dry_run'
+      and run.attempt_number = 1
+  ) attempt1_id,
+  (
+    select run.id
+    from public.food_ingestion_runs run
+    where run.batch_id = batch.id
+      and run.execution_mode = 'dry_run'
+      and run.attempt_number = 2
+  ) attempt2_id
 from public.food_ingestion_batches batch
-join public.food_ingestion_runs run on run.batch_id=batch.id and run.execution_mode='dry_run'
-where batch.semantic_identity_checksum_sha256=repeat('c',64)
-group by batch.id;
+where batch.semantic_identity_checksum_sha256=repeat('c',64);
 
 select public.food_catalog_ingestion_persist_candidate_v2(jsonb_build_object(
   'operationId','55000000-0000-4000-8000-000000000003','commandChecksumSha256',repeat('1',64),
