@@ -2068,4 +2068,38 @@ revoke all on function public.food_ingestion_run_semantic_freeze_guard_v2() from
 revoke all on function public.food_ingestion_manifest_insert_semantic_freeze_guard_v2() from public, anon, authenticated;
 grant execute on function public.food_ingestion_batch_semantically_frozen_v2(uuid) to service_role;
 
+-- A dry-run with zero candidates has no persist_candidate call to enter the running state.
+-- Reconciliation is therefore the execution-start boundary for such a prepared run. The
+-- trigger retains batch -> run lock order and transitions only dry-run prepared attempts;
+-- Production lease semantics remain untouched.
+create or replace function private.food_ingestion_reconciliation_start_dry_run_v2()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  perform 1
+  from public.food_ingestion_batches
+  where id = new.batch_id
+  for update;
+
+  update public.food_ingestion_runs
+  set status = 'running',
+      started_at = coalesce(started_at, clock_timestamp())
+  where id = new.run_id
+    and batch_id = new.batch_id
+    and execution_mode = 'dry_run'
+    and status = 'prepared';
+
+  return new;
+end
+$function$;
+
+create trigger food_ingestion_reconciliation_start_dry_run_v2
+before insert on public.food_ingestion_reconciliations
+for each row execute function private.food_ingestion_reconciliation_start_dry_run_v2();
+
+revoke all on function private.food_ingestion_reconciliation_start_dry_run_v2()
+from public, anon, authenticated, service_role;
+
 commit;
