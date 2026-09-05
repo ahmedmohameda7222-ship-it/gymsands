@@ -4,7 +4,7 @@ begin;
 -- reviewed per-record manifest authority, structured Plan 1 facts and fail-closed reconciliation.
 -- Added correction evidence: cross-attempt live lease, cross-attempt materialized resume,
 -- lease lifecycle events, nullable serving label, explicit milliliter serving evidence,
--- failed reconciliation terminalization. Everything is rollback-only.
+-- failed reconciliation terminalization, release diff manifest authority. Everything is rollback-only.
 
 create or replace function pg_temp.plan4_assert(p_condition boolean, p_message text)
 returns void language plpgsql as $$
@@ -434,6 +434,108 @@ select pg_temp.plan4_assert((
   select count(*)=1 from public.food_ingestion_operational_events
   where run_id=(select production_run_id from plan4_ids) and event_type='execution_failed'
 ), 'failed reconciliation terminalization event');
+
+-- Release diff manifest authority: previous/next immutable manifests differ only in raw sourceNutrition.
+insert into public.food_ingestion_batches(
+  provider, dataset_name, source_version, source_release_date,
+  license_name, license_reference, source_reference, source_checksum_sha256,
+  importer_version, config_checksum_sha256, manifest_content_checksum_sha256,
+  semantic_identity_checksum_sha256, input_count, accepted_count, rejected_count,
+  matched_count, created_count, possible_duplicate_count, expected_quarantine_count
+)
+select
+  provider, dataset_name, '2026.08', source_release_date,
+  license_name, license_reference, source_reference, source_checksum_sha256,
+  importer_version, config_checksum_sha256, repeat('6',64),
+  repeat('7',64), input_count, accepted_count, rejected_count,
+  matched_count, created_count, possible_duplicate_count, expected_quarantine_count
+from public.food_ingestion_batches
+where id=(select batch_id from plan4_ids);
+
+create temporary table plan4_release_diff_ids as
+select id previous_batch_id
+from public.food_ingestion_batches
+where semantic_identity_checksum_sha256=repeat('7',64);
+
+insert into public.food_source_records(
+  food_id, provider, source_record_id, source_reference, license_name, license_reference,
+  retrieved_at, source_nutrition, source_serving, source_dataset, source_version,
+  source_release_date, source_record_checksum_sha256
+)
+select
+  null, source.provider, source.source_record_id, source.source_reference,
+  source.license_name, source.license_reference, clock_timestamp(),
+  jsonb_set(source.source_nutrition, '{fixture}', 'false'::jsonb),
+  source.source_serving, source.source_dataset, '2026.08',
+  source.source_release_date, source.source_record_checksum_sha256
+from public.food_source_records source
+join public.food_ingestion_manifest_records manifest on manifest.source_record_id=source.id
+where manifest.batch_id=(select batch_id from plan4_ids)
+  and manifest.source_record_key='fixture-create-1';
+
+insert into public.food_ingestion_manifest_records(
+  batch_id, source_record_key, source_record_id, manifest_content_checksum_sha256,
+  candidate_json, issues_json, decision_json, disposition_json, planned_food_id
+)
+select
+  (select previous_batch_id from plan4_release_diff_ids),
+  current_manifest.source_record_key,
+  previous_source.id,
+  repeat('6',64),
+  jsonb_set(current_manifest.candidate_json, '{sourceNutrition,fixture}', 'false'::jsonb),
+  current_manifest.issues_json,
+  current_manifest.decision_json,
+  current_manifest.disposition_json,
+  current_manifest.planned_food_id
+from public.food_ingestion_manifest_records current_manifest
+join public.food_source_records previous_source
+  on previous_source.provider='synthetic-reference'
+ and previous_source.source_dataset='fixture-v2'
+ and previous_source.source_version='2026.08'
+ and previous_source.source_record_id=current_manifest.source_record_key
+where current_manifest.batch_id=(select batch_id from plan4_ids)
+  and current_manifest.source_record_key='fixture-create-1';
+
+select pg_temp.plan4_rejected(format(
+  'select public.food_catalog_ingestion_record_release_diff_v2(%L::jsonb)',
+  jsonb_build_object(
+    'operationId','44000000-0000-4000-8000-000000000021',
+    'commandChecksumSha256',repeat('1',64),
+    'batchId',(select batch_id from plan4_ids),
+    'previousBatchId',(select previous_batch_id from plan4_release_diff_ids),
+    'records',jsonb_build_array(jsonb_build_object(
+      'sourceRecordId','fixture-create-1','classifications',jsonb_build_array('unchanged')
+    )),
+    'diffChecksumSha256',repeat('2',64)
+  )::text
+), 'false unchanged release diff rejected');
+
+select public.food_catalog_ingestion_record_release_diff_v2(jsonb_build_object(
+  'operationId','44000000-0000-4000-8000-000000000022',
+  'commandChecksumSha256',repeat('2',64),
+  'batchId',(select batch_id from plan4_ids),
+  'previousBatchId',(select previous_batch_id from plan4_release_diff_ids),
+  'records',jsonb_build_array(jsonb_build_object(
+    'sourceRecordId','fixture-create-1','classifications',jsonb_build_array('nutrition_changed')
+  )),
+  'diffChecksumSha256',encode(extensions.digest(convert_to(
+    '{"entries":[{"classifications":["nutrition_changed"],"sourceRecordId":"fixture-create-1"}],"nextBatchIdentity":"'
+    || repeat('b',64)
+    || '","previousBatchIdentity":"'
+    || repeat('7',64)
+    || '"}',
+    'UTF8'
+  ), 'sha256'), 'hex')
+));
+select pg_temp.plan4_assert((
+  select count(*)=1
+  from public.food_ingestion_release_diff_records record
+  join public.food_ingestion_release_diffs diff on diff.id=record.release_diff_id
+  where diff.batch_id=(select batch_id from plan4_ids)
+    and diff.previous_batch_id=(select previous_batch_id from plan4_release_diff_ids)
+    and record.source_record_key='fixture-create-1'
+    and record.classifications=array['nutrition_changed']::text[]
+), 'release diff manifest authority');
 
 -- Quarantine remains first-class and distinct from reject; verification stays rollback-only.
 select pg_temp.plan4_assert((
