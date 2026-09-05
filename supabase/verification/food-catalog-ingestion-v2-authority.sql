@@ -4,8 +4,9 @@ begin;
 -- reviewed per-record manifest authority, structured Plan 1 facts and fail-closed reconciliation.
 -- Added correction evidence: cross-attempt live lease, cross-attempt materialized resume,
 -- lease lifecycle events, nullable serving label, explicit milliliter serving evidence,
--- dual gram and milliliter serving evidence, generic append event unavailable,
--- failed reconciliation terminalization, stale-run retirement, frozen release-diff manifest authority. Everything is rollback-only.
+-- dual gram and milliliter serving evidence, distinct explicit milliliter serving evidence,
+-- execution preparation event, generic append event unavailable, failed reconciliation terminalization,
+-- stale-run retirement, frozen release-diff manifest authority. Everything is rollback-only.
 
 create or replace function pg_temp.plan4_assert(p_condition boolean, p_message text)
 returns void language plpgsql as $$
@@ -92,10 +93,16 @@ insert into plan4_fixture values (
     'identityEvidence',jsonb_build_object(
       'semanticSignature',null,'preparation',null,'state',null,'form',null,'structuredEvidenceKey',null
     ),
-    'servings',jsonb_build_array(jsonb_build_object(
-      'servingKey','cup-1','amount',1,'unit','cup','gramWeight',240,'milliliterVolume',250,
-      'label','1 cup','sourceEvidence',jsonb_build_object('fixture',true,'grams',240,'milliliters',250)
-    )),
+    'servings',jsonb_build_array(
+      jsonb_build_object(
+        'servingKey','cup-1','amount',1,'unit','cup','gramWeight',240,'milliliterVolume',250,
+        'label','1 cup','sourceEvidence',jsonb_build_object('fixture',true,'grams',240,'milliliters',250)
+      ),
+      jsonb_build_object(
+        'servingKey','ml-mismatch','amount',200,'unit','ml','gramWeight',210,'milliliterVolume',250,
+        'label','200 ml source serving','sourceEvidence',jsonb_build_object('fixture',true,'grams',210,'milliliters',250)
+      )
+    ),
     'taxonomyEvidence',jsonb_build_array(jsonb_build_object(
       'taxonomy','primary_food_group','sourceCode','fixture-dairy','mappedTaxonomyId','dairy'
     )),
@@ -133,6 +140,17 @@ select batch.id batch_id, run.id dry_run_id
 from public.food_ingestion_batches batch
 join public.food_ingestion_runs run on run.batch_id = batch.id
 where batch.semantic_identity_checksum_sha256 = repeat('b',64) and run.execution_mode = 'dry_run';
+
+select pg_temp.plan4_assert((
+  select count(*)=1
+  from public.food_ingestion_operational_events
+  where batch_id=(select batch_id from plan4_ids)
+    and run_id=(select dry_run_id from plan4_ids)
+    and event_type='execution_prepared'
+    and payload_json->>'executionMode'='dry_run'
+    and nullif(payload_json->>'attemptNumber','')::integer=1
+    and event_checksum_sha256=repeat('1',64)
+), 'execution preparation event');
 
 -- Stage one exact source candidate and reviewed per-record manifest without canonical Food mutation.
 select public.food_catalog_ingestion_persist_candidate_v2(jsonb_build_object(
@@ -317,12 +335,30 @@ select pg_temp.plan4_assert((
   select count(*)=1 from public.food_serving_options
   where food_id=(select planned_food_id from plan4_fixture)
     and amount=250 and unit_code='ml' and gram_weight is null
+    and source_portion_code='cup-1'
 ), 'explicit milliliter serving evidence');
 select pg_temp.plan4_assert((
   select count(*)=2 from public.food_serving_options
   where food_id=(select planned_food_id from plan4_fixture)
     and source_portion_code='cup-1'
 ), 'dual gram and milliliter serving evidence');
+select pg_temp.plan4_assert((
+  select count(*)=1 from public.food_serving_options
+  where food_id=(select planned_food_id from plan4_fixture)
+    and source_portion_code='ml-mismatch'
+    and amount=200 and unit_code='ml' and gram_weight=210
+), 'distinct explicit milliliter serving evidence');
+select pg_temp.plan4_assert((
+  select count(*)=1 from public.food_serving_options
+  where food_id=(select planned_food_id from plan4_fixture)
+    and source_portion_code='ml-mismatch'
+    and amount=250 and unit_code='ml' and gram_weight is null
+), 'distinct explicit milliliter serving evidence');
+select pg_temp.plan4_assert((
+  select count(*)=2 from public.food_serving_options
+  where food_id=(select planned_food_id from plan4_fixture)
+    and source_portion_code='ml-mismatch'
+), 'distinct explicit milliliter serving evidence');
 select pg_temp.plan4_assert((
   select count(*)=1 from public.food_barcodes
   where food_id=(select planned_food_id from plan4_fixture) and gtin='4006381333931'
@@ -383,7 +419,7 @@ select pg_temp.plan4_assert((
   select count(*)=2 from public.food_names where food_id=(select planned_food_id from plan4_fixture)
 ), 'cross-attempt materialized resume keeps names single');
 select pg_temp.plan4_assert((
-  select count(*)=2 from public.food_serving_options where food_id=(select planned_food_id from plan4_fixture)
+  select count(*)=4 from public.food_serving_options where food_id=(select planned_food_id from plan4_fixture)
 ), 'cross-attempt materialized resume keeps serving facts single');
 select pg_temp.plan4_assert((
   select observed_input_count=1 and observed_accepted_count=1 and observed_created_count=1
