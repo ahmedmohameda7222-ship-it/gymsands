@@ -190,7 +190,7 @@ describe("Food Catalog Plan 4 cross-boundary security and replay", () => {
     }, emptyIndex())).toThrow(/duplicate.*source.*identity/i);
   });
 
-  it("keeps command replay idempotent and rejects changed semantic reuse of one operation ID", async () => {
+  it("keeps narrow command replay idempotent and rejects changed semantic reuse of one operation ID", async () => {
     const seen = new Map<string, string>();
     const rpc = async (_name: string, args: Record<string, unknown>) => {
       const command = args.p_command as Record<string, unknown>;
@@ -201,18 +201,23 @@ describe("Food Catalog Plan 4 cross-boundary security and replay", () => {
         return { data: null, error: { message: "Food Catalog ingestion operation replay conflict." } };
       }
       seen.set(operationId, checksum);
-      return { data: { eventId: "66000000-0000-4000-8000-000000000001" }, error: null };
+      return { data: { releaseDiffId: "66000000-0000-4000-8000-000000000001" }, error: null };
     };
     const client = { rpc } as unknown as Parameters<typeof createSupabaseFoodCatalogIngestionCommandStore>[0];
     const store = createSupabaseFoodCatalogIngestionCommandStore(client);
     const operationId = "66000000-0000-4000-8000-000000000002";
-    const first = { batchId: "batch-1", eventType: "release_diff_recorded", payload: { fixture: 1 } };
+    const first = {
+      batchId: "batch-1",
+      previousBatchId: null,
+      records: [{ sourceRecordId: "fixture-1", classifications: ["unchanged"], fixture: 1 }],
+      diffChecksumSha256: "a".repeat(64),
+    };
 
-    await expect(store.appendEvent(operationId, first)).resolves.toBeDefined();
-    await expect(store.appendEvent(operationId, first)).resolves.toBeDefined();
-    await expect(store.appendEvent(operationId, {
+    await expect(store.recordReleaseDiff(operationId, first)).resolves.toBeDefined();
+    await expect(store.recordReleaseDiff(operationId, first)).resolves.toBeDefined();
+    await expect(store.recordReleaseDiff(operationId, {
       ...first,
-      payload: { fixture: 2 },
+      records: [{ sourceRecordId: "fixture-1", classifications: ["unchanged"], fixture: 2 }],
     })).rejects.toMatchObject({ code: "OPERATION_ID_CONFLICT" });
   });
 
