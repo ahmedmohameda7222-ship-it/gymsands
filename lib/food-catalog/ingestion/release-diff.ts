@@ -113,7 +113,16 @@ function candidateClassifications(
   );
   addClassification(
     classifications,
-    changed(previous.candidate.nutrition, next.candidate.nutrition),
+    changed(
+      {
+        nutrition: previous.candidate.nutrition,
+        sourceNutrition: previous.candidate.sourceNutrition,
+      },
+      {
+        nutrition: next.candidate.nutrition,
+        sourceNutrition: next.candidate.sourceNutrition,
+      },
+    ),
     "nutrition_changed"
   );
   addClassification(
