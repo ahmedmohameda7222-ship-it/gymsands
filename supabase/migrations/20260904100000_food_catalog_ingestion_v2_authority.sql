@@ -545,6 +545,17 @@ begin
     raise exception 'Food Catalog ingestion run already has a live lease.' using errcode = '55P03';
   end if;
 
+  perform 1
+  from public.food_ingestion_runs stale_run
+  where stale_run.batch_id = v_batch_id
+    and stale_run.id <> v_run_id
+    and stale_run.execution_mode = 'production'
+    and stale_run.status = 'running'
+    and stale_run.lease_token is not null
+    and stale_run.lease_expires_at <= clock_timestamp()
+  order by stale_run.attempt_number, stale_run.id
+  for update;
+
   v_takeover := exists (
     select 1 from public.food_ingestion_runs stale_run
     where stale_run.batch_id = v_batch_id
@@ -570,6 +581,22 @@ begin
         and lost_event.event_type = 'lease_lost'
         and nullif(lost_event.payload_json->>'leaseEpoch', '')::bigint = stale_run.lease_epoch
     );
+
+  update public.food_ingestion_runs stale_run
+  set status = 'cancelled',
+      completed_at = clock_timestamp(),
+      error_summary = coalesce(stale_run.error_summary, 'superseded by cross-attempt stale lease takeover'),
+      lease_owner = null,
+      lease_token = null,
+      lease_acquired_at = null,
+      lease_heartbeat_at = null,
+      lease_expires_at = null
+  where stale_run.batch_id = v_batch_id
+    and stale_run.id <> v_run_id
+    and stale_run.execution_mode = 'production'
+    and stale_run.status = 'running'
+    and stale_run.lease_token is not null
+    and stale_run.lease_expires_at <= clock_timestamp();
 
   update public.food_ingestion_runs
   set status = 'running',
@@ -1284,6 +1311,9 @@ declare
   v_previous_found boolean;
   v_next_found boolean;
   v_material_dimension_count integer;
+  v_batch_authority record;
+  v_locked_batch_count integer := 0;
+  v_required_batch_count integer;
   v_result jsonb;
 begin
   v_replay := private.food_catalog_ingestion_replay_operation_v2(p_command, 'food_catalog_ingestion_record_release_diff_v2');
@@ -1292,17 +1322,46 @@ begin
     raise exception 'Release diff records must be a JSON array.' using errcode = '22023';
   end if;
 
-  select batch.semantic_identity_checksum_sha256 into v_next_identity
-  from public.food_ingestion_batches batch where batch.id = v_batch_id for share;
-  if not found or v_next_identity is null then
-    raise exception 'Release diff requires a Plan 4 semantic next batch.' using errcode = '23514';
-  end if;
-  if v_previous_batch_id is not null then
-    select batch.semantic_identity_checksum_sha256 into v_previous_identity
-    from public.food_ingestion_batches batch where batch.id = v_previous_batch_id for share;
-    if not found or v_previous_identity is null then
-      raise exception 'Release diff requires a Plan 4 semantic previous batch.' using errcode = '23514';
+  v_required_batch_count := case when v_previous_batch_id is null then 1 else 2 end;
+  for v_batch_authority in
+    select batch.id, batch.review_state, batch.manifest_content_checksum_sha256,
+           batch.semantic_identity_checksum_sha256
+    from public.food_ingestion_batches batch
+    where batch.id = v_batch_id
+       or (v_previous_batch_id is not null and batch.id = v_previous_batch_id)
+    order by batch.id
+    for share
+  loop
+    v_locked_batch_count := v_locked_batch_count + 1;
+    if v_batch_authority.review_state = 'prepared'
+       or v_batch_authority.manifest_content_checksum_sha256 is null
+       or v_batch_authority.semantic_identity_checksum_sha256 is null
+       or not exists (
+         select 1
+         from public.food_ingestion_reconciliations reconciliation
+         join public.food_ingestion_runs run on run.id = reconciliation.run_id
+         where run.batch_id = v_batch_authority.id
+           and run.execution_mode = 'dry_run'
+           and run.status = 'completed'
+           and lower(run.manifest_content_checksum_sha256) = lower(v_batch_authority.manifest_content_checksum_sha256)
+           and reconciliation.batch_id = v_batch_authority.id
+           and reconciliation.reconciled
+           and lower(reconciliation.manifest_content_checksum_sha256) = lower(v_batch_authority.manifest_content_checksum_sha256)
+           and lower(reconciliation.semantic_identity_checksum_sha256) = lower(v_batch_authority.semantic_identity_checksum_sha256)
+       )
+    then
+      raise exception 'Release diff requires frozen successfully reconciled manifest authority.' using errcode = '23514';
     end if;
+
+    if v_batch_authority.id = v_batch_id then
+      v_next_identity := v_batch_authority.semantic_identity_checksum_sha256;
+    elsif v_batch_authority.id = v_previous_batch_id then
+      v_previous_identity := v_batch_authority.semantic_identity_checksum_sha256;
+    end if;
+  end loop;
+
+  if v_locked_batch_count <> v_required_batch_count then
+    raise exception 'Release diff requires frozen successfully reconciled manifest authority.' using errcode = '23514';
   end if;
 
   for v_record in
