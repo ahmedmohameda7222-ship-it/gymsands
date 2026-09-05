@@ -907,6 +907,21 @@ begin
               v_source_record.id, nullif(v_fact->>'servingKey', ''), 'exact_source', false,
               v_batch.id::text || ':' || v_batch.manifest_content_checksum_sha256
             );
+
+            if nullif(v_fact->>'gramWeight', '') is not null
+               and coalesce(nullif(v_fact->>'milliliterVolume', '')::numeric, 0) > 0
+               and v_fact->>'unit' <> 'ml'
+            then
+              insert into public.food_serving_options(
+                food_id, label, amount, unit_code, gram_weight, source_record_id,
+                source_portion_code, evidence_class, source_primary, authority_reference
+              ) values (
+                v_food_id, coalesce(nullif(v_fact->>'label', ''), v_fact->>'servingKey'),
+                (v_fact->>'milliliterVolume')::numeric, 'ml', null,
+                v_source_record.id, nullif(v_fact->>'servingKey', ''), 'exact_source', false,
+                v_batch.id::text || ':' || v_batch.manifest_content_checksum_sha256
+              );
+            end if;
           end if;
         end loop;
 
@@ -1612,32 +1627,6 @@ begin
 end
 $function$;
 
-create or replace function public.food_catalog_ingestion_append_event_v2(p_command jsonb)
-returns jsonb
-language plpgsql
-security definer
-set search_path = pg_catalog, public, private, extensions
-as $function$
-declare
-  v_replay jsonb;
-  v_event_id uuid;
-  v_result jsonb;
-begin
-  v_replay := private.food_catalog_ingestion_replay_operation_v2(p_command, 'food_catalog_ingestion_append_event_v2');
-  if v_replay is not null then return v_replay; end if;
-  if nullif(p_command->>'runId', '') is not null then
-    perform private.food_catalog_ingestion_assert_active_lease_v2((p_command->>'runId')::uuid, (p_command->>'leaseToken')::uuid, (p_command->>'leaseEpoch')::bigint);
-  end if;
-  insert into public.food_ingestion_operational_events(batch_id, run_id, source_record_key, event_type, payload_json, event_checksum_sha256)
-  values (
-    nullif(p_command->>'batchId', '')::uuid, nullif(p_command->>'runId', '')::uuid, nullif(p_command->>'sourceRecordId', ''),
-    p_command->>'eventType', coalesce(p_command->'payload', '{}'::jsonb), lower(p_command->>'eventChecksumSha256')
-  ) returning id into v_event_id;
-  v_result := jsonb_build_object('eventId', v_event_id);
-  return private.food_catalog_ingestion_finish_operation_v2(p_command, 'food_catalog_ingestion_append_event_v2', nullif(p_command->>'runId', '')::uuid, v_result);
-end
-$function$;
-
 create or replace function public.food_catalog_ingestion_complete_run_v2(p_command jsonb)
 returns jsonb
 language plpgsql
@@ -1771,7 +1760,6 @@ revoke all on function public.food_catalog_ingestion_record_quarantine_v2(jsonb)
 revoke all on function public.food_catalog_ingestion_resolve_quarantine_v2(jsonb) from public, anon, authenticated;
 revoke all on function public.food_catalog_ingestion_record_reconciliation_v2(jsonb) from public, anon, authenticated;
 revoke all on function public.food_catalog_ingestion_record_release_diff_v2(jsonb) from public, anon, authenticated;
-revoke all on function public.food_catalog_ingestion_append_event_v2(jsonb) from public, anon, authenticated;
 revoke all on function public.food_catalog_ingestion_complete_run_v2(jsonb) from public, anon, authenticated;
 revoke all on function public.food_catalog_ingestion_fail_run_v2(jsonb) from public, anon, authenticated;
 
@@ -1783,7 +1771,6 @@ grant execute on function public.food_catalog_ingestion_record_quarantine_v2(jso
 grant execute on function public.food_catalog_ingestion_resolve_quarantine_v2(jsonb) to service_role;
 grant execute on function public.food_catalog_ingestion_record_reconciliation_v2(jsonb) to service_role;
 grant execute on function public.food_catalog_ingestion_record_release_diff_v2(jsonb) to service_role;
-grant execute on function public.food_catalog_ingestion_append_event_v2(jsonb) to service_role;
 grant execute on function public.food_catalog_ingestion_complete_run_v2(jsonb) to service_role;
 grant execute on function public.food_catalog_ingestion_fail_run_v2(jsonb) to service_role;
 
