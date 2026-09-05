@@ -209,7 +209,7 @@ describe("Food Catalog Plan 4 cross-boundary security and replay", () => {
     const first = {
       batchId: "batch-1",
       previousBatchId: null,
-      records: [{ sourceRecordId: "fixture-1", classifications: ["unchanged"], fixture: 1 }],
+      records: [{ sourceRecordId: "fixture-1", classifications: ["unchanged"] }],
       diffChecksumSha256: "a".repeat(64),
     };
 
@@ -217,7 +217,7 @@ describe("Food Catalog Plan 4 cross-boundary security and replay", () => {
     await expect(store.recordReleaseDiff(operationId, first)).resolves.toBeDefined();
     await expect(store.recordReleaseDiff(operationId, {
       ...first,
-      records: [{ sourceRecordId: "fixture-1", classifications: ["unchanged"], fixture: 2 }],
+      diffChecksumSha256: "b".repeat(64),
     })).rejects.toMatchObject({ code: "OPERATION_ID_CONFLICT" });
   });
 
