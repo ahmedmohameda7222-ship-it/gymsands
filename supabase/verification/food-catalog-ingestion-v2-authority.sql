@@ -4,7 +4,7 @@ begin;
 -- reviewed per-record manifest authority, structured Plan 1 facts and fail-closed reconciliation.
 -- Added correction evidence: cross-attempt live lease, cross-attempt materialized resume,
 -- lease lifecycle events, nullable serving label, explicit milliliter serving evidence,
--- failed reconciliation terminalization, release diff manifest authority. Everything is rollback-only.
+-- failed reconciliation terminalization, stale-run retirement, frozen release-diff manifest authority. Everything is rollback-only.
 
 create or replace function pg_temp.plan4_assert(p_condition boolean, p_message text)
 returns void language plpgsql as $$
@@ -334,6 +334,18 @@ select public.food_catalog_ingestion_acquire_lease_v2(jsonb_build_object(
   'operationId','44000000-0000-4000-8000-000000000018','commandChecksumSha256',repeat('3',64),
   'runId',(select production_run2_id from plan4_ids),'leaseOwner','worker-c','leaseToken','44000000-0000-4000-8000-000000000103','leaseSeconds',120
 ));
+select pg_temp.plan4_assert((
+  select status='cancelled'
+    and completed_at is not null
+    and lease_owner is null
+    and lease_token is null
+    and lease_acquired_at is null
+    and lease_heartbeat_at is null
+    and lease_expires_at is null
+    and error_summary='superseded by cross-attempt stale lease takeover'
+  from public.food_ingestion_runs
+  where id=(select production_run_id from plan4_ids)
+), 'cross-attempt stale lease terminalization');
 
 -- New attempt acknowledges the already materialized write without duplicating canonical facts.
 select public.food_catalog_ingestion_persist_candidate_v2(jsonb_build_object(
@@ -495,6 +507,96 @@ join public.food_source_records previous_source
  and previous_source.source_record_id=current_manifest.source_record_key
 where current_manifest.batch_id=(select batch_id from plan4_ids)
   and current_manifest.source_record_key='fixture-create-1';
+
+-- A prepared previous batch must not be eligible for immutable release-diff evidence.
+select pg_temp.plan4_rejected(format(
+  'select public.food_catalog_ingestion_record_release_diff_v2(%L::jsonb)',
+  jsonb_build_object(
+    'operationId','44000000-0000-4000-8000-000000000023',
+    'commandChecksumSha256',repeat('3',64),
+    'batchId',(select batch_id from plan4_ids),
+    'previousBatchId',(select previous_batch_id from plan4_release_diff_ids),
+    'records',jsonb_build_array(jsonb_build_object(
+      'sourceRecordId','fixture-create-1','classifications',jsonb_build_array('nutrition_changed')
+    )),
+    'diffChecksumSha256',repeat('3',64)
+  )::text
+), 'prepared release diff authority rejected');
+
+-- Freeze the previous manifest with exact completed successfully reconciled dry-run authority.
+insert into public.food_ingestion_runs(
+  batch_id, execution_mode, attempt_number, status, started_at, completed_at,
+  manifest_content_checksum_sha256,
+  observed_input_count, observed_accepted_count, observed_rejected_count,
+  observed_created_count, observed_matched_count,
+  observed_possible_duplicate_count, observed_quarantine_count
+)
+select
+  batch.id, 'dry_run', 1, 'completed', clock_timestamp(), clock_timestamp(),
+  repeat('6',64),
+  batch.input_count, batch.accepted_count, batch.rejected_count,
+  batch.created_count, batch.matched_count,
+  batch.possible_duplicate_count, batch.expected_quarantine_count
+from public.food_ingestion_batches batch
+where batch.id=(select previous_batch_id from plan4_release_diff_ids);
+
+insert into public.food_ingestion_reconciliations(
+  run_id, batch_id, manifest_content_checksum_sha256,
+  semantic_identity_checksum_sha256, expected_counts, observed_counts,
+  mismatch_codes, reconciled
+)
+select
+  run.id,
+  batch.id,
+  repeat('6',64),
+  repeat('7',64),
+  jsonb_build_object(
+    'input',batch.input_count,
+    'accepted',batch.accepted_count,
+    'rejected',batch.rejected_count,
+    'matched',batch.matched_count,
+    'created',batch.created_count,
+    'possibleDuplicate',batch.possible_duplicate_count,
+    'quarantined',batch.expected_quarantine_count
+  ),
+  jsonb_build_object(
+    'input',batch.input_count,
+    'accepted',batch.accepted_count,
+    'rejected',batch.rejected_count,
+    'matched',batch.matched_count,
+    'created',batch.created_count,
+    'possibleDuplicate',batch.possible_duplicate_count,
+    'quarantined',batch.expected_quarantine_count
+  ),
+  '{}'::text[],
+  true
+from public.food_ingestion_batches batch
+join public.food_ingestion_runs run
+  on run.batch_id=batch.id
+ and run.execution_mode='dry_run'
+ and run.attempt_number=1
+where batch.id=(select previous_batch_id from plan4_release_diff_ids);
+
+update public.food_ingestion_batches
+set review_state='reviewed', reviewed_at=clock_timestamp()
+where id=(select previous_batch_id from plan4_release_diff_ids);
+
+select pg_temp.plan4_assert((
+  select batch.review_state='reviewed'
+    and run.status='completed'
+    and reconciliation.reconciled
+    and lower(run.manifest_content_checksum_sha256)=repeat('6',64)
+    and lower(reconciliation.manifest_content_checksum_sha256)=repeat('6',64)
+    and lower(reconciliation.semantic_identity_checksum_sha256)=repeat('7',64)
+  from public.food_ingestion_batches batch
+  join public.food_ingestion_runs run
+    on run.batch_id=batch.id
+   and run.execution_mode='dry_run'
+   and run.attempt_number=1
+  join public.food_ingestion_reconciliations reconciliation
+    on reconciliation.run_id=run.id
+  where batch.id=(select previous_batch_id from plan4_release_diff_ids)
+), 'release diff frozen dry-run authority');
 
 select pg_temp.plan4_rejected(format(
   'select public.food_catalog_ingestion_record_release_diff_v2(%L::jsonb)',
