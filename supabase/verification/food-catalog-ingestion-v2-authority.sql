@@ -4,6 +4,7 @@ begin;
 -- reviewed per-record manifest authority, structured Plan 1 facts and fail-closed reconciliation.
 -- Added correction evidence: cross-attempt live lease, cross-attempt materialized resume,
 -- lease lifecycle events, nullable serving label, explicit milliliter serving evidence,
+-- dual gram and milliliter serving evidence, generic append event unavailable,
 -- failed reconciliation terminalization, stale-run retirement, frozen release-diff manifest authority. Everything is rollback-only.
 
 create or replace function pg_temp.plan4_assert(p_condition boolean, p_message text)
@@ -47,8 +48,7 @@ begin
     'food_catalog_ingestion_heartbeat_lease_v2','food_catalog_ingestion_persist_candidate_v2',
     'food_catalog_ingestion_record_quarantine_v2','food_catalog_ingestion_resolve_quarantine_v2',
     'food_catalog_ingestion_record_reconciliation_v2','food_catalog_ingestion_record_release_diff_v2',
-    'food_catalog_ingestion_append_event_v2','food_catalog_ingestion_complete_run_v2',
-    'food_catalog_ingestion_fail_run_v2'
+    'food_catalog_ingestion_complete_run_v2','food_catalog_ingestion_fail_run_v2'
   ] loop
     perform pg_temp.plan4_assert(has_function_privilege('service_role', 'public.' || v_rpc || '(jsonb)', 'EXECUTE'), v_rpc || ' service_role execute');
     perform pg_temp.plan4_assert(not has_function_privilege('anon', 'public.' || v_rpc || '(jsonb)', 'EXECUTE'), v_rpc || ' anon denied');
@@ -56,6 +56,11 @@ begin
   end loop;
 end
 $privileges$;
+
+select pg_temp.plan4_assert(
+  to_regprocedure('public.food_catalog_ingestion_append_event_v2(jsonb)') is null,
+  'generic append event unavailable'
+);
 
 create temporary table plan4_fixture(
   candidate jsonb not null,
@@ -88,8 +93,8 @@ insert into plan4_fixture values (
       'semanticSignature',null,'preparation',null,'state',null,'form',null,'structuredEvidenceKey',null
     ),
     'servings',jsonb_build_array(jsonb_build_object(
-      'servingKey','cup-1','amount',1,'unit','cup','gramWeight',null,'milliliterVolume',240,
-      'label','1 cup','sourceEvidence',jsonb_build_object('fixture',true,'milliliters',240)
+      'servingKey','cup-1','amount',1,'unit','cup','gramWeight',240,'milliliterVolume',250,
+      'label','1 cup','sourceEvidence',jsonb_build_object('fixture',true,'grams',240,'milliliters',250)
     )),
     'taxonomyEvidence',jsonb_build_array(jsonb_build_object(
       'taxonomy','primary_food_group','sourceCode','fixture-dairy','mappedTaxonomyId','dairy'
@@ -100,7 +105,7 @@ insert into plan4_fixture values (
     )),
     'globallyRelevant',false,
     'sourceNutrition',jsonb_build_object('fixture',true),
-    'sourceServing',jsonb_build_object('label','1 cup','milliliterVolume',240)
+    'sourceServing',jsonb_build_object('label','1 cup','gramWeight',240,'milliliterVolume',250)
   ),
   jsonb_build_object('kind','create'),
   jsonb_build_object('kind','accept','reasonCodes',jsonb_build_array()),
@@ -305,8 +310,19 @@ select pg_temp.plan4_assert((
 ), 'structured Plan 1 facts include source name and alias');
 select pg_temp.plan4_assert((
   select count(*)=1 from public.food_serving_options
-  where food_id=(select planned_food_id from plan4_fixture) and amount=240 and unit_code='ml' and gram_weight is null
+  where food_id=(select planned_food_id from plan4_fixture)
+    and amount=1 and unit_code='cup' and gram_weight=240
+), 'dual gram and milliliter serving evidence');
+select pg_temp.plan4_assert((
+  select count(*)=1 from public.food_serving_options
+  where food_id=(select planned_food_id from plan4_fixture)
+    and amount=250 and unit_code='ml' and gram_weight is null
 ), 'explicit milliliter serving evidence');
+select pg_temp.plan4_assert((
+  select count(*)=2 from public.food_serving_options
+  where food_id=(select planned_food_id from plan4_fixture)
+    and source_portion_code='cup-1'
+), 'dual gram and milliliter serving evidence');
 select pg_temp.plan4_assert((
   select count(*)=1 from public.food_barcodes
   where food_id=(select planned_food_id from plan4_fixture) and gtin='4006381333931'
@@ -367,8 +383,8 @@ select pg_temp.plan4_assert((
   select count(*)=2 from public.food_names where food_id=(select planned_food_id from plan4_fixture)
 ), 'cross-attempt materialized resume keeps names single');
 select pg_temp.plan4_assert((
-  select count(*)=1 from public.food_serving_options where food_id=(select planned_food_id from plan4_fixture)
-), 'cross-attempt materialized resume keeps serving single');
+  select count(*)=2 from public.food_serving_options where food_id=(select planned_food_id from plan4_fixture)
+), 'cross-attempt materialized resume keeps serving facts single');
 select pg_temp.plan4_assert((
   select observed_input_count=1 and observed_accepted_count=1 and observed_created_count=1
   from public.food_ingestion_runs where id=(select production_run2_id from plan4_ids)
@@ -377,13 +393,12 @@ select pg_temp.plan4_assert((
 -- Continue final fail-closed evidence on attempt 2, which now owns the live batch lease.
 update plan4_ids set production_run_id=production_run2_id;
 
--- Immutable event/materialized authority rejects direct mutation.
-select public.food_catalog_ingestion_append_event_v2(jsonb_build_object(
-  'operationId','44000000-0000-4000-8000-000000000011','commandChecksumSha256',repeat('b',64),
-  'batchId',(select batch_id from plan4_ids),'runId',(select production_run_id from plan4_ids),
-  'leaseToken','44000000-0000-4000-8000-000000000103','leaseEpoch',1,
-  'eventType','lease_heartbeat','eventChecksumSha256',repeat('c',64),'payload',jsonb_build_object('fixture',true)
-));
+-- Immutable event/materialized authority rejects direct mutation. Operational events are
+-- produced only by command-specific RPCs; the generic append-event escape hatch is absent.
+select pg_temp.plan4_assert(
+  to_regprocedure('public.food_catalog_ingestion_append_event_v2(jsonb)') is null,
+  'generic append event unavailable'
+);
 select pg_temp.plan4_rejected(
   'delete from public.food_ingestion_operational_events where event_type=''lease_heartbeat''',
   'immutable operational event'
