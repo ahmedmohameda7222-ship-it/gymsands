@@ -58,7 +58,6 @@ const rpcs = [
   "food_catalog_ingestion_resolve_quarantine_v2",
   "food_catalog_ingestion_record_reconciliation_v2",
   "food_catalog_ingestion_record_release_diff_v2",
-  "food_catalog_ingestion_append_event_v2",
   "food_catalog_ingestion_complete_run_v2",
 ] as const;
 
