@@ -1802,4 +1802,270 @@ revoke all on function private.food_catalog_ingestion_finish_operation_v2(jsonb,
 revoke all on function private.food_catalog_ingestion_assert_active_lease_v2(uuid, uuid, bigint) from public, anon, authenticated, service_role;
 revoke all on function private.reject_food_catalog_ingestion_authority_mutation_v2() from public, anon, authenticated, service_role;
 
+-- Successful exact dry-run reconciliation is the single semantic-membership freeze authority.
+-- Review/approval remain separate human lifecycle transitions.
+create or replace function public.food_ingestion_batch_semantically_frozen_v2(p_batch_id uuid)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $function$
+  select exists (
+    select 1
+    from public.food_ingestion_batches batch
+    join public.food_ingestion_runs run
+      on run.batch_id = batch.id
+     and run.execution_mode = 'dry_run'
+    join public.food_ingestion_reconciliations reconciliation
+      on reconciliation.run_id = run.id
+     and reconciliation.batch_id = batch.id
+    where batch.id = p_batch_id
+      and batch.manifest_content_checksum_sha256 is not null
+      and batch.semantic_identity_checksum_sha256 is not null
+      and reconciliation.reconciled
+      and lower(run.manifest_content_checksum_sha256) = lower(batch.manifest_content_checksum_sha256)
+      and lower(reconciliation.manifest_content_checksum_sha256) = lower(batch.manifest_content_checksum_sha256)
+      and lower(reconciliation.semantic_identity_checksum_sha256) = lower(batch.semantic_identity_checksum_sha256)
+  )
+$function$;
+
+-- Batch0 historically granted service_role direct membership writes, so preserve that
+-- boundary but add the Plan 4 reconciliation freeze while retaining deterministic batch locks.
+create or replace function public.food_ingestion_batch_membership_guard()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+declare
+  v_review_state text;
+  v_batch record;
+begin
+  if tg_op = 'INSERT' then
+    select review_state into v_review_state
+    from public.food_ingestion_batches
+    where id = new.batch_id
+    for update;
+
+    if found and (
+      v_review_state <> 'prepared'
+      or public.food_ingestion_batch_semantically_frozen_v2(new.batch_id)
+    ) then
+      raise exception 'Reconciled or reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
+    end if;
+
+    perform 1
+    from public.food_source_records
+    where id = new.source_record_id
+    for update;
+
+    return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    select review_state into v_review_state
+    from public.food_ingestion_batches
+    where id = old.batch_id
+    for update;
+
+    if found and (
+      v_review_state <> 'prepared'
+      or public.food_ingestion_batch_semantically_frozen_v2(old.batch_id)
+    ) then
+      raise exception 'Reconciled or reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
+    end if;
+
+    return old;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    for v_batch in
+      select id, review_state
+      from public.food_ingestion_batches
+      where id in (old.batch_id, new.batch_id)
+      order by id
+      for update
+    loop
+      if v_batch.review_state <> 'prepared'
+         or public.food_ingestion_batch_semantically_frozen_v2(v_batch.id)
+      then
+        raise exception 'Reconciled or reviewed Food ingestion batch membership is immutable.' using errcode = '23514';
+      end if;
+    end loop;
+
+    if new.source_record_id is distinct from old.source_record_id then
+      perform 1
+      from public.food_source_records
+      where id = new.source_record_id
+      for update;
+    end if;
+
+    return new;
+  end if;
+
+  raise exception 'Unsupported Food ingestion batch membership operation.' using errcode = '23514';
+end
+$function$;
+
+-- The run row itself is a trusted boundary for new dry-run attempts. Lock the semantic
+-- batch before accepting a new attempt so reconciliation-vs-prepare has no TOCTOU window.
+create or replace function public.food_ingestion_run_semantic_freeze_guard_v2()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  if new.execution_mode <> 'dry_run' then
+    return new;
+  end if;
+
+  perform 1
+  from public.food_ingestion_batches
+  where id = new.batch_id
+  for update;
+
+  if public.food_ingestion_batch_semantically_frozen_v2(new.batch_id) then
+    raise exception 'Successfully reconciled Food ingestion batch rejects a fresh mutable dry-run attempt.' using errcode = '23514';
+  end if;
+
+  return new;
+end
+$function$;
+
+create trigger food_ingestion_run_semantic_freeze_v2
+before insert on public.food_ingestion_runs
+for each row execute function public.food_ingestion_run_semantic_freeze_guard_v2();
+
+-- Manifest rows are immutable after insertion already. This insert guard closes the remaining
+-- post-reconciliation expansion path, including runs prepared before the freeze transaction.
+create or replace function public.food_ingestion_manifest_insert_semantic_freeze_guard_v2()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  perform 1
+  from public.food_ingestion_batches
+  where id = new.batch_id
+  for update;
+
+  if public.food_ingestion_batch_semantically_frozen_v2(new.batch_id) then
+    raise exception 'Successfully reconciled Food ingestion batch manifest authority is immutable.' using errcode = '23514';
+  end if;
+
+  return new;
+end
+$function$;
+
+create trigger food_ingestion_manifest_insert_semantic_freeze_v2
+before insert on public.food_ingestion_manifest_records
+for each row execute function public.food_ingestion_manifest_insert_semantic_freeze_guard_v2();
+
+-- Semantic batch fields also freeze at successful reconciliation even if human review_state
+-- is still prepared. The existing reviewed->approved exact-completed-reconciliation gate remains.
+create or replace function public.food_ingestion_batch_identity_immutable_guard()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+declare
+  v_semantically_frozen boolean := public.food_ingestion_batch_semantically_frozen_v2(old.id);
+begin
+  if old.review_state <> 'prepared' and new.review_state = 'prepared' then
+    raise exception 'Reviewed Food ingestion batch cannot return to prepared.' using errcode = '23514';
+  end if;
+
+  if new.review_state is distinct from old.review_state
+     and not (
+       (old.review_state = 'prepared' and new.review_state = 'reviewed')
+       or (old.review_state = 'reviewed' and new.review_state in ('approved', 'rejected'))
+       or (old.review_state = 'approved' and new.review_state = 'superseded')
+     )
+  then
+    raise exception 'Invalid Food ingestion batch review-state transition: % -> %.', old.review_state, new.review_state
+      using errcode = '23514';
+  end if;
+
+  if old.review_state = 'reviewed' and new.review_state = 'approved' then
+    if not exists (
+      select 1
+      from public.food_ingestion_runs run
+      join public.food_ingestion_reconciliations reconciliation on reconciliation.run_id = run.id
+      where run.batch_id = old.id
+        and run.execution_mode = 'dry_run'
+        and run.status = 'completed'
+        and lower(run.manifest_content_checksum_sha256) = lower(old.manifest_content_checksum_sha256)
+        and reconciliation.batch_id = old.id
+        and reconciliation.reconciled
+        and lower(reconciliation.manifest_content_checksum_sha256) = lower(old.manifest_content_checksum_sha256)
+        and lower(reconciliation.semantic_identity_checksum_sha256) = lower(old.semantic_identity_checksum_sha256)
+    ) then
+      raise exception 'Food Catalog ingestion approval requires completed reconciled dry run for the exact semantic batch and manifest.'
+        using errcode = '23514';
+    end if;
+  end if;
+
+  if old.review_state = 'approved' and new.review_state = 'superseded' then
+    perform 1
+    from public.food_ingestion_batches
+    where id = old.id
+    for update;
+
+    if exists (
+      select 1
+      from public.food_ingestion_runs
+      where batch_id = old.id
+        and execution_mode = 'production'
+        and status in ('prepared', 'running')
+    ) then
+      raise exception 'Approved Food ingestion batch cannot be superseded while Production runs are nonterminal.'
+        using errcode = '23514';
+    end if;
+  end if;
+
+  if old.review_state <> 'prepared'
+     or new.review_state <> 'prepared'
+     or v_semantically_frozen
+  then
+    if new.provider is distinct from old.provider
+       or new.dataset_name is distinct from old.dataset_name
+       or new.source_version is distinct from old.source_version
+       or new.source_release_date is distinct from old.source_release_date
+       or new.license_name is distinct from old.license_name
+       or new.license_reference is distinct from old.license_reference
+       or new.source_reference is distinct from old.source_reference
+       or new.source_checksum_sha256 is distinct from old.source_checksum_sha256
+       or new.importer_version is distinct from old.importer_version
+       or new.config_checksum_sha256 is distinct from old.config_checksum_sha256
+       or new.manifest_content_checksum_sha256 is distinct from old.manifest_content_checksum_sha256
+       or new.semantic_identity_checksum_sha256 is distinct from old.semantic_identity_checksum_sha256
+       or new.input_count is distinct from old.input_count
+       or new.accepted_count is distinct from old.accepted_count
+       or new.rejected_count is distinct from old.rejected_count
+       or new.matched_count is distinct from old.matched_count
+       or new.created_count is distinct from old.created_count
+       or new.possible_duplicate_count is distinct from old.possible_duplicate_count
+       or new.expected_quarantine_count is distinct from old.expected_quarantine_count
+    then
+      raise exception 'Reconciled or reviewed Food ingestion batch semantic authority is immutable.' using errcode = '23514';
+    end if;
+  end if;
+
+  if old.reviewed_at is not null and new.reviewed_at is distinct from old.reviewed_at then
+    raise exception 'Established Food ingestion batch reviewed_at is immutable.' using errcode = '23514';
+  end if;
+  if old.approved_at is not null and new.approved_at is distinct from old.approved_at then
+    raise exception 'Established Food ingestion batch approved_at is immutable.' using errcode = '23514';
+  end if;
+  if old.approval_reference is not null and new.approval_reference is distinct from old.approval_reference then
+    raise exception 'Established Food ingestion batch approval_reference is immutable.' using errcode = '23514';
+  end if;
+  return new;
+end
+$function$;
+
+revoke all on function public.food_ingestion_batch_semantically_frozen_v2(uuid) from public, anon, authenticated;
+revoke all on function public.food_ingestion_run_semantic_freeze_guard_v2() from public, anon, authenticated;
+revoke all on function public.food_ingestion_manifest_insert_semantic_freeze_guard_v2() from public, anon, authenticated;
+grant execute on function public.food_ingestion_batch_semantically_frozen_v2(uuid) to service_role;
+
 commit;
