@@ -123,6 +123,7 @@ export type FoodCatalogValidationIssueCode =
   | "invalid_gtin"
   | "invalid_gtin_check_digit"
   | "invalid_market_scope"
+  | "invalid_taxonomy_mapping"
   | "duplicate_gtin_in_candidate"
   | "suspicious_calorie_macro_delta";
 
