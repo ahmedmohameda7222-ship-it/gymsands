@@ -49,4 +49,29 @@ describe("Food Catalog Plan 4 independent-review hardening", () => {
     );
     expect(releaseDiffRpc).toContain("release diff checksum does not match immutable manifest authority");
   });
+
+  it("requires frozen successfully reconciled dry-run authority before recording an immutable release diff", () => {
+    const releaseDiffRpc = sql.match(
+      /create\s+or\s+replace\s+function\s+public\.food_catalog_ingestion_record_release_diff_v2[\s\S]*?\nend\n\$function\$;/i,
+    )?.[0] ?? "";
+    expect(releaseDiffRpc).toMatch(/review_state[\s\S]*prepared/i);
+    expect(releaseDiffRpc).toMatch(/from\s+public\.food_ingestion_reconciliations/i);
+    expect(releaseDiffRpc).toMatch(
+      /execution_mode\s*=\s*'dry_run'[\s\S]*status\s*=\s*'completed'[\s\S]*reconciled/i,
+    );
+    expect(releaseDiffRpc).toContain(
+      "release diff requires frozen successfully reconciled manifest authority",
+    );
+  });
+
+  it("terminalizes an expired prior Production attempt during cross-attempt lease takeover", () => {
+    const acquireLeaseRpc = sql.match(
+      /create\s+or\s+replace\s+function\s+public\.food_catalog_ingestion_acquire_lease_v2[\s\S]*?\nend\n\$function\$;/i,
+    )?.[0] ?? "";
+    expect(acquireLeaseRpc).toMatch(
+      /update\s+public\.food_ingestion_runs[\s\S]*status\s*=\s*'cancelled'[\s\S]*completed_at\s*=[\s\S]*lease_owner\s*=\s*null[\s\S]*lease_token\s*=\s*null/i,
+    );
+    expect(acquireLeaseRpc).toMatch(/id\s*<>\s*v_run_id/i);
+    expect(acquireLeaseRpc).toContain("superseded by cross-attempt stale lease takeover");
+  });
 });
