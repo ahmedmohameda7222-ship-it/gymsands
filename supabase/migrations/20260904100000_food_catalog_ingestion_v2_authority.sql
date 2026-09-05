@@ -17,8 +17,6 @@ alter table public.food_ingestion_batches
     or semantic_identity_checksum_sha256 ~ '^[0-9A-Fa-f]{64}$'
   );
 
--- Batch 0's source/config uniqueness was a readiness placeholder. Plan 4 makes the full
--- semantic checksum (source + deterministic manifest + expected counts) authoritative.
 do $drop_batch0_semantic_placeholder$
 declare
   v_constraint text;
@@ -1271,12 +1269,21 @@ declare
   v_previous_batch_id uuid := nullif(p_command->>'previousBatchId', '')::uuid;
   v_next_identity text;
   v_previous_identity text := '';
+  v_expected_records jsonb := '[]'::jsonb;
+  v_supplied_records jsonb := '[]'::jsonb;
   v_entries_text text := '';
+  v_classifications text[];
   v_classifications_text text;
   v_canonical_text text;
   v_expected_checksum text;
   v_diff_id uuid;
   v_record jsonb;
+  v_source_record_id text;
+  v_previous_manifest public.food_ingestion_manifest_records%rowtype;
+  v_next_manifest public.food_ingestion_manifest_records%rowtype;
+  v_previous_found boolean;
+  v_next_found boolean;
+  v_material_dimension_count integer;
   v_result jsonb;
 begin
   v_replay := private.food_catalog_ingestion_replay_operation_v2(p_command, 'food_catalog_ingestion_record_release_diff_v2');
@@ -1300,16 +1307,196 @@ begin
 
   for v_record in
     select value from jsonb_array_elements(coalesce(p_command->'records', '[]'::jsonb))
-    order by value->>'sourceRecordId'
   loop
     if length(btrim(coalesce(v_record->>'sourceRecordId', ''))) = 0
        or jsonb_typeof(coalesce(v_record->'classifications', 'null'::jsonb)) <> 'array'
-       or v_record ? 'before'
-       or v_record ? 'after'
+       or (v_record - 'sourceRecordId' - 'classifications') <> '{}'::jsonb
     then
       raise exception 'Release diff command contains noncanonical record evidence.' using errcode = '22023';
     end if;
+  end loop;
+  if jsonb_array_length(coalesce(p_command->'records', '[]'::jsonb)) <> (
+    select count(distinct value->>'sourceRecordId')
+    from jsonb_array_elements(coalesce(p_command->'records', '[]'::jsonb))
+  ) then
+    raise exception 'Release diff command contains duplicate source records.' using errcode = '22023';
+  end if;
 
+  for v_source_record_id in
+    select source_record_key
+    from (
+      select manifest.source_record_key
+      from public.food_ingestion_manifest_records manifest
+      where manifest.batch_id = v_batch_id
+      union
+      select manifest.source_record_key
+      from public.food_ingestion_manifest_records manifest
+      where v_previous_batch_id is not null
+        and manifest.batch_id = v_previous_batch_id
+    ) authority
+    order by source_record_key
+  loop
+    select * into v_previous_manifest
+    from public.food_ingestion_manifest_records manifest
+    where manifest.batch_id = v_previous_batch_id
+      and manifest.source_record_key = v_source_record_id;
+    v_previous_found := found;
+
+    select * into v_next_manifest
+    from public.food_ingestion_manifest_records manifest
+    where manifest.batch_id = v_batch_id
+      and manifest.source_record_key = v_source_record_id;
+    v_next_found := found;
+
+    if not v_previous_found then
+      v_classifications := array['source_record_added']::text[];
+    elsif not v_next_found then
+      v_classifications := array['source_record_removed']::text[];
+    else
+      v_classifications := '{}'::text[];
+      v_material_dimension_count := 0;
+
+      if jsonb_build_object(
+           'sourceReference', v_previous_manifest.candidate_json->'sourceReference',
+           'sourceRecordChecksumSha256', v_previous_manifest.candidate_json->'sourceRecordChecksumSha256',
+           'identityEvidence', v_previous_manifest.candidate_json->'identityEvidence'
+         ) is distinct from jsonb_build_object(
+           'sourceReference', v_next_manifest.candidate_json->'sourceReference',
+           'sourceRecordChecksumSha256', v_next_manifest.candidate_json->'sourceRecordChecksumSha256',
+           'identityEvidence', v_next_manifest.candidate_json->'identityEvidence'
+         )
+      then
+        v_classifications := array_append(v_classifications, 'source_record_changed');
+        v_material_dimension_count := v_material_dimension_count + 1;
+      end if;
+
+      if jsonb_build_object(
+           'nutrition', v_previous_manifest.candidate_json->'nutrition',
+           'sourceNutrition', v_previous_manifest.candidate_json->'sourceNutrition'
+         ) is distinct from jsonb_build_object(
+           'nutrition', v_next_manifest.candidate_json->'nutrition',
+           'sourceNutrition', v_next_manifest.candidate_json->'sourceNutrition'
+         )
+      then
+        v_classifications := array_append(v_classifications, 'nutrition_changed');
+        v_material_dimension_count := v_material_dimension_count + 1;
+      end if;
+
+      if jsonb_build_object(
+           'servingLabel', v_previous_manifest.candidate_json->'servingLabel',
+           'servings', v_previous_manifest.candidate_json->'servings',
+           'sourceServing', v_previous_manifest.candidate_json->'sourceServing'
+         ) is distinct from jsonb_build_object(
+           'servingLabel', v_next_manifest.candidate_json->'servingLabel',
+           'servings', v_next_manifest.candidate_json->'servings',
+           'sourceServing', v_next_manifest.candidate_json->'sourceServing'
+         )
+      then
+        v_classifications := array_append(v_classifications, 'serving_changed');
+        v_material_dimension_count := v_material_dimension_count + 1;
+      end if;
+
+      if jsonb_build_object(
+           'canonicalName', v_previous_manifest.candidate_json->'canonicalName',
+           'brandName', v_previous_manifest.candidate_json->'brandName',
+           'aliases', v_previous_manifest.candidate_json->'aliases',
+           'names', v_previous_manifest.candidate_json->'names'
+         ) is distinct from jsonb_build_object(
+           'canonicalName', v_next_manifest.candidate_json->'canonicalName',
+           'brandName', v_next_manifest.candidate_json->'brandName',
+           'aliases', v_next_manifest.candidate_json->'aliases',
+           'names', v_next_manifest.candidate_json->'names'
+         )
+      then
+        v_classifications := array_append(v_classifications, 'naming_changed');
+        v_material_dimension_count := v_material_dimension_count + 1;
+      end if;
+
+      if v_previous_manifest.candidate_json->'gtins'
+         is distinct from v_next_manifest.candidate_json->'gtins'
+      then
+        v_classifications := array_append(v_classifications, 'barcode_changed');
+        v_material_dimension_count := v_material_dimension_count + 1;
+      end if;
+
+      if jsonb_build_object(
+           'category', v_previous_manifest.candidate_json->'category',
+           'cuisine', v_previous_manifest.candidate_json->'cuisine',
+           'taxonomyEvidence', v_previous_manifest.candidate_json->'taxonomyEvidence'
+         ) is distinct from jsonb_build_object(
+           'category', v_next_manifest.candidate_json->'category',
+           'cuisine', v_next_manifest.candidate_json->'cuisine',
+           'taxonomyEvidence', v_next_manifest.candidate_json->'taxonomyEvidence'
+         )
+      then
+        v_classifications := array_append(v_classifications, 'taxonomy_changed');
+        v_material_dimension_count := v_material_dimension_count + 1;
+      end if;
+
+      if jsonb_build_object(
+           'marketScopes', v_previous_manifest.candidate_json->'marketScopes',
+           'globallyRelevant', v_previous_manifest.candidate_json->'globallyRelevant'
+         ) is distinct from jsonb_build_object(
+           'marketScopes', v_next_manifest.candidate_json->'marketScopes',
+           'globallyRelevant', v_next_manifest.candidate_json->'globallyRelevant'
+         )
+      then
+        v_classifications := array_append(v_classifications, 'market_evidence_changed');
+        v_material_dimension_count := v_material_dimension_count + 1;
+      end if;
+
+      if v_previous_manifest.decision_json is distinct from v_next_manifest.decision_json then
+        v_classifications := array_append(v_classifications, 'canonical_match_changed');
+        v_material_dimension_count := v_material_dimension_count + 1;
+      end if;
+
+      if v_previous_manifest.disposition_json->>'kind' <> 'quarantine'
+         and v_next_manifest.disposition_json->>'kind' = 'quarantine'
+      then
+        v_classifications := array_append(v_classifications, 'newly_quarantined');
+      end if;
+      if v_previous_manifest.disposition_json->>'kind' = 'quarantine'
+         and v_next_manifest.disposition_json->>'kind' <> 'quarantine'
+      then
+        v_classifications := array_append(v_classifications, 'quarantine_resolved');
+      end if;
+
+      if v_material_dimension_count >= 3 then
+        v_classifications := array_append(v_classifications, 'suspicious_material_change');
+      end if;
+      if cardinality(v_classifications) = 0 then
+        v_classifications := array['unchanged']::text[];
+      end if;
+    end if;
+
+    v_expected_records := v_expected_records || jsonb_build_array(
+      jsonb_build_object(
+        'sourceRecordId', v_source_record_id,
+        'classifications', to_jsonb(v_classifications)
+      )
+    );
+  end loop;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'sourceRecordId', value->>'sourceRecordId',
+        'classifications', value->'classifications'
+      )
+      order by value->>'sourceRecordId'
+    ),
+    '[]'::jsonb
+  ) into v_supplied_records
+  from jsonb_array_elements(coalesce(p_command->'records', '[]'::jsonb));
+
+  if v_supplied_records is distinct from v_expected_records then
+    raise exception 'Release diff claimed classifications do not match immutable manifest classification authority.' using errcode = '23514';
+  end if;
+
+  for v_record in
+    select value from jsonb_array_elements(v_expected_records)
+    order by value->>'sourceRecordId'
+  loop
     select coalesce(
       '[' || string_agg(to_jsonb(classification)::text, ',' order by ordinality) || ']',
       '[]'
@@ -1327,26 +1514,42 @@ begin
     || ',"previousBatchIdentity":' || to_jsonb(v_previous_identity)::text || '}';
   v_expected_checksum := encode(extensions.digest(convert_to(v_canonical_text, 'UTF8'), 'sha256'), 'hex');
   if v_expected_checksum <> lower(coalesce(p_command->>'diffChecksumSha256', '')) then
-    raise exception 'Release diff checksum does not match canonical batch identities and records.' using errcode = '23514';
+    raise exception 'Release diff checksum does not match immutable manifest authority.' using errcode = '23514';
   end if;
 
   insert into public.food_ingestion_release_diffs(batch_id, previous_batch_id, diff_checksum_sha256)
   values (v_batch_id, v_previous_batch_id, v_expected_checksum)
   returning id into v_diff_id;
+
   for v_record in
-    select value from jsonb_array_elements(coalesce(p_command->'records', '[]'::jsonb))
+    select value from jsonb_array_elements(v_expected_records)
     order by value->>'sourceRecordId'
   loop
-    insert into public.food_ingestion_release_diff_records(release_diff_id, source_record_key, classifications, before_json, after_json)
-    values (
-      v_diff_id, v_record->>'sourceRecordId', array(select jsonb_array_elements_text(v_record->'classifications')),
-      null, null
+    insert into public.food_ingestion_release_diff_records(
+      release_diff_id, source_record_key, classifications, before_json, after_json
+    ) values (
+      v_diff_id,
+      v_record->>'sourceRecordId',
+      array(select jsonb_array_elements_text(v_record->'classifications')),
+      null,
+      null
     );
   end loop;
+
   insert into public.food_ingestion_operational_events(batch_id, event_type, payload_json, event_checksum_sha256)
-  values (v_batch_id, 'release_diff_recorded', jsonb_build_object('releaseDiffId', v_diff_id, 'diffChecksumSha256', v_expected_checksum), lower(p_command->>'commandChecksumSha256'));
+  values (
+    v_batch_id,
+    'release_diff_recorded',
+    jsonb_build_object('releaseDiffId', v_diff_id, 'diffChecksumSha256', v_expected_checksum),
+    lower(p_command->>'commandChecksumSha256')
+  );
   v_result := jsonb_build_object('releaseDiffId', v_diff_id, 'diffChecksumSha256', v_expected_checksum);
-  return private.food_catalog_ingestion_finish_operation_v2(p_command, 'food_catalog_ingestion_record_release_diff_v2', null, v_result);
+  return private.food_catalog_ingestion_finish_operation_v2(
+    p_command,
+    'food_catalog_ingestion_record_release_diff_v2',
+    null,
+    v_result
+  );
 end
 $function$;
 
