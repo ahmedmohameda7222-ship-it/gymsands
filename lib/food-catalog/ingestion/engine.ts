@@ -77,7 +77,9 @@ function assertUniqueNormalizedSourceIdentities(
 ): void {
   const seen = new Set<string>();
   for (const candidate of candidates) {
-    if (!candidate.sourceRecordId) continue;
+    if (!candidate.sourceRecordId) {
+      throw new Error("Normalized source identity cannot be blank in a persistable ingestion artifact.");
+    }
     if (seen.has(candidate.sourceRecordId)) {
       throw new Error(`Duplicate normalized source identity: ${candidate.sourceRecordId}.`);
     }
