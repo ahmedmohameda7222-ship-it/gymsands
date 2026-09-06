@@ -119,9 +119,8 @@ function normalizeTaxonomy(candidate: FoodCatalogCandidateInput): FoodCatalogTax
   );
 }
 
-export function normalizeGtin(value: string): string | null {
-  const collapsed = value.replace(/[\s-]/g, "");
-  return collapsed.length > 0 ? collapsed : null;
+export function normalizeGtin(value: string): string {
+  return value.replace(/[\s-]/g, "");
 }
 
 export function isValidGtinCheckDigit(value: string): boolean {
@@ -148,7 +147,7 @@ function normalizeMarketScopes(candidate: FoodCatalogCandidateInput): FoodCatalo
 export function normalizeFoodCatalogCandidate(
   candidate: FoodCatalogCandidateInput
 ): FoodCatalogNormalizedCandidate {
-  const gtins = [...new Set(candidate.gtins.map(normalizeGtin).filter((value): value is string => value !== null))]
+  const gtins = [...new Set(candidate.gtins.map(normalizeGtin))]
     .sort(compareStableStrings);
 
   return {
