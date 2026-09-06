@@ -6,6 +6,7 @@ import type {
   FoodCatalogNameEvidence,
   FoodCatalogNormalizedCandidate,
   FoodCatalogServingEvidence,
+  FoodCatalogSourceDescriptor,
   FoodCatalogTaxonomyEvidence
 } from "./contracts";
 
@@ -142,6 +143,16 @@ function normalizeMarketScopes(candidate: FoodCatalogCandidateInput): FoodCatalo
     })),
     (scope) => `${scope.type}\u0000${scope.code}\u0000${scope.relevanceLevel}`
   );
+}
+
+export function normalizeFoodCatalogSourceDescriptor(
+  source: FoodCatalogSourceDescriptor
+): FoodCatalogSourceDescriptor {
+  return {
+    ...source,
+    sourceChecksumSha256: source.sourceChecksumSha256.toLowerCase(),
+    configChecksumSha256: source.configChecksumSha256.toLowerCase()
+  };
 }
 
 export function normalizeFoodCatalogCandidate(
