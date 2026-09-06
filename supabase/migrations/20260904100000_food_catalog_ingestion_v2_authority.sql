@@ -1802,6 +1802,69 @@ revoke all on function private.food_catalog_ingestion_finish_operation_v2(jsonb,
 revoke all on function private.food_catalog_ingestion_assert_active_lease_v2(uuid, uuid, bigint) from public, anon, authenticated, service_role;
 revoke all on function private.reject_food_catalog_ingestion_authority_mutation_v2() from public, anon, authenticated, service_role;
 
+-- Batch 0 intentionally retains broad service_role table grants until Plan 6, but those
+-- grants must not bypass Plan 4 semantic command authority once a row belongs to a
+-- semantic batch. Direct service_role DML is rejected; SECURITY DEFINER Plan 4 commands
+-- execute as their owner and remain the sole service_role mutation path.
+create or replace function private.food_catalog_ingestion_plan4_service_role_direct_guard_v2()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+declare
+  v_plan4 boolean := false;
+  v_old_batch_id uuid;
+  v_new_batch_id uuid;
+begin
+  if current_user <> 'service_role' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+
+  if tg_table_name = 'food_ingestion_batches' then
+    if tg_op <> 'INSERT' then
+      v_plan4 := v_plan4 or old.semantic_identity_checksum_sha256 is not null;
+    end if;
+    if tg_op <> 'DELETE' then
+      v_plan4 := v_plan4 or new.semantic_identity_checksum_sha256 is not null;
+    end if;
+  elsif tg_table_name in ('food_ingestion_runs', 'food_ingestion_batch_records') then
+    if tg_op <> 'INSERT' then v_old_batch_id := old.batch_id; end if;
+    if tg_op <> 'DELETE' then v_new_batch_id := new.batch_id; end if;
+
+    select exists (
+      select 1
+      from public.food_ingestion_batches batch
+      where (batch.id = v_old_batch_id or batch.id = v_new_batch_id)
+        and batch.semantic_identity_checksum_sha256 is not null
+    ) into v_plan4;
+  end if;
+
+  if v_plan4 then
+    raise exception 'Direct service_role mutation of Plan 4 semantic ingestion authority is forbidden.'
+      using errcode = '23514';
+  end if;
+
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end
+$function$;
+
+create trigger food_ingestion_batches_plan4_service_role_direct_guard_v2
+before insert or update or delete on public.food_ingestion_batches
+for each row execute function private.food_catalog_ingestion_plan4_service_role_direct_guard_v2();
+
+create trigger food_ingestion_runs_plan4_service_role_direct_guard_v2
+before insert or update or delete on public.food_ingestion_runs
+for each row execute function private.food_catalog_ingestion_plan4_service_role_direct_guard_v2();
+
+create trigger food_ingestion_batch_records_plan4_service_role_direct_guard_v2
+before insert or update or delete on public.food_ingestion_batch_records
+for each row execute function private.food_catalog_ingestion_plan4_service_role_direct_guard_v2();
+
+revoke all on function private.food_catalog_ingestion_plan4_service_role_direct_guard_v2()
+from public, anon, authenticated, service_role;
+
 -- Successful exact dry-run reconciliation is the single semantic-membership freeze authority.
 -- Review/approval remain separate human lifecycle transitions.
 create or replace function public.food_ingestion_batch_semantically_frozen_v2(p_batch_id uuid)
