@@ -48,6 +48,8 @@ where batch.semantic_identity_checksum_sha256 = repeat('b',64)
   and run.execution_mode = 'dry_run'
   and run.attempt_number = 1;
 
+grant select on table plan4_boundary_ids to service_role;
+
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
 
