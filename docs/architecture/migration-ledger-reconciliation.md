@@ -3,7 +3,7 @@
 **Project:** `bkwezjxvapaeasfvlhvv`
 **Current reconciliation date:** 2026-09-06
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history is reconciled through the applied Food Catalog Plan 4 ingestion V2 authority migration; no repository migration remains pending or unresolved
+**Status:** Production migration history is physically reconciled through the applied Food Catalog Plan 4 ingestion V2 authority migration; repository migration `20260906183000_food_catalog_search_projection_v2.sql` is intentionally pending tracked Plan 5 Production application
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -23,14 +23,36 @@ The latest verified Plaivra Production inspection after the authorized 2026-09-0
 
 The current repository/machine-ledger state records:
 
-- Pending repository migrations: **0**
-- `pendingCount = 0`
+- Pending repository migrations: **1**
+- Pending migration: `20260906183000_food_catalog_search_projection_v2.sql`
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- migration-ledger `release_ready = true`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- migration-ledger `release_ready = false`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is now 119 records. No prior-plan repository migration remains pending or unresolved.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history remains 119 records. All prior-plan migrations remain resolved. The only unresolved repository migration is the intentionally pending Plan 5 Search Projection V2 migration, which has no Production identity and must not be marked applied until tracked Production application and read-back complete.
+
+## Food Catalog Plan 5 Search Projection V2 — pending Production application
+
+The forward-only repository migration:
+
+`20260906183000_food_catalog_search_projection_v2.sql`
+
+is intentionally classified `state = pending`. No Production version or generated alias is claimed yet.
+
+Pre-Production implementation verification has established that the migration can replay chronologically and passes database lint and the registered database verification suite after the Plan 5 `string_agg` checksum correction. The implementation branch also carries deterministic SearchDocument rebuild/search verification, context-bound keyset pagination, explicit language/script/market context, strict numeric nutrient operators, bounded result hydration, and rendered Food Library consumer coverage. Exact-head Quality remains the gate before Production application; historical successful sub-gates are evidence only and do not authorize an apply by themselves.
+
+Plan 5 deliberately creates versioned nutrition-policy authority without inventing Product threshold values. The policy table is expected to remain empty at application time. No numeric High Protein or Low Carb threshold has been approved, and the legacy transitional `20 g` / `10 g` values are not Plan 5 authority. Generic tags named High Protein or Low Carb are not allowed to become nutrition-claim authority.
+
+Until tracked Production application occurs:
+
+- Production physical migration history remains at 119 records with head `20260906131808_food_catalog_ingestion_v2_authority`;
+- `food_catalog_search_documents` and Plan 5 search-policy schema are not yet Production authority;
+- no Plan 5 Production migration identity may be written into the ledger;
+- no Food population, provider ingestion, activation, verification approval, Catalog Generation creation/promotion, current-generation pointer movement, runtime cutover, deployment, compatibility-marker promotion, or Activity Catalog mutation is authorized by this pending classification.
+
+After exact-head Quality passes, Production preflight must independently prove the target project/history/schema/data state before the exact frozen migration is applied through the tracked Supabase migration mechanism. The ledger may transition from `pending` to an immutable applied identity only after that application and immediate structural/security/data read-back. Do not replay any already-applied migration.
 
 ## Food Catalog Plan 4 ingestion V2 — Production application 2026-09-06
 
