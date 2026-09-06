@@ -18,7 +18,10 @@ import {
   deriveCanonicalConflictReasons,
   type FoodCatalogMatchIndex
 } from "./matching";
-import { normalizeFoodCatalogCandidate } from "./normalize";
+import {
+  normalizeFoodCatalogCandidate,
+  normalizeFoodCatalogSourceDescriptor
+} from "./normalize";
 import { deriveProcessingDisposition } from "./quarantine";
 import { validateFoodCatalogCandidate } from "./validate";
 
@@ -58,7 +61,7 @@ export function buildSemanticBatchIdentity({
   return createHash("sha256")
     .update(stableJson({
       schemaVersion: "food-catalog-semantic-batch-v2",
-      source,
+      source: normalizeFoodCatalogSourceDescriptor(source),
       manifestContentChecksumSha256,
       expectedMutations
     }))
