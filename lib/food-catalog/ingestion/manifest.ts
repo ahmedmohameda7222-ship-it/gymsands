@@ -9,6 +9,7 @@ import type {
   FoodCatalogSourceDescriptor,
   FoodCatalogValidationIssue
 } from "./contracts";
+import { normalizeFoodCatalogSourceDescriptor } from "./normalize";
 
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
@@ -78,7 +79,7 @@ export function canonicalizeManifestContent(
   content: FoodCatalogDryRunManifestContent
 ): FoodCatalogDryRunManifestContent {
   return {
-    source: content.source,
+    source: normalizeFoodCatalogSourceDescriptor(content.source),
     candidates: content.candidates
       .map(canonicalizeManifestCandidate)
       .sort((left, right) => {
