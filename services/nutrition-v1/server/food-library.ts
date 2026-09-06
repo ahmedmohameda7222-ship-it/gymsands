@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type FoodLibrarySource = "catalog" | "my_food";
-export type FoodLibraryLocale = "en" | "de" | "ar";
+export type FoodLibraryLocale = string;
 export type FoodLibraryPreset = "high-protein" | "low-carb";
-export type FoodLibraryNumericOperator = "gte" | "lte" | "eq" | "between";
+export type FoodLibraryNumericOperator = "gt" | "lt" | "eq" | "gte" | "lte" | "between";
 export type FoodLibraryBasisUnit = "g" | "ml" | "serving" | "piece" | "custom";
 
 export type FoodLibraryNutrition = {
@@ -26,6 +26,12 @@ export type FoodLibraryAlias = {
   value: string;
 };
 
+export type FoodLibraryNutritionLabelPolicy = {
+  policyVersion: string;
+  highProteinMinGPer100: number;
+  lowCarbMaxGPer100: number;
+};
+
 export type FoodLibraryCandidate = {
   id: string;
   source: FoodLibrarySource;
@@ -41,6 +47,7 @@ export type FoodLibraryCandidate = {
   locale: FoodLibraryLocale;
   aliases: FoodLibraryAlias[];
   nutrition: FoodLibraryNutrition;
+  nutritionLabels?: FoodLibraryPreset[];
   tags?: string[];
   usingPersonalValues?: boolean;
 };
@@ -129,6 +136,8 @@ function normalizedNutrient(
 function numericMatch(value: number | null, filter: FoodLibraryNumericFilter | undefined) {
   if (!filter) return true;
   if (value === null || !Number.isFinite(filter.value)) return false;
+  if (filter.operator === "gt") return value > filter.value;
+  if (filter.operator === "lt") return value < filter.value;
   if (filter.operator === "gte") return value >= filter.value;
   if (filter.operator === "lte") return value <= filter.value;
   if (filter.operator === "eq") return Math.abs(value - filter.value) < 0.0001;
@@ -140,14 +149,19 @@ function numericMatch(value: number | null, filter: FoodLibraryNumericFilter | u
 export function qualifiesFoodNutrition(
   nutrition: FoodLibraryNutrition,
   filters: FoodLibraryNutritionFilters,
+  policy?: FoodLibraryNutritionLabelPolicy | null,
 ) {
   const presets = filters.presets ?? [];
   const protein = normalizedNutrient(nutrition, "protein_g");
   const carbs = normalizedNutrient(nutrition, "carbs_g");
   const fat = normalizedNutrient(nutrition, "fat_g");
   const calories = normalizedNutrient(nutrition, "calories");
-  if (presets.includes("high-protein") && (protein === null || protein < 20)) return false;
-  if (presets.includes("low-carb") && (carbs === null || carbs > 10)) return false;
+
+  // Convenience filters are Product policy, not a Food fact. Until an exact
+  // versioned policy is supplied, no runtime helper may silently choose values.
+  if (presets.length && !policy) return false;
+  if (presets.includes("high-protein") && (protein === null || protein < (policy as FoodLibraryNutritionLabelPolicy).highProteinMinGPer100)) return false;
+  if (presets.includes("low-carb") && (carbs === null || carbs > (policy as FoodLibraryNutritionLabelPolicy).lowCarbMaxGPer100)) return false;
   if (!numericMatch(protein, filters.protein)) return false;
   if (!numericMatch(carbs, filters.carbs)) return false;
   if (!numericMatch(fat, filters.fat)) return false;
