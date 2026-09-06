@@ -73,6 +73,7 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     const currentBatch0Entries = current.entries.filter((entry) => entry.localFile === BATCH0_MIGRATION);
     const currentPlan3Entries = current.entries.filter((entry) => entry.localFile === PLAN3_MIGRATION);
     const currentPlan4Entries = current.entries.filter((entry) => entry.localFile === PLAN4_MIGRATION);
+    const currentPlan5Entries = current.entries.filter((entry) => entry.localFile === PLAN5_MIGRATION);
     const currentPendingEntries = current.entries.filter((entry) => entry.state === "pending");
 
     expect(historicalEntries).toEqual(base.entries);
@@ -117,19 +118,22 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         productionName: "food_catalog_ingestion_v2_authority",
       }),
     ]);
-    expect(currentPendingEntries).toEqual([
+    expect(currentPlan5Entries).toEqual([
       expect.objectContaining({
         localFile: PLAN5_MIGRATION,
-        state: "pending",
+        state: "applied_version_alias",
+        productionVersion: "20260906200129",
+        productionName: "food_catalog_search_projection_v2",
       }),
     ]);
-    expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(1);
+    expect(currentPendingEntries).toEqual([]);
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "pending",
-        pendingCount: 1,
-        unresolvedCount: 1,
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
       })
     );
   });
