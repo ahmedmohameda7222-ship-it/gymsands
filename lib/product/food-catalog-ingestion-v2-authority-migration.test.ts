@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const MIGRATION_FILE = "20260904100000_food_catalog_ingestion_v2_authority.sql";
+const PLAN5_MIGRATION_FILE = "20260906183000_food_catalog_search_projection_v2.sql";
 const MIGRATION_PATH = `supabase/migrations/${MIGRATION_FILE}`;
 const VERIFICATION_PATH = "supabase/verification/food-catalog-ingestion-v2-authority.sql";
 const RECONCILIATION_DOC = "docs/architecture/migration-ledger-reconciliation.md";
@@ -224,19 +225,24 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(verificationSql).toContain("rollback");
   });
 
-  it("records the verified Production application under the generated immutable alias", () => {
+  it("records the verified Plan 4 Production alias while exactly Plan 5 remains pending", () => {
     expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.productionRecordCount).toBe(119);
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
-    expect(ledger.historyRepair.state).toBe("reconciled");
-    expect(ledger.historyRepair.pendingCount).toBe(0);
-    expect(ledger.historyRepair.unresolvedCount).toBe(0);
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.state).toBe("pending");
+    expect(ledger.historyRepair.pendingCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
     expect(ledger.historyRepair.schemaAppliedUntrackedCount).toBe(0);
     expect(releaseCompatibility.databaseMigrationMarkerVersion).toBe("20260724232734");
 
     const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
-    expect(pendingEntries).toHaveLength(0);
+    expect(pendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: PLAN5_MIGRATION_FILE,
+        state: "pending",
+      }),
+    ]);
 
     const plan4 = ledger.entries.find((entry) => entry.localFile === MIGRATION_FILE);
     expect(plan4).toEqual({
@@ -251,9 +257,10 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(plan3?.productionVersion).toBe("20260903210503");
     expect(plan3?.productionName).toBe("food_catalog_generation_authority");
     expect(reconciliationDoc).toContain(MIGRATION_FILE);
+    expect(reconciliationDoc).toContain(PLAN5_MIGRATION_FILE);
     expect(reconciliationDoc).toContain("20260906131808_food_catalog_ingestion_v2_authority");
     expect(reconciliationDoc).toContain("physical production migration records: **119**");
-    expect(reconciliationDoc).toContain("pending repository migrations: **0**");
-    expect(reconciliationDoc).toContain("`unresolvedcount = 0`");
+    expect(reconciliationDoc).toContain("pending repository migrations: **1**");
+    expect(reconciliationDoc).toContain("`unresolvedcount = 1`");
   });
 });
