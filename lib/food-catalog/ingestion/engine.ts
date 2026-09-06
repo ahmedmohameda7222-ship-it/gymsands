@@ -43,6 +43,12 @@ type EvaluatedCandidate = {
   errorIssueCodes: FoodCatalogValidationIssueCode[];
 };
 
+type SameManifestStrongConflicts = {
+  gtins: Set<string>;
+  semanticSignatures: Set<string>;
+  qualifiedAliases: Set<string>;
+};
+
 function uniqueSortedStrings(values: readonly string[]): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
@@ -101,23 +107,23 @@ function assertUniqueNormalizedSourceIdentities(
   }
 }
 
-function sameManifestUnownedGtinConflicts(
+function collectUnownedSameManifestCollisions(
   candidates: readonly EvaluatedCandidate[],
-  index: FoodCatalogMatchIndex
+  indexedKeys: ReadonlySet<string>,
+  keysForCandidate: (candidate: EvaluatedCandidate["candidate"]) => readonly string[]
 ): Set<string> {
-  const indexedGtins = new Set(index.gtinOwners.map((owner) => owner.gtin));
-  const firstSourceByGtin = new Map<string, string>();
+  const firstSourceByKey = new Map<string, string>();
   const conflicts = new Set<string>();
 
   for (const entry of candidates) {
     if (entry.errorIssueCodes.length > 0) continue;
-    for (const gtin of entry.candidate.gtins) {
-      if (indexedGtins.has(gtin)) continue;
-      const firstSource = firstSourceByGtin.get(gtin);
+    for (const key of keysForCandidate(entry.candidate)) {
+      if (indexedKeys.has(key)) continue;
+      const firstSource = firstSourceByKey.get(key);
       if (firstSource === undefined) {
-        firstSourceByGtin.set(gtin, entry.candidate.sourceRecordId);
+        firstSourceByKey.set(key, entry.candidate.sourceRecordId);
       } else if (firstSource !== entry.candidate.sourceRecordId) {
-        conflicts.add(gtin);
+        conflicts.add(key);
       }
     }
   }
@@ -125,13 +131,74 @@ function sameManifestUnownedGtinConflicts(
   return conflicts;
 }
 
+function qualifiedAliasKey(
+  normalizedAlias: string,
+  state: string,
+  preparation: string,
+  form: string
+): string {
+  return `${normalizedAlias}\u0000${state}\u0000${preparation}\u0000${form}`;
+}
+
+function candidateQualifiedAliasKeys(candidate: EvaluatedCandidate["candidate"]): string[] {
+  const { state, preparation, form } = candidate.identityEvidence;
+  if (!state || !preparation || !form) return [];
+  return candidate.aliases.map((alias) =>
+    qualifiedAliasKey(alias.normalizedValue, state, preparation, form)
+  );
+}
+
+function sameManifestUnownedStrongConflicts(
+  candidates: readonly EvaluatedCandidate[],
+  index: FoodCatalogMatchIndex
+): SameManifestStrongConflicts {
+  const indexedGtins = new Set(index.gtinOwners.map((owner) => owner.gtin));
+  const indexedSemanticSignatures = new Set(
+    index.semanticIdentities.map((entry) => entry.semanticSignature)
+  );
+  const indexedQualifiedAliases = new Set(
+    index.qualifiedAliases.map((entry) =>
+      qualifiedAliasKey(entry.normalizedAlias, entry.state, entry.preparation, entry.form)
+    )
+  );
+
+  return {
+    gtins: collectUnownedSameManifestCollisions(
+      candidates,
+      indexedGtins,
+      (candidate) => candidate.gtins
+    ),
+    semanticSignatures: collectUnownedSameManifestCollisions(
+      candidates,
+      indexedSemanticSignatures,
+      (candidate) => candidate.identityEvidence.semanticSignature
+        ? [candidate.identityEvidence.semanticSignature]
+        : []
+    ),
+    qualifiedAliases: collectUnownedSameManifestCollisions(
+      candidates,
+      indexedQualifiedAliases,
+      candidateQualifiedAliasKeys
+    )
+  };
+}
+
 function deriveSameManifestConflictReasons(
   candidate: EvaluatedCandidate["candidate"],
-  conflictingGtins: ReadonlySet<string>
+  conflicts: SameManifestStrongConflicts
 ): string[] {
-  return candidate.gtins.some((gtin) => conflictingGtins.has(gtin))
-    ? ["barcode_conflict", "identity_conflict"]
-    : [];
+  const reasons: string[] = [];
+  if (candidate.gtins.some((gtin) => conflicts.gtins.has(gtin))) {
+    reasons.push("barcode_conflict", "identity_conflict");
+  }
+  if (
+    (candidate.identityEvidence.semanticSignature !== null
+      && conflicts.semanticSignatures.has(candidate.identityEvidence.semanticSignature))
+    || candidateQualifiedAliasKeys(candidate).some((key) => conflicts.qualifiedAliases.has(key))
+  ) {
+    reasons.push("identity_conflict");
+  }
+  return uniqueSortedStrings(reasons);
 }
 
 export function buildFoodCatalogDryRun<TArtifact>(
@@ -153,7 +220,7 @@ export function buildFoodCatalogDryRun<TArtifact>(
     );
     return { candidate, issues, errorIssueCodes };
   });
-  const conflictingManifestGtins = sameManifestUnownedGtinConflicts(evaluatedCandidates, index);
+  const sameManifestConflicts = sameManifestUnownedStrongConflicts(evaluatedCandidates, index);
 
   const entries = evaluatedCandidates.map(({ candidate, issues, errorIssueCodes }) => {
     const matchInput = { source, candidate, index };
@@ -164,7 +231,7 @@ export function buildFoodCatalogDryRun<TArtifact>(
       ? []
       : uniqueSortedStrings([
           ...deriveCanonicalConflictReasons(matchInput),
-          ...deriveSameManifestConflictReasons(candidate, conflictingManifestGtins)
+          ...deriveSameManifestConflictReasons(candidate, sameManifestConflicts)
         ]);
     const disposition = deriveProcessingDisposition({
       decision,
