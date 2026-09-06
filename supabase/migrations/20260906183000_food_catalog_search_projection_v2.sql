@@ -379,8 +379,8 @@ begin
              coalesce(doc.protein_100::text, 'NULL'),
              coalesce(doc.carbs_100::text, 'NULL'),
              coalesce(doc.fat_100::text, 'NULL'),
-             array_to_string(doc.nutrition_labels, ','))
-           order by doc.food_id::text, doc.language_tag, doc.script_code
+             array_to_string(doc.nutrition_labels, ',')),
+           '' order by doc.food_id::text, doc.language_tag, doc.script_code
          ), ''), 'sha256'), 'hex')
     into v_document_count, v_checksum
   from public.food_catalog_search_documents doc
