@@ -3,7 +3,7 @@
 **Project:** `bkwezjxvapaeasfvlhvv`
 **Current reconciliation date:** 2026-09-06
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history is reconciled through the applied Food Catalog Plan 4 ingestion V2 authority migration; no repository migration remains pending or unresolved
+**Status:** Production migration history is physically reconciled through the applied Food Catalog Plan 5 Search Projection V2 migration; no repository migration remains pending or unresolved
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -11,13 +11,13 @@ Historical PR descriptions, completed implementation reports, and old audit snap
 
 ## Current state
 
-The latest verified Plaivra Production inspection after the authorized 2026-09-06 Food Catalog Plan 4 application established:
+The latest verified Plaivra Production inspection after the authorized 2026-09-06 Food Catalog Plan 5 application established:
 
-- Physical Production migration records: **119**
+- Physical Production migration records: **120**
 - Exact repository-name applications tracked as `state = applied`: **63**
-- Latest physical Production record: `20260906131808_food_catalog_ingestion_v2_authority`
-- Corresponding immutable repository migration: `20260904100000_food_catalog_ingestion_v2_authority.sql`
-- Frozen Plan 4 migration Git blob: `eb2cdc2ee16462d7712080a3e3532757ec093742`
+- Latest physical Production record: `20260906200129_food_catalog_search_projection_v2`
+- Corresponding immutable repository migration: `20260906183000_food_catalog_search_projection_v2.sql`
+- Frozen Plan 5 migration Git blob: `7be00af5e347ca8d58abcac74cf4c816761a0745`
 - Released compatibility marker: `20260724232734`
 - Activity Catalog Production remains isolated from the Main Plaivra migration ledger
 
@@ -30,7 +30,87 @@ The current repository/machine-ledger state records:
 - `historyRepair.state = reconciled`
 - migration-ledger `release_ready = true`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is now 119 records. No prior-plan repository migration remains pending or unresolved.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is 120 records. All repository migrations are currently resolved. Applied migrations must not be replayed.
+
+## Food Catalog Plan 5 Search Projection V2 — Production application 2026-09-06
+
+The forward-only repository migration:
+
+`20260906183000_food_catalog_search_projection_v2.sql`
+
+was frozen at Git blob:
+
+`7be00af5e347ca8d58abcac74cf4c816761a0745`
+
+Before Production application, exact-head PR Quality run `34056018392` passed on implementation/reconciliation precursor head `49e164103f9aa339107c63daabc71f74840ea03e`, including core, build, database replay/lint/verification/integration, CI contracts, rendered UI/i18n, integrity, and required-summary. Both exact-head Exercise runtime QA workflows also passed.
+
+Read-only Production preflight then proved:
+
+- the target was Plaivra Production `bkwezjxvapaeasfvlhvv`;
+- the physical migration head remained `20260906131808_food_catalog_ingestion_v2_authority`;
+- no Plan 5 migration identity existed;
+- `food_catalog_search_documents` and `food_catalog_search_nutrition_policies` did not exist;
+- the Plan 5 rebuild/search RPCs did not exist;
+- `food_items = 0`;
+- `food_source_records = 0`;
+- `food_ingestion_batches = 0`;
+- `food_ingestion_runs = 0`;
+- `food_catalog_generations = 0`;
+- `food_catalog_generation_foods = 0`;
+- `current_generation_id = NULL` and `pointer_revision = 0`;
+- the released compatibility marker remained `20260724232734`.
+
+The exact frozen migration was applied once through the connected tracked Supabase migration mechanism. Supabase generated physical identity:
+
+`20260906200129_food_catalog_search_projection_v2`
+
+Immediate structural/security read-back proved:
+
+- both Plan 5 tables exist with RLS enabled;
+- `service_role` has `SELECT` but no direct `INSERT`, `UPDATE`, `DELETE`, or `TRUNCATE` authority on the two Plan 5 tables;
+- `anon` and `authenticated` have no direct table authority on the Plan 5 tables;
+- `public.rebuild_food_catalog_search_projection_v2(uuid,text,text)` exists as `SECURITY DEFINER` and is executable only by `service_role` among the application roles;
+- `public.search_food_catalog_v2(text,text,text,text,text,integer,text,text,text,jsonb)` exists as `SECURITY DEFINER`, `STABLE`, is executable by `authenticated` and `service_role`, and is denied to `anon`;
+- the expected generation/context, trigram, FTS, protein, carbs, and fat indexes exist;
+- `food_catalog_search_nutrition_policies = 0`;
+- `food_catalog_search_documents = 0`;
+- canonical Food/source/ingestion/generation data remained unpopulated;
+- `current_generation_id = NULL` and `pointer_revision = 0`;
+- the released compatibility marker remained `20260724232734`.
+
+The registered Plan 5 Production verifier was then executed with all synthetic fixture mutations inside one transaction ending in `ROLLBACK`. It proved:
+
+- Plan 5 schema/RLS/RPC privilege boundaries;
+- null-safe strict numeric `gt`, `lt`, and `eq` filtering;
+- deterministic SearchDocument rebuild equality;
+- no convenience nutrition labels without explicit versioned policy authority;
+- exact-policy High Protein / Low Carb label derivation using a rollback-only test policy;
+- generation-bound search visibility;
+- explicit language/script and market ranking behavior;
+- numeric nutrient filters compose with AND semantics;
+- High Protein + Low Carb presets compose with AND semantics;
+- keyset cursors are bound to the exact search context and reject context reuse;
+- deterministic repeated search results with bounded page size.
+
+The verifier transaction rolled back successfully. Final zero-residue read-back proved:
+
+- `food_items = 0`;
+- `food_source_records = 0`;
+- `food_ingestion_batches = 0`;
+- `food_ingestion_runs = 0`;
+- `food_catalog_search_nutrition_policies = 0`;
+- `food_catalog_search_documents = 0`;
+- `food_catalog_activation_sets = 0`;
+- `food_catalog_generations = 0`;
+- `food_catalog_generation_foods = 0`;
+- `food_catalog_generation_events = 0`;
+- `current_generation_id = NULL`;
+- `pointer_revision = 0`;
+- released compatibility marker `20260724232734` unchanged.
+
+Plan 5 deliberately creates versioned nutrition-policy authority without inventing Product threshold values. No numeric High Protein or Low Carb threshold has been approved; the policy table remains empty. The rollback-only verifier policy is test evidence only and is not Product authority.
+
+Migration application and verification performed no Food population, provider ingestion, persistent ingestion dry-run, activation, verification approval, Catalog Generation creation/promotion, current-pointer movement, deployment, compatibility-marker promotion, or Activity Catalog mutation. The machine ledger records this migration as `state = applied_version_alias` with Production version `20260906200129` and Production name `food_catalog_search_projection_v2`. Do not replay this migration.
 
 ## Food Catalog Plan 4 ingestion V2 — Production application 2026-09-06
 
@@ -347,7 +427,7 @@ The later forward-only Nutrition V1 corrections are represented by these generat
 
 The final identity maps to immutable repository migration `20260829110000_nutrition_v1_final_review_corrections.sql`.
 
-No Nutrition V1 repository migration remains pending or unresolved. The Main Plaivra repository contains applied Food Catalog Plan 3 migration `20260902150000_food_catalog_generation_authority.sql` as generated identity `20260903210503_food_catalog_generation_authority` and applied Plan 4 migration `20260904100000_food_catalog_ingestion_v2_authority.sql` as generated identity `20260906131808_food_catalog_ingestion_v2_authority`. No prior-Plan repository migration remains pending or unresolved.
+No Nutrition V1 repository migration remains pending or unresolved. The Main Plaivra repository contains applied Food Catalog Plan 3 migration `20260902150000_food_catalog_generation_authority.sql` as generated identity `20260903210503_food_catalog_generation_authority`, applied Plan 4 migration `20260904100000_food_catalog_ingestion_v2_authority.sql` as generated identity `20260906131808_food_catalog_ingestion_v2_authority`, and applied Plan 5 migration `20260906183000_food_catalog_search_projection_v2.sql` as generated identity `20260906200129_food_catalog_search_projection_v2`. No repository migration remains pending or unresolved.
 
 ## Meal Plan duplicate-history repair
 

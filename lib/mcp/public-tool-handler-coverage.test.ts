@@ -181,7 +181,7 @@ function createInMemorySupabase() {
   }
 
   async function rpc(name: string, args: Record<string, unknown>) {
-    if (name === "search_nutrition_food_library") {
+    if (name === "search_food_catalog_v2") {
       const query = String(args.p_query ?? "").trim().toLowerCase();
       const limit = Math.max(1, Number(args.p_limit ?? 20));
       const items = tables.food_items

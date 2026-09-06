@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type FoodLibrarySource = "catalog" | "my_food";
-export type FoodLibraryLocale = "en" | "de" | "ar";
+export type FoodLibraryLocale = string;
 export type FoodLibraryPreset = "high-protein" | "low-carb";
-export type FoodLibraryNumericOperator = "gte" | "lte" | "eq" | "between";
+export type FoodLibraryNumericOperator = "gt" | "lt" | "eq" | "gte" | "lte" | "between";
 export type FoodLibraryBasisUnit = "g" | "ml" | "serving" | "piece" | "custom";
 
 export type FoodLibraryNutrition = {
@@ -26,6 +26,12 @@ export type FoodLibraryAlias = {
   value: string;
 };
 
+export type FoodLibraryNutritionLabelPolicy = {
+  policyVersion: string;
+  highProteinMinGPer100: number;
+  lowCarbMaxGPer100: number;
+};
+
 export type FoodLibraryCandidate = {
   id: string;
   source: FoodLibrarySource;
@@ -41,6 +47,7 @@ export type FoodLibraryCandidate = {
   locale: FoodLibraryLocale;
   aliases: FoodLibraryAlias[];
   nutrition: FoodLibraryNutrition;
+  nutritionLabels?: FoodLibraryPreset[];
   tags?: string[];
   usingPersonalValues?: boolean;
 };
@@ -62,6 +69,8 @@ export type FoodLibraryNutritionFilters = {
 export type FoodLibraryQuery = FoodLibraryNutritionFilters & {
   query?: string;
   locale?: FoodLibraryLocale;
+  scriptCode?: string | null;
+  marketScopeCode?: string | null;
   cursor?: string | null;
   limit?: number;
   category?: string | null;
@@ -127,6 +136,8 @@ function normalizedNutrient(
 function numericMatch(value: number | null, filter: FoodLibraryNumericFilter | undefined) {
   if (!filter) return true;
   if (value === null || !Number.isFinite(filter.value)) return false;
+  if (filter.operator === "gt") return value > filter.value;
+  if (filter.operator === "lt") return value < filter.value;
   if (filter.operator === "gte") return value >= filter.value;
   if (filter.operator === "lte") return value <= filter.value;
   if (filter.operator === "eq") return Math.abs(value - filter.value) < 0.0001;
@@ -138,14 +149,19 @@ function numericMatch(value: number | null, filter: FoodLibraryNumericFilter | u
 export function qualifiesFoodNutrition(
   nutrition: FoodLibraryNutrition,
   filters: FoodLibraryNutritionFilters,
+  policy?: FoodLibraryNutritionLabelPolicy | null,
 ) {
   const presets = filters.presets ?? [];
   const protein = normalizedNutrient(nutrition, "protein_g");
   const carbs = normalizedNutrient(nutrition, "carbs_g");
   const fat = normalizedNutrient(nutrition, "fat_g");
   const calories = normalizedNutrient(nutrition, "calories");
-  if (presets.includes("high-protein") && (protein === null || protein < 20)) return false;
-  if (presets.includes("low-carb") && (carbs === null || carbs > 10)) return false;
+
+  // Convenience filters are Product policy, not a Food fact. Until an exact
+  // versioned policy is supplied, no runtime helper may silently choose values.
+  if (presets.length && !policy) return false;
+  if (presets.includes("high-protein") && (protein === null || protein < (policy as FoodLibraryNutritionLabelPolicy).highProteinMinGPer100)) return false;
+  if (presets.includes("low-carb") && (carbs === null || carbs > (policy as FoodLibraryNutritionLabelPolicy).lowCarbMaxGPer100)) return false;
   if (!numericMatch(protein, filters.protein)) return false;
   if (!numericMatch(carbs, filters.carbs)) return false;
   if (!numericMatch(fat, filters.fat)) return false;
@@ -250,9 +266,11 @@ export async function listFoodLibrary(
 ): Promise<FoodLibraryPage> {
   const requested = Number(options.limit ?? MAX_PAGE_SIZE);
   const limit = Math.max(1, Math.min(MAX_PAGE_SIZE, Number.isFinite(requested) ? Math.floor(requested) : MAX_PAGE_SIZE));
-  const result = await supabase.rpc("search_nutrition_food_library", {
+  const result = await supabase.rpc("search_food_catalog_v2", {
     p_query: options.query?.trim() ?? "",
-    p_locale: options.locale ?? "en",
+    p_language_tag: options.locale ?? "en",
+    p_script_code: options.scriptCode?.trim() || null,
+    p_market_scope_code: options.marketScopeCode?.trim() || null,
     p_cursor: options.cursor ?? null,
     p_limit: limit,
     p_category: options.category?.trim() || null,
@@ -260,8 +278,8 @@ export async function listFoodLibrary(
     p_scope: options.scope ?? "all",
     p_filters: filterPayload(options),
   });
-  const data = checked(result as unknown as { data: unknown; error: { message?: string } | null }, "Food Library authoritative search");
-  if (!isFoodLibraryPage(data)) throw new Error("Food Library authoritative search returned an invalid page.");
+  const data = checked(result as unknown as { data: unknown; error: { message?: string } | null }, "Food Catalog V2 authoritative search");
+  if (!isFoodLibraryPage(data)) throw new Error("Food Catalog V2 authoritative search returned an invalid page.");
   return data;
 }
 

@@ -9,6 +9,10 @@ function value(value: number | null, locale: string, unit = "g") {
   return value === null ? "—" : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(Math.round(value * 10) / 10)} ${unit}`;
 }
 
+function normalizedTag(value: string) {
+  return value.trim().toLowerCase().replace(/[\s_-]+/g, " ");
+}
+
 export function FoodRow({
   food,
   onOpen,
@@ -21,7 +25,11 @@ export function FoodRow({
   onFavorite: () => void;
 }) {
   const { nt, locale, dir } = useNutritionV1Translation();
-  const tags = food.tags ?? [];
+  const nutritionLabels = food.nutritionLabels ?? [];
+  const tags = (food.tags ?? []).filter((tag) => {
+    const normalized = normalizedTag(tag);
+    return normalized !== "high protein" && normalized !== "low carb";
+  });
   return (
     <div className="flex min-h-[88px] items-center gap-3 border-b border-border/70 px-2 py-3 sm:px-3" dir={dir}>
       <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-start">
@@ -32,15 +40,14 @@ export function FoodRow({
           <div className="flex flex-wrap items-center gap-1.5">
             <bdi className="truncate text-sm font-semibold sm:text-[15px]" dir="auto">{food.name}</bdi>
             {food.verified ? <ShieldCheck className="h-4 w-4 shrink-0" aria-label={nt("plaivraVerified")} /> : null}
-            {tags.slice(0, 2).map((tag) => {
-              const normalized = tag.trim().toLowerCase().replace(/[\s_-]+/g, " ");
-              const label = normalized === "high protein"
-                ? nt("highProtein")
-                : normalized === "low carb"
-                  ? nt("lowCarb")
-                  : tag;
-              return <span key={tag} className="rounded-full border border-border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground"><bdi dir="auto">{label}</bdi></span>;
-            })}
+            {nutritionLabels.map((label) => (
+              <span key={label} className="rounded-full border border-border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <bdi dir="auto">{label === "high-protein" ? nt("highProtein") : label === "low-carb" ? nt("lowCarb") : label}</bdi>
+              </span>
+            ))}
+            {tags.slice(0, Math.max(0, 2 - nutritionLabels.length)).map((tag) => (
+              <span key={tag} className="rounded-full border border-border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground"><bdi dir="auto">{tag}</bdi></span>
+            ))}
           </div>
           <p className="mt-1 truncate text-xs text-muted-foreground"><bdi dir="auto">{food.servingLabel}</bdi>{food.category ? <> · <bdi dir="auto">{food.category}</bdi></> : null}{food.cuisine ? <> · <bdi dir="auto">{food.cuisine}</bdi></> : null}</p>
           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
