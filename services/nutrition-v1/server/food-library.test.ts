@@ -7,6 +7,7 @@ import {
   rankFoodLibraryCandidates,
   resolveEffectiveFoodNutrition,
   type FoodLibraryCandidate,
+  type FoodLibraryNutritionLabelPolicy,
 } from "@/services/nutrition-v1/server/food-library";
 
 function candidate(overrides: Partial<FoodLibraryCandidate> = {}): FoodLibraryCandidate {
@@ -39,6 +40,12 @@ function candidate(overrides: Partial<FoodLibraryCandidate> = {}): FoodLibraryCa
     ...overrides,
   };
 }
+
+const fixturePolicy: FoodLibraryNutritionLabelPolicy = {
+  policyVersion: "test-only-policy-v1",
+  highProteinMinGPer100: 30,
+  lowCarbMaxGPer100: 5,
+};
 
 describe("Nutrition V1 Food Library search authority", () => {
   it("ranks exact personal identity first, then exact catalog intent, then exact alias, with personal relevance only inside relevant matches", () => {
@@ -113,11 +120,19 @@ describe("Nutrition V1 Food Library search authority", () => {
     expect(effective).toMatchObject({ calories: 150, protein_g: 31, carbs_g: null, fat_g: 3, basis_amount: 100, basis_unit: "g" });
   });
 
-  it("never qualifies unknown nutrition or an unknown normalized basis for numeric/discovery filters", () => {
+  it("requires explicit versioned policy for convenience labels and never qualifies unknown nutrition", () => {
     const known = candidate().nutrition;
-    expect(qualifiesFoodNutrition(known, { presets: ["high-protein"] })).toBe(true);
-    expect(qualifiesFoodNutrition({ ...known, protein_g: null }, { presets: ["high-protein"] })).toBe(false);
-    expect(qualifiesFoodNutrition({ ...known, carbs_g: null }, { presets: ["low-carb"] })).toBe(false);
-    expect(qualifiesFoodNutrition({ ...known, basis_amount: null, basis_unit: null }, { protein: { operator: "gte", value: 20 } })).toBe(false);
+    expect(qualifiesFoodNutrition(known, { presets: ["high-protein"] })).toBe(false);
+    expect(qualifiesFoodNutrition(known, { presets: ["high-protein", "low-carb"] }, fixturePolicy)).toBe(true);
+    expect(qualifiesFoodNutrition({ ...known, protein_g: null }, { presets: ["high-protein"] }, fixturePolicy)).toBe(false);
+    expect(qualifiesFoodNutrition({ ...known, carbs_g: null }, { presets: ["low-carb"] }, fixturePolicy)).toBe(false);
+    expect(qualifiesFoodNutrition({ ...known, basis_amount: null, basis_unit: null }, { protein: { operator: "gt", value: 20 } })).toBe(false);
+  });
+
+  it("supports strict greater-than, less-than and equality numeric predicates independently per nutrient", () => {
+    const known = candidate().nutrition;
+    expect(qualifiesFoodNutrition(known, { protein: { operator: "gt", value: 30 } })).toBe(true);
+    expect(qualifiesFoodNutrition(known, { protein: { operator: "lt", value: 31 } })).toBe(false);
+    expect(qualifiesFoodNutrition(known, { protein: { operator: "eq", value: 31 }, carbs: { operator: "eq", value: 0 }, fat: { operator: "lt", value: 4 } })).toBe(true);
   });
 });
