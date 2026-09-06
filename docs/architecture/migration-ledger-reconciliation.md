@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-09-04
+**Current reconciliation date:** 2026-09-06
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Physical Production migration history remains reconciled through the applied Plan 3 generation-authority migration; Food Catalog Plan 4 is repository-only pending and is not applied to Plaivra Production
+**Status:** Production migration history is reconciled through the applied Food Catalog Plan 4 ingestion V2 authority migration; no repository migration remains pending or unresolved
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -11,38 +11,86 @@ Historical PR descriptions, completed implementation reports, and old audit snap
 
 ## Current state
 
-The latest verified Plaivra Production inspection after the authorized 2026-09-03 Food Catalog Plan 3 application established:
+The latest verified Plaivra Production inspection after the authorized 2026-09-06 Food Catalog Plan 4 application established:
 
-- Physical Production migration records: **118**
+- Physical Production migration records: **119**
 - Exact repository-name applications tracked as `state = applied`: **63**
-- Latest physical Production record: `20260903210503_food_catalog_generation_authority`
-- Corresponding immutable repository migration: `20260902150000_food_catalog_generation_authority.sql`
-- Frozen Plan 3 migration Git blob: `65cd33d5a6e8bc7af08ba8079fff8e9da6a68122`
+- Latest physical Production record: `20260906131808_food_catalog_ingestion_v2_authority`
+- Corresponding immutable repository migration: `20260904100000_food_catalog_ingestion_v2_authority.sql`
+- Frozen Plan 4 migration Git blob: `eb2cdc2ee16462d7712080a3e3532757ec093742`
 - Released compatibility marker: `20260724232734`
 - Activity Catalog Production remains isolated from the Main Plaivra migration ledger
 
 The current repository/machine-ledger state records:
 
-- Repository-only pending migrations: **1**
-- `pendingCount = 1`
+- Pending repository migrations: **0**
+- `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 1`
-- `historyRepair.state = pending`
-- migration-ledger `release_ready = false`
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
+- migration-ledger `release_ready = true`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history remains 118 records. The pending repository classification does not claim a new Production migration identity or a fresh Production inspection.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is now 119 records. No prior-plan repository migration remains pending or unresolved.
 
-## Food Catalog Plan 4 ingestion V2 — repository-only pending
+## Food Catalog Plan 4 ingestion V2 — Production application 2026-09-06
 
 The forward-only repository migration:
 
 `20260904100000_food_catalog_ingestion_v2_authority.sql`
 
-is currently classified as `state = pending`. It has **not** been applied to Plaivra Production and therefore has no Production version/name mapping. The physically verified Production head remains `20260903210503_food_catalog_generation_authority`, with **118** physical Production migration records at the latest verified inspection.
+was independently squash-merged in PR #168, with merged `main` fixed at `19cdeecd2590381d9f74cba79f6ae6bfd482c551`. The merged file resolved to frozen Git blob:
 
-Plan 4 may be applied only after PR #168 is merged and a fresh exact-target/history/schema-drift Production preflight succeeds under the standing migration authority. Until then, do not apply or replay this pending migration.
+`eb2cdc2ee16462d7712080a3e3532757ec093742`
 
-The Plan 4 repository work does not authorize or claim Food population, a real provider import, activation, verification, Catalog Generation creation/promotion, current-generation mutation, compatibility-marker promotion, application deployment, or Activity Catalog mutation. The released compatibility marker remains `20260724232734`.
+Read-only Production preflight proved the target was Plaivra Production `bkwezjxvapaeasfvlhvv` in `eu-central-1`, the physical migration head remained `20260903210503_food_catalog_generation_authority`, no Plan 4 migration record existed, Plan 4 tables/columns/guards were absent rather than partially applied, canonical Food/source/ingestion/generation data remained empty, `current_generation_id = NULL`, and `pointer_revision = 0`. The frozen migration contains no Activity Catalog target.
+
+The exact migration was applied once through the connected Supabase tracked migration mechanism. Supabase generated physical identity:
+
+`20260906131808_food_catalog_ingestion_v2_authority`
+
+Immediate structural/security read-back proved:
+
+- exactly one migration-history record exists for `food_catalog_ingestion_v2_authority`;
+- all nine Plan 4 authority tables exist and have RLS enabled;
+- `service_role` has `SELECT` but no direct `INSERT`, `UPDATE`, `DELETE`, or `TRUNCATE` authority on those Plan 4 authority tables;
+- `anon` and `authenticated` have no table mutation authority on the Plan 4 authority tables;
+- all ten approved Plan 4 command RPCs exist as `SECURITY DEFINER`, are executable by `service_role`, and are not executable by `anon` or `authenticated`;
+- the semantic-batch checksum constraint and partial unique semantic-identity index exist;
+- the run lease-shape constraint and expected Plan 4 indexes exist;
+- immutable-row triggers exist for command replay, manifest, materialized result, quarantine, quarantine resolution, reconciliation, release-diff, release-diff-record, and operational-event authority;
+- the inherited Batch 0 `service_role` direct-mutation guard is installed on ingestion batches, runs, and batch membership;
+- successful exact dry-run reconciliation freezes semantic batch identity, future dry-run attempts, manifest expansion, and batch membership;
+- persisted-candidate and reconciliation code preserve deterministic batch-then-run lock order;
+- Production mutation requires the exact live lease token/epoch and stale cross-attempt leases are terminalized before takeover;
+- Production candidate persistence is bound to the exact approved per-record immutable manifest;
+- quarantine writes are bound to reviewed manifest disposition/reason/evidence authority;
+- reconciliation computes immutable mismatch authority including missing/extra/duplicate/idempotency/partial/quarantine/outcome-count divergence;
+- release-diff classification and checksum are recomputed from immutable manifest authority;
+- zero-record dry-run reconciliation has an explicit prepared-to-running start boundary;
+- `food_items.serving_size` is nullable as required for structured serving evidence.
+
+Rollback-only synthetic Production verification then proved the executable boundaries without leaving Product data behind:
+
+- zero-record dry-run reconciliation starts and completes successfully;
+- successful reconciliation freezes the semantic batch and rejects a fresh mutable dry-run attempt;
+- inherited Batch 0 `service_role` direct DML is rejected for Plan 4 semantic authority;
+- a live cross-attempt Production lease cannot be stolen;
+- an expired prior attempt is terminalized as `cancelled` before takeover;
+- `lease_lost` and `lease_takeover` lifecycle events are recorded correctly.
+
+The verification transaction was rolled back. Final read-back proved:
+
+- `food_items = 0`;
+- `food_source_records = 0`;
+- `food_ingestion_batches = 0`;
+- `food_ingestion_runs = 0`;
+- Plan 4 manifest/materialized/quarantine/reconciliation/release-diff/event rows = 0;
+- `food_catalog_generations = 0`;
+- generation Food/event rows = 0;
+- `current_generation_id = NULL`;
+- `pointer_revision = 0`.
+
+Migration application and verification performed no Food population, USDA/FDC/FNDDS/provider ingestion, persistent dry-run batch execution, Production candidate materialization, activation, verification approval, Catalog Generation creation, generation promotion, current-pointer movement, runtime/member cutover, deployment, or Activity Catalog mutation. The released compatibility marker remains `20260724232734`. The machine ledger records this migration as `state = applied_version_alias` with Production version `20260906131808` and Production name `food_catalog_ingestion_v2_authority`. Do not replay this migration.
 
 ## Food Catalog Plan 3 generation authority — Production application 2026-09-03
 
@@ -210,7 +258,7 @@ At Nutrition V1 feature closure, Production `/api/version` reported:
 
 This is the verified Nutrition V1 closure baseline, not a claim about permanently current physical Production migration identity. Documentation-only and later product/schema commits can advance Git, deployed commit identity, and physical migration history. Exact current runtime identity must be verified live from GitHub `main`, Vercel, and Production `/api/version`.
 
-Physical schema advancement and compatibility-marker promotion are separate authorities. The 2026-08-30, 2026-09-01, and 2026-09-03 schema applications did not change the released compatibility marker because the runtime compatibility contract remains anchored to marker `20260724232734`.
+Physical schema advancement and compatibility-marker promotion are separate authorities. The 2026-08-30, 2026-09-01, 2026-09-03, and 2026-09-06 schema applications did not change the released compatibility marker because the runtime compatibility contract remains anchored to marker `20260724232734`.
 
 ## Immutable migration rules
 
@@ -299,7 +347,7 @@ The later forward-only Nutrition V1 corrections are represented by these generat
 
 The final identity maps to immutable repository migration `20260829110000_nutrition_v1_final_review_corrections.sql`.
 
-No Nutrition V1 repository migration remains pending or unresolved. The Main Plaivra repository contains the applied Plan 3 migration `20260902150000_food_catalog_generation_authority.sql`, represented by generated Production identity `20260903210503_food_catalog_generation_authority`. No prior-Plan repository migration remains pending or unresolved; only Plan 4 `20260904100000_food_catalog_ingestion_v2_authority.sql` is repository-only pending.
+No Nutrition V1 repository migration remains pending or unresolved. The Main Plaivra repository contains applied Food Catalog Plan 3 migration `20260902150000_food_catalog_generation_authority.sql` as generated identity `20260903210503_food_catalog_generation_authority` and applied Plan 4 migration `20260904100000_food_catalog_ingestion_v2_authority.sql` as generated identity `20260906131808_food_catalog_ingestion_v2_authority`. No prior-Plan repository migration remains pending or unresolved.
 
 ## Meal Plan duplicate-history repair
 
