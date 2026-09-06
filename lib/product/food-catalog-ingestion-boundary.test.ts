@@ -63,7 +63,7 @@ function readableRuntimePaths(paths: string[]): string[] {
 }
 
 describe("Food Catalog Batch 0 ingestion boundary", () => {
-  it("preserves finalized Batch 0 authority while recording its later authorized Production alias", () => {
+  it("preserves finalized Batch 0 authority while recording later authorized Production aliases", () => {
     const base = readLedgerAt(APPROVED_BASE_SHA);
     const batch0 = readLedgerAt(BATCH0_FINAL_SHA);
     const current = readCurrentLedger();
@@ -71,6 +71,7 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     const historicalEntries = batch0.entries.filter((entry) => entry.localFile !== BATCH0_MIGRATION);
     const currentBatch0Entries = current.entries.filter((entry) => entry.localFile === BATCH0_MIGRATION);
     const currentPlan3Entries = current.entries.filter((entry) => entry.localFile === PLAN3_MIGRATION);
+    const currentPlan4Entries = current.entries.filter((entry) => entry.localFile === PLAN4_MIGRATION);
     const currentPendingEntries = current.entries.filter((entry) => entry.state === "pending");
 
     expect(historicalEntries).toEqual(base.entries);
@@ -107,21 +108,22 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         productionName: "food_catalog_generation_authority",
       }),
     ]);
-    expect(currentPendingEntries).toEqual([
+    expect(currentPlan4Entries).toEqual([
       expect.objectContaining({
         localFile: PLAN4_MIGRATION,
-        state: "pending",
+        state: "applied_version_alias",
+        productionVersion: "20260906131808",
+        productionName: "food_catalog_ingestion_v2_authority",
       }),
     ]);
-    expect(currentPendingEntries[0]?.productionVersion).toBeUndefined();
-    expect(currentPendingEntries[0]?.productionName).toBeUndefined();
-    expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(1);
+    expect(currentPendingEntries).toEqual([]);
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "pending",
-        pendingCount: 1,
-        unresolvedCount: 1,
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
       })
     );
   });
