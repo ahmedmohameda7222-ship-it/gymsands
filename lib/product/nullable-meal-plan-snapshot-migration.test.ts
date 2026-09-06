@@ -23,7 +23,7 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
     expect(source).not.toMatch(/alter\s+column\s+(?:quantity|status|completed_at|food_log_id)/i);
   });
 
-  it("preserves the authorized Production aliases while exactly Plan 5 remains pending", () => {
+  it("preserves the authorized Production aliases through reconciled Plan 5", () => {
     const ledger = JSON.parse(read("supabase/migration-ledger.json")) as {
       pendingCount: number;
       unresolvedCount: number;
@@ -41,12 +41,7 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
         productionName: "nullable_meal_plan_nutrition_snapshots",
       }),
     ]);
-    expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: plan5MigrationName,
-        state: "pending",
-      }),
-    ]);
+    expect(pendingEntries).toEqual([]);
     const plan4Entry = ledger.entries.find((entry) => entry.localFile === plan4MigrationName);
     expect(plan4Entry).toEqual(expect.objectContaining({
       localFile: plan4MigrationName,
@@ -54,11 +49,18 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
       productionVersion: "20260906131808",
       productionName: "food_catalog_ingestion_v2_authority",
     }));
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    const plan5Entry = ledger.entries.find((entry) => entry.localFile === plan5MigrationName);
+    expect(plan5Entry).toEqual(expect.objectContaining({
+      localFile: plan5MigrationName,
+      state: "applied_version_alias",
+      productionVersion: "20260906200129",
+      productionName: "food_catalog_search_projection_v2",
+    }));
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(ledger.historyRepair.pendingCount).toBe(0);
+    expect(ledger.historyRepair.unresolvedCount).toBe(0);
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {
