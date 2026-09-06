@@ -22,7 +22,7 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
     expect(source).not.toMatch(/alter\s+column\s+(?:quantity|status|completed_at|food_log_id)/i);
   });
 
-  it("records the authorized Production application as an immutable generated alias", () => {
+  it("preserves the authorized Production alias after Plan 4 reconciliation", () => {
     const ledger = JSON.parse(read("supabase/migration-ledger.json")) as {
       pendingCount: number;
       unresolvedCount: number;
@@ -40,17 +40,17 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
         productionName: "nullable_meal_plan_nutrition_snapshots",
       }),
     ]);
-    expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: plan4MigrationName,
-        state: "pending",
-      }),
-    ]);
-    expect(pendingEntries[0]?.productionVersion).toBeUndefined();
-    expect(pendingEntries[0]?.productionName).toBeUndefined();
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair.state).toBe("pending");
+    expect(pendingEntries).toEqual([]);
+    const plan4Entry = ledger.entries.find((entry) => entry.localFile === plan4MigrationName);
+    expect(plan4Entry).toEqual(expect.objectContaining({
+      localFile: plan4MigrationName,
+      state: "applied_version_alias",
+      productionVersion: "20260906131808",
+      productionName: "food_catalog_ingestion_v2_authority",
+    }));
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {

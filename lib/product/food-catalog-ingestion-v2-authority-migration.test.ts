@@ -224,30 +224,36 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(verificationSql).toContain("rollback");
   });
 
-  it("records exactly one repository-pending Plan 4 migration without inventing Production history", () => {
+  it("records the verified Production application under the generated immutable alias", () => {
     expect(ledger.productionMigrationCount).toBe(63);
-    expect(ledger.productionRecordCount).toBe(118);
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.productionRecordCount).toBe(119);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(ledger.historyRepair.pendingCount).toBe(0);
+    expect(ledger.historyRepair.unresolvedCount).toBe(0);
     expect(ledger.historyRepair.schemaAppliedUntrackedCount).toBe(0);
     expect(releaseCompatibility.databaseMigrationMarkerVersion).toBe("20260724232734");
 
     const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
-    expect(pendingEntries).toHaveLength(1);
-    expect(pendingEntries[0]?.localFile).toBe(MIGRATION_FILE);
-    expect(pendingEntries[0]?.productionVersion).toBeUndefined();
-    expect(pendingEntries[0]?.productionName).toBeUndefined();
-    expect(pendingEntries[0]?.note?.toLowerCase()).toContain("not applied to plaivra production");
+    expect(pendingEntries).toHaveLength(0);
+
+    const plan4 = ledger.entries.find((entry) => entry.localFile === MIGRATION_FILE);
+    expect(plan4).toEqual({
+      localFile: MIGRATION_FILE,
+      state: "applied_version_alias",
+      note: "differs; repository migration applied exactly once to Plaivra Production on 2026-09-06 as generated identity 20260906131808_food_catalog_ingestion_v2_authority from frozen Git blob eb2cdc2ee16462d7712080a3e3532757ec093742 after exact merged-main/blob/history/schema-drift preflight. Read-back proved all nine Plan 4 authority tables with RLS, service_role SELECT without direct mutation, service-role-only SECURITY DEFINER command RPCs, semantic batch identity/freeze, deterministic batch-run locking, lease lifecycle and stale-attempt terminalization, immutable manifest/quarantine/reconciliation/release-diff authority, zero-record dry-run support, and the inherited Batch 0 service_role direct-mutation guard. Food/source/ingestion/generation data remained unpopulated, current_generation_id remained NULL with pointer_revision 0, and no activation, verification approval, provider ingestion, generation creation/promotion, runtime cutover, deployment, or Activity Catalog mutation occurred. Do not replay.",
+      productionVersion: "20260906131808",
+      productionName: "food_catalog_ingestion_v2_authority",
+    });
 
     const plan3 = ledger.entries.find((entry) => entry.localFile === "20260902150000_food_catalog_generation_authority.sql");
     expect(plan3?.productionVersion).toBe("20260903210503");
     expect(plan3?.productionName).toBe("food_catalog_generation_authority");
     expect(reconciliationDoc).toContain(MIGRATION_FILE);
-    expect(reconciliationDoc).toContain("repository-only pending");
-    expect(reconciliationDoc).toContain("physical production migration records: **118**");
-    expect(reconciliationDoc).toContain("20260903210503_food_catalog_generation_authority");
+    expect(reconciliationDoc).toContain("20260906131808_food_catalog_ingestion_v2_authority");
+    expect(reconciliationDoc).toContain("physical production migration records: **119**");
+    expect(reconciliationDoc).toContain("pending repository migrations: **0**");
+    expect(reconciliationDoc).toContain("`unresolvedcount = 0`");
   });
 });
