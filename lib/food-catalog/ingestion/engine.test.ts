@@ -172,6 +172,59 @@ describe("Food Catalog Plan 4 ingestion engine", () => {
     });
   });
 
+  it("quarantines same-manifest GTIN collisions before Production materialization", () => {
+    const adapter = createSyntheticFoodCatalogAdapter();
+    const result = buildFoodCatalogDryRun(adapter, {
+      source: source(),
+      candidates: [
+        candidate("collision-a", { gtins: ["4006381333931"] }),
+        candidate("collision-b", { gtins: ["4006381333931"] })
+      ]
+    }, emptyIndex());
+
+    expect(result.manifestContent.candidates.map((entry) => ({
+      sourceRecordId: entry.candidate.sourceRecordId,
+      decision: entry.decision.kind,
+      disposition: entry.disposition
+    }))).toEqual([
+      {
+        sourceRecordId: "collision-a",
+        decision: "create",
+        disposition: { kind: "quarantine", reasonCodes: ["barcode_conflict", "identity_conflict"] }
+      },
+      {
+        sourceRecordId: "collision-b",
+        decision: "create",
+        disposition: { kind: "quarantine", reasonCodes: ["barcode_conflict", "identity_conflict"] }
+      }
+    ]);
+    expect(result.manifestContent.expectedMutations).toEqual({
+      input: 2,
+      accepted: 0,
+      rejected: 0,
+      matched: 0,
+      created: 0,
+      possibleDuplicate: 0,
+      quarantined: 2
+    });
+  });
+
+  it("canonicalizes source-record checksum casing before manifest and semantic identity hashing", () => {
+    const adapter = createSyntheticFoodCatalogAdapter();
+    const upper = buildFoodCatalogDryRun(adapter, {
+      source: source(),
+      candidates: [candidate("checksum-case", { sourceRecordChecksumSha256: "AB".repeat(32) })]
+    }, emptyIndex());
+    const lower = buildFoodCatalogDryRun(adapter, {
+      source: source(),
+      candidates: [candidate("checksum-case", { sourceRecordChecksumSha256: "ab".repeat(32) })]
+    }, emptyIndex());
+
+    expect(upper.manifestContent.candidates[0]?.candidate.sourceRecordChecksumSha256).toBe("ab".repeat(32));
+    expect(upper.manifestContentChecksumSha256).toBe(lower.manifestContentChecksumSha256);
+    expect(upper.semanticBatchIdentityChecksumSha256).toBe(lower.semanticBatchIdentityChecksumSha256);
+  });
+
   it("changes semantic batch identity for source/config/release/manifest/expected-count changes", () => {
     const baseInput = {
       source: source(),
