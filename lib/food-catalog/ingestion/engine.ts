@@ -5,6 +5,7 @@ import type {
   FoodCatalogDryRunManifestContent,
   FoodCatalogExpectedMutationCounts,
   FoodCatalogSourceDescriptor,
+  FoodCatalogValidationIssue,
   FoodCatalogValidationIssueCode
 } from "./contracts";
 import {
@@ -33,10 +34,20 @@ export type FoodCatalogDryRunResult = {
   semanticBatchIdentityChecksumSha256: string;
 };
 
+type EvaluatedCandidate = {
+  candidate: ReturnType<typeof normalizeFoodCatalogCandidate>;
+  issues: FoodCatalogValidationIssue[];
+  errorIssueCodes: FoodCatalogValidationIssueCode[];
+};
+
+function uniqueSortedStrings(values: readonly string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
 function uniqueSortedIssueCodes(
   values: readonly FoodCatalogValidationIssueCode[]
 ): FoodCatalogValidationIssueCode[] {
-  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+  return uniqueSortedStrings(values) as FoodCatalogValidationIssueCode[];
 }
 
 export function buildSemanticBatchIdentity({
@@ -87,6 +98,39 @@ function assertUniqueNormalizedSourceIdentities(
   }
 }
 
+function sameManifestUnownedGtinConflicts(
+  candidates: readonly EvaluatedCandidate[],
+  index: FoodCatalogMatchIndex
+): Set<string> {
+  const indexedGtins = new Set(index.gtinOwners.map((owner) => owner.gtin));
+  const firstSourceByGtin = new Map<string, string>();
+  const conflicts = new Set<string>();
+
+  for (const entry of candidates) {
+    if (entry.errorIssueCodes.length > 0) continue;
+    for (const gtin of entry.candidate.gtins) {
+      if (indexedGtins.has(gtin)) continue;
+      const firstSource = firstSourceByGtin.get(gtin);
+      if (firstSource === undefined) {
+        firstSourceByGtin.set(gtin, entry.candidate.sourceRecordId);
+      } else if (firstSource !== entry.candidate.sourceRecordId) {
+        conflicts.add(gtin);
+      }
+    }
+  }
+
+  return conflicts;
+}
+
+function deriveSameManifestConflictReasons(
+  candidate: EvaluatedCandidate["candidate"],
+  conflictingGtins: ReadonlySet<string>
+): string[] {
+  return candidate.gtins.some((gtin) => conflictingGtins.has(gtin))
+    ? ["barcode_conflict", "identity_conflict"]
+    : [];
+}
+
 export function buildFoodCatalogDryRun<TArtifact>(
   adapter: FoodCatalogSourceAdapter<TArtifact>,
   artifact: TArtifact,
@@ -97,20 +141,28 @@ export function buildFoodCatalogDryRun<TArtifact>(
     .map((candidateInput) => normalizeFoodCatalogCandidate(candidateInput));
   assertUniqueNormalizedSourceIdentities(normalizedCandidates);
 
-  const entries = normalizedCandidates.map((candidate) => {
+  const evaluatedCandidates: EvaluatedCandidate[] = normalizedCandidates.map((candidate) => {
     const issues = validateFoodCatalogCandidate(candidate);
     const errorIssueCodes = uniqueSortedIssueCodes(
       issues
         .filter((issue) => issue.severity === "error")
         .map((issue) => issue.code)
     );
+    return { candidate, issues, errorIssueCodes };
+  });
+  const conflictingManifestGtins = sameManifestUnownedGtinConflicts(evaluatedCandidates, index);
+
+  const entries = evaluatedCandidates.map(({ candidate, issues, errorIssueCodes }) => {
     const matchInput = { source, candidate, index };
     const decision: FoodCatalogCanonicalDecision = errorIssueCodes.length > 0
       ? { kind: "reject", issueCodes: errorIssueCodes }
       : decideCanonicalMatch(matchInput);
     const conflictReasons = errorIssueCodes.length > 0
       ? []
-      : deriveCanonicalConflictReasons(matchInput);
+      : uniqueSortedStrings([
+          ...deriveCanonicalConflictReasons(matchInput),
+          ...deriveSameManifestConflictReasons(candidate, conflictingManifestGtins)
+        ]);
     const disposition = deriveProcessingDisposition({
       decision,
       issues,
