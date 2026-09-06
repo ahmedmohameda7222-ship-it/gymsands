@@ -62,6 +62,8 @@ export type FoodLibraryNutritionFilters = {
 export type FoodLibraryQuery = FoodLibraryNutritionFilters & {
   query?: string;
   locale?: FoodLibraryLocale;
+  scriptCode?: string | null;
+  marketScopeCode?: string | null;
   cursor?: string | null;
   limit?: number;
   category?: string | null;
@@ -250,9 +252,11 @@ export async function listFoodLibrary(
 ): Promise<FoodLibraryPage> {
   const requested = Number(options.limit ?? MAX_PAGE_SIZE);
   const limit = Math.max(1, Math.min(MAX_PAGE_SIZE, Number.isFinite(requested) ? Math.floor(requested) : MAX_PAGE_SIZE));
-  const result = await supabase.rpc("search_nutrition_food_library", {
+  const result = await supabase.rpc("search_food_catalog_v2", {
     p_query: options.query?.trim() ?? "",
-    p_locale: options.locale ?? "en",
+    p_language_tag: options.locale ?? "en",
+    p_script_code: options.scriptCode?.trim() || null,
+    p_market_scope_code: options.marketScopeCode?.trim() || null,
     p_cursor: options.cursor ?? null,
     p_limit: limit,
     p_category: options.category?.trim() || null,
@@ -260,8 +264,8 @@ export async function listFoodLibrary(
     p_scope: options.scope ?? "all",
     p_filters: filterPayload(options),
   });
-  const data = checked(result as unknown as { data: unknown; error: { message?: string } | null }, "Food Library authoritative search");
-  if (!isFoodLibraryPage(data)) throw new Error("Food Library authoritative search returned an invalid page.");
+  const data = checked(result as unknown as { data: unknown; error: { message?: string } | null }, "Food Catalog V2 authoritative search");
+  if (!isFoodLibraryPage(data)) throw new Error("Food Catalog V2 authoritative search returned an invalid page.");
   return data;
 }
 
