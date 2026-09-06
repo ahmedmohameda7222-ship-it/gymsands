@@ -254,6 +254,6 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(reconciliationDoc).toContain("20260906131808_food_catalog_ingestion_v2_authority");
     expect(reconciliationDoc).toContain("physical production migration records: **119**");
     expect(reconciliationDoc).toContain("pending repository migrations: **0**");
-    expect(reconciliationDoc).toContain("unresolved repository migrations: **0**");
+    expect(reconciliationDoc).toContain("`unresolvedcount = 0`");
   });
 });
