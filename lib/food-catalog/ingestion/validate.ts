@@ -20,6 +20,24 @@ const SHA256 = /^[a-f0-9]{64}$/i;
 const GTIN = /^(?:\d{8}|\d{12}|\d{13}|\d{14})$/;
 const COUNTRY_SCOPE = /^[A-Z]{2}$/;
 const REGION_SCOPE = /^[A-Z][A-Z0-9_-]{1,15}$/;
+const CONTROLLED_COUNTRY_SCOPES = new Set(["US", "DE", "EG", "GB", "SA", "AE"]);
+const CONTROLLED_REGION_SCOPES = new Set(["EU", "GCC"]);
+const CONTROLLED_TAXONOMY_NODES = new Set([
+  "protein_foods",
+  "dairy",
+  "grains",
+  "vegetables",
+  "fruits",
+  "legumes",
+  "nuts_seeds",
+  "fats_oils",
+  "beverages",
+  "mixed_dishes",
+  "snacks",
+  "desserts",
+  "condiments",
+  "other",
+]);
 
 function isValidLocaleTag(value: string): boolean {
   try {
@@ -80,19 +98,58 @@ export function validateFoodCatalogCandidate(
       || !alias.value.trim()
       || !alias.normalizedValue.trim()
     )
+    || candidate.names.some((name) =>
+      !name.locale.trim()
+      || !isValidLocaleTag(name.locale)
+      || !name.value.trim()
+      || !name.normalizedValue.trim()
+    )
   ) {
     addIssue("invalid_alias", "error", "aliases");
   }
 
   if (
+    candidate.servings.some((serving) => {
+      if (!serving.servingKey.trim()) return true;
+      if (serving.amount === null || !Number.isFinite(serving.amount) || serving.amount <= 0) return true;
+      const unit = serving.unit.trim().toLocaleLowerCase();
+      if (!unit) return true;
+      if (serving.gramWeight !== null && (!Number.isFinite(serving.gramWeight) || serving.gramWeight <= 0)) return true;
+      if (
+        serving.milliliterVolume !== null
+        && (!Number.isFinite(serving.milliliterVolume) || serving.milliliterVolume <= 0)
+      ) return true;
+      return serving.gramWeight === null
+        && serving.milliliterVolume === null
+        && unit !== "g"
+        && unit !== "ml";
+    })
+  ) {
+    addIssue("invalid_serving", "error", "servings");
+  }
+
+  if (
     candidate.marketScopes.some((scope) => {
       if (scope.relevanceLevel !== "primary" && scope.relevanceLevel !== "secondary") return true;
-      if (scope.type === "country") return !COUNTRY_SCOPE.test(scope.code);
-      if (scope.type === "region") return !REGION_SCOPE.test(scope.code);
+      if (scope.type === "country") {
+        return !COUNTRY_SCOPE.test(scope.code) || !CONTROLLED_COUNTRY_SCOPES.has(scope.code);
+      }
+      if (scope.type === "region") {
+        return !REGION_SCOPE.test(scope.code) || !CONTROLLED_REGION_SCOPES.has(scope.code);
+      }
       return true;
     })
   ) {
     addIssue("invalid_market_scope", "error", "marketScopes");
+  }
+
+  if (
+    candidate.taxonomyEvidence.some((evidence) =>
+      evidence.mappedTaxonomyId !== null
+      && !CONTROLLED_TAXONOMY_NODES.has(evidence.mappedTaxonomyId)
+    )
+  ) {
+    addIssue("invalid_taxonomy_mapping", "error", "taxonomyEvidence");
   }
 
   const gtinCounts = new Map<string, number>();

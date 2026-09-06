@@ -7,6 +7,7 @@ const BATCH0_FINAL_SHA = "53f3cbbd078e82a1d29da20e7d6b126cab6aaa81";
 const BATCH0_MIGRATION = "20260830011407_food_catalog_population_readiness.sql";
 const BATCH0_MIGRATION_PATH = `supabase/migrations/${BATCH0_MIGRATION}`;
 const PLAN3_MIGRATION = "20260902150000_food_catalog_generation_authority.sql";
+const PLAN4_MIGRATION = "20260904100000_food_catalog_ingestion_v2_authority.sql";
 const INTERNAL_TABLES = [
   "food_ingestion_batches",
   "food_ingestion_runs",
@@ -106,14 +107,21 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         productionName: "food_catalog_generation_authority",
       }),
     ]);
-    expect(currentPendingEntries).toEqual([]);
-    expect(current.pendingCount).toBe(0);
-    expect(current.unresolvedCount).toBe(0);
+    expect(currentPendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: PLAN4_MIGRATION,
+        state: "pending",
+      }),
+    ]);
+    expect(currentPendingEntries[0]?.productionVersion).toBeUndefined();
+    expect(currentPendingEntries[0]?.productionName).toBeUndefined();
+    expect(current.pendingCount).toBe(1);
+    expect(current.unresolvedCount).toBe(1);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "reconciled",
-        pendingCount: 0,
-        unresolvedCount: 0,
+        state: "pending",
+        pendingCount: 1,
+        unresolvedCount: 1,
       })
     );
   });

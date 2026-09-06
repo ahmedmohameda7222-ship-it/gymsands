@@ -35,12 +35,14 @@ create or replace function pg_temp.food_catalog_approve_batch(
 returns void
 language plpgsql
 as $function$
+declare
+  v_dry_run_id uuid := gen_random_uuid();
 begin
   insert into public.food_ingestion_batches (
     id, provider, dataset_name, source_version, source_release_date,
     license_name, license_reference, source_reference,
     source_checksum_sha256, importer_version, config_checksum_sha256,
-    manifest_content_checksum_sha256
+    manifest_content_checksum_sha256, semantic_identity_checksum_sha256
   ) values (
     p_id,
     'concurrency-fixture-provider',
@@ -53,12 +55,35 @@ begin
     repeat(substr(md5(p_suffix), 1, 1), 64),
     'fixture-importer-v1',
     repeat(substr(md5(p_suffix || '-config'), 1, 1), 64),
+    p_manifest_checksum,
     p_manifest_checksum
   );
 
   update public.food_ingestion_batches
   set review_state = 'reviewed', reviewed_at = clock_timestamp()
   where id = p_id;
+
+  insert into public.food_ingestion_runs (
+    id, batch_id, execution_mode, attempt_number, status, started_at, completed_at,
+    manifest_content_checksum_sha256,
+    observed_input_count, observed_accepted_count, observed_rejected_count,
+    observed_created_count, observed_matched_count,
+    observed_possible_duplicate_count, observed_quarantine_count
+  ) values (
+    v_dry_run_id, p_id, 'dry_run', 1, 'completed', clock_timestamp(), clock_timestamp(),
+    p_manifest_checksum, 0, 0, 0, 0, 0, 0, 0
+  );
+
+  insert into public.food_ingestion_reconciliations (
+    run_id, batch_id, manifest_content_checksum_sha256,
+    semantic_identity_checksum_sha256, expected_counts, observed_counts,
+    mismatch_codes, reconciled
+  ) values (
+    v_dry_run_id, p_id, p_manifest_checksum, p_manifest_checksum,
+    '{"input":0,"accepted":0,"rejected":0,"matched":0,"created":0,"possibleDuplicate":0,"quarantined":0}'::jsonb,
+    '{"input":0,"accepted":0,"rejected":0,"matched":0,"created":0,"possibleDuplicate":0,"quarantined":0}'::jsonb,
+    '{}'::text[], true
+  );
 
   update public.food_ingestion_batches
   set review_state = 'approved',

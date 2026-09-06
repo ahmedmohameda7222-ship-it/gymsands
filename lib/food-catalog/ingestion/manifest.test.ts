@@ -52,6 +52,16 @@ const normalizedCandidate = (
     { locale: "en", value: "Zulu", normalizedValue: "zulu" },
     { locale: "de", value: "Alpha", normalizedValue: "alpha" }
   ],
+  names: [],
+  identityEvidence: {
+    semanticSignature: null,
+    preparation: null,
+    state: null,
+    form: null,
+    structuredEvidenceKey: null
+  },
+  servings: [],
+  taxonomyEvidence: [],
   gtins: ["4006381333931", "036000291452"],
   marketScopes: [
     { type: "region", code: "GCC", relevanceLevel: "secondary" },
@@ -69,21 +79,24 @@ const content = (overrides: Partial<FoodCatalogDryRunManifestContent> = {}): Foo
     {
       candidate: normalizedCandidate("b"),
       issues: [],
-      decision: { kind: "possible_duplicate", candidateFoodIds: ["food-z", "food-a"] }
+      decision: { kind: "possible_duplicate", candidateFoodIds: ["food-z", "food-a"] },
+      disposition: { kind: "quarantine", reasonCodes: ["possible_duplicate"] }
     },
     {
       candidate: normalizedCandidate("a"),
       issues: [],
-      decision: { kind: "create" }
+      decision: { kind: "create" },
+      disposition: { kind: "accept", reasonCodes: [] }
     }
   ],
   expectedMutations: {
     input: 2,
-    accepted: 2,
+    accepted: 1,
     rejected: 0,
     matched: 0,
     created: 1,
-    possibleDuplicate: 1
+    possibleDuplicate: 1,
+    quarantined: 1
   },
   ...overrides
 });

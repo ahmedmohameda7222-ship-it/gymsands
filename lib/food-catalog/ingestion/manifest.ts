@@ -1,89 +1,93 @@
 import { createHash } from "node:crypto";
 import type {
+  FoodCatalogCanonicalDecision,
   FoodCatalogDryRunManifestCandidate,
   FoodCatalogDryRunManifestContent,
-  FoodCatalogDryRunManifestEnvelope
+  FoodCatalogDryRunManifestEnvelope,
+  FoodCatalogNormalizedCandidate,
+  FoodCatalogProcessingDisposition,
+  FoodCatalogSourceDescriptor,
+  FoodCatalogValidationIssue
 } from "./contracts";
+import { normalizeFoodCatalogSourceDescriptor } from "./normalize";
 
-function canonicalizeJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalizeJson);
-  if (value === null || typeof value !== "object") return value;
-
-  const record = value as Record<string, unknown>;
-  const canonical: Record<string, unknown> = {};
-  for (const key of Object.keys(record).sort()) {
-    if (record[key] === undefined) continue;
-    canonical[key] = canonicalizeJson(record[key]);
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, stableValue(entry)])
+    );
   }
-  return canonical;
+  return value;
 }
 
-function sortedUnique<T>(values: T[], keyOf: (value: T) => string): T[] {
-  const sorted = [...values].sort((left, right) => keyOf(left).localeCompare(keyOf(right)));
-  const seen = new Set<string>();
-  return sorted.filter((value) => {
-    const key = keyOf(value);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+export function stableJson(value: unknown): string {
+  return JSON.stringify(stableValue(value));
+}
+
+function sortStable<T>(values: readonly T[]): T[] {
+  return [...values].sort((left, right) => stableJson(left).localeCompare(stableJson(right)));
+}
+
+function canonicalizeDecision(decision: FoodCatalogCanonicalDecision): FoodCatalogCanonicalDecision {
+  if (decision.kind !== "possible_duplicate") return decision;
+  return {
+    ...decision,
+    candidateFoodIds: [...new Set(decision.candidateFoodIds)].sort((left, right) => left.localeCompare(right))
+  };
+}
+
+function canonicalizeDisposition(
+  disposition: FoodCatalogProcessingDisposition
+): FoodCatalogProcessingDisposition {
+  return {
+    ...disposition,
+    reasonCodes: [...new Set(disposition.reasonCodes)].sort((left, right) => left.localeCompare(right))
+  };
+}
+
+function canonicalizeIssues(issues: FoodCatalogValidationIssue[]): FoodCatalogValidationIssue[] {
+  return sortStable(issues);
+}
+
+function canonicalizeCandidate(candidate: FoodCatalogNormalizedCandidate): FoodCatalogNormalizedCandidate {
+  return {
+    ...candidate,
+    aliases: sortStable(candidate.aliases),
+    names: sortStable(candidate.names),
+    servings: sortStable(candidate.servings),
+    taxonomyEvidence: sortStable(candidate.taxonomyEvidence),
+    gtins: [...new Set(candidate.gtins)].sort((left, right) => left.localeCompare(right)),
+    marketScopes: sortStable(candidate.marketScopes)
+  };
 }
 
 function canonicalizeManifestCandidate(
   entry: FoodCatalogDryRunManifestCandidate
 ): FoodCatalogDryRunManifestCandidate {
-  const decision = entry.decision.kind === "possible_duplicate"
-    ? {
-        ...entry.decision,
-        candidateFoodIds: [...new Set(entry.decision.candidateFoodIds)].sort()
-      }
-    : entry.decision.kind === "reject"
-      ? {
-          ...entry.decision,
-          issueCodes: [...new Set(entry.decision.issueCodes)].sort()
-        }
-      : entry.decision;
-
   return {
-    candidate: {
-      ...entry.candidate,
-      aliases: sortedUnique(
-        entry.candidate.aliases,
-        (alias) => `${alias.locale}\u0000${alias.normalizedValue}\u0000${alias.value}`
-      ),
-      gtins: [...new Set(entry.candidate.gtins)].sort(),
-      marketScopes: sortedUnique(
-        entry.candidate.marketScopes,
-        (scope) => `${scope.type}\u0000${scope.code}\u0000${scope.relevanceLevel}`
-      )
-    },
-    issues: sortedUnique(
-      entry.issues,
-      (issue) => `${issue.code}\u0000${issue.severity}\u0000${issue.field ?? ""}`
-    ),
-    decision
+    candidate: canonicalizeCandidate(entry.candidate),
+    issues: canonicalizeIssues(entry.issues),
+    decision: canonicalizeDecision(entry.decision),
+    disposition: canonicalizeDisposition(entry.disposition)
   };
 }
 
-function canonicalizeManifestContent(
+export function canonicalizeManifestContent(
   content: FoodCatalogDryRunManifestContent
 ): FoodCatalogDryRunManifestContent {
-  const candidates = content.candidates
-    .map(canonicalizeManifestCandidate)
-    .sort((left, right) => {
-      const bySourceRecord = left.candidate.sourceRecordId.localeCompare(right.candidate.sourceRecordId);
-      return bySourceRecord || stableJson(left).localeCompare(stableJson(right));
-    });
-
   return {
-    source: { ...content.source },
-    candidates,
-    expectedMutations: { ...content.expectedMutations }
+    source: normalizeFoodCatalogSourceDescriptor(content.source),
+    candidates: content.candidates
+      .map(canonicalizeManifestCandidate)
+      .sort((left, right) => {
+        const bySourceId = left.candidate.sourceRecordId.localeCompare(right.candidate.sourceRecordId);
+        return bySourceId !== 0 ? bySourceId : stableJson(left).localeCompare(stableJson(right));
+      }),
+    expectedMutations: content.expectedMutations
   };
-}
-
-export function stableJson(value: unknown): string {
-  return JSON.stringify(canonicalizeJson(value));
 }
 
 export function checksumManifestContent(content: FoodCatalogDryRunManifestContent): string {
@@ -92,12 +96,43 @@ export function checksumManifestContent(content: FoodCatalogDryRunManifestConten
     .digest("hex");
 }
 
+/**
+ * Task-1 semantic-content builder for deterministic adapter/normalization
+ * verification. The full Plan 4 engine replaces the provisional CREATE
+ * decisions with validated matching decisions before Production authority.
+ */
+export function buildPlan4ManifestContent(
+  source: FoodCatalogSourceDescriptor,
+  candidates: readonly FoodCatalogNormalizedCandidate[]
+): FoodCatalogDryRunManifestContent {
+  const entries = candidates.map((candidate): FoodCatalogDryRunManifestCandidate => ({
+    candidate,
+    issues: [],
+    decision: { kind: "create" },
+    disposition: { kind: "accept", reasonCodes: [] }
+  }));
+
+  return canonicalizeManifestContent({
+    source,
+    candidates: entries,
+    expectedMutations: {
+      input: entries.length,
+      accepted: entries.length,
+      rejected: 0,
+      matched: 0,
+      created: entries.length,
+      possibleDuplicate: 0,
+      quarantined: 0
+    }
+  });
+}
+
 export function createDryRunManifestEnvelope(
   content: FoodCatalogDryRunManifestContent,
   metadata: Pick<FoodCatalogDryRunManifestEnvelope, "generatedAt" | "runId" | "diagnosticsLocation">
 ): FoodCatalogDryRunManifestEnvelope {
   return {
-    content,
+    content: canonicalizeManifestContent(content),
     manifestContentChecksumSha256: checksumManifestContent(content),
     ...metadata
   };

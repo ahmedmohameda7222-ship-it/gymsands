@@ -24,6 +24,16 @@ const candidate = (overrides: Partial<FoodCatalogNormalizedCandidate> = {}): Foo
     basis_unit: "g"
   },
   aliases: [{ locale: "en", value: "Greek yoghurt", normalizedValue: "greek yoghurt" }],
+  names: [],
+  identityEvidence: {
+    semanticSignature: null,
+    preparation: null,
+    state: null,
+    form: null,
+    structuredEvidenceKey: null
+  },
+  servings: [],
+  taxonomyEvidence: [],
   gtins: ["4006381333931"],
   marketScopes: [{ type: "country", code: "DE", relevanceLevel: "primary" }],
   globallyRelevant: false,
@@ -65,6 +75,16 @@ describe("Food Catalog structural validation/quarantine", () => {
     expect(codes(candidate({ aliases: [{ locale: "not a locale!", value: "Alias", normalizedValue: "alias" }] }))).toContain("invalid_alias");
   });
 
+  it("reports structurally invalid name evidence and locale tags", () => {
+    expect(codes(candidate({ names: [{
+      locale: "not a locale!",
+      script: null,
+      role: "source",
+      value: "Source name",
+      normalizedValue: "source name"
+    }] }))).toContain("invalid_alias");
+  });
+
   it("reports invalid country scope codes", () => {
     expect(codes(candidate({ marketScopes: [{ type: "country", code: "DEU", relevanceLevel: "primary" }] }))).toContain("invalid_market_scope");
     expect(codes(candidate({ marketScopes: [{ type: "country", code: "de", relevanceLevel: "primary" }] }))).toContain("invalid_market_scope");
@@ -86,6 +106,60 @@ describe("Food Catalog structural validation/quarantine", () => {
 
   it("reports duplicate GTINs when the normalization contract is bypassed", () => {
     expect(codes(candidate({ gtins: ["4006381333931", "4006381333931"] }))).toContain("duplicate_gtin_in_candidate");
+  });
+
+  it("rejects serving facts that cannot be represented without inventing amount or unit", () => {
+    const invalidAmount = candidate({
+      servings: [{
+        servingKey: "portion-1",
+        amount: null,
+        unit: "piece",
+        gramWeight: 42,
+        milliliterVolume: null,
+        label: "1 piece",
+        sourceEvidence: { providerAmount: null }
+      }]
+    });
+    const invalidUnit = candidate({
+      servings: [{
+        servingKey: "portion-2",
+        amount: 1,
+        unit: "   ",
+        gramWeight: 42,
+        milliliterVolume: null,
+        label: "1 piece",
+        sourceEvidence: { providerUnit: null }
+      }]
+    });
+
+    expect(codes(invalidAmount)).toContain("invalid_serving");
+    expect(codes(invalidUnit)).toContain("invalid_serving");
+  });
+
+  it("accepts representable mass and explicit-volume serving facts", () => {
+    const value = candidate({
+      servings: [
+        {
+          servingKey: "portion-g",
+          amount: 1,
+          unit: "piece",
+          gramWeight: 42,
+          milliliterVolume: null,
+          label: "1 piece",
+          sourceEvidence: { exact: true }
+        },
+        {
+          servingKey: "portion-ml",
+          amount: 1,
+          unit: "cup",
+          gramWeight: null,
+          milliliterVolume: 240,
+          label: "1 cup",
+          sourceEvidence: { exact: true }
+        }
+      ]
+    });
+    expect(codes(value)).not.toContain("invalid_serving");
   });
 
   it("accepts null nutrient values without fabricating zero", () => {
