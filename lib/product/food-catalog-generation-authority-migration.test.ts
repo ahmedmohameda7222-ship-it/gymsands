@@ -109,14 +109,14 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
     expect(applyOnlySql).toMatch(/insert\s+into\s+public\.food_catalog_current_generation/i);
   });
 
-  it("preserves the verified Plan 3 and Plan 4 aliases while exactly Plan 5 remains pending", () => {
+  it("preserves the verified Plan 3/4 aliases while the ledger advances through reconciled Plan 5", () => {
     expect(ledger.productionMigrationCount).toBe(63);
-    expect(ledger.productionRecordCount).toBe(119);
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.productionRecordCount).toBe(120);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(ledger.historyRepair.pendingCount).toBe(0);
+    expect(ledger.historyRepair.unresolvedCount).toBe(0);
 
     const entry = ledger.entries.find((item) => item.localFile === "20260902150000_food_catalog_generation_authority.sql");
     expect(entry).toEqual({
@@ -128,18 +128,20 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
     });
 
     const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
-    expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: PLAN5_MIGRATION,
-        state: "pending",
-      }),
-    ]);
+    expect(pendingEntries).toEqual([]);
     const plan4 = ledger.entries.find((item) => item.localFile === PLAN4_MIGRATION);
     expect(plan4).toEqual(expect.objectContaining({
       localFile: PLAN4_MIGRATION,
       state: "applied_version_alias",
       productionVersion: "20260906131808",
       productionName: "food_catalog_ingestion_v2_authority",
+    }));
+    const plan5 = ledger.entries.find((item) => item.localFile === PLAN5_MIGRATION);
+    expect(plan5).toEqual(expect.objectContaining({
+      localFile: PLAN5_MIGRATION,
+      state: "applied_version_alias",
+      productionVersion: "20260906200129",
+      productionName: "food_catalog_search_projection_v2",
     }));
   });
 });
