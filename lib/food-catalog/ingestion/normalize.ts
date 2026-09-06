@@ -155,6 +155,7 @@ export function normalizeFoodCatalogCandidate(
     ...candidate,
     sourceRecordId: collapseWhitespace(candidate.sourceRecordId),
     sourceReference: nullableCollapsed(candidate.sourceReference),
+    sourceRecordChecksumSha256: candidate.sourceRecordChecksumSha256?.toLowerCase() ?? null,
     canonicalName: collapseWhitespace(candidate.canonicalName),
     brandName: nullableCollapsed(candidate.brandName),
     servingLabel: nullableCollapsed(candidate.servingLabel),
