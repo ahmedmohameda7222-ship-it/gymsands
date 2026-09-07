@@ -40,7 +40,9 @@ function numericFilter(params: URLSearchParams, nutrient: "protein" | "carbs" | 
   if (operator === "eq") return { operator: "eq", value };
   if (operator === "gte") return { operator: "gte", value };
   if (operator === "lte") return { operator: "lte", value };
-  const max = Number(params.get(`${nutrient}Max`));
+  const rawMax = params.get(`${nutrient}Max`);
+  if (rawMax === null || rawMax.trim() === "") return undefined;
+  const max = Number(rawMax);
   return Number.isFinite(max) ? { operator: "between", value, max } : undefined;
 }
 
