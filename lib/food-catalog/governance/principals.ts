@@ -2,6 +2,7 @@ export const FOOD_GOVERNANCE_ROLE_CLASSES = ["owner", "curator", "service"] as c
 export type FoodGovernanceRoleClass = (typeof FOOD_GOVERNANCE_ROLE_CLASSES)[number];
 
 export const FOOD_GOVERNANCE_CAPABILITIES = [
+  "food.governance.manage_principals",
   "food.correction.report",
   "food.correction.review",
   "food.correction.approve",
