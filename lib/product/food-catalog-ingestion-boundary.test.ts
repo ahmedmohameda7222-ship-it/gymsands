@@ -65,7 +65,7 @@ function readableRuntimePaths(paths: string[]): string[] {
 }
 
 describe("Food Catalog Batch 0 ingestion boundary", () => {
-  it("preserves finalized Batch 0 authority while recording later authorized Production aliases and the pending Plan 5 correction", () => {
+  it("preserves finalized Batch 0 authority while recording later authorized Production aliases and the reconciled Plan 5 correction", () => {
     const base = readLedgerAt(APPROVED_BASE_SHA);
     const batch0 = readLedgerAt(BATCH0_FINAL_SHA);
     const current = readCurrentLedger();
@@ -131,17 +131,19 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     expect(currentCorrectionEntries).toEqual([
       expect.objectContaining({
         localFile: PLAN5_SERVING_CORRECTION,
-        state: "pending",
+        state: "applied_version_alias",
+        productionVersion: "20260907215257",
+        productionName: "food_catalog_search_serving_semantics_correction",
       }),
     ]);
-    expect(currentPendingEntries).toEqual(currentCorrectionEntries);
-    expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(1);
+    expect(currentPendingEntries).toEqual([]);
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "pending",
-        pendingCount: 1,
-        unresolvedCount: 1,
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
       })
     );
   });

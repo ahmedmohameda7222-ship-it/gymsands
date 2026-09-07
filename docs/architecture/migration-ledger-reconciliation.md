@@ -3,7 +3,7 @@
 **Project:** `bkwezjxvapaeasfvlhvv`
 **Current reconciliation date:** 2026-09-07
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history remains physically reconciled through the applied Food Catalog Plan 5 Search Projection V2 migration, while one forward-only Plan 5 serving-semantics correction remains pending and unapplied
+**Status:** Production migration history and repository ledger are reconciled through the applied Food Catalog Plan 5 serving-semantics correction
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -11,77 +11,59 @@ Historical PR descriptions, completed implementation reports, and old audit snap
 
 ## Current state
 
-The latest verified Plaivra Production inspection after the authorized 2026-09-06 Food Catalog Plan 5 application and the 2026-09-07 serving-semantics correction implementation established:
+The latest verified Plaivra Production inspection after the authorized 2026-09-07 Plan 5 serving-semantics correction established:
 
-- Physical Production migration records: **120**
+- Physical Production migration records: **121**
 - Exact repository-name applications tracked as `state = applied`: **63**
-- Latest physical Production record: `20260906200129_food_catalog_search_projection_v2`
-- Corresponding immutable applied repository migration: `20260906183000_food_catalog_search_projection_v2.sql`
-- Frozen applied Plan 5 migration Git blob: `7be00af5e347ca8d58abcac74cf4c816761a0745`
-- Pending forward-only Plan 5 correction: `20260907165500_food_catalog_search_serving_semantics_correction.sql`
-- Current correction migration Git blob: `fd51c88a1326cc83d4532ac60a6e89650847f894`
+- Latest physical Production record: `20260907215257_food_catalog_search_serving_semantics_correction`
+- Corresponding immutable repository migration: `20260907165500_food_catalog_search_serving_semantics_correction.sql`
+- Frozen correction migration Git blob: `fd51c88a1326cc83d4532ac60a6e89650847f894`
+- Original applied Plan 5 migration: `20260906183000_food_catalog_search_projection_v2.sql` → `20260906200129_food_catalog_search_projection_v2`
+- Frozen original Plan 5 migration Git blob: `7be00af5e347ca8d58abcac74cf4c816761a0745`
 - Released compatibility marker: `20260724232734`
 - Activity Catalog Production remains isolated from the Main Plaivra migration ledger
 
 The current repository/machine-ledger state records:
 
-- Pending repository migrations: **1**
-- `pendingCount = 1`
+- Pending repository migrations: **0**
+- `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 1`
-- `historyRepair.state = pending`
-- migration-ledger `release_ready = false`
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
+- migration-ledger `release_ready = true`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history remains 120 records. The original Plan 5 migration is resolved and immutable, while the forward-only serving correction is intentionally unresolved until post-merge Production application and reconciliation. Applied migrations must not be replayed.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is now 121 records. Applied migrations must not be replayed.
 
-## Food Catalog Plan 5 serving-semantics correction — pending 2026-09-07
+## Food Catalog Plan 5 serving-semantics correction — Production application 2026-09-07
 
-Planner final QA/QC on PR #171 found a P1 correctness defect in the already-applied Plan 5 SearchDocument rebuild: `serving_label` was non-null and the rebuild derived `100 g` / `100 ml` from nutrition normalization basis. That fabricated user-visible serving semantics when a generation Food had no authoritative serving evidence, including the valid case where `nutrition_revision_id = NULL`.
-
-The blocked pre-correction head was:
-
-`19df7616a08d6f775946b2023f4abd2d7c4522af`
-
-The implementation first added a causal rollback-only database RED. Exact RED head `f243964f1b8c58e529ba0a69d8033f80fdb02f34` reached chronological replay and DB lint successfully, then registered database verification failed on the intended assertion:
-
-`Food without nutrition or serving authority must preserve NULL serving and NULL nutrition.`
-
-The executable verifier covers both required semantic boundaries:
-
-- active generation Food with no nutrition revision and no serving-display authority must rebuild with `serving_label IS NULL` and all absent nutrition remaining NULL;
-- active generation Food with valid `100 g` nutrition basis but no serving-display authority may retain its nutrition normalization basis and normalized nutrition values, but must still rebuild with `serving_label IS NULL`.
-
-Because the original Plan 5 migration is already applied and immutable, the correction is a new forward-only repository migration:
+Planner final QA/QC on PR #171 found a serving-authority correctness defect in the already-applied Plan 5 SearchDocument rebuild. The approved forward-only correction is:
 
 `20260907165500_food_catalog_search_serving_semantics_correction.sql`
 
-Current Git blob:
+Frozen Git blob:
 
 `fd51c88a1326cc83d4532ac60a6e89650847f894`
 
-The correction:
+After PR #171 was merged at `main@94553f79dbafb41a059f6ac07bcc2a48e9418414`, read-only preflight confirmed that Production still ended at `20260906200129_food_catalog_search_projection_v2`, the correction had not been applied, SearchDocuments were empty, Food/source/ingestion/generation data were unpopulated, and the current-generation pointer remained `NULL/0`. Under standing migration authority, the exact frozen correction was then applied once through the tracked Supabase migration mechanism. Supabase generated physical identity:
 
-- makes global SearchDocument `serving_label` nullable;
-- does not choose an arbitrary generation serving option or a first serving row;
-- does not treat nutrition normalization basis as serving authority;
-- preserves `nutrition_basis_unit` as an independent nutrition-normalization fact;
-- preserves nullable nutrition end-to-end;
-- preserves My Foods' explicit user-owned serving behavior separately;
-- removes legacy derived serving labels from rebuildable SearchDocument state;
-- keeps numeric nutrition filtering on the normalization basis without introducing any generic `ml`↔`g` conversion;
-- keeps High Protein / Low Carb labels policy-derived only;
-- recomputes deterministic projection checksum with nullable serving authority and nutrition basis represented independently;
-- preserves the public rebuild signature and the existing keyset cursor contract.
+`20260907215257_food_catalog_search_serving_semantics_correction`
 
-On correction head `8cc50043d0206fb99d85be66d1b06296932fcc71`, chronological migration replay, DB lint, and registered database verification all passed, including the original Plan 5 verifier and the new serving-semantics verifier. Lint, typecheck, units, build, rendered QA, Phase A, Exercise Detail runtime QA, and Exercise Library Locale runtime QA also passed on that implementation head. Its only remaining Quality failure was the then-stale migration ledger, which correctly reported the new correction as unclassified before this pending-state reconciliation.
+Immediate read-back proved:
 
-The correction migration has **not** been applied to Plaivra Production. Read-only Production history still ends at exactly:
+- global SearchDocument `serving_label` is nullable;
+- `public.rebuild_food_catalog_search_projection_v2(uuid,text,text)` remains the public rebuild boundary and is executable by `service_role` but not `authenticated` or `anon`;
+- the internal legacy rebuild exists only under `private` and is not executable by `service_role`, `authenticated`, or `anon`;
+- `food_catalog_search_documents = 0`;
+- `food_items = 0`;
+- `food_source_records = 0`;
+- `food_ingestion_batches = 0`;
+- `food_ingestion_runs = 0`;
+- `food_catalog_generations = 0`;
+- `food_catalog_generation_foods = 0`;
+- `current_generation_id = NULL` and `pointer_revision = 0`;
+- the released compatibility marker remains `20260724232734`.
 
-`20260906200129_food_catalog_search_projection_v2`
-
-Production therefore remains at 120 physical migration records. The correction has no Production migration identity yet. The machine ledger records the original Plan 5 migration as `applied_version_alias` and the correction as `pending`; repository release readiness is intentionally false until Planner-approved merge, corrective migration application, Production verification, and reconciliation.
-
-No Food population, provider/USDA ingestion, activation, verification approval, generation creation/promotion, current-pointer movement, deployment, compatibility-marker promotion, Activity Catalog mutation, or Plan 6 implementation is authorized by this correction. Do not apply the corrective migration before merge, and do not replay the original Plan 5 migration.
+The correction preserves nullable nutrition, keeps nutrition normalization basis separate from serving-display authority, does not choose an arbitrary serving option, and leaves Plan 3 generation authority and Plan 5 derived-search authority intact. No Food population, provider ingestion, activation, generation creation/promotion, current-pointer movement, deployment, compatibility-marker promotion, or Activity Catalog mutation occurred. Do not replay either Plan 5 migration.
 
 ## Food Catalog Plan 5 Search Projection V2 — Production application 2026-09-06
 
