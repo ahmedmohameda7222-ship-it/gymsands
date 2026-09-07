@@ -17,5 +17,5 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Plan 6 focused governance unit contracts
-        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/food-catalog/governance
+      - name: Plan 6 focused governance contracts
+        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/food-catalog/governance lib/product/food-catalog-governance-plan6.test.ts lib/product/food-catalog-governance-plan6-database.test.ts
