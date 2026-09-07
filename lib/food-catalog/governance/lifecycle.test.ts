@@ -1,0 +1,7 @@
+import { describe, expect, it } from "vitest";
+import { planFoodLifecycleChange } from "./lifecycle";
+const A="11111111-1111-4111-8111-111111111111", B="22222222-2222-4222-8222-222222222222";
+describe("Plan 6 lifecycle governance",()=>{
+ it("withdraws/restores non-destructively with reason and CAS",()=>{ expect(planFoodLifecycleChange({command:"withdraw",foodId:A,currentLifecycle:"active",expectedLifecycle:"active",replacementFoodId:B,reason:"Outdated product"})).toMatchObject({nextLifecycle:"withdrawn",replacementFoodId:B}); expect(planFoodLifecycleChange({command:"restore",foodId:A,currentLifecycle:"withdrawn",expectedLifecycle:"withdrawn",replacementFoodId:null,reason:"Source corrected"}).nextLifecycle).toBe("active"); });
+ it("rejects delete semantics, blank reason, self replacement, and CAS drift",()=>{ expect(()=>planFoodLifecycleChange({command:"delete" as never,foodId:A,currentLifecycle:"active",expectedLifecycle:"active",replacementFoodId:null,reason:"x"})).toThrow(/unsupported/i); expect(()=>planFoodLifecycleChange({command:"withdraw",foodId:A,currentLifecycle:"active",expectedLifecycle:"active",replacementFoodId:null,reason:" "})).toThrow(/reason/i); expect(()=>planFoodLifecycleChange({command:"withdraw",foodId:A,currentLifecycle:"active",expectedLifecycle:"active",replacementFoodId:A,reason:"x"})).toThrow(/distinct/i); expect(()=>planFoodLifecycleChange({command:"withdraw",foodId:A,currentLifecycle:"draft",expectedLifecycle:"active",replacementFoodId:null,reason:"x"})).toThrow(/cas/i); });
+});
