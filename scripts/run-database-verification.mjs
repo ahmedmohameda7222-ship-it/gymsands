@@ -56,6 +56,8 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/food-catalog-ingestion-v2-inherited-service-role-boundary.sql",
   "supabase/verification/food-catalog-ingestion-v2-batch-freeze.sql",
   "supabase/verification/food-catalog-ingestion-v2-zero-record.sql",
+  "supabase/verification/food-catalog-search-projection-v2.sql",
+  "supabase/verification/food-catalog-search-serving-semantics-correction.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
