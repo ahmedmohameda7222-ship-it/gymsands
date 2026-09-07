@@ -49,7 +49,11 @@ export function FoodRow({
               <span key={tag} className="rounded-full border border-border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground"><bdi dir="auto">{tag}</bdi></span>
             ))}
           </div>
-          <p className="mt-1 truncate text-xs text-muted-foreground"><bdi dir="auto">{food.servingLabel}</bdi>{food.category ? <> · <bdi dir="auto">{food.category}</bdi></> : null}{food.cuisine ? <> · <bdi dir="auto">{food.cuisine}</bdi></> : null}</p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {food.servingLabel ? <bdi dir="auto">{food.servingLabel}</bdi> : null}
+            {food.category ? <>{food.servingLabel ? " · " : ""}<bdi dir="auto">{food.category}</bdi></> : null}
+            {food.cuisine ? <>{food.servingLabel || food.category ? " · " : ""}<bdi dir="auto">{food.cuisine}</bdi></> : null}
+          </p>
           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
             <span dir="ltr">{food.nutrition.calories === null ? "— kcal" : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(food.nutrition.calories))} kcal`}</span>
             <span>{nt("macroProtein")} <bdi dir="ltr">{value(food.nutrition.protein_g, locale)}</bdi></span>
@@ -60,7 +64,7 @@ export function FoodRow({
       </button>
       <div className="flex shrink-0 items-center gap-1">
         {food.source === "catalog" ? <button type="button" onClick={onFavorite} className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted" aria-label={food.favorite ? nt("removeFavorite") : nt("favoriteFood")}><Star className={`h-4 w-4 ${food.favorite ? "fill-current" : ""}`} /></button> : null}
-        <button type="button" onClick={onAdd} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted" aria-label={nt("addFoodNamed", { name: food.name })}><Plus className="h-4 w-4" /></button>
+        <button type="button" onClick={onAdd} disabled={!food.servingLabel} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40" aria-label={nt("addFoodNamed", { name: food.name })}><Plus className="h-4 w-4" /></button>
       </div>
     </div>
   );
