@@ -5,6 +5,7 @@ const MIGRATION = "supabase/migrations/20260902150000_food_catalog_generation_au
 const SUFFIX = "_food_catalog_generation_authority.sql";
 const PLAN4_MIGRATION = "20260904100000_food_catalog_ingestion_v2_authority.sql";
 const PLAN5_MIGRATION = "20260906183000_food_catalog_search_projection_v2.sql";
+const PLAN5_SERVING_CORRECTION = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 const migrationFiles = readdirSync("supabase/migrations").filter((name) => name.endsWith(SUFFIX));
 const sql = readFileSync(MIGRATION, "utf8").toLowerCase();
 const applyOnlySql = sql.split("create or replace function public.food_catalog_create_activation_set_v1")[0];
@@ -109,14 +110,14 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
     expect(applyOnlySql).toMatch(/insert\s+into\s+public\.food_catalog_current_generation/i);
   });
 
-  it("preserves the verified Plan 3/4 aliases while the ledger advances through reconciled Plan 5", () => {
+  it("preserves verified Plan 3/4/5 aliases while carrying the pending Plan 5 serving correction", () => {
     expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.productionRecordCount).toBe(120);
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
-    expect(ledger.historyRepair.state).toBe("reconciled");
-    expect(ledger.historyRepair.pendingCount).toBe(0);
-    expect(ledger.historyRepair.unresolvedCount).toBe(0);
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.state).toBe("pending");
+    expect(ledger.historyRepair.pendingCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
 
     const entry = ledger.entries.find((item) => item.localFile === "20260902150000_food_catalog_generation_authority.sql");
     expect(entry).toEqual({
@@ -128,7 +129,12 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
     });
 
     const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
-    expect(pendingEntries).toEqual([]);
+    expect(pendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: PLAN5_SERVING_CORRECTION,
+        state: "pending",
+      }),
+    ]);
     const plan4 = ledger.entries.find((item) => item.localFile === PLAN4_MIGRATION);
     expect(plan4).toEqual(expect.objectContaining({
       localFile: PLAN4_MIGRATION,
