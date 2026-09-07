@@ -1,0 +1,25 @@
+name: Plan 5 Ledger Reconcile Temp
+on:
+  push:
+    branches: [chore/plan5-serving-correction-reconciliation]
+permissions:
+  contents: write
+jobs:
+  reconcile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/reconcile-plan5-ledger-temp.mjs
+      - run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add supabase/migration-ledger.json
+          git diff --cached --check
+          git commit -m 'chore: reconcile Plan 5 serving correction ledger'
+          git push origin HEAD:${GITHUB_REF_NAME}
