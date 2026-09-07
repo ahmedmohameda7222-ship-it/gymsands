@@ -9,6 +9,7 @@ const BATCH0_MIGRATION_PATH = `supabase/migrations/${BATCH0_MIGRATION}`;
 const PLAN3_MIGRATION = "20260902150000_food_catalog_generation_authority.sql";
 const PLAN4_MIGRATION = "20260904100000_food_catalog_ingestion_v2_authority.sql";
 const PLAN5_MIGRATION = "20260906183000_food_catalog_search_projection_v2.sql";
+const PLAN5_SERVING_CORRECTION = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 const INTERNAL_TABLES = [
   "food_ingestion_batches",
   "food_ingestion_runs",
@@ -64,7 +65,7 @@ function readableRuntimePaths(paths: string[]): string[] {
 }
 
 describe("Food Catalog Batch 0 ingestion boundary", () => {
-  it("preserves finalized Batch 0 authority while recording later authorized Production aliases", () => {
+  it("preserves finalized Batch 0 authority while recording later authorized Production aliases and the pending Plan 5 correction", () => {
     const base = readLedgerAt(APPROVED_BASE_SHA);
     const batch0 = readLedgerAt(BATCH0_FINAL_SHA);
     const current = readCurrentLedger();
@@ -74,6 +75,7 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     const currentPlan3Entries = current.entries.filter((entry) => entry.localFile === PLAN3_MIGRATION);
     const currentPlan4Entries = current.entries.filter((entry) => entry.localFile === PLAN4_MIGRATION);
     const currentPlan5Entries = current.entries.filter((entry) => entry.localFile === PLAN5_MIGRATION);
+    const currentCorrectionEntries = current.entries.filter((entry) => entry.localFile === PLAN5_SERVING_CORRECTION);
     const currentPendingEntries = current.entries.filter((entry) => entry.state === "pending");
 
     expect(historicalEntries).toEqual(base.entries);
@@ -126,14 +128,20 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         productionName: "food_catalog_search_projection_v2",
       }),
     ]);
-    expect(currentPendingEntries).toEqual([]);
-    expect(current.pendingCount).toBe(0);
-    expect(current.unresolvedCount).toBe(0);
+    expect(currentCorrectionEntries).toEqual([
+      expect.objectContaining({
+        localFile: PLAN5_SERVING_CORRECTION,
+        state: "pending",
+      }),
+    ]);
+    expect(currentPendingEntries).toEqual(currentCorrectionEntries);
+    expect(current.pendingCount).toBe(1);
+    expect(current.unresolvedCount).toBe(1);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "reconciled",
-        pendingCount: 0,
-        unresolvedCount: 0,
+        state: "pending",
+        pendingCount: 1,
+        unresolvedCount: 1,
       })
     );
   });
