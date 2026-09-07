@@ -35,6 +35,13 @@ describe("Plan 5 Food Library V2 consumer surface", () => {
     expect(service).toContain('"gt" | "lt" | "eq"');
   });
 
+  it("rejects incomplete between filters instead of coercing a missing max to zero", () => {
+    expect(route).toContain('const rawMax = params.get(`${nutrient}Max`)');
+    expect(route).toContain('if (rawMax === null || rawMax.trim() === "") return undefined;');
+    expect(route).toContain("const max = Number(rawMax)");
+    expect(route).not.toContain('const max = Number(params.get(`${nutrient}Max`))');
+  });
+
   it("renders only SearchDocument-derived nutrition labels as High Protein / Low Carb convenience badges", () => {
     expect(row).toContain("food.nutritionLabels ?? []");
     expect(row).toContain('label === "high-protein"');
