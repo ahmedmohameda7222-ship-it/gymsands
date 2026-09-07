@@ -57,7 +57,7 @@ test("release consumers preserve the declared marker after the applied Plan 5 se
   assert.notEqual(releaseTarget.expectedMigration, releaseTarget.latestAppliedMigrationVersion);
 });
 
-test("preflight blocks release while the Plan 5 serving correction is pending", () => {
+test("preflight accepts the reconciled Plan 5 correction while preserving the declared marker", () => {
   const expectedCommit = "a".repeat(40);
   const releaseTarget = deriveReleaseTarget(ledger);
   const migrationState = deriveMigrationLedgerState(ledger);
@@ -92,8 +92,8 @@ test("preflight blocks release while the Plan 5 serving correction is pending", 
 
   const markerResult = evaluateReleasePreflight({ ...baseInput, manifest });
   assert.equal(markerResult.failures.includes("release_manifest_migration_mismatch"), false);
-  assert.equal(markerResult.failures.includes("migration_ledger_not_reconciled"), true);
-  assert.equal(markerResult.releaseBlockers.includes("migration_ledger_not_reconciled"), true);
+  assert.equal(markerResult.failures.includes("migration_ledger_not_reconciled"), false);
+  assert.equal(markerResult.releaseBlockers.includes("migration_ledger_not_reconciled"), false);
 
   const physicalHeadResult = evaluateReleasePreflight({
     ...baseInput,
@@ -106,8 +106,8 @@ test("preflight blocks release while the Plan 5 serving correction is pending", 
     },
   });
   assert.equal(physicalHeadResult.failures.includes("release_manifest_migration_mismatch"), true);
-  assert.equal(physicalHeadResult.failures.includes("migration_ledger_not_reconciled"), true);
-  assert.equal(physicalHeadResult.releaseBlockers.includes("migration_ledger_not_reconciled"), true);
+  assert.equal(physicalHeadResult.failures.includes("migration_ledger_not_reconciled"), false);
+  assert.equal(physicalHeadResult.releaseBlockers.includes("migration_ledger_not_reconciled"), false);
 });
 
 test("release authority fails closed when the declared marker is absent", () => {
