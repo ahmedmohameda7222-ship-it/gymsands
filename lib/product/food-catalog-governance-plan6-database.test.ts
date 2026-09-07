@@ -32,6 +32,8 @@ describe("Food Catalog Plan 6 database authority", () => {
       "food_personal_overrides",
     ]) expect(sql).toContain(relation);
     for (const command of [
+      "food_catalog_manage_governance_principal",
+      "food_catalog_revoke_governance_capability",
       "food_catalog_apply_nutrition_correction",
       "food_catalog_apply_serving_correction",
       "food_catalog_apply_name_correction",
@@ -42,6 +44,7 @@ describe("Food Catalog Plan 6 database authority", () => {
       "food_catalog_withdraw_food",
       "food_catalog_restore_food",
     ]) expect(sql).toContain(command);
+    expect(sql).toContain("food.governance.manage_principals");
   });
 
   it("removes direct global canonical DML authority while preserving named command boundaries", () => {

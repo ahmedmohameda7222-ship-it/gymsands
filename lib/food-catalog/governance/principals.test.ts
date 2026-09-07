@@ -38,10 +38,17 @@ describe("Food Catalog Plan 6 governance principals", () => {
     expect(() => assertFoodGovernanceCapability(curator, "food.identity.merge")).toThrow(/capability denied/i);
   });
 
+  it("keeps principal management Owner-only so future humans can be provisioned without code changes", () => {
+    expect(DEFAULT_FOOD_GOVERNANCE_CAPABILITIES.owner).toContain("food.governance.manage_principals");
+    expect(DEFAULT_FOOD_GOVERNANCE_CAPABILITIES.curator).not.toContain("food.governance.manage_principals");
+    expect(DEFAULT_FOOD_GOVERNANCE_CAPABILITIES.service).not.toContain("food.governance.manage_principals");
+  });
+
   it("keeps Service principals ingestion-oriented and unable to self-escalate", () => {
     expect(() => assertFoodGovernanceCapability(service, "food.ingestion.propose")).not.toThrow();
     expect(() => assertFoodGovernanceCapability(service, "food.correction.approve")).toThrow(/capability denied/i);
     expect(() => assertFoodGovernanceCapability(service, "food.break_glass")).toThrow(/capability denied/i);
+    expect(() => assertFoodGovernanceCapability(service, "food.governance.manage_principals")).toThrow(/capability denied/i);
   });
 
   it("respects revocation when deriving an immutable capability snapshot", () => {
