@@ -39,7 +39,7 @@ export type FoodLibraryCandidate = {
   brand: string | null;
   category: string | null;
   cuisine: string | null;
-  servingLabel: string;
+  servingLabel: string | null;
   verified: boolean;
   favorite: boolean;
   recentAt: string | null;
