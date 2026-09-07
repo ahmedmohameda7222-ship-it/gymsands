@@ -41,16 +41,20 @@ type Props = {
 export function FoodDetail({ food, initialAdd = false, onClose, onFavorite, onCorrect, onEdit, onDelete }: Props) {
   const { nt: baseNt, language, dir } = useNutritionV1Translation();
   const nt = useCallback((key: FoodLibraryTextKey, values?: Record<string, string | number>) => foodLibraryText(language, baseNt, key, values), [baseNt, language]);
-  const [servingLabel, setServingLabel] = useState(food.servingLabel);
+  const hasAuthoritativeServing = Boolean(food.servingLabel?.trim());
+  const [servingLabel, setServingLabel] = useState(food.servingLabel ?? "");
   const [quantity, setQuantity] = useState(1);
-  const [addOpen, setAddOpen] = useState(initialAdd);
-  const nutrition = useMemo(() => scaledNutrition(food.nutrition, quantity), [food.nutrition, quantity]);
+  const [addOpen, setAddOpen] = useState(initialAdd && hasAuthoritativeServing);
+  const nutrition = useMemo(() => scaledNutrition(food.nutrition, hasAuthoritativeServing ? quantity : 1), [food.nutrition, hasAuthoritativeServing, quantity]);
   const foodParam = encodeURIComponent(food.id);
   const sourceParam = encodeURIComponent(food.source);
   const quantityParam = encodeURIComponent(String(quantity));
   const servingParam = encodeURIComponent(servingLabel);
   const unavailable = nt("notAvailable");
   const destinationSuffix = `addFoodId=${foodParam}&source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}`;
+  const nutritionBasis = food.nutrition.basis_amount !== null && food.nutrition.basis_unit
+    ? `${food.nutrition.basis_amount} ${food.nutrition.basis_unit}`
+    : null;
 
   return (
     <div dir={dir} className="fixed inset-0 z-50 flex justify-end bg-black/25" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -59,18 +63,18 @@ export function FoodDetail({ food, initialAdd = false, onClose, onFavorite, onCo
           <button type="button" onClick={onClose} className="inline-flex min-h-11 items-center gap-1 rounded-xl pe-2 text-sm font-medium hover:bg-muted" aria-label={nt("closeFoodDetails")}><ChevronLeft className="h-5 w-5 rtl:rotate-180" /><span>{nt("foodLibrary")}</span></button>
           <div className="flex items-center gap-1">
             {food.source === "catalog" ? <button type="button" onClick={() => onFavorite?.(food)} className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted" aria-label={food.favorite ? nt("removeFavorite") : nt("favoriteFood")}><Star className={`h-5 w-5 ${food.favorite ? "fill-current" : ""}`} /></button> : null}
-            <button type="button" onClick={() => setAddOpen((open) => !open)} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted" aria-label={nt("addTo")} aria-expanded={addOpen}><Plus className="h-5 w-5" /></button>
+            <button type="button" disabled={!hasAuthoritativeServing} onClick={() => setAddOpen((open) => !open)} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40" aria-label={nt("addTo")} aria-expanded={addOpen}><Plus className="h-5 w-5" /></button>
           </div>
         </header>
 
         <div className="mt-5"><div className="flex items-center gap-2"><h2 className="text-xl font-semibold"><bdi dir="auto">{food.name}</bdi></h2>{food.verified ? <ShieldCheck className="h-4 w-4" aria-label={nt("plaivraVerified")} /> : null}</div><p className="mt-1 text-sm text-muted-foreground"><bdi dir="auto">{food.category ?? nt("food")}</bdi>{food.cuisine ? <> · <bdi dir="auto">{food.cuisine}</bdi></> : null}</p></div>
 
-        <section className="mt-6 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">{nt("serving")}</h3><select value={servingLabel} onChange={(event) => setServingLabel(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value={food.servingLabel}>{food.servingLabel}</option></select></section>
-        <section className="mt-5"><h3 className="text-sm font-semibold">{nt("quantity")}</h3><div className="mt-2 inline-flex min-h-11 items-center rounded-xl border border-border"><button type="button" onClick={() => setQuantity((value) => Math.max(0.25, Math.round((value - 0.25) * 100) / 100))} className="h-11 w-11" aria-label={nt("decreaseQuantity")}><Minus className="mx-auto h-4 w-4" /></button><span className="min-w-14 text-center text-sm font-semibold" aria-live="polite">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.round((value + 0.25) * 100) / 100)} className="h-11 w-11" aria-label={nt("increaseQuantity")}><Plus className="mx-auto h-4 w-4" /></button></div></section>
+        {hasAuthoritativeServing ? <section className="mt-6 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">{nt("serving")}</h3><select value={servingLabel} onChange={(event) => setServingLabel(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value={food.servingLabel ?? ""}>{food.servingLabel}</option></select></section> : null}
+        {hasAuthoritativeServing ? <section className="mt-5"><h3 className="text-sm font-semibold">{nt("quantity")}</h3><div className="mt-2 inline-flex min-h-11 items-center rounded-xl border border-border"><button type="button" onClick={() => setQuantity((value) => Math.max(0.25, Math.round((value - 0.25) * 100) / 100))} className="h-11 w-11" aria-label={nt("decreaseQuantity")}><Minus className="mx-auto h-4 w-4" /></button><span className="min-w-14 text-center text-sm font-semibold" aria-live="polite">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.round((value + 0.25) * 100) / 100)} className="h-11 w-11" aria-label={nt("increaseQuantity")}><Plus className="mx-auto h-4 w-4" /></button></div></section> : null}
 
-        <section className="mt-6" aria-live="polite"><div className="text-2xl font-semibold tabular-nums">{display(nutrition.calories, "kcal", unavailable)}</div><dl className="mt-3 grid grid-cols-3 gap-3 text-sm"><div><dt className="text-xs text-muted-foreground">{nt("macroProtein")}</dt><dd className="font-medium">{display(nutrition.protein_g, "g", unavailable)}</dd></div><div><dt className="text-xs text-muted-foreground">{nt("macroCarbs")}</dt><dd className="font-medium">{display(nutrition.carbs_g, "g", unavailable)}</dd></div><div><dt className="text-xs text-muted-foreground">{nt("macroFat")}</dt><dd className="font-medium">{display(nutrition.fat_g, "g", unavailable)}</dd></div></dl></section>
+        <section className="mt-6" aria-live="polite"><div className="text-2xl font-semibold tabular-nums">{display(nutrition.calories, "kcal", unavailable)}</div>{nutritionBasis ? <p className="mt-1 text-xs text-muted-foreground"><bdi dir="ltr">{nutritionBasis}</bdi></p> : null}<dl className="mt-3 grid grid-cols-3 gap-3 text-sm"><div><dt className="text-xs text-muted-foreground">{nt("macroProtein")}</dt><dd className="font-medium">{display(nutrition.protein_g, "g", unavailable)}</dd></div><div><dt className="text-xs text-muted-foreground">{nt("macroCarbs")}</dt><dd className="font-medium">{display(nutrition.carbs_g, "g", unavailable)}</dd></div><div><dt className="text-xs text-muted-foreground">{nt("macroFat")}</dt><dd className="font-medium">{display(nutrition.fat_g, "g", unavailable)}</dd></div></dl></section>
 
-        {addOpen ? <section className="mt-6 rounded-xl border border-border p-3"><h3 className="text-sm font-semibold">{nt("addTo")}</h3><div className="mt-2 grid grid-cols-2 gap-2">
+        {addOpen && hasAuthoritativeServing ? <section className="mt-6 rounded-xl border border-border p-3"><h3 className="text-sm font-semibold">{nt("addTo")}</h3><div className="mt-2 grid grid-cols-2 gap-2">
           <Link href={`/calories?${destinationSuffix}`} className="flex min-h-11 items-center justify-center rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">{nt("diary")}</Link>
           <Link href={`/my-meal-plan?${destinationSuffix}`} className="flex min-h-11 items-center justify-center rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">{nt("mealPlan")}</Link>
           <Link href={`/calories?savedMealFoodId=${foodParam}&source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}`} className="flex min-h-11 items-center justify-center rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">{nt("savedMeal")}</Link>
