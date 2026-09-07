@@ -9,7 +9,6 @@ const V2_ROOT_IDENTITY_ACCESS = /\.from\(\s*["']food_items["']\s*\)\s*\.select\(
 const V2_ROOT_ADAPTER = "services/food-catalog/server/supabase-read-store.ts";
 const ALLOWED_DIRECT_ACCESS = new Set([
   "services/food-catalog/server/legacy-compatibility.ts",
-  "services/nutrition-v1/server/food-curation.ts",
 ]);
 
 function normalizedRelative(path: string) {
