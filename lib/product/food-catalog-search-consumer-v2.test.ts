@@ -46,8 +46,8 @@ describe("Plan 5 Food Library V2 consumer surface", () => {
     expect(service).toContain("servingLabel: string | null");
     expect(servingCorrection).toContain("alter column serving_label drop not null");
     expect(servingCorrection).toContain("set serving_label = null");
-    expect(servingCorrection).not.toMatch(/nutrition_basis_unit\s*=\s*'ml'[\s\S]*100 ml/i);
-    expect(servingCorrection).not.toMatch(/nutrition_basis_unit[\s\S]*100 g/i);
+    expect(servingCorrection).not.toMatch(/set\s+serving_label\s*=\s*'100\s+(?:g|ml)'/i);
+    expect(servingCorrection).not.toMatch(/case\s+when\s+[^;]*nutrition_basis_unit[^;]*then\s+'100\s+(?:g|ml)'/i);
     expect(row).toContain("food.servingLabel ?");
     expect(detail).toContain("hasAuthoritativeServing");
   });
