@@ -4,7 +4,13 @@ import { describe, expect, it } from "vitest";
 
 const route = readFileSync(resolve(process.cwd(), "app/api/nutrition/v1/foods/route.ts"), "utf8");
 const row = readFileSync(resolve(process.cwd(), "components/nutrition/food-library/food-row.tsx"), "utf8");
+const detail = readFileSync(resolve(process.cwd(), "components/nutrition/food-library/food-detail.tsx"), "utf8");
+const diaryLogger = readFileSync(resolve(process.cwd(), "components/nutrition/diary/logging-session.tsx"), "utf8");
+const mealPlan = readFileSync(resolve(process.cwd(), "components/nutrition/meal-plan/add-to-plan-workspace.tsx"), "utf8");
+const savedMealUtility = readFileSync(resolve(process.cwd(), "components/nutrition/saved-meals/saved-meal-utility.tsx"), "utf8");
+const mcpSavedMeal = readFileSync(resolve(process.cwd(), "lib/mcp/nutrition-v1-saved-meal.ts"), "utf8");
 const service = readFileSync(resolve(process.cwd(), "services/nutrition-v1/server/food-library.ts"), "utf8");
+const servingCorrection = readFileSync(resolve(process.cwd(), "supabase/migrations/20260907165500_food_catalog_search_serving_semantics_correction.sql"), "utf8");
 
 describe("Plan 5 Food Library V2 consumer surface", () => {
   it("passes explicit BCP-47 language, script and market context without inferring market", () => {
@@ -34,5 +40,23 @@ describe("Plan 5 Food Library V2 consumer surface", () => {
     expect(row).toContain('label === "high-protein"');
     expect(row).toContain('label === "low-carb"');
     expect(row).not.toMatch(/tags\.slice\(0, 2\)[\s\S]*high protein/i);
+  });
+
+  it("keeps global serving display nullable and never relabels nutrition basis as serving", () => {
+    expect(service).toContain("servingLabel: string | null");
+    expect(servingCorrection).toContain("alter column serving_label drop not null");
+    expect(servingCorrection).toContain("set serving_label = null");
+    expect(servingCorrection).not.toMatch(/nutrition_basis_unit\s*=\s*'ml'[\s\S]*100 ml/i);
+    expect(servingCorrection).not.toMatch(/nutrition_basis_unit[\s\S]*100 g/i);
+    expect(row).toContain("food.servingLabel ?");
+    expect(detail).toContain("hasAuthoritativeServing");
+  });
+
+  it("fails closed for mutation consumers when a global Food has no authoritative serving while preserving My Foods", () => {
+    expect(diaryLogger).toContain("if (!food.servingLabel)");
+    expect(mealPlan).toContain("if (!food.servingLabel)");
+    expect(savedMealUtility).toContain("if (!food.servingLabel)");
+    expect(mcpSavedMeal).toContain("if (!selected.servingLabel)");
+    expect(service).toContain('source: FoodLibrarySource');
   });
 });
