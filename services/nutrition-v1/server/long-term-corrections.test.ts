@@ -90,7 +90,7 @@ describe("Nutrition V1 long-term architecture corrections", () => {
       }],
     ]);
     const db = rpcClient(async (name, args) => {
-      expect(name).toBe("search_nutrition_food_library");
+      expect(name).toBe("search_food_catalog_v2");
       const cursor = typeof args.p_cursor === "string" && args.p_cursor ? args.p_cursor : "first";
       return { data: pages.get(cursor) ?? null, error: null };
     });

@@ -23,10 +23,12 @@ function diaryNutrition(nutrition: { calories: number | null; protein_g: number 
 }
 
 function foodMutation(food: FoodLibraryCandidate, date: string, mealSlotKey: string): MealPlanOccurrenceMutation {
+  if (!food.servingLabel) throw new Error("Food serving authority is required before adding this Food to a Meal Plan.");
+  const servingLabel = food.servingLabel;
   const frozenNutrition = { calories: food.nutrition.calories, protein_g: food.nutrition.protein_g, carbs_g: food.nutrition.carbs_g, fat_g: food.nutrition.fat_g, fiber_g: food.nutrition.fiber_g };
   return {
-    planDate: date, mealSlotKey, sourceType: "food", sourceId: food.id, resolvedQuantity: 1, resolvedServingLabel: food.servingLabel, frozenName: food.name,
-    frozenSnapshot: { food_id: food.id, frozen_name: food.name, resolved_quantity: 1, resolved_serving_label: food.servingLabel, frozen_nutrition: frozenNutrition, verified: food.verified, items: [{ foodName: food.name, servingLabel: food.servingLabel, quantity: 1, nutrition: diaryNutrition(frozenNutrition) }], shoppingIngredients: [{ foodId: food.id, name: food.name, quantity: 1, unit: food.servingLabel, qualifier: null }] },
+    planDate: date, mealSlotKey, sourceType: "food", sourceId: food.id, resolvedQuantity: 1, resolvedServingLabel: servingLabel, frozenName: food.name,
+    frozenSnapshot: { food_id: food.id, frozen_name: food.name, resolved_quantity: 1, resolved_serving_label: servingLabel, frozen_nutrition: frozenNutrition, verified: food.verified, items: [{ foodName: food.name, servingLabel, quantity: 1, nutrition: diaryNutrition(frozenNutrition) }], shoppingIngredients: [{ foodId: food.id, name: food.name, quantity: 1, unit: servingLabel, qualifier: null }] },
   };
 }
 
@@ -68,7 +70,7 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: { d
         if (!active) return;
         const savedMeals = diary.domains.savedMeals.status === "ready" ? diary.domains.savedMeals.data : [];
         const normalizedQuery = query.trim().toLocaleLowerCase();
-        const foodResults: SearchResult[] = foods.items.map((value) => ({ kind: "food", id: value.id, name: value.name, detail: `${value.servingLabel} · ${nt("food")}`, value }));
+        const foodResults: SearchResult[] = foods.items.map((value) => ({ kind: "food", id: value.id, name: value.name, detail: value.servingLabel ? `${value.servingLabel} · ${nt("food")}` : nt("food"), value }));
         const recipeResults: SearchResult[] = recipes.recipes.filter((value) => value.status === "published" && value.recipeVersionId).filter((value) => scope !== "favorites" || value.favorite).filter((value) => scope !== "recent" || value.lastUsedAt).map((value) => ({ kind: "recipe", id: value.recipeId, name: value.name, detail: `${nt("recipe")} · ${value.nutritionPerServing?.calories ?? "—"} kcal`, value }));
         const savedResults: SearchResult[] = savedMeals.filter((value) => !normalizedQuery || value.name.toLocaleLowerCase().includes(normalizedQuery)).map((value) => ({ kind: "saved_meal", id: value.id, name: value.name, detail: nt("savedMeal"), value }));
         setResults([...foodResults, ...recipeResults, ...savedResults].slice(0, 24)); setError("");
@@ -96,7 +98,12 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: { d
   }
 
   async function selectResult(result: SearchResult) {
-    if (result.kind === "food") { setSelectedItems((current) => [...current, foodMutation(result.value, date, mealSlotKey)]); return; }
+    if (result.kind === "food") {
+      if (!result.value.servingLabel) { setError(`${result.value.name}: ${nt("notAvailable")}`); return; }
+      setSelectedItems((current) => [...current, foodMutation(result.value, date, mealSlotKey)]);
+      setError("");
+      return;
+    }
     if (result.kind === "saved_meal") {
       const choice = result.value;
       setSelectedItems((current) => [...current, { planDate: date, mealSlotKey, sourceType: "saved_meal", sourceId: choice.id, resolvedQuantity: 1, resolvedServingLabel: "1 saved meal", frozenName: choice.name, frozenSnapshot: { ...choice.bundle, items: savedMealLogItems(choice), shoppingIngredients: [] } }]);
@@ -134,7 +141,7 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: { d
         {barcodeOpen ? <div className="mt-3 rounded-xl border border-border p-3"><p className="text-sm font-medium">{nt("barcodeLookup")}</p><p className="mt-1 text-xs text-muted-foreground">{nt("barcodeLookupDescription")}</p><div className="mt-2 flex gap-2"><input inputMode="numeric" value={barcode} onChange={(event) => setBarcode(event.target.value.replace(/\D/g, ""))} placeholder={nt("enterBarcode")} className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><button type="button" disabled={barcodeBusy} onClick={() => void lookupBarcode()} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{barcodeBusy ? nt("lookingUp") : nt("lookup")}</button></div></div> : null}
         {notice ? <p role="status" className="mt-3 rounded-xl bg-muted p-3 text-sm">{notice}</p> : null}
         {error ? <p role="alert" className="mt-3 text-sm text-destructive">{error}</p> : null}
-        <div className="mt-3 divide-y divide-border" aria-live="polite">{loading ? <p className="py-4 text-sm text-muted-foreground">{nt("searching")}</p> : results.map((result) => <button key={`${result.kind}:${result.id}`} type="button" onClick={() => void selectResult(result)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start"><span className="min-w-0"><span className="block truncate text-sm font-medium"><bdi dir="auto">{result.name}</bdi></span><span className="block text-xs text-muted-foreground"><bdi dir="auto">{result.detail}</bdi></span></span><Plus className="h-4 w-4 shrink-0" /></button>)}</div>
+        <div className="mt-3 divide-y divide-border" aria-live="polite">{loading ? <p className="py-4 text-sm text-muted-foreground">{nt("searching")}</p> : results.map((result) => <button key={`${result.kind}:${result.id}`} type="button" disabled={result.kind === "food" && !result.value.servingLabel} onClick={() => void selectResult(result)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start disabled:cursor-not-allowed disabled:opacity-50"><span className="min-w-0"><span className="block truncate text-sm font-medium"><bdi dir="auto">{result.name}</bdi></span><span className="block text-xs text-muted-foreground"><bdi dir="auto">{result.detail}</bdi></span></span><Plus className="h-4 w-4 shrink-0" /></button>)}</div>
         <div className="mt-4 border-t border-border pt-4"><label className="text-sm font-medium" htmlFor="meal-plan-placeholder">{nt("placeholderLabel")}</label><div className="mt-2 flex gap-2"><input id="meal-plan-placeholder" value={placeholderName} onChange={(event) => setPlaceholderName(event.target.value)} placeholder={nt("placeholderExample")} className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><button type="button" onClick={addPlaceholder} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{nt("addPlaceholder")}</button></div></div>
         {selectedItems.length ? <div className="mt-4 border-t border-border pt-4"><p className="text-sm font-semibold">{nt("selectedCount", { count: selectedItems.length })}</p><ul className="mt-2 space-y-1 text-sm text-muted-foreground">{selectedNames.map((name, index) => <li key={`${name}-${index}`}><bdi dir="auto">{name}</bdi></li>)}</ul></div> : null}
         <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t border-border bg-background pt-4"><button type="button" onClick={onClose} className="min-h-11 rounded-xl px-4 text-sm font-medium">{nt("cancel")}</button><button type="button" disabled={!selectedItems.length || saving} onClick={() => void commit()} className="min-h-11 rounded-xl bg-foreground px-4 text-sm font-semibold text-background disabled:opacity-50">{saving ? nt("saving") : `${nt("add")} ${selectedItems.length || ""}`.trim()}</button></div>

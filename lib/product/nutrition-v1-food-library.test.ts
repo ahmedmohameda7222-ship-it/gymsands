@@ -56,7 +56,11 @@ describe("Nutrition V1 canonical Food Library product surface", () => {
   it("keeps discovery labels restrained and result layout to at most two columns", () => {
     const row = source(rowPath);
     const page = source(pagePath);
-    expect(row).toContain("tags.slice(0, 2)");
+    expect(row).toContain("const nutritionLabels = food.nutritionLabels ?? []");
+    expect(row).toContain('normalized !== "high protein"');
+    expect(row).toContain('normalized !== "low carb"');
+    expect(row).toContain("nutritionLabels.map");
+    expect(row).toContain("Math.max(0, 2 - nutritionLabels.length)");
     expect(page).toContain("lg:grid-cols-2");
     expect(page).not.toMatch(/grid-cols-3|grid-cols-4/);
   });

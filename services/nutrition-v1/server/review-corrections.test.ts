@@ -77,15 +77,22 @@ it("replaces a Recipe Working Draft and all child rows through one transactional
   expect(db.from).not.toHaveBeenCalled();
 });
 
-it("delegates normal member Food Catalog discovery to the owner-derived active-canonical RPC authority", async () => {
+it("delegates member Food Library discovery to the Food Catalog V2 search boundary with explicit language, script, and market context", async () => {
   const db = rpcOnlyClient({ data: { items: [], nextCursor: null }, error: null });
 
-  await listFoodLibrary(db.client, userId, { query: "chicken", locale: "en" });
+  await listFoodLibrary(db.client, userId, {
+    query: "chicken",
+    locale: "de",
+    scriptCode: "Latn",
+    marketScopeCode: "DE",
+  } as never);
 
   expect(db.rpc).toHaveBeenCalledTimes(1);
-  expect(db.rpc).toHaveBeenCalledWith("search_nutrition_food_library", expect.objectContaining({
+  expect(db.rpc).toHaveBeenCalledWith("search_food_catalog_v2", expect.objectContaining({
     p_query: "chicken",
-    p_locale: "en",
+    p_language_tag: "de",
+    p_script_code: "Latn",
+    p_market_scope_code: "DE",
     p_scope: "all",
   }));
   expect(db.from).not.toHaveBeenCalled();

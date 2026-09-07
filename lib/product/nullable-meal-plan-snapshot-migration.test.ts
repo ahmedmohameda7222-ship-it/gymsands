@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 const migrationName = "20260830155245_nullable_meal_plan_nutrition_snapshots.sql";
 const plan4MigrationName = "20260904100000_food_catalog_ingestion_v2_authority.sql";
+const plan5MigrationName = "20260906183000_food_catalog_search_projection_v2.sql";
+const plan5ServingCorrectionName = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 
 function read(relativePath: string) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
@@ -22,11 +24,11 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
     expect(source).not.toMatch(/alter\s+column\s+(?:quantity|status|completed_at|food_log_id)/i);
   });
 
-  it("preserves the authorized Production alias after Plan 4 reconciliation", () => {
+  it("preserves authorized Production aliases while carrying the pending Plan 5 serving correction", () => {
     const ledger = JSON.parse(read("supabase/migration-ledger.json")) as {
       pendingCount: number;
       unresolvedCount: number;
-      historyRepair: { state: string };
+      historyRepair: { state: string; pendingCount: number; unresolvedCount: number };
       entries: Array<Record<string, unknown>>;
     };
     const entries = ledger.entries.filter((entry) => entry.localFile === migrationName);
@@ -40,7 +42,12 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
         productionName: "nullable_meal_plan_nutrition_snapshots",
       }),
     ]);
-    expect(pendingEntries).toEqual([]);
+    expect(pendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: plan5ServingCorrectionName,
+        state: "pending",
+      }),
+    ]);
     const plan4Entry = ledger.entries.find((entry) => entry.localFile === plan4MigrationName);
     expect(plan4Entry).toEqual(expect.objectContaining({
       localFile: plan4MigrationName,
@@ -48,9 +55,18 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
       productionVersion: "20260906131808",
       productionName: "food_catalog_ingestion_v2_authority",
     }));
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
-    expect(ledger.historyRepair.state).toBe("reconciled");
+    const plan5Entry = ledger.entries.find((entry) => entry.localFile === plan5MigrationName);
+    expect(plan5Entry).toEqual(expect.objectContaining({
+      localFile: plan5MigrationName,
+      state: "applied_version_alias",
+      productionVersion: "20260906200129",
+      productionName: "food_catalog_search_projection_v2",
+    }));
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.state).toBe("pending");
+    expect(ledger.historyRepair.pendingCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {

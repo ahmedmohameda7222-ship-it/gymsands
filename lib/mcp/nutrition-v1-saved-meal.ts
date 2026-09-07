@@ -22,7 +22,7 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
     limit: 20,
   });
   let exact = page.items.filter((candidate) => normalizeFoodSearchText(candidate.name) === normalizedName);
-  if (requestedServing) exact = exact.filter((candidate) => candidate.servingLabel.trim() === requestedServing);
+  if (requestedServing) exact = exact.filter((candidate) => candidate.servingLabel?.trim() === requestedServing);
   if (exact.length !== 1) {
     throw new Error(
       exact.length === 0
@@ -31,6 +31,9 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
     );
   }
   const selected = exact[0]!;
+  if (!selected.servingLabel) {
+    throw new Error(`Canonical Food “${foodName}” has no authoritative serving selection. Choose a Food with explicit serving authority before creating a Saved Meal.`);
+  }
   return resolveFoodHandoff(ctx.supabase, ctx.userId, {
     foodId: selected.id,
     source: selected.source,

@@ -52,6 +52,7 @@ const copy = {
     loading: "Loading Saved Meals…", loadFailed: "Saved Meals could not be loaded.", detailFailed: "Saved Meal detail could not be loaded.",
     saveFailed: "Saved Meal could not be saved.", deleteFailed: "Saved Meal could not be deleted.", lifecycleFailed: "Saved Meal recovery action failed.",
     chooseFood: "Choose Food", chooseRecipe: "Choose Recipe", search: "Search", searchFood: "Search Foods", searchRecipe: "Search published Recipes",
+    servingUnavailable: "This Food has no authoritative serving yet. Choose a Food with an explicit serving before adding it to a Saved Meal.",
     noMatches: "No matching items.", items: "Items", note: "Note", noNote: "No note.", recoverable: "Recoverable for 30 days after deletion.",
   },
   de: {
@@ -60,6 +61,7 @@ const copy = {
     loading: "Gespeicherte Mahlzeiten werden geladen…", loadFailed: "Gespeicherte Mahlzeiten konnten nicht geladen werden.", detailFailed: "Details konnten nicht geladen werden.",
     saveFailed: "Die gespeicherte Mahlzeit konnte nicht gespeichert werden.", deleteFailed: "Die gespeicherte Mahlzeit konnte nicht gelöscht werden.", lifecycleFailed: "Die Wiederherstellungsaktion ist fehlgeschlagen.",
     chooseFood: "Lebensmittel auswählen", chooseRecipe: "Rezept auswählen", search: "Suchen", searchFood: "Lebensmittel suchen", searchRecipe: "Veröffentlichte Rezepte suchen",
+    servingUnavailable: "Für dieses Lebensmittel gibt es noch keine verbindliche Portion. Wähle ein Lebensmittel mit expliziter Portion, bevor du es zu einer gespeicherten Mahlzeit hinzufügst.",
     noMatches: "Keine passenden Einträge.", items: "Einträge", note: "Notiz", noNote: "Keine Notiz.", recoverable: "Nach dem Löschen 30 Tage wiederherstellbar.",
   },
   ar: {
@@ -68,6 +70,7 @@ const copy = {
     loading: "جارٍ تحميل الوجبات المحفوظة…", loadFailed: "تعذر تحميل الوجبات المحفوظة.", detailFailed: "تعذر تحميل تفاصيل الوجبة المحفوظة.",
     saveFailed: "تعذر حفظ الوجبة المحفوظة.", deleteFailed: "تعذر حذف الوجبة المحفوظة.", lifecycleFailed: "تعذر تنفيذ إجراء الاستعادة.",
     chooseFood: "اختيار طعام", chooseRecipe: "اختيار وصفة", search: "بحث", searchFood: "البحث في الأطعمة", searchRecipe: "البحث في الوصفات المنشورة",
+    servingUnavailable: "لا توجد حصة معتمدة لهذا الطعام حتى الآن. اختر طعامًا له حصة صريحة قبل إضافته إلى وجبة محفوظة.",
     noMatches: "لا توجد نتائج مطابقة.", items: "العناصر", note: "ملاحظة", noNote: "لا توجد ملاحظة.", recoverable: "يمكن استعادتها لمدة 30 يومًا بعد الحذف.",
   },
 } as const;
@@ -140,6 +143,7 @@ function editorItems(bundle: SavedMealBundle | null): UtilityEditorItem[] {
 }
 
 function foodPayload(food: FoodLibraryCandidate): SavedMealItemInput {
+  if (!food.servingLabel) throw new Error("Food serving authority is required before creating a Saved Meal item.");
   return {
     kind: "food",
     food_id: food.id,
@@ -358,6 +362,7 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
   }
 
   function addFood(food: FoodLibraryCandidate) {
+    if (!food.servingLabel) { setError(text.servingUnavailable); return; }
     setItems((current) => [...current, {
       id: crypto.randomUUID(), kind: "food", name: food.name, servingLabel: `1 × ${food.servingLabel}`, payload: foodPayload(food),
     }]);
@@ -438,7 +443,7 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
         {selectionMode ? <section className="mt-4 space-y-3">
           <h3 className="font-semibold">{mode === "add-food" ? text.chooseFood : text.chooseRecipe}</h3>
           <div className="flex gap-2"><label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-border px-3"><Search className="h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={mode === "add-food" ? text.searchFood : text.searchRecipe} className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label><Button type="button" variant="outline" onClick={() => void searchCandidates(mode === "add-food" ? "food" : "recipe")}>{text.search}</Button></div>
-          <div className="divide-y divide-border border-y border-border">{mode === "add-food" ? foods.map((food) => <button key={`${food.source}:${food.id}`} type="button" onClick={() => addFood(food)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start"><span><span className="block text-sm font-medium"><bdi dir="auto">{food.name}</bdi></span><span className="block text-xs text-muted-foreground"><bdi dir="auto">{food.servingLabel}</bdi></span></span><Plus className="h-4 w-4" /></button>) : recipes.map((recipe) => <button key={recipe.recipeId} type="button" onClick={() => addRecipe(recipe)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start"><span><span className="block text-sm font-medium"><bdi dir="auto">{recipe.name}</bdi></span><span className="block text-xs text-muted-foreground">1 serving</span></span><Plus className="h-4 w-4" /></button>)}</div>
+          <div className="divide-y divide-border border-y border-border">{mode === "add-food" ? foods.map((food) => <button key={`${food.source}:${food.id}`} type="button" disabled={!food.servingLabel} onClick={() => addFood(food)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start disabled:cursor-not-allowed disabled:opacity-50"><span><span className="block text-sm font-medium"><bdi dir="auto">{food.name}</bdi></span>{food.servingLabel ? <span className="block text-xs text-muted-foreground"><bdi dir="auto">{food.servingLabel}</bdi></span> : null}</span><Plus className="h-4 w-4" /></button>) : recipes.map((recipe) => <button key={recipe.recipeId} type="button" onClick={() => addRecipe(recipe)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start"><span><span className="block text-sm font-medium"><bdi dir="auto">{recipe.name}</bdi></span><span className="block text-xs text-muted-foreground">1 serving</span></span><Plus className="h-4 w-4" /></button>)}</div>
           {!loading && ((mode === "add-food" && !foods.length) || (mode === "add-recipe" && !recipes.length)) ? <p className="text-sm text-muted-foreground">{text.noMatches}</p> : null}
         </section> : null}
 
