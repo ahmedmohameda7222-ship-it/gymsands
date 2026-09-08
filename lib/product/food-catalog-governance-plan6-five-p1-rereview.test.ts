@@ -1,8 +1,13 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const MIGRATION = "supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql";
-const sql = readFileSync(MIGRATION, "utf8").toLowerCase();
+const HARDENING = "supabase/migrations/20260908110000_food_catalog_governance_five_p1_hardening.sql";
+const sql = [MIGRATION, HARDENING]
+  .filter((path) => existsSync(path))
+  .map((path) => readFileSync(path, "utf8"))
+  .join("\n")
+  .toLowerCase();
 
 function body(name: string) {
   const marker = `create or replace function ${name.toLowerCase()}`;
