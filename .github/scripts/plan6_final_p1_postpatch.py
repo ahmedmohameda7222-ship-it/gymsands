@@ -1,8 +1,11 @@
 from pathlib import Path
+import hashlib
+import json
 
 root = Path(__file__).resolve().parents[2]
 migration = root / "supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql"
 concurrency = root / "scripts/test-food-catalog-governance-plan6-final-p1-concurrency.mjs"
+ledger_path = root / "supabase/migration-ledger.json"
 text = migration.read_text()
 
 old = """  human_user_id uuid generated always as (
@@ -68,3 +71,19 @@ if script.count(needle) != 1:
     raise SystemExit(f"GTIN concurrency synchronization marker count={script.count(needle)}")
 script = script.replace(needle, replacement, 1)
 concurrency.write_text(script)
+
+# postpatch changes the pending Plan 6 migration bytes, so refresh its pending
+# repository hash only after all in-place migration edits are complete.
+ledger = json.loads(ledger_path.read_text())
+new_hash = hashlib.sha256(migration.read_bytes()).hexdigest()
+updated = 0
+for entry in ledger.get("entries", []):
+    if entry.get("localFile") == "20260908100000_food_catalog_governance_control_plane.sql":
+        if entry.get("state") != "pending":
+            raise SystemExit(f"Plan 6 ledger entry is not pending: {entry.get('state')}")
+        entry["repositorySha256"] = new_hash
+        updated += 1
+if updated != 1:
+    raise SystemExit(f"expected one pending Plan 6 ledger entry, found {updated}")
+ledger_path.write_text(json.dumps(ledger, separators=(",", ":")))
+print(f"Plan 6 final P1 postpatch complete; migration sha256={new_hash}")
