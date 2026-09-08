@@ -72,6 +72,39 @@ jobs:
           PY
           python .github/scripts/plan6_final_p1_apply.py
           python .github/scripts/plan6_final_p1_postpatch.py
+          # Legacy rollback verifiers now bind human actors to real Auth rows. Give
+          # each disposable user a unique profile nickname so the account/profile
+          # trigger cannot collide on account_access_states.member_handle.
+          python - <<'PY'
+          from pathlib import Path
+          fixtures = {
+              'supabase/verification/food-catalog-governance-control-plane.sql': {
+                  'plan6-owner@example.test': 'p6core-owner',
+                  'plan6-curator@example.test': 'p6core-cur',
+                  'plan6-provisioned-curator@example.test': 'p6core-new',
+              },
+              'supabase/verification/food-catalog-governance-control-plane-rereview.sql': {
+                  'plan6-rereview-owner@example.test': 'p6rr-owner',
+                  'plan6-rereview-domain@example.test': 'p6rr-domain',
+                  'plan6-rereview-apply@example.test': 'p6rr-apply',
+                  'plan6-rereview-both@example.test': 'p6rr-both',
+              },
+              'supabase/verification/food-catalog-governance-control-plane-authority-rereview.sql': {
+                  'plan6-authority-owner@example.test': 'p6auth-owner',
+              },
+          }
+          provider='{"provider":"email","providers":["email"]}'
+          for relative, users in fixtures.items():
+              path=Path(relative)
+              s=path.read_text()
+              for email, nickname in users.items():
+                  old=f"'{email}','','{provider}'::jsonb,'{{}}'::jsonb"
+                  new=f"'{email}','','{provider}'::jsonb,'{{\"nickname\":\"{nickname}\"}}'::jsonb"
+                  if s.count(old) != 1:
+                      raise SystemExit(f'{relative}: expected one empty profile fixture for {email}, found {s.count(old)}')
+                  s=s.replace(old,new,1)
+              path.write_text(s)
+          PY
           git diff --check
 
       - name: Focused final-P1 source contracts GREEN
