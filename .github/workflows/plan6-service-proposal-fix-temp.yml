@@ -17,61 +17,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Add constrained Service-principal proposal authority
+      - name: Correct Service proposal migration dependency order
         run: |
           node <<'NODE'
           const fs = require('node:fs');
-          const migrationPath = 'supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql';
-          let migration = fs.readFileSync(migrationPath, 'utf8');
-
-          const reportIndex = `create index food_catalog_correction_reports_owner_idx\n  on public.food_catalog_correction_reports(reporter_user_id,created_at,id);\n`;
-          if (!migration.includes(reportIndex)) throw new Error('Correction report index anchor missing.');
-          const proposalTable = `\ncreate table public.food_catalog_service_proposals (\n  id uuid primary key default gen_random_uuid(),\n  operation_id uuid not null unique references public.food_catalog_governance_operations(operation_id) on delete restrict,\n  principal_id uuid not null references public.food_catalog_governance_principals(id) on delete restrict,\n  food_id uuid not null references public.food_items(id) on delete restrict,\n  category text not null check (category in (\n    'wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation',\n    'wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product',\n    'source_conflict','other'\n  )),\n  claim_key text not null check (length(btrim(claim_key)) between 1 and 240),\n  description text not null check (length(btrim(description)) between 1 and 2000),\n  evidence jsonb not null default '{}'::jsonb check (jsonb_typeof(evidence)='object' and pg_column_size(evidence) <= 8192),\n  policy_version text not null check (length(btrim(policy_version)) > 0),\n  created_at timestamptz not null default now()\n);\ncreate index food_catalog_service_proposals_food_idx on public.food_catalog_service_proposals(food_id,created_at,id);\n`;
-          migration = migration.replace(reportIndex, reportIndex + proposalTable);
-
-          const triggerAnchor = `create trigger food_catalog_correction_reports_immutable before update or delete on public.food_catalog_correction_reports for each row execute function private.reject_food_catalog_governance_immutable_mutation();\n`;
-          if (!migration.includes(triggerAnchor)) throw new Error('Immutable trigger anchor missing.');
-          migration = migration.replace(triggerAnchor, triggerAnchor + `create trigger food_catalog_service_proposals_immutable before update or delete on public.food_catalog_service_proposals for each row execute function private.reject_food_catalog_governance_immutable_mutation();\n`);
-
-          const memberAnchor = `-- Member reporting is intentionally not global canonical mutation authority.\n`;
-          if (!migration.includes(memberAnchor)) throw new Error('Member report anchor missing.');
-          const serviceRpc = `-- Future provider adapters may propose bounded governance work as constrained Service principals.\n-- A proposal is immutable evidence only: it cannot approve/apply a correction or mutate canonical Food truth.\ncreate or replace function public.food_catalog_service_propose_correction(\n  p_operation_id uuid,p_principal_id uuid,p_food_id uuid,p_category text,p_claim_key text,p_description text,\n  p_evidence jsonb default '{}'::jsonb,p_policy_version text default 'plan6-v1',p_reason text default 'service proposal'\n) returns jsonb language plpgsql security definer set search_path='' as $function$\ndeclare v_replay jsonb; v_proposal uuid; v_result jsonb;\nbegin\n  if auth.role()<>'service_role' then raise exception 'Service governance proposal requires service_role execution.' using errcode='42501'; end if;\n  if p_category not in ('wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation','wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product','source_conflict','other') then raise exception 'Invalid service correction proposal category.' using errcode='22023'; end if;\n  if length(btrim(coalesce(p_claim_key,''))) not between 1 and 240 or length(btrim(coalesce(p_description,''))) not between 1 and 2000 then raise exception 'Service correction proposal text is outside allowed bounds.' using errcode='22023'; end if;\n  if jsonb_typeof(coalesce(p_evidence,'{}'::jsonb))<>'object' or pg_column_size(coalesce(p_evidence,'{}'::jsonb))>8192 then raise exception 'Service correction proposal evidence must remain bounded.' using errcode='22023'; end if;\n  if coalesce(p_evidence,'{}'::jsonb) ?| array['accessToken','authorization','password','secret','cookie','session','apiKey','serviceRole'] then raise exception 'Sensitive service proposal evidence is forbidden.' using errcode='22023'; end if;\n  perform 1 from public.food_items where id=p_food_id and is_global=true;\n  if not found then raise exception 'Global Food not found for service proposal.' using errcode='23503'; end if;\n\n  v_replay:=private.food_catalog_governance_begin_operation(\n    p_operation_id,p_principal_id,'food.ingestion.propose','food_catalog_service_propose_correction',p_food_id,null,\n    btrim(p_policy_version),p_reason,\n    jsonb_build_object('foodId',p_food_id,'category',p_category,'claimKey',btrim(p_claim_key),'description',btrim(p_description),'evidence',coalesce(p_evidence,'{}'::jsonb))\n  );\n  if v_replay is not null then return v_replay; end if;\n\n  insert into public.food_catalog_service_proposals(operation_id,principal_id,food_id,category,claim_key,description,evidence,policy_version)\n  values(p_operation_id,p_principal_id,p_food_id,p_category,btrim(p_claim_key),btrim(p_description),coalesce(p_evidence,'{}'::jsonb),btrim(p_policy_version))\n  returning id into v_proposal;\n\n  v_result:=jsonb_build_object('proposalId',v_proposal,'foodId',p_food_id,'canonicalMutation',false);\n  return private.food_catalog_governance_finish_operation(\n    p_operation_id,null,null,'{}'::uuid[],v_result,'food.governance.service.proposed',\n    jsonb_build_object('proposalId',v_proposal,'foodId',p_food_id,'category',p_category)\n  );\nend\n$function$;\n\n`;
-          migration = migration.replace(memberAnchor, serviceRpc + memberAnchor);
-
-          const rlsAnchor = `alter table public.food_catalog_correction_reports enable row level security;\n`;
-          if (!migration.includes(rlsAnchor)) throw new Error('RLS anchor missing.');
-          migration = migration.replace(rlsAnchor, rlsAnchor + `alter table public.food_catalog_service_proposals enable row level security;\n`);
-
-          const revokeAnchor = `revoke all on table public.food_catalog_correction_reports from anon,authenticated,service_role;\n`;
-          if (!migration.includes(revokeAnchor)) throw new Error('Table revoke anchor missing.');
-          migration = migration.replace(revokeAnchor, revokeAnchor + `revoke all on table public.food_catalog_service_proposals from anon,authenticated,service_role;\n`);
-
-          const outboxAnchor = `create or replace function public.food_catalog_claim_governance_outbox(p_event_id uuid)\n`;
-          if (!migration.includes(outboxAnchor)) throw new Error('Outbox function anchor missing.');
-          const serviceAcl = `revoke all on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) from public,anon,authenticated,service_role;\ngrant execute on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) to service_role;\n\n`;
-          migration = migration.replace(outboxAnchor, serviceAcl + outboxAnchor);
-          fs.writeFileSync(migrationPath, migration);
-
-          const verifierPath = 'supabase/verification/food-catalog-governance-control-plane.sql';
-          let verifier = fs.readFileSync(verifierPath, 'utf8');
-          const relationAnchor = `  and to_regclass('public.food_catalog_correction_evidence') is not null\n`;
-          if (!verifier.includes(relationAnchor)) throw new Error('Verifier relation anchor missing.');
-          verifier = verifier.replace(relationAnchor, relationAnchor + `  and to_regclass('public.food_catalog_service_proposals') is not null\n`);
-
-          const serviceSection = `-- Service-role bypass/escalation is denied while Plan 4 service RPC remains executable.\nset local role service_role;\nselect set_config('request.jwt.claim.role','service_role',true);\nselect set_config('request.jwt.claim.sub','',true);\n`;
-          if (!verifier.includes(serviceSection)) throw new Error('Verifier service-role section missing.');
-          const serviceProof = `-- Service principal proposal: constrained adapter evidence, never approval/application authority.\nselect (public.food_catalog_service_propose_correction(\n '66000000-0000-4000-8000-000000000408',:'service_principal',:'food_a','other','adapter:proposal','Provider adapter proposal',\n jsonb_build_object('sourceClass','fixture'),'plan6-v1','adapter proposal'\n))->>'proposalId' as service_proposal \\gset\nselect public.food_catalog_service_propose_correction(\n '66000000-0000-4000-8000-000000000408',:'service_principal',:'food_a','other','adapter:proposal','Provider adapter proposal',\n jsonb_build_object('sourceClass','fixture'),'plan6-v1','adapter proposal'\n);\nselect pg_temp.plan6_rejected(format('insert into public.food_catalog_service_proposals(operation_id,principal_id,food_id,category,claim_key,description,policy_version) values(%L,%L,%L,%L,%L,%L,%L)',\n '66000000-0000-4000-8000-000000000409',:'service_principal',:'food_a','other','direct','direct bypass','plan6-v1'),'service_role cannot directly insert Service proposal rows');\n`;
-          verifier = verifier.replace(serviceSection, serviceSection + serviceProof);
-
-          const resetAnchor = `reset role;\n\n-- Owner-only provisioning proves future human capability assignments require no code/schema change.`;
-          if (!verifier.includes(resetAnchor)) throw new Error('Verifier owner provisioning reset anchor missing.');
-          const serviceAssertions = `reset role;\nselect pg_temp.plan6_assert((select count(*)=1 from public.food_catalog_service_proposals where id=:'service_proposal' and principal_id=:'service_principal' and food_id=:'food_a'),'Service principal proposal persisted exactly once');\nselect pg_temp.plan6_assert((select replay_count=1 from public.food_catalog_governance_operations where operation_id='66000000-0000-4000-8000-000000000408'),'Service principal proposal exact replay is idempotent');\nselect pg_temp.plan6_assert(exists(select 1 from public.food_catalog_governance_audit_events where operation_id='66000000-0000-4000-8000-000000000408' and capability='food.ingestion.propose'),'Service principal proposal emitted immutable audit evidence');\nselect pg_temp.plan6_assert(exists(select 1 from public.food_catalog_governance_outbox where operation_id='66000000-0000-4000-8000-000000000408'),'Service principal proposal emitted transactional outbox evidence');\nselect pg_temp.plan6_assert((select food_name='Plan 6 Fixture A' and lifecycle_status='active' from public.food_items where id=:'food_a'),'Service principal proposal changed zero canonical Food truth');\nselect pg_temp.plan6_assert(\n  exists(select 1 from public.food_catalog_governance_capability_assignments where principal_id=:'service_principal' and capability='food.ingestion.propose' and revoked_at is null)\n  and not exists(select 1 from public.food_catalog_governance_capability_assignments where principal_id=:'service_principal' and capability in ('food.correction.approve','food.correction.apply','food.nutrition.correct','food.identity.merge') and revoked_at is null),\n  'Service principal cannot approve or apply canonical governance work'\n);\nselect pg_temp.plan6_assert(not has_function_privilege('service_role','public.food_catalog_transition_correction_case(uuid,uuid,text,bigint,text,text,text,text,bigint,uuid)','EXECUTE'),'Service principal cannot approve through human transition RPC');\n\n-- Owner-only provisioning proves future human capability assignments require no code/schema change.`;
-          verifier = verifier.replace(resetAnchor, serviceAssertions);
-          fs.writeFileSync(verifierPath, verifier);
+          const path = 'supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql';
+          let sql = fs.readFileSync(path, 'utf8');
+          const start = sql.indexOf('\ncreate table public.food_catalog_service_proposals (');
+          if (start < 0) throw new Error('Service proposal table block missing.');
+          const endMarker = 'create index food_catalog_service_proposals_food_idx on public.food_catalog_service_proposals(food_id,created_at,id);\n';
+          const end = sql.indexOf(endMarker, start);
+          if (end < 0) throw new Error('Service proposal table block terminator missing.');
+          const blockEnd = end + endMarker.length;
+          const block = sql.slice(start, blockEnd);
+          sql = sql.slice(0, start) + sql.slice(blockEnd);
+          const auditAnchor = '\ncreate table public.food_catalog_governance_audit_events (';
+          const auditIndex = sql.indexOf(auditAnchor);
+          if (auditIndex < 0) throw new Error('Governance audit table anchor missing.');
+          sql = sql.slice(0, auditIndex) + block + '\n' + sql.slice(auditIndex);
+          const operationsIndex = sql.indexOf('create table public.food_catalog_governance_operations (');
+          const proposalIndex = sql.indexOf('create table public.food_catalog_service_proposals (');
+          if (operationsIndex < 0 || proposalIndex <= operationsIndex) throw new Error('Service proposal table still precedes operations authority.');
+          fs.writeFileSync(path, sql);
           NODE
           git diff --check
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql supabase/verification/food-catalog-governance-control-plane.sql
-          git commit -m "feat: add constrained Service governance proposal boundary"
+          git add supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql
+          git commit -m "fix: order Service proposal after operation authority"
           git push origin HEAD:feat/food-catalog-governance-plan6
