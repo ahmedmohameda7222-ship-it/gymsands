@@ -31,7 +31,7 @@ create table public.food_catalog_governance_capability_assignments (
     'food.evidence.attach','food.nutrition.correct','food.serving.correct','food.name.correct',
     'food.barcode.correct','food.taxonomy.correct','food.market.correct','food.identity.merge',
     'food.lifecycle.withdraw','food.lifecycle.restore','food.break_glass','food.personal_override.write',
-    'food.observability.read','food.ingestion.propose'
+    'food.observability.read','food.ingestion.propose','food.outbox.deliver'
   )),
   granted_by_principal_id uuid references public.food_catalog_governance_principals(id) on delete restrict,
   granted_at timestamptz not null default now(),
@@ -245,6 +245,7 @@ create table public.food_catalog_governance_outbox (
   attempt_count integer not null default 0 check (attempt_count >= 0),
   available_at timestamptz not null default now(),
   claim_owner text,
+  claim_principal_id uuid references public.food_catalog_governance_principals(id) on delete restrict,
   lease_token uuid,
   lease_epoch bigint not null default 0 check (lease_epoch >= 0),
   lease_acquired_at timestamptz,
@@ -254,7 +255,7 @@ create table public.food_catalog_governance_outbox (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check ((status='delivered' and delivered_at is not null) or (status<>'delivered' and delivered_at is null)),
-  check ((status='processing' and claim_owner is not null and lease_token is not null and lease_acquired_at is not null and lease_expires_at is not null) or (status<>'processing' and claim_owner is null and lease_token is null and lease_acquired_at is null and lease_expires_at is null))
+  check ((status='processing' and claim_owner is not null and claim_principal_id is not null and lease_token is not null and lease_acquired_at is not null and lease_expires_at is not null) or (status<>'processing' and claim_owner is null and claim_principal_id is null and lease_token is null and lease_acquired_at is null and lease_expires_at is null))
 );
 
 create table public.food_catalog_governance_lifecycle_events (
@@ -311,6 +312,24 @@ create table public.food_catalog_serving_fact_revisions (
   check (predecessor_serving_option_id is null or predecessor_serving_option_id<>serving_option_id)
 );
 
+
+-- PLAN6_AUTHORITY_REREVIEW_HARDENED: stable lineage authority for genuinely multi-valued Name facts.
+create table public.food_catalog_name_fact_lineages (
+  lineage_id uuid primary key,
+  food_id uuid not null references public.food_items(id) on delete restrict,
+  created_at timestamptz not null default now()
+);
+create table public.food_catalog_name_fact_revisions (
+  name_fact_id uuid primary key references public.food_names(id) on delete restrict,
+  lineage_id uuid not null references public.food_catalog_name_fact_lineages(lineage_id) on delete restrict,
+  predecessor_name_fact_id uuid references public.food_names(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  unique(lineage_id,name_fact_id),
+  foreign key(lineage_id,predecessor_name_fact_id)
+    references public.food_catalog_name_fact_revisions(lineage_id,name_fact_id) on delete restrict,
+  check (predecessor_name_fact_id is null or predecessor_name_fact_id<>name_fact_id)
+);
+
 create table public.food_personal_override_operations (
   user_id uuid not null,
   operation_id uuid not null,
@@ -333,6 +352,8 @@ $function$;
 create trigger food_catalog_governance_policy_versions_immutable before update or delete on public.food_catalog_governance_policy_versions for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_serving_fact_lineages_immutable before update or delete on public.food_catalog_serving_fact_lineages for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_serving_fact_revisions_immutable before update or delete on public.food_catalog_serving_fact_revisions for each row execute function private.reject_food_catalog_governance_immutable_mutation();
+create trigger food_catalog_name_fact_lineages_immutable before update or delete on public.food_catalog_name_fact_lineages for each row execute function private.reject_food_catalog_governance_immutable_mutation();
+create trigger food_catalog_name_fact_revisions_immutable before update or delete on public.food_catalog_name_fact_revisions for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_correction_reports_immutable before update or delete on public.food_catalog_correction_reports for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_service_proposals_immutable before update or delete on public.food_catalog_service_proposals for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_correction_evidence_immutable before update or delete on public.food_catalog_correction_evidence for each row execute function private.reject_food_catalog_governance_immutable_mutation();
@@ -601,6 +622,44 @@ create table public.food_catalog_barcode_corrections (
 );
 create trigger food_catalog_barcode_corrections_immutable before update or delete on public.food_catalog_barcode_corrections for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 
+
+create or replace function private.food_catalog_governance_authority_fact_matches_key(
+  p_food_id uuid,p_kind text,p_key text,p_fact_id uuid
+) returns boolean language plpgsql stable security definer set search_path='' as $function$
+begin
+  if p_fact_id is null then return true; end if;
+  case p_kind
+    when 'nutrition_revision' then
+      return coalesce(p_key,'')='' and exists(select 1 from public.food_nutrition_revisions f where f.id=p_fact_id and f.food_id=p_food_id);
+    when 'serving_option' then
+      return exists(
+        select 1 from public.food_catalog_serving_fact_revisions r
+        join public.food_catalog_serving_fact_lineages l on l.lineage_id=r.lineage_id
+        where r.serving_option_id=p_fact_id and l.food_id=p_food_id and r.lineage_id::text=coalesce(p_key,'')
+      );
+    when 'name_fact' then
+      return exists(
+        select 1 from public.food_catalog_name_fact_revisions r
+        join public.food_catalog_name_fact_lineages l on l.lineage_id=r.lineage_id
+        where r.name_fact_id=p_fact_id and l.food_id=p_food_id and r.lineage_id::text=coalesce(p_key,'')
+      );
+    when 'barcode_correction' then
+      return exists(select 1 from public.food_barcodes f where f.id=p_fact_id and f.food_id=p_food_id and f.gtin=coalesce(p_key,''))
+        or exists(select 1 from public.food_catalog_barcode_corrections f where f.id=p_fact_id and f.food_id=p_food_id and f.gtin=coalesce(p_key,''));
+    when 'taxonomy_assignment' then
+      return exists(select 1 from public.food_taxonomy_assignments f where f.id=p_fact_id and f.food_id=p_food_id and f.node_code=coalesce(p_key,''));
+    when 'market_assignment' then
+      return exists(select 1 from public.food_market_assignments f where f.id=p_fact_id and f.food_id=p_food_id and f.scope_code=coalesce(p_key,''));
+    when 'identity_merge' then
+      return coalesce(p_key,'')='' and exists(select 1 from public.food_merge_events f where f.id=p_fact_id and f.source_food_id=p_food_id);
+    when 'lifecycle' then
+      return coalesce(p_key,'')='' and exists(select 1 from public.food_catalog_governance_lifecycle_events f where f.id=p_fact_id and f.food_id=p_food_id);
+    else
+      return false;
+  end case;
+end
+$function$;
+
 create or replace function private.food_catalog_governance_lock_authority(
   p_food_id uuid,p_kind text,p_key text,p_expected_revision bigint,p_expected_fact_id uuid
 ) returns public.food_catalog_governance_authority_revisions language plpgsql security definer set search_path='' as $function$
@@ -611,19 +670,14 @@ begin
   where food_id=p_food_id and authority_kind=p_kind and authority_key=coalesce(p_key,'') for update;
   if not found then
     if coalesce(p_expected_revision,0)<>0 then raise exception 'Food governance authority CAS conflict.' using errcode='40001'; end if;
-    if p_expected_fact_id is not null then
-      if not (case p_kind
-        when 'nutrition_revision' then exists(select 1 from public.food_nutrition_revisions f where f.id=p_expected_fact_id and f.food_id=p_food_id)
-        when 'serving_option' then exists(select 1 from public.food_serving_options f where f.id=p_expected_fact_id and f.food_id=p_food_id)
-        when 'name_fact' then exists(select 1 from public.food_names f where f.id=p_expected_fact_id and f.food_id=p_food_id)
-        when 'barcode_correction' then exists(select 1 from public.food_barcodes f where f.id=p_expected_fact_id and f.food_id=p_food_id) or exists(select 1 from public.food_catalog_barcode_corrections f where f.id=p_expected_fact_id and f.food_id=p_food_id)
-        when 'taxonomy_assignment' then exists(select 1 from public.food_taxonomy_assignments f where f.id=p_expected_fact_id and f.food_id=p_food_id)
-        when 'market_assignment' then exists(select 1 from public.food_market_assignments f where f.id=p_expected_fact_id and f.food_id=p_food_id)
-        when 'identity_merge' then exists(select 1 from public.food_merge_events f where f.id=p_expected_fact_id and f.source_food_id=p_food_id)
-        when 'lifecycle' then exists(select 1 from public.food_catalog_governance_lifecycle_events f where f.id=p_expected_fact_id and f.food_id=p_food_id)
-        else false end) then raise exception 'Expected Food governance authority fact does not belong to target Food/kind.' using errcode='23514'; end if;
+    if p_expected_fact_id is not null and not private.food_catalog_governance_authority_fact_matches_key(p_food_id,p_kind,coalesce(p_key,''),p_expected_fact_id) then
+      raise exception 'Expected Food governance authority predecessor does not match target Food/kind/key.' using errcode='23514';
     end if;
-    v_head.food_id:=p_food_id; v_head.authority_kind:=p_kind; v_head.authority_key:=coalesce(p_key,''); v_head.authority_revision:=0; v_head.current_fact_id:=p_expected_fact_id;
+    v_head.food_id:=p_food_id;
+    v_head.authority_kind:=p_kind;
+    v_head.authority_key:=coalesce(p_key,'');
+    v_head.authority_revision:=0;
+    v_head.current_fact_id:=p_expected_fact_id;
   elsif v_head.authority_revision<>coalesce(p_expected_revision,0) or v_head.current_fact_id is distinct from p_expected_fact_id then
     raise exception 'Food governance authority CAS conflict.' using errcode='40001';
   end if;
@@ -670,7 +724,8 @@ begin
   end if;
   foreach v_cap in array coalesce(p_capabilities,'{}'::text[]) loop
     if v_cap='food.governance.manage_principals' and p_role_class<>'owner' then raise exception 'Only Owner principals may receive principal management capability.' using errcode='23514'; end if;
-    if p_target_principal_type='service' and v_cap not in ('food.correction.report','food.evidence.attach','food.ingestion.propose') then raise exception 'Service principal governance escalation is forbidden.' using errcode='23514'; end if;
+    if p_target_principal_type='service' and v_cap not in ('food.correction.report','food.evidence.attach','food.ingestion.propose','food.outbox.deliver') then raise exception 'Service principal governance escalation is forbidden.' using errcode='23514'; end if;
+    if v_cap='food.outbox.deliver' and p_target_principal_type<>'service' then raise exception 'Governance outbox delivery capability is Service-principal-only.' using errcode='23514'; end if;
     insert into public.food_catalog_governance_capability_assignments(principal_id,capability,granted_by_principal_id,reason)
     values(v_target,v_cap,v_actor,btrim(p_reason)) on conflict(principal_id,capability) where revoked_at is null do nothing;
   end loop;
@@ -889,19 +944,28 @@ begin
   v_actor:=private.food_catalog_governance_principal_for_user();
   if p_serving_lineage_id is null then raise exception 'Serving lineage ID is required.' using errcode='22023'; end if;
   if p_break_glass_reason is not null then perform private.food_catalog_governance_assert_capability(v_actor,'food.break_glass'); if length(btrim(p_break_glass_reason))=0 then raise exception 'Break-glass reason is required.' using errcode='22023'; end if; end if;
-  v_pre:=private.food_catalog_governance_prepare_apply(p_operation_id,v_actor,'food.serving.correct','food_catalog_apply_serving_correction',p_case_id,p_food_id,p_expected_case_revision,p_expected_authority_revision,p_expected_authority_id,'serving_option',p_serving_lineage_id::text,p_reason,
-    jsonb_build_object('caseId',p_case_id,'foodId',p_food_id,'servingLineageId',p_serving_lineage_id,'expectedCaseRevision',p_expected_case_revision,'expectedAuthorityRevision',p_expected_authority_revision,'expectedAuthorityId',p_expected_authority_id,'label',p_label,'amount',p_amount,'unitCode',p_unit_code,'gramWeight',p_gram_weight,'sourceRecordId',p_source_record_id,'sourcePortionCode',p_source_portion_code,'evidenceClass',p_evidence_class,'sourcePrimary',p_source_primary,'breakGlassReason',p_break_glass_reason));
-  if (v_pre->>'replay')::boolean then return v_pre->'result'; end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_food_id::text||'|serving_lineage|'||p_serving_lineage_id::text,0));
   select food_id into v_lineage_food from public.food_catalog_serving_fact_lineages where lineage_id=p_serving_lineage_id for update;
   if v_lineage_food is null then
     insert into public.food_catalog_serving_fact_lineages(lineage_id,food_id) values(p_serving_lineage_id,p_food_id);
     if p_expected_authority_id is not null then
       perform 1 from public.food_serving_options where id=p_expected_authority_id and food_id=p_food_id;
       if not found then raise exception 'Expected predecessor serving option not found.' using errcode='40001'; end if;
-      insert into public.food_catalog_serving_fact_revisions(serving_option_id,lineage_id,predecessor_serving_option_id) values(p_expected_authority_id,p_serving_lineage_id,null) on conflict(serving_option_id) do nothing;
+      insert into public.food_catalog_serving_fact_revisions(serving_option_id,lineage_id,predecessor_serving_option_id)
+      values(p_expected_authority_id,p_serving_lineage_id,null) on conflict(serving_option_id) do nothing;
     end if;
-  elsif v_lineage_food<>p_food_id then raise exception 'Serving lineage belongs to a different Food.' using errcode='23514'; end if;
-  if p_expected_authority_id is not null and not exists(select 1 from public.food_catalog_serving_fact_revisions where serving_option_id=p_expected_authority_id and lineage_id=p_serving_lineage_id) then raise exception 'Expected serving predecessor belongs to a different lineage.' using errcode='40001'; end if;
+  elsif v_lineage_food<>p_food_id then
+    raise exception 'Serving lineage belongs to a different Food.' using errcode='23514';
+  end if;
+  if p_expected_authority_id is not null and not exists(select 1 from public.food_catalog_serving_fact_revisions where serving_option_id=p_expected_authority_id and lineage_id=p_serving_lineage_id) then
+    raise exception 'Expected serving predecessor belongs to a different lineage.' using errcode='40001';
+  end if;
+  if p_expected_authority_id is null and exists(select 1 from public.food_catalog_serving_fact_revisions where lineage_id=p_serving_lineage_id) then
+    raise exception 'Explicit predecessor serving option is required for an existing lineage.' using errcode='40001';
+  end if;
+  v_pre:=private.food_catalog_governance_prepare_apply(p_operation_id,v_actor,'food.serving.correct','food_catalog_apply_serving_correction',p_case_id,p_food_id,p_expected_case_revision,p_expected_authority_revision,p_expected_authority_id,'serving_option',p_serving_lineage_id::text,p_reason,
+    jsonb_build_object('caseId',p_case_id,'foodId',p_food_id,'servingLineageId',p_serving_lineage_id,'expectedCaseRevision',p_expected_case_revision,'expectedAuthorityRevision',p_expected_authority_revision,'expectedAuthorityId',p_expected_authority_id,'label',p_label,'amount',p_amount,'unitCode',p_unit_code,'gramWeight',p_gram_weight,'sourceRecordId',p_source_record_id,'sourcePortionCode',p_source_portion_code,'evidenceClass',p_evidence_class,'sourcePrimary',p_source_primary,'breakGlassReason',p_break_glass_reason));
+  if (v_pre->>'replay')::boolean then return v_pre->'result'; end if;
   insert into public.food_serving_options(id,food_id,label,amount,unit_code,gram_weight,source_record_id,source_portion_code,evidence_class,source_primary,authority_reference)
   values(v_new,p_food_id,btrim(p_label),p_amount,btrim(p_unit_code),p_gram_weight,p_source_record_id,nullif(btrim(coalesce(p_source_portion_code,'')),''),p_evidence_class,coalesce(p_source_primary,false),'plan6:'||p_operation_id::text);
   insert into public.food_catalog_serving_fact_revisions(serving_option_id,lineage_id,predecessor_serving_option_id) values(v_new,p_serving_lineage_id,p_expected_authority_id);
@@ -914,23 +978,44 @@ end
 $function$;
 
 create or replace function public.food_catalog_apply_name_correction(
-  p_operation_id uuid,p_case_id uuid,p_food_id uuid,p_expected_case_revision bigint,p_expected_authority_revision bigint,p_expected_authority_id uuid,
+  p_operation_id uuid,p_case_id uuid,p_food_id uuid,p_name_lineage_id uuid,p_expected_case_revision bigint,p_expected_authority_revision bigint,p_expected_authority_id uuid,
   p_language_tag text,p_name_role text,p_name_text text,p_normalized_text text,p_script_code text,p_source_record_id uuid,p_reason text
 ) returns jsonb language plpgsql security definer set search_path='' as $function$
-declare v_actor uuid; v_key text; v_pre jsonb; v_new uuid:=gen_random_uuid(); v_revision bigint; v_case_revision bigint; v_result jsonb; v_evidence uuid[]; v_policy text;
+declare v_actor uuid; v_pre jsonb; v_new uuid:=gen_random_uuid(); v_revision bigint; v_case_revision bigint; v_result jsonb; v_evidence uuid[]; v_policy text; v_lineage_food uuid;
 begin
-  v_actor:=private.food_catalog_governance_principal_for_user(); v_key:=lower(btrim(p_language_tag)||':'||btrim(p_name_role));
-  v_pre:=private.food_catalog_governance_prepare_apply(p_operation_id,v_actor,'food.name.correct','food_catalog_apply_name_correction',p_case_id,p_food_id,p_expected_case_revision,p_expected_authority_revision,p_expected_authority_id,'name_fact',v_key,p_reason,
-    jsonb_build_object('caseId',p_case_id,'foodId',p_food_id,'expectedCaseRevision',p_expected_case_revision,'expectedAuthorityRevision',p_expected_authority_revision,'expectedAuthorityId',p_expected_authority_id,'languageTag',p_language_tag,'nameRole',p_name_role,'nameText',p_name_text,'normalizedText',p_normalized_text,'scriptCode',p_script_code,'sourceRecordId',p_source_record_id));
+  v_actor:=private.food_catalog_governance_principal_for_user();
+  if p_name_lineage_id is null then raise exception 'Name lineage ID is required.' using errcode='22023'; end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_food_id::text||'|name_lineage|'||p_name_lineage_id::text,0));
+  select food_id into v_lineage_food from public.food_catalog_name_fact_lineages where lineage_id=p_name_lineage_id for update;
+  if v_lineage_food is null then
+    insert into public.food_catalog_name_fact_lineages(lineage_id,food_id) values(p_name_lineage_id,p_food_id);
+    if p_expected_authority_id is not null then
+      perform 1 from public.food_names where id=p_expected_authority_id and food_id=p_food_id;
+      if not found then raise exception 'Expected predecessor Name fact not found.' using errcode='40001'; end if;
+      insert into public.food_catalog_name_fact_revisions(name_fact_id,lineage_id,predecessor_name_fact_id)
+      values(p_expected_authority_id,p_name_lineage_id,null) on conflict(name_fact_id) do nothing;
+    end if;
+  elsif v_lineage_food<>p_food_id then
+    raise exception 'Name lineage belongs to a different Food.' using errcode='23514';
+  end if;
+  if p_expected_authority_id is not null and not exists(select 1 from public.food_catalog_name_fact_revisions where name_fact_id=p_expected_authority_id and lineage_id=p_name_lineage_id) then
+    raise exception 'Expected Name predecessor belongs to a different lineage.' using errcode='40001';
+  end if;
+  if p_expected_authority_id is null and exists(select 1 from public.food_catalog_name_fact_revisions where lineage_id=p_name_lineage_id) then
+    raise exception 'Explicit predecessor Name fact is required for an existing lineage.' using errcode='40001';
+  end if;
+  v_pre:=private.food_catalog_governance_prepare_apply(p_operation_id,v_actor,'food.name.correct','food_catalog_apply_name_correction',p_case_id,p_food_id,p_expected_case_revision,p_expected_authority_revision,p_expected_authority_id,'name_fact',p_name_lineage_id::text,p_reason,
+    jsonb_build_object('caseId',p_case_id,'foodId',p_food_id,'nameLineageId',p_name_lineage_id,'expectedCaseRevision',p_expected_case_revision,'expectedAuthorityRevision',p_expected_authority_revision,'expectedAuthorityId',p_expected_authority_id,'languageTag',p_language_tag,'nameRole',p_name_role,'nameText',p_name_text,'normalizedText',p_normalized_text,'scriptCode',p_script_code,'sourceRecordId',p_source_record_id));
   if (v_pre->>'replay')::boolean then return v_pre->'result'; end if;
   select policy_version into v_policy from public.food_catalog_correction_cases where id=p_case_id;
   insert into public.food_names(id,food_id,language_tag,name_role,name_text,normalized_text,script_code,origin,source_record_id,policy_version)
   values(v_new,p_food_id,btrim(p_language_tag),p_name_role,btrim(p_name_text),btrim(p_normalized_text),nullif(btrim(coalesce(p_script_code,'')),''),'curated',p_source_record_id,v_policy);
-  v_revision:=private.food_catalog_governance_advance_authority(p_food_id,'name_fact',v_key,v_new);
+  insert into public.food_catalog_name_fact_revisions(name_fact_id,lineage_id,predecessor_name_fact_id) values(v_new,p_name_lineage_id,p_expected_authority_id);
+  v_revision:=private.food_catalog_governance_advance_authority(p_food_id,'name_fact',p_name_lineage_id::text,v_new);
   v_case_revision:=private.food_catalog_governance_mark_case_applied(p_case_id,p_operation_id,v_actor,p_reason);
   select coalesce(array_agg(id order by id),'{}'::uuid[]) into v_evidence from public.food_catalog_correction_evidence where case_id=p_case_id;
-  v_result:=jsonb_build_object('foodId',p_food_id,'nameId',v_new,'authorityRevision',v_revision,'caseRevision',v_case_revision);
-  return private.food_catalog_governance_finish_operation(p_operation_id,p_expected_authority_id,v_new,v_evidence,v_result,'food.correction.applied',jsonb_build_object('foodId',p_food_id,'authorityKind','name_fact','factId',v_new));
+  v_result:=jsonb_build_object('foodId',p_food_id,'nameLineageId',p_name_lineage_id,'nameId',v_new,'authorityRevision',v_revision,'caseRevision',v_case_revision);
+  return private.food_catalog_governance_finish_operation(p_operation_id,p_expected_authority_id,v_new,v_evidence,v_result,'food.correction.applied',jsonb_build_object('foodId',p_food_id,'authorityKind','name_fact','authorityKey',p_name_lineage_id::text,'factId',v_new));
 end
 $function$;
 
@@ -1218,6 +1303,8 @@ alter table public.food_catalog_governance_policy_versions enable row level secu
 alter table public.food_catalog_governance_policy_pointer enable row level security;
 alter table public.food_catalog_serving_fact_lineages enable row level security;
 alter table public.food_catalog_serving_fact_revisions enable row level security;
+alter table public.food_catalog_name_fact_lineages enable row level security;
+alter table public.food_catalog_name_fact_revisions enable row level security;
 alter table public.food_personal_override_operations enable row level security;
 
 alter table public.food_catalog_correction_cases add constraint food_catalog_correction_cases_policy_fk foreign key(policy_version) references public.food_catalog_governance_policy_versions(policy_version) on delete restrict;
@@ -1246,6 +1333,8 @@ revoke all on table public.food_catalog_governance_policy_versions from anon,aut
 revoke all on table public.food_catalog_governance_policy_pointer from anon,authenticated,service_role;
 revoke all on table public.food_catalog_serving_fact_lineages from anon,authenticated,service_role;
 revoke all on table public.food_catalog_serving_fact_revisions from anon,authenticated,service_role;
+revoke all on table public.food_catalog_name_fact_lineages from anon,authenticated,service_role;
+revoke all on table public.food_catalog_name_fact_revisions from anon,authenticated,service_role;
 revoke all on table public.food_personal_override_operations from anon,authenticated,service_role;
 revoke all on table public.food_catalog_governance_principals from anon,authenticated,service_role;
 revoke all on table public.food_catalog_governance_capability_assignments from anon,authenticated,service_role;
@@ -1308,33 +1397,35 @@ $do$;
 revoke all on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) from public,anon,authenticated,service_role;
 grant execute on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) to service_role;
 
-create or replace function public.food_catalog_claim_governance_outbox(p_event_id uuid,p_claim_owner text default 'governance-worker',p_lease_seconds integer default 300)
+create or replace function public.food_catalog_claim_governance_outbox(p_event_id uuid,p_lease_seconds integer default 300)
 returns jsonb language plpgsql security definer set search_path='' as $function$
-declare v_row public.food_catalog_governance_outbox%rowtype; v_token uuid:=gen_random_uuid();
+declare v_row public.food_catalog_governance_outbox%rowtype; v_token uuid:=gen_random_uuid(); v_actor uuid;
 begin
-  if auth.role()<>'service_role' then raise exception 'Governance outbox delivery requires service_role.' using errcode='42501'; end if;
-  if length(btrim(coalesce(p_claim_owner,'')))=0 or p_lease_seconds not between 1 and 3600 then raise exception 'Governance outbox claim owner/lease is invalid.' using errcode='22023'; end if;
-  update public.food_catalog_governance_outbox set status='processing',attempt_count=attempt_count+1,claim_owner=btrim(p_claim_owner),lease_token=v_token,lease_epoch=lease_epoch+1,lease_acquired_at=clock_timestamp(),lease_expires_at=clock_timestamp()+make_interval(secs=>p_lease_seconds),updated_at=clock_timestamp(),last_error=null
+  v_actor:=private.food_catalog_governance_service_principal_for_request();
+  perform private.food_catalog_governance_assert_capability(v_actor,'food.outbox.deliver');
+  if p_lease_seconds not between 1 and 3600 then raise exception 'Governance outbox lease is invalid.' using errcode='22023'; end if;
+  update public.food_catalog_governance_outbox set status='processing',attempt_count=attempt_count+1,claim_owner=v_actor::text,claim_principal_id=v_actor,lease_token=v_token,lease_epoch=lease_epoch+1,lease_acquired_at=clock_timestamp(),lease_expires_at=clock_timestamp()+make_interval(secs=>p_lease_seconds),updated_at=clock_timestamp(),last_error=null
   where event_id=p_event_id and available_at<=clock_timestamp() and (status in ('pending','failed') or (status='processing' and lease_expires_at<=clock_timestamp())) returning * into v_row;
   if not found then raise exception 'Governance outbox event is not claimable.' using errcode='40001'; end if;
-  return jsonb_build_object('eventId',v_row.event_id,'eventType',v_row.event_type,'payload',v_row.payload,'attemptCount',v_row.attempt_count,'claimOwner',v_row.claim_owner,'leaseToken',v_row.lease_token,'leaseEpoch',v_row.lease_epoch,'leaseExpiresAt',v_row.lease_expires_at);
+  return jsonb_build_object('eventId',v_row.event_id,'eventType',v_row.event_type,'payload',v_row.payload,'attemptCount',v_row.attempt_count,'claimOwner',v_row.claim_owner,'claimPrincipalId',v_row.claim_principal_id,'leaseToken',v_row.lease_token,'leaseEpoch',v_row.lease_epoch,'leaseExpiresAt',v_row.lease_expires_at);
 end
 $function$;
 create or replace function public.food_catalog_finish_governance_outbox(p_event_id uuid,p_lease_token uuid,p_delivered boolean,p_error text default null,p_retry_after_seconds integer default 0)
 returns jsonb language plpgsql security definer set search_path='' as $function$
-declare v_row public.food_catalog_governance_outbox%rowtype;
+declare v_row public.food_catalog_governance_outbox%rowtype; v_actor uuid;
 begin
-  if auth.role()<>'service_role' then raise exception 'Governance outbox delivery requires service_role.' using errcode='42501'; end if;
+  v_actor:=private.food_catalog_governance_service_principal_for_request();
+  perform private.food_catalog_governance_assert_capability(v_actor,'food.outbox.deliver');
   if p_lease_token is null or p_retry_after_seconds not between 0 and 86400 then raise exception 'Governance outbox finish lease/retry is invalid.' using errcode='22023'; end if;
-  update public.food_catalog_governance_outbox set status=case when p_delivered then 'delivered' else 'failed' end,delivered_at=case when p_delivered then clock_timestamp() else null end,last_error=case when p_delivered then null else nullif(btrim(coalesce(p_error,'')),'') end,available_at=case when p_delivered then available_at else clock_timestamp()+make_interval(secs=>p_retry_after_seconds) end,claim_owner=null,lease_token=null,lease_acquired_at=null,lease_expires_at=null,updated_at=clock_timestamp()
-  where event_id=p_event_id and status='processing' and lease_token=p_lease_token and lease_expires_at>clock_timestamp() returning * into v_row;
-  if not found then raise exception 'Governance outbox lease is stale, expired, or not processing.' using errcode='40001'; end if;
+  update public.food_catalog_governance_outbox set status=case when p_delivered then 'delivered' else 'failed' end,delivered_at=case when p_delivered then clock_timestamp() else null end,last_error=case when p_delivered then null else nullif(btrim(coalesce(p_error,'')),'') end,available_at=case when p_delivered then available_at else clock_timestamp()+make_interval(secs=>p_retry_after_seconds) end,claim_owner=null,claim_principal_id=null,lease_token=null,lease_acquired_at=null,lease_expires_at=null,updated_at=clock_timestamp()
+  where event_id=p_event_id and status='processing' and claim_principal_id=v_actor and lease_token=p_lease_token and lease_expires_at>clock_timestamp() returning * into v_row;
+  if not found then raise exception 'Governance outbox lease is stale, expired, owned by another Service principal, or not processing.' using errcode='40001'; end if;
   return jsonb_build_object('eventId',v_row.event_id,'status',v_row.status,'attemptCount',v_row.attempt_count);
 end
 $function$;
-revoke all on function public.food_catalog_claim_governance_outbox(uuid,text,integer) from public,anon,authenticated;
+revoke all on function public.food_catalog_claim_governance_outbox(uuid,integer) from public,anon,authenticated;
 revoke all on function public.food_catalog_finish_governance_outbox(uuid,uuid,boolean,text,integer) from public,anon,authenticated;
-grant execute on function public.food_catalog_claim_governance_outbox(uuid,text,integer) to service_role;
+grant execute on function public.food_catalog_claim_governance_outbox(uuid,integer) to service_role;
 grant execute on function public.food_catalog_finish_governance_outbox(uuid,uuid,boolean,text,integer) to service_role;
 revoke all on function public.food_catalog_lookup_effective_barcode(text) from public,anon;
 grant execute on function public.food_catalog_lookup_effective_barcode(text) to authenticated,service_role;

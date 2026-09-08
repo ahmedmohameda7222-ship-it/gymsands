@@ -175,3 +175,18 @@ Plan 6 Production mutation is intentionally excluded from this implementation PR
 7. reconcile the repository migration ledger in a separate post-apply repository change if the program authority requires that reconciliation.
 
 The implementation chat does not merge PR #173 and does not perform the pre-merge Production migration apply.
+
+
+## Deeper authority re-review hardening
+
+### Name fact lineages
+
+Name facts are genuinely multi-valued. `food_catalog_name_fact_lineages` and `food_catalog_name_fact_revisions` give each independent Name fact a stable lineage and predecessor chain. The governance head key for `name_fact` is the lineage UUID, never `language_tag:name_role`, so multiple synonyms, aliases, or transliterations with the same language and role remain independently correctable while old Name facts stay immutable history. Plan 3 generation membership remains fact-ID based and can continue selecting multiple Name facts.
+
+### Exact semantic predecessor validation
+
+Initial governance-head seeding validates the predecessor against the exact semantic key. Name uses lineage identity; serving uses serving lineage; barcode uses exact GTIN; taxonomy uses exact `node_code`; market uses exact `scope_code`. Same-Food membership alone is not predecessor authority, so audit `old_authority_id` and CAS initialization cannot be seeded from an unrelated keyed fact.
+
+### Outbox Service-principal authority
+
+Governance outbox delivery is an explicit opt-in Service capability: `food.outbox.deliver`. Claim and finish resolve the non-forgeable `plaivra_food_service_identity` execution claim through the existing Service-principal hash binding, require that capability, and bind the active lease to the resolved principal. Generic `service_role`, an unrelated Service principal, or caller-authored worker text is not delivery authority. Lease expiry/reclaim, stale-token rejection, `available_at`, retry scheduling, and terminal delivery semantics remain local Postgres control-plane behavior with no paid queue dependency.

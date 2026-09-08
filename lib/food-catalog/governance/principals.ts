@@ -21,6 +21,7 @@ export const FOOD_GOVERNANCE_CAPABILITIES = [
   "food.personal_override.write",
   "food.observability.read",
   "food.ingestion.propose",
+  "food.outbox.deliver",
 ] as const;
 export type FoodGovernanceCapability = (typeof FOOD_GOVERNANCE_CAPABILITIES)[number];
 
@@ -38,7 +39,7 @@ export type FoodGovernanceCapabilityAssignment = {
 };
 
 const OWNER_CAPABILITIES: readonly FoodGovernanceCapability[] = FOOD_GOVERNANCE_CAPABILITIES.filter(
-  (capability) => capability !== "food.ingestion.propose",
+  (capability) => capability !== "food.ingestion.propose" && capability !== "food.outbox.deliver",
 );
 const CURATOR_CAPABILITIES: readonly FoodGovernanceCapability[] = [
   "food.correction.report",

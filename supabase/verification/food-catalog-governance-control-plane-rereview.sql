@@ -58,6 +58,7 @@ select :'owner_principal',capability,'rereview-owner' from unnest(array[
 ]) capability;
 insert into public.food_catalog_governance_capability_assignments(principal_id,capability,reason) values
   (:'service_a','food.ingestion.propose','service-a-propose'),
+  (:'service_a','food.outbox.deliver','service-a-outbox'),
   (:'service_b','food.evidence.attach','service-b-evidence'),
   (:'domain_principal','food.nutrition.correct','domain-only'),
   (:'apply_principal','food.correction.apply','apply-only'),
@@ -174,24 +175,27 @@ insert into public.food_catalog_governance_outbox(event_id,operation_id,event_ty
  ('67000000-0000-4000-8000-000000000552','67000000-0000-4000-8000-000000000552','fixture.retry','{}',now());
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
-select (public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000550','worker-a',300))->>'leaseToken' as lease_a \gset
+select set_config('request.jwt.claims',jsonb_build_object('role','service_role','plaivra_food_service_identity','service-a-identity')::text,true);
+select (public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000550',300))->>'leaseToken' as lease_a \gset
 reset role;
 update public.food_catalog_governance_outbox set lease_expires_at=clock_timestamp()-interval '1 second' where event_id='67000000-0000-4000-8000-000000000550';
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
-select (public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000550','worker-b',300))->>'leaseToken' as lease_b \gset
+select set_config('request.jwt.claims',jsonb_build_object('role','service_role','plaivra_food_service_identity','service-a-identity')::text,true);
+select (public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000550',300))->>'leaseToken' as lease_b \gset
 select pg_temp.plan6_rereview_rejected(format('select public.food_catalog_finish_governance_outbox(%L,%L,true,null,0)','67000000-0000-4000-8000-000000000550',:'lease_a'),'stale worker cannot finish newer claim');
 select public.food_catalog_finish_governance_outbox('67000000-0000-4000-8000-000000000550',:'lease_b',true,null,0);
-select pg_temp.plan6_rereview_rejected($$select public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000550','worker-c',300)$$,'delivered event cannot be redelivered');
-select pg_temp.plan6_rereview_rejected($$select public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000551','worker-future',300)$$,'available_at is respected');
-select (public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000552','worker-retry-a',300))->>'leaseToken' as retry_lease_a \gset
+select pg_temp.plan6_rereview_rejected($$select public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000550',300)$$,'delivered event cannot be redelivered');
+select pg_temp.plan6_rereview_rejected($$select public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000551',300)$$,'available_at is respected');
+select (public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000552',300))->>'leaseToken' as retry_lease_a \gset
 select public.food_catalog_finish_governance_outbox('67000000-0000-4000-8000-000000000552',:'retry_lease_a',false,'transient',60);
-select pg_temp.plan6_rereview_rejected($$select public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000552','worker-retry-b',300)$$,'failed retry respects available_at');
+select pg_temp.plan6_rereview_rejected($$select public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000552',300)$$,'failed retry respects available_at');
 reset role;
 update public.food_catalog_governance_outbox set available_at=clock_timestamp()-interval '1 second' where event_id='67000000-0000-4000-8000-000000000552';
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
-select (public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000552','worker-retry-b',300))->>'leaseToken' as retry_lease_b \gset
+select set_config('request.jwt.claims',jsonb_build_object('role','service_role','plaivra_food_service_identity','service-a-identity')::text,true);
+select (public.food_catalog_claim_governance_outbox('67000000-0000-4000-8000-000000000552',300))->>'leaseToken' as retry_lease_b \gset
 select public.food_catalog_finish_governance_outbox('67000000-0000-4000-8000-000000000552',:'retry_lease_b',true,null,0);
 reset role;
 select pg_temp.plan6_rereview_assert((select status='delivered' and attempt_count=2 from public.food_catalog_governance_outbox where event_id='67000000-0000-4000-8000-000000000552'),'failed outbox work retried and delivered');

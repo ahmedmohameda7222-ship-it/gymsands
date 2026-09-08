@@ -49,6 +49,8 @@ describe("Food Catalog Plan 6 governance principals", () => {
     expect(() => assertFoodGovernanceCapability(service, "food.correction.approve")).toThrow(/capability denied/i);
     expect(() => assertFoodGovernanceCapability(service, "food.break_glass")).toThrow(/capability denied/i);
     expect(() => assertFoodGovernanceCapability(service, "food.governance.manage_principals")).toThrow(/capability denied/i);
+    expect(DEFAULT_FOOD_GOVERNANCE_CAPABILITIES.service).not.toContain("food.outbox.deliver");
+    expect(DEFAULT_FOOD_GOVERNANCE_CAPABILITIES.owner).not.toContain("food.outbox.deliver");
   });
 
   it("respects revocation when deriving an immutable capability snapshot", () => {

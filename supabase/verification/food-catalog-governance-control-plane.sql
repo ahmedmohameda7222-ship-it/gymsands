@@ -128,7 +128,7 @@ select :'owner_principal',capability,'plan6-verifier-owner' from unnest(array[
 insert into public.food_catalog_governance_capability_assignments(principal_id,capability,reason)
 select :'curator_principal',capability,'plan6-verifier-curator' from unnest(array['food.correction.report','food.correction.review','food.evidence.attach']) capability;
 insert into public.food_catalog_governance_capability_assignments(principal_id,capability,reason)
-select :'service_principal',capability,'plan6-verifier-service' from unnest(array['food.correction.report','food.evidence.attach','food.ingestion.propose']) capability;
+select :'service_principal',capability,'plan6-verifier-service' from unnest(array['food.correction.report','food.evidence.attach','food.ingestion.propose','food.outbox.deliver']) capability;
 
 -- Member can report but cannot mutate global authority directly.
 set local role authenticated;
@@ -371,9 +371,10 @@ select pg_temp.plan6_assert((select count(*)=1 from public.food_catalog_governan
 -- Outbox failure/retry/delivery is idempotent and terminal once delivered.
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
-select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422','governance-worker',300))->>'leaseToken' as primary_retry_lease_a \gset
+select set_config('request.jwt.claims',jsonb_build_object('role','service_role','plaivra_food_service_identity','plan6-verifier-service-identity')::text,true);
+select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422',300))->>'leaseToken' as primary_retry_lease_a \gset
 select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',:'primary_retry_lease_a',false,'fixture failure',0);
-select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422','governance-worker',300))->>'leaseToken' as primary_retry_lease_b \gset
+select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422',300))->>'leaseToken' as primary_retry_lease_b \gset
 select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',:'primary_retry_lease_b',true,null,0);
 select pg_temp.plan6_rejected($$select public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422')$$,'delivered outbox event terminal');
 reset role;
