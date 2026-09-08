@@ -29,3 +29,44 @@ jobs:
 
       - name: Check branch diff formatting against main
         run: git diff --check origin/main...HEAD
+
+  plan6-five-p1-concurrency-red:
+    if: github.event.pull_request.number == 173
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PLAIVRA_PLAN6_CONCURRENCY_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      SUPABASE_TELEMETRY_DISABLED: 1
+      DO_NOT_TRACK: 1
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact checkout identity
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Replay chronological migrations
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/plan6-five-p1-red.log --prove-future-order
+
+      - name: Run Plan 6 multi-session concurrency adversaries
+        run: node scripts/test-food-catalog-governance-plan6-concurrency.mjs
