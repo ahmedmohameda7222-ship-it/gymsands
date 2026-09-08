@@ -90,7 +90,15 @@ jobs:
         run: supabase db lint --local --schema public --level error --fail-on error
 
       - name: All registered database verification and concurrency adversaries
-        run: node scripts/run-database-verification.mjs
+        shell: bash
+        run: |
+          set +e
+          node scripts/run-database-verification.mjs 2>&1 | tee /tmp/plan6-dbverify.log
+          status=${PIPESTATUS[0]}
+          echo "===== PLAN6 DB VERIFICATION TAIL ====="
+          tail -n 180 /tmp/plan6-dbverify.log
+          echo "===== END PLAN6 DB VERIFICATION TAIL (status=${status}) ====="
+          exit "${status}"
 
       - name: Migration ledger
         run: npm run migration:ledger:check
