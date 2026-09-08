@@ -371,10 +371,10 @@ select pg_temp.plan6_assert((select count(*)=1 from public.food_catalog_governan
 -- Outbox failure/retry/delivery is idempotent and terminal once delivered.
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
-select public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422');
-select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',false,'fixture failure');
-select public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422');
-select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',true,null);
+select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422','governance-worker',300))->>'leaseToken' as primary_retry_lease_a \gset
+select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',:'primary_retry_lease_a',false,'fixture failure',0);
+select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422','governance-worker',300))->>'leaseToken' as primary_retry_lease_b \gset
+select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',:'primary_retry_lease_b',true,null,0);
 select pg_temp.plan6_rejected($$select public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422')$$,'delivered outbox event terminal');
 reset role;
 select pg_temp.plan6_assert((select status='delivered' and attempt_count=2 from public.food_catalog_governance_outbox where event_id='66000000-0000-4000-8000-000000000422'),'outbox retry/delivery state visible');
