@@ -203,6 +203,15 @@ jobs:
           echo "===== END PLAN6 DB VERIFICATION TAIL (status=${status}) ====="
           exit "${status}"
 
+      - name: Upload Plan 6 DB verification diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan6-dbverify-${{ github.event.pull_request.head.sha }}
+          path: /tmp/plan6-dbverify.log
+          if-no-files-found: warn
+          retention-days: 1
+
       - name: Migration ledger
         run: npm run migration:ledger:check
 
