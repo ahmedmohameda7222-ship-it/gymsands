@@ -1,0 +1,45 @@
+name: Plan 6 Personal History Purge Fix Temp
+on:
+  push:
+    branches:
+      - feat/food-catalog-governance-plan6
+    paths:
+      - .github/workflows/plan6-personal-history-purge-fix-temp.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Preserve personal history immutability with privacy deletion authority
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const migrationPath = 'supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql';
+          let migration = fs.readFileSync(migrationPath, 'utf8');
+          const oldTrigger = "create trigger food_personal_override_revisions_immutable before update or delete on public.food_personal_override_revisions for each row execute function private.reject_food_catalog_governance_immutable_mutation();";
+          const newTrigger = "create trigger food_personal_override_revisions_immutable before update on public.food_personal_override_revisions for each row execute function private.reject_food_catalog_governance_immutable_mutation();";
+          if (!migration.includes(oldTrigger)) throw new Error('Personal revision immutable trigger anchor missing.');
+          migration = migration.replace(oldTrigger, newTrigger);
+          fs.writeFileSync(migrationPath, migration);
+
+          const verifierPath = 'supabase/verification/food-catalog-governance-control-plane.sql';
+          let verifier = fs.readFileSync(verifierPath, 'utf8');
+          const anchor = "select pg_temp.plan6_assert((select calories is null and protein_g is null from public.food_items where id=:'food_a'),'personal override did not alter global/compatibility Food nutrition');\n\n-- Plan 6 personal override purge follows the existing account-deletion lifecycle.";
+          if (!verifier.includes(anchor)) throw new Error('Personal override verifier anchor missing.');
+          const proof = "select pg_temp.plan6_assert((select calories is null and protein_g is null from public.food_items where id=:'food_a'),'personal override did not alter global/compatibility Food nutrition');\n\n-- Revision history is UPDATE-immutable and application DELETE remains denied; only the canonical privacy purge may physically remove owner history.\nset local role authenticated;\nselect set_config('request.jwt.claim.sub', :'member_id', true);\nselect set_config('request.jwt.claim.role','authenticated',true);\nselect pg_temp.plan6_rejected(format('delete from public.food_personal_override_revisions where id=%L',:'override_a'),'authenticated owner cannot directly delete personal override revision history');\nreset role;\nset local role service_role;\nselect set_config('request.jwt.claim.role','service_role',true);\nselect pg_temp.plan6_rejected(format('delete from public.food_personal_override_revisions where id=%L',:'override_b'),'service_role cannot directly delete personal override revision history');\nreset role;\n\n-- Plan 6 personal override purge follows the existing account-deletion lifecycle.";
+          verifier = verifier.replace(anchor, proof);
+          fs.writeFileSync(verifierPath, verifier);
+          NODE
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql supabase/verification/food-catalog-governance-control-plane.sql
+          git commit -m "fix: allow privacy purge of personal override history"
+          git push origin HEAD:feat/food-catalog-governance-plan6
