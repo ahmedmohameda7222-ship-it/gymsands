@@ -183,14 +183,6 @@ jobs:
             tail -n 20 /tmp/plan6-one-verifier.log
             echo "===== PASS ${verifier} ====="
           done
-          echo "===== START concurrency adversaries ====="
-          if ! node scripts/test-food-catalog-governance-plan6-concurrency.mjs >/tmp/plan6-concurrency.log 2>&1; then
-            echo "::error title=Plan 6 concurrency adversary failed::scripts/test-food-catalog-governance-plan6-concurrency.mjs"
-            cat /tmp/plan6-concurrency.log
-            exit 1
-          fi
-          cat /tmp/plan6-concurrency.log
-          echo "===== PASS concurrency adversaries ====="
 
       - name: All registered database verification and concurrency adversaries
         shell: bash
