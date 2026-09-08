@@ -42,6 +42,33 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
+      - name: Align one-shot fixer with current TS layout
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('.github/scripts/plan6_authority_rereview_apply.py')
+          s=p.read_text()
+          replacement=r'''principals = PRINCIPALS.read_text()
+          principals = replace_once(
+              principals,
+              '  "food.observability.read",\n  "food.ingestion.propose",\n] as const;',
+              '  "food.observability.read",\n  "food.ingestion.propose",\n  "food.outbox.deliver",\n] as const;',
+              'TS outbox capability',
+          )
+          principals = replace_once(
+              principals,
+              'const OWNER_CAPABILITIES: readonly FoodGovernanceCapability[] = FOOD_GOVERNANCE_CAPABILITIES.filter(\n  (capability) => capability !== "food.ingestion.propose",\n);',
+              'const OWNER_CAPABILITIES: readonly FoodGovernanceCapability[] = FOOD_GOVERNANCE_CAPABILITIES.filter(\n  (capability) => capability !== "food.ingestion.propose" && capability !== "food.outbox.deliver",\n);',
+              'Owner default excludes delivery',
+          )
+          PRINCIPALS.write_text(principals)'''
+          s2,n=re.subn(r"principals = PRINCIPALS\.read_text\(\)[\s\S]*?PRINCIPALS\.write_text\(principals\)",replacement,s,count=1)
+          if n!=1:
+              raise SystemExit(f'expected one principals patch section, got {n}')
+          p.write_text(s2)
+          PY
+
       - name: Apply Plan 6 authority root fix
         run: python3 .github/scripts/plan6_authority_rereview_apply.py
 
