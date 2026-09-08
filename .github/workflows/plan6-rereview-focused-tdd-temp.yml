@@ -23,14 +23,18 @@ jobs:
           from pathlib import Path
           p=Path('supabase/verification/food-catalog-governance-control-plane.sql')
           s=p.read_text()
-          old="""select public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422');
-select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',false,'fixture failure');
-select public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422');
-select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',true,null);"""
-          new="""select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422','governance-worker',300))->>'leaseToken' as primary_retry_lease_a \\gset
-select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',:'primary_retry_lease_a',false,'fixture failure',0);
-select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422','governance-worker',300))->>'leaseToken' as primary_retry_lease_b \\gset
-select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',:'primary_retry_lease_b',true,null,0);"""
+          old="\n".join([
+              "select public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422');",
+              "select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',false,'fixture failure');",
+              "select public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422');",
+              "select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',true,null);",
+          ])
+          new="\n".join([
+              "select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422','governance-worker',300))->>'leaseToken' as primary_retry_lease_a \\gset",
+              "select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',:'primary_retry_lease_a',false,'fixture failure',0);",
+              "select (public.food_catalog_claim_governance_outbox('66000000-0000-4000-8000-000000000422','governance-worker',300))->>'leaseToken' as primary_retry_lease_b \\gset",
+              "select public.food_catalog_finish_governance_outbox('66000000-0000-4000-8000-000000000422',:'primary_retry_lease_b',true,null,0);",
+          ])
           if old in s:
               p.write_text(s.replace(old,new))
           elif "primary_retry_lease_a" not in s:
