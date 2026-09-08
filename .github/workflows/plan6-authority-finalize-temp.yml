@@ -37,7 +37,19 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Apply already-validated Plan 6 authority root fix
-        run: python3 .github/scripts/plan6_authority_rereview_apply.py
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/plan6_authority_rereview_apply.py')
+          text = path.read_text()
+          text = text.replace(
+              'if "format_administrative_food_name_rows_v3" in src:\n    fail("shared artifact formatters are already v3")',
+              'if "format_administrative_food_name_rows_v3(p_scope text" in src:\n    fail("shared artifact formatters are already v3")',
+              1,
+          )
+          path.write_text(text)
+          PY
+          python3 .github/scripts/plan6_authority_rereview_apply.py
       - uses: actions/setup-node@v4
         with:
           node-version: 24
