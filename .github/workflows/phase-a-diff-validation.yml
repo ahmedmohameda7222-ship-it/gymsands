@@ -56,6 +56,25 @@ jobs:
       - name: Apply five-P1 hardened correction in disposable checkout
         run: python3 .github/scripts/plan6_five_p1_apply.py
 
+      - name: Repair legacy Plan 6 verifier Auth fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("supabase/verification/food-catalog-governance-control-plane.sql")
+          text = path.read_text()
+          marker = "Plan 6 member Auth fixture did not create canonical profile/access state"
+          if marker not in text:
+              anchor = "-- The disposable purge owner is a real Auth user so the canonical privacy lifecycle can be exercised without bypasses.\n"
+              if text.count(anchor) != 1:
+                  raise RuntimeError(f"expected one purge-owner fixture anchor, found {text.count(anchor)}")
+              member_fixture = """-- The ordinary member is also a real Auth user because Personal Override writes are gated by canonical account lifecycle state.\ninsert into auth.users (\n  id, aud, role, email, encrypted_password,\n  raw_app_meta_data, raw_user_meta_data, created_at, updated_at\n) values (\n  :'member_id'::uuid, 'authenticated', 'authenticated', 'plan6-member@example.test', '',\n  '{\\\"provider\\\":\\\"email\\\",\\\"providers\\\":[\\\"email\\\"]}'::jsonb, '{}'::jsonb, now(), now()\n);\nselect pg_temp.plan6_assert(\n  exists(select 1 from public.profiles where id=:'member_id'::uuid)\n  and exists(select 1 from public.account_access_states where user_id=:'member_id'::uuid and state='active' and disabled_at is null),\n  'Plan 6 member Auth fixture did not create canonical profile/access state'\n);\n\n"""
+              text = text.replace(anchor, member_fixture + anchor, 1)
+              path.write_text(text)
+          PY
+
       - name: Check staged working-tree diff
         run: git diff --check
 
@@ -147,6 +166,7 @@ jobs:
             supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql \
             scripts/run-database-verification.mjs \
             scripts/test-food-catalog-governance-plan6-concurrency.mjs \
+            supabase/verification/food-catalog-governance-control-plane.sql \
             supabase/verification/food-catalog-governance-control-plane-five-p1-rereview.sql \
             lib/product/food-catalog-governance-plan6-five-p1-rereview.test.ts \
             docs/architecture/food-catalog-governance-control-plane.md \
