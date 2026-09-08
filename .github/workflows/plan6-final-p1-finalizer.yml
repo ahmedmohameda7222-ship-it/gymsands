@@ -56,6 +56,20 @@ jobs:
           s=s[:j]+"perform pg_advisory_xact_lock( hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));"+s[j+len(old):]
           p.write_text(s)
           PY
+          # The patcher itself introduces the shared lock helper before replacing
+          # the legacy Personal Override literal. Keep the helper semantically
+          # identical but textually distinct so replace_once targets only legacy SQL.
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/scripts/plan6_final_p1_apply.py')
+          s=p.read_text()
+          old="  perform pg_advisory_xact_lock(hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));"
+          new="  perform pg_advisory_xact_lock( hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));"
+          if s.count(old) < 2:
+              raise SystemExit(f'expected helper template plus replace target, found {s.count(old)}')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
           python .github/scripts/plan6_final_p1_apply.py
           python .github/scripts/plan6_final_p1_postpatch.py
           git diff --check
