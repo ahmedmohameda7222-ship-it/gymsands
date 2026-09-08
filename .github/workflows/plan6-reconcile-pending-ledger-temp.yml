@@ -1,0 +1,56 @@
+name: Plan 6 Reconcile Pending Ledger Temp
+on:
+  push:
+    branches:
+      - feat/food-catalog-governance-plan6
+    paths:
+      - .github/workflows/plan6-reconcile-pending-ledger-temp.yml
+permissions:
+  contents: write
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Reconcile Plan 6 pending ledger and forward-aware Batch 0 verifier
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const ledgerPath = 'supabase/migration-ledger.json';
+          const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+          ledger.pendingCount = 1;
+          ledger.unresolvedCount = 1;
+          ledger.historyRepair.state = 'pending';
+          ledger.historyRepair.pendingCount = 1;
+          ledger.historyRepair.unresolvedCount = 1;
+          ledger.historyRepair.note = ledger.historyRepair.note
+            .replace(' No repository migration remains pending or unresolved. Do not replay applied migrations.', '')
+            + ' Repository Plan 6 migration 20260908100000_food_catalog_governance_control_plane.sql is intentionally pending/unapplied and must not be treated as Production history. Do not replay applied migrations.';
+          ledger.entries = ledger.entries.filter((entry) => entry.localFile !== '20260908100000_food_catalog_governance_control_plane.sql');
+          ledger.entries.push({
+            localFile: '20260908100000_food_catalog_governance_control_plane.sql',
+            state: 'pending',
+            note: 'Plan 6 repository-only forward migration; not applied to Plaivra Production.'
+          });
+          fs.writeFileSync(ledgerPath, JSON.stringify(ledger));
+
+          const verifierPath = 'supabase/verification/food-catalog-population-readiness.sql';
+          let verifier = fs.readFileSync(verifierPath, 'utf8');
+          const oldBlock = `    where not c.relrowsecurity\n       or has_table_privilege('anon', 'public.' || required.table_name, 'SELECT,INSERT,UPDATE,DELETE')\n       or has_table_privilege('authenticated', 'public.' || required.table_name, 'SELECT,INSERT,UPDATE,DELETE')\n       or not has_table_privilege('service_role', 'public.' || required.table_name, 'SELECT,INSERT,UPDATE,DELETE')`;
+          const newBlock = `    where not c.relrowsecurity\n       or has_table_privilege('anon', 'public.' || required.table_name, 'SELECT,INSERT,UPDATE,DELETE')\n       or has_table_privilege('authenticated', 'public.' || required.table_name, 'SELECT,INSERT,UPDATE,DELETE')\n       or not has_table_privilege('service_role', 'public.' || required.table_name, 'SELECT')\n       or (\n         required.table_name = 'food_barcodes'\n         and to_regclass('public.food_catalog_governance_principals') is not null\n         and has_table_privilege('service_role', 'public.' || required.table_name, 'INSERT,UPDATE,DELETE,TRUNCATE')\n       )\n       or (\n         (required.table_name <> 'food_barcodes' or to_regclass('public.food_catalog_governance_principals') is null)\n         and not has_table_privilege('service_role', 'public.' || required.table_name, 'INSERT,UPDATE,DELETE')\n       )`;
+          if (!verifier.includes(oldBlock)) throw new Error('Batch 0 verifier ACL block did not match the frozen expected source.');
+          verifier = verifier.replace(oldBlock, newBlock);
+          fs.writeFileSync(verifierPath, verifier);
+          NODE
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add supabase/migration-ledger.json supabase/verification/food-catalog-population-readiness.sql
+          git commit -m "test: reconcile Plan 6 pending migration authority"
+          git push origin HEAD:feat/food-catalog-governance-plan6
