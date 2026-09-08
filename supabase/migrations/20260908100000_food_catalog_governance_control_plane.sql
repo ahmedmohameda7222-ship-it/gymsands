@@ -103,6 +103,24 @@ create table public.food_catalog_correction_reports (
 create index food_catalog_correction_reports_owner_idx
   on public.food_catalog_correction_reports(reporter_user_id,created_at,id);
 
+create table public.food_catalog_service_proposals (
+  id uuid primary key default gen_random_uuid(),
+  operation_id uuid not null unique references public.food_catalog_governance_operations(operation_id) on delete restrict,
+  principal_id uuid not null references public.food_catalog_governance_principals(id) on delete restrict,
+  food_id uuid not null references public.food_items(id) on delete restrict,
+  category text not null check (category in (
+    'wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation',
+    'wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product',
+    'source_conflict','other'
+  )),
+  claim_key text not null check (length(btrim(claim_key)) between 1 and 240),
+  description text not null check (length(btrim(description)) between 1 and 2000),
+  evidence jsonb not null default '{}'::jsonb check (jsonb_typeof(evidence)='object' and pg_column_size(evidence) <= 8192),
+  policy_version text not null check (length(btrim(policy_version)) > 0),
+  created_at timestamptz not null default now()
+);
+create index food_catalog_service_proposals_food_idx on public.food_catalog_service_proposals(food_id,created_at,id);
+
 create table public.food_catalog_correction_evidence (
   id uuid primary key default gen_random_uuid(),
   case_id uuid not null references public.food_catalog_correction_cases(id) on delete restrict,
@@ -239,6 +257,7 @@ end
 $function$;
 
 create trigger food_catalog_correction_reports_immutable before update or delete on public.food_catalog_correction_reports for each row execute function private.reject_food_catalog_governance_immutable_mutation();
+create trigger food_catalog_service_proposals_immutable before update or delete on public.food_catalog_service_proposals for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_correction_evidence_immutable before update or delete on public.food_catalog_correction_evidence for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_correction_events_immutable before update or delete on public.food_catalog_correction_events for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_governance_audit_events_immutable before update or delete on public.food_catalog_governance_audit_events for each row execute function private.reject_food_catalog_governance_immutable_mutation();
@@ -463,6 +482,41 @@ begin
   if v_assignment is null then raise exception 'Active capability assignment not found.' using errcode='23503'; end if;
   v_result:=jsonb_build_object('principalId',p_target_principal_id,'capability',p_capability,'revoked',true);
   return private.food_catalog_governance_finish_operation(p_operation_id,v_assignment,null,'{}'::uuid[],v_result,'food.governance.capability.revoked',jsonb_build_object('principalId',p_target_principal_id,'capability',p_capability));
+end
+$function$;
+
+-- Future provider adapters may propose bounded governance work as constrained Service principals.
+-- A proposal is immutable evidence only: it cannot approve/apply a correction or mutate canonical Food truth.
+create or replace function public.food_catalog_service_propose_correction(
+  p_operation_id uuid,p_principal_id uuid,p_food_id uuid,p_category text,p_claim_key text,p_description text,
+  p_evidence jsonb default '{}'::jsonb,p_policy_version text default 'plan6-v1',p_reason text default 'service proposal'
+) returns jsonb language plpgsql security definer set search_path='' as $function$
+declare v_replay jsonb; v_proposal uuid; v_result jsonb;
+begin
+  if auth.role()<>'service_role' then raise exception 'Service governance proposal requires service_role execution.' using errcode='42501'; end if;
+  if p_category not in ('wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation','wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product','source_conflict','other') then raise exception 'Invalid service correction proposal category.' using errcode='22023'; end if;
+  if length(btrim(coalesce(p_claim_key,''))) not between 1 and 240 or length(btrim(coalesce(p_description,''))) not between 1 and 2000 then raise exception 'Service correction proposal text is outside allowed bounds.' using errcode='22023'; end if;
+  if jsonb_typeof(coalesce(p_evidence,'{}'::jsonb))<>'object' or pg_column_size(coalesce(p_evidence,'{}'::jsonb))>8192 then raise exception 'Service correction proposal evidence must remain bounded.' using errcode='22023'; end if;
+  if coalesce(p_evidence,'{}'::jsonb) ?| array['accessToken','authorization','password','secret','cookie','session','apiKey','serviceRole'] then raise exception 'Sensitive service proposal evidence is forbidden.' using errcode='22023'; end if;
+  perform 1 from public.food_items where id=p_food_id and is_global=true;
+  if not found then raise exception 'Global Food not found for service proposal.' using errcode='23503'; end if;
+
+  v_replay:=private.food_catalog_governance_begin_operation(
+    p_operation_id,p_principal_id,'food.ingestion.propose','food_catalog_service_propose_correction',p_food_id,null,
+    btrim(p_policy_version),p_reason,
+    jsonb_build_object('foodId',p_food_id,'category',p_category,'claimKey',btrim(p_claim_key),'description',btrim(p_description),'evidence',coalesce(p_evidence,'{}'::jsonb))
+  );
+  if v_replay is not null then return v_replay; end if;
+
+  insert into public.food_catalog_service_proposals(operation_id,principal_id,food_id,category,claim_key,description,evidence,policy_version)
+  values(p_operation_id,p_principal_id,p_food_id,p_category,btrim(p_claim_key),btrim(p_description),coalesce(p_evidence,'{}'::jsonb),btrim(p_policy_version))
+  returning id into v_proposal;
+
+  v_result:=jsonb_build_object('proposalId',v_proposal,'foodId',p_food_id,'canonicalMutation',false);
+  return private.food_catalog_governance_finish_operation(
+    p_operation_id,null,null,'{}'::uuid[],v_result,'food.governance.service.proposed',
+    jsonb_build_object('proposalId',v_proposal,'foodId',p_food_id,'category',p_category)
+  );
 end
 $function$;
 
@@ -913,6 +967,7 @@ alter table public.food_catalog_governance_principals enable row level security;
 alter table public.food_catalog_governance_capability_assignments enable row level security;
 alter table public.food_catalog_correction_cases enable row level security;
 alter table public.food_catalog_correction_reports enable row level security;
+alter table public.food_catalog_service_proposals enable row level security;
 alter table public.food_catalog_correction_evidence enable row level security;
 alter table public.food_catalog_correction_events enable row level security;
 alter table public.food_catalog_governance_authority_revisions enable row level security;
@@ -928,6 +983,7 @@ revoke all on table public.food_catalog_governance_principals from anon,authenti
 revoke all on table public.food_catalog_governance_capability_assignments from anon,authenticated,service_role;
 revoke all on table public.food_catalog_correction_cases from anon,authenticated,service_role;
 revoke all on table public.food_catalog_correction_reports from anon,authenticated,service_role;
+revoke all on table public.food_catalog_service_proposals from anon,authenticated,service_role;
 revoke all on table public.food_catalog_correction_evidence from anon,authenticated,service_role;
 revoke all on table public.food_catalog_correction_events from anon,authenticated,service_role;
 revoke all on table public.food_catalog_governance_authority_revisions from anon,authenticated,service_role;
@@ -980,6 +1036,9 @@ begin
   end loop;
 end
 $do$;
+
+revoke all on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) from public,anon,authenticated,service_role;
+grant execute on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) to service_role;
 
 create or replace function public.food_catalog_claim_governance_outbox(p_event_id uuid)
 returns jsonb language plpgsql security definer set search_path='' as $function$

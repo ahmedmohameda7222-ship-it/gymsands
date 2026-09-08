@@ -39,6 +39,7 @@ select pg_temp.plan6_assert(
   and to_regclass('public.food_catalog_governance_capability_assignments') is not null
   and to_regclass('public.food_catalog_correction_cases') is not null
   and to_regclass('public.food_catalog_correction_evidence') is not null
+  and to_regclass('public.food_catalog_service_proposals') is not null
   and to_regclass('public.food_catalog_governance_operations') is not null
   and to_regclass('public.food_catalog_governance_audit_events') is not null
   and to_regclass('public.food_catalog_governance_outbox') is not null
@@ -130,11 +131,33 @@ select pg_temp.plan6_assert((select food_name='Plan 6 Fixture A' from public.foo
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
 select set_config('request.jwt.claim.sub','',true);
+-- Service principal proposal: constrained adapter evidence, never approval/application authority.
+select (public.food_catalog_service_propose_correction(
+ '66000000-0000-4000-8000-000000000408',:'service_principal',:'food_a','other','adapter:proposal','Provider adapter proposal',
+ jsonb_build_object('sourceClass','fixture'),'plan6-v1','adapter proposal'
+))->>'proposalId' as service_proposal \gset
+select public.food_catalog_service_propose_correction(
+ '66000000-0000-4000-8000-000000000408',:'service_principal',:'food_a','other','adapter:proposal','Provider adapter proposal',
+ jsonb_build_object('sourceClass','fixture'),'plan6-v1','adapter proposal'
+);
+select pg_temp.plan6_rejected(format('insert into public.food_catalog_service_proposals(operation_id,principal_id,food_id,category,claim_key,description,policy_version) values(%L,%L,%L,%L,%L,%L,%L)',
+ '66000000-0000-4000-8000-000000000409',:'service_principal',:'food_a','other','direct','direct bypass','plan6-v1'),'service_role cannot directly insert Service proposal rows');
 select pg_temp.plan6_rejected(format('update public.food_items set food_name=%L where id=%L','service-hijack',:'food_a'),'service_role direct Food update denied');
 select pg_temp.plan6_rejected(format('insert into public.food_nutrition_revisions(food_id,revision_number,basis_amount,basis_unit,nutrient_mapping_version) values(%L,1,100,%L,%L)',:'food_a','g','bad'),'service_role direct canonical fact insert denied');
 select pg_temp.plan6_rejected(format('select public.food_catalog_manage_governance_principal(%L,%L,%L,%L,array[%L]::text[],%L)',
  '66000000-0000-4000-8000-000000000401','service','evil-service','service','food.correction.approve','escalate'),'service-role human governance RPC denied');
 reset role;
+select pg_temp.plan6_assert((select count(*)=1 from public.food_catalog_service_proposals where id=:'service_proposal' and principal_id=:'service_principal' and food_id=:'food_a'),'Service principal proposal persisted exactly once');
+select pg_temp.plan6_assert((select replay_count=1 from public.food_catalog_governance_operations where operation_id='66000000-0000-4000-8000-000000000408'),'Service principal proposal exact replay is idempotent');
+select pg_temp.plan6_assert(exists(select 1 from public.food_catalog_governance_audit_events where operation_id='66000000-0000-4000-8000-000000000408' and capability='food.ingestion.propose'),'Service principal proposal emitted immutable audit evidence');
+select pg_temp.plan6_assert(exists(select 1 from public.food_catalog_governance_outbox where operation_id='66000000-0000-4000-8000-000000000408'),'Service principal proposal emitted transactional outbox evidence');
+select pg_temp.plan6_assert((select food_name='Plan 6 Fixture A' and lifecycle_status='active' from public.food_items where id=:'food_a'),'Service principal proposal changed zero canonical Food truth');
+select pg_temp.plan6_assert(
+  exists(select 1 from public.food_catalog_governance_capability_assignments where principal_id=:'service_principal' and capability='food.ingestion.propose' and revoked_at is null)
+  and not exists(select 1 from public.food_catalog_governance_capability_assignments where principal_id=:'service_principal' and capability in ('food.correction.approve','food.correction.apply','food.nutrition.correct','food.identity.merge') and revoked_at is null),
+  'Service principal cannot approve or apply canonical governance work'
+);
+select pg_temp.plan6_assert(not has_function_privilege('service_role','public.food_catalog_transition_correction_case(uuid,uuid,text,bigint,text,text,text,text,bigint,uuid)','EXECUTE'),'Service principal cannot approve through human transition RPC');
 
 -- Owner-only provisioning proves future human capability assignments require no code/schema change.
 set local role authenticated;
