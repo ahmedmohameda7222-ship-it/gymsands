@@ -65,6 +65,21 @@ describe("Food Catalog Plan 6 database authority", () => {
     expect(sql).toContain("revoke all on function %s from public, anon, authenticated, service_role");
   });
 
+  it("extends the canonical account purge to delete Plan 6 personal overrides and proves it in rollback verification", () => {
+    const sql = read(MIGRATION).toLowerCase();
+    const verifier = read(VERIFIER).toLowerCase();
+    expect(sql).toContain("alter function public.purge_account_application_data_atomic(uuid) set schema private");
+    expect(sql).toContain("food_catalog_governance_core_purge_account_application_data_atomic");
+    expect(sql).toContain("delete from public.food_personal_overrides where user_id = p_user_id");
+    expect(sql).toContain("delete from public.food_personal_override_revisions where user_id = p_user_id");
+    expect(sql).toContain("food_personal_overrides_deleted");
+    expect(sql).toContain("food_personal_override_revisions_deleted");
+    expect(verifier).toContain("plan 6 personal override purge");
+    expect(verifier).toContain("purge_account_application_data_atomic");
+    expect(verifier).toContain("food_personal_overrides");
+    expect(verifier).toContain("food_personal_override_revisions");
+  });
+
   it("does not bypass Plan 3 generation authority or Plan 5 derived-search authority", () => {
     const sql = read(MIGRATION).toLowerCase();
     expect(sql).not.toMatch(/(?:insert\s+into|update|delete\s+from)\s+public\.food_catalog_current_generation/);
