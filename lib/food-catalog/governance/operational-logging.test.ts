@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const logOperationalEvent = vi.fn();
+const { logOperationalEvent } = vi.hoisted(() => ({
+  logOperationalEvent: vi.fn(),
+}));
 vi.mock("@/lib/observability/structured-log", () => ({ logOperationalEvent }));
 
 import {
