@@ -96,4 +96,9 @@ jobs:
         env:
           PLAIVRA_PLAN6_FINAL_P1_CONCURRENCY_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
           PLAIVRA_PLAN6_FINAL_P1_SCENARIO: gtin
-        run: node scripts/test-food-catalog-governance-plan6-final-p1-concurrency.mjs
+        run: |
+          # PostgreSQL fires same-timing triggers by trigger name. For the RED proof,
+          # force the barrier after food_barcodes_global_gtin_serialization so Plan6
+          # holds the GTIN advisory lock before sleeping and Plan4 can hold Food A.
+          sed -i 's/aaa_plan6_final_p1_barcode_sleep/zzz_plan6_final_p1_barcode_sleep/g' scripts/test-food-catalog-governance-plan6-final-p1-concurrency.mjs
+          node scripts/test-food-catalog-governance-plan6-final-p1-concurrency.mjs
