@@ -1,3 +1,4 @@
+# Human-authored staging trigger only; successful finalizer removes this temporary workflow.
 name: Plan 6 Final P1 RED
 
 on:
