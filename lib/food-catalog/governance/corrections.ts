@@ -43,13 +43,13 @@ const MAX_DESCRIPTION = 2000;
 const MAX_EVIDENCE_TEXT = 4096;
 const MAX_EVIDENCE_KEYS = 24;
 
-const TRANSITIONS: Readonly<Record<FoodCorrectionState, readonly FoodCorrectionState[]>> = Object.freeze({
-  reported: Object.freeze(["under_review", "rejected"]),
-  under_review: Object.freeze(["approved", "rejected"]),
-  approved: Object.freeze(["applied"]),
-  applied: Object.freeze([]),
-  rejected: Object.freeze([]),
-});
+const TRANSITIONS = {
+  reported: ["under_review", "rejected"],
+  under_review: ["approved", "rejected"],
+  approved: ["applied"],
+  applied: [],
+  rejected: [],
+} as const satisfies Readonly<Record<FoodCorrectionState, readonly FoodCorrectionState[]>>;
 
 function nonblank(value: string, label: string) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`${label} is required.`);
@@ -107,6 +107,6 @@ export function validateCorrectionTransition(from: FoodCorrectionState, to: Food
   if (!FOOD_CORRECTION_STATES.includes(from) || !FOOD_CORRECTION_STATES.includes(to)) {
     throw new Error("Correction state is invalid.");
   }
-  if (!TRANSITIONS[from].includes(to)) throw new Error(`Invalid correction transition: ${from} -> ${to}`);
+  if (!TRANSITIONS[from].includes(to as never)) throw new Error(`Invalid correction transition: ${from} -> ${to}`);
   return { from, to } as const;
 }
