@@ -91,9 +91,11 @@ export function planCanonicalCorrection(input: {
   if (input.expectedAuthorityId !== null && !UUID.test(input.expectedAuthorityId)) {
     throw new Error("Expected canonical authority ID must be an exact UUID or null when no current authority exists.");
   }
+  const requiredCapabilities = Object.freeze(["food.correction.apply", policy.capability] satisfies FoodGovernanceCapability[]);
   return Object.freeze({
     commandName: input.commandName,
     capability: policy.capability,
+    requiredCapabilities,
     authorityKind: policy.authorityKind,
     category: input.category,
     foodId: input.foodId.toLowerCase(),
