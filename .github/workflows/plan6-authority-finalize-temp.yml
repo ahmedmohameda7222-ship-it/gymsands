@@ -47,6 +47,16 @@ jobs:
               'if "format_administrative_food_name_rows_v3(p_scope text" in src:\n    fail("shared artifact formatters are already v3")',
               1,
           )
+          text = text.replace(
+              "principals = replace_once(principals, '  \"food.ingestion.propose\",\\n', '  \"food.ingestion.propose\",\\n  \"food.outbox.deliver\",\\n', 'TS outbox capability')",
+              "principals = replace_once(principals, '  \"food.ingestion.propose\",\\n] as const;', '  \"food.ingestion.propose\",\\n  \"food.outbox.deliver\",\\n] as const;', 'TS outbox capability')",
+              1,
+          )
+          text = text.replace(
+              "    'const OWNER_CAPABILITIES = FOOD_GOVERNANCE_CAPABILITIES.filter((capability) => capability !== \"food.ingestion.propose\");',\n    'const OWNER_CAPABILITIES = FOOD_GOVERNANCE_CAPABILITIES.filter((capability) => capability !== \"food.ingestion.propose\" && capability !== \"food.outbox.deliver\");',",
+              "    'const OWNER_CAPABILITIES: readonly FoodGovernanceCapability[] = FOOD_GOVERNANCE_CAPABILITIES.filter(\\n  (capability) => capability !== \"food.ingestion.propose\",\\n);',\n    'const OWNER_CAPABILITIES: readonly FoodGovernanceCapability[] = FOOD_GOVERNANCE_CAPABILITIES.filter(\\n  (capability) => capability !== \"food.ingestion.propose\" && capability !== \"food.outbox.deliver\",\\n);',",
+              1,
+          )
           path.write_text(text)
           PY
           python3 .github/scripts/plan6_authority_rereview_apply.py
