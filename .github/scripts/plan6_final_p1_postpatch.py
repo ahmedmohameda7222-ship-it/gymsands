@@ -53,6 +53,27 @@ if text.count(marker) != 1:
     raise SystemExit(f"service identity index marker count={text.count(marker)}")
 text = text.replace(marker, binding, 1)
 
+# Principal management writes the strong human UUID binding explicitly; the trigger
+# remains a defensive consistency boundary for database-owner/bootstrap inserts.
+manage_start = text.index("create or replace function public.food_catalog_manage_governance_principal(")
+manage_end = text.index("create or replace function public.food_catalog_revoke_governance_capability(", manage_start)
+manage = text[manage_start:manage_end]
+manage_old_insert = "insert into public.food_catalog_governance_principals(principal_type,subject_id,service_identity_sha256,role_class,active,revoked_at)"
+manage_new_insert = "insert into public.food_catalog_governance_principals(principal_type,subject_id,human_user_id,service_identity_sha256,role_class,active,revoked_at)"
+manage_old_values = "values(p_target_principal_type,v_subject,v_service_hash,p_role_class,true,null)"
+manage_new_values = "values(p_target_principal_type,v_subject,v_human_user,v_service_hash,p_role_class,true,null)"
+manage_old_update = "set service_identity_sha256=excluded.service_identity_sha256,role_class=excluded.role_class,active=true,revoked_at=null"
+manage_new_update = "set human_user_id=excluded.human_user_id,service_identity_sha256=excluded.service_identity_sha256,role_class=excluded.role_class,active=true,revoked_at=null"
+for old_value, new_value, label in [
+    (manage_old_insert, manage_new_insert, "management principal insert binding"),
+    (manage_old_values, manage_new_values, "management principal values binding"),
+    (manage_old_update, manage_new_update, "management principal upsert binding"),
+]:
+    if manage.count(old_value) != 1:
+        raise SystemExit(f"expected one {label}, found {manage.count(old_value)}")
+    manage = manage.replace(old_value, new_value, 1)
+text = text[:manage_start] + manage + text[manage_end:]
+
 # Preserve the earlier P1-5 contract literally as well as semantically. Personal
 # Override writes still join the same canonical per-user purge-lock domain before
 # the operation ledger; keeping the key inline also prevents this security boundary
