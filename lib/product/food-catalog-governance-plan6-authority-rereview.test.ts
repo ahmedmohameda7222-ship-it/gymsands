@@ -12,6 +12,7 @@ function body(name: string) {
   return sql.slice(start, next < 0 ? sql.length : next);
 }
 
+// These contracts stay permanent; the temporary workflow only supplies the TDD execution harness.
 describe("Plan 6 deeper authority re-review blockers", () => {
   it("P1-R1 gives each Name fact an independent stable lineage authority", () => {
     expect(sql).toContain("food_catalog_name_fact_lineages");
