@@ -71,6 +71,29 @@ select pg_temp.plan6_assert(
   'Plan 3 current/generation and Plan 5 derived-search authority remain locked'
 );
 
+do $private_acl$
+declare r record;
+begin
+  for r in
+    select p.oid as function_oid, p.oid::regprocedure as signature
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='private'
+      and (
+        p.proname like 'food_catalog_governance_%'
+        or p.proname in ('food_catalog_change_lifecycle','reject_food_catalog_governance_immutable_mutation')
+      )
+  loop
+    perform pg_temp.plan6_assert(
+      not has_function_privilege('anon',r.function_oid,'EXECUTE')
+      and not has_function_privilege('authenticated',r.function_oid,'EXECUTE')
+      and not has_function_privilege('service_role',r.function_oid,'EXECUTE'),
+      'Plan 6 private helper executable by application role: '||r.signature::text
+    );
+  end loop;
+end
+$private_acl$;
+
 -- Database-owner fixtures. Runtime application roles cannot perform these direct inserts.
 insert into public.food_items(id,food_name,is_global,lifecycle_status) values
   (:'food_a','Plan 6 Fixture A',true,'active'),(:'food_b','Plan 6 Fixture B',true,'active');

@@ -907,6 +907,24 @@ revoke insert, update, delete, truncate on table public.food_taxonomy_assignment
 revoke insert, update, delete, truncate on table public.food_market_assignments from anon, authenticated, service_role;
 revoke insert, update, delete, truncate on table public.food_merge_events from anon, authenticated, service_role;
 
+do $private_acl$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as signature
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='private'
+      and (
+        p.proname like 'food_catalog_governance_%'
+        or p.proname in ('food_catalog_change_lifecycle','reject_food_catalog_governance_immutable_mutation')
+      )
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated, service_role',r.signature);
+  end loop;
+end
+$private_acl$;
+
 do $do$
 declare r record;
 begin
