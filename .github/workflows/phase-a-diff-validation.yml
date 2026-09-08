@@ -63,7 +63,7 @@ jobs:
               'Owner default excludes delivery',
           )
           PRINCIPALS.write_text(principals)'''
-          s2,n=re.subn(r"principals = PRINCIPALS\.read_text\(\)[\s\S]*?PRINCIPALS\.write_text\(principals\)",replacement,s,count=1)
+          s2,n=re.subn(r"principals = PRINCIPALS\.read_text\(\)[\s\S]*?PRINCIPALS\.write_text\(principals\)",lambda _m: replacement,s,count=1)
           if n!=1:
               raise SystemExit(f'expected one principals patch section, got {n}')
           p.write_text(s2)
