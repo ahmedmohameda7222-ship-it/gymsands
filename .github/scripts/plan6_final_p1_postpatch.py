@@ -54,22 +54,16 @@ if text.count(marker) != 1:
 text = text.replace(marker, binding, 1)
 migration.write_text(text)
 
-# Make the permanent GTIN adversary deterministic: Plan6 holds GTIN while sleeping,
-# then wait until Plan4 MATCH is visibly blocked on that advisory lock.
+# The permanent GREEN adversary forces overlap after the canonical Food->GTIN
+# safety trigger has acquired the corrected lock order. It deliberately does not
+# require Plan4 to wait on a GTIN advisory lock: after the fix, Plan4 may correctly
+# wait on the Food row instead. The harness itself rejects any PostgreSQL deadlock,
+# requires both legitimate transactions to complete, and verifies final authority.
+# The separate RED workflow patches this same harness to assert the old advisory
+# wait explicitly when reproducing the pre-fix GTIN->Food inversion.
 script = concurrency.read_text()
 script = script.replace("aaa_plan6_final_p1_barcode_sleep", "zzz_plan6_final_p1_barcode_sleep")
 script = script.replace("perform pg_catalog.pg_sleep(3);", "perform pg_catalog.pg_sleep(15);", 1)
-needle = "  const [r6, r4] = await Promise.all([p6.done, p4Session.done]);\n"
-replacement = """  await waitFor(
-    () => runSql(`select count(*) from pg_stat_activity where application_name='${APP_P4_MATCH}' and state='active' and wait_event_type='Lock' and wait_event='advisory'`) === "1",
-    10000,
-    "Plan4 MATCH to block on the in-flight GTIN advisory lock",
-  );
-  const [r6, r4] = await Promise.all([p6.done, p4Session.done]);
-"""
-if script.count(needle) != 1:
-    raise SystemExit(f"GTIN concurrency synchronization marker count={script.count(needle)}")
-script = script.replace(needle, replacement, 1)
 concurrency.write_text(script)
 
 # postpatch changes the pending Plan 6 migration bytes, so refresh its pending
