@@ -101,6 +101,78 @@ script = script.replace("aaa_plan6_final_p1_barcode_sleep", "zzz_plan6_final_p1_
 script = script.replace("perform pg_catalog.pg_sleep(3);", "perform pg_catalog.pg_sleep(15);", 1)
 concurrency.write_text(script)
 
+# P1-F2 intentionally tightens human governance identity from arbitrary text to a
+# live Auth-backed, account-active UUID. Older rollback verifiers predate that
+# invariant and used phantom UUID subjects only as fixtures. Keep their behavioral
+# assertions, but bind every human actor/provisioning target they actually execute
+# as to a real active disposable Auth account. This is verifier compatibility only;
+# no production function or policy is weakened.
+def replace_once_file(relative_path, old_text, new_text, label):
+    path = root / relative_path
+    value = path.read_text()
+    count = value.count(old_text)
+    if count != 1:
+        raise SystemExit(f"expected one {label} in {relative_path}, found {count}")
+    path.write_text(value.replace(old_text, new_text, 1))
+
+core_marker = """begin;
+
+-- Food Catalog Plan 6 disposable rollback-only verification. No fixture survives.
+"""
+core_live_fixtures = """begin;
+
+-- P1-F2 live-identity compatibility fixtures for legacy governance actors.
+insert into auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values
+  (:'owner_id'::uuid,'authenticated','authenticated','plan6-owner@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now()),
+  (:'curator_id'::uuid,'authenticated','authenticated','plan6-curator@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now()),
+  ('66000000-0000-4000-8000-000000000099'::uuid,'authenticated','authenticated','plan6-provisioned-curator@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now());
+
+-- Food Catalog Plan 6 disposable rollback-only verification. No fixture survives.
+"""
+replace_once_file(
+    "supabase/verification/food-catalog-governance-control-plane.sql",
+    core_marker,
+    core_live_fixtures,
+    "core Plan 6 live human fixture marker",
+)
+
+rereview_marker = """begin;
+
+create or replace function pg_temp.plan6_rereview_assert"""
+rereview_live_fixtures = """begin;
+
+-- P1-F2 live-identity compatibility fixtures for human governance actors.
+insert into auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values
+  (:'owner_uid'::uuid,'authenticated','authenticated','plan6-rereview-owner@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now()),
+  (:'domain_uid'::uuid,'authenticated','authenticated','plan6-rereview-domain@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now()),
+  (:'apply_uid'::uuid,'authenticated','authenticated','plan6-rereview-apply@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now()),
+  (:'both_uid'::uuid,'authenticated','authenticated','plan6-rereview-both@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now());
+
+create or replace function pg_temp.plan6_rereview_assert"""
+replace_once_file(
+    "supabase/verification/food-catalog-governance-control-plane-rereview.sql",
+    rereview_marker,
+    rereview_live_fixtures,
+    "Plan 6 rereview live human fixture marker",
+)
+
+authority_marker = """begin;
+
+create or replace function pg_temp.plan6_authority_assert"""
+authority_live_fixture = """begin;
+
+-- P1-F2 live-identity compatibility fixture for the human governance owner.
+insert into auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
+values(:'owner_uid'::uuid,'authenticated','authenticated','plan6-authority-owner@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now());
+
+create or replace function pg_temp.plan6_authority_assert"""
+replace_once_file(
+    "supabase/verification/food-catalog-governance-control-plane-authority-rereview.sql",
+    authority_marker,
+    authority_live_fixture,
+    "Plan 6 authority rereview live human fixture marker",
+)
+
 # postpatch changes the pending Plan 6 migration bytes, so refresh its pending
 # repository hash only after all in-place migration edits are complete.
 ledger = json.loads(ledger_path.read_text())
