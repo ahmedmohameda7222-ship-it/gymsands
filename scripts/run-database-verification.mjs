@@ -61,6 +61,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/food-catalog-governance-control-plane.sql",
   "supabase/verification/food-catalog-governance-control-plane-rereview.sql",
   "supabase/verification/food-catalog-governance-control-plane-authority-rereview.sql",
+  "supabase/verification/food-catalog-governance-control-plane-five-p1-rereview.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
@@ -97,6 +98,10 @@ export function runDatabaseVerification({
   run(process.execPath, ["scripts/test-food-catalog-grant-promotion-concurrency.mjs"], {
     ...executionEnv,
     PLAIVRA_GRANT_PROMOTION_CONCURRENCY_TEST_DATABASE_URL: localUrl,
+  });
+  run(process.execPath, ["scripts/test-food-catalog-governance-plan6-concurrency.mjs"], {
+    ...executionEnv,
+    PLAIVRA_PLAN6_CONCURRENCY_TEST_DATABASE_URL: localUrl,
   });
   run(process.execPath, ["scripts/test-database-preflight-control.mjs"], {
     ...executionEnv,

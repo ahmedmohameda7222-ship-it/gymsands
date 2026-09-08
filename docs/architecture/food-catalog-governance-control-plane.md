@@ -190,3 +190,12 @@ Initial governance-head seeding validates the predecessor against the exact sema
 ### Outbox Service-principal authority
 
 Governance outbox delivery is an explicit opt-in Service capability: `food.outbox.deliver`. Claim and finish resolve the non-forgeable `plaivra_food_service_identity` execution claim through the existing Service-principal hash binding, require that capability, and bind the active lease to the resolved principal. Generic `service_role`, an unrelated Service principal, or caller-authored worker text is not delivery authority. Lease expiry/reclaim, stale-token rejection, `available_at`, retry scheduling, and terminal delivery semantics remain local Postgres control-plane behavior with no paid queue dependency.
+
+
+## Five-P1 concurrency and privilege hardening
+
+The independent security/correctness re-review added five fail-closed boundaries without changing cross-plan ownership. Private Personal Override helpers are caller-bound to `auth.uid()` and have application-role/PUBLIC EXECUTE removed. Personal Override writes acquire the canonical account-purge advisory lock and require an active, non-disabled `account_access_states` row before their operation ledger can be created or replayed; the Plan 6 purge wrapper takes that same lock before deleting Plan 6 owner data.
+
+GTIN ownership now has one database-wide serialization domain keyed only by normalized GTIN. A `food_barcodes` trigger covers every privileged writer, including the already-applied Plan 4 ingestion runtime, while the Plan 6 barcode command acquires the same lock before authority/ownership checks and verifies final effective ownership before correction history, authority advancement, case application, audit, or outbox success. The applied Plan 4 migration remains byte-for-byte untouched.
+
+Governance recovery-set mutations share one advisory-lock domain and assert after mutation that at least one active human Owner retains active `food.governance.manage_principals`; a failed postcondition rolls back the operation and its audit/outbox atomically. Duplicate resolution locks source and target Foods in deterministic ID order, requires an active unredirected target, forbids using a current merge survivor as a later source, and thereby prevents chains/cycles. Lifecycle withdrawal rejects Foods with inbound merge redirects and validates any replacement as an active unredirected canonical root.

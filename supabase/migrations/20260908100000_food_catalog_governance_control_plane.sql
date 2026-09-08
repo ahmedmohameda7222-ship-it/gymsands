@@ -441,6 +441,106 @@ begin
 end
 $function$;
 
+
+-- PLAN6_FIVE_P1_HARDENED: shared cross-plan serialization and recovery/privacy locks.
+create or replace function private.food_catalog_lock_gtin_authority(p_gtin text)
+returns void language plpgsql security definer set search_path='' as $function$
+declare v_gtin text:=btrim(coalesce(p_gtin,''));
+begin
+  if length(v_gtin)=0 then raise exception 'GTIN serialization key is required.' using errcode='22023'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('food-catalog-gtin:'||v_gtin,0));
+end
+$function$;
+
+create or replace function private.food_catalog_serialize_gtin_write()
+returns trigger language plpgsql security definer set search_path='' as $function$
+declare v_old text; v_new text;
+begin
+  if tg_op='INSERT' then
+    perform private.food_catalog_lock_gtin_authority(new.gtin);
+    return new;
+  elsif tg_op='DELETE' then
+    perform private.food_catalog_lock_gtin_authority(old.gtin);
+    return old;
+  end if;
+  v_old:=btrim(coalesce(old.gtin,''));
+  v_new:=btrim(coalesce(new.gtin,''));
+  if v_old=v_new then
+    perform private.food_catalog_lock_gtin_authority(v_new);
+  else
+    perform private.food_catalog_lock_gtin_authority(least(v_old,v_new));
+    perform private.food_catalog_lock_gtin_authority(greatest(v_old,v_new));
+  end if;
+  return new;
+end
+$function$;
+
+drop trigger if exists food_barcodes_global_gtin_serialization on public.food_barcodes;
+create trigger food_barcodes_global_gtin_serialization
+before insert or update or delete on public.food_barcodes
+for each row execute function private.food_catalog_serialize_gtin_write();
+
+create or replace function private.food_catalog_governance_lock_recovery_set()
+returns void language plpgsql security definer set search_path='' as $function$
+begin
+  perform pg_advisory_xact_lock(hashtextextended('food-catalog-governance-recovery-set',0));
+end
+$function$;
+
+create or replace function private.food_catalog_governance_assert_recovery_exists()
+returns void language plpgsql stable security definer set search_path='' as $function$
+begin
+  if not exists(
+    select 1
+    from public.food_catalog_governance_principals p
+    join public.food_catalog_governance_capability_assignments a
+      on a.principal_id=p.id
+     and a.capability='food.governance.manage_principals'
+     and a.revoked_at is null
+    where p.principal_type='human'
+      and p.role_class='owner'
+      and p.active
+      and p.revoked_at is null
+  ) then
+    raise exception 'At least one active human Owner recovery principal must remain.' using errcode='23514';
+  end if;
+end
+$function$;
+
+create or replace function private.food_catalog_lock_food_pair(p_food_a uuid,p_food_b uuid)
+returns void language plpgsql security definer set search_path='' as $function$
+declare v_id uuid; v_count integer:=0;
+begin
+  if p_food_a is null or p_food_b is null or p_food_a=p_food_b then
+    raise exception 'Distinct Food pair is required for identity topology locking.' using errcode='22023';
+  end if;
+  for v_id in
+    select id from public.food_items where id in (p_food_a,p_food_b) order by id
+  loop
+    perform 1 from public.food_items where id=v_id for update;
+    v_count:=v_count+1;
+  end loop;
+  if v_count<>2 then raise exception 'Food identity topology member not found.' using errcode='23503'; end if;
+end
+$function$;
+
+create or replace function private.food_catalog_personal_override_require_writable_account(p_user_id uuid)
+returns void language plpgsql security definer set search_path='' as $function$
+begin
+  if auth.uid() is null or auth.uid()<>p_user_id then
+    raise exception 'Personal Override account identity mismatch.' using errcode='42501';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));
+  perform 1
+  from public.account_access_states
+  where user_id=p_user_id and state='active' and disabled_at is null
+  for share;
+  if not found then
+    raise exception 'Personal Override writes require an active, non-disabled account.' using errcode='42501';
+  end if;
+end
+$function$;
+
 create or replace function private.food_catalog_gtin_is_valid(p_gtin text)
 returns boolean language plpgsql immutable set search_path='' as $function$
 declare v_sum integer:=0; v_i integer; v_digit integer; v_len integer:=length(coalesce(p_gtin,'')); v_check integer;
@@ -476,6 +576,7 @@ create or replace function private.food_catalog_personal_override_begin_operatio
 returns jsonb language plpgsql security definer set search_path='' as $function$
 declare v_checksum text; v_existing public.food_personal_override_operations%rowtype;
 begin
+  if auth.uid() is null or auth.uid()<>p_user_id then raise exception 'Personal Override helper identity mismatch.' using errcode='42501'; end if;
   if p_operation_id is null then raise exception 'Personal override operation ID is required.' using errcode='22023'; end if;
   v_checksum:=private.food_catalog_governance_semantic_checksum(p_semantics);
   perform pg_advisory_xact_lock(hashtextextended(p_user_id::text||'|'||p_operation_id::text,0));
@@ -496,6 +597,7 @@ $function$;
 create or replace function private.food_catalog_personal_override_finish_operation(p_user_id uuid,p_operation_id uuid,p_result jsonb)
 returns jsonb language plpgsql security definer set search_path='' as $function$
 begin
+  if auth.uid() is null or auth.uid()<>p_user_id then raise exception 'Personal Override helper identity mismatch.' using errcode='42501'; end if;
   update public.food_personal_override_operations set result_json=p_result,completed_at=clock_timestamp()
   where user_id=p_user_id and operation_id=p_operation_id and completed_at is null;
   if not found then raise exception 'Personal override operation cannot be completed.' using errcode='40001'; end if;
@@ -707,6 +809,7 @@ begin
   v_actor:=private.food_catalog_governance_principal_for_user();
   v_policy:=private.food_catalog_governance_current_policy_version();
   v_service_hash:=case when p_target_principal_type='service' then encode(extensions.digest(convert_to(btrim(coalesce(p_service_identity,'')),'UTF8'),'sha256'),'hex') else null end;
+  perform private.food_catalog_governance_lock_recovery_set();
   v_replay:=private.food_catalog_governance_begin_operation(p_operation_id,v_actor,'food.governance.manage_principals','food_catalog_manage_governance_principal',null,null,v_policy,p_reason,
     jsonb_build_object('principalType',p_target_principal_type,'subjectId',btrim(p_target_subject_id),'roleClass',p_role_class,'capabilities',to_jsonb(coalesce(p_capabilities,'{}'::text[])),'serviceIdentitySha256',v_service_hash));
   if v_replay is not null then return v_replay; end if;
@@ -729,6 +832,7 @@ begin
     insert into public.food_catalog_governance_capability_assignments(principal_id,capability,granted_by_principal_id,reason)
     values(v_target,v_cap,v_actor,btrim(p_reason)) on conflict(principal_id,capability) where revoked_at is null do nothing;
   end loop;
+  perform private.food_catalog_governance_assert_recovery_exists();
   v_result:=jsonb_build_object('principalId',v_target,'principalType',p_target_principal_type,'roleClass',p_role_class);
   return private.food_catalog_governance_finish_operation(p_operation_id,null,v_target,'{}'::uuid[],v_result,'food.governance.principal.managed',jsonb_build_object('principalId',v_target));
 end
@@ -741,6 +845,7 @@ declare v_actor uuid; v_replay jsonb; v_assignment uuid; v_result jsonb; v_polic
 begin
   v_actor:=private.food_catalog_governance_principal_for_user();
   v_policy:=private.food_catalog_governance_current_policy_version();
+  perform private.food_catalog_governance_lock_recovery_set();
   v_replay:=private.food_catalog_governance_begin_operation(p_operation_id,v_actor,'food.governance.manage_principals','food_catalog_revoke_governance_capability',null,null,v_policy,p_reason,jsonb_build_object('targetPrincipalId',p_target_principal_id,'capability',p_capability));
   if v_replay is not null then return v_replay; end if;
   if p_capability='food.governance.manage_principals' and exists(select 1 from public.food_catalog_governance_principals where id=p_target_principal_id and principal_type='human' and role_class='owner' and active and revoked_at is null) then
@@ -749,6 +854,7 @@ begin
   update public.food_catalog_governance_capability_assignments set revoked_at=clock_timestamp(),revoked_by_principal_id=v_actor
   where principal_id=p_target_principal_id and capability=p_capability and revoked_at is null returning id into v_assignment;
   if v_assignment is null then raise exception 'Active capability assignment not found.' using errcode='23503'; end if;
+  perform private.food_catalog_governance_assert_recovery_exists();
   v_result:=jsonb_build_object('principalId',p_target_principal_id,'capability',p_capability,'revoked',true);
   return private.food_catalog_governance_finish_operation(p_operation_id,v_assignment,null,'{}'::uuid[],v_result,'food.governance.capability.revoked',jsonb_build_object('principalId',p_target_principal_id,'capability',p_capability));
 end
@@ -1023,22 +1129,35 @@ create or replace function public.food_catalog_apply_barcode_correction(
   p_operation_id uuid,p_case_id uuid,p_food_id uuid,p_expected_case_revision bigint,p_expected_authority_revision bigint,p_expected_authority_id uuid,
   p_gtin text,p_action text,p_source_record_id uuid,p_reason text
 ) returns jsonb language plpgsql security definer set search_path='' as $function$
-declare v_actor uuid; v_key text:=btrim(p_gtin); v_pre jsonb; v_new uuid:=gen_random_uuid(); v_revision bigint; v_case_revision bigint; v_result jsonb; v_evidence uuid[]; v_policy text; v_effective uuid;
+declare v_actor uuid; v_key text:=btrim(p_gtin); v_pre jsonb; v_new uuid:=gen_random_uuid(); v_revision bigint; v_case_revision bigint; v_result jsonb; v_evidence uuid[]; v_policy text; v_effective uuid; v_effective_food uuid;
 begin
   v_actor:=private.food_catalog_governance_principal_for_user();
   if not private.food_catalog_gtin_is_valid(v_key) then raise exception 'GTIN fails supported shape or GS1 Mod-10 validation.' using errcode='23514'; end if;
+  if p_action not in ('assign','remove') then raise exception 'Invalid barcode correction action.' using errcode='22023'; end if;
+  perform private.food_catalog_lock_gtin_authority(v_key);
   v_pre:=private.food_catalog_governance_prepare_apply(p_operation_id,v_actor,'food.barcode.correct','food_catalog_apply_barcode_correction',p_case_id,p_food_id,p_expected_case_revision,p_expected_authority_revision,p_expected_authority_id,'barcode_correction',v_key,p_reason,jsonb_build_object('caseId',p_case_id,'foodId',p_food_id,'expectedCaseRevision',p_expected_case_revision,'expectedAuthorityRevision',p_expected_authority_revision,'expectedAuthorityId',p_expected_authority_id,'gtin',v_key,'action',p_action,'sourceRecordId',p_source_record_id));
   if (v_pre->>'replay')::boolean then return v_pre->'result'; end if;
-  if p_action not in ('assign','remove') then raise exception 'Invalid barcode correction action.' using errcode='22023'; end if;
   if p_source_record_id is not null and not exists(select 1 from public.food_source_records where id=p_source_record_id and food_id=p_food_id) then raise exception 'Barcode source record belongs to a different Food.' using errcode='23514'; end if;
   if p_action='assign' then
     if exists(select 1 from public.food_barcodes where gtin=v_key and food_id<>p_food_id) then raise exception 'GTIN is owned by a different canonical Food.' using errcode='23514'; end if;
     insert into public.food_barcodes(food_id,gtin,source_record_id) values(p_food_id,v_key,p_source_record_id)
-      on conflict(gtin) do update set source_record_id=coalesce(excluded.source_record_id,public.food_barcodes.source_record_id),updated_at=clock_timestamp()
-      returning id into v_effective;
+      on conflict(gtin) do update
+        set source_record_id=coalesce(excluded.source_record_id,public.food_barcodes.source_record_id),updated_at=clock_timestamp()
+        where public.food_barcodes.food_id=excluded.food_id
+      returning id,food_id into v_effective,v_effective_food;
+    if v_effective is null or v_effective_food is distinct from p_food_id then
+      raise exception 'Effective GTIN assignment changed ownership during correction.' using errcode='40001';
+    end if;
+    select id,food_id into v_effective,v_effective_food from public.food_barcodes where gtin=v_key for update;
+    if not found or v_effective_food is distinct from p_food_id then
+      raise exception 'Effective GTIN assignment changed ownership during correction.' using errcode='40001';
+    end if;
   else
-    delete from public.food_barcodes where gtin=v_key and food_id=p_food_id returning id into v_effective;
+    delete from public.food_barcodes where gtin=v_key and food_id=p_food_id returning id,food_id into v_effective,v_effective_food;
     if v_effective is null then raise exception 'Effective GTIN assignment not found for target Food.' using errcode='23503'; end if;
+    if exists(select 1 from public.food_barcodes where gtin=v_key) then
+      raise exception 'Effective GTIN assignment changed ownership during correction.' using errcode='40001';
+    end if;
   end if;
   select policy_version into v_policy from public.food_catalog_correction_cases where id=p_case_id;
   insert into public.food_catalog_barcode_corrections(id,food_id,gtin,correction_action,source_record_id,policy_version,authority_reference)
@@ -1104,7 +1223,7 @@ $function$;
 create or replace function public.food_catalog_resolve_duplicate(
   p_operation_id uuid,p_case_id uuid,p_source_food_id uuid,p_target_food_id uuid,p_expected_case_revision bigint,p_expected_authority_revision bigint,p_expected_authority_id uuid,p_reason text
 ) returns jsonb language plpgsql security definer set search_path='' as $function$
-declare v_actor uuid; v_case public.food_catalog_correction_cases%rowtype; v_pre jsonb; v_new uuid:=gen_random_uuid(); v_revision bigint; v_case_revision bigint; v_result jsonb; v_evidence uuid[]; v_source_lifecycle text; v_source_redirect uuid;
+declare v_actor uuid; v_case public.food_catalog_correction_cases%rowtype; v_pre jsonb; v_new uuid:=gen_random_uuid(); v_revision bigint; v_case_revision bigint; v_result jsonb; v_evidence uuid[]; v_source_lifecycle text; v_source_redirect uuid; v_target_lifecycle text; v_target_redirect uuid;
 begin
   v_actor:=private.food_catalog_governance_principal_for_user();
   perform private.food_catalog_governance_assert_capability(v_actor,'food.correction.apply');
@@ -1116,11 +1235,16 @@ begin
   if v_pre is not null then return v_pre; end if;
   v_case:=private.food_catalog_governance_require_case(p_case_id,p_source_food_id,p_expected_case_revision,'approved',array['duplicate_food','wrong_variant','other']);
   perform private.food_catalog_governance_lock_authority(p_source_food_id,'identity_merge','',p_expected_authority_revision,p_expected_authority_id);
-  select lifecycle_status,merged_into_food_id into v_source_lifecycle,v_source_redirect from public.food_items where id=p_source_food_id for update;
-  if not found then raise exception 'Duplicate source Food not found.' using errcode='23503'; end if;
+  perform private.food_catalog_lock_food_pair(p_source_food_id,p_target_food_id);
+  select lifecycle_status,merged_into_food_id into v_source_lifecycle,v_source_redirect from public.food_items where id=p_source_food_id;
+  select lifecycle_status,merged_into_food_id into v_target_lifecycle,v_target_redirect from public.food_items where id=p_target_food_id;
   if v_source_lifecycle='merged' or v_source_redirect is not null then raise exception 'Source Food already has merge authority.' using errcode='40001'; end if;
-  perform 1 from public.food_items where id=p_target_food_id and lifecycle_status<>'merged' and merged_into_food_id is null;
-  if not found then raise exception 'Duplicate target must be a canonical survivor.' using errcode='23514'; end if;
+  if exists(select 1 from public.food_items where merged_into_food_id=p_source_food_id) then
+    raise exception 'A Food with inbound merge redirects cannot become a merge source.' using errcode='23514';
+  end if;
+  if v_target_lifecycle is distinct from 'active' or v_target_redirect is not null then
+    raise exception 'Duplicate target must be an active, unredirected canonical survivor.' using errcode='23514';
+  end if;
   insert into public.food_merge_events(id,source_food_id,target_food_id,policy_version,reason_code,evidence_reference,authority_reference)
   values(v_new,p_source_food_id,p_target_food_id,v_case.policy_version,'plan6_duplicate_resolution','case:'||p_case_id::text,'plan6:'||p_operation_id::text);
   update public.food_items set lifecycle_status='merged',merged_into_food_id=p_target_food_id where id=p_source_food_id;
@@ -1137,7 +1261,7 @@ $function$;
 create or replace function private.food_catalog_change_lifecycle(
   p_operation_id uuid,p_food_id uuid,p_command text,p_expected_lifecycle text,p_expected_authority_revision bigint,p_expected_authority_id uuid,p_replacement_food_id uuid,p_reason text,p_break_glass_reason text
 ) returns jsonb language plpgsql security definer set search_path='' as $function$
-declare v_actor uuid; v_cap text; v_next text; v_replay jsonb; v_current text; v_event uuid:=gen_random_uuid(); v_revision bigint; v_result jsonb;
+declare v_actor uuid; v_cap text; v_next text; v_replay jsonb; v_current text; v_redirect uuid; v_replacement_lifecycle text; v_replacement_redirect uuid; v_event uuid:=gen_random_uuid(); v_revision bigint; v_result jsonb;
 begin
   v_actor:=private.food_catalog_governance_principal_for_user();
   v_cap:=case when p_command='withdraw' then 'food.lifecycle.withdraw' when p_command='restore' then 'food.lifecycle.restore' else null end;
@@ -1147,12 +1271,33 @@ begin
     jsonb_build_object('foodId',p_food_id,'command',p_command,'expectedLifecycle',p_expected_lifecycle,'expectedAuthorityRevision',p_expected_authority_revision,'expectedAuthorityId',p_expected_authority_id,'replacementFoodId',p_replacement_food_id,'breakGlassReason',p_break_glass_reason));
   if v_replay is not null then return v_replay; end if;
   perform private.food_catalog_governance_lock_authority(p_food_id,'lifecycle','',p_expected_authority_revision,p_expected_authority_id);
-  select lifecycle_status into v_current from public.food_items where id=p_food_id for update;
+  if p_replacement_food_id=p_food_id then raise exception 'Replacement Food must be distinct.' using errcode='23514'; end if;
+  if p_replacement_food_id is null then
+    perform 1 from public.food_items where id=p_food_id for update;
+    if not found then raise exception 'Food not found.' using errcode='23503'; end if;
+  else
+    perform private.food_catalog_lock_food_pair(p_food_id,p_replacement_food_id);
+  end if;
+  select lifecycle_status,merged_into_food_id into v_current,v_redirect from public.food_items where id=p_food_id;
   if not found then raise exception 'Food not found.' using errcode='23503'; end if;
   if v_current<>p_expected_lifecycle then raise exception 'Food lifecycle CAS conflict.' using errcode='40001'; end if;
-  if p_replacement_food_id=p_food_id then raise exception 'Replacement Food must be distinct.' using errcode='23514'; end if;
-  if p_command='withdraw' then if v_current in ('withdrawn','merged') then raise exception 'Food cannot be withdrawn from current lifecycle.' using errcode='23514'; end if; v_next:='withdrawn';
-  else if v_current<>'withdrawn' then raise exception 'Only withdrawn Food can be restored.' using errcode='23514'; end if; v_next:='active'; end if;
+  if v_current='merged' or v_redirect is not null then raise exception 'Merged or redirected Food lifecycle cannot be changed.' using errcode='23514'; end if;
+  if p_command='withdraw' then
+    if v_current='withdrawn' then raise exception 'Food cannot be withdrawn from current lifecycle.' using errcode='23514'; end if;
+    if exists(select 1 from public.food_items where merged_into_food_id=p_food_id) then
+      raise exception 'A current merge survivor cannot be withdrawn while inbound redirects point to it.' using errcode='23514';
+    end if;
+    if p_replacement_food_id is not null then
+      select lifecycle_status,merged_into_food_id into v_replacement_lifecycle,v_replacement_redirect from public.food_items where id=p_replacement_food_id;
+      if v_replacement_lifecycle is distinct from 'active' or v_replacement_redirect is not null then
+        raise exception 'Replacement Food must be an active, unredirected canonical root.' using errcode='23514';
+      end if;
+    end if;
+    v_next:='withdrawn';
+  else
+    if v_current<>'withdrawn' then raise exception 'Only withdrawn Food can be restored.' using errcode='23514'; end if;
+    v_next:='active';
+  end if;
   update public.food_items set lifecycle_status=v_next,merged_into_food_id=case when p_command='restore' then null else merged_into_food_id end where id=p_food_id;
   insert into public.food_catalog_governance_lifecycle_events(id,operation_id,food_id,event_type,previous_lifecycle,next_lifecycle,replacement_food_id,reason)
   values(v_event,p_operation_id,p_food_id,p_command,v_current,v_next,p_replacement_food_id,btrim(p_reason));
@@ -1178,6 +1323,7 @@ create or replace function public.food_catalog_set_personal_override(
 declare v_user uuid; v_current public.food_personal_overrides%rowtype; v_new uuid:=gen_random_uuid(); v_next bigint; v_result jsonb; v_replay jsonb;
 begin
   v_user:=auth.uid(); if v_user is null then raise exception 'Authenticated override owner is required.' using errcode='42501'; end if;
+  perform private.food_catalog_personal_override_require_writable_account(v_user);
   perform private.food_catalog_validate_personal_nutrition_override(p_nutrition_override);
   if length(coalesce(p_serving_label,''))>200 then raise exception 'Serving label is too long.' using errcode='22023'; end if;
   if length(coalesce(p_note,''))>1000 then raise exception 'Personal override note is too long.' using errcode='22023'; end if;
@@ -1207,6 +1353,7 @@ create or replace function public.food_catalog_delete_personal_override(
 declare v_user uuid; v_current public.food_personal_overrides%rowtype; v_new uuid:=gen_random_uuid(); v_next bigint; v_result jsonb; v_replay jsonb;
 begin
   v_user:=auth.uid(); if v_user is null then raise exception 'Authenticated override owner is required.' using errcode='42501'; end if;
+  perform private.food_catalog_personal_override_require_writable_account(v_user);
   v_replay:=private.food_catalog_personal_override_begin_operation(v_user,p_operation_id,p_food_id,'delete',jsonb_build_object('foodId',p_food_id,'expectedRevisionId',p_expected_revision_id,'expectedPointerRevision',p_expected_pointer_revision));
   if v_replay is not null then return v_replay; end if;
   perform pg_advisory_xact_lock(hashtextextended(v_user::text||'|'||p_food_id::text,0));
@@ -1235,6 +1382,8 @@ declare
   v_food_personal_overrides integer := 0;
   v_food_personal_override_revisions integer := 0;
 begin
+  if p_user_id is null then raise exception 'Account-data purge requires a user ID.' using errcode='22023'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));
   -- Existing reviewed top-level Nutrition V1 replay cleanup remains explicit.
   delete from private.nutrition_saved_meal_creation_operations where user_id = p_user_id;
   get diagnostics v_saved_meal_creation_operations = row_count;
@@ -1372,7 +1521,8 @@ begin
     where n.nspname='private'
       and (
         p.proname like 'food_catalog_governance_%'
-        or p.proname in ('food_catalog_change_lifecycle','reject_food_catalog_governance_immutable_mutation')
+        or p.proname like 'food_catalog_personal_override_%'
+        or p.proname in ('food_catalog_change_lifecycle','food_catalog_lock_gtin_authority','food_catalog_serialize_gtin_write','food_catalog_lock_food_pair','reject_food_catalog_governance_immutable_mutation')
       )
   loop
     execute format('revoke all on function %s from public, anon, authenticated, service_role',r.signature);

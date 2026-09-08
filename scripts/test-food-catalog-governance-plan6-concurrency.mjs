@@ -309,10 +309,10 @@ async function verifyMergeCycleConcurrency() {
 
 function setupDeletionProcessingUser() {
   runSql(authSql(DPROC_UID, `select public.food_catalog_set_personal_override('6a000000-0000-4000-8000-000000000801','${PURGE_FOOD}',null,0,'{"protein_g":11}'::jsonb,null,'dproc seed')`));
-  runSql(`update public.account_access_states set state='deletion_processing',disabled_at=clock_timestamp() where user_id='${DPROC_UID}';`);
-  const setResult = spawnSync("psql", [...psqlArgs, "-c", authSql(DPROC_UID, `select public.food_catalog_set_personal_override('6a000000-0000-4000-8000-000000000802','${PURGE_FOOD}','6a000000-0000-4000-8000-000000000000',1,'{"protein_g":12}'::jsonb,null,'blocked set')`)], { encoding: "utf8", env: { ...process.env, PGPASSWORD: "postgres" } });
-  if (setResult.status === 0) throw new Error("deletion_processing account unexpectedly set Personal Override.");
   const current = runSql(`select current_revision_id::text from public.food_personal_overrides where user_id='${DPROC_UID}' and food_id='${PURGE_FOOD}'`);
+  runSql(`update public.account_access_states set state='deletion_processing',disabled_at=clock_timestamp() where user_id='${DPROC_UID}';`);
+  const setResult = spawnSync("psql", [...psqlArgs, "-c", authSql(DPROC_UID, `select public.food_catalog_set_personal_override('6a000000-0000-4000-8000-000000000802','${PURGE_FOOD}','${current}',1,'{"protein_g":12}'::jsonb,null,'blocked set')`)], { encoding: "utf8", env: { ...process.env, PGPASSWORD: "postgres" } });
+  if (setResult.status === 0) throw new Error("deletion_processing account unexpectedly set Personal Override.");
   const delResult = spawnSync("psql", [...psqlArgs, "-c", authSql(DPROC_UID, `select public.food_catalog_delete_personal_override('6a000000-0000-4000-8000-000000000803','${PURGE_FOOD}','${current}',1)`)], { encoding: "utf8", env: { ...process.env, PGPASSWORD: "postgres" } });
   if (delResult.status === 0) throw new Error("deletion_processing account unexpectedly deleted Personal Override.");
   const ops = Number(runSql("select count(*) from public.food_personal_override_operations where operation_id in ('6a000000-0000-4000-8000-000000000802','6a000000-0000-4000-8000-000000000803')"));
@@ -330,7 +330,7 @@ async function verifyPurgeRace() {
   if (remaining !== "0|0|0") throw new Error(`Account purge race left Personal Override data: ${remaining}`);
   const stale = startSql(authSql(PURGE_UID, `select public.food_catalog_set_personal_override('6a000000-0000-4000-8000-000000000813','${PURGE_FOOD}',null,0,'{"protein_g":44}'::jsonb,null,'stale after purge')`), "plan6-stale-after-purge");
   requireFailure("stale override request after purge", await stale.done);
-  const staleOps = Number(runSql("select count(*) from public.food_personal_override_operations where user_id='${PURGE_UID}' and operation_id='6a000000-0000-4000-8000-000000000813'"));
+  const staleOps = Number(runSql(`select count(*) from public.food_personal_override_operations where user_id='${PURGE_UID}' and operation_id='6a000000-0000-4000-8000-000000000813'`));
   if (staleOps !== 0) throw new Error("Stale post-purge request recreated Personal Override operation ledger.");
 }
 

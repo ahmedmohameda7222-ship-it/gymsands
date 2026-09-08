@@ -5,6 +5,7 @@
 \set other_id '66000000-0000-4000-8000-000000000004'
 \set food_a '66000000-0000-4000-8000-000000000101'
 \set food_b '66000000-0000-4000-8000-000000000102'
+\set lifecycle_food '66000000-0000-4000-8000-000000000103'
 \set owner_principal '66000000-0000-4000-8000-000000000301'
 \set curator_principal '66000000-0000-4000-8000-000000000302'
 \set service_principal '66000000-0000-4000-8000-000000000303'
@@ -96,6 +97,20 @@ end
 $private_acl$;
 
 -- Database-owner fixtures. Runtime application roles cannot perform these direct inserts.
+-- The ordinary member is also a real Auth user because Personal Override writes are gated by canonical account lifecycle state.
+insert into auth.users (
+  id, aud, role, email, encrypted_password,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values (
+  :'member_id'::uuid, 'authenticated', 'authenticated', 'plan6-member@example.test', '',
+  '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()
+);
+select pg_temp.plan6_assert(
+  exists(select 1 from public.profiles where id=:'member_id'::uuid)
+  and exists(select 1 from public.account_access_states where user_id=:'member_id'::uuid and state='active' and disabled_at is null),
+  'Plan 6 member Auth fixture did not create canonical profile/access state'
+);
+
 -- The disposable purge owner is a real Auth user so the canonical privacy lifecycle can be exercised without bypasses.
 insert into auth.users (
   id, aud, role, email, encrypted_password,
@@ -111,7 +126,9 @@ select pg_temp.plan6_assert(
 );
 
 insert into public.food_items(id,food_name,is_global,lifecycle_status) values
-  (:'food_a','Plan 6 Fixture A',true,'active'),(:'food_b','Plan 6 Fixture B',true,'active');
+  (:'food_a','Plan 6 Fixture A',true,'active'),
+  (:'food_b','Plan 6 Fixture B',true,'active'),
+  (:'lifecycle_food','Plan 6 Lifecycle Fixture',true,'active');
 insert into public.food_source_records(id,food_id,provider,source_record_id,license_name,source_reference)
 values(:'foreign_source',:'food_b','plan6-verifier','foreign-source','Verifier License','fixture://foreign');
 insert into public.food_catalog_governance_principals(id,principal_type,subject_id,service_identity_sha256,role_class) values
@@ -356,10 +373,10 @@ select pg_temp.plan6_assert((select count(*)=1 from public.food_merge_events whe
 set local role authenticated;
 select set_config('request.jwt.claim.sub', :'owner_id', true);
 select set_config('request.jwt.claim.role','authenticated',true);
-select (public.food_catalog_withdraw_food('66000000-0000-4000-8000-000000000470',:'food_a','active',0,null,null,'emergency withdraw','emergency evidence review'))->>'lifecycleEventId' as withdraw_event \gset
-select public.food_catalog_restore_food('66000000-0000-4000-8000-000000000471',:'food_a','withdrawn',1,:'withdraw_event','restore after review',null);
+select (public.food_catalog_withdraw_food('66000000-0000-4000-8000-000000000470',:'lifecycle_food','active',0,null,null,'emergency withdraw','emergency evidence review'))->>'lifecycleEventId' as withdraw_event \gset
+select public.food_catalog_restore_food('66000000-0000-4000-8000-000000000471',:'lifecycle_food','withdrawn',1,:'withdraw_event','restore after review',null);
 reset role;
-select pg_temp.plan6_assert(exists(select 1 from public.food_items where id=:'food_a' and lifecycle_status='active'),'withdraw/restore preserve the same Food row');
+select pg_temp.plan6_assert(exists(select 1 from public.food_items where id=:'lifecycle_food' and lifecycle_status='active'),'withdraw/restore preserve the same independent Food row');
 select pg_temp.plan6_assert(exists(select 1 from public.food_catalog_governance_audit_events where operation_id='66000000-0000-4000-8000-000000000470' and break_glass and break_glass_reason='emergency evidence review'),'break-glass immutable audit marker present');
 
 -- Immutable audit and atomic audit/outbox evidence.

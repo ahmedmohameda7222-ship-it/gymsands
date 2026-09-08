@@ -248,6 +248,20 @@ reset role;
 select pg_temp.plan6_rereview_assert(not exists(select 1 from public.food_catalog_lookup_effective_barcode(:'gtin')),'authoritative barcode lookup observes removal correction');
 select pg_temp.plan6_rereview_assert((select count(*)=2 from public.food_catalog_barcode_corrections where food_id=:'food_a' and gtin=:'gtin'),'immutable barcode correction history preserves assign and remove');
 
+-- Personal Override lifecycle hardening requires the verifier owner to be a real active Auth account.
+insert into auth.users (
+  id, aud, role, email, encrypted_password,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values (
+  :'override_uid'::uuid, 'authenticated', 'authenticated', 'plan6-rereview-override@example.test', '',
+  '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()
+);
+select pg_temp.plan6_rereview_assert(
+  exists(select 1 from public.profiles where id=:'override_uid'::uuid)
+  and exists(select 1 from public.account_access_states where user_id=:'override_uid'::uuid and state='active' and disabled_at is null),
+  'Plan 6 re-review override Auth fixture did not create canonical profile/access state'
+);
+
 -- P2 personal overrides: owner-scoped idempotency, semantic conflict rejection, payload/domain bounds.
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);
