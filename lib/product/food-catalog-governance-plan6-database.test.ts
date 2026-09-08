@@ -56,6 +56,15 @@ describe("Food Catalog Plan 6 database authority", () => {
     expect(sql).toContain("food_catalog_governance_assert_capability");
   });
 
+  it("revokes application-role execution from every Plan 6 private SECURITY DEFINER helper", () => {
+    const sql = read(MIGRATION).toLowerCase();
+    expect(sql).toContain("n.nspname='private'");
+    expect(sql).toContain("p.proname like 'food_catalog_governance_%'");
+    expect(sql).toContain("food_catalog_change_lifecycle");
+    expect(sql).toContain("reject_food_catalog_governance_immutable_mutation");
+    expect(sql).toContain("revoke all on function %s from public, anon, authenticated, service_role");
+  });
+
   it("does not bypass Plan 3 generation authority or Plan 5 derived-search authority", () => {
     const sql = read(MIGRATION).toLowerCase();
     expect(sql).not.toMatch(/(?:insert\s+into|update|delete\s+from)\s+public\.food_catalog_current_generation/);
