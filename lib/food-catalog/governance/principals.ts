@@ -37,36 +37,38 @@ export type FoodGovernanceCapabilityAssignment = {
   revokedAt: string | null;
 };
 
-const OWNER_CAPABILITIES = FOOD_GOVERNANCE_CAPABILITIES.filter(
+const OWNER_CAPABILITIES: readonly FoodGovernanceCapability[] = FOOD_GOVERNANCE_CAPABILITIES.filter(
   (capability) => capability !== "food.ingestion.propose",
 );
+const CURATOR_CAPABILITIES: readonly FoodGovernanceCapability[] = [
+  "food.correction.report",
+  "food.correction.review",
+  "food.correction.approve",
+  "food.correction.apply",
+  "food.evidence.attach",
+  "food.nutrition.correct",
+  "food.serving.correct",
+  "food.name.correct",
+  "food.barcode.correct",
+  "food.taxonomy.correct",
+  "food.market.correct",
+  "food.identity.merge",
+  "food.lifecycle.withdraw",
+  "food.lifecycle.restore",
+  "food.observability.read",
+];
+const SERVICE_CAPABILITIES: readonly FoodGovernanceCapability[] = [
+  "food.correction.report",
+  "food.evidence.attach",
+  "food.ingestion.propose",
+];
 
 export const DEFAULT_FOOD_GOVERNANCE_CAPABILITIES: Readonly<
   Record<FoodGovernanceRoleClass, readonly FoodGovernanceCapability[]>
 > = Object.freeze({
   owner: Object.freeze(OWNER_CAPABILITIES),
-  curator: Object.freeze([
-    "food.correction.report",
-    "food.correction.review",
-    "food.correction.approve",
-    "food.correction.apply",
-    "food.evidence.attach",
-    "food.nutrition.correct",
-    "food.serving.correct",
-    "food.name.correct",
-    "food.barcode.correct",
-    "food.taxonomy.correct",
-    "food.market.correct",
-    "food.identity.merge",
-    "food.lifecycle.withdraw",
-    "food.lifecycle.restore",
-    "food.observability.read",
-  ]),
-  service: Object.freeze([
-    "food.correction.report",
-    "food.evidence.attach",
-    "food.ingestion.propose",
-  ]),
+  curator: Object.freeze(CURATOR_CAPABILITIES),
+  service: Object.freeze(SERVICE_CAPABILITIES),
 });
 
 function requireNonblank(value: string, label: string) {
