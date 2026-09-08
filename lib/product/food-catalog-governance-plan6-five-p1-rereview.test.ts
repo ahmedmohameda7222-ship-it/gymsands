@@ -62,7 +62,8 @@ describe("Plan 6 five-P1 security/correctness re-review blockers", () => {
     expect(pairLock).toContain("order by id");
     expect(pairLock).toContain("for update");
     expect(merge).toContain("food_catalog_lock_food_pair");
-    expect(merge).toMatch(/p_target_food_id[\s\S]*lifecycle_status='active'/);
+    expect(merge).toContain("v_target_lifecycle is distinct from 'active'");
+    expect(merge).toContain("v_target_redirect is not null");
     expect(merge).toContain("merged_into_food_id=p_source_food_id");
     expect(lifecycle).toContain("merged_into_food_id=p_food_id");
     expect(lifecycle).toContain("active, unredirected canonical root");
