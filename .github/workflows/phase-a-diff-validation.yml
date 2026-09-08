@@ -56,7 +56,7 @@ jobs:
       - name: Apply five-P1 hardened correction in disposable checkout
         run: python3 .github/scripts/plan6_five_p1_apply.py
 
-      - name: Repair legacy Plan 6 verifier Auth fixture
+      - name: Repair legacy Plan 6 verifier fixtures
         shell: bash
         run: |
           set -euo pipefail
@@ -65,14 +65,47 @@ jobs:
 
           path = Path("supabase/verification/food-catalog-governance-control-plane.sql")
           text = path.read_text()
-          marker = "Plan 6 member Auth fixture did not create canonical profile/access state"
-          if marker not in text:
+
+          member_marker = "Plan 6 member Auth fixture did not create canonical profile/access state"
+          if member_marker not in text:
               anchor = "-- The disposable purge owner is a real Auth user so the canonical privacy lifecycle can be exercised without bypasses.\n"
               if text.count(anchor) != 1:
                   raise RuntimeError(f"expected one purge-owner fixture anchor, found {text.count(anchor)}")
               member_fixture = """-- The ordinary member is also a real Auth user because Personal Override writes are gated by canonical account lifecycle state.\ninsert into auth.users (\n  id, aud, role, email, encrypted_password,\n  raw_app_meta_data, raw_user_meta_data, created_at, updated_at\n) values (\n  :'member_id'::uuid, 'authenticated', 'authenticated', 'plan6-member@example.test', '',\n  '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()\n);\nselect pg_temp.plan6_assert(\n  exists(select 1 from public.profiles where id=:'member_id'::uuid)\n  and exists(select 1 from public.account_access_states where user_id=:'member_id'::uuid and state='active' and disabled_at is null),\n  'Plan 6 member Auth fixture did not create canonical profile/access state'\n);\n\n"""
               text = text.replace(anchor, member_fixture + anchor, 1)
-              path.write_text(text)
+
+          if "\\set lifecycle_food '66000000-0000-4000-8000-000000000103'" not in text:
+              food_b_var = "\\set food_b '66000000-0000-4000-8000-000000000102'\n"
+              if text.count(food_b_var) != 1:
+                  raise RuntimeError(f"expected one food_b variable anchor, found {text.count(food_b_var)}")
+              text = text.replace(
+                  food_b_var,
+                  food_b_var + "\\set lifecycle_food '66000000-0000-4000-8000-000000000103'\n",
+                  1,
+              )
+
+              old_food_insert = """insert into public.food_items(id,food_name,is_global,lifecycle_status) values\n  (:'food_a','Plan 6 Fixture A',true,'active'),(:'food_b','Plan 6 Fixture B',true,'active');"""
+              new_food_insert = """insert into public.food_items(id,food_name,is_global,lifecycle_status) values\n  (:'food_a','Plan 6 Fixture A',true,'active'),\n  (:'food_b','Plan 6 Fixture B',true,'active'),\n  (:'lifecycle_food','Plan 6 Lifecycle Fixture',true,'active');"""
+              if text.count(old_food_insert) != 1:
+                  raise RuntimeError(f"expected one Food fixture insert anchor, found {text.count(old_food_insert)}")
+              text = text.replace(old_food_insert, new_food_insert, 1)
+
+              old_withdraw = "select (public.food_catalog_withdraw_food('66000000-0000-4000-8000-000000000470',:'food_a','active',0,null,null,'emergency withdraw','emergency evidence review'))->>'lifecycleEventId' as withdraw_event \\gset"
+              new_withdraw = "select (public.food_catalog_withdraw_food('66000000-0000-4000-8000-000000000470',:'lifecycle_food','active',0,null,null,'emergency withdraw','emergency evidence review'))->>'lifecycleEventId' as withdraw_event \\gset"
+              old_restore = "select public.food_catalog_restore_food('66000000-0000-4000-8000-000000000471',:'food_a','withdrawn',1,:'withdraw_event','restore after review',null);"
+              new_restore = "select public.food_catalog_restore_food('66000000-0000-4000-8000-000000000471',:'lifecycle_food','withdrawn',1,:'withdraw_event','restore after review',null);"
+              old_assert = "select pg_temp.plan6_assert(exists(select 1 from public.food_items where id=:'food_a' and lifecycle_status='active'),'withdraw/restore preserve the same Food row');"
+              new_assert = "select pg_temp.plan6_assert(exists(select 1 from public.food_items where id=:'lifecycle_food' and lifecycle_status='active'),'withdraw/restore preserve the same independent Food row');"
+              for label, old, new in [
+                  ("withdraw", old_withdraw, new_withdraw),
+                  ("restore", old_restore, new_restore),
+                  ("lifecycle assertion", old_assert, new_assert),
+              ]:
+                  if text.count(old) != 1:
+                      raise RuntimeError(f"expected one {label} anchor, found {text.count(old)}")
+                  text = text.replace(old, new, 1)
+
+          path.write_text(text)
           PY
 
       - name: Check staged working-tree diff
