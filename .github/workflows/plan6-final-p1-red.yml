@@ -1,0 +1,99 @@
+name: Plan 6 Final P1 RED
+
+on:
+  push:
+    branches:
+      - feat/food-catalog-governance-plan6
+
+permissions:
+  contents: read
+
+env:
+  PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  SUPABASE_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+
+jobs:
+  source-contract-red:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Final P1 source contracts must fail before the fix
+        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/product/food-catalog-governance-plan6-final-p1-rereview.test.ts
+
+  live-owner-red:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Replay exact migration chain
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/plan6-final-p1-owner-red.log --prove-future-order
+      - name: Ghost/unusable Owner must reproduce RED
+        run: psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/food-catalog-governance-control-plane-live-owner-rereview.sql
+
+  report-privacy-red:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Replay exact migration chain
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/plan6-final-p1-privacy-red.log --prove-future-order
+      - name: Surviving member report payload must reproduce RED
+        run: psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/food-catalog-governance-control-plane-report-privacy-rereview.sql
+
+  plan4-match-gtin-red:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Replay exact migration chain
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/plan6-final-p1-gtin-red.log --prove-future-order
+      - name: Plan4 MATCH / Plan6 same-Food same-GTIN deadlock must reproduce RED
+        env:
+          PLAIVRA_PLAN6_FINAL_P1_CONCURRENCY_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
+          PLAIVRA_PLAN6_FINAL_P1_SCENARIO: gtin
+        run: node scripts/test-food-catalog-governance-plan6-final-p1-concurrency.mjs
