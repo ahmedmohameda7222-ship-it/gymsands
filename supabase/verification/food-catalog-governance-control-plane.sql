@@ -114,10 +114,10 @@ insert into public.food_items(id,food_name,is_global,lifecycle_status) values
   (:'food_a','Plan 6 Fixture A',true,'active'),(:'food_b','Plan 6 Fixture B',true,'active');
 insert into public.food_source_records(id,food_id,provider,source_record_id,license_name,source_reference)
 values(:'foreign_source',:'food_b','plan6-verifier','foreign-source','Verifier License','fixture://foreign');
-insert into public.food_catalog_governance_principals(id,principal_type,subject_id,role_class) values
-  (:'owner_principal','human',:'owner_id','owner'),
-  (:'curator_principal','human',:'curator_id','curator'),
-  (:'service_principal','service','plan6-verifier-service','service');
+insert into public.food_catalog_governance_principals(id,principal_type,subject_id,service_identity_sha256,role_class) values
+  (:'owner_principal','human',:'owner_id',null,'owner'),
+  (:'curator_principal','human',:'curator_id',null,'curator'),
+  (:'service_principal','service','plan6-verifier-service',encode(extensions.digest(convert_to('plan6-verifier-service-identity','UTF8'),'sha256'),'hex'),'service');
 insert into public.food_catalog_governance_capability_assignments(principal_id,capability,reason)
 select :'owner_principal',capability,'plan6-verifier-owner' from unnest(array[
  'food.governance.manage_principals','food.correction.report','food.correction.review','food.correction.approve','food.correction.apply',
@@ -145,6 +145,7 @@ select pg_temp.plan6_assert((select food_name='Plan 6 Fixture A' from public.foo
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
 select set_config('request.jwt.claim.sub','',true);
+select set_config('request.jwt.claims',jsonb_build_object('role','service_role','plaivra_food_service_identity','plan6-verifier-service-identity')::text,true);
 -- Service principal proposal: constrained adapter evidence, never approval/application authority.
 select (public.food_catalog_service_propose_correction(
  '66000000-0000-4000-8000-000000000408',:'service_principal',:'food_a','other','adapter:proposal','Provider adapter proposal',

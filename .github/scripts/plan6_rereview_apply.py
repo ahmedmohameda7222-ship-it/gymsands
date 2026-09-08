@@ -16,7 +16,7 @@ if "PLAN6_REREVIEW_HARDENED" in sql:
 
 def replace_func(text: str, name: str, replacement: str) -> str:
     pattern = re.compile(rf"create or replace function {re.escape(name)}\([\s\S]*?\n\$function\$;", re.I)
-    text2, count = pattern.subn(replacement.strip(), text, count=1)
+    text2, count = pattern.subn(lambda _match: replacement.strip(), text, count=1)
     if count != 1:
         raise RuntimeError(f"expected exactly one function block for {name}, got {count}")
     return text2
@@ -64,20 +64,20 @@ create table public.food_catalog_governance_policy_pointer (
 );
 insert into public.food_catalog_governance_policy_versions(policy_version,evidence_policy,evidence_required_categories)
 values('plan6-v1',jsonb_build_object(
-  'wrong_nutrition',jsonb_build_array('source_record','product_label','manufacturer_document'),
-  'missing_nutrition',jsonb_build_array('source_record','product_label'),
-  'wrong_serving',jsonb_build_array('source_record','product_label'),
-  'missing_serving',jsonb_build_array('source_record','product_label'),
-  'wrong_name',jsonb_build_array('source_record','product_label','manufacturer_document'),
-  'wrong_translation',jsonb_build_array('source_record','product_label','manufacturer_document'),
-  'wrong_barcode',jsonb_build_array('source_record','product_label','manufacturer_document','barcode_lookup'),
-  'wrong_taxonomy',jsonb_build_array('source_record','canonical_registry','curator_reason'),
-  'wrong_market_relevance',jsonb_build_array('source_record','manufacturer_document','canonical_registry','curator_reason'),
-  'duplicate_food',jsonb_build_array('source_record','product_label','barcode_lookup','canonical_registry','curator_reason'),
-  'wrong_variant',jsonb_build_array('source_record','product_label','manufacturer_document','barcode_lookup','curator_reason'),
-  'outdated_product',jsonb_build_array('source_record','product_label','manufacturer_document','curator_reason'),
-  'source_conflict',jsonb_build_array('source_record','product_label','manufacturer_document','barcode_lookup','canonical_registry','curator_reason'),
-  'other',jsonb_build_array('source_record','product_label','manufacturer_document','canonical_registry','curator_reason')
+  'wrong_nutrition',jsonb_build_array('source_record','product_label','manufacturer'),
+  'missing_nutrition',jsonb_build_array('source_record','product_label','manufacturer','curator_reason'),
+  'wrong_serving',jsonb_build_array('source_record','product_label','manufacturer'),
+  'missing_serving',jsonb_build_array('source_record','product_label','manufacturer','curator_reason'),
+  'wrong_name',jsonb_build_array('source_record','product_label','manufacturer','canonical'),
+  'wrong_translation',jsonb_build_array('source_record','product_label','manufacturer','canonical'),
+  'wrong_barcode',jsonb_build_array('source_record','product_label','manufacturer','barcode'),
+  'wrong_taxonomy',jsonb_build_array('source_record','canonical','curator_reason'),
+  'wrong_market_relevance',jsonb_build_array('source_record','manufacturer','canonical','curator_reason'),
+  'duplicate_food',jsonb_build_array('source_record','product_label','manufacturer','barcode','canonical'),
+  'wrong_variant',jsonb_build_array('source_record','product_label','manufacturer','barcode'),
+  'outdated_product',jsonb_build_array('source_record','manufacturer','canonical'),
+  'source_conflict',jsonb_build_array('source_record','product_label','manufacturer','canonical'),
+  'other',jsonb_build_array('source_record','product_label','manufacturer','barcode','canonical','curator_reason')
 ),array['wrong_nutrition','wrong_serving','wrong_name','wrong_translation','wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product','source_conflict']);
 insert into public.food_catalog_governance_policy_pointer(singleton,current_policy_version,pointer_revision)
 values(true,'plan6-v1',0);
@@ -87,7 +87,7 @@ sql = sql.replace("\n-- One-time bootstrap from the pre-Plan-6 admin identity", 
 # Persistence evidence vocabulary exactly mirrors the domain vocabulary.
 sql = sql.replace(
     "evidence_type text not null check (evidence_type in ('source_record','product_label','manufacturer','barcode','canonical','curator_reason'))",
-    "evidence_type text not null check (evidence_type in ('source_record','product_label','manufacturer_document','barcode_lookup','canonical_registry','curator_reason'))",
+    "evidence_type text not null check (evidence_type in ('source_record','product_label','manufacturer','barcode','canonical','curator_reason'))",
     1,
 )
 
@@ -297,7 +297,7 @@ $function$;
 ''')
 
 # Replace fixed evidence-required helper call with versioned policy authority.
-sql = re.sub(r"create or replace function private\.food_catalog_governance_case_evidence_required\([\s\S]*?\n\$function\$;\n", "", sql, count=1)
+sql = re.sub(r"create or replace function private\.food_catalog_governance_case_evidence_required\(p_category text\)[\s\S]*?\n\$function\$;\n", "", sql, count=1)
 sql = sql.replace("private.food_catalog_governance_case_evidence_required(v_case.category)", "private.food_catalog_governance_case_evidence_required(v_case.policy_version,v_case.category)")
 
 # GTIN authority is validated at the durable table boundary too.
@@ -371,14 +371,14 @@ $function$;
 sql = replace_func(sql, "public.food_catalog_service_propose_correction", r'''
 create or replace function public.food_catalog_service_propose_correction(
   p_operation_id uuid,p_principal_id uuid,p_food_id uuid,p_category text,p_claim_key text,p_description text,
-  p_evidence jsonb default '{}'::jsonb,p_policy_version text default 'plan6-v1',p_reason text default 'service proposal'
+  p_evidence jsonb default '{}'::jsonb,p_policy_version text default null,p_reason text default 'service proposal'
 ) returns jsonb language plpgsql security definer set search_path='' as $function$
 declare v_actor uuid; v_policy text; v_replay jsonb; v_proposal uuid; v_result jsonb;
 begin
   v_actor:=private.food_catalog_governance_service_principal_for_request();
   if p_principal_id is distinct from v_actor then raise exception 'Service Food governance principal identity mismatch.' using errcode='42501'; end if;
   v_policy:=private.food_catalog_governance_current_policy_version();
-  if btrim(coalesce(p_policy_version,''))<>v_policy then raise exception 'Unsupported governance policy version.' using errcode='22023'; end if;
+  if p_policy_version is not null and btrim(p_policy_version)<>v_policy then raise exception 'Unsupported governance policy version.' using errcode='22023'; end if;
   if p_category not in ('wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation','wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product','source_conflict','other') then raise exception 'Invalid service correction proposal category.' using errcode='22023'; end if;
   if length(btrim(coalesce(p_claim_key,''))) not between 1 and 240 or length(btrim(coalesce(p_description,''))) not between 1 and 2000 then raise exception 'Service correction proposal text is outside allowed bounds.' using errcode='22023'; end if;
   if jsonb_typeof(coalesce(p_evidence,'{}'::jsonb))<>'object' or pg_column_size(coalesce(p_evidence,'{}'::jsonb))>8192 then raise exception 'Service correction proposal evidence must remain bounded.' using errcode='22023'; end if;
@@ -396,13 +396,13 @@ $function$;
 
 sql = replace_func(sql, "public.food_catalog_report_correction", r'''
 create or replace function public.food_catalog_report_correction(
-  p_food_id uuid,p_category text,p_claim_key text,p_description text,p_evidence jsonb default '{}'::jsonb,p_policy_version text default 'plan6-v1'
+  p_food_id uuid,p_category text,p_claim_key text,p_description text,p_evidence jsonb default '{}'::jsonb,p_policy_version text default null
 ) returns jsonb language plpgsql security definer set search_path='' as $function$
 declare v_user uuid; v_policy text; v_issue text; v_case uuid; v_report uuid;
 begin
   v_user:=auth.uid(); if v_user is null then raise exception 'Authenticated reporter is required.' using errcode='42501'; end if;
   v_policy:=private.food_catalog_governance_current_policy_version();
-  if btrim(coalesce(p_policy_version,''))<>v_policy then raise exception 'Unsupported governance policy version.' using errcode='22023'; end if;
+  if p_policy_version is not null and btrim(p_policy_version)<>v_policy then raise exception 'Unsupported governance policy version.' using errcode='22023'; end if;
   if p_category not in ('wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation','wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product','source_conflict','other') then raise exception 'Invalid correction category.' using errcode='22023'; end if;
   if length(btrim(coalesce(p_claim_key,''))) not between 1 and 240 or length(btrim(coalesce(p_description,''))) not between 1 and 2000 then raise exception 'Correction report text is outside allowed bounds.' using errcode='22023'; end if;
   if jsonb_typeof(coalesce(p_evidence,'{}'::jsonb))<>'object' or pg_column_size(coalesce(p_evidence,'{}'::jsonb))>8192 then raise exception 'Correction report evidence must remain bounded.' using errcode='22023'; end if;

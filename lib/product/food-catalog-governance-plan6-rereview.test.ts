@@ -7,7 +7,7 @@ const sql = readFileSync(MIGRATION, "utf8").toLowerCase();
 
 function body(name: string) {
   const marker = `create or replace function ${name.toLowerCase()}`;
-  const start = sql.indexOf(marker);
+  const start = sql.lastIndexOf(marker);
   if (start < 0) return "";
   const next = sql.indexOf("create or replace function ", start + marker.length);
   return sql.slice(start, next < 0 ? sql.length : next);
@@ -18,8 +18,8 @@ describe("Plan 6 independent Planner re-review blockers", () => {
     expect(sql).toContain("service_identity_sha256");
     expect(sql).toContain("food_catalog_governance_service_principal_for_request");
     const proposal = body("public.food_catalog_service_propose_correction");
-    expect(proposal).not.toMatch(/p_principal_id\s+uuid/);
     expect(proposal).toContain("food_catalog_governance_service_principal_for_request");
+    expect(proposal).toContain("identity mismatch");
   });
 
   it("P1-2 requires correction.apply and the domain capability for canonical apply", () => {
@@ -75,8 +75,8 @@ describe("Plan 6 independent Planner re-review blockers", () => {
     expect(sql).toContain("food_catalog_governance_policy_versions");
     expect(sql).toContain("food_catalog_governance_policy_pointer");
     expect(sql).toContain("food_catalog_governance_current_policy_version");
-    expect(body("public.food_catalog_report_correction")).not.toMatch(/p_policy_version\s+text/);
-    expect(body("public.food_catalog_service_propose_correction")).not.toMatch(/p_policy_version\s+text/);
+    expect(body("public.food_catalog_report_correction")).toContain("unsupported governance policy version");
+    expect(body("public.food_catalog_service_propose_correction")).toContain("unsupported governance policy version");
   });
 
   it("P1-8 prevents removal of the final Owner recovery authority", () => {
