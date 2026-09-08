@@ -61,7 +61,8 @@ describe("Food Catalog Plan 6 final P1 adversarial contracts", () => {
       "create or replace function private.food_catalog_governance_principal_for_user()",
       "create or replace function private.food_catalog_governance_service_principal_for_request()",
     );
-    expect(principalResolver).toContain("private.food_catalog_lock_account_purge(auth.uid())");
+    expect(principalResolver).toContain("v_user uuid:=auth.uid()");
+    expect(principalResolver).toContain("private.food_catalog_lock_account_purge(v_user)");
     expect(principalResolver).toContain("join auth.users");
     expect(principalResolver).toContain("join public.account_access_states");
     expect(principalResolver).toContain("p.human_user_id=auth.uid()");
