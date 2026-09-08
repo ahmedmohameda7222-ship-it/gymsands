@@ -99,6 +99,11 @@ migration.write_text(text)
 script = concurrency.read_text()
 script = script.replace("aaa_plan6_final_p1_barcode_sleep", "zzz_plan6_final_p1_barcode_sleep")
 script = script.replace("perform pg_catalog.pg_sleep(3);", "perform pg_catalog.pg_sleep(15);", 1)
+cleanup_marker = "    truncate table public.food_items cascade;\n    delete from public.food_catalog_governance_capability_assignments"
+cleanup_replacement = "    truncate table public.food_items cascade;\n    delete from public.account_deletion_jobs where id='6d000000-0000-4000-8000-000000000601';\n    delete from public.food_catalog_governance_capability_assignments"
+if script.count(cleanup_marker) != 1:
+    raise SystemExit(f"expected one final-P1 concurrency cleanup marker, found {script.count(cleanup_marker)}")
+script = script.replace(cleanup_marker, cleanup_replacement, 1)
 concurrency.write_text(script)
 
 # P1-F2 intentionally tightens human governance identity from arbitrary text to a
