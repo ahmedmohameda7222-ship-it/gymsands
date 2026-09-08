@@ -1,4 +1,5 @@
 name: Phase A Diff Validation
+# Temporary Plan 6 final-P1 finalizer authority; restored before product persistence.
 
 on:
   pull_request:
