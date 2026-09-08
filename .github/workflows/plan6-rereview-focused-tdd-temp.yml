@@ -1,0 +1,31 @@
+name: Plan 6 Re-review Focused TDD Temp
+
+on:
+  push:
+    branches:
+      - feat/food-catalog-governance-plan6
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Plan 6 re-review focused unit contracts
+        run: >-
+          ./node_modules/.bin/vitest run --config vitest.unit.config.mjs
+          lib/product/food-catalog-governance-plan6-rereview.test.ts
+          lib/food-catalog/governance/canonical-commands.test.ts
+          lib/food-catalog/governance/evidence.test.ts
+          lib/food-catalog/governance/outbox.test.ts
+          lib/food-catalog/governance/personal-overrides.test.ts
