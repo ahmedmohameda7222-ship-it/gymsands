@@ -106,6 +106,17 @@ jobs:
                   text = text.replace(old, new, 1)
 
           path.write_text(text)
+
+          rereview_path = Path("supabase/verification/food-catalog-governance-control-plane-rereview.sql")
+          rereview = rereview_path.read_text()
+          rereview_marker = "Plan 6 re-review override Auth fixture did not create canonical profile/access state"
+          if rereview_marker not in rereview:
+              anchor = "-- P2 personal overrides: owner-scoped idempotency, semantic conflict rejection, payload/domain bounds.\n"
+              if rereview.count(anchor) != 1:
+                  raise RuntimeError(f"expected one re-review personal override anchor, found {rereview.count(anchor)}")
+              fixture = """-- Personal Override lifecycle hardening requires the verifier owner to be a real active Auth account.\ninsert into auth.users (\n  id, aud, role, email, encrypted_password,\n  raw_app_meta_data, raw_user_meta_data, created_at, updated_at\n) values (\n  :'override_uid'::uuid, 'authenticated', 'authenticated', 'plan6-rereview-override@example.test', '',\n  '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()\n);\nselect pg_temp.plan6_rereview_assert(\n  exists(select 1 from public.profiles where id=:'override_uid'::uuid)\n  and exists(select 1 from public.account_access_states where user_id=:'override_uid'::uuid and state='active' and disabled_at is null),\n  'Plan 6 re-review override Auth fixture did not create canonical profile/access state'\n);\n\n"""
+              rereview = rereview.replace(anchor, fixture + anchor, 1)
+              rereview_path.write_text(rereview)
           PY
 
       - name: Check staged working-tree diff
@@ -200,6 +211,7 @@ jobs:
             scripts/run-database-verification.mjs \
             scripts/test-food-catalog-governance-plan6-concurrency.mjs \
             supabase/verification/food-catalog-governance-control-plane.sql \
+            supabase/verification/food-catalog-governance-control-plane-rereview.sql \
             supabase/verification/food-catalog-governance-control-plane-five-p1-rereview.sql \
             lib/product/food-catalog-governance-plan6-five-p1-rereview.test.ts \
             docs/architecture/food-catalog-governance-control-plane.md \
