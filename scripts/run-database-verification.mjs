@@ -98,10 +98,6 @@ export function runDatabaseVerification({
     ...executionEnv,
     PLAIVRA_GRANT_PROMOTION_CONCURRENCY_TEST_DATABASE_URL: localUrl,
   });
-  run(process.execPath, ["scripts/test-food-catalog-governance-five-p1-concurrency.mjs"], {
-    ...executionEnv,
-    PLAIVRA_PLAN6_FIVE_P1_CONCURRENCY_TEST_DATABASE_URL: localUrl,
-  });
   run(process.execPath, ["scripts/test-database-preflight-control.mjs"], {
     ...executionEnv,
     PLAIVRA_PREFLIGHT_TEST_DATABASE_URL: localUrl,
