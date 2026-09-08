@@ -129,7 +129,18 @@ jobs:
       # Run the registered suite before fixture-heavy dedicated concurrency checks
       # so its empty-state assumptions are evaluated against the clean replay DB.
       - name: All registered database verification
-        run: node scripts/run-database-verification.mjs
+        run: |
+          set -euo pipefail
+          log=/tmp/plan6-registered-db-verification.log
+          if node scripts/run-database-verification.mjs >"$log" 2>&1; then
+            echo "Registered database verification passed."
+          else
+            status=$?
+            echo "::group::Registered database verification failure tail"
+            tail -n 180 "$log"
+            echo "::endgroup::"
+            exit "$status"
+          fi
 
       - name: Final-P1 distinct-session concurrency adversaries
         env:
