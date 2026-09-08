@@ -158,6 +158,8 @@ Repository verification includes:
 - TypeScript unit/adversarial contracts for principals, cases, evidence, workflow transitions, command envelopes, named commands, personal overrides, identity/lifecycle/break-glass, audit, outbox, observability, and boundary retirement.
 - `supabase/verification/food-catalog-governance-control-plane.sql` for the complete rollback-only Plan 6 authority and cross-plan invariants.
 - `supabase/verification/food-catalog-governance-control-plane-rereview.sql` for the independent re-review adversarial cases: service impersonation, dual capabilities, exhaustive evidence matrix, evidence freezing, outbox leases, serving lineages, policy versioning, final-Owner recovery, effective barcodes/GS1 validation, personal-override replay/bounds, and recursive evidence privacy validation.
+- `supabase/verification/food-catalog-governance-control-plane-authority-rereview.sql` for Name-lineage, exact semantic-key predecessor, and least-privileged Governance Outbox authority.
+- `supabase/verification/food-catalog-governance-control-plane-five-p1-rereview.sql` plus `scripts/test-food-catalog-governance-plan6-concurrency.mjs` for the five blocking privilege/concurrency invariants, including distinct-session GTIN, recovery-set, duplicate-topology, and account-purge races.
 - chronological migration replay, database lint, migration ledger validation, integration tests, and the repository's normal exact-head CI gates.
 
 All verifier fixtures are rollback-only and must leave no Catalog data behind.
