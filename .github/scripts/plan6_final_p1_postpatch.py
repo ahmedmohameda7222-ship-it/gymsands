@@ -146,7 +146,8 @@ insert into auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,ra
   (:'owner_uid'::uuid,'authenticated','authenticated','plan6-rereview-owner@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now()),
   (:'domain_uid'::uuid,'authenticated','authenticated','plan6-rereview-domain@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now()),
   (:'apply_uid'::uuid,'authenticated','authenticated','plan6-rereview-apply@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now()),
-  (:'both_uid'::uuid,'authenticated','authenticated','plan6-rereview-both@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now());
+  (:'both_uid'::uuid,'authenticated','authenticated','plan6-rereview-both@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{}'::jsonb,now(),now()),
+  ('67000000-0000-4000-8000-000000000099'::uuid,'authenticated','authenticated','plan6-rereview-second-owner@example.test','','{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,'{\"nickname\":\"p6rr-owner2\"}'::jsonb,now(),now());
 
 create or replace function pg_temp.plan6_rereview_assert"""
 replace_once_file(
