@@ -1,0 +1,49 @@
+name: Plan 6 Account Deletion Fixture Fix Temp
+on:
+  push:
+    branches:
+      - feat/food-catalog-governance-plan6
+    paths:
+      - .github/workflows/plan6-account-deletion-fixture-fix-temp.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Add canonical account deletion lifecycle fixture
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'supabase/verification/food-catalog-governance-control-plane.sql';
+          let sql = fs.readFileSync(path, 'utf8');
+
+          const fixtureAnchor = `-- Database-owner fixtures. Runtime application roles cannot perform these direct inserts.\ninsert into public.food_items(id,food_name,is_global,lifecycle_status) values`;
+          if (!sql.includes(fixtureAnchor)) throw new Error('Plan 6 database-owner fixture anchor missing.');
+          const fixtureReplacement = `-- Database-owner fixtures. Runtime application roles cannot perform these direct inserts.\n-- The disposable purge owner is a real Auth user so the canonical privacy lifecycle can be exercised without bypasses.\ninsert into auth.users (\n  id, aud, role, email, encrypted_password,\n  raw_app_meta_data, raw_user_meta_data, created_at, updated_at\n) values (\n  :'other_id'::uuid, 'authenticated', 'authenticated', 'plan6-purge-owner@example.test', '',\n  '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()\n);\nselect pg_temp.plan6_assert(\n  exists(select 1 from public.profiles where id=:'other_id'::uuid)\n  and exists(select 1 from public.account_access_states where user_id=:'other_id'::uuid and state='active'),\n  'Plan 6 purge owner Auth fixture did not create canonical profile/access state'\n);\n\ninsert into public.food_items(id,food_name,is_global,lifecycle_status) values`;
+          sql = sql.replace(fixtureAnchor, fixtureReplacement);
+
+          const purgeAnchor = `-- Plan 6 personal override purge follows the existing account-deletion lifecycle.\nset local role service_role;\nselect set_config('request.jwt.claim.role','service_role',true);\nselect public.purge_account_application_data_atomic(:'other_id') as plan6_personal_override_purge \\gset`;
+          if (!sql.includes(purgeAnchor)) throw new Error('Plan 6 purge lifecycle anchor missing.');
+          const purgeReplacement = `-- Plan 6 personal override purge follows the existing account-deletion lifecycle.\nupdate public.account_access_states\nset state='deletion_processing',\n    reason_code='plan6_verifier_account_deletion',\n    disabled_at=clock_timestamp()\nwhere user_id=:'other_id'::uuid;\nselect pg_temp.plan6_assert(\n  exists(select 1 from public.account_access_states where user_id=:'other_id'::uuid and state='deletion_processing' and disabled_at is not null),\n  'Plan 6 purge owner access was not disabled before canonical purge'\n);\ninsert into public.account_deletion_jobs(\n  user_id, subject_hash, idempotency_key_hash, state, stage, attempt_count, locked_at\n) values (\n  :'other_id'::uuid,\n  'plan6-verifier-subject-'||:'other_id',\n  'plan6-verifier-idempotency-'||:'other_id',\n  'processing','deleting_database',1,clock_timestamp()\n) returning id as plan6_account_deletion_job_id \\gset\n\nset local role service_role;\nselect set_config('request.jwt.claim.role','service_role',true);\nselect public.purge_account_application_data_atomic(:'other_id') as plan6_personal_override_purge \\gset`;
+          sql = sql.replace(purgeAnchor, purgeReplacement);
+
+          const resultAnchor = `select pg_temp.plan6_assert((:'plan6_personal_override_purge'::jsonb->>'food_personal_overrides_deleted')::integer=1 and (:'plan6_personal_override_purge'::jsonb->>'food_personal_override_revisions_deleted')::integer=1,'Plan 6 personal override purge reports deleted owner rows');`;
+          if (!sql.includes(resultAnchor)) throw new Error('Plan 6 purge result assertion anchor missing.');
+          const resultReplacement = `select pg_temp.plan6_assert(\n  (:'plan6_personal_override_purge'::jsonb->>'food_personal_overrides_deleted')::integer=1\n  and (:'plan6_personal_override_purge'::jsonb->>'food_personal_override_revisions_deleted')::integer=1\n  and (:'plan6_personal_override_purge'::jsonb->>'deletion_job_id')::uuid=:'plan6_account_deletion_job_id'::uuid,\n  'Plan 6 personal override purge reports owner rows and canonical deletion job authority'\n);`;
+          sql = sql.replace(resultAnchor, resultReplacement);
+
+          fs.writeFileSync(path, sql);
+          NODE
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add supabase/verification/food-catalog-governance-control-plane.sql
+          git commit -m "test: exercise canonical account deletion lifecycle in Plan 6 verifier"
+          git push origin HEAD:feat/food-catalog-governance-plan6
