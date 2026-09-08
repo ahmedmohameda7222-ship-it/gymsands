@@ -96,6 +96,20 @@ end
 $private_acl$;
 
 -- Database-owner fixtures. Runtime application roles cannot perform these direct inserts.
+-- The disposable purge owner is a real Auth user so the canonical privacy lifecycle can be exercised without bypasses.
+insert into auth.users (
+  id, aud, role, email, encrypted_password,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values (
+  :'other_id'::uuid, 'authenticated', 'authenticated', 'plan6-purge-owner@example.test', '',
+  '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()
+);
+select pg_temp.plan6_assert(
+  exists(select 1 from public.profiles where id=:'other_id'::uuid)
+  and exists(select 1 from public.account_access_states where user_id=:'other_id'::uuid and state='active'),
+  'Plan 6 purge owner Auth fixture did not create canonical profile/access state'
+);
+
 insert into public.food_items(id,food_name,is_global,lifecycle_status) values
   (:'food_a','Plan 6 Fixture A',true,'active'),(:'food_b','Plan 6 Fixture B',true,'active');
 insert into public.food_source_records(id,food_id,provider,source_record_id,license_name,source_reference)
@@ -291,6 +305,24 @@ select pg_temp.plan6_rejected(format('delete from public.food_personal_override_
 reset role;
 
 -- Plan 6 personal override purge follows the existing account-deletion lifecycle.
+update public.account_access_states
+set state='deletion_processing',
+    reason_code='plan6_verifier_account_deletion',
+    disabled_at=clock_timestamp()
+where user_id=:'other_id'::uuid;
+select pg_temp.plan6_assert(
+  exists(select 1 from public.account_access_states where user_id=:'other_id'::uuid and state='deletion_processing' and disabled_at is not null),
+  'Plan 6 purge owner access was not disabled before canonical purge'
+);
+insert into public.account_deletion_jobs(
+  user_id, subject_hash, idempotency_key_hash, state, stage, attempt_count, locked_at
+) values (
+  :'other_id'::uuid,
+  'plan6-verifier-subject-'||:'other_id',
+  'plan6-verifier-idempotency-'||:'other_id',
+  'processing','deleting_database',1,clock_timestamp()
+) returning id as plan6_account_deletion_job_id \gset
+
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
 select public.purge_account_application_data_atomic(:'other_id') as plan6_personal_override_purge \gset
@@ -298,7 +330,12 @@ reset role;
 select pg_temp.plan6_assert(not exists(select 1 from public.food_personal_overrides where user_id=:'other_id'),'Plan 6 personal override purge removed current pointer');
 select pg_temp.plan6_assert(not exists(select 1 from public.food_personal_override_revisions where user_id=:'other_id'),'Plan 6 personal override purge removed revision history');
 select pg_temp.plan6_assert(exists(select 1 from public.food_personal_overrides where user_id=:'member_id' and food_id=:'food_a'),'Plan 6 personal override purge preserved another member owner scope');
-select pg_temp.plan6_assert((:'plan6_personal_override_purge'::jsonb->>'food_personal_overrides_deleted')::integer=1 and (:'plan6_personal_override_purge'::jsonb->>'food_personal_override_revisions_deleted')::integer=1,'Plan 6 personal override purge reports deleted owner rows');
+select pg_temp.plan6_assert(
+  (:'plan6_personal_override_purge'::jsonb->>'food_personal_overrides_deleted')::integer=1
+  and (:'plan6_personal_override_purge'::jsonb->>'food_personal_override_revisions_deleted')::integer=1
+  and (:'plan6_personal_override_purge'::jsonb->>'deletion_job_id')::uuid=:'plan6_account_deletion_job_id'::uuid,
+  'Plan 6 personal override purge reports owner rows and canonical deletion job authority'
+);
 select pg_temp.plan6_assert((select calories is null and protein_g is null from public.food_items where id=:'food_a'),'Plan 6 personal override purge did not mutate canonical Food');
 
 -- Duplicate resolution requires approved evidence and preserves the source Food/history.
