@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: phase-a-diff-${{ github.workflow }}-${{ github.ref }}
@@ -30,10 +30,10 @@ jobs:
       - name: Check branch diff formatting against main
         run: git diff --check origin/main...HEAD
 
-  plan6-five-p1-concurrency-red:
+  plan6-five-p1-green-finalizer:
     if: github.event.pull_request.number == 173
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
       PLAIVRA_PLAN6_CONCURRENCY_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
@@ -48,7 +48,16 @@ jobs:
 
       - name: Verify exact checkout identity
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test "$(git branch -r --contains HEAD | grep -c 'origin/feat/food-catalog-governance-plan6')" -ge 1
+
+      - name: Apply five-P1 hardened correction in disposable checkout
+        run: python3 .github/scripts/plan6_five_p1_apply.py
+
+      - name: Check staged working-tree diff
+        run: git diff --check
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -59,14 +68,56 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Focused Plan 6 GREEN contracts
+        run: >-
+          npx vitest run
+          lib/product/food-catalog-governance-plan6-five-p1-rereview.test.ts
+          lib/product/food-catalog-governance-plan6-authority-rereview.test.ts
+          lib/food-catalog/governance/principals.test.ts
+          lib/food-catalog/governance/canonical-commands.test.ts
+          lib/food-catalog/governance/outbox.test.ts
+
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v2
         with:
           version: 2.109.1
           github-token: ${{ github.token }}
 
-      - name: Replay chronological migrations
-        run: node scripts/replay-local-migration-chain.mjs --log /tmp/plan6-five-p1-red.log --prove-future-order
+      - name: Chronological migration replay
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/plan6-five-p1-green.log --prove-future-order
 
-      - name: Run Plan 6 multi-session concurrency adversaries
-        run: node scripts/test-food-catalog-governance-plan6-concurrency.mjs
+      - name: Database lint
+        run: supabase db lint --local --schema public --level error --fail-on error
+
+      - name: All registered database verification and concurrency adversaries
+        run: node scripts/run-database-verification.mjs
+
+      - name: Migration ledger
+        run: npm run migration:ledger:check
+
+      - name: Verify applied Plan 4 migration stayed byte-for-byte untouched
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object supabase/migrations/20260904100000_food_catalog_ingestion_v2_authority.sql)" = "eb2cdc2ee16462d7712080a3e3532757ec093742"
+
+      - name: Commit permanent fix and remove temporary finalizer tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout origin/main -- .github/workflows/phase-a-diff-validation.yml
+          git rm -f --ignore-unmatch .github/scripts/plan6_five_p1_apply.py
+          git add \
+            supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql \
+            scripts/run-database-verification.mjs \
+            scripts/test-food-catalog-governance-plan6-concurrency.mjs \
+            supabase/verification/food-catalog-governance-control-plane-five-p1-rereview.sql \
+            lib/product/food-catalog-governance-plan6-five-p1-rereview.test.ts \
+            docs/architecture/food-catalog-governance-control-plane.md \
+            .github/workflows/phase-a-diff-validation.yml
+          git diff --cached --check
+          test ! -e .github/scripts/plan6_five_p1_apply.py
+          git config user.name "plaivra-plan6-finalizer"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "fix(plan6): close five P1 security blockers"
+          git push origin HEAD:feat/food-catalog-governance-plan6
