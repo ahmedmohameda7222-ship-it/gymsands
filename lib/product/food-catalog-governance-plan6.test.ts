@@ -52,7 +52,7 @@ describe("Food Catalog Plan 6 governance authority", () => {
     expect(source).toContain('"cas_conflict"');
     expect(source).toContain('"authorization_denied"');
     expect(source).toContain('"failed"');
-    expect(source).not.toMatch(/payload|accessToken|authorization/i);
+    expect(source).not.toMatch(/accessToken|bearer|password|secret|requestBody|commandArgs/i);
   });
 
   it("gives future provider adapters a constrained Service-principal proposal path without apply/approve authority", () => {
