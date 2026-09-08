@@ -84,9 +84,10 @@ describe("Food Catalog Plan 6 final P1 adversarial contracts", () => {
       "create or replace function public.food_catalog_manage_governance_principal(",
       "create or replace function public.food_catalog_revoke_governance_capability(",
     );
-    expect(manage).toContain("human_user_id");
+    expect(manage).toContain("v_human_user:=btrim(p_target_subject_id)::uuid");
     expect(manage).toContain("from auth.users");
-    expect(manage).toContain("from public.account_access_states");
+    expect(manage).toContain("join public.account_access_states");
+    expect(manage).toContain("where auth_user.id=v_human_user");
 
     expect(MIGRATION).toContain("create or replace function public.food_catalog_begin_account_deletion(");
     expect(PRIVACY_ROUTE).toContain('.rpc("food_catalog_begin_account_deletion"');
