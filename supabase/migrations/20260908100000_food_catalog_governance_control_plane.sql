@@ -900,12 +900,9 @@ begin
 end
 $function$;
 
--- Extend the canonical Nutrition account-deletion lifecycle to Plan 6 personal overrides.
-alter function public.purge_account_application_data_atomic(uuid) set schema private;
-alter function private.purge_account_application_data_atomic(uuid)
-  rename to food_catalog_governance_core_purge_account_application_data_atomic;
-
-create function public.purge_account_application_data_atomic(p_user_id uuid)
+-- Extend the canonical Nutrition account-deletion lifecycle in place so the reviewed
+-- public purge authority remains verifier-visible while adding Plan 6 owner data.
+create or replace function public.purge_account_application_data_atomic(p_user_id uuid)
 returns jsonb
 language plpgsql
 security definer
@@ -913,16 +910,27 @@ set search_path = ''
 as $function$
 declare
   v_result jsonb;
+  v_saved_meal_creation_operations integer := 0;
   v_food_personal_overrides integer := 0;
   v_food_personal_override_revisions integer := 0;
 begin
-  -- Delete the current pointer first because it RESTRICT-references the revision history.
+  -- Existing reviewed top-level Nutrition V1 replay cleanup remains explicit.
+  delete from private.nutrition_saved_meal_creation_operations where user_id = p_user_id;
+  get diagnostics v_saved_meal_creation_operations = row_count;
+
+  -- Delete the current Plan 6 pointer first because it RESTRICT-references revision history.
   delete from public.food_personal_overrides where user_id = p_user_id;
   get diagnostics v_food_personal_overrides = row_count;
 
   delete from public.food_personal_override_revisions where user_id = p_user_id;
   get diagnostics v_food_personal_override_revisions = row_count;
 
+  -- Preserve the reviewed Nutrition V1 delegated purge graph directly.
+  v_result := private.nutrition_v1_final_review_core_purge_account_application_data_atomic(p_user_id);
+
+  if exists (select 1 from private.nutrition_saved_meal_creation_operations where user_id = p_user_id) then
+    raise exception 'Nutrition V1 account-data purge left Saved Meal creation replay rows behind.' using errcode='23514';
+  end if;
   if exists (
     select 1 from public.food_personal_overrides where user_id = p_user_id
     union all
@@ -931,8 +939,8 @@ begin
     raise exception 'Food Catalog Plan 6 personal override purge left owner rows behind.' using errcode='23514';
   end if;
 
-  v_result := private.food_catalog_governance_core_purge_account_application_data_atomic(p_user_id);
   return v_result || jsonb_build_object(
+    'nutrition_saved_meal_creation_operations_deleted', v_saved_meal_creation_operations,
     'food_personal_overrides_deleted', v_food_personal_overrides,
     'food_personal_override_revisions_deleted', v_food_personal_override_revisions
   );

@@ -68,8 +68,9 @@ describe("Food Catalog Plan 6 database authority", () => {
   it("extends the canonical account purge to delete Plan 6 personal overrides and proves it in rollback verification", () => {
     const sql = read(MIGRATION).toLowerCase();
     const verifier = read(VERIFIER).toLowerCase();
-    expect(sql).toContain("alter function public.purge_account_application_data_atomic(uuid) set schema private");
-    expect(sql).toContain("food_catalog_governance_core_purge_account_application_data_atomic");
+    expect(sql).toContain("create or replace function public.purge_account_application_data_atomic");
+    expect(sql).toContain("private.nutrition_saved_meal_creation_operations");
+    expect(sql).toContain("private.nutrition_v1_final_review_core_purge_account_application_data_atomic");
     expect(sql).toContain("delete from public.food_personal_overrides where user_id = p_user_id");
     expect(sql).toContain("delete from public.food_personal_override_revisions where user_id = p_user_id");
     expect(sql).toContain("food_personal_overrides_deleted");
