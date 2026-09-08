@@ -26,6 +26,7 @@ jobs:
           from pathlib import Path
           p=Path('.github/scripts/plan6_rereview_apply.py')
           s=p.read_text()
+          s=s.replace('text2, count = pattern.subn(replacement.strip(), text, count=1)', 'text2, count = pattern.subn(lambda _match: replacement.strip(), text, count=1)')
           s=s.replace('manufacturer_document','manufacturer').replace('barcode_lookup','barcode').replace('canonical_registry','canonical')
           replacements={
             "'missing_nutrition',jsonb_build_array('source_record','product_label')":"'missing_nutrition',jsonb_build_array('source_record','product_label','manufacturer','curator_reason')",
