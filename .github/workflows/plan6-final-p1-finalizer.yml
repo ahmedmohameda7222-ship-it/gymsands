@@ -78,6 +78,11 @@ jobs:
           psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/food-catalog-governance-control-plane-live-owner-rereview.sql
           psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/food-catalog-governance-control-plane-report-privacy-rereview.sql
 
+      # Run the registered suite before fixture-heavy dedicated concurrency checks
+      # so its empty-state assumptions are evaluated against the clean replay DB.
+      - name: All registered database verification
+        run: node scripts/run-database-verification.mjs
+
       - name: Final-P1 distinct-session concurrency adversaries
         env:
           PLAIVRA_PLAN6_FINAL_P1_CONCURRENCY_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
@@ -87,9 +92,6 @@ jobs:
         env:
           PLAIVRA_PLAN6_CONCURRENCY_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
         run: node scripts/test-food-catalog-governance-plan6-concurrency.mjs
-
-      - name: All registered database verification
-        run: node scripts/run-database-verification.mjs
 
       - name: Migration ledger
         run: npm run migration:ledger:check
