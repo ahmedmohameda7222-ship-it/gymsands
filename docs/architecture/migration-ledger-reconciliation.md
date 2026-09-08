@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-09-07
+**Current reconciliation date:** 2026-09-08
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history and repository ledger are reconciled through the applied Food Catalog Plan 5 serving-semantics correction
+**Status:** Production remains reconciled through the applied Food Catalog Plan 5 serving-semantics correction; repository Plan 6 governance migration is pending/unapplied
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -25,14 +25,22 @@ The latest verified Plaivra Production inspection after the authorized 2026-09-0
 
 The current repository/machine-ledger state records:
 
-- Pending repository migrations: **0**
-- `pendingCount = 0`
+- Pending repository migrations: **1** — `20260908100000_food_catalog_governance_control_plane.sql`
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- migration-ledger `release_ready = true`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- migration-ledger `release_ready = false`
 
 The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is now 121 records. Applied migrations must not be replayed.
+
+## Food Catalog Plan 6 governance control plane — repository pending / Production unapplied 2026-09-08
+
+Repository migration `20260908100000_food_catalog_governance_control_plane.sql` is a forward-only Plan 6 implementation artifact. It is intentionally classified as `state = pending` with no Production version/name because PR #173 is still an implementation Draft and Plan 6 migration authority does not permit application before merge.
+
+The latest verified Production physical migration head remains `20260907215257_food_catalog_search_serving_semantics_correction`. The released compatibility marker remains `20260724232734`. The pending Plan 6 entry therefore makes the repository ledger deliberately non-release-ready: `historyRepair.state = pending`, `pendingCount = 1`, `unresolvedCount = 1`, and `release_ready = false`. Release preflight must fail closed until the Plan 6 repository migration is independently approved, merged, applied exactly once under standing migration authority, verified, and reconciled.
+
+Plan 6 implementation/verification work must not populate Foods, execute provider ingestion, activate or verify Foods, create/promote Catalog Generations, move `food_catalog_current_generation`, mutate derived SearchDocuments outside their existing authority, promote the compatibility marker, deploy runtime cutover, or mutate the isolated Activity Catalog. Do not apply or replay `20260908100000_food_catalog_governance_control_plane.sql` from this Draft implementation branch.
 
 ## Food Catalog Plan 5 serving-semantics correction — Production application 2026-09-07
 
