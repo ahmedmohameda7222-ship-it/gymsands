@@ -1,0 +1,81 @@
+name: Plan 6 Authority Finalize Temp
+
+on:
+  push:
+    branches:
+      - feat/food-catalog-governance-plan6
+
+permissions:
+  contents: write
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+  SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+  PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+  PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+  PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+  PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+  PLAIVRA_RELEASE_ENVIRONMENT: ci
+  PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+  PLAIVRA_ACTIVITY_CATALOG_MODE: library_v2_with_legacy_fallback
+  PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
+  PLAIVRA_ACTIVITY_CATALOG_API_KEY: ci-placeholder-catalog-key-long-enough
+  PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  SUPABASE_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Apply already-validated Plan 6 authority root fix
+        run: python3 .github/scripts/plan6_authority_rereview_apply.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Permanent focused GREEN
+        run: >-
+          ./node_modules/.bin/vitest run --config vitest.unit.config.mjs
+          lib/product/food-catalog-governance-plan6-authority-rereview.test.ts
+          lib/product/food-catalog-governance-plan6-rereview.test.ts
+          lib/food-catalog/governance/principals.test.ts
+          lib/food-catalog/governance/canonical-commands.test.ts
+          lib/food-catalog/governance/outbox.test.ts
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Chronological migration replay
+        run: >-
+          node scripts/replay-local-migration-chain.mjs
+          --log ci-reports/plan6-authority-finalize-database.log --prove-future-order
+      - name: Database lint
+        run: supabase db lint --local --schema public --level error --fail-on error
+      - name: Registered database verification
+        run: node scripts/run-database-verification.mjs
+      - name: Migration ledger
+        run: npm run migration:ledger:check
+      - name: Commit verified product root fix only
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git restore --staged -- .github || true
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No product changes to commit" >&2
+            exit 1
+          fi
+          git commit -m "fix(plan6): close deeper authority blockers"
+          git push origin HEAD:feat/food-catalog-governance-plan6
