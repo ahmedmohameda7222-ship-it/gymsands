@@ -263,7 +263,7 @@ create trigger food_catalog_correction_evidence_immutable before update or delet
 create trigger food_catalog_correction_events_immutable before update or delete on public.food_catalog_correction_events for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_governance_audit_events_immutable before update or delete on public.food_catalog_governance_audit_events for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_governance_lifecycle_events_immutable before update or delete on public.food_catalog_governance_lifecycle_events for each row execute function private.reject_food_catalog_governance_immutable_mutation();
-create trigger food_personal_override_revisions_immutable before update or delete on public.food_personal_override_revisions for each row execute function private.reject_food_catalog_governance_immutable_mutation();
+create trigger food_personal_override_revisions_immutable before update on public.food_personal_override_revisions for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 
 create or replace function private.food_catalog_governance_principal_for_user()
 returns uuid language plpgsql stable security definer set search_path='' as $function$

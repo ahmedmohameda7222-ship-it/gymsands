@@ -279,6 +279,17 @@ reset role;
 select pg_temp.plan6_assert((select count(*)=2 from public.food_personal_overrides where food_id=:'food_a'),'personal overrides are owner-isolated');
 select pg_temp.plan6_assert((select calories is null and protein_g is null from public.food_items where id=:'food_a'),'personal override did not alter global/compatibility Food nutrition');
 
+-- Revision history is UPDATE-immutable and application DELETE remains denied; only the canonical privacy purge may physically remove owner history.
+set local role authenticated;
+select set_config('request.jwt.claim.sub', :'member_id', true);
+select set_config('request.jwt.claim.role','authenticated',true);
+select pg_temp.plan6_rejected(format('delete from public.food_personal_override_revisions where id=%L',:'override_a'),'authenticated owner cannot directly delete personal override revision history');
+reset role;
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+select pg_temp.plan6_rejected(format('delete from public.food_personal_override_revisions where id=%L',:'override_b'),'service_role cannot directly delete personal override revision history');
+reset role;
+
 -- Plan 6 personal override purge follows the existing account-deletion lifecycle.
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
