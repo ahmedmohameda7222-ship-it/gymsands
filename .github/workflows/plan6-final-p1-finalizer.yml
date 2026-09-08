@@ -65,8 +65,8 @@ jobs:
           s=p.read_text()
           old="  perform pg_advisory_xact_lock(hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));"
           new="  perform pg_advisory_xact_lock( hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));"
-          if s.count(old) < 2:
-              raise SystemExit(f'expected helper template plus replace target, found {s.count(old)}')
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one shared-lock helper template, found {s.count(old)}')
           s=s.replace(old,new,1)
           p.write_text(s)
           PY
