@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { planCanonicalCorrection } from "../food-catalog/governance/canonical-commands";
+import { correctionEvidenceRequirement } from "../food-catalog/governance/evidence";
+import type { FoodCorrectionCategory } from "../food-catalog/governance/corrections";
 
 const MIGRATION = "supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql";
 const sql = readFileSync(MIGRATION, "utf8").toLowerCase();
@@ -12,6 +14,11 @@ function body(name: string) {
   const next = sql.indexOf("create or replace function ", start + marker.length);
   return sql.slice(start, next < 0 ? sql.length : next);
 }
+
+const EVIDENCE_CATEGORIES: readonly FoodCorrectionCategory[] = [
+  "wrong_nutrition","missing_nutrition","wrong_serving","missing_serving","wrong_name","wrong_translation",
+  "wrong_barcode","wrong_taxonomy","wrong_market_relevance","duplicate_food","wrong_variant","outdated_product","source_conflict","other",
+];
 
 describe("Plan 6 independent Planner re-review blockers", () => {
   it("P1-1 binds service governance identity to a trusted execution identity instead of caller UUID", () => {
@@ -37,13 +44,16 @@ describe("Plan 6 independent Planner re-review blockers", () => {
     expect(body("public.food_catalog_resolve_duplicate")).toContain("food.correction.apply");
   });
 
-  it("P1-3 mirrors the exhaustive category/evidence matrix at the DB boundary", () => {
-    const policy = body("private.food_catalog_governance_evidence_type_allowed");
-    expect(policy).not.toBe("");
-    for (const category of [
-      "wrong_nutrition","missing_nutrition","wrong_serving","missing_serving","wrong_name","wrong_translation",
-      "wrong_barcode","wrong_taxonomy","wrong_market_relevance","duplicate_food","wrong_variant","outdated_product","source_conflict","other",
-    ]) expect(policy).toContain(category);
+  it("P1-3 mirrors the exhaustive TypeScript category/evidence matrix at the DB boundary", () => {
+    for (const category of EVIDENCE_CATEGORIES) {
+      const policy = correctionEvidenceRequirement(category);
+      const encoded = `'${category}',jsonb_build_array(${policy.allowed.map((type) => `'${type}'`).join(",")})`;
+      expect(sql).toContain(encoded);
+    }
+    const required = EVIDENCE_CATEGORIES.filter((category) => correctionEvidenceRequirement(category).required);
+    expect(sql).toContain(`),array[${required.map((category) => `'${category}'`).join(",")}]);`);
+    const policyLookup = body("private.food_catalog_governance_evidence_type_allowed");
+    expect(policyLookup).toContain("food_catalog_governance_policy_versions");
     expect(body("public.food_catalog_attach_correction_evidence")).toContain("food_catalog_governance_evidence_type_allowed");
   });
 
@@ -57,7 +67,7 @@ describe("Plan 6 independent Planner re-review blockers", () => {
   it("P1-5 gives outbox claims crash-safe lease identity and stale-finish protection", () => {
     expect(sql).toContain("lease_token uuid");
     expect(sql).toContain("lease_expires_at timestamptz");
-    expect(body("public.food_catalog_claim_governance_outbox")).toContain("available_at <=");
+    expect(body("public.food_catalog_claim_governance_outbox")).toMatch(/available_at\s*<=\s*clock_timestamp\(\)/);
     const finish = body("public.food_catalog_finish_governance_outbox");
     expect(finish).toMatch(/p_lease_token\s+uuid/);
     expect(finish).toContain("lease_token=p_lease_token");
@@ -96,11 +106,14 @@ describe("Plan 6 independent Planner re-review blockers", () => {
 
   it("P2 personal overrides use owner-scoped idempotency and bounded validated payloads", () => {
     expect(sql).toContain("food_personal_override_operations");
+    const beginOverride = body("private.food_catalog_personal_override_begin_operation");
+    expect(beginOverride).toContain("semantic_checksum_sha256");
+    expect(beginOverride).toContain("p_operation_id");
     const setOverride = body("public.food_catalog_set_personal_override");
     const deleteOverride = body("public.food_catalog_delete_personal_override");
     for (const fn of [setOverride, deleteOverride]) {
-      expect(fn).toContain("semantic_checksum_sha256");
-      expect(fn).toContain("operation_id");
+      expect(fn).toContain("food_catalog_personal_override_begin_operation");
+      expect(fn).toContain("p_operation_id");
     }
     expect(setOverride).toContain("food_catalog_validate_personal_nutrition_override");
     expect(setOverride).toContain("serving label is too long");
