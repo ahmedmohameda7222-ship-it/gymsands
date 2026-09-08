@@ -103,24 +103,6 @@ create table public.food_catalog_correction_reports (
 create index food_catalog_correction_reports_owner_idx
   on public.food_catalog_correction_reports(reporter_user_id,created_at,id);
 
-create table public.food_catalog_service_proposals (
-  id uuid primary key default gen_random_uuid(),
-  operation_id uuid not null unique references public.food_catalog_governance_operations(operation_id) on delete restrict,
-  principal_id uuid not null references public.food_catalog_governance_principals(id) on delete restrict,
-  food_id uuid not null references public.food_items(id) on delete restrict,
-  category text not null check (category in (
-    'wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation',
-    'wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product',
-    'source_conflict','other'
-  )),
-  claim_key text not null check (length(btrim(claim_key)) between 1 and 240),
-  description text not null check (length(btrim(description)) between 1 and 2000),
-  evidence jsonb not null default '{}'::jsonb check (jsonb_typeof(evidence)='object' and pg_column_size(evidence) <= 8192),
-  policy_version text not null check (length(btrim(policy_version)) > 0),
-  created_at timestamptz not null default now()
-);
-create index food_catalog_service_proposals_food_idx on public.food_catalog_service_proposals(food_id,created_at,id);
-
 create table public.food_catalog_correction_evidence (
   id uuid primary key default gen_random_uuid(),
   case_id uuid not null references public.food_catalog_correction_cases(id) on delete restrict,
@@ -175,6 +157,25 @@ create table public.food_catalog_governance_operations (
   created_at timestamptz not null default now(),
   completed_at timestamptz
 );
+
+create table public.food_catalog_service_proposals (
+  id uuid primary key default gen_random_uuid(),
+  operation_id uuid not null unique references public.food_catalog_governance_operations(operation_id) on delete restrict,
+  principal_id uuid not null references public.food_catalog_governance_principals(id) on delete restrict,
+  food_id uuid not null references public.food_items(id) on delete restrict,
+  category text not null check (category in (
+    'wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation',
+    'wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product',
+    'source_conflict','other'
+  )),
+  claim_key text not null check (length(btrim(claim_key)) between 1 and 240),
+  description text not null check (length(btrim(description)) between 1 and 2000),
+  evidence jsonb not null default '{}'::jsonb check (jsonb_typeof(evidence)='object' and pg_column_size(evidence) <= 8192),
+  policy_version text not null check (length(btrim(policy_version)) > 0),
+  created_at timestamptz not null default now()
+);
+create index food_catalog_service_proposals_food_idx on public.food_catalog_service_proposals(food_id,created_at,id);
+
 
 create table public.food_catalog_governance_audit_events (
   id uuid primary key default gen_random_uuid(),
