@@ -54,7 +54,7 @@ describe("Food Catalog Plan 6 final P1 adversarial contracts", () => {
       "create table public.food_catalog_governance_capability_assignments (",
     );
     expect(principals).toContain("human_user_id uuid");
-    expect(principals).toMatch(/principal_type='human'.*human_user_id is not null/s);
+    expect(principals).toMatch(/principal_type='human'[\s\S]*human_user_id is not null/);
 
     const principalResolver = section(
       MIGRATION,
