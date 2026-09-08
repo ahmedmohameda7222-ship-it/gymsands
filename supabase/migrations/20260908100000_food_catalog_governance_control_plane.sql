@@ -845,6 +845,48 @@ begin
 end
 $function$;
 
+-- Extend the canonical Nutrition account-deletion lifecycle to Plan 6 personal overrides.
+alter function public.purge_account_application_data_atomic(uuid) set schema private;
+alter function private.purge_account_application_data_atomic(uuid)
+  rename to food_catalog_governance_core_purge_account_application_data_atomic;
+
+create function public.purge_account_application_data_atomic(p_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_result jsonb;
+  v_food_personal_overrides integer := 0;
+  v_food_personal_override_revisions integer := 0;
+begin
+  -- Delete the current pointer first because it RESTRICT-references the revision history.
+  delete from public.food_personal_overrides where user_id = p_user_id;
+  get diagnostics v_food_personal_overrides = row_count;
+
+  delete from public.food_personal_override_revisions where user_id = p_user_id;
+  get diagnostics v_food_personal_override_revisions = row_count;
+
+  if exists (
+    select 1 from public.food_personal_overrides where user_id = p_user_id
+    union all
+    select 1 from public.food_personal_override_revisions where user_id = p_user_id
+  ) then
+    raise exception 'Food Catalog Plan 6 personal override purge left owner rows behind.' using errcode='23514';
+  end if;
+
+  v_result := private.food_catalog_governance_core_purge_account_application_data_atomic(p_user_id);
+  return v_result || jsonb_build_object(
+    'food_personal_overrides_deleted', v_food_personal_overrides,
+    'food_personal_override_revisions_deleted', v_food_personal_override_revisions
+  );
+end
+$function$;
+
+revoke all on function public.purge_account_application_data_atomic(uuid) from public, anon, authenticated, service_role;
+grant execute on function public.purge_account_application_data_atomic(uuid) to service_role;
+
 create or replace function public.food_catalog_governance_metrics()
 returns jsonb language plpgsql stable security definer set search_path='' as $function$
 declare v_actor uuid; v_result jsonb;

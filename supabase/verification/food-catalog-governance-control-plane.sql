@@ -256,6 +256,17 @@ reset role;
 select pg_temp.plan6_assert((select count(*)=2 from public.food_personal_overrides where food_id=:'food_a'),'personal overrides are owner-isolated');
 select pg_temp.plan6_assert((select calories is null and protein_g is null from public.food_items where id=:'food_a'),'personal override did not alter global/compatibility Food nutrition');
 
+-- Plan 6 personal override purge follows the existing account-deletion lifecycle.
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+select public.purge_account_application_data_atomic(:'other_id') as plan6_personal_override_purge \gset
+reset role;
+select pg_temp.plan6_assert(not exists(select 1 from public.food_personal_overrides where user_id=:'other_id'),'Plan 6 personal override purge removed current pointer');
+select pg_temp.plan6_assert(not exists(select 1 from public.food_personal_override_revisions where user_id=:'other_id'),'Plan 6 personal override purge removed revision history');
+select pg_temp.plan6_assert(exists(select 1 from public.food_personal_overrides where user_id=:'member_id' and food_id=:'food_a'),'Plan 6 personal override purge preserved another member owner scope');
+select pg_temp.plan6_assert((:'plan6_personal_override_purge'::jsonb->>'food_personal_overrides_deleted')::integer=1 and (:'plan6_personal_override_purge'::jsonb->>'food_personal_override_revisions_deleted')::integer=1,'Plan 6 personal override purge reports deleted owner rows');
+select pg_temp.plan6_assert((select calories is null and protein_g is null from public.food_items where id=:'food_a'),'Plan 6 personal override purge did not mutate canonical Food');
+
 -- Duplicate resolution requires approved evidence and preserves the source Food/history.
 set local role authenticated;
 select set_config('request.jwt.claim.sub', :'owner_id', true);
