@@ -1,0 +1,121 @@
+name: Plan 6 Final P1 Finalizer
+
+on:
+  push:
+    branches:
+      - feat/food-catalog-governance-plan6
+
+permissions:
+  contents: write
+
+env:
+  PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  SUPABASE_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+
+jobs:
+  finalize:
+    if: github.event.head_commit.message == 'chore(plan6): stage final P1 green finalizer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Checkout exact staging head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Verify exact checkout
+        run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Apply final P1 root fixes in the pending Plan 6 migration
+        run: |
+          # Disambiguate the old purge-wrapper lock spelling. The main patcher
+          # intentionally replaces only the Personal Override helper occurrence;
+          # it replaces the entire purge function later in the same pass.
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql')
+          s=p.read_text()
+          marker='create or replace function public.purge_account_application_data_atomic(p_user_id uuid)'
+          i=s.index(marker)
+          old="perform pg_advisory_xact_lock(hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));"
+          j=s.find(old,i)
+          if j < 0:
+              raise SystemExit('purge wrapper lock marker missing')
+          s=s[:j]+"perform pg_advisory_xact_lock( hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));"+s[j+len(old):]
+          p.write_text(s)
+          PY
+          python .github/scripts/plan6_final_p1_apply.py
+          python .github/scripts/plan6_final_p1_postpatch.py
+          git diff --check
+
+      - name: Focused final-P1 source contracts GREEN
+        run: >-
+          ./node_modules/.bin/vitest run --config vitest.unit.config.mjs
+          lib/product/food-catalog-governance-plan6-final-p1-rereview.test.ts
+          lib/product/food-catalog-governance-plan6-five-p1-rereview.test.ts
+          lib/product/food-catalog-governance-plan6-authority-rereview.test.ts
+          lib/product/food-catalog-governance-plan6-rereview.test.ts
+
+      - name: Chronological migration replay
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/plan6-final-p1-green.log --prove-future-order
+
+      - name: Database lint
+        run: supabase db lint --local --schema public --level error --fail-on error
+
+      - name: Final-P1 rollback SQL verifiers
+        run: |
+          psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/food-catalog-governance-control-plane-live-owner-rereview.sql
+          psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/food-catalog-governance-control-plane-report-privacy-rereview.sql
+
+      - name: Final-P1 distinct-session concurrency adversaries
+        env:
+          PLAIVRA_PLAN6_FINAL_P1_CONCURRENCY_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
+        run: node scripts/test-food-catalog-governance-plan6-final-p1-concurrency.mjs
+
+      - name: Preserve previous five-P1 distinct-session adversaries
+        env:
+          PLAIVRA_PLAN6_CONCURRENCY_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
+        run: node scripts/test-food-catalog-governance-plan6-concurrency.mjs
+
+      - name: All registered database verification
+        run: node scripts/run-database-verification.mjs
+
+      - name: Migration ledger
+        run: npm run migration:ledger:check
+
+      - name: Applied Plan 4 remains byte-for-byte unchanged
+        run: |
+          test "$(git hash-object supabase/migrations/20260904100000_food_catalog_ingestion_v2_authority.sql)" = "eb2cdc2ee16462d7712080a3e3532757ec093742"
+          test "$(git rev-parse fd53bff22792eb974e99ba4fba1a65f4a9265c62:supabase/migrations/20260904100000_food_catalog_ingestion_v2_authority.sql)" = "eb2cdc2ee16462d7712080a3e3532757ec093742"
+
+      - name: Focused lint and typecheck before persistence
+        run: |
+          npm run lint
+          npm run typecheck
+
+      - name: Persist only permanent Plan 6 product/test changes
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/plan6-final-p1-red.yml
+          rm -f .github/workflows/plan6-final-p1-finalizer.yml
+          rm -f .github/scripts/plan6_final_p1_apply.py
+          rm -f .github/scripts/plan6_final_p1_postpatch.py
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          test -n "$(git status --porcelain)"
+          git commit -m "fix(plan6): close final P1 rereview blockers"
+          git push origin HEAD:feat/food-catalog-governance-plan6
+          echo "product_head=$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "plan6_blob=$(git hash-object supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql)" >> "$GITHUB_STEP_SUMMARY"
