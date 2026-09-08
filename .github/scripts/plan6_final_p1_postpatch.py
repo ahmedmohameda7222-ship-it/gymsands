@@ -52,6 +52,20 @@ for each row execute function private.food_catalog_governance_bind_human_identit
 if text.count(marker) != 1:
     raise SystemExit(f"service identity index marker count={text.count(marker)}")
 text = text.replace(marker, binding, 1)
+
+# Preserve the earlier P1-5 contract literally as well as semantically. Personal
+# Override writes still join the same canonical per-user purge-lock domain before
+# the operation ledger; keeping the key inline also prevents this security boundary
+# from depending on direct EXECUTE access to the new shared helper.
+po_start = text.index("create or replace function private.food_catalog_personal_override_require_writable_account(p_user_id uuid)")
+po_end = text.index("create or replace function private.food_catalog_gtin_is_valid", po_start)
+po = text[po_start:po_end]
+po_old = "perform private.food_catalog_lock_account_purge(p_user_id);"
+po_new = "perform pg_advisory_xact_lock(hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));"
+if po.count(po_old) != 1:
+    raise SystemExit(f"expected one Personal Override shared purge-lock call, found {po.count(po_old)}")
+po = po.replace(po_old, po_new, 1)
+text = text[:po_start] + po + text[po_end:]
 migration.write_text(text)
 
 # The permanent GREEN adversary forces overlap after the canonical Food->GTIN
