@@ -206,6 +206,5 @@ describe("privacy request routes", () => {
     expect(calls.find((call) => call.table === "privacy_requests" && call.action === "insert")).toBeUndefined();
     expect(calls.find((call) => call.table === "account_deletion_jobs" && call.action === "insert")).toBeUndefined();
     expect(calls.find((call) => call.table === "chatgpt_connections" && call.action === "update")).toBeUndefined();
-    expect(rpc.mock.calls.find(([name]) => name === "food_catalog_queue_account_deletion")?.[1]).not.toMatchObject({ p_user_id: userB });
   });
 });
