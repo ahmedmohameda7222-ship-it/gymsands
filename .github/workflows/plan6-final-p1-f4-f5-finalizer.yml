@@ -39,6 +39,7 @@ jobs:
       - name: Apply P1-F4/F5 root corrections
         run: |
           python .github/scripts/plan6_final_p1_f4_f5_apply.py
+          python .github/scripts/plan6_final_p1_f4_f5_postpatch.py
           git diff --check
 
       - name: Focused permanent source contracts GREEN
@@ -105,6 +106,7 @@ jobs:
           rm -f .github/workflows/plan6-final-p1-f4-f5-red.yml
           rm -f .github/workflows/plan6-final-p1-f4-f5-finalizer.yml
           rm -f .github/scripts/plan6_final_p1_f4_f5_apply.py
+          rm -f .github/scripts/plan6_final_p1_f4_f5_postpatch.py
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
