@@ -1,0 +1,54 @@
+name: Plan 6 stale boundary test once
+
+on:
+  push:
+    branches:
+      - fix/plan6-production-exactness
+
+permissions:
+  contents: write
+
+jobs:
+  update-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/plan6-production-exactness
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Update stale Batch 0 ledger guard
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'lib/product/food-catalog-ingestion-boundary.test.ts';
+          let s = fs.readFileSync(path, 'utf8');
+          function replaceOnce(from, to) {
+            if (!s.includes(from)) throw new Error(`Expected test fragment not found:\n${from}`);
+            s = s.replace(from, to);
+          }
+          replaceOnce(
+            'const PLAN6_MIGRATION = "20260908100000_food_catalog_governance_control_plane.sql";\n',
+            'const PLAN6_MIGRATION = "20260908100000_food_catalog_governance_control_plane.sql";\nconst PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";\n'
+          );
+          replaceOnce(
+            '    const currentCorrectionEntries = current.entries.filter((entry) => entry.localFile === PLAN5_SERVING_CORRECTION);\n    const currentPendingEntries = current.entries.filter((entry) => entry.state === "pending");\n',
+            '    const currentCorrectionEntries = current.entries.filter((entry) => entry.localFile === PLAN5_SERVING_CORRECTION);\n    const currentPlan6Entries = current.entries.filter((entry) => entry.localFile === PLAN6_MIGRATION);\n    const currentPlan6ExactnessEntries = current.entries.filter((entry) => entry.localFile === PLAN6_EXACTNESS_CORRECTION);\n    const currentPendingEntries = current.entries.filter((entry) => entry.state === "pending");\n'
+          );
+          replaceOnce(
+            '    expect(currentPendingEntries).toEqual([\n      expect.objectContaining({\n        localFile: PLAN6_MIGRATION,\n        state: "pending",\n      }),\n    ]);\n    expect(current.pendingCount).toBe(1);\n    expect(current.unresolvedCount).toBe(1);\n    expect(current.historyRepair).toEqual(\n      expect.objectContaining({\n        state: "pending",\n        pendingCount: 1,\n        unresolvedCount: 1,\n      })\n    );\n',
+            '    expect(currentPlan6Entries).toEqual([\n      expect.objectContaining({\n        localFile: PLAN6_MIGRATION,\n        state: "ledger_drift_review",\n        productionVersion: "20260909081402",\n        productionName: "food_catalog_governance_control_plane",\n      }),\n    ]);\n    expect(currentPlan6ExactnessEntries).toEqual([\n      expect.objectContaining({\n        localFile: PLAN6_EXACTNESS_CORRECTION,\n        state: "pending",\n      }),\n    ]);\n    expect(currentPendingEntries).toEqual(currentPlan6ExactnessEntries);\n    expect(current.pendingCount).toBe(1);\n    expect(current.unresolvedCount).toBe(2);\n    expect(current.historyRepair).toEqual(\n      expect.objectContaining({\n        state: "pending",\n        pendingCount: 1,\n        unresolvedCount: 2,\n      })\n    );\n'
+          );
+          fs.writeFileSync(path, s);
+          NODE
+      - name: Remove one-shot workflow
+        run: rm .github/workflows/plan6-stale-boundary-test-once.yml
+      - name: Commit test correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/product/food-catalog-ingestion-boundary.test.ts .github/workflows/plan6-stale-boundary-test-once.yml
+          git commit -m "test(food-catalog): reflect Plan6 production reconciliation state"
+          git push origin HEAD:fix/plan6-production-exactness
