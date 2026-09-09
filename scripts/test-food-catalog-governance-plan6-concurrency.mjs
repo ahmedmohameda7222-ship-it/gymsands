@@ -347,6 +347,7 @@ function cleanup() {
     truncate table public.food_catalog_governance_operations cascade;
     truncate table public.food_ingestion_batches cascade;
     truncate table public.food_items cascade;
+    delete from public.account_deletion_jobs where id='6a000000-0000-4000-8000-000000000812';
     delete from public.food_catalog_governance_capability_assignments where principal_id in ('${GOV_PRINCIPAL}','${REC_A}','${REC_B}','${MIX_A}','${MIX_B}');
     delete from public.food_catalog_governance_principals where id in ('${GOV_PRINCIPAL}','${REC_A}','${REC_B}','${MIX_A}','${MIX_B}');
     delete from auth.users where id in ('${OWNER_UID}','${REC_A_UID}','${REC_B_UID}','${MIX_A_UID}','${MIX_B_UID}','${PURGE_UID}','${DPROC_UID}');
