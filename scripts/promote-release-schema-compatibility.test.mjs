@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
 import {
   ACTIVITY_CATALOG_PROJECT_REF,
   APPLY_CONFIRMATION,
@@ -92,6 +93,17 @@ function validRequest(overrides = {}) {
     ...overrides,
   };
 }
+
+test("controlled downstream fixture satisfies normal release-ready ledger invariants", () => {
+  const state = deriveMigrationLedgerState(ledger);
+  assert.equal(state.reconciliationState, "reconciled");
+  assert.equal(state.pendingCount, 0);
+  assert.equal(state.schemaAppliedUntrackedCount, 0);
+  assert.equal(state.ledgerDriftReviewCount, 0);
+  assert.equal(state.unresolvedCount, 0);
+  assert.equal(state.releaseReady, true);
+  assert.equal(state.latestAppliedMigrationVersion, TARGET_MARKER);
+});
 
 test("rejects the real current repository ledger while reconciliation is unresolved", () => {
   assert.throws(
