@@ -101,8 +101,10 @@ select pg_temp.plan6_deletion_resumability_assert(
   'canonical purge did not atomically persist the deleting_auth checkpoint'
 );
 
+-- claim_account_deletion_jobs compares against transaction-stable now(). Keep
+-- this retry deterministically due inside this same verifier transaction.
 update public.account_deletion_jobs
-set state='retry_scheduled',next_attempt_at=clock_timestamp(),locked_at=null,last_error_code='transient-auth-provider-fixture'
+set state='retry_scheduled',next_attempt_at=now() - interval '1 second',locked_at=null,last_error_code='transient-auth-provider-fixture'
 where id=((:'queued')::jsonb->>'jobId')::uuid;
 
 set local role service_role;
