@@ -89,9 +89,12 @@ describe("Food Catalog Plan 6 final P1 adversarial contracts", () => {
     expect(manage).toContain("join public.account_access_states");
     expect(manage).toContain("where auth_user.id=v_human_user");
 
-    expect(MIGRATION).toContain("create or replace function public.food_catalog_begin_account_deletion(");
-    expect(PRIVACY_ROUTE).toContain('.rpc("food_catalog_begin_account_deletion"');
+    expect(MIGRATION).toContain("create or replace function public.food_catalog_queue_account_deletion(");
+    expect(MIGRATION).toContain("create or replace function public.food_catalog_begin_account_deletion(p_user_id uuid,p_deletion_job_id uuid)");
+    expect(PRIVACY_ROUTE).toContain('.rpc("food_catalog_queue_account_deletion"');
+    expect(PRIVACY_ROUTE).not.toContain('.rpc("food_catalog_begin_account_deletion"');
     expect(DELETION_WORKER).toContain('.rpc("food_catalog_begin_account_deletion"');
+    expect(DELETION_WORKER).toContain("p_deletion_job_id: jobId");
   });
 
   it("separates member report payload from immutable non-personal report metadata and purges it", () => {
