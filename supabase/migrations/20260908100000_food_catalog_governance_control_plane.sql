@@ -1576,6 +1576,11 @@ begin
 end
 $function$;
 
+-- PLAN6_F6_HARDENED: post-begin deletion must always retain a durable resume stage.
+alter table public.account_deletion_jobs drop constraint if exists account_deletion_jobs_stage_check;
+alter table public.account_deletion_jobs add constraint account_deletion_jobs_stage_check
+  check (stage in ('queued','revoking_connections','disabling_access','deleting_storage','provider_cleanup','deleting_database','deleting_auth','notification','completed'));
+
 -- Canonical privacy transition for Food governance identity. The lock order is
 -- account-purge user -> recovery set. This function intentionally deactivates the
 -- effective principal but preserves the historical principal/capability/audit rows.
@@ -1797,6 +1802,69 @@ $function$;
 
 revoke all on function public.purge_account_application_data_atomic(uuid) from public, anon, authenticated, service_role;
 grant execute on function public.purge_account_application_data_atomic(uuid) to service_role;
+
+-- Canonical purge and its post-purge resume checkpoint commit atomically. A later
+-- Auth/provider failure can therefore resume at deleting_auth without repeating
+-- the irreversible canonical application purge.
+create or replace function public.food_catalog_purge_account_application_data_for_deletion_job(
+  p_user_id uuid,p_deletion_job_id uuid
+) returns jsonb language plpgsql security definer set search_path='' as $function$
+declare
+  v_job public.account_deletion_jobs%rowtype;
+  v_state text;
+  v_result jsonb;
+  v_evidence jsonb;
+begin
+  if auth.role()<>'service_role' then
+    raise exception 'Job-bound account deletion purge requires service_role.' using errcode='42501';
+  end if;
+  if p_user_id is null or p_deletion_job_id is null then
+    raise exception 'Account deletion purge user and durable job IDs are required.' using errcode='22023';
+  end if;
+
+  perform private.food_catalog_lock_account_purge(p_user_id);
+  perform private.food_catalog_governance_lock_recovery_set();
+  select * into v_job from public.account_deletion_jobs
+  where id=p_deletion_job_id and user_id=p_user_id and state in ('processing','retry_scheduled')
+  for update;
+  if not found then
+    raise exception 'Durable resumable account deletion job is required before canonical purge.' using errcode='23514';
+  end if;
+
+  select state into v_state from public.account_access_states where user_id=p_user_id for update;
+  if not found or v_state not in ('deletion_pending','deletion_processing') then
+    raise exception 'Canonical account purge requires an irreversible deletion transition.' using errcode='55000';
+  end if;
+
+  if coalesce(v_job.evidence->>'application_data_purge_checkpointed','false')='true' then
+    if v_job.stage<>'deleting_auth' then
+      update public.account_deletion_jobs
+      set stage='deleting_auth',updated_at=clock_timestamp()
+      where id=p_deletion_job_id;
+    end if;
+    return v_job.evidence;
+  end if;
+
+  v_result:=public.purge_account_application_data_atomic(p_user_id);
+  v_evidence:=coalesce(v_job.evidence,'{}'::jsonb)
+    || coalesce(v_result,'{}'::jsonb)
+    || jsonb_build_object(
+      'irreversible_transition_started',true,
+      'application_data_purge_checkpointed',true,
+      'application_data_purge_checkpointed_at',clock_timestamp()
+    );
+  update public.account_deletion_jobs
+  set stage='deleting_auth',evidence=v_evidence,updated_at=clock_timestamp()
+  where id=p_deletion_job_id;
+  if not found then
+    raise exception 'Account deletion purge checkpoint could not be persisted.' using errcode='40001';
+  end if;
+  return v_evidence;
+end
+$function$;
+
+revoke all on function public.food_catalog_purge_account_application_data_for_deletion_job(uuid,uuid) from public,anon,authenticated,service_role;
+grant execute on function public.food_catalog_purge_account_application_data_for_deletion_job(uuid,uuid) to service_role;
 
 create or replace function public.food_catalog_governance_metrics()
 returns jsonb language plpgsql stable security definer set search_path='' as $function$
