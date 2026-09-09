@@ -40,8 +40,6 @@ select pg_temp.plan6_live_owner_assert(
   'Auth fixtures did not receive active canonical account access state'
 );
 
--- Build two real usable Owner fixtures without assuming whether the final schema
--- has already added the explicit human_user_id column.
 do $fixture$
 begin
   if exists(
@@ -66,8 +64,6 @@ insert into public.food_catalog_governance_capability_assignments(principal_id,c
 ('6b000000-0000-4000-8000-000000000101','food.governance.manage_principals','live-owner-verifier'),
 ('6b000000-0000-4000-8000-000000000102','food.governance.manage_principals','live-owner-verifier');
 
--- A human principal may never be arbitrary text. This is the causal RED for the
--- reviewed ghost-owner acceptance defect.
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub','6b000000-0000-4000-8000-000000000001',true);
@@ -100,7 +96,6 @@ select pg_temp.plan6_live_owner_rejected($sql$
 $sql$,'disabled Auth account cannot become Owner');
 reset role;
 
--- A stale JWT for a disabled Owner is not governance authority.
 update public.account_access_states
 set state='disabled',disabled_at=clock_timestamp(),reason_code='plan6-live-owner-stale-jwt'
 where user_id='6b000000-0000-4000-8000-000000000001'::uuid;
@@ -115,8 +110,6 @@ select pg_temp.plan6_live_owner_rejected($sql$
 $sql$,'disabled Owner stale JWT cannot govern');
 reset role;
 
--- A disabled human may not satisfy the recovery predicate. Owner B cannot revoke
--- itself while the only other nominal Owner is disabled.
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub','6b000000-0000-4000-8000-000000000002',true);
@@ -129,7 +122,6 @@ select pg_temp.plan6_live_owner_rejected($sql$
 $sql$,'disabled human Owner is excluded from recovery set');
 reset role;
 
--- Restore A. Two valid Owners still allow safe revocation of B.
 update public.account_access_states
 set state='active',disabled_at=null,reason_code=null
 where user_id='6b000000-0000-4000-8000-000000000001'::uuid;
@@ -157,22 +149,31 @@ select pg_temp.plan6_live_owner_assert(
   'safe revocation did not preserve a usable Owner'
 );
 
--- Re-grant B directly as rollback-only database-owner fixture for deletion tests.
 insert into public.food_catalog_governance_capability_assignments(principal_id,capability,reason)
 values('6b000000-0000-4000-8000-000000000102','food.governance.manage_principals','live-owner-delete-fixture');
 
--- Canonical deletion start deactivates one of two Owners under the recovery lock.
+-- Two usable Owners permit a durable deletion job to be queued for A while A
+-- remains active. Only after that durable authority exists may the worker begin
+-- the access/governance transition.
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
-select public.food_catalog_begin_account_deletion('6b000000-0000-4000-8000-000000000001');
+select public.food_catalog_queue_account_deletion(
+  '6b000000-0000-4000-8000-000000000001'::uuid,null,
+  'live-owner-a-subject','live-owner-a-idempotency',clock_timestamp(),'2026-07-1',null,
+  '{"request_source":"live-owner-verifier"}'::jsonb
+) as owner_a_queue \gset
+select public.food_catalog_begin_account_deletion(
+  '6b000000-0000-4000-8000-000000000001'::uuid,
+  ((:'owner_a_queue')::jsonb->>'jobId')::uuid
+);
 reset role;
 select pg_temp.plan6_live_owner_assert(
-  (select not active and revoked_at is not null from public.food_catalog_governance_principals where id='6b000000-0000-4000-8000-000000000101'::uuid)
+  exists(select 1 from public.account_deletion_jobs where id=((:'owner_a_queue')::jsonb->>'jobId')::uuid and user_id='6b000000-0000-4000-8000-000000000001'::uuid)
+  and (select not active and revoked_at is not null from public.food_catalog_governance_principals where id='6b000000-0000-4000-8000-000000000101'::uuid)
   and (select state='deletion_pending' from public.account_access_states where user_id='6b000000-0000-4000-8000-000000000001'::uuid),
-  'deleting one of two Owners did not deactivate governance authority and move account to deletion_pending'
+  'deleting one of two Owners lacked durable authority or failed canonical transition'
 );
 
--- Deleted/deleting Owner stale JWT remains unusable.
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub','6b000000-0000-4000-8000-000000000001',true);
@@ -184,18 +185,24 @@ select pg_temp.plan6_live_owner_rejected($sql$
 $sql$,'deletion_pending Owner stale JWT cannot govern');
 reset role;
 
--- The final usable recovery Owner cannot begin deletion. Failure must roll back
--- both principal deactivation and the account-access transition.
+-- B is now the final usable recovery Owner. The durable queue itself must reject
+-- before creating a request/job or changing access/governance state.
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
 select pg_temp.plan6_live_owner_rejected($sql$
-  select public.food_catalog_begin_account_deletion('6b000000-0000-4000-8000-000000000002')
-$sql$,'final usable Owner account deletion blocked');
+  select public.food_catalog_queue_account_deletion(
+    '6b000000-0000-4000-8000-000000000002'::uuid,null,
+    'live-owner-b-subject','live-owner-b-idempotency',clock_timestamp(),'2026-07-1',null,
+    '{"request_source":"live-owner-verifier-final-owner"}'::jsonb
+  )
+$sql$,'final usable Owner account deletion blocked before durable queue');
 reset role;
 select pg_temp.plan6_live_owner_assert(
   (select active and revoked_at is null from public.food_catalog_governance_principals where id='6b000000-0000-4000-8000-000000000102'::uuid)
-  and (select state='active' and disabled_at is null from public.account_access_states where user_id='6b000000-0000-4000-8000-000000000002'::uuid),
-  'failed final-Owner deletion changed usable recovery authority'
+  and (select state='active' and disabled_at is null from public.account_access_states where user_id='6b000000-0000-4000-8000-000000000002'::uuid)
+  and not exists(select 1 from public.account_deletion_jobs where user_id='6b000000-0000-4000-8000-000000000002'::uuid)
+  and not exists(select 1 from public.privacy_requests where user_id='6b000000-0000-4000-8000-000000000002'::uuid and request_type='deletion'),
+  'failed final-Owner deletion changed usable recovery authority or created false durable state'
 );
 
 rollback;
