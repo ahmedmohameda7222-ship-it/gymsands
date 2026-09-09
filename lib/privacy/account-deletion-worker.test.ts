@@ -197,7 +197,10 @@ describe("account deletion worker contract", () => {
       p_user_id: "user-a",
       p_deletion_job_id: "job-a"
     });
-    expect(first.calls.some((call) => call.table === "account_deletion_jobs" && call.action === "update" && call.values?.stage === "deleting_auth")).toBe(true);
+    // The database wrapper, not the worker, owns the transactional deleting_auth
+    // checkpoint. The database verifier proves that side effect; the worker must
+    // simply resume from the persisted stage returned by the next maintenance claim.
+    expect(first.calls.some((call) => call.table === "account_deletion_jobs" && call.action === "update" && call.values?.stage === "deleting_auth")).toBe(false);
 
     const resumed = workerAdminMock({ accountState: "deletion_processing", governancePrincipalActive: false });
     const resumedResult = await processAccountDeletionJob(resumed.client, {
