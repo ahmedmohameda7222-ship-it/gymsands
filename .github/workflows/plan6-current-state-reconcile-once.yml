@@ -1,0 +1,188 @@
+name: Plan 6 current-state reconcile once
+
+on:
+  push:
+    branches:
+      - fix/plan6-production-exactness
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/plan6-production-exactness
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Reconcile current Plan 6 state contracts
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const ORIGINAL = '20260908100000_food_catalog_governance_control_plane.sql';
+          const CORRECTION = '20260909083000_food_catalog_governance_gtin_lock_exactness.sql';
+          const PROD_VERSION = '20260909081402';
+          const PROD_NAME = 'food_catalog_governance_control_plane';
+
+          function edit(path, transform) {
+            const before = fs.readFileSync(path, 'utf8');
+            const after = transform(before);
+            if (after === before) throw new Error(`No change produced for ${path}`);
+            fs.writeFileSync(path, after);
+          }
+          function once(s, from, to, label) {
+            if (!s.includes(from)) throw new Error(`Missing ${label || 'fragment'}:\n${from}`);
+            return s.replace(from, to);
+          }
+
+          // Machine ledger: preserve checker-defined exact-applied count (63),
+          // update only the verified physical Supabase history count.
+          edit('supabase/migration-ledger.json', (raw) => {
+            const ledger = JSON.parse(raw);
+            if (ledger.productionMigrationCount !== 63) throw new Error('Unexpected exact-applied ledger count');
+            const original = ledger.entries.find((e) => e.localFile === ORIGINAL);
+            const correction = ledger.entries.find((e) => e.localFile === CORRECTION);
+            if (!original || original.state !== 'ledger_drift_review' || original.productionVersion !== PROD_VERSION || original.productionName !== PROD_NAME) {
+              throw new Error('Plan 6 drift-review ledger authority is not the expected pre-correction state');
+            }
+            if (!correction || correction.state !== 'pending' || correction.productionVersion || correction.productionName) {
+              throw new Error('Plan 6 exactness correction is not the expected pending state');
+            }
+            ledger.productionRecordCount = 122;
+            ledger.capturedAt = new Date().toISOString();
+            return JSON.stringify(ledger);
+          });
+
+          // Human current authority: replace the stale pre-Production header/current-state
+          // block and remove the duplicated appended interim section.
+          edit('docs/architecture/migration-ledger-reconciliation.md', (raw) => {
+            let s = raw;
+            const duplicate = '\n## Plan 6 production exactness reconciliation';
+            if (s.includes(duplicate)) s = s.slice(0, s.indexOf(duplicate)).trimEnd() + '\n';
+            const plan5 = '## Food Catalog Plan 5 serving-semantics correction — Production application 2026-09-07';
+            const idx = s.indexOf(plan5);
+            if (idx < 0) throw new Error('Plan 5 history boundary not found');
+            const prefix = `# Production migration ledger reconciliation\n\n**Project:** \`bkwezjxvapaeasfvlhvv\`\n**Current reconciliation date:** 2026-09-09\n**Machine authority:** \`supabase/migration-ledger.json\`\n**Status:** Plan 6 governance control plane is applied once in Production and held under \`ledger_drift_review\`; the forward-only GTIN-lock exactness correction is pending/unapplied\n\nThis document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in \`supabase/migration-ledger.json\`; immutable SQL lives under \`supabase/migrations/\`; executable verification lives under \`supabase/verification/\`.\n\nHistorical PR descriptions, completed implementation reports, and old audit snapshots are evidence only. They do not override the current state below.\n\n## Current state\n\nRead-only Plaivra Production inspection on 2026-09-09 established:\n\n- Physical Production migration records: **122**\n- Exact repository-name applications tracked as \`state = applied\`: **63**\n- Latest physical Production record: \`20260909081402_food_catalog_governance_control_plane\`\n- Corresponding immutable repository migration: \`20260908100000_food_catalog_governance_control_plane.sql\`\n- Released compatibility marker: \`20260724232734\`\n- Activity Catalog Production remains isolated from the Main Plaivra migration ledger\n\nThe current repository/machine-ledger state records:\n\n- Applied-under-review repository migration: **1** — \`20260908100000_food_catalog_governance_control_plane.sql\` as \`ledger_drift_review\`, mapped to Production identity \`20260909081402_food_catalog_governance_control_plane\`\n- Pending repository migrations: **1** — \`20260909083000_food_catalog_governance_gtin_lock_exactness.sql\`\n- \`pendingCount = 1\`\n- \`schemaVerifiedUntrackedCount = 0\`\n- \`unresolvedCount = 2\`\n- \`historyRepair.state = pending\`\n- migration-ledger \`release_ready = false\`\n\nThe machine-ledger \`productionMigrationCount\` counts exact \`state = applied\` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately by their ledger state. Applied migrations must not be replayed.\n\n## Food Catalog Plan 6 governance control plane — Production applied / exactness correction pending 2026-09-09\n\nRepository migration \`20260908100000_food_catalog_governance_control_plane.sql\` was merged and applied exactly once to Plaivra Production as generated physical identity \`20260909081402_food_catalog_governance_control_plane\`. Immediate read-back proved all expected Plan 6 governance relations and policy authority were created while canonical Food/source/ingestion/generation/search data remained unpopulated and the current-generation pointer remained \`NULL / 0\`.\n\nPost-apply exactness inspection found one connector-transfer divergence in the UPDATE branch of \`private.food_catalog_serialize_gtin_write()\`: Production used a direct Food row lock where the reviewed repository migration calls \`private.food_catalog_lock_food_authority(v_food)\`. The applied migration is immutable and must not be rewritten or replayed. It is therefore classified as \`ledger_drift_review\` while forward-only repository migration \`20260909083000_food_catalog_governance_gtin_lock_exactness.sql\` remains the sole pending correction.\n\nCurrent fail-closed authority is \`historyRepair.state = pending\`, \`pendingCount = 1\`, \`unresolvedCount = 2\`, and \`release_ready = false\`. No Food population, provider ingestion, activation, verification approval, Catalog Generation creation/promotion, current-pointer movement, SearchDocument mutation outside existing derived authority, compatibility-marker promotion, runtime cutover, deployment, or Activity Catalog mutation is authorized by this reconciliation.\n\n`;
+            return prefix + s.slice(idx);
+          });
+
+          // nullable Meal Plan snapshot state guard
+          edit('lib/product/nullable-meal-plan-snapshot-migration.test.ts', (s) => {
+            s = once(s,
+              `const plan6MigrationName = "${ORIGINAL}";\n`,
+              `const plan6MigrationName = "${ORIGINAL}";\nconst plan6ExactnessCorrectionName = "${CORRECTION}";\n`, 'nullable const');
+            s = s.replace('preserves authorized Production aliases while Plan 6 remains explicitly pending', 'preserves authorized Production aliases while Plan 6 exactness reconciliation remains pending');
+            s = once(s,
+              '    const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");\n',
+              '    const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");\n    const plan6Entry = ledger.entries.find((entry) => entry.localFile === plan6MigrationName);\n    const plan6CorrectionEntry = ledger.entries.find((entry) => entry.localFile === plan6ExactnessCorrectionName);\n', 'nullable state vars');
+            s = once(s,
+`    expect(pendingEntries).toEqual([\n      expect.objectContaining({\n        localFile: plan6MigrationName,\n        state: "pending",\n      }),\n    ]);`,
+`    expect(plan6Entry).toEqual(expect.objectContaining({\n      localFile: plan6MigrationName,\n      state: "ledger_drift_review",\n      productionVersion: "${PROD_VERSION}",\n      productionName: "${PROD_NAME}",\n    }));\n    expect(plan6CorrectionEntry).toEqual(expect.objectContaining({\n      localFile: plan6ExactnessCorrectionName,\n      state: "pending",\n    }));\n    expect(pendingEntries).toEqual([plan6CorrectionEntry]);`, 'nullable pending assertion');
+            s = s.replace('expect(ledger.unresolvedCount).toBe(1);', 'expect(ledger.unresolvedCount).toBe(2);');
+            s = s.replace('expect(ledger.historyRepair.unresolvedCount).toBe(1);', 'expect(ledger.historyRepair.unresolvedCount).toBe(2);');
+            return s;
+          });
+
+          // Plan 3 generation authority current-ledger guard
+          edit('lib/product/food-catalog-generation-authority-migration.test.ts', (s) => {
+            s = once(s,
+              `const PLAN6_MIGRATION = "${ORIGINAL}";\n`,
+              `const PLAN6_MIGRATION = "${ORIGINAL}";\nconst PLAN6_EXACTNESS_CORRECTION = "${CORRECTION}";\n`, 'plan3 const');
+            s = s.replace('preserves verified Plan 3/4/5 aliases while Plan 6 remains explicitly pending', 'preserves verified Plan 3/4/5 aliases while Plan 6 exactness reconciliation remains pending');
+            s = s.replace('expect(ledger.productionRecordCount).toBe(121);', 'expect(ledger.productionRecordCount).toBe(122);');
+            s = s.replace('expect(ledger.unresolvedCount).toBe(1);', 'expect(ledger.unresolvedCount).toBe(2);');
+            s = s.replace('expect(ledger.historyRepair.unresolvedCount).toBe(1);', 'expect(ledger.historyRepair.unresolvedCount).toBe(2);');
+            s = once(s,
+`    const pendingEntries = ledger.entries.filter((item) => item.state === "pending");\n    expect(pendingEntries).toEqual([\n      expect.objectContaining({\n        localFile: PLAN6_MIGRATION,\n        state: "pending",\n      }),\n    ]);`,
+`    const plan6 = ledger.entries.find((item) => item.localFile === PLAN6_MIGRATION);\n    expect(plan6).toEqual(expect.objectContaining({\n      state: "ledger_drift_review",\n      productionVersion: "${PROD_VERSION}",\n      productionName: "${PROD_NAME}",\n    }));\n    const pendingEntries = ledger.entries.filter((item) => item.state === "pending");\n    expect(pendingEntries).toEqual([\n      expect.objectContaining({\n        localFile: PLAN6_EXACTNESS_CORRECTION,\n        state: "pending",\n      }),\n    ]);`, 'plan3 pending block');
+            return s;
+          });
+
+          // Plan 4 ingestion current-ledger guard
+          edit('lib/product/food-catalog-ingestion-v2-authority-migration.test.ts', (s) => {
+            s = once(s,
+              `const PLAN6_MIGRATION_FILE = "${ORIGINAL}";\n`,
+              `const PLAN6_MIGRATION_FILE = "${ORIGINAL}";\nconst PLAN6_EXACTNESS_CORRECTION = "${CORRECTION}";\n`, 'plan4 const');
+            s = s.replace('records the verified Plan 4/5 aliases while Plan 6 remains explicitly pending', 'records the verified Plan 4/5 aliases while Plan 6 exactness reconciliation remains pending');
+            s = s.replace('expect(ledger.productionRecordCount).toBe(121);', 'expect(ledger.productionRecordCount).toBe(122);');
+            s = s.replace('expect(ledger.unresolvedCount).toBe(1);', 'expect(ledger.unresolvedCount).toBe(2);');
+            s = s.replace('expect(ledger.historyRepair.unresolvedCount).toBe(1);', 'expect(ledger.historyRepair.unresolvedCount).toBe(2);');
+            s = once(s,
+`    const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");\n    expect(pendingEntries).toEqual([\n      expect.objectContaining({\n        localFile: PLAN6_MIGRATION_FILE,\n        state: "pending",\n      }),\n    ]);`,
+`    const plan6 = ledger.entries.find((entry) => entry.localFile === PLAN6_MIGRATION_FILE);\n    expect(plan6).toEqual(expect.objectContaining({\n      state: "ledger_drift_review",\n      productionVersion: "${PROD_VERSION}",\n      productionName: "${PROD_NAME}",\n    }));\n    const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");\n    expect(pendingEntries).toEqual([\n      expect.objectContaining({\n        localFile: PLAN6_EXACTNESS_CORRECTION,\n        state: "pending",\n      }),\n    ]);`, 'plan4 pending block');
+            s = s.replace('expect(reconciliationDoc).toContain("physical production migration records: **121**");', 'expect(reconciliationDoc).toContain("physical production migration records: **122**");');
+            s = s.replace('expect(reconciliationDoc).toContain("`unresolvedcount = 1`");', 'expect(reconciliationDoc).toContain("`unresolvedcount = 2`");');
+            s = once(s,
+              '    expect(reconciliationDoc).toContain(PLAN6_MIGRATION_FILE);\n    expect(reconciliationDoc).toContain(PLAN5_SERVING_CORRECTION);\n',
+              '    expect(reconciliationDoc).toContain(PLAN6_MIGRATION_FILE);\n    expect(reconciliationDoc).toContain(PLAN6_EXACTNESS_CORRECTION);\n    expect(reconciliationDoc).toContain("ledger_drift_review");\n    expect(reconciliationDoc).toContain("20260909081402_food_catalog_governance_control_plane");\n    expect(reconciliationDoc).toContain(PLAN5_SERVING_CORRECTION);\n', 'plan4 doc assertions');
+            return s;
+          });
+
+          // Plan 6 database authority current-ledger guard
+          edit('lib/product/food-catalog-governance-plan6-database.test.ts', (s) => {
+            s = once(s,
+              'const LEDGER = "supabase/migration-ledger.json";\n',
+              `const LEDGER = "supabase/migration-ledger.json";\nconst EXACTNESS_CORRECTION = "${CORRECTION}";\n`, 'plan6 db const');
+            s = once(s,
+`  it("records Plan 6 as pending/unapplied in the repository migration ledger", () => {\n    const ledger = JSON.parse(read(LEDGER)) as { pendingCount: number; unresolvedCount: number; historyRepair: { state: string }; entries: Array<Record<string, unknown>> };\n    const entry = ledger.entries.find((item) => item.localFile === "${ORIGINAL}");\n    expect(entry).toEqual(expect.objectContaining({ state: "pending" }));\n    expect(entry).not.toHaveProperty("productionVersion");\n    expect(ledger.pendingCount).toBe(1);\n    expect(ledger.unresolvedCount).toBe(1);\n    expect(ledger.historyRepair.state).toBe("pending");\n  });`,
+`  it("records applied Plan 6 under drift review while the forward exactness correction remains pending", () => {\n    const ledger = JSON.parse(read(LEDGER)) as { pendingCount: number; unresolvedCount: number; historyRepair: { state: string }; entries: Array<Record<string, unknown>> };\n    const entry = ledger.entries.find((item) => item.localFile === "${ORIGINAL}");\n    const correction = ledger.entries.find((item) => item.localFile === EXACTNESS_CORRECTION);\n    expect(entry).toEqual(expect.objectContaining({\n      state: "ledger_drift_review",\n      productionVersion: "${PROD_VERSION}",\n      productionName: "${PROD_NAME}",\n    }));\n    expect(correction).toEqual(expect.objectContaining({ state: "pending" }));\n    expect(correction).not.toHaveProperty("productionVersion");\n    expect(ledger.pendingCount).toBe(1);\n    expect(ledger.unresolvedCount).toBe(2);\n    expect(ledger.historyRepair.state).toBe("pending");\n  });`, 'plan6 db state test');
+            return s;
+          });
+
+          // Release target fail-closed contract
+          edit('scripts/release-target-compatibility.test.mjs', (s) => {
+            s = once(s,
+              `const PLAN6_MIGRATION = "${ORIGINAL}";\n`,
+              `const PLAN6_MIGRATION = "${ORIGINAL}";\nconst PLAN6_EXACTNESS_CORRECTION = "${CORRECTION}";\n`, 'release target const');
+            s = s.replace('release consumers preserve the declared marker and block release while Plan 6 is pending', 'release consumers preserve the declared marker and block release while Plan 6 exactness reconciliation is pending');
+            s = s.replace('preflight preserves the declared marker but blocks release while Plan 6 remains pending', 'preflight preserves the declared marker but blocks release while Plan 6 exactness reconciliation remains pending');
+            s = once(s,
+              '  const plan6 = ledger.entries.find((entry) => entry.localFile === PLAN6_MIGRATION);\n',
+              '  const plan6 = ledger.entries.find((entry) => entry.localFile === PLAN6_MIGRATION);\n  const plan6Correction = ledger.entries.find((entry) => entry.localFile === PLAN6_EXACTNESS_CORRECTION);\n', 'release target vars');
+            s = once(s,
+`  assert.equal(plan6.state, "pending");\n  assert.equal(plan6.productionVersion, undefined);`,
+`  assert.equal(plan6.state, "ledger_drift_review");\n  assert.equal(plan6.productionVersion, "${PROD_VERSION}");\n  assert.equal(plan6.productionName, "${PROD_NAME}");\n  assert.equal(plan6Correction.state, "pending");\n  assert.equal(plan6Correction.productionVersion, undefined);\n  assert.equal(pendingEntries[0].localFile, PLAN6_EXACTNESS_CORRECTION);`, 'release target plan6 assertions');
+            s = s.replace('assert.equal(releaseTarget.unresolvedCount, 1);', 'assert.equal(releaseTarget.unresolvedCount, 2);');
+            s = s.replace('assert.equal(qualityTarget.unresolvedCount, 1);', 'assert.equal(qualityTarget.unresolvedCount, 2);');
+            s = s.replace('assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "1");', 'assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "2");');
+            return s;
+          });
+
+          // Release compatibility metadata contract
+          edit('scripts/release-compatibility-contract.test.mjs', (s) => {
+            s = once(s,
+              `const PLAN6_MIGRATION = "${ORIGINAL}";\n`,
+              `const PLAN6_MIGRATION = "${ORIGINAL}";\nconst PLAN6_EXACTNESS_CORRECTION = "${CORRECTION}";\n`, 'release compat const');
+            s = s.replace('declared database marker remains distinct from the reconciled Plan 5 physical head while Plan 6 stays pending', 'declared database marker remains distinct from the resolved physical head while Plan 6 exactness reconciliation stays pending');
+            s = s.replace('Next build metadata preserves the declared marker and exposes pending Plan 6 reconciliation', 'Next build metadata preserves the declared marker and exposes pending Plan 6 exactness reconciliation');
+            s = once(s,
+              '  const plan6 = ledger.entries.find((entry) => entry.localFile === PLAN6_MIGRATION);\n',
+              '  const plan6 = ledger.entries.find((entry) => entry.localFile === PLAN6_MIGRATION);\n  const plan6Correction = ledger.entries.find((entry) => entry.localFile === PLAN6_EXACTNESS_CORRECTION);\n', 'release compat vars');
+            s = once(s,
+`  assert.equal(plan6.state, "pending");\n  assert.equal(plan6.productionVersion, undefined);`,
+`  assert.equal(plan6.state, "ledger_drift_review");\n  assert.equal(plan6.productionVersion, "${PROD_VERSION}");\n  assert.equal(plan6.productionName, "${PROD_NAME}");\n  assert.equal(plan6Correction.state, "pending");\n  assert.equal(plan6Correction.productionVersion, undefined);\n  assert.equal(pendingEntries[0].localFile, PLAN6_EXACTNESS_CORRECTION);`, 'release compat plan6 assertions');
+            s = s.replace('assert.equal(resolved.unresolvedMigrationCount, 1);', 'assert.equal(resolved.unresolvedMigrationCount, 2);');
+            s = s.replace('assert.equal(releaseMetadata.unresolvedMigrationCount, "1");', 'assert.equal(releaseMetadata.unresolvedMigrationCount, "2");');
+            return s;
+          });
+          NODE
+      - name: Remove one-shot workflow
+        run: rm .github/workflows/plan6-current-state-reconcile-once.yml
+      - name: Commit current-state reconciliation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/migration-ledger.json docs/architecture/migration-ledger-reconciliation.md \
+            lib/product/nullable-meal-plan-snapshot-migration.test.ts \
+            lib/product/food-catalog-generation-authority-migration.test.ts \
+            lib/product/food-catalog-ingestion-v2-authority-migration.test.ts \
+            lib/product/food-catalog-governance-plan6-database.test.ts \
+            scripts/release-target-compatibility.test.mjs \
+            scripts/release-compatibility-contract.test.mjs \
+            .github/workflows/plan6-current-state-reconcile-once.yml
+          git commit -m "test(food-catalog): reconcile Plan6 Production state contracts"
+          git push origin HEAD:fix/plan6-production-exactness
