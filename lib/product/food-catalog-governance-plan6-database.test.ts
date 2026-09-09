@@ -71,8 +71,8 @@ describe("Food Catalog Plan 6 database authority", () => {
     expect(sql).toContain("create or replace function public.purge_account_application_data_atomic");
     expect(sql).toContain("private.nutrition_saved_meal_creation_operations");
     expect(sql).toContain("private.nutrition_v1_final_review_core_purge_account_application_data_atomic");
-    expect(sql).toContain("delete from public.food_personal_overrides where user_id = p_user_id");
-    expect(sql).toContain("delete from public.food_personal_override_revisions where user_id = p_user_id");
+    expect(sql).toMatch(/delete\s+from\s+public\.food_personal_overrides\s+where\s+user_id\s*=\s*p_user_id/);
+    expect(sql).toMatch(/delete\s+from\s+public\.food_personal_override_revisions\s+where\s+user_id\s*=\s*p_user_id/);
     expect(sql).toContain("food_personal_overrides_deleted");
     expect(sql).toContain("food_personal_override_revisions_deleted");
     expect(verifier).toContain("plan 6 personal override purge");
