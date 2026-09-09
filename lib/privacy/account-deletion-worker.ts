@@ -77,6 +77,8 @@ async function revokeConnections(admin: SupabaseClient, userId: string) {
 }
 
 async function disableAccount(admin: SupabaseClient, userId: string) {
+  const governanceDeletion = await admin.rpc("food_catalog_begin_account_deletion", { p_user_id: userId });
+  if (governanceDeletion.error) throw new DeletionWorkerError("governance_recovery_owner_blocked");
   const result = await admin.from("account_access_states").upsert({
     user_id: userId,
     state: "deletion_processing",

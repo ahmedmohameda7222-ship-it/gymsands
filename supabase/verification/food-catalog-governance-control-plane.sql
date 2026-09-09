@@ -13,6 +13,12 @@
 
 begin;
 
+-- P1-F2 live-identity compatibility fixtures for legacy governance actors.
+insert into auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values
+  (:'owner_id'::uuid,'authenticated','authenticated','plan6-owner@example.test','','{"provider":"email","providers":["email"]}'::jsonb,'{}'::jsonb,now(),now()),
+  (:'curator_id'::uuid,'authenticated','authenticated','plan6-curator@example.test','','{"provider":"email","providers":["email"]}'::jsonb,'{}'::jsonb,now(),now()),
+  ('66000000-0000-4000-8000-000000000099'::uuid,'authenticated','authenticated','plan6-provisioned-curator@example.test','','{"provider":"email","providers":["email"]}'::jsonb,'{}'::jsonb,now(),now());
+
 -- Food Catalog Plan 6 disposable rollback-only verification. No fixture survives.
 create or replace function pg_temp.plan6_assert(p_condition boolean, p_message text)
 returns void language plpgsql as $$

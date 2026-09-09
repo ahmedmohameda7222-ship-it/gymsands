@@ -238,19 +238,22 @@ async function createAccountDeletionRequest(
     deletionRequest = created.data;
   }
 
+  const governanceDeletion = await admin.rpc("food_catalog_begin_account_deletion", {
+    p_user_id: context.user.id,
+  });
+  if (governanceDeletion.error) {
+    console.error("Plaivra Food governance deletion transition failed:", governanceDeletion.error.message);
+    if (governanceDeletion.error.code === "23514") {
+      return NextResponse.json({
+        error: "Account deletion is blocked while this account is the final usable Food governance recovery Owner. Provision another usable Owner first.",
+      }, { status: 409 });
+    }
+    return NextResponse.json({ error: "The deletion request could not be queued safely." }, { status: 500 });
+  }
+
   const chatgptAccessRevoked = await revokeDeletionConnections(context.user.id, context.accessToken);
   if (!chatgptAccessRevoked) {
     return NextResponse.json({ error: "ChatGPT access could not be revoked; no deletion job was queued." }, { status: 503 });
-  }
-
-  const state = await admin.from("account_access_states").upsert({
-    user_id: context.user.id,
-    state: "deletion_pending",
-    reason_code: "member_requested_deletion"
-  }, { onConflict: "user_id" });
-  if (state.error) {
-    console.error("Plaivra deletion access-state update failed:", state.error.message);
-    return NextResponse.json({ error: "The deletion request could not be queued safely." }, { status: 500 });
   }
 
   const job = await admin

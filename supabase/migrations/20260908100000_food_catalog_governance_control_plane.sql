@@ -9,6 +9,10 @@ create table public.food_catalog_governance_principals (
   id uuid primary key default gen_random_uuid(),
   principal_type text not null check (principal_type in ('human','service')),
   subject_id text not null check (length(btrim(subject_id)) > 0),
+  -- Historical principal identity survives Auth deletion. For human principals the
+  -- authorization subject is a strongly typed UUID derived once from subject_id;
+  -- Service principals never populate this column.
+  human_user_id uuid,
   service_identity_sha256 text,
   role_class text not null check (role_class in ('owner','curator','service')),
   active boolean not null default true,
@@ -16,11 +20,42 @@ create table public.food_catalog_governance_principals (
   revoked_at timestamptz,
   unique (principal_type, subject_id),
   check ((principal_type='service' and role_class='service') or (principal_type='human' and role_class in ('owner','curator'))),
-  check ((principal_type='service' and service_identity_sha256 ~ '^[0-9a-f]{64}$') or (principal_type='human' and service_identity_sha256 is null)),
+  check (
+    (principal_type='service' and human_user_id is null and service_identity_sha256 ~ '^[0-9a-f]{64}$')
+    or (principal_type='human' and human_user_id is not null and service_identity_sha256 is null)
+  ),
   check ((active and revoked_at is null) or (not active and revoked_at is not null))
 );
+create unique index food_catalog_governance_human_user_uq
+  on public.food_catalog_governance_principals(human_user_id) where principal_type='human';
 create unique index food_catalog_governance_service_identity_uq
   on public.food_catalog_governance_principals(service_identity_sha256) where principal_type='service';
+
+create or replace function private.food_catalog_governance_bind_human_identity()
+returns trigger language plpgsql set search_path='' as $function$
+declare v_subject uuid;
+begin
+  if new.principal_type='human' then
+    begin
+      v_subject:=btrim(new.subject_id)::uuid;
+    exception when invalid_text_representation then
+      raise exception 'Human governance principal subject must be a UUID.' using errcode='22023';
+    end;
+    if new.human_user_id is null then
+      new.human_user_id:=v_subject;
+    elsif new.human_user_id<>v_subject then
+      raise exception 'Human governance UUID identity must match subject authority.' using errcode='23514';
+    end if;
+  elsif new.human_user_id is not null then
+    raise exception 'Service governance principal cannot carry a human Auth identity.' using errcode='23514';
+  end if;
+  return new;
+end
+$function$;
+create trigger food_catalog_governance_principals_bind_human_identity
+before insert or update of principal_type,subject_id,human_user_id
+on public.food_catalog_governance_principals
+for each row execute function private.food_catalog_governance_bind_human_identity();
 
 create table public.food_catalog_governance_capability_assignments (
   id uuid primary key default gen_random_uuid(),
@@ -83,6 +118,11 @@ values(true,'plan6-v1',0);
 insert into public.food_catalog_governance_principals (principal_type, subject_id, role_class)
 select 'human', profile.id::text, 'owner'
 from public.profiles profile
+join auth.users auth_user on auth_user.id=profile.id
+join public.account_access_states access_state
+  on access_state.user_id=profile.id
+ and access_state.state='active'
+ and access_state.disabled_at is null
 where profile.role='admin'
 on conflict (principal_type, subject_id) do nothing;
 
@@ -133,13 +173,23 @@ create index food_catalog_correction_cases_food_state_idx
 create table public.food_catalog_correction_reports (
   id uuid primary key default gen_random_uuid(),
   case_id uuid not null references public.food_catalog_correction_cases(id) on delete restrict,
-  reporter_user_id uuid not null,
-  description text not null check (length(btrim(description)) between 1 and 2000),
-  evidence jsonb not null default '{}'::jsonb check (jsonb_typeof(evidence)='object' and pg_column_size(evidence) <= 8192),
   created_at timestamptz not null default now()
 );
-create index food_catalog_correction_reports_owner_idx
-  on public.food_catalog_correction_reports(reporter_user_id,created_at,id);
+create index food_catalog_correction_reports_case_idx
+  on public.food_catalog_correction_reports(case_id,created_at,id);
+
+-- Member-authored intake payload is deliberately separate from durable global
+-- report metadata. It is owner data and participates in canonical account purge.
+create table public.food_catalog_correction_report_member_payloads (
+  report_id uuid primary key references public.food_catalog_correction_reports(id) on delete cascade,
+  reporter_user_id uuid not null,
+  description text not null check (length(btrim(description)) between 1 and 2000),
+  evidence jsonb not null default '{}'::jsonb
+    check (jsonb_typeof(evidence)='object' and pg_column_size(evidence) <= 8192),
+  created_at timestamptz not null default now()
+);
+create index food_catalog_correction_report_member_payloads_owner_idx
+  on public.food_catalog_correction_report_member_payloads(reporter_user_id,created_at,report_id);
 
 create table public.food_catalog_correction_evidence (
   id uuid primary key default gen_random_uuid(),
@@ -355,6 +405,9 @@ create trigger food_catalog_serving_fact_revisions_immutable before update or de
 create trigger food_catalog_name_fact_lineages_immutable before update or delete on public.food_catalog_name_fact_lineages for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_name_fact_revisions_immutable before update or delete on public.food_catalog_name_fact_revisions for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_correction_reports_immutable before update or delete on public.food_catalog_correction_reports for each row execute function private.reject_food_catalog_governance_immutable_mutation();
+-- Member payload may be physically deleted only through the canonical privacy
+-- SECURITY DEFINER path; direct UPDATE remains immutable.
+create trigger food_catalog_correction_report_member_payloads_immutable before update on public.food_catalog_correction_report_member_payloads for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_service_proposals_immutable before update or delete on public.food_catalog_service_proposals for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_correction_evidence_immutable before update or delete on public.food_catalog_correction_evidence for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_catalog_correction_events_immutable before update or delete on public.food_catalog_correction_events for each row execute function private.reject_food_catalog_governance_immutable_mutation();
@@ -362,15 +415,53 @@ create trigger food_catalog_governance_audit_events_immutable before update or d
 create trigger food_catalog_governance_lifecycle_events_immutable before update or delete on public.food_catalog_governance_lifecycle_events for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 create trigger food_personal_override_revisions_immutable before update on public.food_personal_override_revisions for each row execute function private.reject_food_catalog_governance_immutable_mutation();
 
-create or replace function private.food_catalog_governance_principal_for_user()
-returns uuid language plpgsql stable security definer set search_path='' as $function$
-declare v_principal uuid;
+-- PLAN6_FINAL_P1_HARDENED: one account-lifecycle lock, one live-human
+-- authority model, and one canonical Food-before-GTIN writer order.
+create or replace function private.food_catalog_lock_account_purge(p_user_id uuid)
+returns void language plpgsql security definer set search_path='' as $function$
 begin
-  if auth.uid() is null then raise exception 'Authenticated Food governance principal is required.' using errcode='42501'; end if;
+  if p_user_id is null then raise exception 'Account serialization identity is required.' using errcode='22023'; end if;
+  perform pg_advisory_xact_lock( hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));
+end
+$function$;
+
+create or replace function private.food_catalog_governance_require_active_member_account(p_user_id uuid)
+returns void language plpgsql security definer set search_path='' as $function$
+begin
+  if auth.uid() is null or auth.uid()<>p_user_id then
+    raise exception 'Food Catalog member account identity mismatch.' using errcode='42501';
+  end if;
+  perform private.food_catalog_lock_account_purge(p_user_id);
+  perform 1
+  from auth.users auth_user
+  join public.account_access_states access_state on access_state.user_id=auth_user.id
+  where auth_user.id=p_user_id and access_state.state='active' and access_state.disabled_at is null
+  for share of access_state;
+  if not found then
+    raise exception 'Food Catalog member action requires an active, non-disabled account.' using errcode='42501';
+  end if;
+end
+$function$;
+
+create or replace function private.food_catalog_governance_principal_for_user()
+returns uuid language plpgsql security definer set search_path='' as $function$
+declare v_user uuid:=auth.uid(); v_principal uuid;
+begin
+  if v_user is null then raise exception 'Authenticated Food governance principal is required.' using errcode='42501'; end if;
+  perform private.food_catalog_lock_account_purge(v_user);
   select p.id into v_principal
   from public.food_catalog_governance_principals p
-  where p.principal_type='human' and p.subject_id=auth.uid()::text and p.active and p.revoked_at is null;
-  if v_principal is null then raise exception 'Authenticated member has no Food governance principal.' using errcode='42501'; end if;
+  join auth.users auth_user on auth_user.id=p.human_user_id
+  join public.account_access_states access_state
+    on access_state.user_id=auth_user.id
+   and access_state.state='active'
+   and access_state.disabled_at is null
+  where p.principal_type='human'
+    and p.human_user_id=auth.uid()
+    and p.active
+    and p.revoked_at is null
+  for share of access_state;
+  if v_principal is null then raise exception 'Authenticated member has no live Food governance principal.' using errcode='42501'; end if;
   return v_principal;
 end
 $function$;
@@ -434,15 +525,37 @@ create or replace function private.food_catalog_governance_assert_recovery_survi
 returns void language plpgsql stable security definer set search_path='' as $function$
 begin
   if not exists(
-    select 1 from public.food_catalog_governance_principals p
-    join public.food_catalog_governance_capability_assignments a on a.principal_id=p.id and a.capability='food.governance.manage_principals' and a.revoked_at is null
-    where p.principal_type='human' and p.role_class='owner' and p.active and p.revoked_at is null and p.id<>p_target_principal_id
-  ) then raise exception 'Final Owner recovery authority cannot be removed.' using errcode='23514'; end if;
+    select 1
+    from public.food_catalog_governance_principals p
+    join auth.users auth_user on auth_user.id=p.human_user_id
+    join public.account_access_states access_state
+      on access_state.user_id=auth_user.id
+     and access_state.state='active'
+     and access_state.disabled_at is null
+    join public.food_catalog_governance_capability_assignments a
+      on a.principal_id=p.id
+     and a.capability='food.governance.manage_principals'
+     and a.revoked_at is null
+    where p.principal_type='human'
+      and p.role_class='owner'
+      and p.active
+      and p.revoked_at is null
+      and p.id<>p_target_principal_id
+  ) then raise exception 'Final usable Owner recovery authority cannot be removed.' using errcode='23514'; end if;
 end
 $function$;
 
 
 -- PLAN6_FIVE_P1_HARDENED: shared cross-plan serialization and recovery/privacy locks.
+create or replace function private.food_catalog_lock_food_authority(p_food_id uuid)
+returns void language plpgsql security definer set search_path='' as $function$
+begin
+  if p_food_id is null then raise exception 'Canonical Food identity is required.' using errcode='22023'; end if;
+  perform 1 from public.food_items where id=p_food_id for update;
+  if not found then raise exception 'Canonical Food not found.' using errcode='23503'; end if;
+end
+$function$;
+
 create or replace function private.food_catalog_lock_gtin_authority(p_gtin text)
 returns void language plpgsql security definer set search_path='' as $function$
 declare v_gtin text:=btrim(coalesce(p_gtin,''));
@@ -452,25 +565,37 @@ begin
 end
 $function$;
 
+-- Safety trigger for every privileged food_barcodes writer, including the already-
+-- applied Plan 4 runtime. Lock order is always Food row(s), then normalized GTIN(s).
 create or replace function private.food_catalog_serialize_gtin_write()
 returns trigger language plpgsql security definer set search_path='' as $function$
-declare v_old text; v_new text;
+declare v_old text; v_new text; v_food uuid; v_gtin text;
 begin
   if tg_op='INSERT' then
+    perform private.food_catalog_lock_food_authority(new.food_id);
     perform private.food_catalog_lock_gtin_authority(new.gtin);
     return new;
   elsif tg_op='DELETE' then
+    perform private.food_catalog_lock_food_authority(old.food_id);
     perform private.food_catalog_lock_gtin_authority(old.gtin);
     return old;
   end if;
+
+  for v_food in
+    select distinct x from unnest(array[old.food_id,new.food_id]) as t(x)
+    where x is not null order by x
+  loop
+    perform private.food_catalog_lock_food_authority(v_food);
+  end loop;
+
   v_old:=btrim(coalesce(old.gtin,''));
   v_new:=btrim(coalesce(new.gtin,''));
-  if v_old=v_new then
-    perform private.food_catalog_lock_gtin_authority(v_new);
-  else
-    perform private.food_catalog_lock_gtin_authority(least(v_old,v_new));
-    perform private.food_catalog_lock_gtin_authority(greatest(v_old,v_new));
-  end if;
+  for v_gtin in
+    select distinct x from unnest(array[v_old,v_new]) as t(x)
+    where length(x)>0 order by x
+  loop
+    perform private.food_catalog_lock_gtin_authority(v_gtin);
+  end loop;
   return new;
 end
 $function$;
@@ -493,6 +618,11 @@ begin
   if not exists(
     select 1
     from public.food_catalog_governance_principals p
+    join auth.users auth_user on auth_user.id=p.human_user_id
+    join public.account_access_states access_state
+      on access_state.user_id=auth_user.id
+     and access_state.state='active'
+     and access_state.disabled_at is null
     join public.food_catalog_governance_capability_assignments a
       on a.principal_id=p.id
      and a.capability='food.governance.manage_principals'
@@ -502,7 +632,7 @@ begin
       and p.active
       and p.revoked_at is null
   ) then
-    raise exception 'At least one active human Owner recovery principal must remain.' using errcode='23514';
+    raise exception 'At least one live active human Owner recovery principal must remain.' using errcode='23514';
   end if;
 end
 $function$;
@@ -606,15 +736,16 @@ end
 $function$;
 
 create or replace function private.food_catalog_governance_assert_capability(p_principal_id uuid, p_capability text)
-returns void language plpgsql stable security definer set search_path='' as $function$
-declare v_type text; v_subject text; v_resolved_service uuid;
+returns void language plpgsql security definer set search_path='' as $function$
+declare v_type text; v_resolved_human uuid; v_resolved_service uuid;
 begin
-  select p.principal_type,p.subject_id into v_type,v_subject
+  select p.principal_type into v_type
   from public.food_catalog_governance_principals p
   where p.id=p_principal_id and p.active and p.revoked_at is null;
   if v_type is null then raise exception 'Food governance principal is inactive or unknown.' using errcode='42501'; end if;
   if v_type='human' then
-    if auth.uid() is null or auth.uid()::text<>v_subject then raise exception 'Human Food governance principal identity mismatch.' using errcode='42501'; end if;
+    v_resolved_human:=private.food_catalog_governance_principal_for_user();
+    if v_resolved_human<>p_principal_id then raise exception 'Human Food governance principal identity mismatch.' using errcode='42501'; end if;
   elsif v_type='service' then
     v_resolved_service:=private.food_catalog_governance_service_principal_for_request();
     if v_resolved_service<>p_principal_id then raise exception 'Service Food governance principal identity mismatch.' using errcode='42501'; end if;
@@ -804,37 +935,97 @@ $function$;
 create or replace function public.food_catalog_manage_governance_principal(
   p_operation_id uuid,p_target_principal_type text,p_target_subject_id text,p_role_class text,p_capabilities text[],p_reason text,p_service_identity text default null
 ) returns jsonb language plpgsql security definer set search_path='' as $function$
-declare v_actor uuid; v_target uuid; v_existing_role text; v_replay jsonb; v_cap text; v_result jsonb; v_service_hash text; v_policy text;
+declare
+  v_actor uuid; v_target uuid; v_existing_role text; v_replay jsonb; v_cap text;
+  v_result jsonb; v_service_hash text; v_policy text; v_human_user uuid; v_subject text;
 begin
   v_actor:=private.food_catalog_governance_principal_for_user();
   v_policy:=private.food_catalog_governance_current_policy_version();
-  v_service_hash:=case when p_target_principal_type='service' then encode(extensions.digest(convert_to(btrim(coalesce(p_service_identity,'')),'UTF8'),'sha256'),'hex') else null end;
+  if p_target_principal_type not in ('human','service') or length(btrim(coalesce(p_target_subject_id,'')))=0 then
+    raise exception 'Invalid governance principal identity.' using errcode='22023';
+  end if;
+  if (p_target_principal_type='service' and (p_role_class<>'service' or length(btrim(coalesce(p_service_identity,'')))=0))
+     or (p_target_principal_type='human' and p_role_class not in ('owner','curator')) then
+    raise exception 'Governance principal role/type or service identity is invalid.' using errcode='23514';
+  end if;
+
+  if p_target_principal_type='human' then
+    begin
+      v_human_user:=btrim(p_target_subject_id)::uuid;
+    exception when invalid_text_representation then
+      raise exception 'Human governance principal subject must be an Auth user UUID.' using errcode='22023';
+    end;
+    v_subject:=v_human_user::text;
+    v_service_hash:=null;
+  else
+    v_human_user:=null;
+    v_subject:=btrim(p_target_subject_id);
+    v_service_hash:=encode(extensions.digest(convert_to(btrim(coalesce(p_service_identity,'')),'UTF8'),'sha256'),'hex');
+  end if;
+
+  -- Actor account lock is acquired by principal_for_user. Recovery comes next.
+  -- Target account state is re-read only after recovery serialization so account
+  -- deletion cannot race a human promotion through a stale pre-lock snapshot.
   perform private.food_catalog_governance_lock_recovery_set();
-  v_replay:=private.food_catalog_governance_begin_operation(p_operation_id,v_actor,'food.governance.manage_principals','food_catalog_manage_governance_principal',null,null,v_policy,p_reason,
-    jsonb_build_object('principalType',p_target_principal_type,'subjectId',btrim(p_target_subject_id),'roleClass',p_role_class,'capabilities',to_jsonb(coalesce(p_capabilities,'{}'::text[])),'serviceIdentitySha256',v_service_hash));
+  if p_target_principal_type='human' then
+    perform 1
+    from auth.users auth_user
+    join public.account_access_states access_state
+      on access_state.user_id=auth_user.id
+     and access_state.state='active'
+     and access_state.disabled_at is null
+    where auth_user.id=v_human_user;
+    if not found then
+      raise exception 'Human governance principal requires an existing active, non-disabled Auth account.' using errcode='42501';
+    end if;
+  end if;
+
+  v_replay:=private.food_catalog_governance_begin_operation(
+    p_operation_id,v_actor,'food.governance.manage_principals','food_catalog_manage_governance_principal',
+    null,null,v_policy,p_reason,
+    jsonb_build_object('principalType',p_target_principal_type,'subjectId',v_subject,'roleClass',p_role_class,
+      'capabilities',to_jsonb(coalesce(p_capabilities,'{}'::text[])),'serviceIdentitySha256',v_service_hash)
+  );
   if v_replay is not null then return v_replay; end if;
-  if p_target_principal_type not in ('human','service') or length(btrim(coalesce(p_target_subject_id,'')))=0 then raise exception 'Invalid governance principal identity.' using errcode='22023'; end if;
-  if (p_target_principal_type='service' and (p_role_class<>'service' or length(btrim(coalesce(p_service_identity,'')))=0)) or (p_target_principal_type='human' and p_role_class not in ('owner','curator')) then raise exception 'Governance principal role/type or service identity is invalid.' using errcode='23514'; end if;
-  select id,role_class into v_target,v_existing_role from public.food_catalog_governance_principals where principal_type=p_target_principal_type and subject_id=btrim(p_target_subject_id) for update;
-  if v_target is not null and v_existing_role='owner' and p_role_class<>'owner' then perform private.food_catalog_governance_assert_recovery_survives(v_target); end if;
-  insert into public.food_catalog_governance_principals(principal_type,subject_id,service_identity_sha256,role_class,active,revoked_at)
-  values(p_target_principal_type,btrim(p_target_subject_id),v_service_hash,p_role_class,true,null)
-  on conflict(principal_type,subject_id) do update set service_identity_sha256=excluded.service_identity_sha256,role_class=excluded.role_class,active=true,revoked_at=null
+
+  select id,role_class into v_target,v_existing_role
+  from public.food_catalog_governance_principals
+  where principal_type=p_target_principal_type and subject_id=v_subject
+  for update;
+  if v_target is not null and v_existing_role='owner' and p_role_class<>'owner' then
+    perform private.food_catalog_governance_assert_recovery_survives(v_target);
+  end if;
+
+  insert into public.food_catalog_governance_principals(principal_type,subject_id,human_user_id,service_identity_sha256,role_class,active,revoked_at)
+  values(p_target_principal_type,v_subject,v_human_user,v_service_hash,p_role_class,true,null)
+  on conflict(principal_type,subject_id) do update
+    set human_user_id=excluded.human_user_id,service_identity_sha256=excluded.service_identity_sha256,role_class=excluded.role_class,active=true,revoked_at=null
   returning id into v_target;
+
   if p_role_class<>'owner' then
-    update public.food_catalog_governance_capability_assignments set revoked_at=clock_timestamp(),revoked_by_principal_id=v_actor
+    update public.food_catalog_governance_capability_assignments
+    set revoked_at=clock_timestamp(),revoked_by_principal_id=v_actor
     where principal_id=v_target and capability='food.governance.manage_principals' and revoked_at is null;
   end if;
   foreach v_cap in array coalesce(p_capabilities,'{}'::text[]) loop
-    if v_cap='food.governance.manage_principals' and p_role_class<>'owner' then raise exception 'Only Owner principals may receive principal management capability.' using errcode='23514'; end if;
-    if p_target_principal_type='service' and v_cap not in ('food.correction.report','food.evidence.attach','food.ingestion.propose','food.outbox.deliver') then raise exception 'Service principal governance escalation is forbidden.' using errcode='23514'; end if;
-    if v_cap='food.outbox.deliver' and p_target_principal_type<>'service' then raise exception 'Governance outbox delivery capability is Service-principal-only.' using errcode='23514'; end if;
+    if v_cap='food.governance.manage_principals' and p_role_class<>'owner' then
+      raise exception 'Only Owner principals may receive principal management capability.' using errcode='23514';
+    end if;
+    if p_target_principal_type='service' and v_cap not in ('food.correction.report','food.evidence.attach','food.ingestion.propose','food.outbox.deliver') then
+      raise exception 'Service principal governance escalation is forbidden.' using errcode='23514';
+    end if;
+    if v_cap='food.outbox.deliver' and p_target_principal_type<>'service' then
+      raise exception 'Governance outbox delivery capability is Service-principal-only.' using errcode='23514';
+    end if;
     insert into public.food_catalog_governance_capability_assignments(principal_id,capability,granted_by_principal_id,reason)
-    values(v_target,v_cap,v_actor,btrim(p_reason)) on conflict(principal_id,capability) where revoked_at is null do nothing;
+    values(v_target,v_cap,v_actor,btrim(p_reason))
+    on conflict(principal_id,capability) where revoked_at is null do nothing;
   end loop;
   perform private.food_catalog_governance_assert_recovery_exists();
   v_result:=jsonb_build_object('principalId',v_target,'principalType',p_target_principal_type,'roleClass',p_role_class);
-  return private.food_catalog_governance_finish_operation(p_operation_id,null,v_target,'{}'::uuid[],v_result,'food.governance.principal.managed',jsonb_build_object('principalId',v_target));
+  return private.food_catalog_governance_finish_operation(
+    p_operation_id,null,v_target,'{}'::uuid[],v_result,'food.governance.principal.managed',jsonb_build_object('principalId',v_target)
+  );
 end
 $function$;
 
@@ -893,6 +1084,9 @@ create or replace function public.food_catalog_report_correction(
 declare v_user uuid; v_policy text; v_issue text; v_case uuid; v_report uuid;
 begin
   v_user:=auth.uid(); if v_user is null then raise exception 'Authenticated reporter is required.' using errcode='42501'; end if;
+  -- Account-purge serialization precedes issue/case locking. A stale JWT from a
+  -- disabled/deleting account fails before either global metadata or member payload exists.
+  perform private.food_catalog_governance_require_active_member_account(v_user);
   v_policy:=private.food_catalog_governance_current_policy_version();
   if p_policy_version is not null and btrim(p_policy_version)<>v_policy then raise exception 'Unsupported governance policy version.' using errcode='22023'; end if;
   if p_category not in ('wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation','wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product','source_conflict','other') then raise exception 'Invalid correction category.' using errcode='22023'; end if;
@@ -904,10 +1098,14 @@ begin
   perform pg_advisory_xact_lock(hashtextextended(v_issue,0));
   select id into v_case from public.food_catalog_correction_cases where issue_key=v_issue and state in ('reported','under_review','approved') order by created_at,id limit 1;
   if v_case is null then
-    insert into public.food_catalog_correction_cases(food_id,category,claim_key,issue_key,policy_version) values(p_food_id,p_category,btrim(p_claim_key),v_issue,v_policy) returning id into v_case;
-    insert into public.food_catalog_correction_events(case_id,from_state,to_state,state_revision,policy_version,reason) values(v_case,null,'reported',0,v_policy,'member-report');
+    insert into public.food_catalog_correction_cases(food_id,category,claim_key,issue_key,policy_version)
+    values(p_food_id,p_category,btrim(p_claim_key),v_issue,v_policy) returning id into v_case;
+    insert into public.food_catalog_correction_events(case_id,from_state,to_state,state_revision,policy_version,reason)
+    values(v_case,null,'reported',0,v_policy,'member-report');
   end if;
-  insert into public.food_catalog_correction_reports(case_id,reporter_user_id,description,evidence) values(v_case,v_user,btrim(p_description),coalesce(p_evidence,'{}'::jsonb)) returning id into v_report;
+  insert into public.food_catalog_correction_reports(case_id) values(v_case) returning id into v_report;
+  insert into public.food_catalog_correction_report_member_payloads(report_id,reporter_user_id,description,evidence)
+  values(v_report,v_user,btrim(p_description),coalesce(p_evidence,'{}'::jsonb));
   return jsonb_build_object('caseId',v_case,'reportId',v_report,'canonicalMutation',false,'policyVersion',(select policy_version from public.food_catalog_correction_cases where id=v_case));
 end
 $function$;
@@ -1134,10 +1332,17 @@ begin
   v_actor:=private.food_catalog_governance_principal_for_user();
   if not private.food_catalog_gtin_is_valid(v_key) then raise exception 'GTIN fails supported shape or GS1 Mod-10 validation.' using errcode='23514'; end if;
   if p_action not in ('assign','remove') then raise exception 'Invalid barcode correction action.' using errcode='22023'; end if;
+  -- Plan 4 already owns source-record locks before canonical Food. If caller supplies
+  -- source evidence, join that order first; canonical barcode ownership then follows
+  -- the global Food row -> normalized GTIN -> governance operation/CAS contract.
+  if p_source_record_id is not null then
+    perform 1 from public.food_source_records where id=p_source_record_id and food_id=p_food_id for key share;
+    if not found then raise exception 'Barcode source record belongs to a different Food.' using errcode='23514'; end if;
+  end if;
+  perform private.food_catalog_lock_food_authority(p_food_id);
   perform private.food_catalog_lock_gtin_authority(v_key);
   v_pre:=private.food_catalog_governance_prepare_apply(p_operation_id,v_actor,'food.barcode.correct','food_catalog_apply_barcode_correction',p_case_id,p_food_id,p_expected_case_revision,p_expected_authority_revision,p_expected_authority_id,'barcode_correction',v_key,p_reason,jsonb_build_object('caseId',p_case_id,'foodId',p_food_id,'expectedCaseRevision',p_expected_case_revision,'expectedAuthorityRevision',p_expected_authority_revision,'expectedAuthorityId',p_expected_authority_id,'gtin',v_key,'action',p_action,'sourceRecordId',p_source_record_id));
   if (v_pre->>'replay')::boolean then return v_pre->'result'; end if;
-  if p_source_record_id is not null and not exists(select 1 from public.food_source_records where id=p_source_record_id and food_id=p_food_id) then raise exception 'Barcode source record belongs to a different Food.' using errcode='23514'; end if;
   if p_action='assign' then
     if exists(select 1 from public.food_barcodes where gtin=v_key and food_id<>p_food_id) then raise exception 'GTIN is owned by a different canonical Food.' using errcode='23514'; end if;
     insert into public.food_barcodes(food_id,gtin,source_record_id) values(p_food_id,v_key,p_source_record_id)
@@ -1367,6 +1572,52 @@ begin
 end
 $function$;
 
+-- Canonical privacy transition for Food governance identity. The lock order is
+-- account-purge user -> recovery set. This function intentionally deactivates the
+-- effective principal but preserves the historical principal/capability/audit rows.
+create or replace function public.food_catalog_begin_account_deletion(p_user_id uuid)
+returns jsonb language plpgsql security definer set search_path='' as $function$
+declare v_state text; v_principal uuid; v_role text; v_was_active boolean:=false;
+begin
+  if auth.role()<>'service_role' then raise exception 'Account deletion governance transition requires service_role.' using errcode='42501'; end if;
+  if p_user_id is null then raise exception 'Account deletion user ID is required.' using errcode='22023'; end if;
+  perform private.food_catalog_lock_account_purge(p_user_id);
+  perform private.food_catalog_governance_lock_recovery_set();
+
+  perform 1 from auth.users where id=p_user_id;
+  if not found then raise exception 'Account deletion requires an existing Auth user.' using errcode='23503'; end if;
+  select state into v_state from public.account_access_states where user_id=p_user_id for update;
+  if not found then raise exception 'Account deletion requires canonical account access state.' using errcode='23503'; end if;
+  if v_state not in ('active','deletion_pending','deletion_processing') then
+    raise exception 'Account state does not permit canonical deletion transition.' using errcode='55000';
+  end if;
+
+  select id,role_class,active into v_principal,v_role,v_was_active
+  from public.food_catalog_governance_principals
+  where principal_type='human' and human_user_id=p_user_id
+  for update;
+  if v_principal is not null and v_was_active then
+    if v_role='owner' and exists(
+      select 1 from public.food_catalog_governance_capability_assignments
+      where principal_id=v_principal and capability='food.governance.manage_principals' and revoked_at is null
+    ) then
+      perform private.food_catalog_governance_assert_recovery_survives(v_principal);
+    end if;
+    update public.food_catalog_governance_principals
+    set active=false,revoked_at=clock_timestamp()
+    where id=v_principal;
+  end if;
+
+  if v_state='active' then
+    update public.account_access_states
+    set state='deletion_pending',reason_code='member_requested_deletion',disabled_at=coalesce(disabled_at,clock_timestamp()),updated_at=clock_timestamp()
+    where user_id=p_user_id;
+    v_state:='deletion_pending';
+  end if;
+  return jsonb_build_object('userId',p_user_id,'accountState',v_state,'governancePrincipalId',v_principal,'governancePrincipalDeactivated',coalesce(v_was_active,false));
+end
+$function$;
+
 -- Extend the canonical Nutrition account-deletion lifecycle in place so the reviewed
 -- public purge authority remains verifier-visible while adding Plan 6 owner data.
 create or replace function public.purge_account_application_data_atomic(p_user_id uuid)
@@ -1381,44 +1632,69 @@ declare
   v_food_personal_override_operations integer := 0;
   v_food_personal_overrides integer := 0;
   v_food_personal_override_revisions integer := 0;
+  v_food_report_member_payloads integer := 0;
+  v_governance_principal uuid;
+  v_governance_role text;
 begin
   if p_user_id is null then raise exception 'Account-data purge requires a user ID.' using errcode='22023'; end if;
-  perform pg_advisory_xact_lock(hashtextextended('plaivra-account-data-purge:'||p_user_id::text,0));
-  -- Existing reviewed top-level Nutrition V1 replay cleanup remains explicit.
-  delete from private.nutrition_saved_meal_creation_operations where user_id = p_user_id;
-  get diagnostics v_saved_meal_creation_operations = row_count;
+  perform private.food_catalog_lock_account_purge(p_user_id);
+  perform private.food_catalog_governance_lock_recovery_set();
 
-  delete from public.food_personal_override_operations where user_id = p_user_id;
-  get diagnostics v_food_personal_override_operations = row_count;
+  -- Defensive privacy integration for canonical/legacy callers: if the begin-
+  -- deletion transition was not invoked, purge still cannot let a live final Owner
+  -- disappear. Failure rolls this transaction back before any owner data is erased.
+  select id,role_class into v_governance_principal,v_governance_role
+  from public.food_catalog_governance_principals
+  where principal_type='human' and human_user_id=p_user_id and active and revoked_at is null
+  for update;
+  if v_governance_principal is not null then
+    if v_governance_role='owner' and exists(
+      select 1 from public.food_catalog_governance_capability_assignments
+      where principal_id=v_governance_principal and capability='food.governance.manage_principals' and revoked_at is null
+    ) then
+      perform private.food_catalog_governance_assert_recovery_survives(v_governance_principal);
+    end if;
+    update public.food_catalog_governance_principals
+    set active=false,revoked_at=clock_timestamp()
+    where id=v_governance_principal;
+  end if;
 
-  -- Delete the current Plan 6 pointer first because it RESTRICT-references revision history.
-  delete from public.food_personal_overrides where user_id = p_user_id;
-  get diagnostics v_food_personal_overrides = row_count;
+  delete from private.nutrition_saved_meal_creation_operations where user_id=p_user_id;
+  get diagnostics v_saved_meal_creation_operations=row_count;
 
-  delete from public.food_personal_override_revisions where user_id = p_user_id;
-  get diagnostics v_food_personal_override_revisions = row_count;
+  delete from public.food_catalog_correction_report_member_payloads where reporter_user_id=p_user_id;
+  get diagnostics v_food_report_member_payloads=row_count;
+
+  delete from public.food_personal_override_operations where user_id=p_user_id;
+  get diagnostics v_food_personal_override_operations=row_count;
+  delete from public.food_personal_overrides where user_id=p_user_id;
+  get diagnostics v_food_personal_overrides=row_count;
+  delete from public.food_personal_override_revisions where user_id=p_user_id;
+  get diagnostics v_food_personal_override_revisions=row_count;
 
   -- Preserve the reviewed Nutrition V1 delegated purge graph directly.
-  v_result := private.nutrition_v1_final_review_core_purge_account_application_data_atomic(p_user_id);
+  v_result:=private.nutrition_v1_final_review_core_purge_account_application_data_atomic(p_user_id);
 
-  if exists (select 1 from private.nutrition_saved_meal_creation_operations where user_id = p_user_id) then
+  if exists(select 1 from private.nutrition_saved_meal_creation_operations where user_id=p_user_id) then
     raise exception 'Nutrition V1 account-data purge left Saved Meal creation replay rows behind.' using errcode='23514';
   end if;
-  if exists (
-    select 1 from public.food_personal_override_operations where user_id = p_user_id
-    union all
-    select 1 from public.food_personal_overrides where user_id = p_user_id
-    union all
-    select 1 from public.food_personal_override_revisions where user_id = p_user_id
+  if exists(
+    select 1 from public.food_personal_override_operations where user_id=p_user_id
+    union all select 1 from public.food_personal_overrides where user_id=p_user_id
+    union all select 1 from public.food_personal_override_revisions where user_id=p_user_id
   ) then
     raise exception 'Food Catalog Plan 6 personal override purge left owner rows behind.' using errcode='23514';
   end if;
+  if exists(select 1 from public.food_catalog_correction_report_member_payloads where reporter_user_id=p_user_id) then
+    raise exception 'Food Catalog Plan 6 correction report member payload purge left owner rows behind.' using errcode='23514';
+  end if;
 
   return v_result || jsonb_build_object(
-    'nutrition_saved_meal_creation_operations_deleted', v_saved_meal_creation_operations,
-    'food_personal_override_operations_deleted', v_food_personal_override_operations,
-    'food_personal_overrides_deleted', v_food_personal_overrides,
-    'food_personal_override_revisions_deleted', v_food_personal_override_revisions
+    'nutrition_saved_meal_creation_operations_deleted',v_saved_meal_creation_operations,
+    'food_personal_override_operations_deleted',v_food_personal_override_operations,
+    'food_personal_overrides_deleted',v_food_personal_overrides,
+    'food_personal_override_revisions_deleted',v_food_personal_override_revisions,
+    'food_correction_report_member_payloads_deleted',v_food_report_member_payloads
   );
 end
 $function$;
@@ -1466,6 +1742,7 @@ alter table public.food_catalog_governance_principals enable row level security;
 alter table public.food_catalog_governance_capability_assignments enable row level security;
 alter table public.food_catalog_correction_cases enable row level security;
 alter table public.food_catalog_correction_reports enable row level security;
+alter table public.food_catalog_correction_report_member_payloads enable row level security;
 alter table public.food_catalog_service_proposals enable row level security;
 alter table public.food_catalog_correction_evidence enable row level security;
 alter table public.food_catalog_correction_events enable row level security;
@@ -1489,6 +1766,7 @@ revoke all on table public.food_catalog_governance_principals from anon,authenti
 revoke all on table public.food_catalog_governance_capability_assignments from anon,authenticated,service_role;
 revoke all on table public.food_catalog_correction_cases from anon,authenticated,service_role;
 revoke all on table public.food_catalog_correction_reports from anon,authenticated,service_role;
+revoke all on table public.food_catalog_correction_report_member_payloads from anon,authenticated,service_role;
 revoke all on table public.food_catalog_service_proposals from anon,authenticated,service_role;
 revoke all on table public.food_catalog_correction_evidence from anon,authenticated,service_role;
 revoke all on table public.food_catalog_correction_events from anon,authenticated,service_role;
@@ -1522,7 +1800,7 @@ begin
       and (
         p.proname like 'food_catalog_governance_%'
         or p.proname like 'food_catalog_personal_override_%'
-        or p.proname in ('food_catalog_change_lifecycle','food_catalog_lock_gtin_authority','food_catalog_serialize_gtin_write','food_catalog_lock_food_pair','reject_food_catalog_governance_immutable_mutation')
+        or p.proname in ('food_catalog_change_lifecycle','food_catalog_lock_account_purge','food_catalog_lock_food_authority','food_catalog_lock_gtin_authority','food_catalog_serialize_gtin_write','food_catalog_lock_food_pair','reject_food_catalog_governance_immutable_mutation')
       )
   loop
     execute format('revoke all on function %s from public, anon, authenticated, service_role',r.signature);
@@ -1543,6 +1821,9 @@ begin
   end loop;
 end
 $do$;
+
+revoke all on function public.food_catalog_begin_account_deletion(uuid) from public,anon,authenticated,service_role;
+grant execute on function public.food_catalog_begin_account_deletion(uuid) to service_role;
 
 revoke all on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) from public,anon,authenticated,service_role;
 grant execute on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) to service_role;

@@ -153,13 +153,13 @@ function installPlan6BarcodeSleep() {
          and new.gtin='${MATCH_GTIN}'
          and current_setting('application_name',true)='${APP_P6_MATCH}'
       then
-        perform pg_catalog.pg_sleep(3);
+        perform pg_catalog.pg_sleep(15);
       end if;
       return new;
     end
     $function$;
-    drop trigger if exists aaa_plan6_final_p1_barcode_sleep on public.food_barcodes;
-    create trigger aaa_plan6_final_p1_barcode_sleep
+    drop trigger if exists zzz_plan6_final_p1_barcode_sleep on public.food_barcodes;
+    create trigger zzz_plan6_final_p1_barcode_sleep
       before insert on public.food_barcodes
       for each row execute function private.plan6_final_p1_barcode_sleep();
   `);
@@ -401,11 +401,12 @@ function cleanup() {
   runSql(`
     drop trigger if exists aaa_plan6_final_p1_owner_delete_sleep on public.food_catalog_governance_principals;
     drop function if exists private.plan6_final_p1_owner_delete_sleep();
-    drop trigger if exists aaa_plan6_final_p1_barcode_sleep on public.food_barcodes;
+    drop trigger if exists zzz_plan6_final_p1_barcode_sleep on public.food_barcodes;
     drop function if exists private.plan6_final_p1_barcode_sleep();
     truncate table public.food_catalog_governance_operations cascade;
     truncate table public.food_ingestion_batches cascade;
     truncate table public.food_items cascade;
+    delete from public.account_deletion_jobs where id='6d000000-0000-4000-8000-000000000601';
     delete from public.food_catalog_governance_capability_assignments where principal_id in ('${OWNER_A}','${OWNER_B}');
     delete from public.food_catalog_governance_principals where id in ('${OWNER_A}','${OWNER_B}');
     delete from auth.users where id in ('${OWNER_A_UID}','${OWNER_B_UID}','${MEMBER_UID}');

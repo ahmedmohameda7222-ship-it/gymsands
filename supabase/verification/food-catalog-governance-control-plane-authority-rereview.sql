@@ -13,6 +13,10 @@
 
 begin;
 
+-- P1-F2 live-identity compatibility fixture for the human governance owner.
+insert into auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
+values(:'owner_uid'::uuid,'authenticated','authenticated','plan6-authority-owner@example.test','','{"provider":"email","providers":["email"]}'::jsonb,'{}'::jsonb,now(),now());
+
 create or replace function pg_temp.plan6_authority_assert(p_condition boolean,p_message text)
 returns void language plpgsql as $$
 begin
