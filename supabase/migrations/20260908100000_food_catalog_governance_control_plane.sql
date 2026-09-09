@@ -183,6 +183,7 @@ create index food_catalog_correction_reports_case_idx
 create table public.food_catalog_correction_report_member_payloads (
   report_id uuid primary key references public.food_catalog_correction_reports(id) on delete cascade,
   reporter_user_id uuid not null,
+  claim_text text not null check (length(btrim(claim_text)) between 1 and 240),
   description text not null check (length(btrim(description)) between 1 and 2000),
   evidence jsonb not null default '{}'::jsonb
     check (jsonb_typeof(evidence)='object' and pg_column_size(evidence) <= 8192),
@@ -1081,32 +1082,35 @@ $function$;
 create or replace function public.food_catalog_report_correction(
   p_food_id uuid,p_category text,p_claim_key text,p_description text,p_evidence jsonb default '{}'::jsonb,p_policy_version text default null
 ) returns jsonb language plpgsql security definer set search_path='' as $function$
-declare v_user uuid; v_policy text; v_issue text; v_case uuid; v_report uuid;
+declare v_user uuid; v_policy text; v_issue text; v_case uuid:=gen_random_uuid(); v_report uuid; v_case_claim text;
 begin
   v_user:=auth.uid(); if v_user is null then raise exception 'Authenticated reporter is required.' using errcode='42501'; end if;
-  -- Account-purge serialization precedes issue/case locking. A stale JWT from a
-  -- disabled/deleting account fails before either global metadata or member payload exists.
+  -- Preserve the canonical active-member helper: it takes the account-purge
+  -- serialization lock and rejects stale/disabled/deleting sessions before intake.
   perform private.food_catalog_governance_require_active_member_account(v_user);
   v_policy:=private.food_catalog_governance_current_policy_version();
-  if p_policy_version is not null and btrim(p_policy_version)<>v_policy then raise exception 'Unsupported governance policy version.' using errcode='22023'; end if;
+  if p_policy_version is not null and btrim(p_policy_version)<>v_policy then
+    raise exception 'Unsupported governance policy version.' using errcode='22023';
+  end if;
   if p_category not in ('wrong_nutrition','missing_nutrition','wrong_serving','missing_serving','wrong_name','wrong_translation','wrong_barcode','wrong_taxonomy','wrong_market_relevance','duplicate_food','wrong_variant','outdated_product','source_conflict','other') then raise exception 'Invalid correction category.' using errcode='22023'; end if;
   if length(btrim(coalesce(p_claim_key,''))) not between 1 and 240 or length(btrim(coalesce(p_description,''))) not between 1 and 2000 then raise exception 'Correction report text is outside allowed bounds.' using errcode='22023'; end if;
   if jsonb_typeof(coalesce(p_evidence,'{}'::jsonb))<>'object' or pg_column_size(coalesce(p_evidence,'{}'::jsonb))>8192 then raise exception 'Correction report evidence must remain bounded.' using errcode='22023'; end if;
   perform private.food_catalog_governance_validate_bounded_evidence(coalesce(p_evidence,'{}'::jsonb),0);
   perform 1 from public.food_items where id=p_food_id and is_global=true; if not found then raise exception 'Global Food not found.' using errcode='23503'; end if;
-  v_issue:=lower(p_food_id::text||'|'||p_category||'|'||regexp_replace(btrim(p_claim_key),'\s+',' ','g'));
-  perform pg_advisory_xact_lock(hashtextextended(v_issue,0));
-  select id into v_case from public.food_catalog_correction_cases where issue_key=v_issue and state in ('reported','under_review','approved') order by created_at,id limit 1;
-  if v_case is null then
-    insert into public.food_catalog_correction_cases(food_id,category,claim_key,issue_key,policy_version)
-    values(p_food_id,p_category,btrim(p_claim_key),v_issue,v_policy) returning id into v_case;
-    insert into public.food_catalog_correction_events(case_id,from_state,to_state,state_revision,policy_version,reason)
-    values(v_case,null,'reported',0,v_policy,'member-report');
-  end if;
+
+  -- Member free text is never part of durable global case identity. Each member
+  -- intake gets a server-generated non-personal identity and can later be
+  -- reconciled by governed curator workflow using canonical domain selectors.
+  v_case_claim:='member-report:'||v_case::text;
+  v_issue:=lower(p_food_id::text||'|'||p_category||'|'||v_case_claim);
+  insert into public.food_catalog_correction_cases(id,food_id,category,claim_key,issue_key,policy_version)
+  values(v_case,p_food_id,p_category,v_case_claim,v_issue,v_policy);
+  insert into public.food_catalog_correction_events(case_id,from_state,to_state,state_revision,policy_version,reason)
+  values(v_case,null,'reported',0,v_policy,'member-report');
   insert into public.food_catalog_correction_reports(case_id) values(v_case) returning id into v_report;
-  insert into public.food_catalog_correction_report_member_payloads(report_id,reporter_user_id,description,evidence)
-  values(v_report,v_user,btrim(p_description),coalesce(p_evidence,'{}'::jsonb));
-  return jsonb_build_object('caseId',v_case,'reportId',v_report,'canonicalMutation',false,'policyVersion',(select policy_version from public.food_catalog_correction_cases where id=v_case));
+  insert into public.food_catalog_correction_report_member_payloads(report_id,reporter_user_id,claim_text,description,evidence)
+  values(v_report,v_user,btrim(p_claim_key),btrim(p_description),coalesce(p_evidence,'{}'::jsonb));
+  return jsonb_build_object('caseId',v_case,'reportId',v_report,'canonicalMutation',false,'policyVersion',v_policy);
 end
 $function$;
 
@@ -1575,17 +1579,106 @@ $function$;
 -- Canonical privacy transition for Food governance identity. The lock order is
 -- account-purge user -> recovery set. This function intentionally deactivates the
 -- effective principal but preserves the historical principal/capability/audit rows.
-create or replace function public.food_catalog_begin_account_deletion(p_user_id uuid)
+-- Durable deletion authority is established before any access/governance disable.
+-- Lock order remains account-purge user -> governance recovery set.
+create or replace function public.food_catalog_queue_account_deletion(
+  p_user_id uuid,
+  p_request_id uuid,
+  p_subject_hash text,
+  p_idempotency_key_hash text,
+  p_reauthenticated_at timestamptz,
+  p_impact_version text,
+  p_notification_recipient_ciphertext text,
+  p_evidence jsonb
+) returns jsonb language plpgsql security definer set search_path='' as $function$
+declare
+  v_state text; v_principal uuid; v_role text; v_request public.privacy_requests%rowtype;
+  v_job public.account_deletion_jobs%rowtype; v_existing boolean:=false;
+begin
+  if auth.role()<>'service_role' then raise exception 'Account deletion queue requires service_role.' using errcode='42501'; end if;
+  if p_user_id is null or length(btrim(coalesce(p_subject_hash,'')))<1 or length(btrim(coalesce(p_idempotency_key_hash,'')))<1
+     or p_reauthenticated_at is null or length(btrim(coalesce(p_impact_version,'')))<1
+     or jsonb_typeof(coalesce(p_evidence,'{}'::jsonb))<>'object' then
+    raise exception 'Account deletion durable queue inputs are invalid.' using errcode='22023';
+  end if;
+  perform private.food_catalog_lock_account_purge(p_user_id);
+
+  select * into v_job from public.account_deletion_jobs
+  where idempotency_key_hash=p_idempotency_key_hash for update;
+  if found then
+    if v_job.user_id is distinct from p_user_id then raise exception 'Deletion idempotency authority belongs to another account.' using errcode='23514'; end if;
+    select * into v_request from public.privacy_requests where id=v_job.request_id;
+    return jsonb_build_object(
+      'requestId',v_job.request_id,'requestStatus',coalesce(v_request.status,'pending'),'requestCreatedAt',v_request.created_at,
+      'jobId',v_job.id,'jobState',v_job.state,'jobStage',v_job.stage,'attemptCount',v_job.attempt_count,
+      'nextAttemptAt',v_job.next_attempt_at,'lastErrorCode',v_job.last_error_code,'notificationStatus',v_job.notification_status,
+      'jobCreatedAt',v_job.created_at,'completedAt',v_job.completed_at,'alreadyExists',true
+    );
+  end if;
+
+  perform private.food_catalog_governance_lock_recovery_set();
+  perform 1 from auth.users where id=p_user_id; if not found then raise exception 'Deletion Auth identity is unavailable.' using errcode='23503'; end if;
+  select state into v_state from public.account_access_states where user_id=p_user_id for update;
+  if not found or v_state<>'active' or exists(select 1 from public.account_access_states where user_id=p_user_id and disabled_at is not null) then
+    raise exception 'Account must remain active until durable deletion authority is queued.' using errcode='55000';
+  end if;
+
+  select id,role_class into v_principal,v_role from public.food_catalog_governance_principals
+  where principal_type='human' and human_user_id=p_user_id and active for update;
+  if v_principal is not null and v_role='owner' and exists(
+    select 1 from public.food_catalog_governance_capability_assignments
+    where principal_id=v_principal and capability='food.governance.manage_principals' and revoked_at is null
+  ) then
+    perform private.food_catalog_governance_assert_recovery_survives(v_principal);
+  end if;
+
+  if p_request_id is not null then
+    select * into v_request from public.privacy_requests
+    where id=p_request_id and user_id=p_user_id and request_type='deletion' and status in ('pending','in_progress') for update;
+    if not found then raise exception 'Existing deletion request is not usable for durable queue authority.' using errcode='23503'; end if;
+  else
+    select * into v_request from public.privacy_requests
+    where user_id=p_user_id and request_type='deletion' and idempotency_key_hash=p_idempotency_key_hash
+      and status in ('pending','in_progress') order by created_at desc limit 1 for update;
+    if not found then
+      insert into public.privacy_requests(
+        user_id,request_type,status,message,reauthenticated_at,impact_version,idempotency_key_hash
+      ) values(
+        p_user_id,'deletion','pending','Submitted after explicit impact acknowledgement.',p_reauthenticated_at,p_impact_version,p_idempotency_key_hash
+      ) returning * into v_request;
+    else
+      v_existing:=true;
+    end if;
+  end if;
+
+  insert into public.account_deletion_jobs(
+    request_id,user_id,subject_hash,idempotency_key_hash,state,stage,notification_recipient_ciphertext,evidence
+  ) values(
+    v_request.id,p_user_id,btrim(p_subject_hash),btrim(p_idempotency_key_hash),'queued','queued',p_notification_recipient_ciphertext,coalesce(p_evidence,'{}'::jsonb)
+  ) returning * into v_job;
+
+  return jsonb_build_object(
+    'requestId',v_request.id,'requestStatus',v_request.status,'requestCreatedAt',v_request.created_at,
+    'jobId',v_job.id,'jobState',v_job.state,'jobStage',v_job.stage,'attemptCount',v_job.attempt_count,
+    'nextAttemptAt',v_job.next_attempt_at,'lastErrorCode',v_job.last_error_code,'notificationStatus',v_job.notification_status,
+    'jobCreatedAt',v_job.created_at,'completedAt',v_job.completed_at,'alreadyExists',v_existing
+  );
+end
+$function$;
+
+create or replace function public.food_catalog_begin_account_deletion(p_user_id uuid,p_deletion_job_id uuid)
 returns jsonb language plpgsql security definer set search_path='' as $function$
-declare v_state text; v_principal uuid; v_role text; v_was_active boolean:=false;
+declare v_state text; v_principal uuid; v_role text; v_was_active boolean:=false; v_job public.account_deletion_jobs%rowtype;
 begin
   if auth.role()<>'service_role' then raise exception 'Account deletion governance transition requires service_role.' using errcode='42501'; end if;
-  if p_user_id is null then raise exception 'Account deletion user ID is required.' using errcode='22023'; end if;
+  if p_user_id is null or p_deletion_job_id is null then raise exception 'Account deletion user and durable job IDs are required.' using errcode='22023'; end if;
   perform private.food_catalog_lock_account_purge(p_user_id);
   perform private.food_catalog_governance_lock_recovery_set();
 
-  perform 1 from auth.users where id=p_user_id;
-  if not found then raise exception 'Account deletion requires an existing Auth user.' using errcode='23503'; end if;
+  select * into v_job from public.account_deletion_jobs
+  where id=p_deletion_job_id and user_id=p_user_id and state in ('queued','processing','retry_scheduled') for update;
+  if not found then raise exception 'Durable retryable account deletion job is required before disabling access.' using errcode='23514'; end if;
+  perform 1 from auth.users where id=p_user_id; if not found then raise exception 'Account deletion Auth identity is unavailable.' using errcode='23503'; end if;
   select state into v_state from public.account_access_states where user_id=p_user_id for update;
   if not found then raise exception 'Account deletion requires canonical account access state.' using errcode='23503'; end if;
   if v_state not in ('active','deletion_pending','deletion_processing') then
@@ -1594,8 +1687,7 @@ begin
 
   select id,role_class,active into v_principal,v_role,v_was_active
   from public.food_catalog_governance_principals
-  where principal_type='human' and human_user_id=p_user_id
-  for update;
+  where principal_type='human' and human_user_id=p_user_id for update;
   if v_principal is not null and v_was_active then
     if v_role='owner' and exists(
       select 1 from public.food_catalog_governance_capability_assignments
@@ -1603,18 +1695,22 @@ begin
     ) then
       perform private.food_catalog_governance_assert_recovery_survives(v_principal);
     end if;
-    update public.food_catalog_governance_principals
-    set active=false,revoked_at=clock_timestamp()
-    where id=v_principal;
   end if;
 
+  -- Session revocation and governance/access transition are one DB transaction.
+  -- Any failure rolls these changes back while the durable job remains retryable.
+  delete from auth.sessions where user_id=p_user_id;
+  if v_principal is not null and v_was_active then
+    update public.food_catalog_governance_principals
+    set active=false,revoked_at=coalesce(revoked_at,clock_timestamp()) where id=v_principal;
+  end if;
   if v_state='active' then
     update public.account_access_states
     set state='deletion_pending',reason_code='member_requested_deletion',disabled_at=coalesce(disabled_at,clock_timestamp()),updated_at=clock_timestamp()
     where user_id=p_user_id;
     v_state:='deletion_pending';
   end if;
-  return jsonb_build_object('userId',p_user_id,'accountState',v_state,'governancePrincipalId',v_principal,'governancePrincipalDeactivated',coalesce(v_was_active,false));
+  return jsonb_build_object('userId',p_user_id,'deletionJobId',p_deletion_job_id,'accountState',v_state,'governancePrincipalId',v_principal,'governancePrincipalDeactivated',coalesce(v_was_active,false));
 end
 $function$;
 
@@ -1822,8 +1918,10 @@ begin
 end
 $do$;
 
-revoke all on function public.food_catalog_begin_account_deletion(uuid) from public,anon,authenticated,service_role;
-grant execute on function public.food_catalog_begin_account_deletion(uuid) to service_role;
+revoke all on function public.food_catalog_queue_account_deletion(uuid,uuid,text,text,timestamptz,text,text,jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.food_catalog_queue_account_deletion(uuid,uuid,text,text,timestamptz,text,text,jsonb) to service_role;
+revoke all on function public.food_catalog_begin_account_deletion(uuid,uuid) from public,anon,authenticated,service_role;
+grant execute on function public.food_catalog_begin_account_deletion(uuid,uuid) to service_role;
 
 revoke all on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) from public,anon,authenticated,service_role;
 grant execute on function public.food_catalog_service_propose_correction(uuid,uuid,uuid,text,text,text,jsonb,text,text) to service_role;

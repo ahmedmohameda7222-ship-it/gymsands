@@ -86,7 +86,7 @@ set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub',:'reporter_id',true);
 select (public.food_catalog_report_correction(
-  :'food_id','other','privacy:open','Member open report private text',
+  :'food_id','other','person@example.test private claim','Member open report private text',
   '{"member_note":"private open payload"}'::jsonb,'plan6-v1'
 ))->>'caseId' as open_case \gset
 select (public.food_catalog_report_correction(
@@ -103,6 +103,14 @@ select pg_temp.plan6_report_privacy_assert(
   pg_temp.plan6_report_member_payload_exists(:'open_report'::uuid,:'reporter_id'::uuid)
   and pg_temp.plan6_report_member_payload_exists(:'applied_report'::uuid,:'reporter_id'::uuid),
   'member report payload was not persisted before deletion'
+);
+select pg_temp.plan6_report_privacy_assert(
+  (select claim_text='person@example.test private claim' from public.food_catalog_correction_report_member_payloads where report_id=:'open_report'::uuid)
+  and not exists(
+    select 1 from public.food_catalog_correction_cases
+    where id=:'open_case'::uuid and (claim_key ilike '%person@example.test%' or issue_key ilike '%person@example.test%')
+  ),
+  'durable global authority retained member-authored claim text'
 );
 
 -- D. Turn one case into an applied canonical Nutrition correction. Approval uses
@@ -160,6 +168,13 @@ select pg_temp.plan6_report_privacy_assert(
   'canonical account purge left attributable correction-report member payload behind'
 );
 select pg_temp.plan6_report_privacy_assert(
+  not exists(select 1 from public.food_catalog_correction_cases where claim_key ilike '%person@example.test%' or issue_key ilike '%person@example.test%')
+  and not exists(select 1 from public.food_catalog_correction_events where reason ilike '%person@example.test%')
+  and not exists(select 1 from public.food_catalog_governance_audit_events where to_jsonb(food_catalog_governance_audit_events)::text ilike '%person@example.test%')
+  and not exists(select 1 from public.food_catalog_governance_outbox where to_jsonb(food_catalog_governance_outbox)::text ilike '%person@example.test%'),
+  'durable global authority retained member-authored claim text after canonical purge'
+);
+select pg_temp.plan6_report_privacy_assert(
   (select state='applied' from public.food_catalog_correction_cases where id=:'applied_case'::uuid)
   and exists(select 1 from public.food_nutrition_revisions where id=:'applied_nutrition_revision'::uuid)
   and exists(select 1 from public.food_catalog_governance_audit_events where operation_id='6c000000-0000-4000-8000-000000000303'::uuid)
@@ -177,12 +192,13 @@ select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub',:'stale_id',true);
 select pg_temp.plan6_report_privacy_rejected(format(
   'select public.food_catalog_report_correction(%L::uuid,%L,%L,%L,%L::jsonb,%L)',
-  :'food_id','other','privacy:stale','stale private description','{"member_note":"stale"}','plan6-v1'
+  :'food_id','other','person@example.test stale private claim','stale private description','{"member_note":"stale"}','plan6-v1'
 ),'deletion_processing member report rejected before payload creation');
 reset role;
 select pg_temp.plan6_report_privacy_assert(
-  not exists(select 1 from public.food_catalog_correction_cases where issue_key=lower(:'food_id'||'|other|privacy:stale')),
-  'stale deletion-processing report created global intake state'
+  not exists(select 1 from public.food_catalog_correction_report_member_payloads where claim_text='person@example.test stale private claim')
+  and not exists(select 1 from public.food_catalog_correction_cases where claim_key ilike '%person@example.test stale private claim%' or issue_key ilike '%person@example.test stale private claim%'),
+  'stale deletion-processing report created global or personal intake state'
 );
 
 rollback;

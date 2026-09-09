@@ -132,7 +132,7 @@ export default function AccountSettingsPage() {
     confirmAsk({
       title: "Submit account deletion request?",
       description:
-        "ChatGPT access is revoked immediately. After legal-hold checks, Plaivra disables access, deletes private storage, removes or anonymizes account data, and deletes the Auth account. This cannot be undone once processing begins.",
+        "Plaivra first records a durable retryable deletion job. The worker then revokes connections and sessions before disabling access, deleting private storage, removing or anonymizing account data, and deleting the Auth account. This cannot be undone once processing begins.",
       confirmLabel: "Request deletion",
       variant: "destructive",
       onConfirm: () => void requestAccountDeletion()
@@ -296,7 +296,7 @@ export default function AccountSettingsPage() {
           <div className="rounded-2xl border bg-card p-3 text-sm leading-6 text-muted-foreground">
             <p className="font-semibold text-foreground">Deletion impact</p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
-              <li>Active ChatGPT connections and OAuth tokens are revoked when the request is accepted.</li>
+              <li>Active ChatGPT connections, OAuth tokens, and Auth sessions are revoked by the durable deletion worker before access is disabled.</li>
               <li>Account access is disabled before private storage, database records, and the Auth account are removed.</li>
               <li>Some operational evidence is minimized and retained only after the retention policy is owner/legal approved and configured.</li>
               <li>An active legal hold pauses deletion without silently rejecting your request.</li>

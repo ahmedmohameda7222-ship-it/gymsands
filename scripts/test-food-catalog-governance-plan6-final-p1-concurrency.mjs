@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 const DATABASE_URL = process.env.PLAIVRA_PLAN6_FINAL_P1_CONCURRENCY_TEST_DATABASE_URL ?? process.env.PLAIVRA_LOCAL_DATABASE_URL;
@@ -13,6 +14,7 @@ const OWNER_A = "6d000000-0000-4000-8000-000000000101";
 const OWNER_B = "6d000000-0000-4000-8000-000000000102";
 const FOOD_A = "6d000000-0000-4000-8000-000000000201";
 const REPORT_FOOD = "6d000000-0000-4000-8000-000000000202";
+const OWNER_DELETE_JOB = randomUUID();
 const MATCH_GTIN = "4006381333931";
 
 const APP_P6_MATCH = "plan6-final-p1-p6-match";
@@ -325,7 +327,13 @@ function installOwnerDeletionSleep() {
 
 async function verifyAccountDeletionVsRecoveryMutation() {
   installOwnerDeletionSleep();
-  const deletion = startSql(serviceSql(`select public.food_catalog_begin_account_deletion('${OWNER_A_UID}')`), APP_DELETE_OWNER);
+  runSql(`insert into public.account_deletion_jobs(
+    id,user_id,subject_hash,idempotency_key_hash,state,stage,attempt_count,created_at,updated_at
+  ) values(
+    '${OWNER_DELETE_JOB}','${OWNER_A_UID}',
+    'final-p1-owner-delete-subject','final-p1-owner-delete-idempotency','processing','disabling_access',1,clock_timestamp(),clock_timestamp()
+  );`);
+  const deletion = startSql(serviceSql(`select public.food_catalog_begin_account_deletion('${OWNER_A_UID}','${OWNER_DELETE_JOB}')`), APP_DELETE_OWNER);
   await waitForSleep(APP_DELETE_OWNER);
   const revoke = startSql(authSql(OWNER_A_UID, `select public.food_catalog_revoke_governance_capability(
     '6d000000-0000-4000-8000-000000000501','${OWNER_B}',
@@ -354,7 +362,7 @@ function reportPayloadCount(userId) {
 async function verifyReportVsAccountPurge() {
   const report = startSql(authSql(MEMBER_UID, `
     select public.food_catalog_report_correction(
-      '${REPORT_FOOD}','other','final-p1:report-race','member private race payload',
+      '${REPORT_FOOD}','other','person@example.test private race claim','member private race payload',
       '{"member_private":"race"}'::jsonb,'plan6-v1');
     select pg_catalog.pg_sleep(3)
   `), APP_REPORT);
@@ -383,13 +391,16 @@ async function verifyReportVsAccountPurge() {
   const metadata = Number(runSql(`select count(*)
     from public.food_catalog_correction_reports r
     join public.food_catalog_correction_cases c on c.id=r.case_id
-    where c.issue_key=lower('${REPORT_FOOD}|other|final-p1:report-race')`));
+    where c.food_id='${REPORT_FOOD}' and c.category='other'`));
   if (metadata !== 1) throw new Error(`Report/purge race did not preserve exactly one non-personal report metadata row: ${metadata}`);
+  const globalClaimLeaks = Number(runSql(`select count(*) from public.food_catalog_correction_cases
+    where claim_key ilike '%person@example.test%' or issue_key ilike '%person@example.test%'`));
+  if (globalClaimLeaks !== 0) throw new Error(`Report/purge race retained ${globalClaimLeaks} member claim leak(s) in durable Case identity.`);
   const payloads = reportPayloadCount(MEMBER_UID);
   if (payloads !== 0) throw new Error(`Report/purge race resurrected ${payloads} attributable member payload row(s).`);
 
   const stale = startSql(authSql(MEMBER_UID, `select public.food_catalog_report_correction(
-    '${REPORT_FOOD}','other','final-p1:stale-report','stale private report','{"member_private":"stale"}'::jsonb,'plan6-v1')`),
+    '${REPORT_FOOD}','other','person@example.test stale private race claim','stale private report','{"member_private":"stale"}'::jsonb,'plan6-v1')`),
     "plan6-final-p1-stale-report");
   requireFailure("stale report after account purge", await stale.done);
   if (reportPayloadCount(MEMBER_UID) !== 0) {
@@ -406,6 +417,7 @@ function cleanup() {
     truncate table public.food_catalog_governance_operations cascade;
     truncate table public.food_ingestion_batches cascade;
     truncate table public.food_items cascade;
+    delete from public.account_deletion_jobs where id='${OWNER_DELETE_JOB}';
     delete from public.account_deletion_jobs where id='6d000000-0000-4000-8000-000000000601';
     delete from public.food_catalog_governance_capability_assignments where principal_id in ('${OWNER_A}','${OWNER_B}');
     delete from public.food_catalog_governance_principals where id in ('${OWNER_A}','${OWNER_B}');

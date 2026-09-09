@@ -76,8 +76,11 @@ async function revokeConnections(admin: SupabaseClient, userId: string) {
   if (connections.error || tokens.error) throw new DeletionWorkerError("connection_revocation_failed");
 }
 
-async function disableAccount(admin: SupabaseClient, userId: string) {
-  const governanceDeletion = await admin.rpc("food_catalog_begin_account_deletion", { p_user_id: userId });
+async function disableAccount(admin: SupabaseClient, userId: string, jobId: string) {
+  const governanceDeletion = await admin.rpc("food_catalog_begin_account_deletion", {
+    p_user_id: userId,
+    p_deletion_job_id: jobId
+  });
   if (governanceDeletion.error) throw new DeletionWorkerError("governance_recovery_owner_blocked");
   const result = await admin.from("account_access_states").upsert({
     user_id: userId,
@@ -237,8 +240,8 @@ export async function processAccountDeletionJob(admin: SupabaseClient, job: Acco
     let evidence = { ...(job.evidence ?? {}) };
     if (job.user_id) {
       // Preflight every external provider before storage or Auth deletion. The
-      // account is already denied by deletion_pending, so failing closed here
-      // does not restore access or falsely claim provider revocation.
+      // Durable deletion authority already exists, but the account remains usable
+      // until provider/connection preflight succeeds and disabling_access begins.
       if (shouldRunDeletionStage(job.stage, "provider_cleanup")) {
         evidence = { ...evidence, ...await verifyProviderCleanup(admin, job.user_id) };
       }
@@ -250,7 +253,7 @@ export async function processAccountDeletionJob(admin: SupabaseClient, job: Acco
 
       if (shouldRunDeletionStage(job.stage, "disabling_access")) {
         await updateJob(admin, job.id, { stage: "disabling_access", evidence });
-        await disableAccount(admin, job.user_id);
+        await disableAccount(admin, job.user_id, job.id);
       }
 
       if (shouldRunDeletionStage(job.stage, "deleting_storage")) {
