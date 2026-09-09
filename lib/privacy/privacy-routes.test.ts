@@ -31,6 +31,7 @@ type QueryCall = {
 
 function privacySupabaseMock() {
   const calls: QueryCall[] = [];
+  const rpc = vi.fn(async () => ({ data: null, error: null }));
   const from = vi.fn((table: string) => {
     const call: QueryCall = { table, action: "select", filters: [] };
     let recorded = false;
@@ -86,9 +87,11 @@ function privacySupabaseMock() {
   return {
     client: {
       from,
+      rpc,
       auth: { admin: { signOut: vi.fn(async () => ({ error: null })) } }
     } as unknown as SupabaseClient,
-    calls
+    calls,
+    rpc
   };
 }
 
@@ -146,7 +149,7 @@ describe("privacy request routes", () => {
   });
 
   it("forces the authenticated owner on creation and revokes only that owner's active connections", async () => {
-    const { client, calls } = privacySupabaseMock();
+    const { client, calls, rpc } = privacySupabaseMock();
     mocks.adminClient = client;
     mocks.requireUser.mockResolvedValue({
       user: { id: userA, last_sign_in_at: new Date().toISOString(), email: null },
@@ -169,6 +172,7 @@ describe("privacy request routes", () => {
     const insert = calls.find((call) => call.table === "privacy_requests" && call.action === "insert");
     expect(insert?.values).toMatchObject({ user_id: userA, request_type: "deletion", status: "pending" });
     expect(insert?.values?.user_id).not.toBe(userB);
+    expect(rpc).toHaveBeenCalledWith("food_catalog_begin_account_deletion", { p_user_id: userA });
     const revoke = calls.find((call) => call.table === "chatgpt_connections" && call.action === "update");
     expect(revoke?.filters).toContainEqual(["user_id", userA]);
     expect(revoke?.filters).toContainEqual(["is_active", true]);
