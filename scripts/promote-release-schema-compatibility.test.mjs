@@ -13,14 +13,20 @@ import {
 
 const reviewedCommit = "1111111111111111111111111111111111111111";
 const currentLedger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
+const RELEASE_READY_STATES = new Set(["applied", "applied_version_alias"]);
 const ledger = structuredClone(currentLedger);
-ledger.entries = ledger.entries.filter((entry) => entry.state !== "pending");
+// Downstream promotion behavior tests need a controlled ledger that satisfies the
+// same fail-closed readiness invariants as a genuinely reconciled repository. The
+// real repository ledger is intentionally unresolved and is tested separately.
+ledger.entries = ledger.entries.filter((entry) => RELEASE_READY_STATES.has(entry.state));
 ledger.pendingCount = 0;
+ledger.schemaVerifiedUntrackedCount = 0;
 ledger.unresolvedCount = 0;
 ledger.historyRepair = {
   ...ledger.historyRepair,
   state: "reconciled",
   pendingCount: 0,
+  schemaAppliedUntrackedCount: 0,
   unresolvedCount: 0,
   note: `AW-3B release-promotion fixture reconciled through ${TARGET_MARKER}. Do not replay any applied migration.`,
 };
@@ -86,6 +92,13 @@ function validRequest(overrides = {}) {
     ...overrides,
   };
 }
+
+test("rejects the real current repository ledger while reconciliation is unresolved", () => {
+  assert.throws(
+    () => validatePromotionRequest({ ...validRequest(), ledger: currentLedger }),
+    /Repository migration ledger is not release-ready/,
+  );
+});
 
 test("dry-run performs all checks and no write", async () => {
   const fake = adapter();
