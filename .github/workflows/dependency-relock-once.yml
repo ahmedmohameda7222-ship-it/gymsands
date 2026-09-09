@@ -25,13 +25,21 @@ jobs:
       - name: Generate minimal security relock
         run: |
           set -euo pipefail
-          npm install --package-lock-only --ignore-scripts --save-exact next@16.3.4
-          npm install --package-lock-only --ignore-scripts --save-dev --save-exact sharp@0.35.4
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          p.dependencies.next = '16.3.4';
+          p.devDependencies.sharp = '0.35.4';
+          p.overrides.sharp = '0.35.4';
+          fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          NODE
+          npm install --package-lock-only --ignore-scripts
           npm update baseline-browser-mapping --package-lock-only --ignore-scripts
           node - <<'NODE'
           const p = require('./package.json');
           if (p.dependencies.next !== '16.3.4') throw new Error(`unexpected next ${p.dependencies.next}`);
           if (p.devDependencies.sharp !== '0.35.4') throw new Error(`unexpected sharp ${p.devDependencies.sharp}`);
+          if (p.overrides.sharp !== '0.35.4') throw new Error(`unexpected sharp override ${p.overrides.sharp}`);
           if (p.dependencies.react !== '^19.2.0') throw new Error(`react changed: ${p.dependencies.react}`);
           if (p.dependencies['react-dom'] !== '^19.2.0') throw new Error(`react-dom changed: ${p.dependencies['react-dom']}`);
           NODE
