@@ -6,7 +6,7 @@ on:
       - fix/plan6-production-exactness
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   relock:
@@ -43,16 +43,36 @@ jobs:
           if (p.dependencies.react !== '^19.2.0') throw new Error(`react changed: ${p.dependencies.react}`);
           if (p.dependencies['react-dom'] !== '^19.2.0') throw new Error(`react-dom changed: ${p.dependencies['react-dom']}`);
           NODE
-          mkdir -p ci-reports/dependency-relock
-          cp package.json package-lock.json ci-reports/dependency-relock/
-          npm ls next sharp baseline-browser-mapping --all > ci-reports/dependency-relock/npm-ls.txt || true
       - name: Run exact locked dependency audit threshold
         run: npm audit --package-lock-only --omit=dev --audit-level=moderate
-      - name: Upload generated dependency authority
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-relock-${{ github.sha }}
-          path: ci-reports/dependency-relock/
-          if-no-files-found: error
-          retention-days: 2
+      - name: Review relock scope and package-version delta
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const cp = require('node:child_process');
+          const before = JSON.parse(cp.execFileSync('git', ['show', 'HEAD:package-lock.json'], {encoding:'utf8'}));
+          const after = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const keys = new Set([...Object.keys(before.packages || {}), ...Object.keys(after.packages || {})]);
+          const changed = [];
+          for (const key of [...keys].sort()) {
+            const a = before.packages?.[key]?.version ?? null;
+            const b = after.packages?.[key]?.version ?? null;
+            if (a !== b) changed.push({package:key || '<root>', from:a, to:b});
+          }
+          console.log(JSON.stringify(changed, null, 2));
+          NODE
+          test "$(git diff --name-only | sort)" = "$(printf 'package-lock.json\npackage.json')"
+          git diff --check -- package.json package-lock.json
+      - name: Commit reviewed dependency authority
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Dependency authority already matches reviewed relock; no commit needed."
+            exit 0
+          fi
+          git commit -m "fix(deps): patch Next.js security advisories"
+          git push origin HEAD:fix/plan6-production-exactness
