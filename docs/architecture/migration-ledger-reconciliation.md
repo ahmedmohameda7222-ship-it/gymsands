@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-09-08
+**Current reconciliation date:** 2026-09-09
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production remains reconciled through the applied Food Catalog Plan 5 serving-semantics correction; repository Plan 6 governance migration is pending/unapplied
+**Status:** Plan 6 governance control plane is applied once in Production and held under `ledger_drift_review`; the forward-only GTIN-lock exactness correction is pending/unapplied
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -11,36 +11,34 @@ Historical PR descriptions, completed implementation reports, and old audit snap
 
 ## Current state
 
-The latest verified Plaivra Production inspection after the authorized 2026-09-07 Plan 5 serving-semantics correction established:
+Read-only Plaivra Production inspection on 2026-09-09 established:
 
-- Physical Production migration records: **121**
+- Physical Production migration records: **122**
 - Exact repository-name applications tracked as `state = applied`: **63**
-- Latest physical Production record: `20260907215257_food_catalog_search_serving_semantics_correction`
-- Corresponding immutable repository migration: `20260907165500_food_catalog_search_serving_semantics_correction.sql`
-- Frozen correction migration Git blob: `fd51c88a1326cc83d4532ac60a6e89650847f894`
-- Original applied Plan 5 migration: `20260906183000_food_catalog_search_projection_v2.sql` → `20260906200129_food_catalog_search_projection_v2`
-- Frozen original Plan 5 migration Git blob: `7be00af5e347ca8d58abcac74cf4c816761a0745`
+- Latest physical Production record: `20260909081402_food_catalog_governance_control_plane`
+- Corresponding immutable repository migration: `20260908100000_food_catalog_governance_control_plane.sql`
 - Released compatibility marker: `20260724232734`
 - Activity Catalog Production remains isolated from the Main Plaivra migration ledger
 
 The current repository/machine-ledger state records:
 
-- Pending repository migrations: **1** — `20260908100000_food_catalog_governance_control_plane.sql`
+- Applied-under-review repository migration: **1** — `20260908100000_food_catalog_governance_control_plane.sql` as `ledger_drift_review`, mapped to Production identity `20260909081402_food_catalog_governance_control_plane`
+- Pending repository migrations: **1** — `20260909083000_food_catalog_governance_gtin_lock_exactness.sql`
 - `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 1`
+- `unresolvedCount = 2`
 - `historyRepair.state = pending`
 - migration-ledger `release_ready = false`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented as `applied_version_alias`; physical Production history is now 121 records. Applied migrations must not be replayed.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately by their ledger state. Applied migrations must not be replayed.
 
-## Food Catalog Plan 6 governance control plane — repository pending / Production unapplied 2026-09-08
+## Food Catalog Plan 6 governance control plane — Production applied / exactness correction pending 2026-09-09
 
-Repository migration `20260908100000_food_catalog_governance_control_plane.sql` is a forward-only Plan 6 implementation artifact. It is intentionally classified as `state = pending` with no Production version/name because PR #173 is still an implementation Draft and Plan 6 migration authority does not permit application before merge.
+Repository migration `20260908100000_food_catalog_governance_control_plane.sql` was merged and applied exactly once to Plaivra Production as generated physical identity `20260909081402_food_catalog_governance_control_plane`. Immediate read-back proved expected Plan 6 governance authority while canonical Food/source/ingestion/generation/search data remained unpopulated and the current-generation pointer remained `NULL / 0`.
 
-The latest verified Production physical migration head remains `20260907215257_food_catalog_search_serving_semantics_correction`. The released compatibility marker remains `20260724232734`. The pending Plan 6 entry therefore makes the repository ledger deliberately non-release-ready: `historyRepair.state = pending`, `pendingCount = 1`, `unresolvedCount = 1`, and `release_ready = false`. Release preflight must fail closed until the Plan 6 repository migration is independently approved, merged, applied exactly once under standing migration authority, verified, and reconciled.
+Post-apply exactness inspection found one connector-transfer divergence in the UPDATE branch of `private.food_catalog_serialize_gtin_write()`: Production used a direct Food row lock where the reviewed repository migration calls `private.food_catalog_lock_food_authority(v_food)`. The applied migration is immutable and must not be rewritten or replayed. It is therefore classified as `ledger_drift_review` while forward-only repository migration `20260909083000_food_catalog_governance_gtin_lock_exactness.sql` remains the sole pending correction.
 
-Plan 6 implementation/verification work must not populate Foods, execute provider ingestion, activate or verify Foods, create/promote Catalog Generations, move `food_catalog_current_generation`, mutate derived SearchDocuments outside their existing authority, promote the compatibility marker, deploy runtime cutover, or mutate the isolated Activity Catalog. Do not apply or replay `20260908100000_food_catalog_governance_control_plane.sql` from this Draft implementation branch.
+Current fail-closed authority is `historyRepair.state = pending`, `pendingCount = 1`, `unresolvedCount = 2`, and `release_ready = false`. No Food population, provider ingestion, activation, verification approval, Catalog Generation creation/promotion, current-pointer movement, SearchDocument mutation outside existing derived authority, compatibility-marker promotion, runtime cutover, deployment, or Activity Catalog mutation is authorized by this reconciliation.
 
 ## Food Catalog Plan 5 serving-semantics correction — Production application 2026-09-07
 

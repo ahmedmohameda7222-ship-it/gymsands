@@ -7,6 +7,7 @@ const plan4MigrationName = "20260904100000_food_catalog_ingestion_v2_authority.s
 const plan5MigrationName = "20260906183000_food_catalog_search_projection_v2.sql";
 const plan5ServingCorrectionName = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 const plan6MigrationName = "20260908100000_food_catalog_governance_control_plane.sql";
+const plan6ExactnessCorrectionName = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
 
 function read(relativePath: string) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
@@ -25,7 +26,7 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
     expect(source).not.toMatch(/alter\s+column\s+(?:quantity|status|completed_at|food_log_id)/i);
   });
 
-  it("preserves authorized Production aliases while Plan 6 remains explicitly pending", () => {
+  it("preserves authorized Production aliases while Plan 6 is under drift review and the exactness correction remains pending", () => {
     const ledger = JSON.parse(read("supabase/migration-ledger.json")) as {
       pendingCount: number;
       unresolvedCount: number;
@@ -34,6 +35,8 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
     };
     const entries = ledger.entries.filter((entry) => entry.localFile === migrationName);
     const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
+    const plan6Entry = ledger.entries.find((entry) => entry.localFile === plan6MigrationName);
+    const plan6CorrectionEntry = ledger.entries.find((entry) => entry.localFile === plan6ExactnessCorrectionName);
 
     expect(entries).toEqual([
       expect.objectContaining({
@@ -43,12 +46,17 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
         productionName: "nullable_meal_plan_nutrition_snapshots",
       }),
     ]);
-    expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: plan6MigrationName,
-        state: "pending",
-      }),
-    ]);
+    expect(plan6Entry).toEqual(expect.objectContaining({
+      localFile: plan6MigrationName,
+      state: "ledger_drift_review",
+      productionVersion: "20260909081402",
+      productionName: "food_catalog_governance_control_plane",
+    }));
+    expect(plan6CorrectionEntry).toEqual(expect.objectContaining({
+      localFile: plan6ExactnessCorrectionName,
+      state: "pending",
+    }));
+    expect(pendingEntries).toEqual([plan6CorrectionEntry]);
     const plan4Entry = ledger.entries.find((entry) => entry.localFile === plan4MigrationName);
     expect(plan4Entry).toEqual(expect.objectContaining({
       localFile: plan4MigrationName,
@@ -70,10 +78,10 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
       productionName: "food_catalog_search_serving_semantics_correction",
     }));
     expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(2);
     expect(ledger.historyRepair.state).toBe("pending");
     expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(2);
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {

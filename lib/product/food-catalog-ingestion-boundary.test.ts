@@ -11,6 +11,7 @@ const PLAN4_MIGRATION = "20260904100000_food_catalog_ingestion_v2_authority.sql"
 const PLAN5_MIGRATION = "20260906183000_food_catalog_search_projection_v2.sql";
 const PLAN5_SERVING_CORRECTION = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 const PLAN6_MIGRATION = "20260908100000_food_catalog_governance_control_plane.sql";
+const PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
 const INTERNAL_TABLES = [
   "food_ingestion_batches",
   "food_ingestion_runs",
@@ -77,6 +78,8 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     const currentPlan4Entries = current.entries.filter((entry) => entry.localFile === PLAN4_MIGRATION);
     const currentPlan5Entries = current.entries.filter((entry) => entry.localFile === PLAN5_MIGRATION);
     const currentCorrectionEntries = current.entries.filter((entry) => entry.localFile === PLAN5_SERVING_CORRECTION);
+    const currentPlan6Entries = current.entries.filter((entry) => entry.localFile === PLAN6_MIGRATION);
+    const currentPlan6ExactnessEntries = current.entries.filter((entry) => entry.localFile === PLAN6_EXACTNESS_CORRECTION);
     const currentPendingEntries = current.entries.filter((entry) => entry.state === "pending");
 
     expect(historicalEntries).toEqual(base.entries);
@@ -137,19 +140,28 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         productionName: "food_catalog_search_serving_semantics_correction",
       }),
     ]);
-    expect(currentPendingEntries).toEqual([
+    expect(currentPlan6Entries).toEqual([
       expect.objectContaining({
         localFile: PLAN6_MIGRATION,
+        state: "ledger_drift_review",
+        productionVersion: "20260909081402",
+        productionName: "food_catalog_governance_control_plane",
+      }),
+    ]);
+    expect(currentPlan6ExactnessEntries).toEqual([
+      expect.objectContaining({
+        localFile: PLAN6_EXACTNESS_CORRECTION,
         state: "pending",
       }),
     ]);
+    expect(currentPendingEntries).toEqual(currentPlan6ExactnessEntries);
     expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(1);
+    expect(current.unresolvedCount).toBe(2);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
         state: "pending",
         pendingCount: 1,
-        unresolvedCount: 1,
+        unresolvedCount: 2,
       })
     );
   });
