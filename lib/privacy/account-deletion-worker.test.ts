@@ -113,7 +113,10 @@ describe("account deletion worker contract", () => {
       attempt_count: 1, evidence: {}, notification_recipient_ciphertext: null
     });
     expect(result).toMatchObject({ state: "completed" });
-    expect(mock.rpc).toHaveBeenCalledWith("food_catalog_begin_account_deletion", { p_user_id: "user-a" });
+    expect(mock.rpc).toHaveBeenCalledWith("food_catalog_begin_account_deletion", {
+      p_user_id: "user-a",
+      p_deletion_job_id: "job-a"
+    });
     expect(mock.rpc).toHaveBeenCalledWith("purge_account_application_data_atomic", { p_user_id: "user-a" });
     expect(mock.deleteUser).toHaveBeenCalledWith("user-a", false);
     expect(mock.irreversibleOrder).toEqual([
@@ -131,7 +134,10 @@ describe("account deletion worker contract", () => {
     });
     expect(result).toMatchObject({ state: "retry_scheduled", errorCode: "database_application_purge_failed" });
     expect(mock.rpc).toHaveBeenCalledTimes(2);
-    expect(mock.rpc).toHaveBeenCalledWith("food_catalog_begin_account_deletion", { p_user_id: "user-a" });
+    expect(mock.rpc).toHaveBeenCalledWith("food_catalog_begin_account_deletion", {
+      p_user_id: "user-a",
+      p_deletion_job_id: "job-a"
+    });
     expect(mock.rpc).toHaveBeenCalledWith("purge_account_application_data_atomic", { p_user_id: "user-a" });
     expect(mock.deleteUser).not.toHaveBeenCalled();
     expect(mock.irreversibleOrder).toEqual([
