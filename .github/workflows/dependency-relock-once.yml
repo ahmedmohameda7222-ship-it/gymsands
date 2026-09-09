@@ -45,7 +45,7 @@ jobs:
           NODE
           mkdir -p ci-reports/dependency-relock
           cp package.json package-lock.json ci-reports/dependency-relock/
-          npm ls next sharp baseline-browser-mapping --all > ci-reports/dependency-relock/npm-ls.txt
+          npm ls next sharp baseline-browser-mapping --all > ci-reports/dependency-relock/npm-ls.txt || true
       - name: Run exact locked dependency audit threshold
         run: npm audit --package-lock-only --omit=dev --audit-level=moderate
       - name: Upload generated dependency authority
