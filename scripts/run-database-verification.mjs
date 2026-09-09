@@ -58,6 +58,14 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/food-catalog-ingestion-v2-zero-record.sql",
   "supabase/verification/food-catalog-search-projection-v2.sql",
   "supabase/verification/food-catalog-search-serving-semantics-correction.sql",
+  "supabase/verification/food-catalog-governance-control-plane.sql",
+  "supabase/verification/food-catalog-governance-control-plane-rereview.sql",
+  "supabase/verification/food-catalog-governance-control-plane-authority-rereview.sql",
+  "supabase/verification/food-catalog-governance-control-plane-five-p1-rereview.sql",
+  "supabase/verification/food-catalog-governance-control-plane-live-owner-rereview.sql",
+  "supabase/verification/food-catalog-governance-control-plane-report-privacy-rereview.sql",
+  "supabase/verification/food-catalog-governance-control-plane-deletion-durability-rereview.sql",
+  "supabase/verification/food-catalog-governance-control-plane-deletion-resumability-rereview.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
@@ -94,6 +102,14 @@ export function runDatabaseVerification({
   run(process.execPath, ["scripts/test-food-catalog-grant-promotion-concurrency.mjs"], {
     ...executionEnv,
     PLAIVRA_GRANT_PROMOTION_CONCURRENCY_TEST_DATABASE_URL: localUrl,
+  });
+  run(process.execPath, ["scripts/test-food-catalog-governance-plan6-concurrency.mjs"], {
+    ...executionEnv,
+    PLAIVRA_PLAN6_CONCURRENCY_TEST_DATABASE_URL: localUrl,
+  });
+  run(process.execPath, ["scripts/test-food-catalog-governance-plan6-final-p1-concurrency.mjs"], {
+    ...executionEnv,
+    PLAIVRA_PLAN6_FINAL_P1_CONCURRENCY_TEST_DATABASE_URL: localUrl,
   });
   run(process.execPath, ["scripts/test-database-preflight-control.mjs"], {
     ...executionEnv,

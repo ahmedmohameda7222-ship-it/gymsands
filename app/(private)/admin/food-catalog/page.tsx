@@ -20,9 +20,9 @@ async function adminError(response: Response) {
     const body = await response.clone().json() as { error?: unknown };
     return typeof body.error === "string" && body.error.trim()
       ? body.error.trim()
-      : "Admin access is required for Food Catalog curation.";
+      : "Admin access is required for Food Catalog governance.";
   } catch {
-    return "Admin access is required for Food Catalog curation.";
+    return "Admin access is required for Food Catalog governance.";
   }
 }
 
@@ -40,10 +40,10 @@ export async function executeFoodCatalogCommand(
   const authorization = await requireAdmin(request);
   if (authorization instanceof Response) throw new Error(await adminError(authorization));
 
-  // Service-role access is created only after requireAdmin has revalidated the
-  // current bearer session. The client-side admin layout is not mutation authority.
+  // This gate now authorizes only access to the retired console. It is not Food
+  // canonical mutation authority; Plan 6 named governance commands own writes.
   const supabase = createSupabaseServerClient(null, true);
-  const actor: FoodCatalogActor = { role: "admin" };
+  const actor: FoodCatalogActor = { authorized: true };
 
   if (command.kind === "normalize") await normalizeFood(supabase, actor, command.input);
   if (command.kind === "publish") await publishFood(supabase, actor, command.foodId);
@@ -61,7 +61,7 @@ export default function FoodCatalogAdminPage() {
     <>
       <PageHeading
         title="Food Catalog"
-        description="Bounded owner curation for canonical Plaivra Food identity and provenance."
+        description="Legacy row curation is retired; canonical changes require Plan 6 governed correction commands."
       />
       <FoodCatalogAdmin execute={executeFoodCatalogCommand} />
     </>

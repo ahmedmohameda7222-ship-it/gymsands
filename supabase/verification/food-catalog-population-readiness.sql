@@ -216,7 +216,16 @@ begin
     where not c.relrowsecurity
        or has_table_privilege('anon', 'public.' || required.table_name, 'SELECT,INSERT,UPDATE,DELETE')
        or has_table_privilege('authenticated', 'public.' || required.table_name, 'SELECT,INSERT,UPDATE,DELETE')
-       or not has_table_privilege('service_role', 'public.' || required.table_name, 'SELECT,INSERT,UPDATE,DELETE')
+       or not has_table_privilege('service_role', 'public.' || required.table_name, 'SELECT')
+       or (
+         required.table_name = 'food_barcodes'
+         and to_regclass('public.food_catalog_governance_principals') is not null
+         and has_table_privilege('service_role', 'public.' || required.table_name, 'INSERT,UPDATE,DELETE,TRUNCATE')
+       )
+       or (
+         (required.table_name <> 'food_barcodes' or to_regclass('public.food_catalog_governance_principals') is null)
+         and not has_table_privilege('service_role', 'public.' || required.table_name, 'INSERT,UPDATE,DELETE')
+       )
   ) then
     raise exception 'Food Catalog ingestion/GTIN/market RLS or privileges are too broad.';
   end if;

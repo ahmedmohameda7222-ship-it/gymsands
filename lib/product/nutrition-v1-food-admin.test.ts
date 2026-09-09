@@ -44,13 +44,18 @@ describe("Nutrition V1 owner Food Catalog product contract", () => {
     expect(library).not.toMatch(/fetch\(|openfoodfacts|wger/i);
   });
 
-  it("preserves history on merge through redirect semantics rather than destructive Food deletion", () => {
+  it("retires generic merge mutation and preserves history behind the named Plan 6 duplicate command", () => {
     const curation = source("services/nutrition-v1/server/food-curation.ts");
-    expect(curation).toContain("merged_into_food_id");
-    expect(curation).toContain("food_favorites");
-    expect(curation).not.toMatch(/from\(["']food_items["']\)\.delete/);
-    expect(curation).not.toMatch(/from\(["']food_logs["']\)[\s\S]*update/);
-    expect(curation).toContain("food_source_records");
-    expect(curation).toMatch(/license_name|license_reference/);
+    const plan6 = source("supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql");
+    const verifier = source("supabase/verification/food-catalog-governance-control-plane.sql");
+
+    expect(curation).toContain("Legacy Food Catalog curation is retired");
+    expect(curation).not.toMatch(/\.from\(["']food_items["']\)[\s\S]{0,180}\.(?:insert|update|delete)\(/);
+    expect(curation).not.toMatch(/\.from\(["']food_favorites["']\)[\s\S]{0,180}\.(?:insert|update|delete)\(/);
+    expect(plan6).toContain("food_catalog_resolve_duplicate");
+    expect(plan6).toContain("food_merge_events");
+    expect(plan6).toContain("merged_into_food_id");
+    expect(verifier).toContain("duplicate source stable Food ID preserved as redirect");
+    expect(verifier).toContain("Plan 1 merge history emitted exactly once");
   });
 });
