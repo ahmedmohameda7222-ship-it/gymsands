@@ -11,13 +11,17 @@ function workerAdminMock({
   const irreversibleOrder: string[] = [];
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
     irreversibleOrder.push(`rpc:${name}`);
-    if (purgeError) return { data: null, error: { message: "purge failed" } };
+    if (name === "purge_account_application_data_atomic" && purgeError) {
+      return { data: null, error: { message: "purge failed" } };
+    }
     return {
-      data: {
-        application_data_purged: true,
-        profile_already_absent: false,
-        profiles_deleted: 1
-      },
+      data: name === "purge_account_application_data_atomic"
+        ? {
+            application_data_purged: true,
+            profile_already_absent: false,
+            profiles_deleted: 1
+          }
+        : null,
       error: null,
       args
     };
@@ -109,9 +113,11 @@ describe("account deletion worker contract", () => {
       attempt_count: 1, evidence: {}, notification_recipient_ciphertext: null
     });
     expect(result).toMatchObject({ state: "completed" });
+    expect(mock.rpc).toHaveBeenCalledWith("food_catalog_begin_account_deletion", { p_user_id: "user-a" });
     expect(mock.rpc).toHaveBeenCalledWith("purge_account_application_data_atomic", { p_user_id: "user-a" });
     expect(mock.deleteUser).toHaveBeenCalledWith("user-a", false);
     expect(mock.irreversibleOrder).toEqual([
+      "rpc:food_catalog_begin_account_deletion",
       "rpc:purge_account_application_data_atomic",
       "auth:deleteUser"
     ]);
@@ -124,9 +130,14 @@ describe("account deletion worker contract", () => {
       attempt_count: 1, evidence: {}, notification_recipient_ciphertext: null
     });
     expect(result).toMatchObject({ state: "retry_scheduled", errorCode: "database_application_purge_failed" });
-    expect(mock.rpc).toHaveBeenCalledTimes(1);
+    expect(mock.rpc).toHaveBeenCalledTimes(2);
+    expect(mock.rpc).toHaveBeenCalledWith("food_catalog_begin_account_deletion", { p_user_id: "user-a" });
+    expect(mock.rpc).toHaveBeenCalledWith("purge_account_application_data_atomic", { p_user_id: "user-a" });
     expect(mock.deleteUser).not.toHaveBeenCalled();
-    expect(mock.irreversibleOrder).toEqual(["rpc:purge_account_application_data_atomic"]);
+    expect(mock.irreversibleOrder).toEqual([
+      "rpc:food_catalog_begin_account_deletion",
+      "rpc:purge_account_application_data_atomic"
+    ]);
   });
 
   it("resumes a notification-stage retry without repeating deletion work", async () => {
