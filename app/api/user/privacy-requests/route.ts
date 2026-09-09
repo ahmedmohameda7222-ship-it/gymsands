@@ -142,7 +142,9 @@ async function createAccountDeletionRequest(
   const admin = createSupabaseAdminClient();
   const replay = await admin.from("account_deletion_jobs")
     .select("id,state,stage,attempt_count,next_attempt_at,last_error_code,notification_status,created_at,completed_at,request_id")
-    .eq("idempotency_key_hash", validated.idempotencyKeyHash).maybeSingle();
+    .eq("user_id", context.user.id)
+    .eq("idempotency_key_hash", validated.idempotencyKeyHash)
+    .maybeSingle();
   if (replay.error) return NextResponse.json({ error: "Deletion request status could not be verified." }, { status: 500 });
   if (replay.data) {
     return NextResponse.json({
@@ -159,7 +161,9 @@ async function createAccountDeletionRequest(
   if (activeRequest.data) {
     const existingJob = await admin.from("account_deletion_jobs")
       .select("id,state,stage,attempt_count,next_attempt_at,last_error_code,notification_status,created_at,completed_at,request_id")
-      .eq("request_id", activeRequest.data.id).maybeSingle();
+      .eq("user_id", context.user.id)
+      .eq("request_id", activeRequest.data.id)
+      .maybeSingle();
     if (existingJob.error) return NextResponse.json({ error: "Deletion request status could not be verified." }, { status: 500 });
     if (existingJob.data) return NextResponse.json({ request: activeRequest.data, deletion_job: safeDeletionJob(existingJob.data), already_exists: true, deletion_queued: true });
   }
