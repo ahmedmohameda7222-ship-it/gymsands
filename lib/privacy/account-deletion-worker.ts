@@ -22,6 +22,7 @@ export const ACCOUNT_DELETION_STAGES = [
   "deleting_storage",
   "provider_cleanup",
   "deleting_database",
+  "deleting_auth",
   "notification",
   "completed"
 ] as const;
@@ -29,6 +30,15 @@ export const ACCOUNT_DELETION_STAGES = [
 const ACCOUNT_DELETION_STAGE_INDEX = new Map<string, number>([
   ["queued", -1],
   ...ACCOUNT_DELETION_STAGES.map((stage, index) => [stage, index] as const)
+]);
+
+const DEFINITELY_POST_TRANSITION_STAGES = new Set([
+  "deleting_storage",
+  "provider_cleanup",
+  "deleting_database",
+  "deleting_auth",
+  "notification",
+  "completed"
 ]);
 
 function shouldRunDeletionStage(currentStage: string, targetStage: typeof ACCOUNT_DELETION_STAGES[number]) {
@@ -173,7 +183,7 @@ async function verifyProviderCleanup(admin: SupabaseClient, userId: string) {
   return { external_provider_connections: 0 };
 }
 
-async function purgeDatabaseAndAuth(admin: SupabaseClient, userId: string) {
+async function purgeDatabaseForJob(admin: SupabaseClient, userId: string, jobId: string) {
   const externalLogs = await admin.from("external_api_logs").delete().eq("user_id", userId);
   const emailLogs = await admin.from("email_logs").delete().eq("user_id", userId);
   const importOwnership = await admin.from("exercise_import_batches").update({ created_by: null }).eq("created_by", userId);
@@ -181,21 +191,67 @@ async function purgeDatabaseAndAuth(admin: SupabaseClient, userId: string) {
     throw new DeletionWorkerError("database_dependency_cleanup_failed");
   }
 
-  const purged = await admin.rpc("purge_account_application_data_atomic", { p_user_id: userId });
+  // This RPC performs the canonical application purge and the deleting_auth
+  // checkpoint in one database transaction. A committed purge therefore always
+  // leaves a durable resume point that prevents a later retry from purging again.
+  const purged = await admin.rpc("food_catalog_purge_account_application_data_for_deletion_job", {
+    p_user_id: userId,
+    p_deletion_job_id: jobId
+  });
   if (purged.error) throw new DeletionWorkerError("database_application_purge_failed");
-  const purgeEvidence = purged.data && typeof purged.data === "object" && !Array.isArray(purged.data)
+  return purged.data && typeof purged.data === "object" && !Array.isArray(purged.data)
     ? purged.data as Record<string, unknown>
-    : { application_data_purged: true };
+    : { application_data_purged: true, application_data_purge_checkpointed: true };
+}
 
+async function deleteAuthUser(admin: SupabaseClient, userId: string) {
   const deleted = await admin.auth.admin.deleteUser(userId, false);
   const deletionStatus = deleted.error && "status" in deleted.error ? Number(deleted.error.status) : null;
   const alreadyAbsent = Boolean(deleted.error) && (deletionStatus === 404 || /not found/i.test(deleted.error?.message ?? ""));
   if (deleted.error && !alreadyAbsent) throw new DeletionWorkerError("auth_provider_delete_failed");
   return {
-    ...purgeEvidence,
     auth_user_deleted: !alreadyAbsent,
     auth_user_already_absent: alreadyAbsent
   };
+}
+
+type TransitionStatus = "pre_transition" | "post_transition" | "unknown";
+
+async function deletionTransitionStatus(
+  admin: SupabaseClient,
+  job: AccountDeletionJob,
+  evidence: Record<string, unknown>
+): Promise<TransitionStatus> {
+  if (evidence.irreversible_transition_started === true || DEFINITELY_POST_TRANSITION_STAGES.has(job.stage)) {
+    return "post_transition";
+  }
+  if (!job.user_id) return "unknown";
+
+  const access = await admin
+    .from("account_access_states")
+    .select("state,disabled_at")
+    .eq("user_id", job.user_id)
+    .maybeSingle();
+  if (access.error) return "unknown";
+  const accessData = access.data as { state?: unknown; disabled_at?: unknown } | null;
+  if (accessData?.state === "deletion_pending" || accessData?.state === "deletion_processing" || accessData?.disabled_at) {
+    return "post_transition";
+  }
+
+  const governance = await admin
+    .from("food_catalog_governance_principals")
+    .select("active,revoked_at")
+    .eq("principal_type", "human")
+    .eq("human_user_id", job.user_id)
+    .maybeSingle();
+  if (governance.error) return "unknown";
+  const principal = governance.data as { active?: unknown; revoked_at?: unknown } | null;
+  if (principal && (principal.active === false || principal.revoked_at)) return "post_transition";
+
+  if (accessData?.state === "active" && !accessData.disabled_at && (!principal || principal.active === true)) {
+    return "pre_transition";
+  }
+  return "unknown";
 }
 
 async function sendCompletionNotification(job: AccountDeletionJob) {
@@ -222,6 +278,7 @@ async function sendCompletionNotification(job: AccountDeletionJob) {
 }
 
 export async function processAccountDeletionJob(admin: SupabaseClient, job: AccountDeletionJob) {
+  let evidence = { ...(job.evidence ?? {}) };
   try {
     if (job.user_id && await checkLegalHold(admin, job.user_id)) {
       await admin.from("account_access_states").upsert({
@@ -237,10 +294,9 @@ export async function processAccountDeletionJob(admin: SupabaseClient, job: Acco
       return { state: "blocked_legal_hold" as const };
     }
 
-    let evidence = { ...(job.evidence ?? {}) };
     if (job.user_id) {
       // Preflight every external provider before storage or Auth deletion. The
-      // Durable deletion authority already exists, but the account remains usable
+      // durable deletion authority already exists, but the account remains usable
       // until provider/connection preflight succeeds and disabling_access begins.
       if (shouldRunDeletionStage(job.stage, "provider_cleanup")) {
         evidence = { ...evidence, ...await verifyProviderCleanup(admin, job.user_id) };
@@ -254,6 +310,12 @@ export async function processAccountDeletionJob(admin: SupabaseClient, job: Acco
       if (shouldRunDeletionStage(job.stage, "disabling_access")) {
         await updateJob(admin, job.id, { stage: "disabling_access", evidence });
         await disableAccount(admin, job.user_id, job.id);
+        evidence = {
+          ...evidence,
+          irreversible_transition_started: true,
+          irreversible_transition_started_at: new Date().toISOString()
+        };
+        await updateJob(admin, job.id, { evidence });
       }
 
       if (shouldRunDeletionStage(job.stage, "deleting_storage")) {
@@ -267,7 +329,11 @@ export async function processAccountDeletionJob(admin: SupabaseClient, job: Acco
 
       if (shouldRunDeletionStage(job.stage, "deleting_database")) {
         await updateJob(admin, job.id, { stage: "deleting_database", evidence });
-        evidence = { ...evidence, ...await purgeDatabaseAndAuth(admin, job.user_id) };
+        evidence = { ...evidence, ...await purgeDatabaseForJob(admin, job.user_id, job.id) };
+      }
+
+      if (shouldRunDeletionStage(job.stage, "deleting_auth")) {
+        evidence = { ...evidence, ...await deleteAuthUser(admin, job.user_id) };
       }
     }
 
@@ -290,14 +356,32 @@ export async function processAccountDeletionJob(admin: SupabaseClient, job: Acco
     return { state: "completed" as const, notificationStatus };
   } catch (error) {
     const code = error instanceof DeletionWorkerError ? error.code : "unexpected_deletion_worker_error";
-    const failed = job.attempt_count >= 5;
+    const exhausted = job.attempt_count >= 5;
+    const transition = await deletionTransitionStatus(admin, job, evidence).catch(() => "unknown" as const);
+    // A bounded retry budget may terminally fail only while we can prove the
+    // account is still usable. After (or ambiguously around) irreversible begin,
+    // fail safe by retaining worker-claimable durable retry authority.
+    const terminalPreTransitionFailure = exhausted && transition === "pre_transition";
     const retryAt = new Date(Date.now() + deletionRetryDelayMinutes(job.attempt_count) * 60_000).toISOString();
+    const retryEvidence = exhausted && !terminalPreTransitionFailure
+      ? {
+          ...evidence,
+          retry_attention_required: true,
+          retry_threshold_exceeded_attempt_count: job.attempt_count,
+          retry_threshold_exceeded_at: new Date().toISOString(),
+          retry_last_error_code: code
+        }
+      : evidence;
     await updateJob(admin, job.id, {
-      state: failed ? "failed" : "retry_scheduled",
+      state: terminalPreTransitionFailure ? "failed" : "retry_scheduled",
+      evidence: retryEvidence,
       last_error_code: code,
       next_attempt_at: retryAt,
       locked_at: null
     }).catch(() => undefined);
-    return { state: failed ? "failed" as const : "retry_scheduled" as const, errorCode: code };
+    return {
+      state: terminalPreTransitionFailure ? "failed" as const : "retry_scheduled" as const,
+      errorCode: code
+    };
   }
 }
