@@ -31,7 +31,29 @@ type QueryCall = {
 
 function privacySupabaseMock() {
   const calls: QueryCall[] = [];
-  const rpc = vi.fn(async () => ({ data: null, error: null }));
+  const rpc = vi.fn(async (name: string) => {
+    if (name === "food_catalog_queue_account_deletion") {
+      return {
+        data: {
+          requestId: "request-a",
+          requestStatus: "pending",
+          requestCreatedAt: "2026-09-09T00:00:00.000Z",
+          jobId: "job-a",
+          jobState: "queued",
+          jobStage: "queued",
+          attemptCount: 0,
+          nextAttemptAt: null,
+          lastErrorCode: null,
+          notificationStatus: "pending",
+          jobCreatedAt: "2026-09-09T00:00:00.000Z",
+          completedAt: null,
+          alreadyExists: false
+        },
+        error: null
+      };
+    }
+    return { data: null, error: null };
+  });
   const from = vi.fn((table: string) => {
     const call: QueryCall = { table, action: "select", filters: [] };
     let recorded = false;
@@ -148,7 +170,7 @@ describe("privacy request routes", () => {
     expect(calls.find((call) => call.action === "insert")).toBeUndefined();
   });
 
-  it("forces the authenticated owner on creation and revokes only that owner's active connections", async () => {
+  it("forces the authenticated owner and queues durable deletion authority without inline revocation", async () => {
     const { client, calls, rpc } = privacySupabaseMock();
     mocks.adminClient = client;
     mocks.requireUser.mockResolvedValue({
@@ -168,16 +190,22 @@ describe("privacy request routes", () => {
       })
     }));
     expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      request: { id: "request-a", request_type: "deletion", status: "pending" },
+      deletion_job: { id: "job-a", state: "queued", stage: "queued", attempt_count: 0 },
+      already_exists: false,
+      deletion_queued: true
+    });
 
-    const insert = calls.find((call) => call.table === "privacy_requests" && call.action === "insert");
-    expect(insert?.values).toMatchObject({ user_id: userA, request_type: "deletion", status: "pending" });
-    expect(insert?.values?.user_id).not.toBe(userB);
-    expect(rpc).toHaveBeenCalledWith("food_catalog_begin_account_deletion", { p_user_id: userA });
-    const revoke = calls.find((call) => call.table === "chatgpt_connections" && call.action === "update");
-    expect(revoke?.filters).toContainEqual(["user_id", userA]);
-    expect(revoke?.filters).toContainEqual(["is_active", true]);
-    const job = calls.find((call) => call.table === "account_deletion_jobs" && call.action === "insert");
-    expect(job?.values?.user_id).toBe(userA);
-    expect(job?.values?.user_id).not.toBe(userB);
+    expect(rpc).toHaveBeenCalledWith("food_catalog_queue_account_deletion", expect.objectContaining({
+      p_user_id: userA,
+      p_request_id: null,
+      p_impact_version: "2026-07-1"
+    }));
+    expect(rpc).not.toHaveBeenCalledWith("food_catalog_begin_account_deletion", expect.anything());
+    expect(calls.find((call) => call.table === "privacy_requests" && call.action === "insert")).toBeUndefined();
+    expect(calls.find((call) => call.table === "account_deletion_jobs" && call.action === "insert")).toBeUndefined();
+    expect(calls.find((call) => call.table === "chatgpt_connections" && call.action === "update")).toBeUndefined();
+    expect(rpc.mock.calls.find(([name]) => name === "food_catalog_queue_account_deletion")?.[1]).not.toMatchObject({ p_user_id: userB });
   });
 });
