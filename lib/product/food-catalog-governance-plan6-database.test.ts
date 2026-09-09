@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const MIGRATION = "supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql";
 const VERIFIER = "supabase/verification/food-catalog-governance-control-plane.sql";
 const LEDGER = "supabase/migration-ledger.json";
+const EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
 
 function read(path: string) { return readFileSync(path, "utf8"); }
 
@@ -89,13 +90,19 @@ describe("Food Catalog Plan 6 database authority", () => {
     expect(sql).not.toMatch(/(?:insert\s+into|update|delete\s+from)\s+public\.food_catalog_search_documents/);
   });
 
-  it("records Plan 6 as pending/unapplied in the repository migration ledger", () => {
+  it("records applied Plan 6 under drift review while the forward exactness correction remains pending", () => {
     const ledger = JSON.parse(read(LEDGER)) as { pendingCount: number; unresolvedCount: number; historyRepair: { state: string }; entries: Array<Record<string, unknown>> };
     const entry = ledger.entries.find((item) => item.localFile === "20260908100000_food_catalog_governance_control_plane.sql");
-    expect(entry).toEqual(expect.objectContaining({ state: "pending" }));
-    expect(entry).not.toHaveProperty("productionVersion");
+    const correction = ledger.entries.find((item) => item.localFile === EXACTNESS_CORRECTION);
+    expect(entry).toEqual(expect.objectContaining({
+      state: "ledger_drift_review",
+      productionVersion: "20260909081402",
+      productionName: "food_catalog_governance_control_plane",
+    }));
+    expect(correction).toEqual(expect.objectContaining({ state: "pending" }));
+    expect(correction).not.toHaveProperty("productionVersion");
     expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(2);
     expect(ledger.historyRepair.state).toBe("pending");
   });
 
