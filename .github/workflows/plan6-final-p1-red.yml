@@ -1,5 +1,5 @@
 # Human-authored staging trigger only; successful finalizer removes this temporary workflow.
-# Re-trigger after making the final-P1 concurrency fixture cleanup repeatable.
+# Re-trigger after making both final-P1 and prior-five concurrency fixture cleanup repeatable.
 name: Plan 6 Final P1 RED
 
 on:
