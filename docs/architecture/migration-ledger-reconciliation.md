@@ -418,3 +418,9 @@ The compatibility marker remained unchanged and Activity Catalog was not modifie
 Repository migration `20260804174500_fix_profiles_update_policy_recursion.sql` was applied exactly once as generated Production identity `20260804180932_fix_profiles_update_policy_recursion`.
 
 The repository filename and Production version differ, so the machine ledger preserves the immutable mapping as `applied_version_alias`. Do not replay it.
+
+## Plan 6 production exactness reconciliation
+
+- `20260908100000_food_catalog_governance_control_plane.sql`: `ledger_drift_review`; applied once to Plaivra Production as `20260909081402_food_catalog_governance_control_plane`. Post-apply exactness verification found one GTIN UPDATE serialization helper divergence introduced during transfer. Do not replay.
+- `20260909083000_food_catalog_governance_gtin_lock_exactness.sql`: `pending`; forward-only correction that restores the reviewed canonical Food-lock helper path. No Production identity until explicit post-merge apply.
+- No Food population, provider ingestion, activation, Catalog Generation creation/promotion, current-pointer movement, SearchDocument mutation, runtime cutover, deployment, or Activity Catalog mutation is authorized by this reconciliation.
