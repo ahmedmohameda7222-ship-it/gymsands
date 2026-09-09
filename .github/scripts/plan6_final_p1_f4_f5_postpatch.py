@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Preserve prior report-account authority after the F4/F5 replacement function is installed.
 path = Path("supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql")
 text = path.read_text()
 old = """  perform private.food_catalog_lock_account_purge(v_user);
@@ -19,4 +20,41 @@ new = """  -- Preserve the canonical active-member helper: it takes the account-
 if text.count(old) != 1:
     raise RuntimeError(f"expected one patched member-authority block, found {text.count(old)}")
 path.write_text(text.replace(old, new, 1))
-print("Preserved prior active-member and exact-policy authority in F4/F5 report patch.")
+
+# The final-P1 concurrency verifier runs after the complete registered DB verification
+# suite, so a hard-coded account_deletion_jobs primary key can legitimately collide with
+# fixture state left by an earlier verifier. Generate a fresh job identity per verifier
+# process and remove it explicitly during cleanup; the race semantics remain unchanged.
+concurrency_path = Path("scripts/test-food-catalog-governance-plan6-final-p1-concurrency.mjs")
+concurrency = concurrency_path.read_text()
+import_anchor = 'import { spawn, spawnSync } from "node:child_process";\n'
+if concurrency.count(import_anchor) != 1:
+    raise RuntimeError("expected node:child_process import anchor once")
+concurrency = concurrency.replace(
+    import_anchor,
+    import_anchor + 'import { randomUUID } from "node:crypto";\n',
+    1,
+)
+constant_anchor = 'const REPORT_FOOD = "6d000000-0000-4000-8000-000000000202";\n'
+if concurrency.count(constant_anchor) != 1:
+    raise RuntimeError("expected REPORT_FOOD constant anchor once")
+concurrency = concurrency.replace(
+    constant_anchor,
+    constant_anchor + 'const OWNER_DELETE_JOB = randomUUID();\n',
+    1,
+)
+fixed_job_id = "6d000000-0000-4000-8000-000000000550"
+if concurrency.count(fixed_job_id) != 2:
+    raise RuntimeError(f"expected hard-coded owner deletion job ID twice, found {concurrency.count(fixed_job_id)}")
+concurrency = concurrency.replace(fixed_job_id, "${OWNER_DELETE_JOB}")
+cleanup_anchor = "    delete from public.account_deletion_jobs where id='6d000000-0000-4000-8000-000000000601';\n"
+if concurrency.count(cleanup_anchor) != 1:
+    raise RuntimeError("expected report-purge deletion-job cleanup anchor once")
+concurrency = concurrency.replace(
+    cleanup_anchor,
+    "    delete from public.account_deletion_jobs where id='${OWNER_DELETE_JOB}';\n" + cleanup_anchor,
+    1,
+)
+concurrency_path.write_text(concurrency)
+
+print("Preserved prior active-member/exact-policy authority and collision-safe final-P1 deletion fixture identity.")
