@@ -1,5 +1,5 @@
 name: Phase A Diff Validation
-# Temporary Plan 6 final-P1 finalizer authority; restored before product persistence.
+# Temporary Plan 6 final-P1 finalizer authority after fail-closed pending-ledger correction; restored before product persistence.
 
 on:
   pull_request:
