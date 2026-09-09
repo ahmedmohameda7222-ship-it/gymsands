@@ -70,6 +70,13 @@ select pg_temp.plan6_deletion_resumability_assert(
   'job-bound begin did not establish irreversible deletion state'
 );
 
+-- The maintenance worker advances the already-disabled account from the
+-- begin checkpoint to the canonical deletion-processing state before purge.
+-- The legacy reviewed purge graph requires this exact state and non-null disable time.
+update public.account_access_states
+set state='deletion_processing',reason_code='account_deletion_in_progress',disabled_at=coalesce(disabled_at,clock_timestamp()),updated_at=clock_timestamp()
+where user_id=:'member_id'::uuid;
+
 update public.account_deletion_jobs
 set state='processing',stage='deleting_database',attempt_count=6,locked_at=clock_timestamp(),created_at='2000-01-01T00:00:00Z'
 where id=((:'queued')::jsonb->>'jobId')::uuid;
@@ -124,7 +131,7 @@ select public.food_catalog_begin_account_deletion(
 reset role;
 
 select pg_temp.plan6_deletion_resumability_assert(
-  (select state='deletion_pending' from public.account_access_states where user_id=:'member_id'::uuid)
+  (select state='deletion_processing' from public.account_access_states where user_id=:'member_id'::uuid)
   and exists(
     select 1 from public.account_deletion_jobs
     where id=((:'queued')::jsonb->>'jobId')::uuid and state='processing' and stage='deleting_auth'
