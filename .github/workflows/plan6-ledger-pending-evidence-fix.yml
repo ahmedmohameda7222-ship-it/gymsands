@@ -23,32 +23,16 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          files = [
-              Path('.github/scripts/plan6_final_p1_apply.py'),
-              Path('.github/scripts/plan6_final_p1_postpatch.py'),
-          ]
+          files = [Path('.github/scripts/plan6_final_p1_apply.py'), Path('.github/scripts/plan6_final_p1_postpatch.py')]
+          old = '        entry["repositorySha256"] = new_hash\n        updated += 1'
+          new = '        # Pending Plan 6 remains intentionally unattested until a frozen committed artifact exists.\n        entry.pop("evidenceCommit", None)\n        entry.pop("repositorySha256", None)\n        entry.pop("repositoryGitBlob", None)\n        updated += 1'
           for p in files:
               s = p.read_text()
-              old = '        entry["repositorySha256"] = new_hash\n        updated += 1'
-              new = '''        # Pending/unapplied repository migrations are intentionally not Git-attested
-        # by the Production reconciliation ledger. Durable evidence requires the
-        # complete audited commit + SHA-256 + Git-blob tuple, which only makes sense
-        # after a frozen committed artifact exists. Keep Plan 6 pending/unattested.
-        entry.pop("evidenceCommit", None)
-        entry.pop("repositorySha256", None)
-        entry.pop("repositoryGitBlob", None)
-        updated += 1'''
               if s.count(old) != 1:
                   raise SystemExit(f'{p}: expected one pending-ledger hash assignment, found {s.count(old)}')
               s = s.replace(old, new, 1)
-              s = s.replace(
-                  '# Plan 6 is pending/unapplied, so only its pending repository hash is refreshed.',
-                  '# Plan 6 is pending/unapplied, so it remains intentionally unattested in the Production ledger.',
-              )
-              s = s.replace(
-                  '# postpatch changes the pending Plan 6 migration bytes, so refresh its pending\n# repository hash only after all in-place migration edits are complete.',
-                  '# Plan 6 remains pending/unapplied. Do not create partial Git evidence before\n# the final bytes exist as a committed, auditable artifact.',
-              )
+              s = s.replace('# Plan 6 is pending/unapplied, so only its pending repository hash is refreshed.', '# Plan 6 is pending/unapplied, so it remains intentionally unattested in the Production ledger.')
+              s = s.replace('# postpatch changes the pending Plan 6 migration bytes, so refresh its pending\n# repository hash only after all in-place migration edits are complete.', '# Plan 6 remains pending/unapplied; do not create partial Git evidence before final committed bytes exist.')
               p.write_text(s)
           PY
           rm -f .github/workflows/plan6-ledger-pending-evidence-fix.yml
