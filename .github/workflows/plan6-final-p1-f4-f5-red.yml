@@ -1,0 +1,27 @@
+# Temporary causal RED workflow; removed by successful F4/F5 finalizer.
+name: Plan 6 Final P1 F4 F5 RED
+
+on:
+  push:
+    branches:
+      - feat/food-catalog-governance-plan6
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract-red:
+    if: github.event.head_commit.message == 'chore(plan6): trigger f4 f5 causal red'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: P1-F4/F5 source contracts must fail before the fix
+        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/product/food-catalog-governance-plan6-final-p1-f4-f5-rereview.test.ts
