@@ -1,0 +1,50 @@
+name: Dependency Relock Once
+
+on:
+  push:
+    branches:
+      - fix/plan6-production-exactness
+
+permissions:
+  contents: read
+
+jobs:
+  relock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact pushed head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Generate minimal security relock
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --ignore-scripts --save-exact next@16.3.4
+          npm install --package-lock-only --ignore-scripts --save-dev --save-exact sharp@0.35.4
+          npm update baseline-browser-mapping --package-lock-only --ignore-scripts
+          node - <<'NODE'
+          const p = require('./package.json');
+          if (p.dependencies.next !== '16.3.4') throw new Error(`unexpected next ${p.dependencies.next}`);
+          if (p.devDependencies.sharp !== '0.35.4') throw new Error(`unexpected sharp ${p.devDependencies.sharp}`);
+          if (p.dependencies.react !== '^19.2.0') throw new Error(`react changed: ${p.dependencies.react}`);
+          if (p.dependencies['react-dom'] !== '^19.2.0') throw new Error(`react-dom changed: ${p.dependencies['react-dom']}`);
+          NODE
+          mkdir -p ci-reports/dependency-relock
+          cp package.json package-lock.json ci-reports/dependency-relock/
+          npm ls next sharp baseline-browser-mapping --all > ci-reports/dependency-relock/npm-ls.txt
+      - name: Run exact locked dependency audit threshold
+        run: npm audit --package-lock-only --omit=dev --audit-level=moderate
+      - name: Upload generated dependency authority
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-relock-${{ github.sha }}
+          path: ci-reports/dependency-relock/
+          if-no-files-found: error
+          retention-days: 2
