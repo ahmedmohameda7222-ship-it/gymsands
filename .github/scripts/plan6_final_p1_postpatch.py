@@ -179,8 +179,7 @@ replace_once_file(
     "Plan 6 authority rereview live human fixture marker",
 )
 
-# postpatch changes the pending Plan 6 migration bytes, so refresh its pending
-# repository hash only after all in-place migration edits are complete.
+# Plan 6 remains pending/unapplied; do not create partial Git evidence before final committed bytes exist.
 ledger = json.loads(ledger_path.read_text())
 new_hash = hashlib.sha256(migration.read_bytes()).hexdigest()
 updated = 0
@@ -188,7 +187,10 @@ for entry in ledger.get("entries", []):
     if entry.get("localFile") == "20260908100000_food_catalog_governance_control_plane.sql":
         if entry.get("state") != "pending":
             raise SystemExit(f"Plan 6 ledger entry is not pending: {entry.get('state')}")
-        entry["repositorySha256"] = new_hash
+        # Pending Plan 6 remains intentionally unattested until a frozen committed artifact exists.
+        entry.pop("evidenceCommit", None)
+        entry.pop("repositorySha256", None)
+        entry.pop("repositoryGitBlob", None)
         updated += 1
 if updated != 1:
     raise SystemExit(f"expected one pending Plan 6 ledger entry, found {updated}")
