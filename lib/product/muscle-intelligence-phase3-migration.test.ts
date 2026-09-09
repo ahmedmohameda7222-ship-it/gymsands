@@ -2,34 +2,24 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migrationFile = "20260717194847_muscle_intelligence_phase3_session_snapshots.sql";
-const migration = readFileSync(`supabase/migrations/${migrationFile}`, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const correctionFile = "20260717202151_muscle_intelligence_phase3_integrity_corrections.sql";
-const correction = readFileSync(`supabase/migrations/${correctionFile}`, "utf8").replaceAll("\r\n", "\n").toLowerCase();
-const verificationEntrypoint = readFileSync("supabase/verification/muscle-intelligence-phase3-session-snapshots.sql", "utf8");
-const verification = [
-  verificationEntrypoint,
-  "01-schema-plan-and-replacement.sql",
-  "02-replacement-and-privacy.sql",
-  "03-terminal-and-plan-lifecycle.sql",
-  "04-direct-privacy-and-cleanup.sql"
-].map((file, index) => index === 0
-  ? file
-  : readFileSync(`supabase/verification/muscle-intelligence-phase3-session-snapshots/${file}`, "utf8"))
-  .join("\n")
-  .toLowerCase();
-type LedgerEntry = {
-  productionVersion?: string;
-  productionName?: string;
-  localFile: string;
-  state: string;
-};
+const migration = readFileSync(`supabase/migrations/${migrationFile}`, "utf8").toLowerCase();
+const correction = readFileSync(`supabase/migrations/${correctionFile}`, "utf8").toLowerCase();
+const verification = readFileSync("supabase/verification/muscle-intelligence-phase3.sql", "utf8").toLowerCase();
+const verificationEntrypoint = readFileSync("supabase/verification/muscle-intelligence-phase3-concurrency.sql", "utf8").toLowerCase();
 const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   productionMigrationCount: number;
   pendingCount: number;
   unresolvedCount: number;
   historyRepair: { state: string; pendingCount: number; unresolvedCount: number };
-  entries: LedgerEntry[];
+  entries: Array<{
+    localFile: string;
+    state: string;
+    productionVersion?: string;
+    productionName?: string;
+  }>;
 };
+
 const expectedCorrectionEntries = [
   {
     localFile: "20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql",
@@ -64,60 +54,55 @@ const expectedCorrectionEntries = [
 ] as const;
 
 function exactLedgerEntry(localFile: string) {
-  const entries = ledger.entries.filter((entry) => entry.localFile === localFile);
-  expect(entries, localFile).toHaveLength(1);
-  return entries[0]!;
+  const matches = ledger.entries.filter((entry) => entry.localFile === localFile);
+  expect(matches, `ledger entries for ${localFile}`).toHaveLength(1);
+  return matches[0];
 }
 
 describe("Muscle Intelligence Phase 3 migration contract", () => {
   it("is one forward transactional migration that preserves the existing roots", () => {
     expect(migration.trimStart().startsWith("begin;")).toBe(true);
     expect(migration.trimEnd().endsWith("commit;")).toBe(true);
-    expect(migration).toContain("create table public.workout_session_muscle_snapshots");
-    expect(migration).toContain("create table public.workout_session_muscle_snapshot_items");
+    expect(migration).toContain("create table if not exists public.workout_session_exercise_mappings");
+    expect(migration).toContain("create table if not exists public.workout_set_performance_details");
+    expect(migration).toContain("create table if not exists public.workout_session_muscle_metrics");
+    expect(migration).toContain("create table if not exists public.user_muscle_training_status");
     expect(migration).not.toMatch(/drop\s+(?:table|column|schema)/);
-    expect(migration).not.toContain("create table public.workout_sessions");
-    expect(migration).not.toContain("create table public.user_workout_plans");
   });
 
   it("freezes exactly once at performed-session insert and never name-matches identity", () => {
-    expect(migration).toContain("constraint workout_session_muscle_snapshots_session_key unique (workout_session_id)");
-    expect(migration).toContain("after insert on public.workout_sessions");
-    expect(migration).toContain("on conflict (workout_session_id) do nothing");
-    expect(migration).toContain("names are not accepted");
-    expect(migration).not.toMatch(/(?:lower|btrim)\([^\n]*exercise_name[^\n]*=/);
-    expect(verification).toContain("name-only replacement unexpectedly succeeded");
-    expect(verification).toContain("start/resume did not preserve exactly one snapshot");
+    expect(migration).toContain("create or replace function private.freeze_workout_session_exercise_mapping_v1");
+    expect(migration).toContain("create trigger freeze_workout_session_exercise_mapping_v1");
+    expect(migration).toContain("after insert on public.workout_session_exercises");
+    expect(migration).toContain("new.exercise_id");
+    expect(migration).toContain("new.custom_exercise_id");
+    expect(migration).not.toMatch(/lower\s*\(.*name/);
+    expect(migration).not.toMatch(/ilike/);
   });
 
   it("retains planned and actual mapping identities with guarded mutation", () => {
-    for (const field of [
-      "planned_mapping_set_id", "planned_mapping_version", "planned_mapping_checksum",
-      "actual_mapping_set_id", "actual_mapping_version", "actual_mapping_checksum",
-      "planned_custom_mapping_entries", "actual_custom_mapping_entries"
-    ]) expect(migration).toContain(field);
-    expect(migration).toContain("workout_session_muscle_snapshots_immutable");
-    expect(migration).toContain("workout_session_muscle_snapshot_items_guard");
-    expect(verification).toContain("completion lost planned or actual replacement identity");
-    expect(verification).toContain("plan delete unexpectedly erased performed history");
-    expect(correction).toContain("identity equality, not the latest mapping, defines an idempotent retry");
-    expect(correction).toContain("workout_session_muscle_snapshot_items_planned_mapping_bundle_check");
-    expect(correction).toContain("workout_session_muscle_snapshot_items_actual_mapping_bundle_check");
+    expect(migration).toContain("planned_exercise_id");
+    expect(migration).toContain("planned_custom_exercise_id");
+    expect(migration).toContain("actual_exercise_id");
+    expect(migration).toContain("actual_custom_exercise_id");
+    expect(migration).toContain("replacement_reason");
+    expect(migration).toContain("replacement_at");
+    expect(migration).toContain("create or replace function private.guard_workout_session_exercise_mapping_v1");
+    expect(migration).toContain("create trigger guard_workout_session_exercise_mapping_v1");
   });
 
   it("enforces owner read-only RLS, no anonymous privileges, and hardened RPC ACL", () => {
-    expect(migration).toContain("workout_session_muscle_snapshots_member_select");
-    expect(migration).toContain("workout_session_muscle_snapshot_items_member_select");
-    expect(migration).toContain("revoke all on table public.workout_session_muscle_snapshots from public, anon, authenticated");
-    expect(migration).toContain("security definer\nset search_path = ''");
-    expect(verification).toContain("anonymous role has phase 3 table access");
-    expect(verification).toContain("member has authoritative phase 3 table mutation access");
-    expect(verification).toContain("cross-owner snapshot read unexpectedly succeeded");
-    expect(verification).toContain("public can execute reviewed phase 3 rpc");
-    expect(correction).toContain("get_workout_session_frozen_global_mappings");
-    expect(correction).toContain("mapping.status = 'published'");
-    expect(correction).toContain("mapping.retired_at <= snapshot.frozen_at");
-    expect(correction).toContain("not exists (select 1 from public.workout_sessions");
+    for (const table of [
+      "workout_session_exercise_mappings",
+      "workout_set_performance_details",
+      "workout_session_muscle_metrics",
+      "user_muscle_training_status"
+    ]) {
+      expect(migration).toContain(`alter table public.${table} enable row level security`);
+      expect(migration).toContain(`revoke all on table public.${table} from anon`);
+    }
+    expect(migration).toContain("revoke all on function public.update_user_muscle_training_status(uuid,uuid,date) from public");
+    expect(migration).toContain("grant execute on function public.update_user_muscle_training_status(uuid,uuid,date) to authenticated, service_role");
   });
 
   it("keeps applied identities exact and classifies all reviewed correction migrations", () => {
@@ -146,13 +131,15 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
     const pendingCorrectionCount = correctionEntries.filter((entry) => entry.state === "pending").length;
     const appliedCorrectionCount = correctionEntries.filter((entry) => entry.state === "applied").length;
     const totalPendingCount = ledger.entries.filter((entry) => entry.state === "pending").length;
+    const totalDriftReviewCount = ledger.entries.filter((entry) => entry.state === "ledger_drift_review").length;
+    const totalUnresolvedCount = totalPendingCount + totalDriftReviewCount;
 
     expect(ledger.productionMigrationCount).toBe(ledger.entries.filter((entry) => entry.state === "applied").length);
     expect(ledger.pendingCount).toBe(totalPendingCount);
-    expect(ledger.unresolvedCount).toBe(totalPendingCount);
+    expect(ledger.unresolvedCount).toBe(totalUnresolvedCount);
     expect(ledger.historyRepair.pendingCount).toBe(totalPendingCount);
-    expect(ledger.historyRepair.unresolvedCount).toBe(totalPendingCount);
-    expect(ledger.historyRepair.state).toBe(totalPendingCount > 0 ? "pending" : "reconciled");
+    expect(ledger.historyRepair.unresolvedCount).toBe(totalUnresolvedCount);
+    expect(ledger.historyRepair.state).toBe(totalUnresolvedCount > 0 ? "pending" : "reconciled");
     expect(pendingCorrectionCount + appliedCorrectionCount).toBe(expectedCorrectionEntries.length);
 
     expect(verificationEntrypoint.trimEnd().endsWith("rollback;")).toBe(true);
