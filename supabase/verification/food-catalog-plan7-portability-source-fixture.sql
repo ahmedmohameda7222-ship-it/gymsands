@@ -273,9 +273,16 @@ insert into public.food_personal_override_operations(
 );
 
 -- Fixture self-checks are part of the source proof, not certification.
+-- psql variables are intentionally not used inside this dollar-quoted block: psql
+-- does not interpolate :'name' tokens inside dollar-quoted PL/pgSQL bodies.
 do $plan7_fixture$
 begin
-  if not exists(select 1 from public.food_catalog_current_generation where singleton_key and current_generation_id=:'generation_current'::uuid and pointer_revision=1) then
+  if not exists(
+    select 1 from public.food_catalog_current_generation
+    where singleton_key
+      and current_generation_id='71000000-0000-4000-8000-000000000901'::uuid
+      and pointer_revision=1
+  ) then
     raise exception 'Plan7 source fixture current pointer was not established.';
   end if;
   if not exists(select 1 from public.food_taxonomy_nodes where node_code='plan7_runtime_protein')
@@ -286,16 +293,21 @@ begin
     select 1
     from public.food_personal_overrides current_override
     join public.food_personal_override_revisions revision on revision.id=current_override.current_revision_id
-    where current_override.user_id=:'owner_uid'::uuid and revision.note='private-plan7-note'
+    where current_override.user_id='71000000-0000-4000-8000-000000000001'::uuid
+      and revision.note='private-plan7-note'
   ) then
     raise exception 'Plan7 source fixture protected personal authority is missing.';
   end if;
   if not exists(
     select 1
     from public.food_ingestion_batches batch
-    join public.food_ingestion_runs dry_run on dry_run.id=:'ingestion_dry_run'::uuid and dry_run.batch_id=batch.id
-    join public.food_ingestion_reconciliations reconciliation on reconciliation.run_id=dry_run.id and reconciliation.batch_id=batch.id
-    where batch.id=:'ingestion_batch'::uuid
+    join public.food_ingestion_runs dry_run
+      on dry_run.id='71000000-0000-4000-8000-000000000a12'::uuid
+     and dry_run.batch_id=batch.id
+    join public.food_ingestion_reconciliations reconciliation
+      on reconciliation.run_id=dry_run.id
+     and reconciliation.batch_id=batch.id
+    where batch.id='71000000-0000-4000-8000-000000000a01'::uuid
       and batch.review_state='approved' and batch.approved_at is not null
       and lower(batch.manifest_content_checksum_sha256)=repeat('a',64)
       and lower(batch.semantic_identity_checksum_sha256)=repeat('b',64)
@@ -306,7 +318,7 @@ begin
   end if;
   if not exists(
     select 1 from public.food_ingestion_runs
-    where id=:'ingestion_run'::uuid
+    where id='71000000-0000-4000-8000-000000000a11'::uuid
       and execution_mode='production' and status='running'
       and lease_owner='plan7-worker' and lease_token is not null and lease_epoch=3
       and lease_acquired_at is not null and lease_heartbeat_at is not null and lease_expires_at is not null
