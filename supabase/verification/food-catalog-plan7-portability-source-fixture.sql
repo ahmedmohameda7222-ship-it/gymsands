@@ -35,6 +35,8 @@
 \set generation_event '71000000-0000-4000-8000-000000000921'
 \set ingestion_batch '71000000-0000-4000-8000-000000000a01'
 \set ingestion_run '71000000-0000-4000-8000-000000000a11'
+\set ingestion_dry_run '71000000-0000-4000-8000-000000000a12'
+\set ingestion_reconciliation '71000000-0000-4000-8000-000000000a13'
 \set override_revision '71000000-0000-4000-8000-000000000b01'
 \set override_operation '71000000-0000-4000-8000-000000000b11'
 \set serving_lineage '71000000-0000-4000-8000-000000000c01'
@@ -192,14 +194,38 @@ set current_generation_id=:'generation_current',current_event_id=:'generation_ev
     current_validation_report_id=:'validation_report',pointer_revision=1,updated_at='2026-09-10T18:18:00Z'
 where singleton_key=true;
 
--- One valid live Production ingestion lease proves restore-time neutralization without losing durable audit/fencing identity.
+-- Model the real ingestion authority lifecycle before creating a live Production lease:
+-- prepared batch -> completed dry-run -> reconciled evidence -> reviewed -> approved -> Production running.
 insert into public.food_ingestion_batches(
   id,provider,dataset_name,source_version,license_name,source_checksum_sha256,importer_version,
-  config_checksum_sha256,manifest_content_checksum_sha256,review_state,created_at,updated_at
+  config_checksum_sha256,manifest_content_checksum_sha256,semantic_identity_checksum_sha256,review_state,created_at,updated_at
 ) values(
-  :'ingestion_batch','plan7-fixture','portable-dataset','v1','Plan7 Fixture License',repeat('8',64),'plan7-fixture-v1',repeat('9',64),repeat('a',64),'prepared',
-  '2026-09-10T18:19:00Z','2026-09-10T18:19:00Z'
+  :'ingestion_batch','plan7-fixture','portable-dataset','v1','Plan7 Fixture License',repeat('8',64),'plan7-fixture-v1',
+  repeat('9',64),repeat('a',64),repeat('b',64),'prepared','2026-09-10T18:19:00Z','2026-09-10T18:19:00Z'
 );
+insert into public.food_ingestion_runs(
+  id,batch_id,execution_mode,attempt_number,status,started_at,completed_at,manifest_content_checksum_sha256,
+  observed_input_count,observed_accepted_count,observed_rejected_count,observed_created_count,observed_matched_count,
+  observed_possible_duplicate_count,observed_quarantine_count,created_at,updated_at
+) values(
+  :'ingestion_dry_run',:'ingestion_batch','dry_run',1,'completed','2026-09-10T18:19:05Z','2026-09-10T18:19:10Z',repeat('a',64),
+  0,0,0,0,0,0,0,'2026-09-10T18:19:05Z','2026-09-10T18:19:10Z'
+);
+insert into public.food_ingestion_reconciliations(
+  id,run_id,batch_id,manifest_content_checksum_sha256,semantic_identity_checksum_sha256,
+  expected_counts,observed_counts,mismatch_codes,reconciled,created_at
+) values(
+  :'ingestion_reconciliation',:'ingestion_dry_run',:'ingestion_batch',repeat('a',64),repeat('b',64),
+  '{"input":0,"accepted":0,"rejected":0,"matched":0,"created":0,"possibleDuplicate":0,"quarantine":0}'::jsonb,
+  '{"input":0,"accepted":0,"rejected":0,"matched":0,"created":0,"possibleDuplicate":0,"quarantine":0}'::jsonb,
+  '{}'::text[],true,'2026-09-10T18:19:15Z'
+);
+update public.food_ingestion_batches
+set review_state='reviewed',reviewed_at='2026-09-10T18:19:20Z',updated_at='2026-09-10T18:19:20Z'
+where id=:'ingestion_batch'::uuid;
+update public.food_ingestion_batches
+set review_state='approved',approved_at='2026-09-10T18:19:30Z',approval_reference='fixture://plan7/ingestion-approval',updated_at='2026-09-10T18:19:30Z'
+where id=:'ingestion_batch'::uuid;
 insert into public.food_ingestion_runs(
   id,batch_id,execution_mode,attempt_number,status,started_at,manifest_content_checksum_sha256,
   created_at,updated_at,lease_owner,lease_token,lease_epoch,lease_acquired_at,lease_heartbeat_at,lease_expires_at
@@ -263,6 +289,20 @@ begin
     where current_override.user_id=:'owner_uid'::uuid and revision.note='private-plan7-note'
   ) then
     raise exception 'Plan7 source fixture protected personal authority is missing.';
+  end if;
+  if not exists(
+    select 1
+    from public.food_ingestion_batches batch
+    join public.food_ingestion_runs dry_run on dry_run.id=:'ingestion_dry_run'::uuid and dry_run.batch_id=batch.id
+    join public.food_ingestion_reconciliations reconciliation on reconciliation.run_id=dry_run.id and reconciliation.batch_id=batch.id
+    where batch.id=:'ingestion_batch'::uuid
+      and batch.review_state='approved' and batch.approved_at is not null
+      and lower(batch.manifest_content_checksum_sha256)=repeat('a',64)
+      and lower(batch.semantic_identity_checksum_sha256)=repeat('b',64)
+      and dry_run.execution_mode='dry_run' and dry_run.status='completed'
+      and reconciliation.reconciled
+  ) then
+    raise exception 'Plan7 source fixture approved ingestion authority was not established.';
   end if;
   if not exists(
     select 1 from public.food_ingestion_runs
