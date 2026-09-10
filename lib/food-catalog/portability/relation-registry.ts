@@ -5,6 +5,10 @@ import type {
 } from "./export-contract";
 
 export type SeedOwnership = "MIGRATION_OWNED" | "PORTABLE_OWNED" | "NONE";
+export type RestoreOwnership =
+  | "UNIFORM"
+  | "MIXED_KEYED_PRESEEDED_RUNTIME"
+  | "MUTABLE_PRESEEDED_SINGLETON";
 
 export type PortableRelationRule = Readonly<{
   segment: string;
@@ -15,6 +19,7 @@ export type PortableRelationRule = Readonly<{
   requiredProfile: PortableExportProfile;
   protected: boolean;
   seedOwnership: SeedOwnership;
+  restoreOwnership: RestoreOwnership;
   transientNeutralize?: readonly string[];
   restoreLast?: boolean;
   operationallyDisabledAfterRestore?: boolean;
@@ -37,6 +42,7 @@ function rule(
     requiredProfile: options.requiredProfile ?? "CORE_PORTABLE",
     protected: options.protected ?? false,
     seedOwnership: options.seedOwnership ?? "NONE",
+    restoreOwnership: options.restoreOwnership ?? "UNIFORM",
     transientNeutralize: options.transientNeutralize ? Object.freeze([...options.transientNeutralize]) : undefined,
     restoreLast: options.restoreLast,
     operationallyDisabledAfterRestore: options.operationallyDisabledAfterRestore,
@@ -63,10 +69,22 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
   rule("food_barcodes", A, "RESTORE_EXACT", ["id"]),
   rule("food_market_relevance", C, "RESTORE_EXACT", ["id"]),
   rule("food_taxonomy_namespaces", A, "VALIDATE_PRESEEDED", ["namespace_code"], { seedOwnership: "MIGRATION_OWNED" }),
-  rule("food_taxonomy_nodes", A, "VALIDATE_PRESEEDED", ["node_code"], { seedOwnership: "MIGRATION_OWNED" }),
+  rule("food_taxonomy_nodes", A, "VALIDATE_PRESEEDED", ["node_code"], {
+    seedOwnership: "MIGRATION_OWNED",
+    restoreOwnership: "MIXED_KEYED_PRESEEDED_RUNTIME",
+    note: "Existing Git-migration keys validate exactly; source-only runtime taxonomy nodes restore exactly.",
+  }),
   rule("food_taxonomy_assignments", A, "RESTORE_EXACT", ["id"]),
-  rule("market_scopes", A, "VALIDATE_PRESEEDED", ["scope_code"], { seedOwnership: "MIGRATION_OWNED" }),
-  rule("market_scope_memberships", A, "VALIDATE_PRESEEDED", ["child_scope_code", "parent_scope_code"], { seedOwnership: "MIGRATION_OWNED" }),
+  rule("market_scopes", A, "VALIDATE_PRESEEDED", ["scope_code"], {
+    seedOwnership: "MIGRATION_OWNED",
+    restoreOwnership: "MIXED_KEYED_PRESEEDED_RUNTIME",
+    note: "Existing Git-migration keys validate exactly; source-only runtime scope extensions restore exactly.",
+  }),
+  rule("market_scope_memberships", A, "VALIDATE_PRESEEDED", ["child_scope_code", "parent_scope_code"], {
+    seedOwnership: "MIGRATION_OWNED",
+    restoreOwnership: "MIXED_KEYED_PRESEEDED_RUNTIME",
+    note: "Existing Git-migration keys validate exactly; source-only runtime membership extensions restore exactly.",
+  }),
   rule("food_market_assignments", A, "RESTORE_EXACT", ["id"]),
   rule("food_verification_assertions", A, "RESTORE_EXACT", ["id"]),
   rule("food_merge_events", H, "RESTORE_EXACT", ["id"]),
@@ -90,6 +108,7 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
   rule("food_catalog_control_operations", H, "RESTORE_EXACT", ["operation_id"]),
   rule("food_catalog_current_generation", A, "VALIDATE_PRESEEDED", ["singleton_key"], {
     seedOwnership: "MIGRATION_OWNED",
+    restoreOwnership: "MUTABLE_PRESEEDED_SINGLETON",
     restoreLast: true,
   }),
 
@@ -119,8 +138,20 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
 
   rule("food_catalog_governance_principals", PA, "RESTORE_EXACT", ["id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_catalog_governance_capability_assignments", PH, "RESTORE_EXACT", ["id"], { requiredProfile: "FULL_DR", protected: true }),
-  rule("food_catalog_governance_policy_versions", PA, "VALIDATE_PRESEEDED", ["policy_version"], { requiredProfile: "FULL_DR", protected: true, seedOwnership: "MIGRATION_OWNED" }),
-  rule("food_catalog_governance_policy_pointer", PA, "VALIDATE_PRESEEDED", ["singleton"], { requiredProfile: "FULL_DR", protected: true, seedOwnership: "MIGRATION_OWNED" }),
+  rule("food_catalog_governance_policy_versions", PA, "VALIDATE_PRESEEDED", ["policy_version"], {
+    requiredProfile: "FULL_DR",
+    protected: true,
+    seedOwnership: "MIGRATION_OWNED",
+    restoreOwnership: "MIXED_KEYED_PRESEEDED_RUNTIME",
+    note: "Migration-created policy versions validate; runtime-created policy versions restore exactly.",
+  }),
+  rule("food_catalog_governance_policy_pointer", PA, "VALIDATE_PRESEEDED", ["singleton"], {
+    requiredProfile: "FULL_DR",
+    protected: true,
+    seedOwnership: "MIGRATION_OWNED",
+    restoreOwnership: "MUTABLE_PRESEEDED_SINGLETON",
+    note: "Singleton identity is migration-owned while approved current policy pointer fields are portable mutable state.",
+  }),
   rule("food_catalog_correction_cases", PH, "RESTORE_EXACT", ["id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_catalog_correction_reports", PH, "RESTORE_EXACT", ["id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_catalog_correction_report_member_payloads", PH, "RESTORE_EXACT", ["report_id"], { requiredProfile: "FULL_DR", protected: true }),
