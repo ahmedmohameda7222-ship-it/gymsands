@@ -6,12 +6,13 @@ on:
     paths:
       - "lib/food-catalog/portability/**"
       - "lib/privacy/**"
-      - "scripts/*food-catalog-portable*"
-      - "scripts/*food-catalog-restore*"
+      - "scripts/*food-catalog*"
       - "scripts/*restored-search*"
+      - "supabase/verification/food-catalog-plan7-portability-*.sql"
       - "test/fixtures/food-catalog/**"
       - "docs/architecture/food-catalog-portability-runbook.md"
       - ".github/workflows/food-catalog-portable-export-qa.yml"
+      - ".github/workflows/food-catalog-plan7-integrated-full-dr.yml"
   workflow_dispatch:
 
 permissions:
@@ -73,9 +74,13 @@ jobs:
       - name: Focused Task 8 contracts
         run: |
           set -euo pipefail
-          npx vitest run lib/food-catalog/portability/search-restore-verifier.test.ts
-          node --test scripts/verify-food-catalog-restored-search.test.mjs
-      - name: Generate exact-head Task 8 fixture evidence
+          npx vitest run lib/food-catalog/portability/search-restore-verifier.test.ts lib/food-catalog/portability/certification-boundary.test.ts
+          node --test \
+            scripts/verify-food-catalog-restored-search.test.mjs \
+            scripts/verify-food-catalog-integrated-restore.test.mjs \
+            scripts/capture-food-catalog-restored-search-runtime.test.mjs \
+            scripts/certify-food-catalog-restore.test.mjs
+      - name: Generate exact-head Task 8 regression evidence
         shell: bash
         run: |
           set -euo pipefail
@@ -92,8 +97,9 @@ jobs:
           const fs = require('node:fs');
           const core = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
           const full = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
-          if (!core.exactHeadVerified || !core.goldenSearchVerified || core.drReady !== false) process.exit(1);
-          if (!full.exactHeadVerified || !full.goldenSearchVerified || !full.protectedFixtureVerified || full.drReady !== true) process.exit(1);
+          if (!core.exactHeadVerified || !core.goldenSearchVerified || core.evidenceRole !== 'SEARCH_REGRESSION_ONLY') process.exit(1);
+          if (!full.exactHeadVerified || !full.goldenSearchVerified || !full.protectedFixtureObserved || full.evidenceRole !== 'SEARCH_REGRESSION_ONLY') process.exit(1);
+          if (Object.hasOwn(core,'drReady') || Object.hasOwn(full,'drReady')) process.exit(1);
           if (core.productionMutationPerformed || full.productionMutationPerformed || core.retirementAuthorized || full.retirementAuthorized) process.exit(1);
           NODE
           cat "$RUNNER_TEMP/plan7-core-search-evidence.json"
@@ -117,7 +123,7 @@ jobs:
           insert into public.food_items values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Fixture Food',12345678901234567890.123456789012,9223372036854775807,'2026-09-10 20:19:20.123456+02','{"n":90071992547409931234567890.1200}');
           SQL
           cat > "$RUNNER_TEMP/plan7-task3-relations.json" <<'JSON'
-          [{"segment":"food_items","relation":"food_items","classification":"PORTABLE_AUTHORITY","loadMode":"RECONSTRUCT_TRANSITIONAL_COMPATIBILITY","stableKey":["id"],"requiredProfile":"CORE_PORTABLE","protected":false,"seedOwnership":"NONE","transientNeutralize":["verified_source_record_id"]}]
+          [{"segment":"food_items","relation":"food_items","classification":"PORTABLE_AUTHORITY","loadMode":"RECONSTRUCT_TRANSITIONAL_COMPATIBILITY","stableKey":["id"],"requiredProfile":"CORE_PORTABLE","protected":false,"seedOwnership":"NONE","restoreOwnership":"UNIFORM","transientNeutralize":["verified_source_record_id"]}]
           JSON
       - name: Execute authoritative one-session snapshot export
         shell: bash
@@ -132,6 +138,12 @@ jobs:
           psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "select current_setting('server_version_num')::int/10000=17 and count(*)=3 from pg_extension where extname in ('pgcrypto','pg_trgm','uuid-ossp')" | grep '^t$'
           test -s "$RUNNER_TEMP/plan7-task3-export/manifest.json"
           test -s "$RUNNER_TEMP/plan7-task3-export/segments/food_items.ndjson"
+          node - "$RUNNER_TEMP/plan7-task3-export/manifest.json" <<'NODE'
+          const fs = require('node:fs');
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (manifest.registryAuthority !== 'DIAGNOSTIC_SUBSET') process.exit(1);
+          if (manifest.certification?.restoreVerified || manifest.certification?.drReady) process.exit(1);
+          NODE
       - name: Exact-head integrity
         shell: bash
         run: |
@@ -265,7 +277,7 @@ jobs:
           values ('11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','private-fixture');
           SQL
           cat > "$RUNNER_TEMP/plan7-full-dr-relations.json" <<'JSON'
-          [{"segment":"food_personal_overrides","relation":"food_personal_overrides","classification":"PROTECTED_PORTABLE_AUTHORITY","loadMode":"RESTORE_EXACT","stableKey":["user_id","food_id"],"requiredProfile":"FULL_DR","protected":true,"seedOwnership":"NONE"}]
+          [{"segment":"food_personal_overrides","relation":"food_personal_overrides","classification":"PROTECTED_PORTABLE_AUTHORITY","loadMode":"RESTORE_EXACT","stableKey":["user_id","food_id"],"requiredProfile":"FULL_DR","protected":true,"seedOwnership":"NONE","restoreOwnership":"UNIFORM"}]
           JSON
       - name: Export protected FULL_DR twice with randomized transport
         shell: bash
