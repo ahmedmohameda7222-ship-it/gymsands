@@ -77,7 +77,11 @@ jobs:
           [{"segment":"food_items","relation":"food_items","classification":"PORTABLE_AUTHORITY","loadMode":"RECONSTRUCT_TRANSITIONAL_COMPATIBILITY","stableKey":["id"],"requiredProfile":"CORE_PORTABLE","protected":false,"seedOwnership":"NONE","transientNeutralize":["verified_source_record_id"]}]
           JSON
       - name: Execute authoritative one-session snapshot export
-        run: node scripts/export-food-catalog-portable.mjs --profile CORE_PORTABLE --relations-json "$RUNNER_TEMP/plan7-task3-relations.json" --output-dir "$RUNNER_TEMP/plan7-task3-export" --source-commit "${{ github.event.pull_request.head.sha || github.sha }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/export-food-catalog-portable.mjs --profile CORE_PORTABLE --relations-json "$RUNNER_TEMP/plan7-task3-relations.json" --output-dir "$RUNNER_TEMP/plan7-task3-export" --source-commit "${{ github.event.pull_request.head.sha || github.sha }}"
+          find "$RUNNER_TEMP/plan7-task3-export" -maxdepth 2 -type f -printf '%P %s bytes\n' | sort
       - name: Prove PostgreSQL 17 capabilities and snapshot artifact
         shell: bash
         run: |
