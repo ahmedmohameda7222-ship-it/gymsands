@@ -14,23 +14,7 @@ import {
 
 const reviewedCommit = "1111111111111111111111111111111111111111";
 const currentLedger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
-const RELEASE_READY_STATES = new Set(["applied", "applied_version_alias"]);
 const ledger = structuredClone(currentLedger);
-// Downstream promotion behavior tests need a controlled ledger that satisfies the
-// same fail-closed readiness invariants as a genuinely reconciled repository. The
-// real repository ledger is intentionally unresolved and is tested separately.
-ledger.entries = ledger.entries.filter((entry) => RELEASE_READY_STATES.has(entry.state));
-ledger.pendingCount = 0;
-ledger.schemaVerifiedUntrackedCount = 0;
-ledger.unresolvedCount = 0;
-ledger.historyRepair = {
-  ...ledger.historyRepair,
-  state: "reconciled",
-  pendingCount: 0,
-  schemaAppliedUntrackedCount: 0,
-  unresolvedCount: 0,
-  note: `AW-3B release-promotion fixture reconciled through ${TARGET_MARKER}. Do not replay any applied migration.`,
-};
 
 function successfulPreflight(overrides = {}) {
   return {
@@ -94,8 +78,8 @@ function validRequest(overrides = {}) {
   };
 }
 
-test("controlled downstream fixture satisfies normal release-ready ledger invariants", () => {
-  const state = deriveMigrationLedgerState(ledger);
+test("current repository ledger satisfies normal release-ready invariants", () => {
+  const state = deriveMigrationLedgerState(currentLedger);
   assert.equal(state.reconciliationState, "reconciled");
   assert.equal(state.pendingCount, 0);
   assert.equal(state.schemaAppliedUntrackedCount, 0);
@@ -105,9 +89,17 @@ test("controlled downstream fixture satisfies normal release-ready ledger invari
   assert.equal(state.latestAppliedMigrationVersion, TARGET_MARKER);
 });
 
-test("rejects the real current repository ledger while reconciliation is unresolved", () => {
+test("still rejects a synthetically unresolved repository ledger", () => {
+  const unresolvedLedger = structuredClone(currentLedger);
+  const correction = unresolvedLedger.entries.find((entry) => entry.localFile === "20260909083000_food_catalog_governance_gtin_lock_exactness.sql");
+  correction.state = "pending";
+  delete correction.productionVersion;
+  delete correction.productionName;
+  unresolvedLedger.pendingCount = 1;
+  unresolvedLedger.unresolvedCount = 1;
+  unresolvedLedger.historyRepair = { ...unresolvedLedger.historyRepair, state: "pending", pendingCount: 1, unresolvedCount: 1 };
   assert.throws(
-    () => validatePromotionRequest({ ...validRequest(), ledger: currentLedger }),
+    () => validatePromotionRequest({ ...validRequest(), ledger: unresolvedLedger }),
     /Repository migration ledger is not release-ready/,
   );
 });

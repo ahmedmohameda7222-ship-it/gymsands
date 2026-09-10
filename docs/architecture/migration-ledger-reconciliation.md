@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-09-09
+**Current reconciliation date:** 2026-09-10
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Plan 6 governance control plane is applied once in Production and held under `ledger_drift_review`; the forward-only GTIN-lock exactness correction is pending/unapplied
+**Status:** Plan 6 governance control plane and its forward-only GTIN-lock exactness correction are both mapped to verified Production identities; migration history is reconciled
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -11,34 +11,42 @@ Historical PR descriptions, completed implementation reports, and old audit snap
 
 ## Current state
 
-Read-only Plaivra Production inspection on 2026-09-09 established:
+Fresh Plaivra Production read-only inspection on 2026-09-10 established:
 
-- Physical Production migration records: **122**
+- Physical Production migration records: **123**
 - Exact repository-name applications tracked as `state = applied`: **63**
-- Latest physical Production record: `20260909081402_food_catalog_governance_control_plane`
-- Corresponding immutable repository migration: `20260908100000_food_catalog_governance_control_plane.sql`
+- Latest physical Production record: `20260910071241_food_catalog_governance_gtin_lock_exactness`
+- Original Plan 6 Production identity: `20260909081402_food_catalog_governance_control_plane`
+- Forward exactness-correction Production identity: `20260910071241_food_catalog_governance_gtin_lock_exactness`
 - Released compatibility marker: `20260724232734`
+- Schema compatibility: `2`
+- `food_items`, Food source/ingestion/generation/search populations remain **0**
+- `current_generation_id = NULL` and `pointer_revision = 0`
 - Activity Catalog Production remains isolated from the Main Plaivra migration ledger
 
 The current repository/machine-ledger state records:
 
-- Applied-under-review repository migration: **1** — `20260908100000_food_catalog_governance_control_plane.sql` as `ledger_drift_review`, mapped to Production identity `20260909081402_food_catalog_governance_control_plane`
-- Pending repository migrations: **1** — `20260909083000_food_catalog_governance_gtin_lock_exactness.sql`
-- `pendingCount = 1`
+- `20260908100000_food_catalog_governance_control_plane.sql`: `applied_version_alias` → `20260909081402_food_catalog_governance_control_plane`
+- `20260909083000_food_catalog_governance_gtin_lock_exactness.sql`: `applied_version_alias` → `20260910071241_food_catalog_governance_gtin_lock_exactness`
+- `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 2`
-- `historyRepair.state = pending`
-- migration-ledger `release_ready = false`
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
+- migration-ledger `release_ready = true`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately by their ledger state. Applied migrations must not be replayed.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`. Applied migrations must not be replayed.
 
-## Food Catalog Plan 6 governance control plane — Production applied / exactness correction pending 2026-09-09
+## Food Catalog Plan 6 governance control plane — Production exactness reconciled 2026-09-10
 
 Repository migration `20260908100000_food_catalog_governance_control_plane.sql` was merged and applied exactly once to Plaivra Production as generated physical identity `20260909081402_food_catalog_governance_control_plane`. Immediate read-back proved expected Plan 6 governance authority while canonical Food/source/ingestion/generation/search data remained unpopulated and the current-generation pointer remained `NULL / 0`.
 
-Post-apply exactness inspection found one connector-transfer divergence in the UPDATE branch of `private.food_catalog_serialize_gtin_write()`: Production used a direct Food row lock where the reviewed repository migration calls `private.food_catalog_lock_food_authority(v_food)`. The applied migration is immutable and must not be rewritten or replayed. It is therefore classified as `ledger_drift_review` while forward-only repository migration `20260909083000_food_catalog_governance_gtin_lock_exactness.sql` remains the sole pending correction.
+Post-apply exactness inspection then found one connector-transfer divergence in the UPDATE branch of `private.food_catalog_serialize_gtin_write()`: Production used `perform 1 from public.food_items where id=v_food for update;` where the reviewed repository migration calls `perform private.food_catalog_lock_food_authority(v_food);`. That applied migration remains immutable and was never replayed or rewritten.
 
-Current fail-closed authority is `historyRepair.state = pending`, `pendingCount = 1`, `unresolvedCount = 2`, and `release_ready = false`. No Food population, provider ingestion, activation, verification approval, Catalog Generation creation/promotion, current-pointer movement, SearchDocument mutation outside existing derived authority, compatibility-marker promotion, runtime cutover, deployment, or Activity Catalog mutation is authorized by this reconciliation.
+PR #174 merged the forward-only repository correction `20260909083000_food_catalog_governance_gtin_lock_exactness.sql` at merged main commit `c911cfde91ea50814c71072f52bf2f4808401881`. Under explicit Planner authorization, that exact correction was applied once to Plaivra Production as generated physical identity `20260910071241_food_catalog_governance_gtin_lock_exactness`. Fresh read-back proved the UPDATE Food loop now executes `perform private.food_catalog_lock_food_authority(v_food);` before GTIN authority locks.
+
+Post-apply safety read-back proved Food/source/ingestion/generation/search populations remain zero, `current_generation_id = NULL`, `pointer_revision = 0`, schema compatibility remains `2`, and compatibility marker remains `20260724232734`. No Food population, provider ingestion, activation, verification approval, Catalog Generation creation/promotion, current-pointer movement, SearchDocument population, compatibility promotion, deployment, or Activity Catalog mutation occurred.
+
+Repository reconciliation therefore resolves the historical Plan 6 drift and pending correction into two immutable `applied_version_alias` mappings. The historical divergence remains documented as causal evidence. Neither migration may be replayed.
 
 ## Food Catalog Plan 5 serving-semantics correction — Production application 2026-09-07
 
