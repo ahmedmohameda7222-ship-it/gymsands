@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { evaluateRestoreAssertions } from "../lib/food-catalog/portability/restore-assertions.ts";
 
 function requireSha256(value, label) {
   if (typeof value !== "string" || !/^[0-9a-f]{64}$/i.test(value)) {
@@ -22,6 +23,12 @@ function assertTarget(target) {
   if (!target.authRlsCompatibilityVerified) throw new Error("Target auth/RLS compatibility evidence is required.");
   requireSha256(target.migrationLedgerIdentity, "migrationLedgerIdentity");
   requireSha256(target.schemaFingerprintSha256, "schemaFingerprintSha256");
+  if (target.securityRlsAclIdentitySha256 !== undefined) {
+    requireSha256(target.securityRlsAclIdentitySha256, "securityRlsAclIdentitySha256");
+  }
+  if (target.restoredTargetIdentitySha256 !== undefined) {
+    requireSha256(target.restoredTargetIdentitySha256, "restoredTargetIdentitySha256");
+  }
 }
 
 export function buildFoodCatalogRestoreVerificationReportV1(input) {
@@ -35,34 +42,43 @@ export function buildFoodCatalogRestoreVerificationReportV1(input) {
   }
   assertTarget(input.target);
 
-  const assertions = input.assertions ?? {};
-  const trusted = input.artifact.valid === true && assertions.trusted === true && assertions.restoreVerified === true;
-  const restoreVerified = trusted;
-  const drReady = restoreVerified && input.profile === "FULL_DR" && assertions.drReady === true;
+  if (!Array.isArray(input.assertions?.evidence)) {
+    throw new Error("Runtime-derived mandatory restore assertion evidence is required.");
+  }
+  const evaluation = evaluateRestoreAssertions({
+    profile: input.profile,
+    artifactValid: input.artifact.valid === true,
+    assertions: input.assertions.evidence,
+  });
+  const trusted = evaluation.trusted;
+  const restoreVerified = evaluation.restoreVerified;
   const recoveryEligible = input.recoveryEligibility?.eligible === true;
 
   return Object.freeze({
-    reportVersion: 1,
+    reportVersion: 2,
     profile: input.profile,
+    headSha: input.headSha ?? null,
     artifact: Object.freeze({ ...input.artifact }),
     target: Object.freeze({ ...input.target, extensions: Object.freeze([...(input.target.extensions ?? [])]) }),
     assertions: Object.freeze({
-      ...assertions,
-      failures: Object.freeze([...(assertions.failures ?? [])]),
-      unknown: Object.freeze([...(assertions.unknown ?? [])]),
-      comparisonClasses: Object.freeze([...(assertions.comparisonClasses ?? [])]),
+      evidence: Object.freeze(input.assertions.evidence.map((entry) => Object.freeze({ ...entry }))),
+      trusted: evaluation.trusted,
+      restoreVerified: evaluation.restoreVerified,
+      failures: Object.freeze([...evaluation.failures]),
+      unknown: Object.freeze([...evaluation.unknown]),
+      missing: Object.freeze([...evaluation.missing]),
+      comparisonClasses: Object.freeze([...evaluation.comparisonClasses]),
     }),
     recoveryEligibility: Object.freeze({ ...input.recoveryEligibility }),
     trusted,
     restoreVerified,
-    drReady,
     recoveryEligible,
     readyForRecovery: restoreVerified && recoveryEligible,
   });
 }
 
 export function assertFoodCatalogRestoreVerificationReady(report) {
-  if (!report?.restoreVerified) throw new Error("Food Catalog restore verification is not ready/trusted.");
+  if (!report?.restoreVerified || !report?.trusted) throw new Error("Food Catalog restore verification is not ready/trusted.");
   return true;
 }
 
