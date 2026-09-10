@@ -1,0 +1,134 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { buildFinalCertificationInput } from "./certify-food-catalog-restore.mjs";
+import { certifyFoodCatalogRestore } from "../lib/food-catalog/portability/final-certification.ts";
+import { computeManifestSemanticRoot, computeSnapshotBoundarySha256 } from "../lib/food-catalog/portability/export-contract.ts";
+
+const head = "a".repeat(40);
+const root = "b".repeat(64);
+const target = "c".repeat(64);
+
+function manifest() {
+  const boundaryBase = {
+    environment: "CI",
+    postgresSnapshot: "00000001-1",
+    capturedAt: "2026-09-10T18:00:00.000Z",
+    migrationCount: "123",
+    latestMigration: "20260910071241",
+    migrationLedgerIdentity: "d".repeat(64),
+    currentGenerationId: null,
+    pointerRevision: "0",
+    compatibilityVersion: "2",
+    compatibilityMarker: "20260724232734",
+  };
+  const snapshotBoundary = { ...boundaryBase, sha256: computeSnapshotBoundarySha256(boundaryBase) };
+  const value = {
+    format: "plaivra-food-catalog-portable-export",
+    formatVersion: 1,
+    canonicalizationVersion: 1,
+    profile: "FULL_DR",
+    registryAuthority: "CANONICAL_REGISTRY_V1",
+    sourceRepositoryCommit: head,
+    sourceSchemaFingerprintSha256: "e".repeat(64),
+    capturedAt: boundaryBase.capturedAt,
+    snapshotBoundary,
+    segments: [],
+    semanticRootSha256: "",
+    certification: { artifactValid: false, restoreVerified: false, drReady: false },
+  };
+  // This synthetic manifest is not canonical-profile complete, so buildFinalCertificationInput
+  // validation is exercised separately through the pure final-certifier input below.
+  value.semanticRootSha256 = computeManifestSemanticRoot(value);
+  return value;
+}
+
+function linkedInput() {
+  return {
+    profile: "FULL_DR",
+    headSha: head,
+    artifactSemanticRootSha256: root,
+    snapshotBoundarySha256: "f".repeat(64),
+    restoredTargetIdentitySha256: target,
+    canonicalProfileVerified: true,
+    restore: {
+      headSha: head,
+      profile: "FULL_DR",
+      artifactSemanticRootSha256: root,
+      snapshotBoundarySha256: "f".repeat(64),
+      restoredTargetIdentitySha256: target,
+      artifactValid: true,
+      restoreVerified: true,
+      trusted: true,
+      failures: [],
+      unknown: [],
+    },
+    protected: { artifactSemanticRootSha256: root, restoredTargetIdentitySha256: target, verified: true },
+    search: {
+      headSha: head,
+      artifactSemanticRootSha256: root,
+      snapshotBoundarySha256: "f".repeat(64),
+      restoredTargetIdentitySha256: target,
+      sameRestoredTargetVerified: true,
+      rebuildVerified: true,
+      goldenSearchVerified: true,
+      staleGenerationIsolationVerified: true,
+    },
+  };
+}
+
+describe("Plan 7 sole final restore certifier", () => {
+  it("is the only authority allowed to produce FULL_DR drReady after all linked evidence passes", () => {
+    const certification = certifyFoodCatalogRestore(linkedInput());
+    assert.equal(certification.restoreVerified, true);
+    assert.equal(certification.trusted, true);
+    assert.equal(certification.protectedSegmentsVerified, true);
+    assert.equal(certification.searchVerified, true);
+    assert.equal(certification.drReady, true);
+  });
+
+  it("fails closed on artifact-root, target-identity, or same-target search mismatch", () => {
+    const rootMismatch = linkedInput();
+    rootMismatch.search.artifactSemanticRootSha256 = "0".repeat(64);
+    assert.throws(() => certifyFoodCatalogRestore(rootMismatch), /linked|root|mismatch/i);
+
+    const targetMismatch = linkedInput();
+    targetMismatch.protected.restoredTargetIdentitySha256 = "1".repeat(64);
+    assert.throws(() => certifyFoodCatalogRestore(targetMismatch), /linked|target|mismatch/i);
+
+    const searchMismatch = linkedInput();
+    searchMismatch.search.sameRestoredTargetVerified = false;
+    assert.throws(() => certifyFoodCatalogRestore(searchMismatch), /search|restored target/i);
+  });
+
+  it("never marks CORE_PORTABLE as DR-ready", () => {
+    const input = linkedInput();
+    input.profile = "CORE_PORTABLE";
+    input.restore.profile = "CORE_PORTABLE";
+    const certification = certifyFoodCatalogRestore(input);
+    assert.equal(certification.restoreVerified, true);
+    assert.equal(certification.drReady, false);
+  });
+
+  it("rejects an incomplete canonical manifest before runtime evidence can be promoted", () => {
+    const incomplete = manifest();
+    const restoreReport = {
+      headSha: head,
+      profile: "FULL_DR",
+      artifact: { valid: true, semanticRootSha256: incomplete.semanticRootSha256, snapshotBoundarySha256: incomplete.snapshotBoundary.sha256 },
+      target: { restoredTargetIdentitySha256: target },
+      restoreVerified: true,
+      trusted: true,
+      assertions: { failures: [], unknown: [] },
+    };
+    const integratedEvidence = {
+      headSha: head,
+      profile: "FULL_DR",
+      artifactSemanticRootSha256: incomplete.semanticRootSha256,
+      snapshotBoundarySha256: incomplete.snapshotBoundary.sha256,
+      restoredTargetIdentitySha256: target,
+      protectedSegmentsVerified: true,
+      search: { sameRestoredTargetVerified: true, rebuildVerified: true, goldenSearchVerified: true, staleGenerationIsolationVerified: true },
+    };
+    assert.throws(() => buildFinalCertificationInput({ manifest: incomplete, restoreReport, integratedEvidence, expectedHead: head }), /mandatory|segment|profile|canonical/i);
+  });
+});
