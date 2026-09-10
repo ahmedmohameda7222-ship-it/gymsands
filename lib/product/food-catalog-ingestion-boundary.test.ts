@@ -143,7 +143,7 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     expect(currentPlan6Entries).toEqual([
       expect.objectContaining({
         localFile: PLAN6_MIGRATION,
-        state: "ledger_drift_review",
+        state: "applied_version_alias",
         productionVersion: "20260909081402",
         productionName: "food_catalog_governance_control_plane",
       }),
@@ -151,17 +151,19 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
     expect(currentPlan6ExactnessEntries).toEqual([
       expect.objectContaining({
         localFile: PLAN6_EXACTNESS_CORRECTION,
-        state: "pending",
+        state: "applied_version_alias",
+        productionVersion: "20260910071241",
+        productionName: "food_catalog_governance_gtin_lock_exactness",
       }),
     ]);
-    expect(currentPendingEntries).toEqual(currentPlan6ExactnessEntries);
-    expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(2);
+    expect(currentPendingEntries).toEqual([]);
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "pending",
-        pendingCount: 1,
-        unresolvedCount: 2,
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
       })
     );
   });
