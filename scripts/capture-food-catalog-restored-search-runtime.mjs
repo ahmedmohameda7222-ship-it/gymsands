@@ -7,9 +7,11 @@ import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const SHA40 = /^[0-9a-f]{40}$/u;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const CURRENT_GENERATION_ID = "71000000-0000-4000-8000-000000000901";
 const STALE_GENERATION_ID = "71000000-0000-4000-8000-000000000903";
 const CURRENT_FOOD_ID = "71000000-0000-4000-8000-000000000101";
+const FIXTURE_OWNER_ID = "71000000-0000-4000-8000-000000000001";
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -35,6 +37,13 @@ function jsonQuery(databaseUrl, sql) {
   const text = runPsql(databaseUrl, sql);
   if (!text) throw new Error("Search runtime evidence query returned no JSON.");
   return JSON.parse(text);
+}
+
+export function buildAuthenticatedSearchSql(searchExpression, userId = FIXTURE_OWNER_ID) {
+  if (typeof searchExpression !== "string" || !searchExpression.trim()) throw new Error("Authenticated search expression is required.");
+  if (!UUID.test(userId)) throw new Error("Authenticated search fixture owner must be a UUID.");
+  const escapedUserId = userId.replaceAll("'", "''");
+  return `WITH plan7_auth_context AS MATERIALIZED (\n  SELECT set_config('request.jwt.claim.sub','${escapedUserId}',true) AS subject\n)\nSELECT (${searchExpression})::text\nFROM plan7_auth_context;`;
 }
 
 export function buildSearchRuntimeEvidence({ headSha, currentGenerationId, currentResult, staleResult, currentRebuild, staleRebuild, documentCounts }) {
@@ -76,8 +85,8 @@ export function captureSearchRuntimeEvidence(databaseUrl, headSha) {
 
   const staleRebuild = jsonQuery(databaseUrl, `select public.rebuild_food_catalog_search_projection_v2('${STALE_GENERATION_ID}'::uuid,'search-projection-v2',null)::text;`);
   const currentRebuild = jsonQuery(databaseUrl, `select public.rebuild_food_catalog_search_projection_v2('${CURRENT_GENERATION_ID}'::uuid,'search-projection-v2',null)::text;`);
-  const currentResult = jsonQuery(databaseUrl, "select public.search_food_catalog_v2('Plan7 Portable Chicken','en','Latn','DE',null,20,null,null,'all','{}'::jsonb)::text;");
-  const staleResult = jsonQuery(databaseUrl, "select public.search_food_catalog_v2('Plan7 Stale Turkey','en','Latn','GLOBAL',null,20,null,null,'all','{}'::jsonb)::text;");
+  const currentResult = jsonQuery(databaseUrl, buildAuthenticatedSearchSql("public.search_food_catalog_v2('Plan7 Portable Chicken','en','Latn','DE',null,20,null,null,'all','{}'::jsonb)"));
+  const staleResult = jsonQuery(databaseUrl, buildAuthenticatedSearchSql("public.search_food_catalog_v2('Plan7 Stale Turkey','en','Latn','GLOBAL',null,20,null,null,'all','{}'::jsonb)"));
   const counts = jsonQuery(databaseUrl, `select json_build_object(
     'current',(select count(*) from public.food_catalog_search_documents where generation_id='${CURRENT_GENERATION_ID}'::uuid),
     'stale',(select count(*) from public.food_catalog_search_documents where generation_id='${STALE_GENERATION_ID}'::uuid)

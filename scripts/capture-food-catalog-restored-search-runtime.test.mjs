@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildSearchRuntimeEvidence } from "./capture-food-catalog-restored-search-runtime.mjs";
+import {
+  buildAuthenticatedSearchSql,
+  buildSearchRuntimeEvidence,
+} from "./capture-food-catalog-restored-search-runtime.mjs";
 
 const head = "a".repeat(40);
 const currentGenerationId = "71000000-0000-4000-8000-000000000901";
 const currentFoodId = "71000000-0000-4000-8000-000000000101";
+const ownerId = "71000000-0000-4000-8000-000000000001";
 
 function passing() {
   return {
@@ -19,6 +23,14 @@ function passing() {
 }
 
 describe("Plan 7 same-restored-target search evidence", () => {
+  it("binds canonical search execution to the deterministic authenticated fixture owner", () => {
+    const sql = buildAuthenticatedSearchSql("public.search_food_catalog_v2('Chicken')", ownerId);
+    assert.match(sql, /WITH plan7_auth_context AS MATERIALIZED/i);
+    assert.match(sql, new RegExp(`set_config\\('request\\.jwt\\.claim\\.sub','${ownerId}',true\\)`));
+    assert.match(sql, /SELECT \(public\.search_food_catalog_v2\('Chicken'\)\)::text\s+FROM plan7_auth_context;/i);
+    assert.throws(() => buildAuthenticatedSearchSql("public.search_food_catalog_v2('Chicken')", "not-a-uuid"), /UUID/i);
+  });
+
   it("binds deterministic search proof to the exact current generation without owning DR readiness", () => {
     const evidence = buildSearchRuntimeEvidence(passing());
     assert.equal(evidence.headSha, head);
