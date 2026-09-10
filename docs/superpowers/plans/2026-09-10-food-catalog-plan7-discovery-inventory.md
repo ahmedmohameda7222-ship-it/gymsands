@@ -1,9 +1,9 @@
 # Food Catalog Plan 7 Discovery Inventory
 
-Status: **Repository + read-only Production discovery; Planner corrections incorporated; no implementation authority**  
-Date: **2026-09-10**  
-Reviewed repository baseline: `main@7f2882d6ad3c67489622ff4be68a4506a2722319`  
-Production project inspected read-only: `bkwezjxvapaeasfvlhvv`  
+Status: **Repository + read-only Production discovery; Planner corrections incorporated; no implementation authority**
+Date: **2026-09-10**
+Reviewed repository baseline: `main@7f2882d6ad3c67489622ff4be68a4506a2722319`
+Production project inspected read-only: `bkwezjxvapaeasfvlhvv`
 Design: `docs/superpowers/specs/2026-09-10-food-catalog-plan7-portability-retirement-design.md`
 
 ## 1. How to read this inventory
