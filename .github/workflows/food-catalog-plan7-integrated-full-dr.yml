@@ -1,0 +1,309 @@
+name: Food Catalog Plan 7 Integrated FULL_DR Certification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/food-catalog/portability/**"
+      - "lib/privacy/**"
+      - "scripts/*food-catalog*"
+      - "supabase/verification/food-catalog-plan7-portability-*.sql"
+      - "test/fixtures/food-catalog/**"
+      - ".github/workflows/food-catalog-plan7-integrated-full-dr.yml"
+      - ".github/workflows/food-catalog-portable-export-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: food-catalog-plan7-integrated-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integrated-full-dr-certification:
+    name: integrated-full-dr-certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PLAN7_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PLAN7_RESTORE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      SUPABASE_TELEMETRY_DISABLED: "1"
+      DO_NOT_TRACK: "1"
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Generate ephemeral FULL_DR key
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="$(openssl rand -base64 32)"
+          echo "::add-mask::$key"
+          echo "PLAN7_PROTECTED_SEGMENT_KEY_ID=plan7-integrated-ci" >> "$GITHUB_ENV"
+          echo "PLAN7_PROTECTED_SEGMENT_KEY_BASE64=$key" >> "$GITHUB_ENV"
+
+      - name: Run focused integrated trust contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx vitest run \
+            lib/food-catalog/portability/restore-plan.test.ts \
+            lib/food-catalog/portability/restore-assertions.test.ts \
+            lib/food-catalog/portability/certification-boundary.test.ts
+          node --test \
+            scripts/verify-food-catalog-integrated-restore.test.mjs \
+            scripts/capture-food-catalog-restored-search-runtime.test.mjs \
+            scripts/certify-food-catalog-restore.test.mjs
+
+      - name: Replay exact Git migrations for source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-reports
+          node scripts/replay-local-migration-chain.mjs \
+            --log ci-reports/plan7-integrated-source-replay.log \
+            --prove-future-order
+          psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -c "select current_setting('server_version_num')::int/10000=17 and count(*)=3 from pg_extension where extname in ('pgcrypto','pg_trgm','uuid-ossp')" \
+            | grep '^t$'
+
+      - name: Populate deterministic FULL_DR source fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$PLAN7_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f supabase/verification/food-catalog-plan7-portability-source-fixture.sql
+          psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -c "select count(*)=3 from public.food_items where id::text like '71000000-%'" | grep '^t$'
+          psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -c "select current_generation_id='71000000-0000-4000-8000-000000000901'::uuid and pointer_revision=1 from public.food_catalog_current_generation where singleton_key" | grep '^t$'
+
+      - name: Capture source RLS ACL identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/capture-food-catalog-security-evidence.mjs > "$RUNNER_TEMP/plan7-source-security.json"
+          node - "$RUNNER_TEMP/plan7-source-security.json" <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!value.criticalBoundariesVerified || !/^[0-9a-f]{64}$/.test(value.securityRlsAclIdentitySha256)) process.exit(1);
+          NODE
+
+      - name: Export canonical populated FULL_DR source artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          node scripts/export-food-catalog-portable.mjs \
+            --profile FULL_DR \
+            --output-dir "$RUNNER_TEMP/plan7-source-artifact" \
+            --source-commit "$expected"
+          node --input-type=module - "$RUNNER_TEMP/plan7-source-artifact" "$expected" <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { requiredSegmentsForProfile } from './lib/food-catalog/portability/relation-registry.ts';
+          import { validateCanonicalPortableProfileManifestV1 } from './lib/food-catalog/portability/profile-certification.ts';
+          const artifactDir = process.argv[2];
+          const expectedHead = process.argv[3];
+          const manifest = JSON.parse(fs.readFileSync(path.join(artifactDir,'manifest.json'),'utf8'));
+          validateCanonicalPortableProfileManifestV1(manifest);
+          if (manifest.profile !== 'FULL_DR' || manifest.registryAuthority !== 'CANONICAL_REGISTRY_V1') process.exit(1);
+          if (manifest.sourceRepositoryCommit !== expectedHead) process.exit(1);
+          const required = requiredSegmentsForProfile('FULL_DR');
+          if (manifest.segments.length !== required.length) process.exit(1);
+          if (required.some((name) => !manifest.segments.some((segment) => segment.name === name))) process.exit(1);
+          const protectedSegments = manifest.segments.filter((segment) => segment.protected && segment.loadMode !== 'DERIVED_REBUILD');
+          if (protectedSegments.length === 0) process.exit(1);
+          for (const segment of protectedSegments) {
+            if (!fs.existsSync(path.join(artifactDir,'segments',`${segment.name}.enc`))) process.exit(1);
+            if (fs.existsSync(path.join(artifactDir,'segments',`${segment.name}.ndjson`))) process.exit(1);
+          }
+          NODE
+          if grep -aR -q 'private-plan7-note' "$RUNNER_TEMP/plan7-source-artifact"; then
+            echo 'Protected plaintext leaked into FULL_DR artifact transport.' >&2
+            exit 1
+          fi
+
+      - name: Capture source canonical V2 search behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          node scripts/capture-food-catalog-restored-search-runtime.mjs \
+            --database-url "$PLAN7_DATABASE_URL" \
+            --expected-head "$expected" \
+            --output "$RUNNER_TEMP/plan7-source-search.json"
+
+      - name: Replay exact Git migrations for clean target
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/replay-local-migration-chain.mjs \
+            --log ci-reports/plan7-integrated-target-replay.log \
+            --prove-future-order
+          psql "$PLAN7_RESTORE_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -c "select current_setting('server_version_num')::int/10000=17 and count(*)=3 from pg_extension where extname in ('pgcrypto','pg_trgm','uuid-ossp')" \
+            | grep '^t$'
+          psql "$PLAN7_RESTORE_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -c "select count(*)=0 from public.food_items where id::text like '71000000-%'" | grep '^t$'
+
+      - name: Establish external target owner identity prerequisite
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$PLAN7_RESTORE_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f supabase/verification/food-catalog-plan7-portability-target-identity.sql
+
+      - name: Restore canonical FULL_DR artifact to Git-migrated target
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/restore-food-catalog-portable.mjs \
+            --artifact-dir "$RUNNER_TEMP/plan7-source-artifact" \
+            --target-url "$PLAN7_RESTORE_DATABASE_URL" \
+            --evidence-output "$RUNNER_TEMP/plan7-loader-evidence.json" \
+            --disposable-target
+          node - "$RUNNER_TEMP/plan7-loader-evidence.json" <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!value.artifactValid || value.restoreVerified || value.trusted || value.drReady) process.exit(1);
+          if (value.phase !== 'RESTORE_LOADED_UNTRUSTED_PENDING_ASSERTIONS') process.exit(1);
+          NODE
+          psql "$PLAN7_RESTORE_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -c "select lease_owner is null and lease_token is null and lease_expires_at is null from public.food_ingestion_runs where id='71000000-0000-4000-8000-000000000a11'::uuid" \
+            | grep '^t$'
+
+      - name: Capture restored target RLS ACL identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/capture-food-catalog-security-evidence.mjs > "$RUNNER_TEMP/plan7-target-security.json"
+          node - "$RUNNER_TEMP/plan7-source-security.json" "$RUNNER_TEMP/plan7-target-security.json" <<'NODE'
+          const fs = require('node:fs');
+          const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const target = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+          if (!target.criticalBoundariesVerified) process.exit(1);
+          if (source.securityRlsAclIdentitySha256 !== target.securityRlsAclIdentitySha256) process.exit(1);
+          NODE
+
+      - name: Rebuild and capture canonical V2 search on same restored target
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          node scripts/capture-food-catalog-restored-search-runtime.mjs \
+            --database-url "$PLAN7_RESTORE_DATABASE_URL" \
+            --expected-head "$expected" \
+            --output "$RUNNER_TEMP/plan7-target-search.json"
+          node - "$RUNNER_TEMP/plan7-source-search.json" "$RUNNER_TEMP/plan7-target-search.json" <<'NODE'
+          const fs = require('node:fs');
+          const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const target = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+          if (!target.rebuildVerified || !target.goldenSearchVerified || !target.staleGenerationIsolationVerified) process.exit(1);
+          if (source.goldenResultSha256 !== target.goldenResultSha256) process.exit(1);
+          if (Object.hasOwn(target,'drReady')) process.exit(1);
+          NODE
+
+      - name: Export canonical FULL_DR restored-target readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          PLAN7_DATABASE_URL="$PLAN7_RESTORE_DATABASE_URL" node scripts/export-food-catalog-portable.mjs \
+            --profile FULL_DR \
+            --output-dir "$RUNNER_TEMP/plan7-target-readback" \
+            --source-commit "$expected"
+          if grep -aR -q 'private-plan7-note' "$RUNNER_TEMP/plan7-target-readback"; then
+            echo 'Protected plaintext leaked into target-readback transport.' >&2
+            exit 1
+          fi
+
+      - name: Derive mandatory restore assertion evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          node scripts/verify-food-catalog-integrated-restore.mjs \
+            --source-artifact-dir "$RUNNER_TEMP/plan7-source-artifact" \
+            --target-artifact-dir "$RUNNER_TEMP/plan7-target-readback" \
+            --target-url "$PLAN7_RESTORE_DATABASE_URL" \
+            --restore-evidence "$RUNNER_TEMP/plan7-loader-evidence.json" \
+            --source-security "$RUNNER_TEMP/plan7-source-security.json" \
+            --target-security "$RUNNER_TEMP/plan7-target-security.json" \
+            --source-search "$RUNNER_TEMP/plan7-source-search.json" \
+            --target-search "$RUNNER_TEMP/plan7-target-search.json" \
+            --consumer-reference "test/fixtures/food-catalog/plan7-consumer-reference-v1.json" \
+            --expected-head "$expected" \
+            --output "$RUNNER_TEMP/plan7-integrated-evidence.json"
+          node - "$RUNNER_TEMP/plan7-integrated-evidence.json" "$RUNNER_TEMP/plan7-verification-input.json" <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!value.assertionEvaluation?.trusted || !value.assertionEvaluation?.restoreVerified) process.exit(1);
+          if (value.assertionEvaluation.failures.length || value.assertionEvaluation.unknown.length) process.exit(1);
+          if (!value.protectedSegmentsVerified || !value.search?.sameRestoredTargetVerified) process.exit(1);
+          fs.writeFileSync(process.argv[3], `${JSON.stringify(value.verificationInput, null, 2)}\n`, 'utf8');
+          NODE
+
+      - name: Build trusted restore verification report
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-food-catalog-restore.mjs \
+            --input "$RUNNER_TEMP/plan7-verification-input.json" \
+            > "$RUNNER_TEMP/plan7-restore-report.json"
+          node - "$RUNNER_TEMP/plan7-restore-report.json" <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!value.restoreVerified || !value.trusted) process.exit(1);
+          if (value.assertions.failures.length || value.assertions.unknown.length) process.exit(1);
+          if (Object.hasOwn(value,'drReady')) process.exit(1);
+          NODE
+
+      - name: Sole final FULL_DR certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          node scripts/certify-food-catalog-restore.mjs \
+            --manifest "$RUNNER_TEMP/plan7-source-artifact/manifest.json" \
+            --restore-report "$RUNNER_TEMP/plan7-restore-report.json" \
+            --integrated-evidence "$RUNNER_TEMP/plan7-integrated-evidence.json" \
+            --expected-head "$expected" \
+            --output "$RUNNER_TEMP/plan7-final-certification.json"
+          node - "$RUNNER_TEMP/plan7-final-certification.json" <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (value.profile !== 'FULL_DR') process.exit(1);
+          if (!value.linkedEvidenceVerified || !value.canonicalProfileVerified) process.exit(1);
+          if (!value.restoreVerified || !value.trusted || !value.protectedSegmentsVerified || !value.searchVerified || !value.drReady) process.exit(1);
+          NODE
+
+      - name: Exact-head and Production-safety integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+          test -z "$(git status --porcelain=v1 --untracked-files=no)"
+          test "$PLAN7_DATABASE_URL" = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          test "$PLAN7_RESTORE_DATABASE_URL" = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
