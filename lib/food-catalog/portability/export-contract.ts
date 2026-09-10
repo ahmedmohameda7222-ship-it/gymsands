@@ -94,6 +94,7 @@ function semanticSnapshotBoundary(boundary: PortableSnapshotBoundaryV1) {
   return {
     environment: boundary.environment,
     postgresSnapshot: boundary.postgresSnapshot,
+    capturedAt: boundary.capturedAt,
     migrationCount: boundary.migrationCount,
     latestMigration: boundary.latestMigration,
     migrationLedgerIdentity: boundary.migrationLedgerIdentity,
@@ -111,6 +112,7 @@ export function computeSnapshotBoundarySha256(
   const canonical = JSON.stringify({
     environment: boundary.environment,
     postgresSnapshot: boundary.postgresSnapshot,
+    capturedAt: boundary.capturedAt,
     migrationCount: boundary.migrationCount,
     latestMigration: boundary.latestMigration,
     migrationLedgerIdentity: boundary.migrationLedgerIdentity,
@@ -180,6 +182,9 @@ export function validatePortableManifestV1(
   exactDigest(manifest.snapshotBoundary.sha256, "Snapshot boundary");
   canonicalizePostgresScalar({ pgType: "timestamptz", text: manifest.capturedAt });
   canonicalizePostgresScalar({ pgType: "timestamptz", text: manifest.snapshotBoundary.capturedAt });
+  if (manifest.capturedAt !== manifest.snapshotBoundary.capturedAt) {
+    throw new Error("Manifest capturedAt must equal the snapshot-boundary capture time.");
+  }
   if (!/^\d+$/.test(manifest.snapshotBoundary.migrationCount)) throw new Error("Migration count must use lossless integer text.");
   if (!/^\d+$/.test(manifest.snapshotBoundary.pointerRevision)) throw new Error("Pointer revision must use lossless integer text.");
 

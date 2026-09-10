@@ -129,6 +129,7 @@ function snapshotBoundarySha(boundary) {
   return sha256(JSON.stringify({
     environment: boundary.environment,
     postgresSnapshot: boundary.postgresSnapshot,
+    capturedAt: boundary.capturedAt,
     migrationCount: boundary.migrationCount,
     latestMigration: boundary.latestMigration,
     migrationLedgerIdentity: boundary.migrationLedgerIdentity,
@@ -150,6 +151,7 @@ function semanticRoot(manifest) {
     snapshotBoundary: {
       environment: manifest.snapshotBoundary.environment,
       postgresSnapshot: manifest.snapshotBoundary.postgresSnapshot,
+      capturedAt: manifest.snapshotBoundary.capturedAt,
       migrationCount: manifest.snapshotBoundary.migrationCount,
       latestMigration: manifest.snapshotBoundary.latestMigration,
       migrationLedgerIdentity: manifest.snapshotBoundary.migrationLedgerIdentity,
