@@ -74,6 +74,27 @@ describe("Plan 7 disposable restore plan", () => {
     ]);
   });
 
+  it("topologically reorders populated FK authority instead of trusting registry declaration order", () => {
+    const plan = buildFoodCatalogRestorePlan([
+      spec("food_catalog_activation_events", "RESTORE_EXACT"),
+      spec("food_catalog_generation_events", "RESTORE_EXACT"),
+      spec("food_catalog_generation_validation_reports", "RESTORE_EXACT"),
+      spec("food_catalog_generations", "RESTORE_EXACT"),
+      spec("food_catalog_activation_sets", "RESTORE_EXACT"),
+      spec("food_catalog_control_operations", "RESTORE_EXACT"),
+      spec("food_ingestion_control_operations", "RESTORE_EXACT"),
+      spec("food_ingestion_runs", "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION", { transientNeutralize: ["lease_owner"] }),
+      spec("food_ingestion_batches", "RESTORE_EXACT"),
+    ]);
+    const ordered = plan.filter((entry) => entry.relation).map((entry) => entry.relation);
+    expect(ordered.indexOf("food_catalog_control_operations")).toBeLessThan(ordered.indexOf("food_catalog_activation_events"));
+    expect(ordered.indexOf("food_catalog_control_operations")).toBeLessThan(ordered.indexOf("food_catalog_generation_events"));
+    expect(ordered.indexOf("food_catalog_generations")).toBeLessThan(ordered.indexOf("food_catalog_generation_validation_reports"));
+    expect(ordered.indexOf("food_catalog_generation_validation_reports")).toBeLessThan(ordered.indexOf("food_catalog_generation_events"));
+    expect(ordered.indexOf("food_ingestion_batches")).toBeLessThan(ordered.indexOf("food_ingestion_runs"));
+    expect(ordered.indexOf("food_ingestion_runs")).toBeLessThan(ordered.indexOf("food_ingestion_control_operations"));
+  });
+
   it("never treats DERIVED_REBUILD as portable truth and never blindly restores uniform migration-seeded rows", () => {
     const plan = buildFoodCatalogRestorePlan([
       spec("release_schema_compatibility", "VALIDATE_PRESEEDED", { stableKey: ["singleton"], seedOwnership: "MIGRATION_OWNED" }),
