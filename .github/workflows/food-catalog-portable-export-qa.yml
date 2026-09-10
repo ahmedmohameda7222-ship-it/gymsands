@@ -53,6 +53,8 @@ jobs:
         run: npm ci
       - name: Focused Task 2-3 contracts
         run: npx vitest run lib/food-catalog/portability/canonicalize.test.ts lib/food-catalog/portability/export-contract.test.ts lib/food-catalog/portability/relation-registry.test.ts lib/food-catalog/portability/postgres-snapshot-reader.test.ts lib/food-catalog/portability/export-reader.test.ts lib/food-catalog/portability/export-writer.test.ts scripts/export-food-catalog-portable.test.mjs
+      - name: Focused Task 4 contracts
+        run: npx vitest run lib/food-catalog/portability/artifact-validator.test.ts lib/food-catalog/portability/recovery-eligibility.test.ts
       - name: Prepare deterministic PostgreSQL snapshot fixture
         shell: bash
         run: |
