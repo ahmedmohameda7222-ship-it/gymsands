@@ -34,7 +34,7 @@ function makeManifest(rowCount = 1): PortableExportManifestV1 {
     profile: "CORE_PORTABLE",
     sourceRepositoryCommit: "c".repeat(40),
     sourceSchemaFingerprintSha256: "d".repeat(64),
-    capturedAt: "2026-09-10T18:19:20.123456Z",
+    capturedAt: snapshotBoundary.capturedAt,
     snapshotBoundary,
     segments: [{
       name: "food_items",
@@ -52,6 +52,16 @@ function makeManifest(rowCount = 1): PortableExportManifestV1 {
   };
   manifest.semanticRootSha256 = computeManifestSemanticRoot(manifest);
   return manifest;
+}
+
+function rebindCaptureTime(manifest: PortableExportManifestV1, capturedAt: string) {
+  const { sha256: _oldSha, ...oldBoundary } = manifest.snapshotBoundary;
+  const boundaryWithoutSha = { ...oldBoundary, capturedAt };
+  const snapshotBoundary = { ...boundaryWithoutSha, sha256: computeSnapshotBoundarySha256(boundaryWithoutSha) };
+  manifest.capturedAt = capturedAt;
+  manifest.snapshotBoundary = snapshotBoundary;
+  manifest.segments = manifest.segments.map((segment) => ({ ...segment, snapshotBoundarySha256: snapshotBoundary.sha256 }));
+  manifest.semanticRootSha256 = computeManifestSemanticRoot(manifest);
 }
 
 describe("Plan 7 artifact validator", () => {
@@ -94,9 +104,26 @@ describe("Plan 7 artifact validator", () => {
     })).toThrow(/snapshot boundary digest/i);
   });
 
+  it("cryptographically binds capturedAt so recovery age evidence cannot be rewritten", () => {
+    const manifest = makeManifest();
+    manifest.capturedAt = "2099-01-01T00:00:00.000000Z";
+    manifest.snapshotBoundary = { ...manifest.snapshotBoundary, capturedAt: manifest.capturedAt };
+    expect(() => validatePortableArtifact({
+      manifest, materials: { food_items: BYTES }, requiredSegments: ["food_items"],
+    })).toThrow(/snapshot boundary digest|semantic root/i);
+  });
+
+  it("requires top-level capturedAt to equal the snapshot-boundary capture time", () => {
+    const manifest = makeManifest();
+    manifest.capturedAt = "2026-09-10T18:19:21.123456Z";
+    expect(() => validatePortableArtifact({
+      manifest, materials: { food_items: BYTES }, requiredSegments: ["food_items"],
+    })).toThrow(/capturedAt|capture time/i);
+  });
+
   it("does not apply artifact age as structural validity", () => {
     const ancient = makeManifest();
-    ancient.capturedAt = "2000-01-01T00:00:00.000000Z";
+    rebindCaptureTime(ancient, "2000-01-01T00:00:00.000000Z");
     expect(validatePortableArtifact({
       manifest: ancient, materials: { food_items: BYTES }, requiredSegments: ["food_items"],
     }).valid).toBe(true);
