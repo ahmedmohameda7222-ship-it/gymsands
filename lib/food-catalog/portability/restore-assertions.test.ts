@@ -21,15 +21,16 @@ function passingAssertions(): RestoreAssertionEvidence[] {
 }
 
 describe("Plan 7 restore assertion engine", () => {
-  it("requires every mandatory byte/hash, exact identity/value, and semantic assertion before trusting a FULL_DR restore", () => {
+  it("requires every mandatory comparison class before trusting a FULL_DR restore without owning final DR readiness", () => {
     const result = evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: passingAssertions() });
-    expect(result).toMatchObject({ trusted: true, restoreVerified: true, drReady: true });
+    expect(result).toMatchObject({ trusted: true, restoreVerified: true });
+    expect(Object.hasOwn(result, "drReady")).toBe(false);
     expect(result.comparisonClasses).toEqual(["BYTE_HASH", "EXACT_IDENTITY_VALUE", "SEMANTIC"]);
   });
 
   it("fails closed when any mandatory assertion is missing/unknown or explicitly fails", () => {
     const missing = passingAssertions().filter((assertion) => assertion.id !== "current_pointer");
-    expect(evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: missing })).toMatchObject({ trusted: false, restoreVerified: false, drReady: false });
+    expect(evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: missing })).toMatchObject({ trusted: false, restoreVerified: false });
 
     const unknown = passingAssertions().map((assertion) => assertion.id === "security_rls_acl_identity" ? { ...assertion, status: "UNKNOWN" as const } : assertion);
     expect(evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: unknown }).unknown).toContain("security_rls_acl_identity");
@@ -38,9 +39,10 @@ describe("Plan 7 restore assertion engine", () => {
     expect(evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: failed }).failures).toContain("merge_graph");
   });
 
-  it("never promotes CORE_PORTABLE to final DR readiness", () => {
-    expect(evaluateRestoreAssertions({ profile: "CORE_PORTABLE", artifactValid: true, assertions: passingAssertions() }))
-      .toMatchObject({ trusted: true, restoreVerified: true, drReady: false });
+  it("never exposes final DR readiness even when CORE assertions pass", () => {
+    const result = evaluateRestoreAssertions({ profile: "CORE_PORTABLE", artifactValid: true, assertions: passingAssertions() });
+    expect(result).toMatchObject({ trusted: true, restoreVerified: true });
+    expect(Object.hasOwn(result, "drReady")).toBe(false);
   });
 
   it("compares hashes and typed rows exactly without numeric coercion", () => {
