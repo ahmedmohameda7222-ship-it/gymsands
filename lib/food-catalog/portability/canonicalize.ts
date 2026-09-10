@@ -191,9 +191,9 @@ export function canonicalizeLosslessJsonText(input: string): string {
   return serializeJsonNode(new LosslessJsonParser(input).parse());
 }
 
-export function canonicalizePostgresScalar(scalar: LosslessPostgresScalar): string {
+export function canonicalizePostgresScalar(scalar: LosslessPostgresScalar): string | null {
   const pgType = scalar.pgType.trim().toLowerCase().replace(/^pg_catalog\./, "");
-  if (scalar.text === null) return "null";
+  if (scalar.text === null) return null;
   const text = scalar.text;
 
   if (["numeric", "decimal"].includes(pgType)) return canonicalizeDecimalText(text);
