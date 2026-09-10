@@ -1,0 +1,36 @@
+name: Plan6 Reconciliation Evidence Once
+
+on:
+  push:
+    branches:
+      - chore/plan6-production-reconciliation-final
+    paths:
+      - .github/workflows/plan6-reconciliation-evidence-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout merged main evidence commit
+        uses: actions/checkout@v4
+        with:
+          ref: c911cfde91ea50814c71072f52bf2f4808401881
+          fetch-depth: 0
+      - name: Print immutable migration evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql \
+            supabase/migrations/20260909083000_food_catalog_governance_gtin_lock_exactness.sql \
+            supabase/migrations/20260731090000_active_workout_aw9_offline_multi_device.sql
+          do
+            printf 'FILE=%s\n' "$file"
+            printf 'SHA256='
+            sha256sum "$file" | awk '{print $1}'
+            printf 'GIT_BLOB='
+            git rev-parse "c911cfde91ea50814c71072f52bf2f4808401881:$file"
+          done
