@@ -139,3 +139,49 @@ jobs:
           expected="${{ github.event.pull_request.head.sha || github.sha }}"
           test "$(git rev-parse HEAD)" = "$expected"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+  restored-search-runtime:
+    name: restored-search-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      SUPABASE_TELEMETRY_DISABLED: "1"
+      DO_NOT_TRACK: "1"
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Replay exact Git migration authority
+        run: node scripts/replay-local-migration-chain.mjs --log ci-reports/plan7-restored-search-runtime.log --prove-future-order
+      - name: Prove PostgreSQL 17 runtime capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "select current_setting('server_version_num')::int/10000=17" | grep '^t$'
+      - name: Execute canonical V2 search runtime verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/food-catalog-search-projection-v2.sql
+      - name: Exact-head integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+          test -z "$(git status --porcelain=v1 --untracked-files=no)"
