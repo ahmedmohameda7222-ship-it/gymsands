@@ -25,7 +25,7 @@ jobs:
           node-version: 24
           cache: npm
       - name: Apply evidence-bound reconciliation edits
-        run: node .github/scripts/plan6-production-reconcile-once.mjs
+        run: node .github/scripts/plan6-run-reconcile-fixed.mjs
       - name: Deterministic dependency install
         run: npm ci
       - name: Verify focused current-state contracts
