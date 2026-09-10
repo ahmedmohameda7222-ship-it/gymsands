@@ -53,9 +53,11 @@ insert into public.food_items(
   id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,source_type,is_global,lifecycle_status
 ) values
   (:'food_current','Plan7 Portable Chicken','100 g',165,31,0,3.6,'admin_created',true,'active'),
-  (:'food_merged','Plan7 Legacy Chicken','100 g',160,30,1,3.5,'admin_created',true,'merged'),
+  (:'food_merged','Plan7 Legacy Chicken','100 g',160,30,1,3.5,'admin_created',true,'active'),
   (:'food_stale','Plan7 Stale Turkey','100 g',135,29,0,2,'admin_created',true,'active');
-update public.food_items set merged_into_food_id=:'food_current'::uuid where id=:'food_merged'::uuid;
+update public.food_items
+set lifecycle_status='merged', merged_into_food_id=:'food_current'::uuid
+where id=:'food_merged'::uuid;
 
 insert into public.food_source_records(
   id,food_id,provider,source_record_id,source_reference,license_name,retrieved_at,
@@ -254,7 +256,12 @@ begin
      or not exists(select 1 from public.market_scopes where scope_code='PLAN7_TEST') then
     raise exception 'Plan7 source fixture mixed runtime reference extensions are missing.';
   end if;
-  if not exists(select 1 from public.food_personal_overrides where user_id=:'owner_uid'::uuid and note='private-plan7-note') then
+  if not exists(
+    select 1
+    from public.food_personal_overrides current_override
+    join public.food_personal_override_revisions revision on revision.id=current_override.current_revision_id
+    where current_override.user_id=:'owner_uid'::uuid and revision.note='private-plan7-note'
+  ) then
     raise exception 'Plan7 source fixture protected personal authority is missing.';
   end if;
   if not exists(select 1 from public.food_ingestion_runs where id=:'ingestion_run'::uuid and lease_owner='plan7-worker' and lease_token is not null) then
