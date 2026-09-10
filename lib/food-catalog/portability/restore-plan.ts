@@ -4,7 +4,9 @@ export type FoodCatalogRestoreStep = Readonly<{
   kind:
     | "VERIFY_TARGET_PROFILE"
     | "VALIDATE_PRESEEDED"
+    | "RESTORE_MIXED_KEYED_PRESEEDED_RUNTIME"
     | "VALIDATE_POINTER_SINGLETON_IDENTITY"
+    | "RESTORE_MUTABLE_SINGLETON_FIELDS"
     | "RESTORE_TRANSITIONAL_WITH_CYCLE_NULL"
     | "RESTORE_EXACT"
     | "RECONSTRUCT_TRANSITIONAL_CYCLE_FIELD"
@@ -52,7 +54,13 @@ export function buildFoodCatalogRestorePlan(rules: readonly PortableRelationRule
   const result: FoodCatalogRestoreStep[] = [step("VERIFY_TARGET_PROFILE")];
 
   for (const rule of rules) {
-    if (rule.loadMode === "VALIDATE_PRESEEDED" && !rule.restoreLast) {
+    if (rule.loadMode !== "VALIDATE_PRESEEDED" || rule.restoreLast) continue;
+    if (rule.restoreOwnership === "MIXED_KEYED_PRESEEDED_RUNTIME") {
+      result.push(step("RESTORE_MIXED_KEYED_PRESEEDED_RUNTIME", rule));
+    } else if (rule.restoreOwnership === "MUTABLE_PRESEEDED_SINGLETON") {
+      result.push(step("VALIDATE_POINTER_SINGLETON_IDENTITY", rule));
+      result.push(step("RESTORE_MUTABLE_SINGLETON_FIELDS", rule));
+    } else {
       result.push(step("VALIDATE_PRESEEDED", rule));
     }
   }
