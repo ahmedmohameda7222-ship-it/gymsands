@@ -4,15 +4,15 @@ import {
   createHash,
   randomBytes,
 } from "node:crypto";
-import {
-  loadAes256ProtectedSegmentKey,
-  type ProtectedSegmentKeyProvider,
-} from "./key-provider";
 
 const ALGORITHM = "AES-256-GCM" as const;
 const NODE_ALGORITHM = "aes-256-gcm";
 const NONCE_BYTES = 12;
 const TRANSPORT_PREFIX = Buffer.from("PLAN7-AES-256-GCM-V1\0", "utf8");
+
+export type ProtectedSegmentKeyProvider = Readonly<{
+  getKey(keyId: string): Promise<Uint8Array>;
+}>;
 
 export type ProtectedSegmentEnvelopeV1 = Readonly<{
   segment: string;
@@ -27,6 +27,19 @@ export type ProtectedSegmentEnvelopeV1 = Readonly<{
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function loadAes256ProtectedSegmentKey(
+  provider: ProtectedSegmentKeyProvider | null | undefined,
+  keyId: string,
+): Promise<Uint8Array> {
+  if (!provider) throw new Error("Protected segment key provider is required.");
+  if (typeof keyId !== "string" || keyId.trim().length === 0) throw new Error("Protected segment key ID is required.");
+  const key = await provider.getKey(keyId);
+  if (!(key instanceof Uint8Array) || key.byteLength !== 32) {
+    throw new Error("Protected segment AES-256 key must contain exactly 32 bytes.");
+  }
+  return new Uint8Array(key);
 }
 
 function transportBytes(nonce: Uint8Array, authTag: Uint8Array, ciphertext: Uint8Array): Buffer {
