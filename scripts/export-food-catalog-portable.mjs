@@ -17,6 +17,9 @@ const PROTECTED_ALGORITHM = "AES-256-GCM";
 const PROTECTED_NODE_ALGORITHM = "aes-256-gcm";
 const PROTECTED_NONCE_BYTES = 12;
 const PROTECTED_TRANSPORT_PREFIX = Buffer.from("PLAN7-AES-256-GCM-V1\0", "utf8");
+export const CANONICAL_REGISTRY_AUTHORITY = "CANONICAL_REGISTRY_V1";
+export const DIAGNOSTIC_REGISTRY_AUTHORITY = "DIAGNOSTIC_SUBSET";
+const REGISTRY_AUTHORITIES = new Set([CANONICAL_REGISTRY_AUTHORITY, DIAGNOSTIC_REGISTRY_AUTHORITY]);
 
 function assertIdentifier(value) {
   if (typeof value !== "string" || !IDENTIFIER.test(value)) {
@@ -150,6 +153,7 @@ function semanticRoot(manifest) {
     formatVersion: manifest.formatVersion,
     canonicalizationVersion: manifest.canonicalizationVersion,
     profile: manifest.profile,
+    registryAuthority: manifest.registryAuthority ?? null,
     sourceRepositoryCommit: manifest.sourceRepositoryCommit,
     sourceSchemaFingerprintSha256: manifest.sourceSchemaFingerprintSha256,
     snapshotBoundary: {
@@ -193,6 +197,30 @@ async function loadDefaultRules(profile) {
   );
 }
 
+function canonicalRuleIdentity(rule) {
+  return JSON.stringify({
+    segment: rule.segment ?? rule.relation,
+    relation: rule.relation,
+    classification: rule.classification,
+    loadMode: rule.loadMode,
+    stableKey: [...rule.stableKey],
+    requiredProfile: rule.requiredProfile,
+    protected: Boolean(rule.protected),
+  });
+}
+
+async function assertRegistryAuthority(profile, rules, registryAuthority) {
+  if (!REGISTRY_AUTHORITIES.has(registryAuthority)) throw new Error("Unknown Plan 7 registry authority.");
+  if (registryAuthority === DIAGNOSTIC_REGISTRY_AUTHORITY) return;
+  const canonical = await loadDefaultRules(profile);
+  if (canonical.length !== rules.length) throw new Error(`Canonical ${profile} export requires the complete profile registry.`);
+  for (let index = 0; index < canonical.length; index += 1) {
+    if (canonicalRuleIdentity(canonical[index]) !== canonicalRuleIdentity(rules[index])) {
+      throw new Error(`Canonical ${profile} relation descriptor mismatch at ${canonical[index].segment}.`);
+    }
+  }
+}
+
 async function loadProtectedRuntime() {
   const keyProviderUrl = pathToFileURL(resolve("lib/food-catalog/portability/key-provider.ts")).href;
   const protectedUrl = pathToFileURL(resolve("lib/food-catalog/portability/protected-segments.ts")).href;
@@ -229,12 +257,14 @@ export async function runAuthoritativeExport({
   profile,
   sourceRepositoryCommit,
   rules,
+  registryAuthority = DIAGNOSTIC_REGISTRY_AUTHORITY,
   protectedKeyProvider = null,
   protectedKeyId = null,
 }) {
   if (!databaseUrl) throw new Error("PLAN7_DATABASE_URL is required.");
   if (!PROFILE.has(profile)) throw new Error(`Unsupported Plan7 export profile: ${profile}`);
   if (!SHA40.test(sourceRepositoryCommit)) throw new Error("An exact 40-character source repository commit is required.");
+  await assertRegistryAuthority(profile, rules, registryAuthority);
   const protectedRules = rules.filter((rule) => rule.protected);
   if (protectedRules.length > 0 && profile !== "FULL_DR") {
     throw new Error("Protected relations are allowed only in FULL_DR exports.");
@@ -413,6 +443,7 @@ export async function runAuthoritativeExport({
       formatVersion: 1,
       canonicalizationVersion: 1,
       profile,
+      registryAuthority,
       sourceRepositoryCommit,
       sourceSchemaFingerprintSha256,
       capturedAt: meta.capturedAt,
@@ -451,10 +482,13 @@ function parseArgs(argv) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   let rules;
+  let registryAuthority;
   if (options.relationsJson) {
     rules = JSON.parse(await readFile(resolve(options.relationsJson), "utf8"));
+    registryAuthority = DIAGNOSTIC_REGISTRY_AUTHORITY;
   } else {
     rules = await loadDefaultRules(options.profile);
+    registryAuthority = CANONICAL_REGISTRY_AUTHORITY;
   }
   const needsProtected = rules.some((rule) => rule.protected);
   let protectedBinding = null;
@@ -468,10 +502,11 @@ async function main() {
     profile: options.profile,
     sourceRepositoryCommit: options.sourceRepositoryCommit,
     rules,
+    registryAuthority,
     protectedKeyProvider: protectedBinding?.keyProvider ?? null,
     protectedKeyId: protectedBinding?.keyId ?? null,
   });
-  process.stdout.write(`Plan7 ${manifest.profile} export complete: ${basename(resolve(options.outputDir))} ${manifest.semanticRootSha256}\n`);
+  process.stdout.write(`Plan7 ${manifest.profile} ${manifest.registryAuthority} export complete: ${basename(resolve(options.outputDir))} ${manifest.semanticRootSha256}\n`);
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
