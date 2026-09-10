@@ -167,7 +167,9 @@ jobs:
           version: 2.109.1
           github-token: ${{ github.token }}
       - name: Replay exact Git migration authority
-        run: node scripts/replay-local-migration-chain.mjs --log ci-reports/plan7-restored-search-runtime.log --prove-future-order
+        run: |
+          mkdir -p ci-reports
+          node scripts/replay-local-migration-chain.mjs --log ci-reports/plan7-restored-search-runtime.log --prove-future-order
       - name: Prove PostgreSQL 17 runtime capability
         shell: bash
         run: |
