@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { basename, resolve } from "node:path";
@@ -13,6 +13,10 @@ const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 const SHA40 = /^[0-9a-f]{40}$/;
 const PROFILE = new Set(["CORE_PORTABLE", "FULL_DR"]);
 const EMPTY_SHA256 = createHash("sha256").update("").digest("hex");
+const PROTECTED_ALGORITHM = "AES-256-GCM";
+const PROTECTED_NODE_ALGORITHM = "aes-256-gcm";
+const PROTECTED_NONCE_BYTES = 12;
+const PROTECTED_TRANSPORT_PREFIX = Buffer.from("PLAN7-AES-256-GCM-V1\0", "utf8");
 
 function assertIdentifier(value) {
   if (typeof value !== "string" || !IDENTIFIER.test(value)) {
@@ -189,8 +193,19 @@ async function loadDefaultRules(profile) {
   );
 }
 
+async function loadProtectedRuntime() {
+  const keyProviderUrl = pathToFileURL(resolve("lib/food-catalog/portability/key-provider.ts")).href;
+  const protectedUrl = pathToFileURL(resolve("lib/food-catalog/portability/protected-segments.ts")).href;
+  const [keyProvider, protectedSegments] = await Promise.all([import(keyProviderUrl), import(protectedUrl)]);
+  return {
+    loadAes256ProtectedSegmentKey: keyProvider.loadAes256ProtectedSegmentKey,
+    createEnvironmentProtectedSegmentKeyBinding: keyProvider.createEnvironmentProtectedSegmentKeyBinding,
+    createProtectedSegmentNonceReuseGuard: protectedSegments.createProtectedSegmentNonceReuseGuard,
+  };
+}
+
 async function writeChunk(stream, chunk) {
-  if (!stream.write(chunk, "utf8")) await once(stream, "drain");
+  if (!stream.write(chunk)) await once(stream, "drain");
 }
 
 async function closeStream(stream) {
@@ -198,12 +213,42 @@ async function closeStream(stream) {
   await once(stream, "close");
 }
 
-export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, sourceRepositoryCommit, rules }) {
+async function protectedTransportSha256(path, nonce, authTag) {
+  const hash = createHash("sha256");
+  hash.update(PROTECTED_TRANSPORT_PREFIX);
+  hash.update(nonce);
+  hash.update(authTag);
+  const stream = createReadStream(path);
+  for await (const chunk of stream) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+export async function runAuthoritativeExport({
+  databaseUrl,
+  outputDir,
+  profile,
+  sourceRepositoryCommit,
+  rules,
+  protectedKeyProvider = null,
+  protectedKeyId = null,
+}) {
   if (!databaseUrl) throw new Error("PLAN7_DATABASE_URL is required.");
   if (!PROFILE.has(profile)) throw new Error(`Unsupported Plan7 export profile: ${profile}`);
   if (!SHA40.test(sourceRepositoryCommit)) throw new Error("An exact 40-character source repository commit is required.");
-  if (rules.some((rule) => rule.protected)) {
-    throw new Error("FULL_DR protected relations require the Plan7 protected-segment key-provider path; plaintext fallback is forbidden.");
+  const protectedRules = rules.filter((rule) => rule.protected);
+  if (protectedRules.length > 0 && profile !== "FULL_DR") {
+    throw new Error("Protected relations are allowed only in FULL_DR exports.");
+  }
+
+  let protectedKey = null;
+  let nonceGuard = null;
+  if (protectedRules.length > 0) {
+    if (!protectedKeyProvider || typeof protectedKeyId !== "string" || protectedKeyId.trim().length === 0) {
+      throw new Error("FULL_DR protected relations require an external protected key provider and key ID; plaintext fallback is forbidden.");
+    }
+    const runtime = await loadProtectedRuntime();
+    protectedKey = await runtime.loadAes256ProtectedSegmentKey(protectedKeyProvider, protectedKeyId);
+    nonceGuard = runtime.createProtectedSegmentNonceReuseGuard();
   }
 
   const { canonicalizeLosslessRow, canonicalizePostgresScalar } = await loadRuntimeCanonicalizer();
@@ -243,11 +288,18 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
         const name = line.slice("__PLAN7_SEGMENT_BEGIN__".length);
         const rule = rulesBySegment.get(name);
         if (!rule) throw new Error(`Unexpected Plan7 segment ${name}.`);
-        const path = resolve(staging, "segments", `${name}.ndjson`);
+        const protectedSegment = Boolean(rule.protected);
+        const path = resolve(staging, "segments", `${name}${protectedSegment ? ".enc" : ".ndjson"}`);
+        const nonce = protectedSegment ? randomBytes(PROTECTED_NONCE_BYTES) : null;
+        if (protectedSegment) nonceGuard.claim(protectedKeyId, nonce);
+        const cipher = protectedSegment ? createCipheriv(PROTECTED_NODE_ALGORITHM, Buffer.from(protectedKey), nonce) : null;
         active = {
           name,
           rule,
+          path,
           stream: createWriteStream(path, { flags: "wx" }),
+          cipher,
+          nonce,
           hash: createHash("sha256"),
           rowCount: 0,
           previousKey: undefined,
@@ -257,10 +309,27 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
       if (line.startsWith("__PLAN7_SEGMENT_END__")) {
         const name = line.slice("__PLAN7_SEGMENT_END__".length);
         if (!active || active.name !== name) throw new Error(`Unbalanced Plan7 segment end ${name}.`);
-        await closeStream(active.stream);
+        let ciphertextTransportSha256;
+        let encryption;
+        if (active.rule.protected) {
+          await writeChunk(active.stream, active.cipher.final());
+          const authTag = active.cipher.getAuthTag();
+          await closeStream(active.stream);
+          ciphertextTransportSha256 = await protectedTransportSha256(active.path, active.nonce, authTag);
+          encryption = {
+            algorithm: PROTECTED_ALGORITHM,
+            keyId: protectedKeyId,
+            nonceBase64: active.nonce.toString("base64"),
+            authTagBase64: authTag.toString("base64"),
+          };
+        } else {
+          await closeStream(active.stream);
+        }
         completed.set(name, {
           rowCount: active.rowCount,
           plaintextSemanticSha256: active.hash.digest("hex"),
+          ciphertextTransportSha256,
+          encryption,
         });
         active = null;
         continue;
@@ -285,8 +354,13 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
       }
       active.previousKey = key;
       const canonical = `${canonicalizeLosslessRow(envelope.values)}\n`;
-      active.hash.update(canonical, "utf8");
-      await writeChunk(active.stream, canonical);
+      const canonicalBytes = Buffer.from(canonical, "utf8");
+      active.hash.update(canonicalBytes);
+      if (active.rule.protected) {
+        await writeChunk(active.stream, active.cipher.update(canonicalBytes));
+      } else {
+        await writeChunk(active.stream, canonicalBytes);
+      }
       active.rowCount += 1;
     }
     const [exitCode] = await closePromise;
@@ -327,6 +401,10 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
         snapshotBoundarySha256: boundary.sha256,
         required: true,
         protected: Boolean(rule.protected),
+        ...(rule.protected ? {
+          ciphertextTransportSha256: result.ciphertextTransportSha256,
+          encryption: result.encryption,
+        } : {}),
       };
     });
 
@@ -347,9 +425,11 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
     await writeFile(resolve(staging, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
     await rm(target, { recursive: true, force: true });
     await rename(staging, target);
+    if (protectedKey) protectedKey.fill(0);
     return manifest;
   } catch (error) {
     child.kill("SIGTERM");
+    if (protectedKey) protectedKey.fill(0);
     await rm(staging, { recursive: true, force: true });
     throw error;
   }
@@ -376,12 +456,20 @@ async function main() {
   } else {
     rules = await loadDefaultRules(options.profile);
   }
+  const needsProtected = rules.some((rule) => rule.protected);
+  let protectedBinding = null;
+  if (needsProtected) {
+    const runtime = await loadProtectedRuntime();
+    protectedBinding = runtime.createEnvironmentProtectedSegmentKeyBinding(process.env);
+  }
   const manifest = await runAuthoritativeExport({
     databaseUrl: process.env.PLAN7_DATABASE_URL,
     outputDir: options.outputDir,
     profile: options.profile,
     sourceRepositoryCommit: options.sourceRepositoryCommit,
     rules,
+    protectedKeyProvider: protectedBinding?.keyProvider ?? null,
+    protectedKeyId: protectedBinding?.keyId ?? null,
   });
   process.stdout.write(`Plan7 ${manifest.profile} export complete: ${basename(resolve(options.outputDir))} ${manifest.semanticRootSha256}\n`);
 }

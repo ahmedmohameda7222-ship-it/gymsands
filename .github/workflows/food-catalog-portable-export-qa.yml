@@ -187,3 +187,121 @@ jobs:
           expected="${{ github.event.pull_request.head.sha || github.sha }}"
           test "$(git rev-parse HEAD)" = "$expected"
           test -z "$(git status --porcelain=v1 --untracked-files=no)"
+
+  full-dr-protected-runtime:
+    name: full-dr-protected-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 55434:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PLAN7_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55434/plan7_source
+      PLAN7_RESTORE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55434/plan7_target
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate ephemeral FULL_DR test key
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="$(openssl rand -base64 32)"
+          echo "::add-mask::$key"
+          echo "PLAN7_PROTECTED_SEGMENT_KEY_ID=ephemeral-ci" >> "$GITHUB_ENV"
+          echo "PLAN7_PROTECTED_SEGMENT_KEY_BASE64=$key" >> "$GITHUB_ENV"
+      - name: Prepare isolated source and target schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+          admin="postgresql://postgres:postgres@127.0.0.1:55434/postgres"
+          psql "$admin" -X -v ON_ERROR_STOP=1 <<'SQL'
+          create database plan7_source;
+          create database plan7_target;
+          do $$ begin if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; end $$;
+          do $$ begin if not exists (select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;
+          do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;
+          do $$ begin if not exists (select 1 from pg_roles where rolname='authenticator') then create role authenticator nologin; end if; end $$;
+          SQL
+          for db in plan7_source plan7_target; do
+            url="postgresql://postgres:postgres@127.0.0.1:55434/$db"
+            psql "$url" -X -v ON_ERROR_STOP=1 <<'SQL'
+          create extension if not exists pgcrypto;
+          create extension if not exists pg_trgm;
+          create extension if not exists "uuid-ossp";
+          create schema auth;
+          create table auth.users(id uuid primary key);
+          create schema supabase_migrations;
+          create table supabase_migrations.schema_migrations(version text primary key);
+          insert into supabase_migrations.schema_migrations(version) values ('20260910071241');
+          create table public.release_schema_compatibility(singleton boolean primary key, version integer not null, migration_version text not null);
+          insert into public.release_schema_compatibility values (true,2,'20260724232734');
+          create table public.food_catalog_current_generation(singleton_key boolean primary key, current_generation_id uuid, pointer_revision bigint not null);
+          insert into public.food_catalog_current_generation values (true,null,0);
+          create table public.food_items(id uuid primary key, food_name text not null);
+          create table public.food_personal_overrides(user_id uuid not null, food_id uuid not null, note text, primary key(user_id,food_id));
+          SQL
+          done
+          psql "$PLAN7_DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          insert into public.food_personal_overrides(user_id,food_id,note)
+          values ('11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','private-fixture');
+          SQL
+          cat > "$RUNNER_TEMP/plan7-full-dr-relations.json" <<'JSON'
+          [{"segment":"food_personal_overrides","relation":"food_personal_overrides","classification":"PROTECTED_PORTABLE_AUTHORITY","loadMode":"RESTORE_EXACT","stableKey":["user_id","food_id"],"requiredProfile":"FULL_DR","protected":true,"seedOwnership":"NONE"}]
+          JSON
+      - name: Export protected FULL_DR twice with randomized transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="${{ github.event.pull_request.head.sha || github.sha }}"
+          node scripts/export-food-catalog-portable.mjs --profile FULL_DR --relations-json "$RUNNER_TEMP/plan7-full-dr-relations.json" --output-dir "$RUNNER_TEMP/plan7-full-dr-a" --source-commit "$head"
+          node scripts/export-food-catalog-portable.mjs --profile FULL_DR --relations-json "$RUNNER_TEMP/plan7-full-dr-relations.json" --output-dir "$RUNNER_TEMP/plan7-full-dr-b" --source-commit "$head"
+          test -s "$RUNNER_TEMP/plan7-full-dr-a/segments/food_personal_overrides.enc"
+          test ! -e "$RUNNER_TEMP/plan7-full-dr-a/segments/food_personal_overrides.ndjson"
+          if grep -aR -q 'private-fixture' "$RUNNER_TEMP/plan7-full-dr-a"; then exit 1; fi
+          node - "$RUNNER_TEMP/plan7-full-dr-a/manifest.json" "$RUNNER_TEMP/plan7-full-dr-b/manifest.json" <<'NODE'
+          const fs = require('node:fs');
+          const a = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).segments[0];
+          const b = JSON.parse(fs.readFileSync(process.argv[3], 'utf8')).segments[0];
+          if (!a.protected || a.encryption?.algorithm !== 'AES-256-GCM') process.exit(1);
+          if (!a.ciphertextTransportSha256 || !b.ciphertextTransportSha256) process.exit(1);
+          if (a.plaintextSemanticSha256 !== b.plaintextSemanticSha256) process.exit(1);
+          if (a.encryption.nonceBase64 === b.encryption.nonceBase64) process.exit(1);
+          if (a.ciphertextTransportSha256 === b.ciphertextTransportSha256) process.exit(1);
+          NODE
+      - name: Restore authenticated protected material on disposable target
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/restore-food-catalog-portable.mjs --artifact-dir "$RUNNER_TEMP/plan7-full-dr-a" --target-url "$PLAN7_RESTORE_DATABASE_URL" --relations-json "$RUNNER_TEMP/plan7-full-dr-relations.json" --evidence-output "$RUNNER_TEMP/plan7-full-dr-restore-evidence.json" --disposable-target
+          psql "$PLAN7_RESTORE_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "select count(*)=1 and min(note)='private-fixture' from public.food_personal_overrides" | grep '^t$'
+          node - "$RUNNER_TEMP/plan7-full-dr-restore-evidence.json" <<'NODE'
+          const fs = require('node:fs');
+          const evidence = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!evidence.artifactValid || evidence.restoreVerified || evidence.trusted || evidence.drReady) process.exit(1);
+          NODE
+      - name: Exact-head integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"

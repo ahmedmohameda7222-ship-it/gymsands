@@ -118,6 +118,39 @@ export function decodeCanonicalSegmentRow(line) {
   return Object.freeze(result);
 }
 
+async function loadProtectedRuntime() {
+  const protectedUrl = pathToFileURL(resolve("lib/food-catalog/portability/protected-segments.ts")).href;
+  const keyProviderUrl = pathToFileURL(resolve("lib/food-catalog/portability/key-provider.ts")).href;
+  const [protectedSegments, keyProvider] = await Promise.all([import(protectedUrl), import(keyProviderUrl)]);
+  return {
+    decryptProtectedSegment: protectedSegments.decryptProtectedSegment,
+    createEnvironmentProtectedSegmentKeyBinding: keyProvider.createEnvironmentProtectedSegmentKeyBinding,
+  };
+}
+
+export async function decodeProtectedArtifactMaterial({ descriptor, ciphertext, keyProvider }) {
+  if (!descriptor?.protected) throw new Error("Protected artifact descriptor is required.");
+  if (!descriptor.encryption || descriptor.encryption.algorithm !== "AES-256-GCM") {
+    throw new Error(`Protected segment ${descriptor.name ?? "<unknown>"} is missing AES-256-GCM encryption metadata.`);
+  }
+  if (typeof descriptor.ciphertextTransportSha256 !== "string" || !SHA256.test(descriptor.ciphertextTransportSha256)) {
+    throw new Error(`Protected segment ${descriptor.name ?? "<unknown>"} is missing ciphertext transport integrity.`);
+  }
+  if (!(ciphertext instanceof Uint8Array)) throw new Error("Protected segment ciphertext bytes are required.");
+  const runtime = await loadProtectedRuntime();
+  const plaintext = await runtime.decryptProtectedSegment({
+    segment: descriptor.name,
+    algorithm: descriptor.encryption.algorithm,
+    keyId: descriptor.encryption.keyId,
+    nonceBase64: descriptor.encryption.nonceBase64,
+    authTagBase64: descriptor.encryption.authTagBase64,
+    ciphertextBase64: Buffer.from(ciphertext).toString("base64"),
+    plaintextSemanticSha256: descriptor.plaintextSemanticSha256,
+    transportSha256: descriptor.ciphertextTransportSha256,
+  }, keyProvider);
+  return new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
+}
+
 function validateRowAgainstTarget(row, targetColumns, { allowOmitted = [] } = {}) {
   const omitted = new Set(allowOmitted);
   for (const [column, targetType] of Object.entries(targetColumns)) {
@@ -244,7 +277,12 @@ function validateRuntimeArtifact(manifest, materials) {
   for (const segment of manifest.segments) {
     if (segment.snapshotBoundarySha256 !== manifest.snapshotBoundary.sha256) throw new Error(`Segment ${segment.name} is snapshot-torn.`);
     if (segment.loadMode === "DERIVED_REBUILD") continue;
-    if (segment.protected) throw new Error(`Protected segment ${segment.name} requires the Task 7 key-provider path.`);
+    if (segment.protected) {
+      if (manifest.profile !== "FULL_DR") throw new Error(`Protected segment ${segment.name} requires FULL_DR profile.`);
+      if (!segment.encryption || segment.encryption.algorithm !== "AES-256-GCM" || !SHA256.test(segment.ciphertextTransportSha256 ?? "")) {
+        throw new Error(`Protected segment ${segment.name} has incomplete encrypted transport metadata.`);
+      }
+    }
     const bytes = materials[segment.name];
     if (bytes === undefined) throw new Error(`Missing segment material ${segment.name}.`);
     if (sha256(bytes) !== segment.plaintextSemanticSha256) throw new Error(`Segment ${segment.name} semantic digest mismatch.`);
@@ -303,13 +341,36 @@ function parseArgs(argv) {
   return options;
 }
 
-export async function restorePortableArtifact({ artifactDir, targetUrl, relationsJson, evidenceOutput, disposableTarget }) {
+export async function restorePortableArtifact({
+  artifactDir,
+  targetUrl,
+  relationsJson,
+  evidenceOutput,
+  disposableTarget,
+  protectedKeyProvider = null,
+}) {
   assertDisposableRestoreTarget(targetUrl, disposableTarget);
   const manifest = JSON.parse(await readFile(resolve(artifactDir, "manifest.json"), "utf8"));
+  const hasProtected = manifest.segments.some((segment) => segment.protected && segment.loadMode !== "DERIVED_REBUILD");
+  let effectiveProtectedKeyProvider = protectedKeyProvider;
+  if (hasProtected && !effectiveProtectedKeyProvider) {
+    const runtime = await loadProtectedRuntime();
+    effectiveProtectedKeyProvider = runtime.createEnvironmentProtectedSegmentKeyBinding(process.env).keyProvider;
+  }
+
   const materials = {};
   for (const segment of manifest.segments) {
-    if (segment.loadMode === "DERIVED_REBUILD" || segment.protected) continue;
-    materials[segment.name] = await readFile(resolve(artifactDir, "segments", `${segment.name}.ndjson`), "utf8");
+    if (segment.loadMode === "DERIVED_REBUILD") continue;
+    if (segment.protected) {
+      const ciphertext = await readFile(resolve(artifactDir, "segments", `${segment.name}.enc`));
+      materials[segment.name] = await decodeProtectedArtifactMaterial({
+        descriptor: segment,
+        ciphertext,
+        keyProvider: effectiveProtectedKeyProvider,
+      });
+    } else {
+      materials[segment.name] = await readFile(resolve(artifactDir, "segments", `${segment.name}.ndjson`), "utf8");
+    }
   }
   validateRuntimeArtifact(manifest, materials);
   const targetProfile = evaluatePortableTargetProfile(loadTargetProfile(targetUrl), {

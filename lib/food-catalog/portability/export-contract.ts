@@ -20,6 +20,13 @@ export type PortableLoadMode =
   | "RECONSTRUCT_TRANSITIONAL_COMPATIBILITY"
   | "DERIVED_REBUILD";
 
+export type PortableSegmentEncryptionV1 = Readonly<{
+  algorithm: "AES-256-GCM";
+  keyId: string;
+  nonceBase64: string;
+  authTagBase64: string;
+}>;
+
 export type PortableSegmentDescriptorV1 = Readonly<{
   name: string;
   relation: string;
@@ -32,6 +39,7 @@ export type PortableSegmentDescriptorV1 = Readonly<{
   required: boolean;
   protected: boolean;
   ciphertextTransportSha256?: string;
+  encryption?: PortableSegmentEncryptionV1;
 }>;
 
 export type PortableSnapshotBoundaryV1 = Readonly<{
@@ -87,7 +95,11 @@ const CLASSIFICATIONS = new Set<PortableRelationClassification>([
 const SECRET_KEY = /(password|passwd|secret|credential|private[_-]?key|access[_-]?token|refresh[_-]?token|service[_-]?role[_-]?key)/i;
 
 export function createPortableSegmentDescriptor(input: PortableSegmentDescriptorV1): PortableSegmentDescriptorV1 {
-  return Object.freeze({ ...input, stableKey: Object.freeze([...input.stableKey]) });
+  return Object.freeze({
+    ...input,
+    stableKey: Object.freeze([...input.stableKey]),
+    encryption: input.encryption ? Object.freeze({ ...input.encryption }) : undefined,
+  });
 }
 
 function semanticSnapshotBoundary(boundary: PortableSnapshotBoundaryV1) {
@@ -167,6 +179,40 @@ function exactDigest(value: unknown, label: string) {
   if (typeof value !== "string" || !SHA256.test(value)) throw new Error(`${label} must be a lowercase SHA-256 digest.`);
 }
 
+function canonicalBase64Bytes(value: unknown, expectedBytes: number, label: string): void {
+  if (typeof value !== "string" || value.length === 0) throw new Error(`${label} is required.`);
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.byteLength !== expectedBytes || decoded.toString("base64").replace(/=+$/u, "") !== value.replace(/=+$/u, "")) {
+    throw new Error(`${label} must be canonical base64 for exactly ${expectedBytes} bytes.`);
+  }
+}
+
+function validateProtectedTransport(manifest: PortableExportManifestV1, segment: PortableSegmentDescriptorV1): void {
+  if (!segment.protected) {
+    if (segment.ciphertextTransportSha256 !== undefined || segment.encryption !== undefined) {
+      throw new Error(`Unprotected segment ${segment.name} cannot carry encrypted transport metadata.`);
+    }
+    return;
+  }
+
+  if (manifest.profile !== "FULL_DR") {
+    throw new Error(`Protected segment ${segment.name} is allowed only in FULL_DR artifacts.`);
+  }
+  if (segment.classification !== "PROTECTED_PORTABLE_AUTHORITY" && segment.classification !== "PROTECTED_PORTABLE_AUDIT_HISTORY") {
+    throw new Error(`Protected segment ${segment.name} must use a protected portability classification.`);
+  }
+  exactDigest(segment.ciphertextTransportSha256, `${segment.name} ciphertext transport SHA-256`);
+  const encryption = segment.encryption;
+  if (!encryption || encryption.algorithm !== "AES-256-GCM") {
+    throw new Error(`Protected segment ${segment.name} requires AES-256-GCM encryption metadata.`);
+  }
+  if (!/^[A-Za-z0-9._:/-]{1,128}$/u.test(encryption.keyId)) {
+    throw new Error(`Protected segment ${segment.name} requires a valid external key ID.`);
+  }
+  canonicalBase64Bytes(encryption.nonceBase64, 12, `${segment.name} AES-256-GCM nonce`);
+  canonicalBase64Bytes(encryption.authTagBase64, 16, `${segment.name} AES-256-GCM authentication tag`);
+}
+
 export function validatePortableManifestV1(
   manifest: PortableExportManifestV1,
   { requiredSegments = [] }: { requiredSegments?: readonly string[] } = {},
@@ -200,10 +246,7 @@ export function validatePortableManifestV1(
     exactDigest(segment.plaintextSemanticSha256, `${segment.name} semantic SHA-256`);
     exactDigest(segment.snapshotBoundarySha256, `${segment.name} snapshot SHA-256`);
     if (segment.snapshotBoundarySha256 !== manifest.snapshotBoundary.sha256) throw new Error(`Segment ${segment.name} belongs to a different snapshot boundary.`);
-    if (segment.ciphertextTransportSha256 !== undefined) {
-      exactDigest(segment.ciphertextTransportSha256, `${segment.name} ciphertext transport SHA-256`);
-      if (!segment.protected) throw new Error(`Only protected segment ${segment.name} may carry ciphertext transport integrity.`);
-    }
+    validateProtectedTransport(manifest, segment);
   }
   const missing = requiredSegments.filter((name) => !names.has(name));
   if (missing.length) throw new Error(`Missing mandatory portable segments: ${missing.join(", ")}.`);
