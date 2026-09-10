@@ -1,6 +1,6 @@
 # Plaivra Food Catalog Plan 7 — Portability, Restore Verification, and Legacy Retirement Design
 
-Status: **Discovery/design for Planner review; implementation not authorized**  
+Status: **Architecture re-review after independent Planner findings; implementation not authorized**  
 Date: **2026-09-10**  
 Architecture class: **Architectural / long-term target design**  
 Parent architecture: `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`  
@@ -8,95 +8,117 @@ Program roadmap: `docs/superpowers/plans/2026-09-01-food-catalog-intelligence-pr
 Discovery inventory: `docs/superpowers/plans/2026-09-10-food-catalog-plan7-discovery-inventory.md`  
 Implementation plan: `docs/superpowers/plans/2026-09-10-food-catalog-plan7-portability-retirement.md`  
 Implementation authority: **Not granted by this document**  
-Production mutation authority: **Not granted by this document**
+Production mutation authority: **Not granted by this document**  
+Deployment authority: **Not granted by this document**
 
 ## 1. Purpose and phase boundary
 
-Plan 7 is one roadmap plan with two sequential internal workstreams:
+Plan 7 remains one roadmap plan with two sequential workstreams:
 
-1. **Portability / backup / export / restore verification** — establish a provider-neutral logical Food Catalog export and prove that Git schema authority plus an approved export can reconstruct the catalog on an isolated compatible PostgreSQL target while preserving Plaivra identities and current-generation authority.
-2. **Legacy retirement** — remove obsolete transitional compatibility authority only after every Product/database consumer is migrated and live preconditions prove removal safe.
+1. **Portability / backup / export / restore verification** — establish a provider-neutral logical Food Catalog export and prove that Git schema authority plus an approved export can reconstruct the catalog on an isolated compatible PostgreSQL target while preserving Plaivra identities, current-generation authority, required history, ownership, and security semantics.
+2. **Consumer cutover / legacy retirement** — migrate Product and database consumers through an expand/deploy/contract sequence, prove the exact deployed artifact no longer requires retirement candidates, and only then retire an explicitly approved destructive set through forward migrations.
 
-Plan 7 is not a Food population plan, provider-adapter plan, deployment plan, or compatibility-marker promotion plan. It must not begin Plan 8. Physical Supabase backups remain useful disaster-recovery artifacts but are not the provider-neutral domain export required by Plan 7.
+Plan 7 is not a Food population plan, provider-ingestion plan, compatibility-promotion plan, Activity Catalog plan, or Plan 8. Physical Supabase/database backups remain useful platform DR artifacts but are not the provider-neutral Food Catalog export required by Plan 7.
 
 The Plan 7 exit condition is:
 
-> Plaivra can restore or move the Food Catalog onto a compatible clean PostgreSQL target from Git schema authority plus approved portable artifacts while preserving exact canonical Food IDs, all authority/history required to interpret them, current-generation semantics, user ownership, and valid consumer references; derived search can be rebuilt and verified; and obsolete transitional authorities are removed only after zero unsupported consumers and live destructive-retirement preconditions are proven.
+> Plaivra can restore or move the Food Catalog onto a compatible PostgreSQL 17.x target from Git schema authority plus an approved `FULL_DR` artifact while preserving exact canonical Food IDs, all authority/history required to interpret them, protected owner/security state and identity prerequisites, current-generation semantics, and valid consumer references; derived search can be rebuilt and verified; and obsolete transitional authority is retired only after the exact deployed application has cut over and live read-only evidence plus Planner authorization prove the destructive set safe.
 
 ## 2. Evidence labels
 
-This document uses four labels deliberately:
-
 - **VERIFIED CURRENT FACT** — confirmed against current repository authority and/or read-only Production evidence on 2026-09-10.
-- **ARCHITECTURE REQUIREMENT** — inherited from binding Food Catalog architecture/roadmap or explicit Plan 7 scope.
-- **PROPOSED PLAN 7 DESIGN** — implementation design proposed for Planner approval; not yet Product policy or Production authority.
-- **OPEN POLICY DECISION** — a choice the existing architecture does not settle and the Planner must decide before implementation that depends on it.
+- **ARCHITECTURE REQUIREMENT** — binding Food Catalog architecture or frozen Planner policy for Plan 7.
+- **PROPOSED PLAN 7 DESIGN** — implementation design proposed for later authorization; no implementation authority is implied.
+- **KEEP / UNKNOWN PENDING EVIDENCE** — no retirement is authorized until exact meaning/replacement and live dependencies are proven.
 
-No implementation should convert a proposed design or open decision into Production behavior without the required Planner review/authorization.
+The previous Plan 7 open-policy items listed in this document are resolved by the frozen Planner policy block below. Per-object retirement approval remains a later explicit Planner decision.
 
 ## 3. Verified starting state
 
-**VERIFIED CURRENT FACT** — repository `main` is at Plan 6 closure commit `7f2882d6ad3c67489622ff4be68a4506a2722319`.
+**VERIFIED CURRENT FACT** — repository `main` remains at Plan 6 closure commit `7f2882d6ad3c67489622ff4be68a4506a2722319` at this documentation review point.
 
-**VERIFIED CURRENT FACT** — read-only Plaivra Production inspection on 2026-09-10 established:
+**VERIFIED CURRENT FACT** — read-only Plaivra Production inspection established:
 
+- PostgreSQL server version: **17.6**;
 - physical migration records: **123**;
 - latest physical migration: `20260910071241_food_catalog_governance_gtin_lock_exactness`;
-- `food_items = 0`;
-- `food_source_records = 0`;
-- `food_ingestion_batches = 0`;
-- `food_ingestion_runs = 0`;
-- `food_catalog_generations = 0`;
-- `food_catalog_generation_foods = 0`;
-- `food_catalog_search_documents = 0`;
-- `food_catalog_search_nutrition_policies = 0`;
-- `current_generation_id = NULL`;
-- `pointer_revision = 0`;
-- schema compatibility version: `2`;
-- released compatibility marker: `20260724232734`.
+- migration ledger pending/schema-untracked/unresolved counts: **0 / 0 / 0**;
+- `food_items = 0`, `food_source_records = 0`, ingestion/generation/search populations from the Plan 7 baseline = `0`;
+- `current_generation_id = NULL`, `pointer_revision = 0`;
+- schema compatibility version `2`; released compatibility marker `20260724232734`;
+- `food_personal_corrections = 0`, `food_favorites = 0`, while `user_food_items` and `user_food_favorites` contain owner data;
+- `food_items.food_name` is currently **NOT NULL**;
+- migration-created reference/singleton state exists despite zero global Foods: `food_taxonomy_namespaces = 6`, `food_taxonomy_nodes = 14`, `market_scopes = 9`, `market_scope_memberships = 3`, `food_catalog_governance_policy_versions = 1`, one governance policy-pointer row, one current-generation singleton row, and one release-schema-compatibility singleton row;
+- required PostgreSQL capabilities include `pgcrypto`, `pg_trgm`, and `uuid-ossp`;
+- Activity Catalog remains a separate authority and is outside Plan 7 mutation scope.
 
-**VERIFIED CURRENT FACT** — `supabase/migration-ledger.json` is reconciled with `pendingCount = 0`, `schemaVerifiedUntrackedCount = 0`, and `unresolvedCount = 0`.
-
-**VERIFIED CURRENT FACT** — Activity Catalog remains a separate project/authority and is outside Plan 7 mutation scope.
-
-**VERIFIED CURRENT FACT** — the current Production catalog is globally unpopulated, but user-owned Food state is not globally empty. Read-only inspection found rows in `user_food_items` and `user_food_favorites`. Zero global Food rows must therefore never be interpreted as permission to delete user-owned compatibility state.
+An empty global catalog is therefore neither an empty database nor authorization to delete owner/reference/compatibility state.
 
 ## 4. Binding invariants
 
-**ARCHITECTURE REQUIREMENT** — Plan 7 preserves all of the following:
+Plan 7 preserves all of the following:
 
-1. Stable Plaivra `food_items.id` UUIDs are identity anchors and must survive export/restore exactly.
-2. Catalog Generation remains the sole authority for current-effective global Food state.
-3. Nutrition revisions are immutable and versioned; unknown nutrition remains `NULL`, not `0`.
-4. Serving and name facts preserve stable lineage/revision identity.
-5. Merge history is immutable; current generation redirects are flattened and cycle-free.
-6. Source/release provenance, verification/activation evidence, governance/correction/audit history, and policy interpretation are preserved.
-7. My Foods remain separate user-owned authority.
-8. Personal overrides remain owner-scoped and must never be reassigned across users during restore.
-9. Historical Diary, Recipe, Saved Meal, and Meal Plan snapshots are not rewritten to match restored current Food truth.
-10. No fabricated servings, `ml ↔ g` conversions, provider-priority inference, or latest-row inference is introduced.
-11. Search is derived/rebuildable and never becomes canonical Food truth.
-12. Product consumers must converge on Food Catalog domain/current-generation boundaries before compatibility-only storage is retired.
-13. Applied migrations are immutable. Any later schema change is forward-only.
-14. No Production population or mutation is implied by a successful portable restore on a disposable target.
+1. Stable Plaivra `food_items.id` UUIDs survive export/restore exactly.
+2. Catalog Generation remains the sole current-effective global Food authority.
+3. Every authoritative export is captured from **one PostgreSQL MVCC snapshot**.
+4. Migration/current-pointer observations recorded in an artifact come from that same snapshot as every exported authoritative segment.
+5. Independent REST/API pagination without a common PostgreSQL snapshot is not authoritative export evidence.
+6. No Product write lock or stop-the-world catalog lock is introduced for export.
+7. Nutrition revisions remain immutable/versioned; `NULL` and zero remain distinct.
+8. Serving/name facts preserve stable lineage and no serving/unit conversion is fabricated.
+9. Merge history is immutable; generation redirects remain flattened/cycle-free.
+10. Source/release provenance, verification/activation evidence, governance/correction/audit history, and policy interpretation are preserved.
+11. My Foods remain separate owner authority.
+12. Personal overrides remain owner-scoped; historical Diary/Recipe/Saved Meal/Meal Plan snapshots are never rewritten.
+13. Search is derived/rebuildable and never canonical truth.
+14. A relation is classified `DERIVED / REBUILD` only if an exact deterministic rebuild/migration source exists.
+15. Classification and restore **load mode** are independent concepts.
+16. Migration-seeded rows are validated, not blindly inserted/upserted.
+17. Authoritative scalar transport is lossless before JavaScript canonicalization; the canonicalizer cannot repair precision already lost by a parser.
+18. Protected encryption is randomized; deterministic semantic hashing is a separate plaintext operation.
+19. Artifact validity is independent from RPO/freshness eligibility.
+20. `CORE_PORTABLE` cannot emit final Plan 7 DR-ready status; only `FULL_DR` can.
+21. Repository cutover alone is insufficient for destructive Production retirement; live deployed-consumer cutover is mandatory.
+22. Applied migrations are immutable. Any later change is forward-only and receives an identity allocated from then-current migration authority at the exact task that creates it.
+23. Deployment, Production DB mutation, Food population, provider ingestion, generation promotion, compatibility promotion, Activity Catalog mutation, and Plan 8 each require separate authority where applicable.
 
-## 5. Recovery model: physical backup versus logical export
+## 5. Export profiles and readiness
 
-### 5.1 Full physical Supabase/database backup
+Plan 7 V1 defines two explicit profiles.
 
-**ARCHITECTURE REQUIREMENT** — a physical/platform backup solves instance-level disaster recovery. It may preserve implementation-specific catalogs, extension state, operational lease rows, platform schemas, and storage details. It can be appropriate when restoring the same platform quickly.
+### 5.1 `CORE_PORTABLE`
 
-A physical backup is **not** sufficient evidence that the Food Catalog is provider-neutral, deterministic, or movable to a clean compatible PostgreSQL target.
+Includes global canonical Food authority plus required non-personal audit/history/policy state. It may prove:
 
-### 5.2 Provider-neutral logical Food Catalog export
+- canonical identity portability;
+- generation portability;
+- deterministic search rebuild portability.
 
-**PROPOSED PLAN 7 DESIGN** — define a domain artifact named:
+It **may not** emit final Plan 7 disaster-recovery readiness.
+
+### 5.2 `FULL_DR`
+
+Includes `CORE_PORTABLE` plus:
+
+- protected governance/security history;
+- protected owner Food Catalog state;
+- exact external user-identity mapping prerequisites.
+
+Only `FULL_DR` may satisfy final Plan 7 DR readiness.
+
+CI uses deterministic protected fixtures and ephemeral test keys. Real Production PII/security plaintext must never be uploaded to GitHub Actions artifacts. If a real protected Production export is separately authorized, CI/repository evidence stores only approved non-sensitive attestations/hashes.
+
+## 6. Physical backup versus provider-neutral logical export
+
+A physical/platform backup solves instance-level recovery and may include platform schemas, implementation-specific catalogs, operational leases, and storage details. It does not prove deterministic provider-neutral Food Catalog portability.
+
+Plan 7 defines the logical artifact:
 
 `plaivra-food-catalog-portable-export`
 
-with initial `formatVersion = 1` and a separate `canonicalizationVersion = 1`.
+with `formatVersion = 1` and separate `canonicalizationVersion = 1`.
 
-The artifact is a logical bundle, not `pg_dump`. Its minimum structure is:
+Conceptual structure:
 
 ```text
 food-catalog-export/
@@ -104,392 +126,427 @@ food-catalog-export/
   segments/
     <logical-segment>.ndjson
   protected/
-    <owner/security-segment>.ndjson.enc   # only when approved and non-empty
+    <protected-segment>.ndjson.enc
   evidence/
-    source-artifact-manifest.json         # references/checksums; bytes only if policy allows
+    source-artifact-manifest.json
 ```
 
-The artifact must be valid for a zero-row catalog. Every required segment still appears in the manifest with `rowCount = 0` and deterministic empty-content checksums.
+A zero-row catalog is a valid first-class artifact. Required empty segments remain present with `rowCount = 0` and deterministic plaintext semantic hashes.
 
-### 5.3 Manifest contract
+## 7. One-snapshot export contract
 
-**PROPOSED PLAN 7 DESIGN** — `manifest.json` contains at least:
+Every authoritative export adapter must use one read-only PostgreSQL `REPEATABLE READ` MVCC snapshot.
 
-- artifact `format` and `formatVersion`;
-- `canonicalizationVersion`;
-- export schema fingerprint/version;
-- source repository commit;
-- source migration-ledger state and latest reconciled Production migration identity;
-- source compatibility version/marker as evidence, not as authority to promote a target;
-- export scope (`global`, `global+protected-owner-state`, or another Planner-approved explicit scope);
+Two supported shapes are allowed:
+
+- **single connection/transaction:** `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`, keep that transaction open for all source observations and segment reads;
+- **parallel/multi-connection:** an exporting transaction establishes the snapshot with equivalent `pg_export_snapshot()` semantics, and every worker imports that exact snapshot before issuing any authoritative query while the exporting transaction remains valid.
+
+The artifact records a snapshot-boundary descriptor containing at minimum:
+
+- source database/environment identity suitable for non-secret evidence;
+- PostgreSQL snapshot evidence (`pg_current_snapshot()`/exported-snapshot equivalent);
+- transaction/snapshot capture time from PostgreSQL;
+- migration count/latest migration observation;
+- migration-ledger/repository identity used for interpretation;
+- current-generation pointer observation;
+- compatibility observation;
+- one snapshot-boundary checksum referenced by every authoritative segment descriptor.
+
+No segment may claim authority if it was read outside that snapshot boundary.
+
+### Torn-export negative proof
+
+A mandatory test starts an export, reads one authority segment, commits a concurrent source write that changes another authority relation/current pointer, then continues the export. The trusted artifact must contain **only the pre-write snapshot state** (or, for a later separate export, only the post-write state). It must never combine both states. An adapter that pages independent REST/API calls without a common database snapshot must be rejected for authoritative export.
+
+This design uses MVCC consistency, not a Production write lock.
+
+## 8. Manifest, classification, and restore load modes
+
+`manifest.json` contains at least:
+
+- format/profile/version/canonicalization version;
+- source repository commit and schema fingerprint;
+- same-snapshot migration/current-pointer/compatibility evidence;
+- snapshot-boundary descriptor/checksum;
 - required segment inventory;
-- per-segment classification;
-- per-segment primary/canonical sort key;
-- per-segment row count;
-- per-segment byte SHA-256;
-- per-segment semantic SHA-256;
-- required/optional marker;
-- an overall manifest semantic checksum over the semantic fields and segment digests;
-- a volatile envelope timestamp that is explicitly excluded from semantic equality.
+- per-segment relation/classification;
+- explicit `loadMode`;
+- stable sort key;
+- row count;
+- deterministic **plaintext semantic SHA-256**;
+- transport/ciphertext SHA-256 where applicable;
+- required/optional/protected markers;
+- overall semantic root calculated only from deterministic semantic fields/plaintext semantic digests;
+- volatile envelope metadata such as `capturedAt`, which is evidence and not semantic equality.
 
-No secret, access token, provider credential, service-role key, database password, active lease token, or transient worker ownership may appear in a portable artifact.
+### 8.1 Required load modes
 
-### 5.4 Deterministic canonicalization
+The relation registry uses explicit load modes independent from canonical classification:
 
-**PROPOSED PLAN 7 DESIGN** — deterministic serialization rules:
+- `VALIDATE_PRESEEDED` — Git migrations already created the row/reference. Never blind insert/upsert. Validate the migration-owned identity/content; relation-specific mutable fields may then be restored only through an exact keyed update contract.
+- `RESTORE_EXACT` — insert/restore exact stable IDs and authoritative persisted values from the artifact.
+- `RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION` — restore durable history/authority exactly while forcing explicitly transient lease/claim fields to safe neutral state.
+- `RECONSTRUCT_TRANSITIONAL_COMPATIBILITY` — preserve/reconstruct physical compatibility values required by the currently tested pre-retirement schema/runtime without elevating them to canonical truth.
+- `DERIVED_REBUILD` — do not import rows; invoke a defined deterministic rebuild from restored authority.
 
-- relations are ordered by explicit stable primary/composite identity, never database physical order;
-- UUIDs use lowercase canonical text;
-- timestamps use exact UTC instants in one canonical representation;
-- JSON object keys are recursively sorted;
-- arrays are sorted only where the owning architecture defines them as unordered sets; semantically ordered arrays retain order;
-- `NULL` remains distinct from numeric/string zero or empty text;
-- numerics use a canonical decimal representation that preserves value without float coercion;
-- text is preserved exactly unless a specific stored value is defined as normalized authority;
-- each NDJSON object uses deterministic key order;
-- semantic checksums exclude volatile storage metadata only where the relation contract explicitly declares it non-semantic.
+A physical relation may map to multiple logical segments/load phases where migration-owned seed rows and runtime-created rows have different behavior.
 
-A restore verifier must reject unknown canonicalization versions rather than guess.
+### 8.2 Seeded/reference examples
 
-## 6. Portable boundary
+Current migrations already create/reference state that must not be blindly inserted:
 
-The exhaustive relation classification is maintained in the discovery inventory. The architectural rule is:
+- taxonomy registry: `food_taxonomy_namespaces`, migration-seeded `food_taxonomy_nodes`;
+- market registry: `market_scopes`, `market_scope_memberships`;
+- governance policy seed and `food_catalog_governance_policy_pointer`;
+- `food_catalog_current_generation` singleton;
+- `release_schema_compatibility` singleton used for target/schema evidence.
 
-### 6.1 Portable authority
+For a relation that later contains additional runtime-created rows, seed-owned keys are `VALIDATE_PRESEEDED` while non-seed portable rows are restored exactly under a separate logical segment/rule.
 
-**ARCHITECTURE REQUIREMENT** — export state needed to reconstruct the exact canonical identity/effective-authority graph, including:
+### 8.3 Current pre-retirement `food_items`
 
-- stable global Food identity anchors;
-- immutable source records/provenance;
-- immutable nutrition, serving, name, taxonomy, market, barcode, verification, merge, and lineage authority;
-- Activation Sets/member authority;
-- Catalog Generations and exact composition relations;
-- current-generation pointer;
-- policy/configuration rows required to interpret/rebuild current authority;
-- Plan 6 governance security/policy authority subject to the protected-identity rules below;
-- owner-scoped personal override pointer/revisions when the export scope includes user-owned Food Catalog state.
+`food_items` is an identity root plus transitional physical compatibility state. Because `food_name` is currently `NOT NULL` and runtime/DB equivalence still depends on flat fields, the export must preserve every physical compatibility value required by the tested schema/runtime until each field is formally retired. An `id`-only insert is not a valid current-schema restore strategy.
 
-### 6.2 Portable audit/history
+The artifact does not promote those compatibility values to long-term canonical authority; it preserves them under `RECONSTRUCT_TRANSITIONAL_COMPATIBILITY` so the pre-retirement schema can be restored exactly enough to satisfy constraints and runtime equivalence.
 
-**ARCHITECTURE REQUIREMENT** — preserve immutable evidence required to explain how authority was produced or changed: activation/generation events, validation reports/findings, ingestion manifests/quarantines/reconciliation/release diffs, correction cases/evidence/events, governance operations/audit/lifecycle history, and personal-override operation history.
+## 9. Lossless PostgreSQL scalar transport and canonicalization
 
-Operational rows that combine durable history with live lease state are exported field-selectively. Durable result/event identity stays; active worker/lease state does not become resumable authority on the target.
+Authoritative values must cross the PostgreSQL-to-export boundary in a type-aware/lossless representation **before** JavaScript can coerce them.
 
-### 6.3 Derived/rebuildable
+The adapter must retain PostgreSQL type identity and canonical/raw database text sufficient for exact round-trip. Native JS `number` and JS `Date` are prohibited as the first authoritative representation for precision-bearing values.
 
-**ARCHITECTURE REQUIREMENT** — `food_catalog_search_documents`, search indexes, generated search vectors, and other caches/projections are rebuilt from restored canonical authority. A SearchDocument table dump is not canonical restore input.
+Required coverage:
 
-### 6.4 Transient/do not export
+- PostgreSQL microsecond timestamps;
+- `bigint` outside JS safe-integer range;
+- large/high-precision `numeric` values;
+- decimal lexical normalization;
+- JSONB with nested large/high-precision numeric values;
+- `NULL` versus zero;
+- exact typed round-trip back into PostgreSQL.
 
-**ARCHITECTURE REQUIREMENT** — exclude active lease ownership/tokens/heartbeats, worker claims, caches, staging state, credentials, secrets, and any implementation state that would incorrectly resume work on a different environment.
+### 9.1 Numeric rules
 
-### 6.5 Outside Food Catalog / reference only
+Transport retains the exact PostgreSQL numeric text. Semantic hashing parses decimal text without binary floating point, normalizes sign/leading zeros, removes only semantically redundant trailing fractional zeros, and normalizes negative zero to zero. Exponent notation is not emitted in the semantic canonical form. Restore uses the lossless transport text cast to the declared PostgreSQL type.
 
-**ARCHITECTURE REQUIREMENT** — Diary/Recipe/Saved Meal/Meal Plan historical rows and My Foods are separate Product/user authorities. The global Food Catalog export does not absorb them into global truth. The restore verifier may inspect or seed controlled references to prove that exact Food IDs remain valid and frozen snapshots remain unchanged.
+### 9.2 Timestamp rules
 
-## 7. Sensitive identity and user-owned state
+Transport preserves the exact PostgreSQL microsecond instant. Canonical semantic form is UTC with six fractional digits and `Z`. No JS `Date` round-trip is allowed to truncate or reinterpret source precision.
 
-**PROPOSED PLAN 7 DESIGN** — portable Food Catalog artifacts use explicit protection boundaries:
+### 9.3 JSONB rules
 
-- global canonical authority is exportable independently;
-- user-owned personal overrides are a separate protected segment keyed by exact user UUID;
-- governance principal/capability history is an admin-only protected segment because it can contain human identity references and service-identity hashes;
-- restoring historical principal IDs does not automatically reactivate external service credentials;
-- active worker/outbox lease tokens are excluded;
-- owner-scoped rows must fail restore if their user identity cannot be mapped exactly to the intended target user.
+JSONB is transported as lossless PostgreSQL JSONB text or an equivalent token-preserving representation. Recursive canonicalization sorts object keys but preserves array order unless the relation contract declares an array to be an unordered set. Numeric tokens are canonicalized without JS floating-point conversion.
 
-**OPEN POLICY DECISION** — Planner must approve whether a disaster-recovery restore to a new Plaivra environment may reactivate governance human/service principals automatically after exact identity match, or whether all principals are restored as historical records and require an explicit reauthorization ceremony before active use.
+Post-restore tests compare typed PostgreSQL values (`IS NOT DISTINCT FROM`/type-appropriate equality) and semantic canonical hashes.
 
-**OPEN POLICY DECISION** — source-evidence object bytes may have provider/legal retention limits. Database provenance/checksum records are portable authority/history; including raw source artifacts in the bundle requires an explicit retention/right policy. The design supports checksum-addressed external evidence references when bytes cannot legally travel.
+## 10. Protected segments: randomized encryption versus deterministic hashes
 
-## 8. Disposable logical restore model
+Plan 7 V1 protected segments use:
 
-**PROPOSED PLAN 7 DESIGN** — restore verification runs only against an isolated disposable target and is fail-closed.
+- **AES-256-GCM**;
+- a fresh cryptographically random nonce for **every encrypted segment on every encryption run**;
+- key material supplied by an external key-custody/provider interface;
+- ephemeral test keys in CI only;
+- no plaintext fallback.
 
-The verifier executes these phases:
+No key material may appear in Git, manifest fields, artifact metadata, logs, or generated QA evidence. A paid cloud KMS is not a mandatory dependency.
 
-1. **Artifact preflight** — parse only supported format/canonicalization versions; require every mandatory segment; reject duplicate segment names, duplicate stable IDs, unexpected secret-shaped fields, checksum mismatches, and stale/wrong source identity according to policy.
-2. **Target preflight** — prove the target is the approved disposable environment and not Plaivra Production or Activity Catalog.
-3. **Schema construction** — create the target from Git migration/schema authority through the exact reviewed repository commit. Do not use exported DDL as authority.
-4. **Schema/security fingerprint** — verify expected relations, constraints, RLS, grants, functions, and required extensions before data load.
-5. **Reference/identity load** — restore registries and stable root Food UUID anchors deterministically.
-6. **Canonical fact/provenance load** — restore sources, immutable nutrition/name/serving/taxonomy/market/barcode/verification/merge facts and lineage.
-7. **Audit/control-plane load** — restore activation, ingestion reproducibility history, correction/governance history, and approved security-policy authority while neutralizing transient leases/claims.
-8. **Generation load** — restore generations, composition, validation, events, and their exact stable IDs/checksums.
-9. **Pre-pointer verification** — prove all referenced generation facts, redirects, grants, assertions, and policy versions are internally valid.
-10. **Current pointer restore last** — only after all prior checks pass, restore exact `current_generation_id`, `current_event_id`, `current_validation_report_id`, and `pointer_revision`.
-11. **Protected owner-state restore** — when included, map exact user IDs first, then restore personal override revisions/pointers/operation history; reject cross-user ownership mismatch.
-12. **Derived search rebuild** — rebuild search for the restored current generation through the current Plan 5 public rebuild boundary, then validate its deterministic evidence and behavior.
-13. **Consumer-reference verification** — use read-only/fixture consumer references to prove restored Food UUIDs remain valid without rewriting historical snapshots.
-14. **Final security/integrity verification** — run FK/constraint, RLS/ACL, checksum, merge topology, generation, owner-isolation, and transient-state assertions.
-15. **Evidence output** — write a deterministic restore-verification report identifying source artifact root, repository commit, target schema fingerprint, comparison results, and any failure. A failed assertion makes the restore untrusted.
+Two hashes are distinct:
+
+1. **canonical plaintext semantic SHA-256** — deterministic for the same logical authority and used by the manifest semantic root;
+2. **ciphertext/transport SHA-256** — integrity of the encrypted transport bytes and allowed/expected to differ when fresh nonces are used.
+
+The manifest semantic root must never depend on randomized ciphertext bytes, nonce values, or transport hashes.
+
+Negative contracts must reject nonce reuse for the same key and reject any implementation/test expectation that identical plaintext produces deterministic ciphertext. Re-encrypting the same protected segment with fresh nonces should preserve plaintext semantic SHA-256 while changing ciphertext/transport SHA-256.
+
+## 11. Portable boundary and deterministic rebuild rule
+
+### Portable authority
+
+Export exact state needed to reconstruct identity/effective authority: Food IDs, source provenance, immutable nutrition/name/serving/taxonomy/market/barcode/verification facts, Activation Sets, Catalog Generations/composition, policy state, current pointer, Plan 6 lineages, and protected personal/governance authority where the profile requires it.
+
+### Portable audit/history
+
+Preserve activation/generation events, validation reports/findings, Plan 4 manifests/quarantine/reconciliation/release diffs, correction/governance operations/audits/lifecycle evidence, merges, and personal-override operation history where required.
+
+### Derived/rebuildable
+
+`food_catalog_search_documents`, search indexes, generated search vectors, and other objects with a **defined deterministic rebuild source** use `DERIVED_REBUILD`.
+
+A transitional relation is not discardable merely because it is not long-term truth. In the current pre-retirement schema, `food_aliases` and `food_market_relevance` are preserved as transitional portable compatibility state unless/until exact retirement removes them; neither is classified derived merely from architectural preference.
+
+### Transient/do not export
+
+Exclude credentials/secrets, active lease tokens/worker claims, caches/staging, and state that would resume source-environment work incorrectly.
+
+### Outside Food Catalog / reference only
+
+Diary, Recipe, Saved Meal, Meal Plan and My Foods remain separate Product/user authority. Controlled reference extracts/fixtures may prove Food-ID and frozen-snapshot compatibility but do not become global catalog truth.
+
+## 12. Governance/security, owner state, and raw source evidence
+
+Cross-environment restore does **not** automatically reactivate external operational authority.
+
+- Preserve exact governance principal/capability/policy/audit history in protected `FULL_DR` segments.
+- Never export service credentials/secrets.
+- Service credentials are rotated/rebound separately.
+- Human authority requires exact auth/account identity binding validation before runtime enablement.
+- Do not enable `food.outbox.deliver` service authority until pending outbox/event replay reconciliation is explicitly complete.
+- The restored target remains operationally isolated until external identity/authorization cutover is separately approved.
+
+Owner rows fail closed if target identity mapping is absent, ambiguous, or cross-owner.
+
+Default source evidence portability is database provenance plus checksum-addressed external evidence references. Raw provider/source bytes are included only where a source-specific legal/retention policy explicitly permits portability.
+
+## 13. Restore target capability profile
+
+Plan 7 V1 certification target is:
+
+- PostgreSQL major **17**;
+- compatible PostgreSQL **17.x**;
+- current Production independently verified as PostgreSQL **17.6**;
+- required capabilities: `pgcrypto`, `pg_trgm`, `uuid-ossp`;
+- disposable certification may provide a thin compatibility harness for Supabase-style `auth` helpers and `anon`/`authenticated`/`service_role` RLS role contracts.
+
+Plan 7 proves Food Catalog domain/schema/data portability. Full authentication-provider/platform portability is **not** a Plan 7 exit requirement.
+
+Every verifier report states the exact target capability profile tested and must not silently skip RLS/ACL assertions.
+
+## 14. Disposable restore model
+
+Restore verification runs only against an isolated disposable target and is fail-closed.
+
+1. **Artifact structural validity** — supported versions/profile, mandatory segments, stable IDs, hashes, secret scan; no RPO rejection here.
+2. **Target preflight** — prove disposable target, PostgreSQL 17.x capability profile, and not Plaivra Production/Activity Catalog.
+3. **Git schema construction** — build from exact reviewed migrations/schema authority; exported DDL is not authority.
+4. **Schema/security fingerprint** — constraints/RLS/grants/functions/extensions.
+5. **Validate preseeded reference/singleton rows** — compare migration-created identities/content rather than insert/upsert.
+6. **Restore stable Food roots with current-schema compatibility values** — no `id`-only shortcut.
+7. **Restore source/canonical authority** — immutable facts/provenance/lineages.
+8. **Restore audit/control plane** — exact history, transient claim/lease neutralization.
+9. **Restore generations/composition/validation/events**.
+10. **Pre-pointer verification** — exact graph/checksum/policy assertions.
+11. **Restore current-generation pointer last** by exact keyed singleton update after its migration-created row has been validated.
+12. **Restore protected owner/security state** for `FULL_DR`, keeping target operationally isolated.
+13. **Rebuild derived search** from the exact restored generation.
+14. **Consumer-reference and frozen-snapshot verification**.
+15. **Final FK/RLS/ACL/identity/hash/security verification**.
+16. **Recovery eligibility evaluation** under an explicit caller-supplied RPO policy.
+17. **Evidence report** — source artifact root, snapshot boundary, target profile, schema fingerprint, comparison results, recovery-eligibility decision.
 
 No step writes to Plaivra Production.
 
-## 9. Current non-deferrable restore-order hazard
+## 15. Current non-deferrable `food_items` / `food_source_records` cycle
 
-**VERIFIED CURRENT FACT** — current schema contains a non-deferrable FK cycle:
+Current schema has a non-deferrable cycle:
 
-- `food_source_records_food_id_fkey`: `food_source_records.food_id → food_items.id`;
-- `food_items_verified_source_record_fk`: `(food_items.verified_source_record_id, food_items.id) → food_source_records(id, food_id)`.
+- `food_source_records.food_id → food_items.id`;
+- `(food_items.verified_source_record_id, food_items.id) → food_source_records(id, food_id)`.
 
-Both are currently non-deferrable.
+While the compatibility FK exists, the loader must preserve all current physical `food_items` values required by schema/runtime but temporarily neutralize only the cyclic `verified_source_record_id` field:
 
-**PROPOSED PLAN 7 DESIGN** — while the transitional root `verified_source_record_id` still exists, logical restore must not rely on disabling constraints or arbitrary row order. The trusted disposable-restore loader should:
+1. load the exact Food row values required by the current schema, with `verified_source_record_id = NULL` only for this controlled phase;
+2. restore exact source records and canonical facts;
+3. reconstruct the exported `verified_source_record_id` under `RECONSTRUCT_TRANSITIONAL_COMPATIBILITY`;
+4. validate the composite FK and exact compatibility value;
+5. never treat that root field as canonical verification authority.
 
-1. insert the exact `food_items.id` identity/root row with compatibility `verified_source_record_id = NULL`;
-2. restore `food_source_records` with exact source IDs and Food links;
-3. restore immutable canonical facts/verification assertions;
-4. only if the transitional compatibility column still exists for that schema version, reconstruct its compatibility value from exported evidence through an explicitly verified transitional restore step;
-5. validate the composite FK and semantic equivalence.
+The workaround disappears only after a separately approved retirement removes the compatibility field/FK.
 
-After approved Plan 7 retirement removes that compatibility field/FK, future export versions omit this transitional reconstruction step.
+## 16. Artifact validity versus recovery eligibility
 
-The portable artifact must not make root `verified_source_record_id` canonical verification authority.
+### Pure artifact validity
 
-## 10. Search rebuild and verification model
+Artifact validation checks structure, supported versions/profile, required segments, exact ownership, snapshot binding, hashes, schema/profile declarations, secret/transient exclusions, and semantic integrity. **Age alone does not make an artifact invalid.**
 
-### 10.1 Existing current boundary
+`capturedAt`/snapshot time is evidence.
 
-**VERIFIED CURRENT FACT** — current Plan 5 exposes:
+### Recovery eligibility
 
-- `public.rebuild_food_catalog_search_projection_v2(uuid, text, text)` — `SECURITY DEFINER`, executable by `service_role`, not anon/authenticated;
-- `public.search_food_catalog_v2(text, text, text, text, text, integer, text, text, text, jsonb)` — current authenticated/service-role search boundary;
-- `food_catalog_search_documents` — generation-keyed derived state.
-
-**VERIFIED CURRENT FACT** — serving-semantics correction moved the original rebuild implementation to `private.food_catalog_search_projection_v2_legacy_rebuild(uuid,text,text)`. The public rebuild currently calls this private helper, then forces global `serving_label = NULL`, because the current generation model has no deterministic preferred-serving selector, and recomputes the projection checksum. The private helper is therefore an implementation dependency and cannot be retired merely because Product code does not call it directly.
-
-### 10.2 Restore search sequence
-
-**PROPOSED PLAN 7 DESIGN**:
+A separate operation accepts an explicit policy such as:
 
 ```text
-restore canonical authority
-  → restore exact generation/current pointer
-  → read exact current generation + projection version
-  → choose exact approved search nutrition-policy version when applicable
-  → call public.rebuild_food_catalog_search_projection_v2
-  → verify returned documentCount + projectionChecksumSha256
-  → run deterministic golden queries through public.search_food_catalog_v2
+evaluateRecoveryEligibility(manifest, { maxArtifactAge, evaluationTime })
 ```
 
-For a valid zero-row/uninitialized catalog where `current_generation_id = NULL`, the verifier expects zero SearchDocuments and does **not** call the rebuild RPC with a null generation.
+A DR/cutover caller may reject an otherwise valid artifact when it exceeds that operation's RPO/max-age. There is no universal hard-coded Plan 7 TTL.
 
-### 10.3 Search equivalence
+## 17. Restore equality and verification matrix
 
-**ARCHITECTURE REQUIREMENT** — verification covers:
+Three comparison classes remain mandatory:
 
-- same active canonical Food IDs and no stale generation rows;
-- deterministic name/alias behavior across language/script contexts;
-- explicit market/direct-parent/GLOBAL semantics;
-- exact category/cuisine behavior supported by the current projection;
-- nullable nutrition: filtered unknown values do not become zero or match invented thresholds;
-- serving semantics: global serving label remains `NULL` until deterministic serving-display authority exists; `100 g`/`100 ml` nutrition basis is not a serving;
-- favorites/recent/My Foods only in controlled owner-specific fixtures;
-- stable cursor continuation and rejection of cursor/context mismatch;
-- exact ordered golden-query result IDs/selected fields for deterministic fixtures;
-- redirects resolve to the current active canonical survivor without exposing stale source identity as a new canonical result.
+- **byte/hash equality** — transport bytes where required, plaintext semantic segment hashes, manifest semantic root, stored architecture-defined checksums, source-evidence references;
+- **exact identity/value equality** — Food UUIDs, fact/revision/event/report/operation IDs, generation composition, pointer IDs/revision, policy strings, ownership IDs, merge redirects, typed timestamps/scalars;
+- **semantic equality** — canonical JSON/numeric values, graph integrity, RLS/ACL behavior, rebuilt search behavior, frozen historical snapshot preservation.
 
-Search comparison is semantic/behavioral plus the rebuild RPC checksum. Physical SearchDocument file bytes are not restore authority.
+Mandatory assertions include canonical Food ID set, stable authority/history ID set, nutrition/name/serving lineage, source provenance, taxonomy/market, GTIN/barcode corrections, merges, verification/activation, generations, current pointer, governance/personal overrides, frozen consumer snapshots, search rebuild/golden queries, security/RLS, migration/schema fingerprint, transient neutralization, and manifest/snapshot consistency.
 
-## 11. Restore assertion classes
+Any unknown mandatory assertion fails trust.
 
-Plan 7 distinguishes three equality classes.
+## 18. Search rebuild and golden verification
 
-### 11.1 Byte/hash equality
+Current canonical boundaries remain:
 
-Use byte/hash equality for:
+- `public.rebuild_food_catalog_search_projection_v2(uuid,text,text)`;
+- `public.search_food_catalog_v2(...)`;
+- `food_catalog_search_documents` as derived generation-keyed state.
 
-- artifact segment bytes;
-- per-segment byte SHA-256;
-- canonical semantic segment hashes;
-- overall manifest semantic checksum;
-- source-artifact checksum references;
-- existing stored checksums whose architecture defines the hash input, including generation composition/change manifest, validation report, ingestion manifest/reconciliation/release-diff, and operation semantic checksums.
+The public rebuild currently depends on `private.food_catalog_search_projection_v2_legacy_rebuild(...)` and then corrects global serving display to `NULL`; that private helper remains **KEEP** until a forward replacement is independently proven.
 
-### 11.2 Exact identity/value equality
+Restore sequence:
 
-Use exact value equality for:
+```text
+restore exact authority/current pointer
+  → read exact generation + projection version
+  → rebuild current projection
+  → verify documentCount + projectionChecksumSha256
+  → run deterministic golden queries
+```
 
-- every stable UUID that is part of canonical authority/audit identity;
-- exact foreign-key identity pairs;
-- generation and activation IDs;
-- exact current pointer IDs and revision;
-- policy/version strings;
-- immutable audit timestamps as instants;
-- ownership user UUIDs;
-- merge redirect pairs;
-- source/provider record identities as stored provenance.
+With `current_generation_id = NULL`, no rebuild is invoked and zero SearchDocuments is valid.
 
-### 11.3 Semantic equality
+Golden coverage includes exact/strong names and aliases, prefix/contains ranking, locale/script, market direct/parent/GLOBAL, category/current cuisine behavior, nullable numeric filters and presets, favorites/recent/My Foods fixtures, cursor continuation/context rejection, redirect behavior, stale-generation isolation, and nullable serving display.
 
-Use semantic equality where storage formatting is not authority:
+## 19. Frozen Product-policy decisions for Workstream 2
 
-- typed relation rows after canonical numeric/JSON serialization;
-- merge topology (flattened, target active, no self/cycle/chain);
-- RLS/ACL privilege semantics;
-- constraint/function behavior where object-definition whitespace is irrelevant;
-- rebuilt search results and pagination behavior;
-- historical-snapshot safety: the consumer rows are byte/value unchanged while their referenced Food IDs still resolve according to the appropriate historical/current contract.
+### Catalog barcode behavior
 
-## 12. Mandatory restore verification matrix
+1. normalize/validate GTIN;
+2. query local canonical `food_catalog_lookup_effective_barcode`;
+3. when a canonical active result exists, use local Plaivra authority;
+4. provider-assisted lookup may occur only on canonical miss;
+5. provider result is suggestion/source evidence only and never overwrites canonical authority.
 
-**ARCHITECTURE REQUIREMENT** — a successful verifier must prove at least:
+This introduces no Plan 8/provider ingestion.
 
-| Assertion | Comparison | Fail-closed condition |
-|---|---|---|
-| Canonical Food IDs | exact set equality | missing/extra/remapped UUID |
-| Stable authority/history IDs | exact identity equality | regenerated ID where stable identity is required |
-| Nutrition revisions | semantic row + stored checksum/evidence | changed NULL/zero/basis/value/supersession |
-| Serving lineage/revisions | exact IDs + semantic graph | broken lineage/current pointer mismatch/fabricated serving |
-| Name lineage/revisions | exact IDs + semantic graph | broken lineage/locale/script/name-role mismatch |
-| Source provenance | exact IDs/links + checksum refs | missing source lineage or Food mismatch |
-| Taxonomy/market | exact registries/assignment IDs + semantic links | unknown/misbound assignment |
-| GTIN/barcode | exact effective mapping + correction history | duplicate/changed effective owner or mismatched correction |
-| Merge topology | exact event/redirect semantics | cycle, chain, self redirect, wrong survivor |
-| Verification/activation | exact assertion/grant IDs + chain semantics | invalid predecessor, revoked/mismatched selection |
-| Generations | exact IDs/composition/checksums | composition mismatch |
-| Current generation | exact pointer IDs/revision | pointer to absent/unverified generation |
-| Governance | exact policy/operation/audit identities + semantic security state | missing history or unauthorized active authority |
-| Personal overrides | exact owner/food/revision graph | owner mismatch, pointer mismatch, missing tombstone/history |
-| Frozen consumer snapshots | exact stored snapshot values | restore rewrites historical snapshot |
-| Search rebuild | RPC checksum + semantic behavior | stale generation, result/cursor/filter mismatch |
-| Golden queries | exact ordered expected IDs/selected fields | any deterministic fixture mismatch |
-| RLS/ACL/security | semantic privilege/policy assertions | broader access than source/architecture |
-| Migration/schema compatibility | exact expected ledger/schema fingerprint | wrong/newer/older authority |
-| Manifest | byte + semantic hashes | missing segment or checksum mismatch |
-| Transient leases | semantic absence/neutral state | target resumes source worker/lease claim |
+### Name-only duplicate hint
 
-## 13. Consumer migration gate before retirement
+Keep it advisory only and use approved V2/current-generation search. Prefer exact/strong normalized matches as “possible existing match” suggestions. The user may ignore it. Name similarity never automatically merges, mutates, or blocks creation.
 
-**ARCHITECTURE REQUIREMENT** — destructive retirement is prohibited until repository inventory and live preflight prove zero unsupported consumers.
+### Transitional local Egyptian dataset
 
-A consumer counts as migrated only when:
+`@/data/egyptian-foods` must never remain or become global canonical Food authority. Before the first real Catalog Generation, Product UX may retain it only as an explicitly isolated **non-canonical/manual suggestion source**. It must not create fake global Food IDs, bypass current-generation authority, become search authority, or fabricate verified provenance.
 
-1. global Food search/read/write-handoff behavior uses the approved Food Catalog domain/current-generation boundary;
-2. no Product path selects compatibility-only flat Food columns for current truth;
-3. no Product path walks `merged_into_food_id` to determine current canonical identity;
-4. verification uses exact generation/assertion/trust authority rather than mutable root `is_verified`;
-5. owner-specific personal Food values use the approved owner authority and do not depend on a compatibility row scheduled for removal;
-6. tests no longer encode the legacy behavior as required Product authority;
-7. database functions/triggers/views/grants no longer depend on the retired object, except immutable historical migration text and explicitly preserved audit fixtures;
-8. live Production evidence confirms the expected schema/data/dependency state immediately before the later forward retirement migration.
+The intended migration boundary is:
 
-## 14. Legacy retirement principles
+- no current generation: suggestions may prefill a manual/My Food flow or non-canonical text entry, clearly typed as non-catalog;
+- current generation exists: global catalog results come only from approved generation/search authority;
+- the suggestion dataset never enters `source='catalog'` handoff semantics unless a real canonical Food ID is resolved independently.
 
-**ARCHITECTURE REQUIREMENT** — `legacy-looking` is not equivalent to `removable`.
+### Unresolved root metadata
 
-- `food_items.id` remains a stable anchor and is **KEEP**.
-- canonical tables introduced in Plans 1–6 are not retired merely because a compatibility column has a similar name.
-- current root `food_items.lifecycle_status` remains used by governance/write-plane logic and is not approved for retirement by this design.
-- `food_barcodes` remains effective barcode authority and is **KEEP**.
-- the Plan 5 private legacy rebuild helper is currently called by the public canonical rebuild and is **KEEP** until replaced by a forward implementation that no longer depends on it.
-- user-owned rows cannot be deleted to simplify global catalog retirement; they require an owner-data migration or an explicit decision to retain their model.
-- immutable historical migrations, audit records, and frozen snapshots are not rewritten to erase old concepts.
+These are **KEEP / UNKNOWN PENDING EVIDENCE**, not authorized retirement objects:
 
-The candidate-by-candidate matrix and preconditions live in the discovery inventory.
+`tags`, `notes`, `source_type`, `is_global`, `is_editable_by_user`, `created_by`, `kitchen_id`, `subcategory_id`, `brand_name`.
 
-## 15. Live retirement preflight contract
+Workstream 2 must prove exact Product meaning/replacement and obtain later Planner approval for each. Do not invent a new canonical destination merely to enable deletion.
 
-**PROPOSED PLAN 7 DESIGN** — immediately before any later destructive forward migration, a read-only preflight must prove all of the following on the exact Production target:
+## 20. Legacy owner favorites and personal corrections
 
-- target project identity equals Plaivra Production and not Activity Catalog;
-- migration history count/latest identity equals the Planner-approved expectation;
-- repository ledger is reconciled with no pending/schema-untracked/unresolved entries;
-- no newer migration/schema authority invalidates reviewed assumptions;
-- candidate table/column/function signatures exactly match the reviewed schema;
-- `pg_constraint`, `pg_proc`, `pg_views`, `pg_depend`/catalog evidence shows no unexpected database dependencies;
-- repository code search shows no current non-historical consumer references;
-- grants/policies do not expose an unexpected active API surface;
-- candidate data counts/non-null counts are understood and match the approved migration strategy;
-- every user-owned row that would be transformed has an exact owner-preserving migration plan;
-- current Food population/generation/pointer state is understood;
-- compatibility version/marker is understood and no compatibility promotion is bundled with retirement;
-- consumer FK rows referencing `food_items.id` remain valid without rewriting historical snapshots;
-- a disposable restore rehearsal of the exact candidate schema/data shape has already passed.
+### Heterogeneous `user_food_favorites(food_key)`
 
-Any mismatch stops retirement. `DROP ... CASCADE` is not an acceptable dependency-discovery mechanism.
+Legacy favorite keys are heterogeneous and must be classified row-by-row:
 
-## 16. Failure and recovery model
+- exact UUID resolving to global `food_items.id` → may migrate to `food_favorites` for the same owner;
+- exact UUID resolving to that owner's `user_food_items.id` → preserve My Food favorite semantics; **do not** convert to a global favorite;
+- text/log-derived `food_name|serving_size` key → preserve as legacy owner state or migrate only to a separately approved owner-favorite model;
+- unknown/ambiguous key → explicit blocker/preserved state, never discard.
 
-**ARCHITECTURE REQUIREMENT** — all verification fails closed.
+Legacy favorite retirement requires zero unmapped owner rows plus exact owner-preserving evidence.
 
-| Failure | Required behavior |
-|---|---|
-| incomplete/corrupt artifact | reject before restore |
-| unsupported export/schema/canonicalization version | reject; never infer a converter |
-| missing required authority relation/segment | reject |
-| duplicate stable ID | reject before mutation of target authority |
-| byte/semantic checksum mismatch | reject |
-| partial restore | mark target untrusted; never promote pointer/use as authority |
-| FK/order problem | stop and report exact relation/identity; never disable integrity as success path |
-| missing source lineage | reject affected canonical authority |
-| invalid merge topology | reject |
-| invalid/missing generation pointer target | reject before pointer restore |
-| search rebuild failure/checksum mismatch | restore verification fails |
-| golden-query mismatch | restore verification fails |
-| stale artifact | reject according to Planner-approved freshness policy |
-| cross-environment identity mismatch | reject protected/user/security activation |
-| secret/credential/lease token detected | reject artifact |
-| wrong user ownership mapping | reject protected segment |
-| cancellation | target remains disposable/untrusted; rerun from validated phase boundary or recreate |
-| retry | idempotent by artifact root + target verification run identity; no duplicate stable IDs/events |
+### `food_personal_corrections`
 
-No failed restore target may be promoted into Production merely because most rows loaded successfully.
+Product reads/writes cut over to Plan 6 personal overrides. At live retirement preflight:
 
-## 17. Target compatibility boundary
+- if Production count remains exactly zero, a verified no-op data migration is acceptable;
+- if any row exists, **STOP** and require an explicit owner-preserving semantic migration design before retirement.
 
-**VERIFIED CURRENT FACT** — current schema uses PostgreSQL extensions including `pg_trgm`, `pgcrypto`, and `uuid-ossp`, and current application/database security contracts include Supabase-style auth/service-role semantics.
+Rows are never discarded merely because the table is legacy.
 
-**PROPOSED PLAN 7 DESIGN** — distinguish:
+## 21. Expand / deploy / contract retirement sequence
 
-- **domain data portability**: logical authority/history is provider-neutral PostgreSQL data;
-- **full runtime portability**: target must also satisfy the repository's required extension, auth-helper, RLS, and role contracts or provide an explicitly reviewed compatibility layer.
+Repository migration is necessary but not sufficient for Production DROP.
 
-The restore verifier must publish which target capability profile it tested; it must not silently skip RLS/ACL assertions on a target that lacks the source security primitives.
+Required high-level order:
 
-**OPEN POLICY DECISION** — Planner must approve the minimum supported Plan 7 restore target profile: exact PostgreSQL major/version floor, extension availability/schema placement, and whether `auth.uid()`/Supabase role compatibility is required for the Plan 7 exit test or separately validated through an adapter profile.
+1. implement and verify repository consumer cutover;
+2. separately review/apply any backward-compatible **expand/reconciliation** DB authority required by the new code;
+3. deploy the consumer-cutover application artifact only under separate Planner deployment authorization;
+4. prove exact deployed artifact SHA and live compatibility behavior;
+5. observe/read-only verify no live consumer requires retirement candidates;
+6. run exact retirement preflight;
+7. Planner approves the exact destructive set;
+8. only then create/merge/apply the explicit forward retirement migration under the required repository/Production authorizations;
+9. perform fresh Production read-back plus full portability/search re-proof.
 
-## 18. Scale and repeatability
+A Production retirement migration is prohibited while the deployed application artifact is still pre-cutover.
 
-**PROPOSED PLAN 7 DESIGN** — export/restore must work for zero rows and future populated catalogs:
+## 22. Live retirement preflight
 
-- stream/page by stable key instead of loading the whole catalog into memory;
-- deterministic chunks/segments with independent checksums;
-- bounded transaction sizes for bulk load, while current pointer stays unrestored until all chunks validate;
-- resumability tracks completed immutable segment hashes, not live source DB cursors alone;
-- retries are idempotent for the same artifact root;
-- cancellation cannot leave an apparently valid pointer/search projection;
-- verification reports include row counts and segment hashes so large-catalog failures are localizable.
+Immediately before any later destructive action, read-only evidence must prove:
 
-## 19. Open Planner policy decisions
+- exact Production target and migration/ledger authority;
+- exact deployed application SHA is the reviewed cutover artifact or approved descendant preserving the contract;
+- live behavior demonstrates no pre-cutover compatibility consumer remains;
+- exact candidate schema signatures, grants, constraints, functions, views, and dependency catalog state;
+- repository search at exact candidate head has no unsupported non-historical references;
+- candidate data/non-null counts match approved migration semantics;
+- every owner row has exact owner-preserving disposition and zero unmapped rows for objects proposed for retirement;
+- current generation/pointer/compatibility state is understood;
+- historical consumer Food IDs/snapshots remain valid;
+- fresh disposable portability proof matches the exact schema/cutover state.
 
-Implementation must not silently resolve these:
+Any mismatch stops retirement. Zero rows plus no known repository reader is not sufficient authorization. `DROP ... CASCADE` is prohibited as dependency discovery.
 
-1. **Restore target profile** — exact PostgreSQL/version/extensions/auth-role compatibility required by the formal Plan 7 exit test.
-2. **Governance principal reactivation** — restore active principal/capability state automatically after exact identity match, or restore as historical/inactive until explicit reauthorization.
-3. **Raw source-evidence portability** — include evidence bytes in encrypted bundle when legally allowed, or standardize checksum-addressed external references only; retention/provider rights must govern.
-4. **Artifact encryption/key custody** — approved encryption mechanism and operational key custody for protected user/security segments.
-5. **Backup freshness/RPO acceptance** — what age makes an otherwise valid portable artifact stale for disaster-recovery approval.
-6. **Barcode Product behavior** — whether Plan 7 consumer migration must make local canonical `food_catalog_lookup_effective_barcode` the first lookup before any provider-assisted fallback, or whether that Product-policy change is deferred without blocking structural retirement.
-7. **Name-only duplicate UX** — replacement semantics for the current advisory My Food duplicate hint. It must never become merge authority, but whether the hint remains and which domain search powers it is Product policy.
-8. **Legacy root metadata** — definitive destination/retention semantics for `tags`, `notes`, `source_type`, `is_global`, `is_editable_by_user`, `created_by`, `kitchen_id`, `subcategory_id`, and `brand_name` before any column retirement.
-9. **Legacy user favorite model** — migration/reconciliation rule between `user_food_favorites(food_key)` and current `food_favorites(food_id)` where existing owner data exists.
-10. **Plan 6 personal override cutover** — exact Product semantics for replacing current `food_personal_corrections` reads with Plan 6 revisioned personal overrides while preserving existing owner-visible behavior and data.
+`food_market_relevance` is therefore **RETIRE AFTER PRECONDITION**, not a “retire now” candidate.
 
-## 20. Plan 7 design acceptance criteria
+## 23. Migration identity allocation
 
-This design is ready for implementation planning review when the Planner agrees that:
+Plan 7 does not reserve long-lived future timestamps/filenames.
 
-- logical export and physical backup are distinct;
-- the portable boundary contains canonical/history authority but excludes derived/transient state;
-- exact UUID identity preservation is mandatory;
-- current pointer restores last;
-- SearchDocuments rebuild from restored generation authority through the current public rebuild boundary;
-- global serving display remains nullable until explicit serving-display authority exists;
-- user/security state is protected and owner-mapped;
-- every retirement is gated by consumer migration plus live dependency/data preflight;
-- current mixed transitional consumers are acknowledged rather than assumed migrated;
-- open policy choices remain explicit rather than embedded in implementation.
+At the exact task that needs a migration:
 
-Approval of this design does **not** authorize implementation, a forward migration, Production mutation, Food population, generation promotion, compatibility promotion, deployment, Activity Catalog mutation, or Plan 8.
+1. read then-current `main`;
+2. inspect latest repository and Production migration authority;
+3. allocate the next safe repository migration identity;
+4. record that identity and evidence in the task/PR **before** SQL creation.
+
+Never silently rename an already-applied migration.
+
+## 24. Failure/recovery rules
+
+All mandatory verification fails closed. Corruption, unsupported versions, missing segments, duplicate stable IDs, checksum/snapshot mismatch, precision loss, wrong owner mapping, invalid merge/generation graph, security widening, search mismatch, target-profile mismatch, active transient claims, or missing deployed-cutover evidence make the relevant operation untrusted/ineligible.
+
+A valid artifact may still be ineligible for a particular recovery because of caller-supplied RPO; that does not retroactively make its structure/hashes invalid.
+
+No failed/partial disposable restore may be promoted merely because most data loaded.
+
+## 25. Frozen Planner policy block
+
+The following are binding for Plan 7 V1:
+
+- **Snapshot:** one PostgreSQL MVCC snapshot per authoritative export; no independent unsnapshotted REST pagination.
+- **Restore target:** PostgreSQL 17.x; current Production 17.6; `pgcrypto`, `pg_trgm`, `uuid-ossp`; optional thin Supabase auth/role compatibility harness for certification.
+- **Portability scope:** Food Catalog domain/schema/data portability; full auth-provider/platform portability is not required.
+- **Profiles:** `CORE_PORTABLE` for global/core proof; `FULL_DR` for final DR readiness.
+- **Protected encryption:** AES-256-GCM, fresh random nonce per encrypted segment/run, external key provider, ephemeral CI keys, no plaintext fallback.
+- **Hashes:** deterministic plaintext semantic SHA-256 separate from randomized ciphertext/transport SHA-256; semantic root excludes ciphertext/nonce.
+- **Governance reactivation:** preserve history, rotate/rebind service credentials, validate human identity binding, isolate target until authorization cutover, keep `food.outbox.deliver` disabled until replay reconciliation.
+- **Source evidence:** DB provenance + checksum-addressed external references by default; raw bytes only when source-specific legal/retention policy permits.
+- **RPO:** no global TTL; artifact validity and operation-specific recovery eligibility are separate.
+- **Barcode:** local canonical GTIN lookup first; provider only on canonical miss and only as suggestion/evidence.
+- **Duplicate hint:** advisory V2/current-generation strong normalized match only; never merge/block automatically.
+- **Root metadata:** listed unresolved metadata remains KEEP / UNKNOWN PENDING EVIDENCE.
+- **Legacy favorites:** heterogeneous row classification; no blanket `user_food_favorites → food_favorites` migration.
+- **Personal corrections:** Product cuts to Plan 6 overrides; zero rows may permit verified no-op, nonzero rows stop for explicit owner-preserving design.
+- **Egyptian dataset:** non-canonical/manual suggestion source only; never global authority.
+- **Derived classification:** only with an exact deterministic rebuild source.
+- **Deployment:** separately authorized deployment is mandatory in the eventual expand/deploy/contract retirement gate.
+
+## 26. Design acceptance and authorization boundary
+
+Architecture re-review should verify that every P1/P2 correction above is frozen consistently in the design, discovery inventory, and implementation plan.
+
+Approval of this design does **not** authorize implementation, migration creation, Production mutation, deployment, Food population, provider ingestion, activation, generation promotion, compatibility promotion, Activity Catalog mutation, destructive retirement, or Plan 8.
