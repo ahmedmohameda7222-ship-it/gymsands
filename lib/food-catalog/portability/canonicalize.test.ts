@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalizeDecimalText,
   canonicalizeLosslessJsonText,
+  canonicalizeLosslessRow,
   canonicalizePostgresScalar,
   sha256Hex,
   type LosslessPostgresScalar,
@@ -39,8 +40,16 @@ describe("Plan 7 lossless PostgreSQL scalar canonicalization", () => {
   });
 
   it("keeps NULL distinct from numeric zero", () => {
-    expect(canonicalizePostgresScalar({ pgType: "numeric", text: null })).toBe("null");
+    expect(canonicalizePostgresScalar({ pgType: "numeric", text: null })).toBeNull();
     expect(canonicalizePostgresScalar({ pgType: "numeric", text: "0" })).toBe("0");
+  });
+
+  it("keeps SQL NULL distinct from the literal text value null in canonical row bytes", () => {
+    const sqlNull = canonicalizeLosslessRow({ value: { pgType: "text", text: null } });
+    const literalNull = canonicalizeLosslessRow({ value: { pgType: "text", text: "null" } });
+    expect(sqlNull).not.toBe(literalNull);
+    expect(sqlNull).toBe('[["value","text",null]]');
+    expect(literalNull).toBe('[["value","text","null"]]');
   });
 
   it("normalizes UUID case without changing textual PostgreSQL identity", () => {
