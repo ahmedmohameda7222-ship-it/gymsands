@@ -203,10 +203,6 @@ export function buildExactRestoreRowSql({ relation, stableKey, targetColumns, ca
   return `DO $plan7_restore$\nBEGIN\n  INSERT INTO public.${table} (${columns.map(qid).join(", ")})\n  VALUES (${values.join(", ")})\n  ON CONFLICT (${conflict}) DO NOTHING;\n  IF NOT EXISTS (SELECT 1 FROM public.${table} AS t WHERE ${keyWhere} AND ${exactWhere}) THEN\n    RAISE EXCEPTION 'Plan7 conflicting stable identity in ${relation}';\n  END IF;\nEND\n$plan7_restore$;`;
 }
 
-export function buildMixedSeedRuntimeRowSql(input) {
-  return buildExactRestoreRowSql(input);
-}
-
 export function buildPreseedValidationSql({ relation, stableKey, targetColumns, canonicalRow, comparisonColumns }) {
   const table = qid(relation);
   const row = decodeCanonicalSegmentRow(canonicalRow);
@@ -326,12 +322,16 @@ function prePointerSql(manifest) {
 async function loadCanonicalRuntime() {
   const registryUrl = pathToFileURL(resolve("lib/food-catalog/portability/relation-registry.ts")).href;
   const profileUrl = pathToFileURL(resolve("lib/food-catalog/portability/profile-certification.ts")).href;
-  const [registry, profile] = await Promise.all([import(registryUrl), import(profileUrl)]);
+  const seedUrl = pathToFileURL(resolve("lib/food-catalog/portability/seed-runtime-ownership.ts")).href;
+  const [registry, profile, seed] = await Promise.all([import(registryUrl), import(profileUrl), import(seedUrl)]);
   return {
     rulesForProfile: (requestedProfile) => registry.FOOD_CATALOG_PORTABLE_RELATIONS_V1.filter(
       (rule) => rule.requiredProfile === "CORE_PORTABLE" || requestedProfile === "FULL_DR",
     ),
     validateCanonicalProfileManifest: profile.validateCanonicalProfileManifest,
+    seedRuntimeOwnershipForRelation: seed.seedRuntimeOwnershipForRelation,
+    stableKeyTextTuple: seed.stableKeyTextTuple,
+    isMigrationSeedKey: seed.isMigrationSeedKey,
   };
 }
 
@@ -344,6 +344,7 @@ async function loadRules(manifest, relationsJson) {
       rules: canonicalRuntime.rulesForProfile(manifest.profile),
       canonicalProfileVerified: true,
       certificationEligible: true,
+      canonicalRuntime,
     };
   }
   if (!relationsJson) throw new Error("DIAGNOSTIC_SUBSET restore requires the matching --relations-json diagnostic descriptor file.");
@@ -351,6 +352,7 @@ async function loadRules(manifest, relationsJson) {
     rules: JSON.parse(await readFile(resolve(relationsJson), "utf8")),
     canonicalProfileVerified: false,
     certificationEligible: false,
+    canonicalRuntime,
   };
 }
 
@@ -396,17 +398,13 @@ export async function restorePortableArtifact({
     if (segment.loadMode === "DERIVED_REBUILD") continue;
     if (segment.protected) {
       const ciphertext = await readFile(resolve(artifactDir, "segments", `${segment.name}.enc`));
-      materials[segment.name] = await decodeProtectedArtifactMaterial({
-        descriptor: segment,
-        ciphertext,
-        keyProvider: effectiveProtectedKeyProvider,
-      });
+      materials[segment.name] = await decodeProtectedArtifactMaterial({ descriptor: segment, ciphertext, keyProvider: effectiveProtectedKeyProvider });
     } else {
       materials[segment.name] = await readFile(resolve(artifactDir, "segments", `${segment.name}.ndjson`), "utf8");
     }
   }
   validateRuntimeArtifact(manifest, materials);
-  const { rules, canonicalProfileVerified, certificationEligible } = await loadRules(manifest, relationsJson);
+  const { rules, canonicalProfileVerified, certificationEligible, canonicalRuntime } = await loadRules(manifest, relationsJson);
   const targetProfile = evaluatePortableTargetProfile(loadTargetProfile(targetUrl), {
     migrationCount: manifest.snapshotBoundary.migrationCount,
     latestMigration: manifest.snapshotBoundary.latestMigration,
@@ -457,10 +455,38 @@ export async function restorePortableArtifact({
     if (!rule || !descriptor) throw new Error(`Restore plan references unknown relation ${action.relation ?? "<none>"}.`);
     const targetColumns = getColumns(rule.relation);
     const rows = segmentRows(materials[descriptor.name] ?? "");
+    const ownershipPolicy = canonicalRuntime.seedRuntimeOwnershipForRelation(rule.relation);
+    const preseedComparisonColumns = ownershipPolicy
+      ? Object.keys(targetColumns).filter((column) => !ownershipPolicy.preseedComparisonOmit.includes(column))
+      : Object.keys(targetColumns);
+
     if (action.kind === "VALIDATE_PRESEEDED") {
-      for (const canonicalRow of rows) runPsql(targetUrl, buildPreseedValidationSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
+      for (const canonicalRow of rows) {
+        runPsql(targetUrl, buildPreseedValidationSql({
+          relation: rule.relation,
+          stableKey: rule.stableKey,
+          targetColumns,
+          canonicalRow,
+          comparisonColumns: preseedComparisonColumns,
+        }));
+      }
     } else if (action.kind === "RESTORE_MIXED_KEYED_PRESEEDED_RUNTIME") {
-      for (const canonicalRow of rows) runPsql(targetUrl, buildMixedSeedRuntimeRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
+      if (!ownershipPolicy) throw new Error(`Missing seed/runtime key policy for ${rule.relation}.`);
+      for (const canonicalRow of rows) {
+        const decoded = decodeCanonicalSegmentRow(canonicalRow);
+        const stableKey = canonicalRuntime.stableKeyTextTuple(decoded, rule.stableKey);
+        if (canonicalRuntime.isMigrationSeedKey(ownershipPolicy, stableKey)) {
+          runPsql(targetUrl, buildPreseedValidationSql({
+            relation: rule.relation,
+            stableKey: rule.stableKey,
+            targetColumns,
+            canonicalRow,
+            comparisonColumns: preseedComparisonColumns,
+          }));
+        } else {
+          runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
+        }
+      }
     } else if (action.kind === "VALIDATE_POINTER_SINGLETON_IDENTITY") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildPreseedValidationSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, comparisonColumns: [...rule.stableKey] }));
     } else if (action.kind === "RESTORE_MUTABLE_SINGLETON_FIELDS") {
