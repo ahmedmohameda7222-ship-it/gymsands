@@ -1,15 +1,21 @@
 import { sha256Hex } from "./canonicalize";
 import {
   computeSnapshotBoundarySha256,
+  PORTABLE_CANONICAL_REGISTRY_AUTHORITY,
   type PortableExportManifestV1,
   validatePortableManifestV1,
 } from "./export-contract";
+import {
+  canonicalRulesForProfile,
+  validateCanonicalProfileManifest,
+} from "./profile-certification";
 
 export type PortableArtifactMaterial = string | Uint8Array;
 
 export type PortableArtifactValidationInput = Readonly<{
   manifest: PortableExportManifestV1;
   materials: Readonly<Record<string, PortableArtifactMaterial | undefined>>;
+  /** Diagnostic-only override. Canonical artifacts always derive their required set from the registry. */
   requiredSegments?: readonly string[];
 }>;
 
@@ -19,6 +25,8 @@ export type PortableArtifactValidationResult = Readonly<{
   segmentCount: number;
   rowCount: number;
   semanticRootSha256: string;
+  canonicalProfileVerified: boolean;
+  certificationEligible: boolean;
 }>;
 
 function materialBytes(material: PortableArtifactMaterial): Uint8Array {
@@ -41,9 +49,15 @@ function countCanonicalRows(material: PortableArtifactMaterial): number {
 export function validatePortableArtifact({
   manifest,
   materials,
-  requiredSegments = [],
+  requiredSegments,
 }: PortableArtifactValidationInput): PortableArtifactValidationResult {
-  validatePortableManifestV1(manifest, { requiredSegments });
+  const canonical = manifest.registryAuthority === PORTABLE_CANONICAL_REGISTRY_AUTHORITY;
+  const effectiveRequiredSegments = canonical
+    ? canonicalRulesForProfile(manifest.profile).map((rule) => rule.segment)
+    : [...(requiredSegments ?? [])];
+
+  if (canonical) validateCanonicalProfileManifest(manifest);
+  validatePortableManifestV1(manifest, { requiredSegments: effectiveRequiredSegments });
 
   const { sha256: _declaredBoundarySha, ...boundaryWithoutSha } = manifest.snapshotBoundary;
   const expectedBoundarySha = computeSnapshotBoundarySha256(boundaryWithoutSha);
@@ -76,5 +90,7 @@ export function validatePortableArtifact({
     segmentCount: manifest.segments.length,
     rowCount: totalRows,
     semanticRootSha256: manifest.semanticRootSha256,
+    canonicalProfileVerified: canonical,
+    certificationEligible: canonical,
   });
 }
