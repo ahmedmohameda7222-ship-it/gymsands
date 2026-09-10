@@ -11,15 +11,17 @@ insert into auth.users(
   '2026-09-10T18:00:00Z'::timestamptz,'2026-09-10T18:00:00Z'::timestamptz
 );
 
+-- Keep the dollar-quoted self-check independent of psql interpolation: psql does
+-- not substitute :'name' tokens inside PL/pgSQL dollar-quoted bodies.
 do $plan7_target_identity$
 begin
-  if not exists(select 1 from auth.users where id=:'owner_uid'::uuid) then
+  if not exists(select 1 from auth.users where id='71000000-0000-4000-8000-000000000001'::uuid) then
     raise exception 'Plan7 target external owner Auth identity is missing.';
   end if;
-  if not exists(select 1 from public.profiles where id=:'owner_uid'::uuid) then
+  if not exists(select 1 from public.profiles where id='71000000-0000-4000-8000-000000000001'::uuid) then
     raise exception 'Plan7 target canonical profile binding was not created.';
   end if;
-  if not exists(select 1 from public.account_access_states where user_id=:'owner_uid'::uuid and state='active' and disabled_at is null) then
+  if not exists(select 1 from public.account_access_states where user_id='71000000-0000-4000-8000-000000000001'::uuid and state='active' and disabled_at is null) then
     raise exception 'Plan7 target active account-access binding was not created.';
   end if;
 end
