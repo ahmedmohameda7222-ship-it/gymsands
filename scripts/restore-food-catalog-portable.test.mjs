@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { randomBytes } from "node:crypto";
 import { encryptProtectedSegment } from "../lib/food-catalog/portability/protected-segments.ts";
+import { seedRuntimeOwnershipForRelation } from "../lib/food-catalog/portability/seed-runtime-ownership.ts";
 import {
   assertDisposableRestoreTarget,
   buildExactRestoreRowSql,
@@ -51,6 +52,14 @@ describe("Plan 7 disposable restore CLI primitives", () => {
     });
     assert.match(sql, /SELECT|PERFORM|IF/i);
     assert.doesNotMatch(sql, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bUPSERT\b/i);
+  });
+
+  it("treats release-schema applied_at as migration replay-time metadata while still validating version and marker", () => {
+    const policy = seedRuntimeOwnershipForRelation("release_schema_compatibility");
+    assert.ok(policy);
+    assert.deepEqual(policy.preseedComparisonOmit, ["applied_at"]);
+    assert.ok(!policy.preseedComparisonOmit.includes("version"));
+    assert.ok(!policy.preseedComparisonOmit.includes("migration_version"));
   });
 
   it("neutralizes only verified_source_record_id for food_items, then reconstructs it after source records", () => {
