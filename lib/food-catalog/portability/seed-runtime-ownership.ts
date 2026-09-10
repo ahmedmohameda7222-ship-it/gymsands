@@ -19,9 +19,9 @@ function policy(
 /**
  * These are immutable identities created by exact repository migrations.
  * Relations may later contain additional runtime-created keys; only the keys
- * listed here remain migration-owned. created_at is omitted only where the
- * migration deliberately used DEFAULT now(), because replay time is not product
- * authority and differs across two exact Git migration replays.
+ * listed here remain migration-owned. Replay-time timestamp columns are omitted
+ * only where exact Git migration replay intentionally regenerates them, because
+ * replay time is not product authority and differs across two exact replays.
  */
 export const FOOD_CATALOG_SEED_RUNTIME_OWNERSHIP_V1: readonly SeedRuntimeOwnershipPolicy[] = Object.freeze([
   policy("food_taxonomy_namespaces", [
@@ -42,7 +42,7 @@ export const FOOD_CATALOG_SEED_RUNTIME_OWNERSHIP_V1: readonly SeedRuntimeOwnersh
   policy("food_catalog_governance_policy_versions", [["plan6-v1"]], ["created_at"]),
   policy("food_catalog_governance_policy_pointer", [["true"]]),
   policy("food_catalog_current_generation", [["true"]]),
-  policy("release_schema_compatibility", [["true"]]),
+  policy("release_schema_compatibility", [["true"]], ["applied_at"]),
 ]);
 
 const BY_RELATION = new Map(FOOD_CATALOG_SEED_RUNTIME_OWNERSHIP_V1.map((entry) => [entry.relation, entry]));
