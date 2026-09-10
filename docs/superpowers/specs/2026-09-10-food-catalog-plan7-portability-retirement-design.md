@@ -1,14 +1,14 @@
 # Plaivra Food Catalog Plan 7 — Portability, Restore Verification, and Legacy Retirement Design
 
-Status: **Architecture re-review after independent Planner findings; implementation not authorized**  
-Date: **2026-09-10**  
-Architecture class: **Architectural / long-term target design**  
-Parent architecture: `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`  
-Program roadmap: `docs/superpowers/plans/2026-09-01-food-catalog-intelligence-program-roadmap.md`  
-Discovery inventory: `docs/superpowers/plans/2026-09-10-food-catalog-plan7-discovery-inventory.md`  
-Implementation plan: `docs/superpowers/plans/2026-09-10-food-catalog-plan7-portability-retirement.md`  
-Implementation authority: **Not granted by this document**  
-Production mutation authority: **Not granted by this document**  
+Status: **Architecture re-review after independent Planner findings; implementation not authorized**
+Date: **2026-09-10**
+Architecture class: **Architectural / long-term target design**
+Parent architecture: `docs/superpowers/specs/2026-09-01-food-catalog-intelligence-architecture-design.md`
+Program roadmap: `docs/superpowers/plans/2026-09-01-food-catalog-intelligence-program-roadmap.md`
+Discovery inventory: `docs/superpowers/plans/2026-09-10-food-catalog-plan7-discovery-inventory.md`
+Implementation plan: `docs/superpowers/plans/2026-09-10-food-catalog-plan7-portability-retirement.md`
+Implementation authority: **Not granted by this document**
+Production mutation authority: **Not granted by this document**
 Deployment authority: **Not granted by this document**
 
 ## 1. Purpose and phase boundary
