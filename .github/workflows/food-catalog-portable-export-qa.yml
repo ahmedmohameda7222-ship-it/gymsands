@@ -1,0 +1,92 @@
+name: Food Catalog Portable Export Restore QA
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/food-catalog/portability/**"
+      - "lib/privacy/**"
+      - "scripts/*food-catalog-portable*"
+      - "scripts/*food-catalog-restore*"
+      - "scripts/*restored-search*"
+      - "test/fixtures/food-catalog/**"
+      - "docs/architecture/food-catalog-portability-runbook.md"
+      - ".github/workflows/food-catalog-portable-export-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: food-catalog-portable-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot-contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PLAN7_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/postgres
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Focused Task 2-3 contracts
+        run: npx vitest run lib/food-catalog/portability/canonicalize.test.ts lib/food-catalog/portability/export-contract.test.ts lib/food-catalog/portability/relation-registry.test.ts lib/food-catalog/portability/postgres-snapshot-reader.test.ts lib/food-catalog/portability/export-reader.test.ts lib/food-catalog/portability/export-writer.test.ts scripts/export-food-catalog-portable.test.mjs
+      - name: Prepare deterministic PostgreSQL snapshot fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$PLAN7_DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          create extension if not exists pgcrypto;
+          create extension if not exists pg_trgm;
+          create extension if not exists "uuid-ossp";
+          create schema if not exists supabase_migrations;
+          create table supabase_migrations.schema_migrations(version text primary key);
+          insert into supabase_migrations.schema_migrations(version) values ('20260910071241');
+          create table public.food_catalog_current_generation(singleton_key boolean primary key default true, current_generation_id uuid, pointer_revision bigint not null default 0);
+          insert into public.food_catalog_current_generation(singleton_key,current_generation_id,pointer_revision) values (true,null,0);
+          create table public.release_schema_compatibility(singleton boolean primary key default true, version integer not null, migration_version text not null);
+          insert into public.release_schema_compatibility(singleton,version,migration_version) values (true,2,'20260724232734');
+          create table public.food_items(id uuid primary key, food_name text not null, precise_numeric numeric(40,12), huge_counter bigint, captured_at timestamptz, nested jsonb);
+          insert into public.food_items values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Fixture Food',12345678901234567890.123456789012,9223372036854775807,'2026-09-10 20:19:20.123456+02','{"n":90071992547409931234567890.1200}');
+          SQL
+          cat > "$RUNNER_TEMP/plan7-task3-relations.json" <<'JSON'
+          [{"segment":"food_items","relation":"food_items","classification":"PORTABLE_AUTHORITY","loadMode":"RECONSTRUCT_TRANSITIONAL_COMPATIBILITY","stableKey":["id"],"requiredProfile":"CORE_PORTABLE","protected":false,"seedOwnership":"NONE","transientNeutralize":["verified_source_record_id"]}]
+          JSON
+      - name: Execute authoritative one-session snapshot export
+        run: node scripts/export-food-catalog-portable.mjs --profile CORE_PORTABLE --relations-json "$RUNNER_TEMP/plan7-task3-relations.json" --output-dir "$RUNNER_TEMP/plan7-task3-export" --source-commit "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Prove PostgreSQL 17 capabilities and snapshot artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "select current_setting('server_version_num')::int/10000=17 and count(*)=3 from pg_extension where extname in ('pgcrypto','pg_trgm','uuid-ossp')" | grep '^t$'
+          test -s "$RUNNER_TEMP/plan7-task3-export/manifest.json"
+          test -s "$RUNNER_TEMP/plan7-task3-export/segments/food_items.ndjson"
+      - name: Exact-head integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
