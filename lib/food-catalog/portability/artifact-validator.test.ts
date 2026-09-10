@@ -2,15 +2,31 @@ import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./canonicalize";
 import {
   computeManifestSemanticRoot,
+  computeSnapshotBoundarySha256,
   type PortableExportManifestV1,
 } from "./export-contract";
 import { validatePortableArtifact } from "./artifact-validator";
 
-const SNAPSHOT = "b".repeat(64);
 const BYTES = '["fixture"]\n';
 
 function makeManifest(rowCount = 1): PortableExportManifestV1 {
   const bytes = rowCount === 0 ? "" : BYTES;
+  const boundaryWithoutSha = {
+    environment: "fixture",
+    postgresSnapshot: "100:100:",
+    capturedAt: "2026-09-10T18:19:20.123456Z",
+    migrationCount: "123",
+    latestMigration: "20260910071241",
+    migrationLedgerIdentity: "e".repeat(64),
+    currentGenerationId: null,
+    pointerRevision: "0",
+    compatibilityVersion: "2",
+    compatibilityMarker: "20260724232734",
+  } as const;
+  const snapshotBoundary = {
+    ...boundaryWithoutSha,
+    sha256: computeSnapshotBoundarySha256(boundaryWithoutSha),
+  };
   const manifest: PortableExportManifestV1 = {
     format: "plaivra-food-catalog-portable-export",
     formatVersion: 1,
@@ -19,19 +35,7 @@ function makeManifest(rowCount = 1): PortableExportManifestV1 {
     sourceRepositoryCommit: "c".repeat(40),
     sourceSchemaFingerprintSha256: "d".repeat(64),
     capturedAt: "2026-09-10T18:19:20.123456Z",
-    snapshotBoundary: {
-      environment: "fixture",
-      postgresSnapshot: "100:100:",
-      capturedAt: "2026-09-10T18:19:20.123456Z",
-      migrationCount: "123",
-      latestMigration: "20260910071241",
-      migrationLedgerIdentity: "e".repeat(64),
-      currentGenerationId: null,
-      pointerRevision: "0",
-      compatibilityVersion: "2",
-      compatibilityMarker: "20260724232734",
-      sha256: SNAPSHOT,
-    },
+    snapshotBoundary,
     segments: [{
       name: "food_items",
       relation: "food_items",
@@ -40,7 +44,7 @@ function makeManifest(rowCount = 1): PortableExportManifestV1 {
       stableKey: ["id"],
       rowCount,
       plaintextSemanticSha256: sha256Hex(bytes),
-      snapshotBoundarySha256: SNAPSHOT,
+      snapshotBoundarySha256: snapshotBoundary.sha256,
       required: true,
       protected: false,
     }],
@@ -78,6 +82,16 @@ describe("Plan 7 artifact validator", () => {
     expect(() => validatePortableArtifact({
       manifest: makeManifest(0), materials: { food_items: BYTES }, requiredSegments: ["food_items"],
     })).toThrow(/row count|digest/i);
+  });
+
+  it("fails closed when the declared snapshot boundary checksum is false", () => {
+    const manifest = makeManifest();
+    manifest.snapshotBoundary = { ...manifest.snapshotBoundary, sha256: "b".repeat(64) };
+    manifest.segments = manifest.segments.map((segment) => ({ ...segment, snapshotBoundarySha256: manifest.snapshotBoundary.sha256 }));
+    manifest.semanticRootSha256 = computeManifestSemanticRoot(manifest);
+    expect(() => validatePortableArtifact({
+      manifest, materials: { food_items: BYTES }, requiredSegments: ["food_items"],
+    })).toThrow(/snapshot boundary digest/i);
   });
 
   it("does not apply artifact age as structural validity", () => {
