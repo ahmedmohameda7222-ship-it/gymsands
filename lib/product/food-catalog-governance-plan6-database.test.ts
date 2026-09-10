@@ -90,20 +90,23 @@ describe("Food Catalog Plan 6 database authority", () => {
     expect(sql).not.toMatch(/(?:insert\s+into|update|delete\s+from)\s+public\.food_catalog_search_documents/);
   });
 
-  it("records applied Plan 6 under drift review while the forward exactness correction remains pending", () => {
+  it("records both Plan 6 migrations as applied Production aliases after exactness reconciliation", () => {
     const ledger = JSON.parse(read(LEDGER)) as { pendingCount: number; unresolvedCount: number; historyRepair: { state: string }; entries: Array<Record<string, unknown>> };
     const entry = ledger.entries.find((item) => item.localFile === "20260908100000_food_catalog_governance_control_plane.sql");
     const correction = ledger.entries.find((item) => item.localFile === EXACTNESS_CORRECTION);
     expect(entry).toEqual(expect.objectContaining({
-      state: "ledger_drift_review",
+      state: "applied_version_alias",
       productionVersion: "20260909081402",
       productionName: "food_catalog_governance_control_plane",
     }));
-    expect(correction).toEqual(expect.objectContaining({ state: "pending" }));
-    expect(correction).not.toHaveProperty("productionVersion");
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(2);
-    expect(ledger.historyRepair.state).toBe("pending");
+    expect(correction).toEqual(expect.objectContaining({
+      state: "applied_version_alias",
+      productionVersion: "20260910071241",
+      productionName: "food_catalog_governance_gtin_lock_exactness",
+    }));
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
   });
 
   it("removes the Plan 2 temporary food-curation direct-access exception", () => {
