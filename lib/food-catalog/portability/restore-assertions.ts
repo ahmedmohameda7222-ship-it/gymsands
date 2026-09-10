@@ -40,7 +40,6 @@ export type RestoreAssertionEvaluation = Readonly<{
   profile: PortableExportProfile;
   trusted: boolean;
   restoreVerified: boolean;
-  drReady: boolean;
   failures: readonly string[];
   unknown: readonly string[];
   missing: readonly string[];
@@ -87,7 +86,6 @@ export function evaluateRestoreAssertions(input: Readonly<{
     profile: input.profile,
     trusted,
     restoreVerified: trusted,
-    drReady: trusted && input.profile === "FULL_DR",
     failures: Object.freeze([...new Set(failures)]),
     unknown: Object.freeze([...new Set(unknown)]),
     missing: Object.freeze([...missing]),
