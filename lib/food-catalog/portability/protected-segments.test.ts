@@ -29,6 +29,20 @@ describe("Plan 7 FULL_DR protected segments", () => {
     expect(await decryptProtectedSegment(second, keyProvider)).toEqual(plaintext);
   });
 
+  it("round-trips an empty protected segment without treating zero-length ciphertext as missing", async () => {
+    const keyProvider = providerFor(randomBytes(32));
+    const plaintext = Buffer.alloc(0);
+    const envelope = await encryptProtectedSegment({
+      segment: "food_personal_override_operations",
+      plaintext,
+      keyId: "ephemeral-ci",
+      keyProvider,
+    });
+
+    expect(envelope.ciphertextBase64).toBe("");
+    expect(await decryptProtectedSegment(envelope, keyProvider)).toEqual(plaintext);
+  });
+
   it("never includes plaintext or key material in the protected envelope", async () => {
     const key = randomBytes(32);
     const secret = "do-not-publish-protected-plaintext";
