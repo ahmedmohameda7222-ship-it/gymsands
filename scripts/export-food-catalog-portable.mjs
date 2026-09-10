@@ -48,7 +48,7 @@ END
 $plan7$;
 SELECT '__PLAN7_SEGMENT_BEGIN__${segment}';
 SELECT format(
-  'COPY (SELECT json_build_object(''segment'', %L, ''values'', json_build_object(%s))::text FROM public.%I ORDER BY ${orderBy}) TO STDOUT',
+  'COPY (SELECT encode(convert_to(json_build_object(''segment'', %L, ''values'', json_build_object(%s))::text, ''UTF8''), ''hex'') FROM public.%I ORDER BY ${orderBy}) TO STDOUT',
   ${segmentLiteral},
   string_agg(
     format('%L, json_build_object(''pgType'', %L, ''text'', %I::text)', a.attname, format_type(a.atttypid, a.atttypmod), a.attname),
@@ -262,8 +262,11 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
         active = null;
         continue;
       }
-      if (!active || !line.startsWith("{")) continue;
-      const envelope = JSON.parse(line);
+      if (!active || line.length === 0) continue;
+      if (!/^[0-9a-f]+$/.test(line) || line.length % 2 !== 0) {
+        throw new Error(`Malformed hexadecimal COPY transport for ${active.name}.`);
+      }
+      const envelope = JSON.parse(Buffer.from(line, "hex").toString("utf8"));
       if (envelope.segment !== active.name || !envelope.values || typeof envelope.values !== "object") {
         throw new Error(`Malformed row envelope for ${active.name}.`);
       }
