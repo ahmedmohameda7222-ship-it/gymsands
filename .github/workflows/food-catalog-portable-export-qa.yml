@@ -52,17 +52,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Focused Task 2-3 contracts
-        run: npx vitest run lib/food-catalog/portability/canonicalize.test.ts lib/food-catalog/portability/export-contract.test.ts lib/food-catalog/portability/relation-registry.test.ts lib/food-catalog/portability/postgres-snapshot-reader.test.ts lib/food-catalog/portability/export-reader.test.ts lib/food-catalog/portability/export-writer.test.ts scripts/export-food-catalog-portable.test.mjs
+        run: |
+          set -euo pipefail
+          npx vitest run lib/food-catalog/portability/canonicalize.test.ts lib/food-catalog/portability/export-contract.test.ts lib/food-catalog/portability/relation-registry.test.ts lib/food-catalog/portability/postgres-snapshot-reader.test.ts lib/food-catalog/portability/export-reader.test.ts lib/food-catalog/portability/export-writer.test.ts
+          node --test scripts/export-food-catalog-portable.test.mjs
       - name: Focused Task 4 contracts
         run: npx vitest run lib/food-catalog/portability/artifact-validator.test.ts lib/food-catalog/portability/recovery-eligibility.test.ts
       - name: Focused Task 5 contracts
-        run: npx vitest run lib/food-catalog/portability/restore-plan.test.ts scripts/restore-food-catalog-portable.test.mjs scripts/verify-food-catalog-portable-target.test.mjs
+        run: |
+          set -euo pipefail
+          npx vitest run lib/food-catalog/portability/restore-plan.test.ts
+          node --test scripts/restore-food-catalog-portable.test.mjs scripts/verify-food-catalog-portable-target.test.mjs
       - name: Focused Task 6 contracts
-        run: npx vitest run lib/food-catalog/portability/restore-assertions.test.ts scripts/verify-food-catalog-restore.test.mjs
+        run: |
+          set -euo pipefail
+          npx vitest run lib/food-catalog/portability/restore-assertions.test.ts
+          node --test scripts/verify-food-catalog-restore.test.mjs
       - name: Focused Task 7 contracts
         run: npx vitest run lib/food-catalog/portability/key-provider.test.ts lib/food-catalog/portability/protected-segments.test.ts lib/privacy/data-export-plan7.test.ts
       - name: Focused Task 8 contracts
-        run: npx vitest run lib/food-catalog/portability/search-restore-verifier.test.ts scripts/verify-food-catalog-restored-search.test.mjs
+        run: |
+          set -euo pipefail
+          npx vitest run lib/food-catalog/portability/search-restore-verifier.test.ts
+          node --test scripts/verify-food-catalog-restored-search.test.mjs
       - name: Generate exact-head Task 8 fixture evidence
         shell: bash
         run: |
