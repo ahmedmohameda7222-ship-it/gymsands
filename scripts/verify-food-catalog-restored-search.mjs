@@ -122,12 +122,12 @@ export function verifyRestoredSearchFixture({ fixture, profile, expectedHeadSha,
     queryCases,
   });
   const matrix = verifyGoldenSearchMatrix(fixture.queryCases ?? []);
-  const protectedFixtureVerified = fixture.protectedFixtureVerified === true;
   const fixtureSha256 = sha256(stableJson(fixture));
   const goldenResultSha256 = sha256(stableJson((fixture.queryCases ?? []).map((entry) => ({ id: entry.id, actual: entry.actual }))));
 
   return Object.freeze({
-    evidenceVersion: 1,
+    evidenceVersion: 2,
+    evidenceRole: "SEARCH_REGRESSION_ONLY",
     profile,
     headSha: actualHeadSha,
     exactHeadVerified: true,
@@ -137,12 +137,11 @@ export function verifyRestoredSearchFixture({ fixture, profile, expectedHeadSha,
     goldenCaseCount: matrix.caseCount,
     populatedFixtureVerified: true,
     zeroRowFixtureVerified: true,
-    protectedFixtureVerified,
+    protectedFixtureObserved: fixture.protectedFixtureVerified === true,
     providerNetworkUsed: false,
     rebuildFunction: "public.rebuild_food_catalog_search_projection_v2(uuid,text,text)",
     searchFunction: "public.search_food_catalog_v2(text,text,text,text,text,integer,text,text,text,jsonb)",
     currentGenerationIdSha256: sha256(fixture.currentGenerationId),
-    drReady: profile === "FULL_DR" && protectedFixtureVerified && matrix.passed,
     productionMutationPerformed: false,
     retirementAuthorized: false,
   });
