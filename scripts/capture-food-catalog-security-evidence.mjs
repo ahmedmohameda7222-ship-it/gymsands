@@ -23,7 +23,7 @@ export function buildFoodCatalogSecurityEvidenceSql() {
     AND c.relkind IN ('r','p')
     AND (c.relname LIKE 'food_%' OR c.relname IN ('market_scopes','market_scope_memberships','release_schema_compatibility'))
 ), policy_rows AS (
-  SELECT tablename,policyname,permissive,roles::text,cmd,coalesce(qual,''),coalesce(with_check,'') with_check
+  SELECT tablename,policyname,permissive,roles::text,cmd,coalesce(qual,'') AS qual,coalesce(with_check,'') AS with_check
   FROM pg_policies
   WHERE schemaname='public'
     AND tablename IN (SELECT relname FROM food_relations)
