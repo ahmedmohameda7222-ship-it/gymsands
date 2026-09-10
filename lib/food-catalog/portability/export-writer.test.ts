@@ -21,7 +21,7 @@ describe("Plan 7 streaming export writer", () => {
     expect(result.plaintextSemanticSha256).toBe(sha256Hex(bytes));
     expect(bytes).toContain('"9007199254740993"');
     expect(bytes).toContain('"1.23"');
-    expect(bytes).toContain('"null"');
+    expect(bytes).toContain('["amount","numeric",null]');
   });
 
   it("does not require whole-catalog buffering in its sink contract", () => {
