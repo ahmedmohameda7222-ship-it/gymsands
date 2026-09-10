@@ -6,6 +6,7 @@ import {
 } from "./verify-food-catalog-restored-search.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("../test/fixtures/food-catalog/plan7-golden-search-v1.json", import.meta.url), "utf8"));
+const workflow = readFileSync(new URL("../.github/workflows/food-catalog-portable-export-qa.yml", import.meta.url), "utf8");
 const head = "a".repeat(40);
 
 describe("Plan 7 restored search verification script", () => {
@@ -41,5 +42,16 @@ describe("Plan 7 restored search verification script", () => {
     const corrupted = structuredClone(fixture);
     corrupted.queryCases[0].actual = { items: [], nextCursor: null };
     expect(() => verifyRestoredSearchFixture({ fixture: corrupted, profile: "FULL_DR", expectedHeadSha: head, actualHeadSha: head })).toThrow(/exact|golden|mismatch/i);
+  });
+
+  it("runs canonical search runtime verification on an exact-head Git-migrated local PostgreSQL 17 target", () => {
+    expect(workflow).toContain("restored-search-runtime:");
+    expect(workflow).toContain("supabase/setup-cli@v2");
+    expect(workflow).toContain("node scripts/replay-local-migration-chain.mjs");
+    expect(workflow).toContain("current_setting('server_version_num')::int/10000=17");
+    expect(workflow).toContain("supabase/verification/food-catalog-search-projection-v2.sql");
+    expect(workflow).toContain("PLAIVRA_LOCAL_DATABASE_URL");
+    expect(workflow).not.toMatch(/supabase\s+db\s+push\s+--linked/i);
+    expect(workflow).not.toMatch(/supabase\s+link\b/i);
   });
 });
