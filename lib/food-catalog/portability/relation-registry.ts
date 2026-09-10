@@ -124,7 +124,8 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
   rule("food_ingestion_release_diffs", H, "RESTORE_EXACT", ["id"]),
   rule("food_ingestion_release_diff_records", H, "RESTORE_EXACT", ["id"]),
   rule("food_ingestion_runs", H, "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION", ["id"], {
-    transientNeutralize: ["lease_owner", "lease_token", "lease_expires_at"],
+    transientNeutralize: ["lease_owner", "lease_token", "lease_acquired_at", "lease_heartbeat_at", "lease_expires_at"],
+    note: "Neutralize the complete live-lease shape atomically; preserve lease_epoch as durable fencing/audit history.",
   }),
 
   rule("food_catalog_search_nutrition_policies", A, "RESTORE_EXACT", ["policy_version"]),

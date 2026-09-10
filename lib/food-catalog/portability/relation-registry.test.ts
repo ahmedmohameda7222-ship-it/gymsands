@@ -45,9 +45,18 @@ describe("Plan 7 relation/load-mode registry", () => {
     });
   });
 
-  it("neutralizes only declared resumable lease/claim fields", () => {
-    expect(findPortableRelationRule("food_ingestion_runs")?.loadMode)
-      .toBe("RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION");
+  it("neutralizes the complete ingestion lease shape while preserving durable fencing history", () => {
+    const ingestionRun = findPortableRelationRule("food_ingestion_runs");
+    expect(ingestionRun?.loadMode).toBe("RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION");
+    expect(ingestionRun?.transientNeutralize).toEqual([
+      "lease_owner",
+      "lease_token",
+      "lease_acquired_at",
+      "lease_heartbeat_at",
+      "lease_expires_at",
+    ]);
+    expect(ingestionRun?.transientNeutralize).not.toContain("lease_epoch");
+
     const outbox = findPortableRelationRule("food_catalog_governance_outbox");
     expect(outbox?.loadMode).toBe("RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION");
     expect(outbox?.transientNeutralize).toEqual(expect.arrayContaining(["lease_token"]));

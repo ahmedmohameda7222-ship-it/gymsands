@@ -192,7 +192,7 @@ set current_generation_id=:'generation_current',current_event_id=:'generation_ev
     current_validation_report_id=:'validation_report',pointer_revision=1,updated_at='2026-09-10T18:18:00Z'
 where singleton_key=true;
 
--- One live ingestion lease proves restore-time neutralization without losing durable audit identity.
+-- One valid live Production ingestion lease proves restore-time neutralization without losing durable audit/fencing identity.
 insert into public.food_ingestion_batches(
   id,provider,dataset_name,source_version,license_name,source_checksum_sha256,importer_version,
   config_checksum_sha256,manifest_content_checksum_sha256,review_state,created_at,updated_at
@@ -202,11 +202,11 @@ insert into public.food_ingestion_batches(
 );
 insert into public.food_ingestion_runs(
   id,batch_id,execution_mode,attempt_number,status,started_at,manifest_content_checksum_sha256,
-  created_at,updated_at,lease_owner,lease_token,lease_epoch,lease_acquired_at,lease_expires_at
+  created_at,updated_at,lease_owner,lease_token,lease_epoch,lease_acquired_at,lease_heartbeat_at,lease_expires_at
 ) values(
-  :'ingestion_run',:'ingestion_batch','dry_run',1,'running','2026-09-10T18:20:00Z',repeat('a',64),
+  :'ingestion_run',:'ingestion_batch','production',1,'running','2026-09-10T18:20:00Z',repeat('a',64),
   '2026-09-10T18:20:00Z','2026-09-10T18:20:00Z','plan7-worker','71000000-0000-4000-8000-000000000a21',3,
-  '2026-09-10T18:20:00Z','2026-09-10T19:20:00Z'
+  '2026-09-10T18:20:00Z','2026-09-10T18:20:30Z','2026-09-10T19:20:00Z'
 );
 
 -- Protected FULL_DR authority: live human binding, runtime policy extension, lineage, and personal override.
@@ -264,8 +264,14 @@ begin
   ) then
     raise exception 'Plan7 source fixture protected personal authority is missing.';
   end if;
-  if not exists(select 1 from public.food_ingestion_runs where id=:'ingestion_run'::uuid and lease_owner='plan7-worker' and lease_token is not null) then
-    raise exception 'Plan7 source fixture live lease was not established.';
+  if not exists(
+    select 1 from public.food_ingestion_runs
+    where id=:'ingestion_run'::uuid
+      and execution_mode='production' and status='running'
+      and lease_owner='plan7-worker' and lease_token is not null and lease_epoch=3
+      and lease_acquired_at is not null and lease_heartbeat_at is not null and lease_expires_at is not null
+  ) then
+    raise exception 'Plan7 source fixture valid live lease was not established.';
   end if;
 end
 $plan7_fixture$;
