@@ -51,8 +51,12 @@ function transportBytes(nonce: Uint8Array, authTag: Uint8Array, ciphertext: Uint
   ]);
 }
 
-function decodeBase64(value: string, label: string): Buffer {
-  if (typeof value !== "string" || value.length === 0) throw new Error(`${label} is required.`);
+function decodeBase64(value: string, label: string, allowEmpty = false): Buffer {
+  if (typeof value !== "string") throw new Error(`${label} is required.`);
+  if (value.length === 0) {
+    if (allowEmpty) return Buffer.alloc(0);
+    throw new Error(`${label} is required.`);
+  }
   const decoded = Buffer.from(value, "base64");
   if (decoded.length === 0 || decoded.toString("base64").replace(/=+$/u, "") !== value.replace(/=+$/u, "")) {
     throw new Error(`${label} must be canonical base64.`);
@@ -127,7 +131,7 @@ export async function decryptProtectedSegment(
   const nonce = decodeBase64(envelope.nonceBase64, "Protected segment nonce");
   if (nonce.byteLength !== NONCE_BYTES) throw new Error(`AES-256-GCM nonce must contain exactly ${NONCE_BYTES} bytes.`);
   const authTag = decodeBase64(envelope.authTagBase64, "Protected segment authentication tag");
-  const ciphertext = decodeBase64(envelope.ciphertextBase64, "Protected segment ciphertext");
+  const ciphertext = decodeBase64(envelope.ciphertextBase64, "Protected segment ciphertext", true);
 
   const observedTransportSha256 = sha256(transportBytes(nonce, authTag, ciphertext));
   if (observedTransportSha256 !== envelope.transportSha256) {
