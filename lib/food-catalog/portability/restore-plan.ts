@@ -1,4 +1,5 @@
 import type { PortableRelationRule } from "./relation-registry";
+import { sortRestoreRulesByDependencies } from "./restore-dependencies";
 
 export type FoodCatalogRestoreStep = Readonly<{
   kind:
@@ -53,6 +54,9 @@ export function buildFoodCatalogRestorePlan(rules: readonly PortableRelationRule
 
   const result: FoodCatalogRestoreStep[] = [step("VERIFY_TARGET_PROFILE")];
 
+  // Migration-created seed identities are established by exact Git schema replay.
+  // Mixed relations restore only source-only runtime keys; mutable singleton fields
+  // are keyed updates after singleton identity validation.
   for (const rule of rules) {
     if (rule.loadMode !== "VALIDATE_PRESEEDED" || rule.restoreLast) continue;
     if (rule.restoreOwnership === "MIXED_KEYED_PRESEEDED_RUNTIME") {
@@ -86,17 +90,30 @@ export function buildFoodCatalogRestorePlan(rules: readonly PortableRelationRule
     }));
   }
 
-  for (const rule of rules) {
-    if (rule === sourceRecordRule || rule === foodItems) continue;
-    if (rule.loadMode === "RESTORE_EXACT") result.push(step("RESTORE_EXACT", rule));
-  }
-  for (const rule of rules) {
+  // Exact and transient-neutralized relations participate in one dependency graph.
+  // This prevents, for example, generation/activation events from being replayed
+  // before their food_catalog_control_operations FK authority, and prevents
+  // ingestion control history from preceding the run it references.
+  const dataRules = rules.filter((rule) =>
+    rule !== sourceRecordRule
+    && rule !== foodItems
+    && (rule.loadMode === "RESTORE_EXACT" || rule.loadMode === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION"),
+  );
+  const satisfiedBeforeData = [
+    ...rules.filter((rule) => rule.loadMode === "VALIDATE_PRESEEDED" && !rule.restoreLast).map((rule) => rule.relation),
+    ...(foodItems ? [foodItems.relation] : []),
+    ...(sourceRecordRule ? [sourceRecordRule.relation] : []),
+  ];
+  for (const rule of sortRestoreRulesByDependencies(dataRules, satisfiedBeforeData)) {
     if (rule.loadMode === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION") {
       result.push(step("RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION", rule, {
         neutralizedColumns: Object.freeze([...(rule.transientNeutralize ?? [])]),
       }));
+    } else {
+      result.push(step("RESTORE_EXACT", rule));
     }
   }
+
   for (const rule of rules) {
     if (rule.loadMode === "DERIVED_REBUILD") result.push(step("MARK_DERIVED_REBUILD_PENDING", rule));
   }
