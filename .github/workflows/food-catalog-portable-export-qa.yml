@@ -61,6 +61,8 @@ jobs:
         run: npx vitest run lib/food-catalog/portability/restore-assertions.test.ts scripts/verify-food-catalog-restore.test.mjs
       - name: Focused Task 7 contracts
         run: npx vitest run lib/food-catalog/portability/key-provider.test.ts lib/food-catalog/portability/protected-segments.test.ts lib/privacy/data-export-plan7.test.ts
+      - name: Focused Task 8 contracts
+        run: npx vitest run lib/food-catalog/portability/search-restore-verifier.test.ts scripts/verify-food-catalog-restored-search.test.mjs
       - name: Prepare deterministic PostgreSQL snapshot fixture
         shell: bash
         run: |
