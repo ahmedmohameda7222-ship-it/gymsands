@@ -217,6 +217,7 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env,
   });
+  const closePromise = once(child, "close");
   child.stdin.end(sql, "utf8");
   let stderr = "";
   child.stderr.setEncoding("utf8");
@@ -288,7 +289,7 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
       await writeChunk(active.stream, canonical);
       active.rowCount += 1;
     }
-    const [exitCode] = await once(child, "close");
+    const [exitCode] = await closePromise;
     if (exitCode !== 0) throw new Error(`psql authoritative snapshot export failed with status ${exitCode}: ${stderr.trim()}`);
     if (active) throw new Error(`Plan7 segment ${active.name} did not terminate.`);
     if (!meta) throw new Error("Plan7 snapshot metadata was not emitted by PostgreSQL.");
