@@ -81,8 +81,11 @@ type JsonNode =
 
 class LosslessJsonParser {
   private index = 0;
+  private readonly source: string;
 
-  constructor(private readonly source: string) {}
+  constructor(source: string) {
+    this.source = source;
+  }
 
   parse(): JsonNode {
     const value = this.readValue();
