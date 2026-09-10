@@ -11,6 +11,8 @@ const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 const SAFE_TYPE = /^[a-zA-Z0-9_." \[\](),]+$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1"]);
+const CANONICAL_REGISTRY_AUTHORITY = "CANONICAL_REGISTRY_V1";
+const DIAGNOSTIC_REGISTRY_AUTHORITY = "DIAGNOSTIC_SUBSET";
 
 function qid(value) {
   if (typeof value !== "string" || !IDENTIFIER.test(value)) throw new Error(`Unsafe PostgreSQL identifier ${String(value)}.`);
@@ -58,6 +60,7 @@ function semanticRoot(manifest) {
     formatVersion: manifest.formatVersion,
     canonicalizationVersion: manifest.canonicalizationVersion,
     profile: manifest.profile,
+    registryAuthority: manifest.registryAuthority ?? null,
     sourceRepositoryCommit: manifest.sourceRepositoryCommit,
     sourceSchemaFingerprintSha256: manifest.sourceSchemaFingerprintSha256,
     snapshotBoundary: {
@@ -151,10 +154,8 @@ export async function decodeProtectedArtifactMaterial({ descriptor, ciphertext, 
   return new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
 }
 
-function validateRowAgainstTarget(row, targetColumns, { allowOmitted = [] } = {}) {
-  const omitted = new Set(allowOmitted);
+function validateRowAgainstTarget(row, targetColumns) {
   for (const [column, targetType] of Object.entries(targetColumns)) {
-    if (omitted.has(column)) continue;
     const scalar = row[column];
     if (!scalar) throw new Error(`Artifact row is missing target column ${column}.`);
     if (normalizeType(scalar.pgType) !== normalizeType(targetType)) {
@@ -197,9 +198,13 @@ export function buildExactRestoreRowSql({ relation, stableKey, targetColumns, ca
   const values = columns.map((column) => forceNull.has(column) ? `NULL::${safeType(targetColumns[column])}` : typedExpression(row[column], targetColumns[column]));
   const compareColumns = columns.filter((column) => !comparisonOmitColumns.includes(column));
   const keyWhere = keyPredicate(row, stableKey, targetColumns);
-  const exactWhere = exactPredicate(row, compareColumns.map((column) => column), Object.fromEntries(compareColumns.map((column) => [column, targetColumns[column]])));
+  const exactWhere = exactPredicate(row, compareColumns, targetColumns);
   const conflict = stableKey.map(qid).join(", ");
   return `DO $plan7_restore$\nBEGIN\n  INSERT INTO public.${table} (${columns.map(qid).join(", ")})\n  VALUES (${values.join(", ")})\n  ON CONFLICT (${conflict}) DO NOTHING;\n  IF NOT EXISTS (SELECT 1 FROM public.${table} AS t WHERE ${keyWhere} AND ${exactWhere}) THEN\n    RAISE EXCEPTION 'Plan7 conflicting stable identity in ${relation}';\n  END IF;\nEND\n$plan7_restore$;`;
+}
+
+export function buildMixedSeedRuntimeRowSql(input) {
+  return buildExactRestoreRowSql(input);
 }
 
 export function buildPreseedValidationSql({ relation, stableKey, targetColumns, canonicalRow, comparisonColumns }) {
@@ -243,6 +248,16 @@ export function buildTransitionalFoodItemsStages({ stableKey, targetColumns, can
   });
 }
 
+export function buildMutableSingletonRestoreSql({ relation, stableKey, targetColumns, canonicalRow }) {
+  const row = decodeCanonicalSegmentRow(canonicalRow);
+  validateRowAgainstTarget(row, targetColumns);
+  const nonKeys = Object.keys(targetColumns).filter((column) => !stableKey.includes(column));
+  if (!nonKeys.length) throw new Error(`Mutable singleton ${relation} has no mutable fields.`);
+  const keyWhere = keyPredicate(row, stableKey, targetColumns);
+  const exactWhere = exactPredicate(row, Object.keys(targetColumns), targetColumns);
+  return `DO $plan7_pointer$\nBEGIN\n  UPDATE public.${qid(relation)} AS t SET ${nonKeys.map((column) => `${qid(column)}=${typedExpression(row[column], targetColumns[column])}`).join(", ")} WHERE ${keyWhere};\n  IF NOT FOUND THEN RAISE EXCEPTION 'Plan7 pointer singleton identity missing'; END IF;\n  IF NOT EXISTS (SELECT 1 FROM public.${qid(relation)} AS t WHERE ${keyWhere} AND ${exactWhere}) THEN RAISE EXCEPTION 'Plan7 pointer restore mismatch'; END IF;\nEND\n$plan7_pointer$;`;
+}
+
 function runPsql(databaseUrl, sql, { tuplesOnly = false } = {}) {
   const args = [databaseUrl, "-X", "-v", "ON_ERROR_STOP=1"];
   if (tuplesOnly) args.push("-A", "-t");
@@ -269,6 +284,9 @@ function loadTargetProfile(databaseUrl) {
 function validateRuntimeArtifact(manifest, materials) {
   if (manifest.format !== "plaivra-food-catalog-portable-export" || manifest.formatVersion !== 1 || manifest.canonicalizationVersion !== 1) {
     throw new Error("Unsupported Plan 7 portable artifact format.");
+  }
+  if (![CANONICAL_REGISTRY_AUTHORITY, DIAGNOSTIC_REGISTRY_AUTHORITY].includes(manifest.registryAuthority)) {
+    throw new Error("Plan 7 artifact registry authority is missing or unsupported.");
   }
   if (!SHA256.test(manifest.semanticRootSha256) || !SHA256.test(manifest.snapshotBoundary?.sha256)) throw new Error("Artifact digests are malformed.");
   if (manifest.capturedAt !== manifest.snapshotBoundary.capturedAt) throw new Error("Artifact capture-time evidence is inconsistent.");
@@ -298,15 +316,6 @@ function segmentRows(material) {
   return material.slice(0, -1).split("\n");
 }
 
-function pointerRestoreSql({ relation, stableKey, targetColumns, canonicalRow }) {
-  const row = decodeCanonicalSegmentRow(canonicalRow);
-  validateRowAgainstTarget(row, targetColumns);
-  const nonKeys = Object.keys(targetColumns).filter((column) => !stableKey.includes(column));
-  const keyWhere = keyPredicate(row, stableKey, targetColumns);
-  const exactWhere = exactPredicate(row, Object.keys(targetColumns), targetColumns);
-  return `DO $plan7_pointer$\nBEGIN\n  UPDATE public.${qid(relation)} AS t SET ${nonKeys.map((column) => `${qid(column)}=${typedExpression(row[column], targetColumns[column])}`).join(", ")} WHERE ${keyWhere};\n  IF NOT FOUND THEN RAISE EXCEPTION 'Plan7 pointer singleton identity missing'; END IF;\n  IF NOT EXISTS (SELECT 1 FROM public.${qid(relation)} AS t WHERE ${keyWhere} AND ${exactWhere}) THEN RAISE EXCEPTION 'Plan7 pointer restore mismatch'; END IF;\nEND\n$plan7_pointer$;`;
-}
-
 function prePointerSql(manifest) {
   const generation = manifest.snapshotBoundary.currentGenerationId;
   if (generation === null) return "SELECT true;";
@@ -314,11 +323,35 @@ function prePointerSql(manifest) {
   return `DO $plan7_pre_pointer$ BEGIN IF NOT EXISTS (SELECT 1 FROM public.food_catalog_generations WHERE id=convert_from(decode('${hex}','hex'),'UTF8')::uuid) THEN RAISE EXCEPTION 'Plan7 current generation is not restored'; END IF; END $plan7_pre_pointer$;`;
 }
 
-async function loadRules(profile, relationsJson) {
-  if (relationsJson) return JSON.parse(await readFile(resolve(relationsJson), "utf8"));
-  const moduleUrl = pathToFileURL(resolve("lib/food-catalog/portability/relation-registry.ts")).href;
-  const { FOOD_CATALOG_PORTABLE_RELATIONS_V1 } = await import(moduleUrl);
-  return FOOD_CATALOG_PORTABLE_RELATIONS_V1.filter((rule) => rule.requiredProfile === "CORE_PORTABLE" || profile === "FULL_DR");
+async function loadCanonicalRuntime() {
+  const registryUrl = pathToFileURL(resolve("lib/food-catalog/portability/relation-registry.ts")).href;
+  const profileUrl = pathToFileURL(resolve("lib/food-catalog/portability/profile-certification.ts")).href;
+  const [registry, profile] = await Promise.all([import(registryUrl), import(profileUrl)]);
+  return {
+    rulesForProfile: (requestedProfile) => registry.FOOD_CATALOG_PORTABLE_RELATIONS_V1.filter(
+      (rule) => rule.requiredProfile === "CORE_PORTABLE" || requestedProfile === "FULL_DR",
+    ),
+    validateCanonicalProfileManifest: profile.validateCanonicalProfileManifest,
+  };
+}
+
+async function loadRules(manifest, relationsJson) {
+  const canonicalRuntime = await loadCanonicalRuntime();
+  if (manifest.registryAuthority === CANONICAL_REGISTRY_AUTHORITY) {
+    if (relationsJson) throw new Error("Trusted canonical restore cannot use --relations-json diagnostic overrides.");
+    canonicalRuntime.validateCanonicalProfileManifest(manifest);
+    return {
+      rules: canonicalRuntime.rulesForProfile(manifest.profile),
+      canonicalProfileVerified: true,
+      certificationEligible: true,
+    };
+  }
+  if (!relationsJson) throw new Error("DIAGNOSTIC_SUBSET restore requires the matching --relations-json diagnostic descriptor file.");
+  return {
+    rules: JSON.parse(await readFile(resolve(relationsJson), "utf8")),
+    canonicalProfileVerified: false,
+    certificationEligible: false,
+  };
 }
 
 async function loadRestorePlan(rules) {
@@ -373,13 +406,13 @@ export async function restorePortableArtifact({
     }
   }
   validateRuntimeArtifact(manifest, materials);
+  const { rules, canonicalProfileVerified, certificationEligible } = await loadRules(manifest, relationsJson);
   const targetProfile = evaluatePortableTargetProfile(loadTargetProfile(targetUrl), {
     migrationCount: manifest.snapshotBoundary.migrationCount,
     latestMigration: manifest.snapshotBoundary.latestMigration,
     migrationLedgerIdentity: manifest.snapshotBoundary.migrationLedgerIdentity,
     schemaFingerprintSha256: manifest.sourceSchemaFingerprintSha256,
   });
-  const rules = await loadRules(manifest.profile, relationsJson);
   const plan = await loadRestorePlan(rules);
   const rulesByRelation = new Map(rules.map((rule) => [rule.relation, rule]));
   const segmentsByName = new Map(manifest.segments.map((segment) => [segment.name, segment]));
@@ -391,8 +424,15 @@ export async function restorePortableArtifact({
   const evidence = {
     format: "plaivra-food-catalog-restore-evidence",
     version: 1,
+    headSha: manifest.sourceRepositoryCommit,
+    profile: manifest.profile,
+    registryAuthority: manifest.registryAuthority,
     semanticRootSha256: manifest.semanticRootSha256,
+    artifactSemanticRootSha256: manifest.semanticRootSha256,
+    snapshotBoundarySha256: manifest.snapshotBoundary.sha256,
     targetProfile,
+    canonicalProfileVerified,
+    certificationEligible,
     artifactValid: true,
     restoreVerified: false,
     trusted: false,
@@ -419,22 +459,28 @@ export async function restorePortableArtifact({
     const rows = segmentRows(materials[descriptor.name] ?? "");
     if (action.kind === "VALIDATE_PRESEEDED") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildPreseedValidationSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
+    } else if (action.kind === "RESTORE_MIXED_KEYED_PRESEEDED_RUNTIME") {
+      for (const canonicalRow of rows) runPsql(targetUrl, buildMixedSeedRuntimeRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
     } else if (action.kind === "VALIDATE_POINTER_SINGLETON_IDENTITY") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildPreseedValidationSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, comparisonColumns: [...rule.stableKey] }));
+    } else if (action.kind === "RESTORE_MUTABLE_SINGLETON_FIELDS") {
+      for (const canonicalRow of rows) runPsql(targetUrl, buildMutableSingletonRestoreSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
     } else if (action.kind === "RESTORE_EXACT") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
     } else if (action.kind === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION") {
-      for (const canonicalRow of rows) runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, forceNullColumns: [...(rule.transientNeutralize ?? [])] }));
+      for (const canonicalRow of rows) runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, forceNullColumns: [...(rule.transientNeutralize ?? [])], comparisonOmitColumns: [...(rule.transientNeutralize ?? [])] }));
     } else if (action.kind === "RESTORE_TRANSITIONAL_WITH_CYCLE_NULL") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).initialSql);
     } else if (action.kind === "RECONSTRUCT_TRANSITIONAL_CYCLE_FIELD") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).reconstructSql);
     } else if (action.kind === "RESTORE_POINTER_FIELDS_LAST") {
-      for (const canonicalRow of rows) runPsql(targetUrl, pointerRestoreSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
+      for (const canonicalRow of rows) runPsql(targetUrl, buildMutableSingletonRestoreSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
     }
     evidence.appliedSteps.push(`${action.kind}:${rule.relation}`);
   }
-  evidence.phase = "RESTORE_LOADED_UNTRUSTED_PENDING_ASSERTIONS";
+  evidence.phase = certificationEligible
+    ? "RESTORE_LOADED_CANONICAL_PENDING_ASSERTIONS"
+    : "RESTORE_LOADED_DIAGNOSTIC_NON_CERTIFIABLE";
   if (evidenceOutput) await writeFile(resolve(evidenceOutput), `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   return evidence;
 }
