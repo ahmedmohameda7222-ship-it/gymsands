@@ -3,8 +3,13 @@ import { canonicalizePostgresScalar, sha256Hex } from "./canonicalize";
 export const PORTABLE_EXPORT_FORMAT = "plaivra-food-catalog-portable-export" as const;
 export const PORTABLE_EXPORT_FORMAT_VERSION = 1 as const;
 export const PORTABLE_CANONICALIZATION_VERSION = 1 as const;
+export const PORTABLE_CANONICAL_REGISTRY_AUTHORITY = "CANONICAL_REGISTRY_V1" as const;
+export const PORTABLE_DIAGNOSTIC_REGISTRY_AUTHORITY = "DIAGNOSTIC_SUBSET" as const;
 
 export type PortableExportProfile = "CORE_PORTABLE" | "FULL_DR";
+export type PortableRegistryAuthority =
+  | typeof PORTABLE_CANONICAL_REGISTRY_AUTHORITY
+  | typeof PORTABLE_DIAGNOSTIC_REGISTRY_AUTHORITY;
 export type PortableRelationClassification =
   | "PORTABLE_AUTHORITY"
   | "PORTABLE_AUDIT_HISTORY"
@@ -61,6 +66,12 @@ export type PortableExportManifestV1 = {
   formatVersion: typeof PORTABLE_EXPORT_FORMAT_VERSION;
   canonicalizationVersion: typeof PORTABLE_CANONICALIZATION_VERSION;
   profile: PortableExportProfile;
+  /**
+   * Canonical artifacts are eligible to enter the trusted certification chain.
+   * DIAGNOSTIC_SUBSET is permanently non-certifiable and exists only for focused tests.
+   * Optional only for backwards-compatible structural tests; trusted validation requires it.
+   */
+  registryAuthority?: PortableRegistryAuthority;
   sourceRepositoryCommit: string;
   sourceSchemaFingerprintSha256: string;
   capturedAt: string;
@@ -91,6 +102,10 @@ const CLASSIFICATIONS = new Set<PortableRelationClassification>([
   "PROTECTED_PORTABLE_AUDIT_HISTORY",
   "DERIVED_REBUILD",
   "REFERENCE_ONLY",
+]);
+const REGISTRY_AUTHORITIES = new Set<PortableRegistryAuthority>([
+  PORTABLE_CANONICAL_REGISTRY_AUTHORITY,
+  PORTABLE_DIAGNOSTIC_REGISTRY_AUTHORITY,
 ]);
 const SECRET_KEY = /(password|passwd|secret|credential|private[_-]?key|access[_-]?token|refresh[_-]?token|service[_-]?role[_-]?key)/i;
 
@@ -136,12 +151,18 @@ export function computeSnapshotBoundarySha256(
   return sha256Hex(canonical);
 }
 
+function codeUnitSort(left: { name: string }, right: { name: string }): number {
+  if (left.name === right.name) return 0;
+  return left.name < right.name ? -1 : 1;
+}
+
 export function computeManifestSemanticRoot(manifest: PortableExportManifestV1): string {
   const canonical = JSON.stringify({
     format: manifest.format,
     formatVersion: manifest.formatVersion,
     canonicalizationVersion: manifest.canonicalizationVersion,
     profile: manifest.profile,
+    registryAuthority: manifest.registryAuthority ?? null,
     sourceRepositoryCommit: manifest.sourceRepositoryCommit,
     sourceSchemaFingerprintSha256: manifest.sourceSchemaFingerprintSha256,
     snapshotBoundary: semanticSnapshotBoundary(manifest.snapshotBoundary),
@@ -158,7 +179,7 @@ export function computeManifestSemanticRoot(manifest: PortableExportManifestV1):
         required: segment.required,
         protected: segment.protected,
       }))
-      .sort((left, right) => left.name.localeCompare(right.name)),
+      .sort(codeUnitSort),
   });
   return sha256Hex(canonical);
 }
@@ -223,6 +244,13 @@ export function validatePortableManifestV1(
   if (manifest.formatVersion !== PORTABLE_EXPORT_FORMAT_VERSION) throw new Error("Unknown portable export format version.");
   if (manifest.canonicalizationVersion !== PORTABLE_CANONICALIZATION_VERSION) throw new Error("Unknown canonicalization version.");
   if (!new Set<PortableExportProfile>(["CORE_PORTABLE", "FULL_DR"]).has(manifest.profile)) throw new Error("Unknown portable export profile.");
+  if (manifest.registryAuthority !== undefined && !REGISTRY_AUTHORITIES.has(manifest.registryAuthority)) {
+    throw new Error("Unknown portable registry authority.");
+  }
+  if (manifest.registryAuthority === PORTABLE_DIAGNOSTIC_REGISTRY_AUTHORITY
+      && (manifest.certification?.restoreVerified || manifest.certification?.drReady)) {
+    throw new Error("Diagnostic subset artifacts are permanently non-certifiable.");
+  }
   if (!COMMIT.test(manifest.sourceRepositoryCommit)) throw new Error("Source repository commit must be an exact SHA.");
   exactDigest(manifest.sourceSchemaFingerprintSha256, "Source schema fingerprint");
   exactDigest(manifest.snapshotBoundary.sha256, "Snapshot boundary");
