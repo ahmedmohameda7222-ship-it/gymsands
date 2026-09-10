@@ -102,4 +102,63 @@ describe("Plan 7 portable export contract", () => {
     badMode.semanticRootSha256 = computeManifestSemanticRoot(badMode);
     expect(() => validatePortableManifestV1(badMode, { requiredSegments: ["food_items"] })).toThrow(/load mode/i);
   });
+
+  it("requires protected authority to use FULL_DR with complete AES-256-GCM transport metadata", () => {
+    const full = manifest({ profile: "FULL_DR" });
+    const missingTransport = {
+      ...full.segments[0],
+      name: "food_personal_overrides",
+      relation: "food_personal_overrides",
+      classification: "PROTECTED_PORTABLE_AUTHORITY" as const,
+      loadMode: "RESTORE_EXACT" as const,
+      stableKey: ["user_id", "food_id"],
+      protected: true,
+    };
+    full.segments = [missingTransport];
+    full.semanticRootSha256 = computeManifestSemanticRoot(full);
+    expect(() => validatePortableManifestV1(full, { requiredSegments: ["food_personal_overrides"] })).toThrow(/encrypt|transport|AES-256-GCM/i);
+
+    const core = manifest();
+    core.segments = [missingTransport];
+    core.semanticRootSha256 = computeManifestSemanticRoot(core);
+    expect(() => validatePortableManifestV1(core, { requiredSegments: ["food_personal_overrides"] })).toThrow(/FULL_DR|protected/i);
+  });
+
+  it("keeps randomized protected transport metadata outside the deterministic semantic root", () => {
+    const first = manifest({ profile: "FULL_DR" });
+    const baseProtected = {
+      ...first.segments[0],
+      name: "food_personal_overrides",
+      relation: "food_personal_overrides",
+      classification: "PROTECTED_PORTABLE_AUTHORITY" as const,
+      loadMode: "RESTORE_EXACT" as const,
+      stableKey: ["user_id", "food_id"],
+      protected: true,
+      ciphertextTransportSha256: "e".repeat(64),
+      encryption: {
+        algorithm: "AES-256-GCM",
+        keyId: "ephemeral-ci",
+        nonceBase64: Buffer.alloc(12, 1).toString("base64"),
+        authTagBase64: Buffer.alloc(16, 2).toString("base64"),
+      },
+    } as unknown as PortableExportManifestV1["segments"][number];
+    first.segments = [baseProtected];
+    first.semanticRootSha256 = computeManifestSemanticRoot(first);
+    expect(validatePortableManifestV1(first, { requiredSegments: ["food_personal_overrides"] })).toBe(first);
+
+    const second = structuredClone(first);
+    second.segments = [{
+      ...baseProtected,
+      ciphertextTransportSha256: "f".repeat(64),
+      encryption: {
+        algorithm: "AES-256-GCM",
+        keyId: "ephemeral-ci",
+        nonceBase64: Buffer.alloc(12, 3).toString("base64"),
+        authTagBase64: Buffer.alloc(16, 4).toString("base64"),
+      },
+    } as unknown as PortableExportManifestV1["segments"][number]];
+    second.semanticRootSha256 = computeManifestSemanticRoot(second);
+    expect(second.semanticRootSha256).toBe(first.semanticRootSha256);
+    expect(validatePortableManifestV1(second, { requiredSegments: ["food_personal_overrides"] })).toBe(second);
+  });
 });

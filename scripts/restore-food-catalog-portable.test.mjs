@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { randomBytes } from "node:crypto";
+import { encryptProtectedSegment } from "../lib/food-catalog/portability/protected-segments.ts";
 import {
   assertDisposableRestoreTarget,
   buildExactRestoreRowSql,
   buildPreseedValidationSql,
   decodeCanonicalSegmentRow,
+  decodeProtectedArtifactMaterial,
   buildTransitionalFoodItemsStages,
 } from "./restore-food-catalog-portable.mjs";
 
@@ -72,5 +75,40 @@ describe("Plan 7 disposable restore CLI primitives", () => {
     assert.throws(() => assertDisposableRestoreTarget("postgresql://localhost:5432/restore", false), /disposable/i);
     assert.throws(() => assertDisposableRestoreTarget("postgresql://project.supabase.co:5432/postgres", true), /production|provider/i);
     assert.doesNotThrow(() => assertDisposableRestoreTarget("postgresql://127.0.0.1:55432/restore", true));
+  });
+
+  it("decrypts and authenticates protected artifact bytes through the external key provider before row replay", async () => {
+    const key = randomBytes(32);
+    const keyProvider = { getKey: async () => key };
+    const plaintext = Buffer.from(`${row}\n`, "utf8");
+    const envelope = await encryptProtectedSegment({
+      segment: "food_personal_overrides",
+      plaintext,
+      keyId: "ephemeral-ci",
+      keyProvider,
+    });
+    const descriptor = {
+      name: "food_personal_overrides",
+      protected: true,
+      plaintextSemanticSha256: envelope.plaintextSemanticSha256,
+      ciphertextTransportSha256: envelope.transportSha256,
+      encryption: {
+        algorithm: envelope.algorithm,
+        keyId: envelope.keyId,
+        nonceBase64: envelope.nonceBase64,
+        authTagBase64: envelope.authTagBase64,
+      },
+    };
+    const restored = await decodeProtectedArtifactMaterial({
+      descriptor,
+      ciphertext: Buffer.from(envelope.ciphertextBase64, "base64"),
+      keyProvider,
+    });
+    assert.equal(restored, plaintext.toString("utf8"));
+    await assert.rejects(() => decodeProtectedArtifactMaterial({
+      descriptor,
+      ciphertext: Buffer.from(envelope.ciphertextBase64, "base64"),
+      keyProvider: { getKey: async () => randomBytes(32) },
+    }), /auth|decrypt|key|integrity/i);
   });
 });

@@ -43,4 +43,12 @@ describe("Plan 7 authoritative export CLI SQL program", () => {
     assert.ok(closeRegistration >= 0, "Expected psql close promise registration");
     assert.ok(closeRegistration < stdoutConsumption, "Close promise must be registered before stdout consumption");
   });
+
+  it("routes protected FULL_DR relations to encrypted transport instead of refusing or writing plaintext segments", async () => {
+    const source = await readFile(new URL("./export-food-catalog-portable.mjs", import.meta.url), "utf8");
+    for (const fragment of ["protectedKeyProvider", "protectedKeyId", "ciphertextTransportSha256", ".enc", "createCipheriv"]) {
+      assert.ok(source.includes(fragment), `Expected protected export wiring to contain ${fragment}`);
+    }
+    assert.doesNotMatch(source, /rules\.some\(\(rule\) => rule\.protected\)[\s\S]{0,200}plaintext fallback is forbidden/i);
+  });
 });

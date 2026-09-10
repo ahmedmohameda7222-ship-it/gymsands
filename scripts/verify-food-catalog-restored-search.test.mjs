@@ -65,4 +65,16 @@ describe("Plan 7 restored search verification script", () => {
     assert.doesNotMatch(workflow, /supabase\s+db\s+push\s+--linked/i);
     assert.doesNotMatch(workflow, /supabase\s+link\b/i);
   });
+
+  it("requires deterministic FULL_DR CI to exercise encrypted protected export and restore with ephemeral key material", () => {
+    for (const fragment of [
+      "full-dr-protected-runtime:",
+      "PLAN7_PROTECTED_SEGMENT_KEY_BASE64",
+      "PLAN7_PROTECTED_SEGMENT_KEY_ID",
+      "openssl rand -base64 32",
+      "food_personal_overrides.enc",
+      "ciphertextTransportSha256",
+      "restore-food-catalog-portable.mjs",
+    ]) assert.ok(workflow.includes(fragment), `Expected FULL_DR protected runtime proof to contain ${fragment}`);
+  });
 });
