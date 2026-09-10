@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { buildSingleSnapshotPsqlProgram } from "./export-food-catalog-portable.mjs";
 
@@ -30,5 +31,13 @@ describe("Plan 7 authoritative export CLI SQL program", () => {
       profile: "CORE_PORTABLE",
       relations: [{ relation: "food_items; drop table x", stableKey: ["id"] }],
     })).toThrow(/identifier/i);
+  });
+
+  it("registers the psql close listener before stdout can finish so finalization cannot miss the event", async () => {
+    const source = await readFile(new URL("./export-food-catalog-portable.mjs", import.meta.url), "utf8");
+    const closeRegistration = source.indexOf('const closePromise = once(child, "close")');
+    const stdoutConsumption = source.indexOf("for await (const line of lines)");
+    expect(closeRegistration).toBeGreaterThanOrEqual(0);
+    expect(closeRegistration).toBeLessThan(stdoutConsumption);
   });
 });
