@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   buildFoodCatalogRestoreVerificationReportV1,
   assertFoodCatalogRestoreVerificationReady,
@@ -45,16 +46,14 @@ function baseInput(profile = "FULL_DR") {
 describe("Plan 7 restore verification report", () => {
   it("keeps recovery eligibility separate from structural restore verification evidence", () => {
     const report = buildFoodCatalogRestoreVerificationReportV1(baseInput());
-    expect(report).toMatchObject({
-      reportVersion: 1,
-      profile: "FULL_DR",
-      restoreVerified: true,
-      drReady: true,
-      recoveryEligible: true,
-    });
-    expect(report.artifact.snapshotBoundarySha256).toBe(hash("b"));
-    expect(report.target.postgresVersion).toBe("17.11");
-    expect(report.recoveryEligibility.reason).toBe("ELIGIBLE");
+    assert.equal(report.reportVersion, 1);
+    assert.equal(report.profile, "FULL_DR");
+    assert.equal(report.restoreVerified, true);
+    assert.equal(report.drReady, true);
+    assert.equal(report.recoveryEligible, true);
+    assert.equal(report.artifact.snapshotBoundarySha256, hash("b"));
+    assert.equal(report.target.postgresVersion, "17.11");
+    assert.equal(report.recoveryEligibility.reason, "ELIGIBLE");
   });
 
   it("does not erase a verified restore when an explicit RPO policy rejects artifact age", () => {
@@ -67,27 +66,27 @@ describe("Plan 7 restore verification report", () => {
       reason: "ARTIFACT_TOO_OLD",
     };
     const report = buildFoodCatalogRestoreVerificationReportV1(input);
-    expect(report.restoreVerified).toBe(true);
-    expect(report.recoveryEligible).toBe(false);
-    expect(report.readyForRecovery).toBe(false);
+    assert.equal(report.restoreVerified, true);
+    assert.equal(report.recoveryEligible, false);
+    assert.equal(report.readyForRecovery, false);
   });
 
   it("never declares CORE_PORTABLE final DR-ready even with all core assertions passing", () => {
     const report = buildFoodCatalogRestoreVerificationReportV1(baseInput("CORE_PORTABLE"));
-    expect(report.restoreVerified).toBe(true);
-    expect(report.drReady).toBe(false);
+    assert.equal(report.restoreVerified, true);
+    assert.equal(report.drReady, false);
   });
 
   it("fails closed when artifact, target, or assertion evidence is untrusted", () => {
     const input = baseInput();
     input.target.disposableTargetVerified = false;
-    expect(() => buildFoodCatalogRestoreVerificationReportV1(input)).toThrow(/disposable|target/i);
+    assert.throws(() => buildFoodCatalogRestoreVerificationReportV1(input), /disposable|target/i);
 
     const untrusted = baseInput();
     untrusted.assertions = { ...untrusted.assertions, trusted: false, restoreVerified: false, failures: ["current_pointer"] };
     const report = buildFoodCatalogRestoreVerificationReportV1(untrusted);
-    expect(report.restoreVerified).toBe(false);
-    expect(report.drReady).toBe(false);
-    expect(() => assertFoodCatalogRestoreVerificationReady(report)).toThrow(/verification|ready/i);
+    assert.equal(report.restoreVerified, false);
+    assert.equal(report.drReady, false);
+    assert.throws(() => assertFoodCatalogRestoreVerificationReady(report), /verification|ready/i);
   });
 });

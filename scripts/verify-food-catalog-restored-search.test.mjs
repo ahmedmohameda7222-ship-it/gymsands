@@ -1,5 +1,6 @@
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
 import {
   buildRestoredSearchSql,
   verifyRestoredSearchFixture,
@@ -12,46 +13,56 @@ const head = "a".repeat(40);
 describe("Plan 7 restored search verification script", () => {
   it("builds SQL that checks the exact current pointer, rebuilds first, then calls only canonical V2 search", () => {
     const sql = buildRestoredSearchSql(fixture);
-    expect(sql).toContain("public.food_catalog_current_generation");
+    assert.ok(sql.includes("public.food_catalog_current_generation"));
     const rebuildAt = sql.indexOf("public.rebuild_food_catalog_search_projection_v2");
     const searchAt = sql.indexOf("public.search_food_catalog_v2");
-    expect(rebuildAt).toBeGreaterThan(0);
-    expect(searchAt).toBeGreaterThan(rebuildAt);
-    expect(sql).not.toContain("search_nutrition_food_library");
-    expect(sql).not.toMatch(/https?:\/\//i);
+    assert.ok(rebuildAt > 0);
+    assert.ok(searchAt > rebuildAt);
+    assert.ok(!sql.includes("search_nutrition_food_library"));
+    assert.doesNotMatch(sql, /https?:\/\//i);
   });
 
   it("publishes non-sensitive exact-head CORE evidence without claiming final DR readiness", () => {
     const evidence = verifyRestoredSearchFixture({ fixture, profile: "CORE_PORTABLE", expectedHeadSha: head, actualHeadSha: head });
-    expect(evidence).toMatchObject({ profile: "CORE_PORTABLE", exactHeadVerified: true, goldenSearchVerified: true, drReady: false, providerNetworkUsed: false });
-    expect(evidence).toHaveProperty("fixtureSha256");
-    expect(evidence).toHaveProperty("goldenResultSha256");
-    expect(evidence).not.toHaveProperty("queryResults");
-    expect(JSON.stringify(evidence)).not.toContain("Chicken Breast");
+    assert.equal(evidence.profile, "CORE_PORTABLE");
+    assert.equal(evidence.exactHeadVerified, true);
+    assert.equal(evidence.goldenSearchVerified, true);
+    assert.equal(evidence.drReady, false);
+    assert.equal(evidence.providerNetworkUsed, false);
+    assert.ok(Object.hasOwn(evidence, "fixtureSha256"));
+    assert.ok(Object.hasOwn(evidence, "goldenResultSha256"));
+    assert.ok(!Object.hasOwn(evidence, "queryResults"));
+    assert.ok(!JSON.stringify(evidence).includes("Chicken Breast"));
   });
 
   it("allows final DR-ready fixture evidence only for FULL_DR with protected fixture verification", () => {
     const evidence = verifyRestoredSearchFixture({ fixture, profile: "FULL_DR", expectedHeadSha: head, actualHeadSha: head });
-    expect(evidence).toMatchObject({ profile: "FULL_DR", exactHeadVerified: true, protectedFixtureVerified: true, drReady: true });
-    expect(verifyRestoredSearchFixture({ fixture: { ...fixture, protectedFixtureVerified: false }, profile: "FULL_DR", expectedHeadSha: head, actualHeadSha: head }).drReady).toBe(false);
+    assert.equal(evidence.profile, "FULL_DR");
+    assert.equal(evidence.exactHeadVerified, true);
+    assert.equal(evidence.protectedFixtureVerified, true);
+    assert.equal(evidence.drReady, true);
+    const withoutProtected = verifyRestoredSearchFixture({ fixture: { ...fixture, protectedFixtureVerified: false }, profile: "FULL_DR", expectedHeadSha: head, actualHeadSha: head });
+    assert.equal(withoutProtected.drReady, false);
   });
 
   it("fails closed on exact-head mismatch, provider network use, or corrupted golden output", () => {
-    expect(() => verifyRestoredSearchFixture({ fixture, profile: "CORE_PORTABLE", expectedHeadSha: head, actualHeadSha: "b".repeat(40) })).toThrow(/head/i);
-    expect(() => verifyRestoredSearchFixture({ fixture: { ...fixture, providerNetworkUsed: true }, profile: "CORE_PORTABLE", expectedHeadSha: head, actualHeadSha: head })).toThrow(/provider|network/i);
+    assert.throws(() => verifyRestoredSearchFixture({ fixture, profile: "CORE_PORTABLE", expectedHeadSha: head, actualHeadSha: "b".repeat(40) }), /head/i);
+    assert.throws(() => verifyRestoredSearchFixture({ fixture: { ...fixture, providerNetworkUsed: true }, profile: "CORE_PORTABLE", expectedHeadSha: head, actualHeadSha: head }), /provider|network/i);
     const corrupted = structuredClone(fixture);
     corrupted.queryCases[0].actual = { items: [], nextCursor: null };
-    expect(() => verifyRestoredSearchFixture({ fixture: corrupted, profile: "FULL_DR", expectedHeadSha: head, actualHeadSha: head })).toThrow(/exact|golden|mismatch/i);
+    assert.throws(() => verifyRestoredSearchFixture({ fixture: corrupted, profile: "FULL_DR", expectedHeadSha: head, actualHeadSha: head }), /exact|golden|mismatch/i);
   });
 
   it("runs canonical search runtime verification on an exact-head Git-migrated local PostgreSQL 17 target", () => {
-    expect(workflow).toContain("restored-search-runtime:");
-    expect(workflow).toContain("supabase/setup-cli@v2");
-    expect(workflow).toContain("node scripts/replay-local-migration-chain.mjs");
-    expect(workflow).toContain("current_setting('server_version_num')::int/10000=17");
-    expect(workflow).toContain("supabase/verification/food-catalog-search-projection-v2.sql");
-    expect(workflow).toContain("PLAIVRA_LOCAL_DATABASE_URL");
-    expect(workflow).not.toMatch(/supabase\s+db\s+push\s+--linked/i);
-    expect(workflow).not.toMatch(/supabase\s+link\b/i);
+    for (const fragment of [
+      "restored-search-runtime:",
+      "supabase/setup-cli@v2",
+      "node scripts/replay-local-migration-chain.mjs",
+      "current_setting('server_version_num')::int/10000=17",
+      "supabase/verification/food-catalog-search-projection-v2.sql",
+      "PLAIVRA_LOCAL_DATABASE_URL",
+    ]) assert.ok(workflow.includes(fragment), `Expected workflow to contain ${fragment}`);
+    assert.doesNotMatch(workflow, /supabase\s+db\s+push\s+--linked/i);
+    assert.doesNotMatch(workflow, /supabase\s+link\b/i);
   });
 });

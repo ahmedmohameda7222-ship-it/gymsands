@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   assertDisposableRestoreTarget,
   buildExactRestoreRowSql,
@@ -12,9 +13,9 @@ const row = '[["amount","numeric","90071992547409931234567890.1200"],["id","uuid
 describe("Plan 7 disposable restore CLI primitives", () => {
   it("decodes canonical rows without converting typed scalar text into JavaScript numbers", () => {
     const decoded = decodeCanonicalSegmentRow(row);
-    expect(decoded.amount).toEqual({ pgType: "numeric", text: "90071992547409931234567890.1200" });
-    expect(decoded.label).toEqual({ pgType: "text", text: "null" });
-    expect(decoded.optional).toEqual({ pgType: "text", text: null });
+    assert.deepEqual(decoded.amount, { pgType: "numeric", text: "90071992547409931234567890.1200" });
+    assert.deepEqual(decoded.label, { pgType: "text", text: "null" });
+    assert.deepEqual(decoded.optional, { pgType: "text", text: null });
   });
 
   it("hex-encodes scalar material and makes conflicting stable IDs fail instead of overwriting", () => {
@@ -30,12 +31,12 @@ describe("Plan 7 disposable restore CLI primitives", () => {
       },
       canonicalRow: row,
     });
-    expect(sql).toContain("ON CONFLICT");
-    expect(sql).toContain("DO NOTHING");
-    expect(sql).toMatch(/RAISE EXCEPTION.*conflict/i);
-    expect(sql).not.toContain("90071992547409931234567890.1200");
-    expect(sql).not.toContain("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
-    expect(sql).toContain("decode(");
+    assert.ok(sql.includes("ON CONFLICT"));
+    assert.ok(sql.includes("DO NOTHING"));
+    assert.match(sql, /RAISE EXCEPTION.*conflict/i);
+    assert.ok(!sql.includes("90071992547409931234567890.1200"));
+    assert.ok(!sql.includes("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"));
+    assert.ok(sql.includes("decode("));
   });
 
   it("validates migration-seeded rows without INSERT, UPDATE, UPSERT or DELETE", () => {
@@ -45,8 +46,8 @@ describe("Plan 7 disposable restore CLI primitives", () => {
       targetColumns: { singleton: "boolean", version: "integer", migration_version: "text" },
       canonicalRow: '[["migration_version","text","20260724232734"],["singleton","boolean","true"],["version","integer","2"]]',
     });
-    expect(sql).toMatch(/SELECT|PERFORM|IF/i);
-    expect(sql).not.toMatch(/\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bUPSERT\b/i);
+    assert.match(sql, /SELECT|PERFORM|IF/i);
+    assert.doesNotMatch(sql, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bUPSERT\b/i);
   });
 
   it("neutralizes only verified_source_record_id for food_items, then reconstructs it after source records", () => {
@@ -61,15 +62,15 @@ describe("Plan 7 disposable restore CLI primitives", () => {
       },
       canonicalRow: row,
     });
-    expect(stages.initialSql).toContain("verified_source_record_id");
-    expect(stages.initialSql).toMatch(/NULL/);
-    expect(stages.reconstructSql).toContain("verified_source_record_id");
-    expect(stages.reconstructAfterRelations).toEqual(["food_source_records"]);
+    assert.ok(stages.initialSql.includes("verified_source_record_id"));
+    assert.match(stages.initialSql, /NULL/);
+    assert.ok(stages.reconstructSql.includes("verified_source_record_id"));
+    assert.deepEqual(stages.reconstructAfterRelations, ["food_source_records"]);
   });
 
   it("requires an explicit disposable-target acknowledgement and rejects provider production hosts", () => {
-    expect(() => assertDisposableRestoreTarget("postgresql://localhost:5432/restore", false)).toThrow(/disposable/i);
-    expect(() => assertDisposableRestoreTarget("postgresql://project.supabase.co:5432/postgres", true)).toThrow(/production|provider/i);
-    expect(() => assertDisposableRestoreTarget("postgresql://127.0.0.1:55432/restore", true)).not.toThrow();
+    assert.throws(() => assertDisposableRestoreTarget("postgresql://localhost:5432/restore", false), /disposable/i);
+    assert.throws(() => assertDisposableRestoreTarget("postgresql://project.supabase.co:5432/postgres", true), /production|provider/i);
+    assert.doesNotThrow(() => assertDisposableRestoreTarget("postgresql://127.0.0.1:55432/restore", true));
   });
 });
