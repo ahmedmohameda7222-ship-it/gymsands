@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildFoodCatalogRestorePlan } from "./restore-plan";
-import type { PortableRelationSpec } from "./relation-registry";
+import type { PortableRelationRule } from "./relation-registry";
 
 const spec = (
   relation: string,
-  loadMode: PortableRelationSpec["loadMode"],
-  overrides: Partial<PortableRelationSpec> = {},
-): PortableRelationSpec => ({
+  loadMode: PortableRelationRule["loadMode"],
+  overrides: Partial<PortableRelationRule> = {},
+): PortableRelationRule => ({
   segment: relation,
   relation,
   classification: loadMode === "DERIVED_REBUILD" ? "DERIVED_REBUILD" : "PORTABLE_AUTHORITY",
@@ -22,8 +22,8 @@ const spec = (
 describe("Plan 7 disposable restore plan", () => {
   it("keeps preseed validation separate, resolves the food/source FK cycle, and restores pointer fields last", () => {
     const plan = buildFoodCatalogRestorePlan([
-      spec("food_taxonomy_namespaces", "VALIDATE_PRESEEDED", { stableKey: ["namespace_code"], seedOwnership: "MIGRATION_SEEDED" }),
-      spec("food_catalog_current_generation", "VALIDATE_PRESEEDED", { stableKey: ["singleton_key"], seedOwnership: "MIGRATION_SEEDED", restoreLast: true }),
+      spec("food_taxonomy_namespaces", "VALIDATE_PRESEEDED", { stableKey: ["namespace_code"], seedOwnership: "MIGRATION_OWNED" }),
+      spec("food_catalog_current_generation", "VALIDATE_PRESEEDED", { stableKey: ["singleton_key"], seedOwnership: "MIGRATION_OWNED", restoreLast: true }),
       spec("food_items", "RECONSTRUCT_TRANSITIONAL_COMPATIBILITY", { transientNeutralize: ["verified_source_record_id"] }),
       spec("food_source_records", "RESTORE_EXACT"),
       spec("food_ingestion_runs", "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION", { transientNeutralize: ["lease_owner", "lease_expires_at"] }),
@@ -56,7 +56,7 @@ describe("Plan 7 disposable restore plan", () => {
 
   it("never treats DERIVED_REBUILD as portable truth and never blindly restores migration-seeded rows", () => {
     const plan = buildFoodCatalogRestorePlan([
-      spec("release_schema_compatibility", "VALIDATE_PRESEEDED", { stableKey: ["singleton"], seedOwnership: "MIGRATION_SEEDED" }),
+      spec("release_schema_compatibility", "VALIDATE_PRESEEDED", { stableKey: ["singleton"], seedOwnership: "MIGRATION_OWNED" }),
       spec("food_catalog_search_documents", "DERIVED_REBUILD"),
     ]);
     expect(plan.some((step) => step.kind.startsWith("RESTORE") && step.relation === "release_schema_compatibility")).toBe(false);
