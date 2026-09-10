@@ -15,6 +15,7 @@ const spec = (
   requiredProfile: "CORE_PORTABLE",
   protected: false,
   seedOwnership: "NONE",
+  restoreOwnership: "UNIFORM",
   transientNeutralize: [],
   ...overrides,
 });
@@ -23,7 +24,7 @@ describe("Plan 7 disposable restore plan", () => {
   it("keeps preseed validation separate, resolves the food/source FK cycle, and restores pointer fields last", () => {
     const plan = buildFoodCatalogRestorePlan([
       spec("food_taxonomy_namespaces", "VALIDATE_PRESEEDED", { stableKey: ["namespace_code"], seedOwnership: "MIGRATION_OWNED" }),
-      spec("food_catalog_current_generation", "VALIDATE_PRESEEDED", { stableKey: ["singleton_key"], seedOwnership: "MIGRATION_OWNED", restoreLast: true }),
+      spec("food_catalog_current_generation", "VALIDATE_PRESEEDED", { stableKey: ["singleton_key"], seedOwnership: "MIGRATION_OWNED", restoreOwnership: "MUTABLE_PRESEEDED_SINGLETON", restoreLast: true }),
       spec("food_items", "RECONSTRUCT_TRANSITIONAL_COMPATIBILITY", { transientNeutralize: ["verified_source_record_id"] }),
       spec("food_source_records", "RESTORE_EXACT"),
       spec("food_ingestion_runs", "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION", { transientNeutralize: ["lease_owner", "lease_expires_at"] }),
@@ -43,18 +44,37 @@ describe("Plan 7 disposable restore plan", () => {
       "RESTORE_POINTER_FIELDS_LAST",
       "MARK_RESTORE_UNTRUSTED_PENDING_ASSERTIONS",
     ]);
-    expect(plan.find((step) => step.kind === "RESTORE_TRANSITIONAL_WITH_CYCLE_NULL")).toMatchObject({
-      relation: "food_items",
-      neutralizedColumns: ["verified_source_record_id"],
-    });
-    expect(plan.find((step) => step.kind === "RECONSTRUCT_TRANSITIONAL_CYCLE_FIELD")).toMatchObject({
-      relation: "food_items",
-      columns: ["verified_source_record_id"],
-      afterRelations: ["food_source_records"],
-    });
   });
 
-  it("never treats DERIVED_REBUILD as portable truth and never blindly restores migration-seeded rows", () => {
+  it("restores source-only runtime rows in mixed migration-seed relations while validating conflicts exactly", () => {
+    const plan = buildFoodCatalogRestorePlan([
+      spec("food_taxonomy_nodes", "VALIDATE_PRESEEDED", {
+        stableKey: ["node_code"],
+        seedOwnership: "MIGRATION_OWNED",
+        restoreOwnership: "MIXED_KEYED_PRESEEDED_RUNTIME",
+      }),
+      spec("market_scopes", "VALIDATE_PRESEEDED", {
+        stableKey: ["scope_code"],
+        seedOwnership: "MIGRATION_OWNED",
+        restoreOwnership: "MIXED_KEYED_PRESEEDED_RUNTIME",
+      }),
+      spec("food_catalog_governance_policy_pointer", "VALIDATE_PRESEEDED", {
+        stableKey: ["singleton"],
+        seedOwnership: "MIGRATION_OWNED",
+        restoreOwnership: "MUTABLE_PRESEEDED_SINGLETON",
+      }),
+    ]);
+    expect(plan.map((step) => [step.kind, step.relation])).toEqual([
+      ["VERIFY_TARGET_PROFILE", undefined],
+      ["RESTORE_MIXED_KEYED_PRESEEDED_RUNTIME", "food_taxonomy_nodes"],
+      ["RESTORE_MIXED_KEYED_PRESEEDED_RUNTIME", "market_scopes"],
+      ["VALIDATE_POINTER_SINGLETON_IDENTITY", "food_catalog_governance_policy_pointer"],
+      ["RESTORE_MUTABLE_SINGLETON_FIELDS", "food_catalog_governance_policy_pointer"],
+      ["MARK_RESTORE_UNTRUSTED_PENDING_ASSERTIONS", undefined],
+    ]);
+  });
+
+  it("never treats DERIVED_REBUILD as portable truth and never blindly restores uniform migration-seeded rows", () => {
     const plan = buildFoodCatalogRestorePlan([
       spec("release_schema_compatibility", "VALIDATE_PRESEEDED", { stableKey: ["singleton"], seedOwnership: "MIGRATION_OWNED" }),
       spec("food_catalog_search_documents", "DERIVED_REBUILD"),
