@@ -1,4 +1,4 @@
-import { canonicalizePostgresScalar, sha256Hex } from "./canonicalize";
+import { canonicalizePostgresScalar, sha256Hex } from "./canonicalize.ts";
 
 export const PORTABLE_EXPORT_FORMAT = "plaivra-food-catalog-portable-export" as const;
 export const PORTABLE_EXPORT_FORMAT_VERSION = 1 as const;

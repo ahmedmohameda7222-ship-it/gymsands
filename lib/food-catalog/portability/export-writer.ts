@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { canonicalizeLosslessRow } from "./canonicalize";
+import { canonicalizeLosslessRow } from "./canonicalize.ts";
 import type { LosslessPostgresRow } from "./export-reader";
 
 export type StreamingSegmentResult = Readonly<{

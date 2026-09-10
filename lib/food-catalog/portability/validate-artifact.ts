@@ -1,14 +1,14 @@
-import { sha256Hex } from "./canonicalize";
+import { sha256Hex } from "./canonicalize.ts";
 import {
   computeSnapshotBoundarySha256,
   PORTABLE_CANONICAL_REGISTRY_AUTHORITY,
   type PortableExportManifestV1,
   validatePortableManifestV1,
-} from "./export-contract";
+} from "./export-contract.ts";
 import {
   canonicalRulesForProfile,
   validateCanonicalProfileManifest,
-} from "./profile-certification";
+} from "./profile-certification.ts";
 
 export type PortableArtifactMaterial = string | Uint8Array;
 

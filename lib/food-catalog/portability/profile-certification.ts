@@ -2,7 +2,7 @@ import type { PortableExportProfile, PortableExportManifestV1 } from "./export-c
 import {
   FOOD_CATALOG_PORTABLE_RELATIONS_V1,
   type PortableRelationRule,
-} from "./relation-registry";
+} from "./relation-registry.ts";
 
 export const PLAN7_CANONICAL_REGISTRY_AUTHORITY = "CANONICAL_REGISTRY_V1" as const;
 export const PLAN7_DIAGNOSTIC_REGISTRY_AUTHORITY = "DIAGNOSTIC_SUBSET" as const;
@@ -78,3 +78,7 @@ export function validateCanonicalProfileManifest(
     complete: true,
   });
 }
+
+// Runtime/CLI compatibility name used by Plan 7 certification scripts. Keep one
+// implementation so structural profile validation cannot drift between callers.
+export const validateCanonicalPortableProfileManifestV1 = validateCanonicalProfileManifest;

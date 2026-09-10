@@ -1,4 +1,4 @@
-import { canonicalizePostgresScalar, type LosslessPostgresScalar } from "./canonicalize";
+import { canonicalizePostgresScalar, type LosslessPostgresScalar } from "./canonicalize.ts";
 
 export type LosslessPostgresRow = Readonly<Record<string, LosslessPostgresScalar>>;
 

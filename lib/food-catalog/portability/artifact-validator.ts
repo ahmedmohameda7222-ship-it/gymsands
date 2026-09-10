@@ -1,1 +1,1 @@
-export * from "./validate-artifact";
+export * from "./validate-artifact.ts";
