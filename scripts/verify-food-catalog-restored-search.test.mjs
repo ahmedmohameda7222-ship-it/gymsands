@@ -22,27 +22,29 @@ describe("Plan 7 restored search verification script", () => {
     assert.doesNotMatch(sql, /https?:\/\//i);
   });
 
-  it("publishes non-sensitive exact-head CORE evidence without claiming final DR readiness", () => {
+  it("publishes non-sensitive exact-head CORE regression evidence without any final DR authority", () => {
     const evidence = verifyRestoredSearchFixture({ fixture, profile: "CORE_PORTABLE", expectedHeadSha: head, actualHeadSha: head });
     assert.equal(evidence.profile, "CORE_PORTABLE");
     assert.equal(evidence.exactHeadVerified, true);
     assert.equal(evidence.goldenSearchVerified, true);
-    assert.equal(evidence.drReady, false);
     assert.equal(evidence.providerNetworkUsed, false);
+    assert.equal(evidence.evidenceRole, "SEARCH_REGRESSION_ONLY");
+    assert.equal(Object.hasOwn(evidence, "drReady"), false);
     assert.ok(Object.hasOwn(evidence, "fixtureSha256"));
     assert.ok(Object.hasOwn(evidence, "goldenResultSha256"));
     assert.ok(!Object.hasOwn(evidence, "queryResults"));
     assert.ok(!JSON.stringify(evidence).includes("Chicken Breast"));
   });
 
-  it("allows final DR-ready fixture evidence only for FULL_DR with protected fixture verification", () => {
+  it("keeps FULL_DR protected fixture observations subordinate to final linked certification", () => {
     const evidence = verifyRestoredSearchFixture({ fixture, profile: "FULL_DR", expectedHeadSha: head, actualHeadSha: head });
     assert.equal(evidence.profile, "FULL_DR");
     assert.equal(evidence.exactHeadVerified, true);
-    assert.equal(evidence.protectedFixtureVerified, true);
-    assert.equal(evidence.drReady, true);
+    assert.equal(evidence.protectedFixtureObserved, true);
+    assert.equal(Object.hasOwn(evidence, "drReady"), false);
     const withoutProtected = verifyRestoredSearchFixture({ fixture: { ...fixture, protectedFixtureVerified: false }, profile: "FULL_DR", expectedHeadSha: head, actualHeadSha: head });
-    assert.equal(withoutProtected.drReady, false);
+    assert.equal(withoutProtected.protectedFixtureObserved, false);
+    assert.equal(Object.hasOwn(withoutProtected, "drReady"), false);
   });
 
   it("fails closed on exact-head mismatch, provider network use, or corrupted golden output", () => {
@@ -66,7 +68,7 @@ describe("Plan 7 restored search verification script", () => {
     assert.doesNotMatch(workflow, /supabase\s+link\b/i);
   });
 
-  it("requires deterministic FULL_DR CI to exercise encrypted protected export and restore with ephemeral key material", () => {
+  it("retains deterministic encrypted protected export/restore as a focused crypto proof", () => {
     for (const fragment of [
       "full-dr-protected-runtime:",
       "PLAN7_PROTECTED_SEGMENT_KEY_BASE64",
