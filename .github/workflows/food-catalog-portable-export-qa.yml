@@ -63,6 +63,29 @@ jobs:
         run: npx vitest run lib/food-catalog/portability/key-provider.test.ts lib/food-catalog/portability/protected-segments.test.ts lib/privacy/data-export-plan7.test.ts
       - name: Focused Task 8 contracts
         run: npx vitest run lib/food-catalog/portability/search-restore-verifier.test.ts scripts/verify-food-catalog-restored-search.test.mjs
+      - name: Generate exact-head Task 8 fixture evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          actual="$(git rev-parse HEAD)"
+          fixture="test/fixtures/food-catalog/plan7-golden-search-v1.json"
+          node scripts/verify-food-catalog-restored-search.mjs --fixture "$fixture" --emit-sql > "$RUNNER_TEMP/plan7-restored-search.sql"
+          grep -q 'public.rebuild_food_catalog_search_projection_v2' "$RUNNER_TEMP/plan7-restored-search.sql"
+          grep -q 'public.search_food_catalog_v2' "$RUNNER_TEMP/plan7-restored-search.sql"
+          if grep -q 'search_nutrition_food_library' "$RUNNER_TEMP/plan7-restored-search.sql"; then exit 1; fi
+          node scripts/verify-food-catalog-restored-search.mjs --fixture "$fixture" --profile CORE_PORTABLE --expected-head "$expected" --actual-head "$actual" > "$RUNNER_TEMP/plan7-core-search-evidence.json"
+          node scripts/verify-food-catalog-restored-search.mjs --fixture "$fixture" --profile FULL_DR --expected-head "$expected" --actual-head "$actual" > "$RUNNER_TEMP/plan7-full-dr-search-evidence.json"
+          node - "$RUNNER_TEMP/plan7-core-search-evidence.json" "$RUNNER_TEMP/plan7-full-dr-search-evidence.json" <<'NODE'
+          const fs = require('node:fs');
+          const core = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const full = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+          if (!core.exactHeadVerified || !core.goldenSearchVerified || core.drReady !== false) process.exit(1);
+          if (!full.exactHeadVerified || !full.goldenSearchVerified || !full.protectedFixtureVerified || full.drReady !== true) process.exit(1);
+          if (core.productionMutationPerformed || full.productionMutationPerformed || core.retirementAuthorized || full.retirementAuthorized) process.exit(1);
+          NODE
+          cat "$RUNNER_TEMP/plan7-core-search-evidence.json"
+          cat "$RUNNER_TEMP/plan7-full-dr-search-evidence.json"
       - name: Prepare deterministic PostgreSQL snapshot fixture
         shell: bash
         run: |
