@@ -72,8 +72,17 @@ export function evaluateFoodCatalogSecurityEvidence(observed) {
   if (!observed || !Array.isArray(observed.relations) || observed.relations.length === 0) throw new Error("Food Catalog security relation evidence is missing.");
   if (!Array.isArray(observed.policies) || !Array.isArray(observed.privileges)) throw new Error("Food Catalog RLS/ACL evidence is incomplete.");
   const critical = observed.critical ?? {};
-  for (const [name, value] of Object.entries(critical)) {
-    if (value !== true) throw new Error(`Food Catalog critical RLS/ACL boundary failed: ${name}.`);
+  const requiredCritical = [
+    "searchDocumentsRls",
+    "searchDocumentsMutationIsolated",
+    "rebuildServiceOnly",
+    "searchMemberBoundary",
+    "currentGenerationServiceMutationDenied",
+    "governanceDirectMemberMutationDenied",
+    "personalOverrideDirectMutationDenied",
+  ];
+  for (const name of requiredCritical) {
+    if (critical[name] !== true) throw new Error(`Food Catalog critical RLS/ACL boundary failed: ${name}.`);
   }
   return Object.freeze({
     securityRlsAclIdentitySha256: sha256(stableJson({
@@ -96,7 +105,12 @@ export function captureFoodCatalogSecurityEvidence(databaseUrl) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`RLS/ACL evidence query failed: ${(result.stderr ?? "").trim()}`);
   const observed = JSON.parse((result.stdout ?? "").trim());
-  return { observed, summary: evaluateFoodCatalogSecurityEvidence(observed) };
+  const summary = evaluateFoodCatalogSecurityEvidence(observed);
+  return Object.freeze({
+    ...summary,
+    observed,
+    summary,
+  });
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
