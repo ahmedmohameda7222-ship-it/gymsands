@@ -6,13 +6,14 @@ import { seedRuntimeOwnershipForRelation } from "../lib/food-catalog/portability
 import {
   assertDisposableRestoreTarget,
   buildExactRestoreRowSql,
+  buildFoodItemsVerificationConstraintWindowSql,
   buildPreseedValidationSql,
   decodeCanonicalSegmentRow,
   decodeProtectedArtifactMaterial,
   buildTransitionalFoodItemsStages,
 } from "./restore-food-catalog-portable.mjs";
 
-const row = '[["amount","numeric","90071992547409931234567890.1200"],["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["label","text","null"],["optional","text",null],["verified_source_record_id","uuid","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]]';
+const row = '[["amount","numeric","90071992547409931234567890.1200"],["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["is_verified","boolean","true"],["label","text","null"],["optional","text",null],["verified_at","timestamptz","2026-09-10T10:05:00.000000Z"],["verified_source_record_id","uuid","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]]';
 
 describe("Plan 7 disposable restore CLI primitives", () => {
   it("decodes canonical rows without converting typed scalar text into JavaScript numbers", () => {
@@ -29,8 +30,10 @@ describe("Plan 7 disposable restore CLI primitives", () => {
       targetColumns: {
         amount: "numeric",
         id: "uuid",
+        is_verified: "boolean",
         label: "text",
         optional: "text",
+        verified_at: "timestamp with time zone",
         verified_source_record_id: "uuid",
       },
       canonicalRow: row,
@@ -68,16 +71,46 @@ describe("Plan 7 disposable restore CLI primitives", () => {
       targetColumns: {
         amount: "numeric",
         id: "uuid",
+        is_verified: "boolean",
         label: "text",
         optional: "text",
+        verified_at: "timestamp with time zone",
         verified_source_record_id: "uuid",
       },
       canonicalRow: row,
     });
     assert.ok(stages.initialSql.includes("verified_source_record_id"));
     assert.match(stages.initialSql, /NULL/);
+    assert.ok(stages.initialSql.includes(Buffer.from("true", "utf8").toString("hex")));
+    assert.ok(stages.initialSql.includes(Buffer.from("2026-09-10T10:05:00.000000Z", "utf8").toString("hex")));
     assert.ok(stages.reconstructSql.includes("verified_source_record_id"));
     assert.deepEqual(stages.reconstructAfterRelations, ["food_source_records"]);
+  });
+
+  it("opens only the exact Food verification CHECK window and restores it validated from target-catalog authority", () => {
+    const window = buildFoodItemsVerificationConstraintWindowSql({
+      constraintName: "food_items_verification_state_check",
+      constraintType: "c",
+      validated: true,
+      definition: "CHECK (((is_verified = false) AND (verified_at IS NULL) AND (verified_source_record_id IS NULL)) OR ((is_verified = true) AND (verified_at IS NOT NULL) AND (verified_source_record_id IS NOT NULL)))",
+    });
+    assert.match(window.dropSql, /^ALTER TABLE public\.food_items DROP CONSTRAINT "food_items_verification_state_check";$/);
+    assert.match(window.restoreSql, /ADD CONSTRAINT "food_items_verification_state_check" CHECK /);
+    assert.match(window.restoreSql, /NOT VALID;/);
+    assert.match(window.restoreSql, /VALIDATE CONSTRAINT "food_items_verification_state_check";/);
+    assert.doesNotMatch(window.dropSql + window.restoreSql, /DISABLE TRIGGER|DROP CONSTRAINT ALL|session_replication_role/i);
+    assert.throws(() => buildFoodItemsVerificationConstraintWindowSql({
+      constraintName: "food_items_lifecycle_status_check",
+      constraintType: "c",
+      validated: true,
+      definition: "CHECK (true)",
+    }), /verification state check/i);
+    assert.throws(() => buildFoodItemsVerificationConstraintWindowSql({
+      constraintName: "food_items_verification_state_check",
+      constraintType: "f",
+      validated: true,
+      definition: "FOREIGN KEY (id) REFERENCES public.food_items(id)",
+    }), /CHECK/i);
   });
 
   it("requires an explicit disposable-target acknowledgement and rejects provider production hosts", () => {
