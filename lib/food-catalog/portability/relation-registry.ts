@@ -8,6 +8,7 @@ export type SeedOwnership = "MIGRATION_OWNED" | "PORTABLE_OWNED" | "NONE";
 export type RestoreOwnership =
   | "UNIFORM"
   | "MIXED_KEYED_PRESEEDED_RUNTIME"
+  | "MIXED_REPLAY_LOCAL_REFERENCE"
   | "MUTABLE_PRESEEDED_SINGLETON";
 
 export type PortableRelationRule = Readonly<{
@@ -88,8 +89,14 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
   rule("food_market_assignments", A, "RESTORE_EXACT", ["id"]),
   rule("food_verification_assertions", A, "RESTORE_EXACT", ["id"]),
   rule("food_merge_events", H, "RESTORE_EXACT", ["id"]),
-  rule("food_kitchens", "REFERENCE_ONLY", "RESTORE_EXACT", ["id"]),
-  rule("food_subcategories", "REFERENCE_ONLY", "RESTORE_EXACT", ["id"]),
+  rule("food_kitchens", "REFERENCE_ONLY", "RESTORE_EXACT", ["id"], {
+    restoreOwnership: "MIXED_REPLAY_LOCAL_REFERENCE",
+    note: "Git-migration system kitchen UUID/timestamps are replay-local reference identity; runtime/user rows retain exact source IDs.",
+  }),
+  rule("food_subcategories", "REFERENCE_ONLY", "RESTORE_EXACT", ["id"], {
+    restoreOwnership: "MIXED_REPLAY_LOCAL_REFERENCE",
+    note: "Git-migration system subcategory UUID/timestamps are replay-local beneath the mapped system kitchen; runtime rows retain exact source IDs.",
+  }),
 
   rule("food_catalog_activation_sets", A, "RESTORE_EXACT", ["id"]),
   rule("food_catalog_activation_set_members", A, "RESTORE_EXACT", ["id"]),
