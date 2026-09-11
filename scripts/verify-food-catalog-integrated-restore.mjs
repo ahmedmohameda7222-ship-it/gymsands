@@ -157,6 +157,13 @@ export function comparePortableRelationRows({
   return Object.freeze({ relation, rowCount: source.size, exact: true, transientNeutralized });
 }
 
+export function areDeclaredTransientRelationsNeutralized(rules, relationResults) {
+  const resultsByRelation = new Map(relationResults.map((entry) => [entry.relation, entry]));
+  return rules
+    .filter((rule) => rule.loadMode === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION")
+    .every((rule) => resultsByRelation.get(rule.relation)?.transientNeutralized === true);
+}
+
 function assertion(id, comparisonClass, passed, detail) {
   return Object.freeze({
     id,
@@ -451,8 +458,7 @@ export async function verifyIntegratedRestore(options) {
   const relationsByName = new Map(relationResults.map((entry) => [entry.relation, entry]));
   const verifiedRelations = (names) => names.every((name) => relationsByName.get(name)?.exact === true);
   const protectedVerified = source.protectedCount > 0 && target.protectedCount === source.protectedCount;
-  const transientVerified = relationResults.filter((entry) => entry.relation === "food_ingestion_runs" || entry.relation === "food_outbox_events")
-    .every((entry) => entry.transientNeutralized === true);
+  const transientVerified = areDeclaredTransientRelationsNeutralized(rules, relationResults);
 
   const assertionEvidence = buildFinalAssertionEvidence({
     artifactHashesVerified: true,
