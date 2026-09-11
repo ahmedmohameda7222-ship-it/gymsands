@@ -10,6 +10,8 @@ import type { PortableRelationRule } from "./relation-registry";
  * when they accidentally invert an authority relationship.
  */
 export const FOOD_CATALOG_RESTORE_DEPENDENCIES_V1: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  food_subcategories: Object.freeze(["food_kitchens"]),
+  food_items: Object.freeze(["food_kitchens", "food_subcategories"]),
   food_source_records: Object.freeze(["food_items"]),
   food_nutrition_revisions: Object.freeze(["food_items", "food_source_records"]),
   food_serving_options: Object.freeze(["food_items", "food_source_records"]),
