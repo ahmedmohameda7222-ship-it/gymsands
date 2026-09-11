@@ -13,6 +13,8 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1"]);
 const CANONICAL_REGISTRY_AUTHORITY = "CANONICAL_REGISTRY_V1";
 const DIAGNOSTIC_REGISTRY_AUTHORITY = "DIAGNOSTIC_SUBSET";
+const FOOD_ITEMS_VERIFICATION_CONSTRAINT = "food_items_verification_state_check";
+const FOOD_ITEMS_UPDATED_AT_TRIGGER = "food_items_updated_at";
 
 function qid(value) {
   if (typeof value !== "string" || !IDENTIFIER.test(value)) throw new Error(`Unsafe PostgreSQL identifier ${String(value)}.`);
@@ -219,7 +221,7 @@ function buildReconstructSql({ relation, stableKey, targetColumns, canonicalRow,
   validateRowAgainstTarget(row, targetColumns);
   const expected = typedExpression(row[column], targetColumns[column]);
   const keyWhere = keyPredicate(row, stableKey, targetColumns);
-  return `DO $plan7_cycle$\nBEGIN\n  UPDATE public.${table} AS t\n     SET ${qid(column)} = ${expected}\n   WHERE ${keyWhere}\n     AND (t.${qid(column)} IS NULL OR t.${qid(column)} IS NOT DISTINCT FROM ${expected});\n  IF NOT EXISTS (SELECT 1 FROM public.${table} AS t WHERE ${keyWhere} AND t.${qid(column)} IS NOT DISTINCT FROM ${expected}) THEN\n    RAISE EXCEPTION 'Plan7 transitional cycle conflict in ${relation}.${column}';\n  END IF;\nEND\n$plan7_cycle$;`;
+  return `DO $plan7_cycle$\nBEGIN\n  UPDATE public.${table} AS t\n     SET ${qid(column)} = ${expected}\n   WHERE ${keyWhere}\n     AND t.${qid(column)} IS NULL\n     AND t.${qid(column)} IS DISTINCT FROM ${expected};\n  IF NOT EXISTS (SELECT 1 FROM public.${table} AS t WHERE ${keyWhere} AND t.${qid(column)} IS NOT DISTINCT FROM ${expected}) THEN\n    RAISE EXCEPTION 'Plan7 transitional cycle conflict in ${relation}.${column}';\n  END IF;\nEND\n$plan7_cycle$;`;
 }
 
 export function buildTransitionalFoodItemsStages({ stableKey, targetColumns, canonicalRow }) {
@@ -241,6 +243,39 @@ export function buildTransitionalFoodItemsStages({ stableKey, targetColumns, can
       column: "verified_source_record_id",
     }),
     reconstructAfterRelations: Object.freeze(["food_source_records"]),
+  });
+}
+
+function safeCheckDefinition(value) {
+  if (typeof value !== "string" || !/^CHECK\s*\(/i.test(value.trim()) || /;|--|\/\*/.test(value)) {
+    throw new Error("food_items verification state CHECK definition is invalid.");
+  }
+  return value.trim();
+}
+
+export function buildFoodItemsVerificationConstraintWindowSql({ constraintName, constraintType, validated, definition }) {
+  if (constraintName !== FOOD_ITEMS_VERIFICATION_CONSTRAINT) throw new Error("Only the food_items verification state check may be suspended for Plan 7 cycle restore.");
+  if (constraintType !== "c") throw new Error("food_items verification state authority must be a CHECK constraint.");
+  if (typeof validated !== "boolean") throw new Error("food_items verification state CHECK validation status is required.");
+  const check = safeCheckDefinition(definition);
+  const quoted = qid(constraintName);
+  return Object.freeze({
+    validated,
+    dropSql: `ALTER TABLE public.food_items DROP CONSTRAINT ${quoted};`,
+    installNotValidSql: `ALTER TABLE public.food_items ADD CONSTRAINT ${quoted} ${check} NOT VALID;`,
+    validateSql: `ALTER TABLE public.food_items VALIDATE CONSTRAINT ${quoted};`,
+  });
+}
+
+export function buildFoodItemsUpdatedAtTriggerWindowSql({ triggerName, enabled, internal, functionSchema, functionName }) {
+  if (triggerName !== FOOD_ITEMS_UPDATED_AT_TRIGGER) throw new Error("Only the food_items updated-at trigger may be suspended during Plan 7 cycle reconstruction.");
+  if (internal !== false) throw new Error("food_items updated-at trigger must be a non-internal Git-built trigger.");
+  if (enabled !== "O") throw new Error("food_items updated-at trigger must be enabled in ordinary origin mode before reconstruction.");
+  if (functionSchema !== "public" || functionName !== "set_updated_at") throw new Error("food_items updated-at trigger must execute public.set_updated_at.");
+  const quoted = qid(triggerName);
+  return Object.freeze({
+    disableSql: `ALTER TABLE public.food_items DISABLE TRIGGER ${quoted};`,
+    enableSql: `ALTER TABLE public.food_items ENABLE TRIGGER ${quoted};`,
   });
 }
 
@@ -270,6 +305,20 @@ function loadTargetColumns(databaseUrl, relation) {
   const parsed = JSON.parse(text || "{}");
   if (!Object.keys(parsed).length) throw new Error(`Required target relation public.${relation} is missing or has no columns.`);
   return parsed;
+}
+
+function loadFoodItemsVerificationConstraint(databaseUrl) {
+  const sql = `SELECT json_build_object('constraintName',c.conname,'constraintType',c.contype,'validated',c.convalidated,'definition',pg_get_constraintdef(c.oid,true))::text FROM pg_constraint AS c WHERE c.conrelid='public.food_items'::regclass AND c.conname='${FOOD_ITEMS_VERIFICATION_CONSTRAINT}';`;
+  const text = runPsql(databaseUrl, sql, { tuplesOnly: true });
+  if (!text) throw new Error("Required food_items verification state CHECK is missing from the Git-built target.");
+  return JSON.parse(text);
+}
+
+function loadFoodItemsUpdatedAtTrigger(databaseUrl) {
+  const sql = `SELECT json_build_object('triggerName',t.tgname,'enabled',t.tgenabled,'internal',t.tgisinternal,'functionSchema',n.nspname,'functionName',p.proname)::text FROM pg_trigger AS t JOIN pg_proc AS p ON p.oid=t.tgfoid JOIN pg_namespace AS n ON n.oid=p.pronamespace WHERE t.tgrelid='public.food_items'::regclass AND t.tgname='${FOOD_ITEMS_UPDATED_AT_TRIGGER}';`;
+  const text = runPsql(databaseUrl, sql, { tuplesOnly: true });
+  if (!text) throw new Error("Required food_items updated-at trigger is missing from the Git-built target.");
+  return JSON.parse(text);
 }
 
 function loadTargetProfile(databaseUrl) {
@@ -496,9 +545,41 @@ export async function restorePortableArtifact({
     } else if (action.kind === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, forceNullColumns: [...(rule.transientNeutralize ?? [])], comparisonOmitColumns: [...(rule.transientNeutralize ?? [])] }));
     } else if (action.kind === "RESTORE_TRANSITIONAL_WITH_CYCLE_NULL") {
-      for (const canonicalRow of rows) runPsql(targetUrl, buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).initialSql);
+      if (rule.relation !== "food_items") throw new Error("Plan 7 transitional cycle suspension is limited to food_items.");
+      if (rows.length) {
+        const constraintState = loadFoodItemsVerificationConstraint(targetUrl);
+        const constraintWindow = buildFoodItemsVerificationConstraintWindowSql(constraintState);
+        if (constraintWindow.validated) {
+          const initialSql = rows.map((canonicalRow) => buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).initialSql);
+          runPsql(targetUrl, ["BEGIN;", constraintWindow.dropSql, ...initialSql, constraintWindow.installNotValidSql, "COMMIT;"].join("\n"));
+        } else {
+          const comparisonColumns = Object.keys(targetColumns).filter((column) => column !== "verified_source_record_id");
+          for (const canonicalRow of rows) {
+            runPsql(targetUrl, buildPreseedValidationSql({
+              relation: rule.relation,
+              stableKey: rule.stableKey,
+              targetColumns,
+              canonicalRow,
+              comparisonColumns,
+            }));
+          }
+        }
+      }
     } else if (action.kind === "RECONSTRUCT_TRANSITIONAL_CYCLE_FIELD") {
-      for (const canonicalRow of rows) runPsql(targetUrl, buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).reconstructSql);
+      if (rule.relation !== "food_items") throw new Error("Plan 7 transitional cycle reconstruction is limited to food_items.");
+      if (rows.length) {
+        const constraintWindow = buildFoodItemsVerificationConstraintWindowSql(loadFoodItemsVerificationConstraint(targetUrl));
+        const triggerWindow = buildFoodItemsUpdatedAtTriggerWindowSql(loadFoodItemsUpdatedAtTrigger(targetUrl));
+        const reconstructSql = rows.map((canonicalRow) => buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).reconstructSql);
+        runPsql(targetUrl, [
+          "BEGIN;",
+          triggerWindow.disableSql,
+          ...reconstructSql,
+          triggerWindow.enableSql,
+          constraintWindow.validateSql,
+          "COMMIT;",
+        ].join("\n"));
+      }
     } else if (action.kind === "RESTORE_POINTER_FIELDS_LAST") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildMutableSingletonRestoreSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
     }
