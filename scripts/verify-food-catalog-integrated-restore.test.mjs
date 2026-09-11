@@ -125,6 +125,28 @@ describe("Plan 7 integrated restore evidence", () => {
     }), /neutral|transient|null/i);
   });
 
+  it("derives transient neutralization proof from every registry-declared relation", async () => {
+    const verifier = await import("./verify-food-catalog-integrated-restore.mjs");
+    assert.equal(typeof verifier.areDeclaredTransientRelationsNeutralized, "function");
+    const rules = [
+      { relation: "food_ingestion_runs", loadMode: "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION" },
+      { relation: "food_catalog_governance_outbox", loadMode: "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION" },
+      { relation: "food_items", loadMode: "RECONSTRUCT_TRANSITIONAL_COMPATIBILITY" },
+    ];
+    const bothVerified = [
+      { relation: "food_ingestion_runs", transientNeutralized: true },
+      { relation: "food_catalog_governance_outbox", transientNeutralized: true },
+      { relation: "food_items", transientNeutralized: true },
+    ];
+    assert.equal(verifier.areDeclaredTransientRelationsNeutralized(rules, bothVerified), true);
+    assert.equal(verifier.areDeclaredTransientRelationsNeutralized(rules, [
+      bothVerified[0],
+      { relation: "food_catalog_governance_outbox", transientNeutralized: false },
+      bothVerified[2],
+    ]), false);
+    assert.equal(verifier.areDeclaredTransientRelationsNeutralized(rules, [bothVerified[0], bothVerified[2]]), false);
+  });
+
   it("builds all mandatory assertions from runtime proof classes without caller trust booleans", () => {
     const evidence = buildFinalAssertionEvidence({
       artifactHashesVerified: true,
