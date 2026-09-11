@@ -1,15 +1,42 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { buildPortableTargetProfileSql, evaluatePortableTargetProfile } from "./verify-food-catalog-portable-target.mjs";
+import { validatePortableArtifact } from "../lib/food-catalog/portability/validate-artifact.ts";
+import { validateCanonicalPortableProfileManifestV1 } from "../lib/food-catalog/portability/profile-certification.ts";
+import { FOOD_CATALOG_PORTABLE_RELATIONS_V1 } from "../lib/food-catalog/portability/relation-registry.ts";
+import { buildFoodCatalogRestorePlan } from "../lib/food-catalog/portability/restore-plan.ts";
+import {
+  isMigrationSeedKey,
+  seedRuntimeOwnershipForRelation,
+  stableKeyTextTuple,
+} from "../lib/food-catalog/portability/seed-runtime-ownership.ts";
+import { decryptProtectedSegment } from "../lib/food-catalog/portability/protected-segments.ts";
+import { createEnvironmentProtectedSegmentKeyBinding } from "../lib/food-catalog/portability/key-provider.ts";
+import {
+  buildReplayLocalSystemKitchenLookupSql,
+  buildReplayLocalSystemSubcategoryLookupSql,
+  isMigrationReplayLocalSystemKitchenRow,
+  isMigrationReplayLocalSystemSubcategoryRow,
+  remapCanonicalRowReferences,
+  replayLocalReferenceIds,
+} from "../lib/food-catalog/portability/replay-local-reference-runtime.mjs";
 
-const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
-const SAFE_TYPE = /^[a-zA-Z0-9_." \[\](),]+$/;
-const SHA256 = /^[0-9a-f]{64}$/;
+export {
+  buildReplayLocalSystemKitchenLookupSql,
+  buildReplayLocalSystemSubcategoryLookupSql,
+  isMigrationReplayLocalSystemKitchenRow,
+  isMigrationReplayLocalSystemSubcategoryRow,
+  remapCanonicalRowReferences,
+} from "../lib/food-catalog/portability/replay-local-reference-runtime.mjs";
+
+const IDENTIFIER = /^[a-z_][a-z0-9_]*$/u;
+const SAFE_TYPE = /^[a-zA-Z0-9_." \[\](),]+$/u;
+const SHA256 = /^[0-9a-f]{64}$/u;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1"]);
 const CANONICAL_REGISTRY_AUTHORITY = "CANONICAL_REGISTRY_V1";
 const DIAGNOSTIC_REGISTRY_AUTHORITY = "DIAGNOSTIC_SUBSET";
@@ -22,82 +49,21 @@ function qid(value) {
 }
 
 function safeType(value) {
-  if (typeof value !== "string" || !SAFE_TYPE.test(value) || /;|--|\/\*/.test(value)) {
+  if (typeof value !== "string" || !SAFE_TYPE.test(value) || /;|--|\/\*/u.test(value)) {
     throw new Error(`Unsafe PostgreSQL target type ${String(value)}.`);
   }
   return value;
 }
 
 function normalizeType(value) {
-  return String(value).trim().toLowerCase().replace(/^pg_catalog\./, "").replace(/\s+/g, " ");
-}
-
-function sha256(value) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function codeUnitSort(left, right) {
-  if (left === right) return 0;
-  return left < right ? -1 : 1;
-}
-
-function snapshotBoundarySha(boundary) {
-  return sha256(JSON.stringify({
-    environment: boundary.environment,
-    postgresSnapshot: boundary.postgresSnapshot,
-    capturedAt: boundary.capturedAt,
-    migrationCount: boundary.migrationCount,
-    latestMigration: boundary.latestMigration,
-    migrationLedgerIdentity: boundary.migrationLedgerIdentity,
-    currentGenerationId: boundary.currentGenerationId,
-    pointerRevision: boundary.pointerRevision,
-    compatibilityVersion: boundary.compatibilityVersion,
-    compatibilityMarker: boundary.compatibilityMarker,
-  }));
-}
-
-function semanticRoot(manifest) {
-  return sha256(JSON.stringify({
-    format: manifest.format,
-    formatVersion: manifest.formatVersion,
-    canonicalizationVersion: manifest.canonicalizationVersion,
-    profile: manifest.profile,
-    registryAuthority: manifest.registryAuthority ?? null,
-    sourceRepositoryCommit: manifest.sourceRepositoryCommit,
-    sourceSchemaFingerprintSha256: manifest.sourceSchemaFingerprintSha256,
-    snapshotBoundary: {
-      environment: manifest.snapshotBoundary.environment,
-      postgresSnapshot: manifest.snapshotBoundary.postgresSnapshot,
-      capturedAt: manifest.snapshotBoundary.capturedAt,
-      migrationCount: manifest.snapshotBoundary.migrationCount,
-      latestMigration: manifest.snapshotBoundary.latestMigration,
-      migrationLedgerIdentity: manifest.snapshotBoundary.migrationLedgerIdentity,
-      currentGenerationId: manifest.snapshotBoundary.currentGenerationId,
-      pointerRevision: manifest.snapshotBoundary.pointerRevision,
-      compatibilityVersion: manifest.snapshotBoundary.compatibilityVersion,
-      compatibilityMarker: manifest.snapshotBoundary.compatibilityMarker,
-      sha256: manifest.snapshotBoundary.sha256,
-    },
-    segments: [...manifest.segments].map((segment) => ({
-      name: segment.name,
-      relation: segment.relation,
-      classification: segment.classification,
-      loadMode: segment.loadMode,
-      stableKey: [...segment.stableKey],
-      rowCount: segment.rowCount,
-      plaintextSemanticSha256: segment.plaintextSemanticSha256,
-      snapshotBoundarySha256: segment.snapshotBoundarySha256,
-      required: segment.required,
-      protected: segment.protected,
-    })).sort((left, right) => codeUnitSort(left.name, right.name)),
-  }));
+  return String(value).trim().toLowerCase().replace(/^pg_catalog\./u, "").replace(/\s+/gu, " ");
 }
 
 export function assertDisposableRestoreTarget(databaseUrl, acknowledged) {
   if (!acknowledged) throw new Error("Plan 7 restore requires explicit disposable-target acknowledgement.");
   let parsed;
   try { parsed = new URL(databaseUrl); } catch { throw new Error("Disposable restore target URL is invalid."); }
-  if (!/^postgres(?:ql)?:$/.test(parsed.protocol)) throw new Error("Disposable restore target must be PostgreSQL.");
+  if (!/^postgres(?:ql)?:$/u.test(parsed.protocol)) throw new Error("Disposable restore target must be PostgreSQL.");
   const host = parsed.hostname.toLowerCase();
   if (host.endsWith(".supabase.co") || host.includes("prod") || host.includes("production")) {
     throw new Error("Provider/production-looking hosts are forbidden for Plan 7 disposable restore.");
@@ -123,16 +89,6 @@ export function decodeCanonicalSegmentRow(line) {
   return Object.freeze(result);
 }
 
-async function loadProtectedRuntime() {
-  const protectedUrl = pathToFileURL(resolve("lib/food-catalog/portability/protected-segments.ts")).href;
-  const keyProviderUrl = pathToFileURL(resolve("lib/food-catalog/portability/key-provider.ts")).href;
-  const [protectedSegments, keyProvider] = await Promise.all([import(protectedUrl), import(keyProviderUrl)]);
-  return {
-    decryptProtectedSegment: protectedSegments.decryptProtectedSegment,
-    createEnvironmentProtectedSegmentKeyBinding: keyProvider.createEnvironmentProtectedSegmentKeyBinding,
-  };
-}
-
 export async function decodeProtectedArtifactMaterial({ descriptor, ciphertext, keyProvider }) {
   if (!descriptor?.protected) throw new Error("Protected artifact descriptor is required.");
   if (!descriptor.encryption || descriptor.encryption.algorithm !== "AES-256-GCM") {
@@ -142,8 +98,7 @@ export async function decodeProtectedArtifactMaterial({ descriptor, ciphertext, 
     throw new Error(`Protected segment ${descriptor.name ?? "<unknown>"} is missing ciphertext transport integrity.`);
   }
   if (!(ciphertext instanceof Uint8Array)) throw new Error("Protected segment ciphertext bytes are required.");
-  const runtime = await loadProtectedRuntime();
-  const plaintext = await runtime.decryptProtectedSegment({
+  const plaintext = await decryptProtectedSegment({
     segment: descriptor.name,
     algorithm: descriptor.encryption.algorithm,
     keyId: descriptor.encryption.keyId,
@@ -247,7 +202,7 @@ export function buildTransitionalFoodItemsStages({ stableKey, targetColumns, can
 }
 
 function safeCheckDefinition(value) {
-  if (typeof value !== "string" || !/^CHECK\s*\(/i.test(value.trim()) || /;|--|\/\*/.test(value)) {
+  if (typeof value !== "string" || !/^CHECK\s*\(/iu.test(value.trim()) || /;|--|\/\*/u.test(value)) {
     throw new Error("food_items verification state CHECK definition is invalid.");
   }
   return value.trim();
@@ -326,35 +281,6 @@ function loadTargetProfile(databaseUrl) {
   return JSON.parse(text);
 }
 
-function validateRuntimeArtifact(manifest, materials) {
-  if (manifest.format !== "plaivra-food-catalog-portable-export" || manifest.formatVersion !== 1 || manifest.canonicalizationVersion !== 1) {
-    throw new Error("Unsupported Plan 7 portable artifact format.");
-  }
-  if (![CANONICAL_REGISTRY_AUTHORITY, DIAGNOSTIC_REGISTRY_AUTHORITY].includes(manifest.registryAuthority)) {
-    throw new Error("Plan 7 artifact registry authority is missing or unsupported.");
-  }
-  if (!SHA256.test(manifest.semanticRootSha256) || !SHA256.test(manifest.snapshotBoundary?.sha256)) throw new Error("Artifact digests are malformed.");
-  if (manifest.capturedAt !== manifest.snapshotBoundary.capturedAt) throw new Error("Artifact capture-time evidence is inconsistent.");
-  if (snapshotBoundarySha(manifest.snapshotBoundary) !== manifest.snapshotBoundary.sha256) throw new Error("Artifact snapshot boundary digest mismatch.");
-  if (semanticRoot(manifest) !== manifest.semanticRootSha256) throw new Error("Artifact semantic root mismatch.");
-  for (const segment of manifest.segments) {
-    if (segment.snapshotBoundarySha256 !== manifest.snapshotBoundary.sha256) throw new Error(`Segment ${segment.name} is snapshot-torn.`);
-    if (segment.loadMode === "DERIVED_REBUILD") continue;
-    if (segment.protected) {
-      if (manifest.profile !== "FULL_DR") throw new Error(`Protected segment ${segment.name} requires FULL_DR profile.`);
-      if (!segment.encryption || segment.encryption.algorithm !== "AES-256-GCM" || !SHA256.test(segment.ciphertextTransportSha256 ?? "")) {
-        throw new Error(`Protected segment ${segment.name} has incomplete encrypted transport metadata.`);
-      }
-    }
-    const bytes = materials[segment.name];
-    if (bytes === undefined) throw new Error(`Missing segment material ${segment.name}.`);
-    if (sha256(bytes) !== segment.plaintextSemanticSha256) throw new Error(`Segment ${segment.name} semantic digest mismatch.`);
-    const rowCount = bytes.length === 0 ? 0 : bytes.endsWith("\n") ? bytes.slice(0, -1).split("\n").length : -1;
-    if (rowCount !== segment.rowCount) throw new Error(`Segment ${segment.name} row-count mismatch.`);
-  }
-  return true;
-}
-
 function segmentRows(material) {
   if (material === "") return [];
   if (!material.endsWith("\n")) throw new Error("Canonical segment must end with newline.");
@@ -368,61 +294,106 @@ function prePointerSql(manifest) {
   return `DO $plan7_pre_pointer$ BEGIN IF NOT EXISTS (SELECT 1 FROM public.food_catalog_generations WHERE id=convert_from(decode('${hex}','hex'),'UTF8')::uuid) THEN RAISE EXCEPTION 'Plan7 current generation is not restored'; END IF; END $plan7_pre_pointer$;`;
 }
 
-async function loadCanonicalRuntime() {
-  const registryUrl = pathToFileURL(resolve("lib/food-catalog/portability/relation-registry.ts")).href;
-  const profileUrl = pathToFileURL(resolve("lib/food-catalog/portability/profile-certification.ts")).href;
-  const seedUrl = pathToFileURL(resolve("lib/food-catalog/portability/seed-runtime-ownership.ts")).href;
-  const [registry, profile, seed] = await Promise.all([import(registryUrl), import(profileUrl), import(seedUrl)]);
-  return {
-    rulesForProfile: (requestedProfile) => registry.FOOD_CATALOG_PORTABLE_RELATIONS_V1.filter(
-      (rule) => rule.requiredProfile === "CORE_PORTABLE" || requestedProfile === "FULL_DR",
-    ),
-    validateCanonicalProfileManifest: profile.validateCanonicalProfileManifest,
-    seedRuntimeOwnershipForRelation: seed.seedRuntimeOwnershipForRelation,
-    stableKeyTextTuple: seed.stableKeyTextTuple,
-    isMigrationSeedKey: seed.isMigrationSeedKey,
-  };
+function parseArgs(argv) {
+  const options = { disposableTarget: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (value === "--artifact-dir") options.artifactDir = argv[++index];
+    else if (value === "--target-url") options.targetUrl = argv[++index];
+    else if (value === "--relations-json") options.relationsJson = argv[++index];
+    else if (value === "--evidence-output") options.evidenceOutput = argv[++index];
+    else if (value === "--disposable-target") options.disposableTarget = true;
+    else throw new Error(`Unknown restore argument ${value}; exported DDL/schema inputs are not accepted.`);
+  }
+  return options;
+}
+
+async function readArtifactMaterials(artifactDir, manifest, protectedKeyProvider) {
+  const materials = {};
+  for (const segment of manifest.segments) {
+    if (segment.loadMode === "DERIVED_REBUILD") continue;
+    if (segment.protected) {
+      const ciphertext = await readFile(resolve(artifactDir, "segments", `${segment.name}.enc`));
+      materials[segment.name] = await decodeProtectedArtifactMaterial({ descriptor: segment, ciphertext, keyProvider: protectedKeyProvider });
+    } else {
+      materials[segment.name] = await readFile(resolve(artifactDir, "segments", `${segment.name}.ndjson`), "utf8");
+    }
+  }
+  return materials;
 }
 
 async function loadRules(manifest, relationsJson) {
-  const canonicalRuntime = await loadCanonicalRuntime();
   if (manifest.registryAuthority === CANONICAL_REGISTRY_AUTHORITY) {
     if (relationsJson) throw new Error("Trusted canonical restore cannot use --relations-json diagnostic overrides.");
-    canonicalRuntime.validateCanonicalProfileManifest(manifest);
+    validateCanonicalPortableProfileManifestV1(manifest);
     return {
-      rules: canonicalRuntime.rulesForProfile(manifest.profile),
+      rules: FOOD_CATALOG_PORTABLE_RELATIONS_V1.filter((rule) => rule.requiredProfile === "CORE_PORTABLE" || manifest.profile === "FULL_DR"),
       canonicalProfileVerified: true,
       certificationEligible: true,
-      canonicalRuntime,
     };
   }
+  if (manifest.registryAuthority !== DIAGNOSTIC_REGISTRY_AUTHORITY) throw new Error("Plan 7 artifact registry authority is missing or unsupported.");
   if (!relationsJson) throw new Error("DIAGNOSTIC_SUBSET restore requires the matching --relations-json diagnostic descriptor file.");
   return {
     rules: JSON.parse(await readFile(resolve(relationsJson), "utf8")),
     canonicalProfileVerified: false,
     certificationEligible: false,
-    canonicalRuntime,
   };
 }
 
-async function loadRestorePlan(rules) {
-  const moduleUrl = pathToFileURL(resolve("lib/food-catalog/portability/restore-plan.ts")).href;
-  const { buildFoodCatalogRestorePlan } = await import(moduleUrl);
-  return buildFoodCatalogRestorePlan(rules);
+function resolveSingleReplayLocalTarget(databaseUrl, sql, label) {
+  const output = runPsql(databaseUrl, sql, { tuplesOnly: true });
+  const ids = output.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean);
+  if (ids.length !== 1 || !UUID.test(ids[0])) throw new Error(`${label} must resolve to exactly one Git-migration target reference.`);
+  return ids[0];
 }
 
-function parseArgs(argv) {
-  const options = { disposableTarget: false };
-  for (let i = 0; i < argv.length; i += 1) {
-    const value = argv[i];
-    if (value === "--artifact-dir") options.artifactDir = argv[++i];
-    else if (value === "--target-url") options.targetUrl = argv[++i];
-    else if (value === "--relations-json") options.relationsJson = argv[++i];
-    else if (value === "--evidence-output") options.evidenceOutput = argv[++i];
-    else if (value === "--disposable-target") options.disposableTarget = true;
-    else throw new Error(`Unknown restore argument ${value}; exported DDL/schema inputs are not accepted.`);
+function remapFoodItemRow(canonicalRow, referenceMaps) {
+  const decoded = decodeCanonicalSegmentRow(canonicalRow);
+  const replacements = {};
+  const kitchenId = decoded.kitchen_id?.text;
+  const subcategoryId = decoded.subcategory_id?.text;
+  if (typeof kitchenId === "string" && referenceMaps.foodKitchens.has(kitchenId)) replacements.kitchen_id = referenceMaps.foodKitchens.get(kitchenId);
+  if (typeof subcategoryId === "string" && referenceMaps.foodSubcategories.has(subcategoryId)) replacements.subcategory_id = referenceMaps.foodSubcategories.get(subcategoryId);
+  return Object.keys(replacements).length ? remapCanonicalRowReferences(canonicalRow, replacements) : canonicalRow;
+}
+
+function restoreReplayLocalReferenceRow({ databaseUrl, relation, stableKey, targetColumns, canonicalRow, referenceMaps }) {
+  if (relation === "food_kitchens") {
+    if (!isMigrationReplayLocalSystemKitchenRow(canonicalRow)) {
+      runPsql(databaseUrl, buildExactRestoreRowSql({ relation, stableKey, targetColumns, canonicalRow }));
+      return;
+    }
+    const sourceId = replayLocalReferenceIds(canonicalRow).id;
+    const targetId = resolveSingleReplayLocalTarget(
+      databaseUrl,
+      buildReplayLocalSystemKitchenLookupSql({ targetColumns, canonicalRow }),
+      "Migration system kitchen",
+    );
+    referenceMaps.foodKitchens.set(sourceId, targetId);
+    return;
   }
-  return options;
+
+  if (relation === "food_subcategories") {
+    const ids = replayLocalReferenceIds(canonicalRow);
+    const mappedKitchenId = typeof ids.kitchenId === "string" ? referenceMaps.foodKitchens.get(ids.kitchenId) : undefined;
+    if (mappedKitchenId && isMigrationReplayLocalSystemSubcategoryRow(canonicalRow)) {
+      const targetId = resolveSingleReplayLocalTarget(
+        databaseUrl,
+        buildReplayLocalSystemSubcategoryLookupSql({ targetColumns, canonicalRow, targetKitchenId: mappedKitchenId }),
+        "Migration system subcategory",
+      );
+      referenceMaps.foodSubcategories.set(ids.id, targetId);
+      return;
+    }
+    const runtimeRow = mappedKitchenId
+      ? remapCanonicalRowReferences(canonicalRow, { kitchen_id: mappedKitchenId })
+      : canonicalRow;
+    runPsql(databaseUrl, buildExactRestoreRowSql({ relation, stableKey, targetColumns, canonicalRow: runtimeRow }));
+    return;
+  }
+
+  throw new Error(`Unsupported replay-local reference relation ${relation}.`);
 }
 
 export async function restorePortableArtifact({
@@ -436,37 +407,32 @@ export async function restorePortableArtifact({
   assertDisposableRestoreTarget(targetUrl, disposableTarget);
   const manifest = JSON.parse(await readFile(resolve(artifactDir, "manifest.json"), "utf8"));
   const hasProtected = manifest.segments.some((segment) => segment.protected && segment.loadMode !== "DERIVED_REBUILD");
-  let effectiveProtectedKeyProvider = protectedKeyProvider;
-  if (hasProtected && !effectiveProtectedKeyProvider) {
-    const runtime = await loadProtectedRuntime();
-    effectiveProtectedKeyProvider = runtime.createEnvironmentProtectedSegmentKeyBinding(process.env).keyProvider;
-  }
+  const effectiveProtectedKeyProvider = protectedKeyProvider ?? (hasProtected ? createEnvironmentProtectedSegmentKeyBinding(process.env).keyProvider : null);
+  const materials = await readArtifactMaterials(artifactDir, manifest, effectiveProtectedKeyProvider);
+  const { rules, canonicalProfileVerified, certificationEligible } = await loadRules(manifest, relationsJson);
+  validatePortableArtifact({
+    manifest,
+    materials,
+    requiredSegments: certificationEligible ? undefined : rules.map((rule) => rule.segment),
+  });
 
-  const materials = {};
-  for (const segment of manifest.segments) {
-    if (segment.loadMode === "DERIVED_REBUILD") continue;
-    if (segment.protected) {
-      const ciphertext = await readFile(resolve(artifactDir, "segments", `${segment.name}.enc`));
-      materials[segment.name] = await decodeProtectedArtifactMaterial({ descriptor: segment, ciphertext, keyProvider: effectiveProtectedKeyProvider });
-    } else {
-      materials[segment.name] = await readFile(resolve(artifactDir, "segments", `${segment.name}.ndjson`), "utf8");
-    }
-  }
-  validateRuntimeArtifact(manifest, materials);
-  const { rules, canonicalProfileVerified, certificationEligible, canonicalRuntime } = await loadRules(manifest, relationsJson);
   const targetProfile = evaluatePortableTargetProfile(loadTargetProfile(targetUrl), {
     migrationCount: manifest.snapshotBoundary.migrationCount,
     latestMigration: manifest.snapshotBoundary.latestMigration,
     migrationLedgerIdentity: manifest.snapshotBoundary.migrationLedgerIdentity,
     schemaFingerprintSha256: manifest.sourceSchemaFingerprintSha256,
   });
-  const plan = await loadRestorePlan(rules);
+  const plan = buildFoodCatalogRestorePlan(rules);
   const rulesByRelation = new Map(rules.map((rule) => [rule.relation, rule]));
   const segmentsByName = new Map(manifest.segments.map((segment) => [segment.name, segment]));
   const columns = new Map();
   const getColumns = (relation) => {
     if (!columns.has(relation)) columns.set(relation, loadTargetColumns(targetUrl, relation));
     return columns.get(relation);
+  };
+  const referenceMaps = {
+    foodKitchens: new Map(),
+    foodSubcategories: new Map(),
   };
   const evidence = {
     format: "plaivra-food-catalog-restore-evidence",
@@ -485,6 +451,7 @@ export async function restorePortableArtifact({
     trusted: false,
     drReady: false,
     phase: "LOADING_UNTRUSTED",
+    replayLocalReferenceMappings: { foodKitchens: 0, foodSubcategories: 0 },
     appliedSteps: [],
   };
   if (evidenceOutput) await writeFile(resolve(evidenceOutput), `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
@@ -504,27 +471,24 @@ export async function restorePortableArtifact({
     if (!rule || !descriptor) throw new Error(`Restore plan references unknown relation ${action.relation ?? "<none>"}.`);
     const targetColumns = getColumns(rule.relation);
     const rows = segmentRows(materials[descriptor.name] ?? "");
-    const ownershipPolicy = canonicalRuntime.seedRuntimeOwnershipForRelation(rule.relation);
+    const ownershipPolicy = seedRuntimeOwnershipForRelation(rule.relation);
     const preseedComparisonColumns = ownershipPolicy
       ? Object.keys(targetColumns).filter((column) => !ownershipPolicy.preseedComparisonOmit.includes(column))
       : Object.keys(targetColumns);
 
     if (action.kind === "VALIDATE_PRESEEDED") {
-      for (const canonicalRow of rows) {
-        runPsql(targetUrl, buildPreseedValidationSql({
-          relation: rule.relation,
-          stableKey: rule.stableKey,
-          targetColumns,
-          canonicalRow,
-          comparisonColumns: preseedComparisonColumns,
-        }));
-      }
+      for (const canonicalRow of rows) runPsql(targetUrl, buildPreseedValidationSql({
+        relation: rule.relation,
+        stableKey: rule.stableKey,
+        targetColumns,
+        canonicalRow,
+        comparisonColumns: preseedComparisonColumns,
+      }));
     } else if (action.kind === "RESTORE_MIXED_KEYED_PRESEEDED_RUNTIME") {
       if (!ownershipPolicy) throw new Error(`Missing seed/runtime key policy for ${rule.relation}.`);
       for (const canonicalRow of rows) {
-        const decoded = decodeCanonicalSegmentRow(canonicalRow);
-        const stableKey = canonicalRuntime.stableKeyTextTuple(decoded, rule.stableKey);
-        if (canonicalRuntime.isMigrationSeedKey(ownershipPolicy, stableKey)) {
+        const key = stableKeyTextTuple(decodeCanonicalSegmentRow(canonicalRow), rule.stableKey);
+        if (isMigrationSeedKey(ownershipPolicy, key)) {
           runPsql(targetUrl, buildPreseedValidationSql({
             relation: rule.relation,
             stableKey: rule.stableKey,
@@ -541,36 +505,48 @@ export async function restorePortableArtifact({
     } else if (action.kind === "RESTORE_MUTABLE_SINGLETON_FIELDS") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildMutableSingletonRestoreSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
     } else if (action.kind === "RESTORE_EXACT") {
-      for (const canonicalRow of rows) runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
+      for (const canonicalRow of rows) {
+        if (rule.restoreOwnership === "MIXED_REPLAY_LOCAL_REFERENCE") {
+          restoreReplayLocalReferenceRow({ databaseUrl: targetUrl, relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, referenceMaps });
+        } else {
+          runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
+        }
+      }
     } else if (action.kind === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION") {
-      for (const canonicalRow of rows) runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, forceNullColumns: [...(rule.transientNeutralize ?? [])], comparisonOmitColumns: [...(rule.transientNeutralize ?? [])] }));
+      for (const canonicalRow of rows) runPsql(targetUrl, buildExactRestoreRowSql({
+        relation: rule.relation,
+        stableKey: rule.stableKey,
+        targetColumns,
+        canonicalRow,
+        forceNullColumns: [...(rule.transientNeutralize ?? [])],
+        comparisonOmitColumns: [...(rule.transientNeutralize ?? [])],
+      }));
     } else if (action.kind === "RESTORE_TRANSITIONAL_WITH_CYCLE_NULL") {
       if (rule.relation !== "food_items") throw new Error("Plan 7 transitional cycle suspension is limited to food_items.");
       if (rows.length) {
-        const constraintState = loadFoodItemsVerificationConstraint(targetUrl);
-        const constraintWindow = buildFoodItemsVerificationConstraintWindowSql(constraintState);
+        const remappedRows = rows.map((canonicalRow) => remapFoodItemRow(canonicalRow, referenceMaps));
+        const constraintWindow = buildFoodItemsVerificationConstraintWindowSql(loadFoodItemsVerificationConstraint(targetUrl));
         if (constraintWindow.validated) {
-          const initialSql = rows.map((canonicalRow) => buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).initialSql);
+          const initialSql = remappedRows.map((canonicalRow) => buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).initialSql);
           runPsql(targetUrl, ["BEGIN;", constraintWindow.dropSql, ...initialSql, constraintWindow.installNotValidSql, "COMMIT;"].join("\n"));
         } else {
           const comparisonColumns = Object.keys(targetColumns).filter((column) => column !== "verified_source_record_id");
-          for (const canonicalRow of rows) {
-            runPsql(targetUrl, buildPreseedValidationSql({
-              relation: rule.relation,
-              stableKey: rule.stableKey,
-              targetColumns,
-              canonicalRow,
-              comparisonColumns,
-            }));
-          }
+          for (const canonicalRow of remappedRows) runPsql(targetUrl, buildPreseedValidationSql({
+            relation: rule.relation,
+            stableKey: rule.stableKey,
+            targetColumns,
+            canonicalRow,
+            comparisonColumns,
+          }));
         }
       }
     } else if (action.kind === "RECONSTRUCT_TRANSITIONAL_CYCLE_FIELD") {
       if (rule.relation !== "food_items") throw new Error("Plan 7 transitional cycle reconstruction is limited to food_items.");
       if (rows.length) {
+        const remappedRows = rows.map((canonicalRow) => remapFoodItemRow(canonicalRow, referenceMaps));
         const constraintWindow = buildFoodItemsVerificationConstraintWindowSql(loadFoodItemsVerificationConstraint(targetUrl));
         const triggerWindow = buildFoodItemsUpdatedAtTriggerWindowSql(loadFoodItemsUpdatedAtTrigger(targetUrl));
-        const reconstructSql = rows.map((canonicalRow) => buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).reconstructSql);
+        const reconstructSql = remappedRows.map((canonicalRow) => buildTransitionalFoodItemsStages({ stableKey: rule.stableKey, targetColumns, canonicalRow }).reconstructSql);
         runPsql(targetUrl, [
           "BEGIN;",
           triggerWindow.disableSql,
@@ -585,6 +561,11 @@ export async function restorePortableArtifact({
     }
     evidence.appliedSteps.push(`${action.kind}:${rule.relation}`);
   }
+
+  evidence.replayLocalReferenceMappings = {
+    foodKitchens: referenceMaps.foodKitchens.size,
+    foodSubcategories: referenceMaps.foodSubcategories.size,
+  };
   evidence.phase = certificationEligible
     ? "RESTORE_LOADED_CANONICAL_PENDING_ASSERTIONS"
     : "RESTORE_LOADED_DIAGNOSTIC_NON_CERTIFIABLE";
@@ -601,4 +582,7 @@ async function main() {
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
-if (isMain) main().catch((error) => { process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`); process.exitCode = 1; });
+if (isMain) main().catch((error) => {
+  process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  process.exitCode = 1;
+});
