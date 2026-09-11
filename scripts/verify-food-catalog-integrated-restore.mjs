@@ -132,7 +132,11 @@ export function comparePortableRelationRows({
       continue;
     }
 
-    if (restoreOwnership === "MIXED_KEYED_PRESEEDED_RUNTIME" && isSeedKey(seedPolicy, key)) {
+    if (
+      loadMode === "VALIDATE_PRESEEDED"
+      && restoreOwnership !== "MUTABLE_PRESEEDED_SINGLETON"
+      && isSeedKey(seedPolicy, key)
+    ) {
       const omitted = seedPolicy?.preseedComparisonOmit ?? [];
       if (filteredCanonicalRow(sourceLine, omitted) !== filteredCanonicalRow(targetLine, omitted)) {
         throw new Error(`Migration-preseed semantic mismatch for ${relation}: ${token}.`);
