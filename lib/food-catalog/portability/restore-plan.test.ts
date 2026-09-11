@@ -74,6 +74,19 @@ describe("Plan 7 disposable restore plan", () => {
     ]);
   });
 
+  it("restores replay-local legacy references before Food roots so non-null kitchen/subcategory FKs remain valid", () => {
+    const plan = buildFoodCatalogRestorePlan([
+      spec("food_items", "RECONSTRUCT_TRANSITIONAL_COMPATIBILITY", { transientNeutralize: ["verified_source_record_id"] }),
+      spec("food_source_records", "RESTORE_EXACT"),
+      spec("food_subcategories", "RESTORE_EXACT", { classification: "REFERENCE_ONLY", restoreOwnership: "MIXED_REPLAY_LOCAL_REFERENCE" as PortableRelationRule["restoreOwnership"] }),
+      spec("food_kitchens", "RESTORE_EXACT", { classification: "REFERENCE_ONLY", restoreOwnership: "MIXED_REPLAY_LOCAL_REFERENCE" as PortableRelationRule["restoreOwnership"] }),
+    ]);
+    const ordered = plan.filter((entry) => entry.relation).map((entry) => entry.relation);
+    expect(ordered.indexOf("food_kitchens")).toBeLessThan(ordered.indexOf("food_subcategories"));
+    expect(ordered.indexOf("food_subcategories")).toBeLessThan(ordered.indexOf("food_items"));
+    expect(ordered.indexOf("food_items")).toBeLessThan(ordered.indexOf("food_source_records"));
+  });
+
   it("topologically reorders populated FK authority instead of trusting registry declaration order", () => {
     const plan = buildFoodCatalogRestorePlan([
       spec("food_catalog_activation_events", "RESTORE_EXACT"),
