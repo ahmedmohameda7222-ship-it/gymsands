@@ -187,7 +187,7 @@ jobs:
           const fs = require('node:fs');
           const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
           if (!value.artifactValid || value.restoreVerified || value.trusted || value.drReady) process.exit(1);
-          if (value.phase !== 'RESTORE_LOADED_UNTRUSTED_PENDING_ASSERTIONS') process.exit(1);
+          if (value.phase !== 'RESTORE_LOADED_CANONICAL_PENDING_ASSERTIONS') process.exit(1);
           NODE
           psql "$PLAN7_RESTORE_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
             -c "select lease_owner is null and lease_token is null and lease_expires_at is null from public.food_ingestion_runs where id='71000000-0000-4000-8000-000000000a11'::uuid" \
