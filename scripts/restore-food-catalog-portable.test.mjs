@@ -9,12 +9,20 @@ import {
   buildFoodItemsUpdatedAtTriggerWindowSql,
   buildFoodItemsVerificationConstraintWindowSql,
   buildPreseedValidationSql,
+  buildReplayLocalSystemKitchenLookupSql,
+  buildReplayLocalSystemSubcategoryLookupSql,
   decodeCanonicalSegmentRow,
   decodeProtectedArtifactMaterial,
   buildTransitionalFoodItemsStages,
+  isMigrationReplayLocalSystemKitchenRow,
+  isMigrationReplayLocalSystemSubcategoryRow,
+  remapCanonicalRowReferences,
 } from "./restore-food-catalog-portable.mjs";
 
-const row = '[["amount","numeric","90071992547409931234567890.1200"],["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["is_verified","boolean","true"],["label","text","null"],["optional","text",null],["updated_at","timestamptz","2026-09-10T10:04:00.000000Z"],["verified_at","timestamptz","2026-09-10T10:05:00.000000Z"],["verified_source_record_id","uuid","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]]';
+const row = '[["amount","numeric","90071992547409931234567890.1200"],["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["is_verified","boolean","true"],["label","text","null"],["optional","text",null],["updated_at","timestamp with time zone","2026-09-10T10:04:00.000000Z"],["verified_at","timestamp with time zone","2026-09-10T10:05:00.000000Z"],["verified_source_record_id","uuid","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]]';
+const systemKitchenRow = '[["created_at","timestamp with time zone","2026-09-10T10:00:00.000000Z"],["id","uuid","11111111-1111-4111-8111-111111111111"],["is_system","boolean","true"],["name","text","Egyptian Kitchen"],["updated_at","timestamp with time zone","2026-09-10T10:00:00.000000Z"],["user_id","uuid",null]]';
+const runtimeSystemKitchenRow = '[["created_at","timestamp with time zone","2026-09-10T10:00:00.000000Z"],["id","uuid","12111111-1111-4111-8111-111111111111"],["is_system","boolean","true"],["name","text","Future Runtime Kitchen"],["updated_at","timestamp with time zone","2026-09-10T10:00:00.000000Z"],["user_id","uuid",null]]';
+const systemSubcategoryRow = '[["created_at","timestamp with time zone","2026-09-10T10:01:00.000000Z"],["id","uuid","22222222-2222-4222-8222-222222222222"],["kitchen_id","uuid","11111111-1111-4111-8111-111111111111"],["name","text","Bread"],["updated_at","timestamp with time zone","2026-09-10T10:01:00.000000Z"]]';
 
 describe("Plan 7 disposable restore CLI primitives", () => {
   it("decodes canonical rows without converting typed scalar text into JavaScript numbers", () => {
@@ -65,6 +73,62 @@ describe("Plan 7 disposable restore CLI primitives", () => {
     assert.deepEqual(policy.preseedComparisonOmit, ["applied_at"]);
     assert.ok(!policy.preseedComparisonOmit.includes("version"));
     assert.ok(!policy.preseedComparisonOmit.includes("migration_version"));
+  });
+
+  it("treats only Git-migration system kitchen/subcategory identities as replay-local references", () => {
+    assert.equal(isMigrationReplayLocalSystemKitchenRow(systemKitchenRow), true);
+    assert.equal(isMigrationReplayLocalSystemKitchenRow(runtimeSystemKitchenRow), false);
+    assert.equal(isMigrationReplayLocalSystemSubcategoryRow(systemSubcategoryRow), true);
+    const runtimeSubcategory = systemSubcategoryRow.replace('"Bread"', '"Future Runtime Category"');
+    assert.equal(isMigrationReplayLocalSystemSubcategoryRow(runtimeSubcategory), false);
+  });
+
+  it("resolves migration-owned system kitchen/subcategory rows read-only by semantic identity", () => {
+    const kitchenSql = buildReplayLocalSystemKitchenLookupSql({
+      targetColumns: {
+        created_at: "timestamp with time zone",
+        id: "uuid",
+        is_system: "boolean",
+        name: "text",
+        updated_at: "timestamp with time zone",
+        user_id: "uuid",
+      },
+      canonicalRow: systemKitchenRow,
+    });
+    assert.match(kitchenSql, /^SELECT id::text FROM public\."food_kitchens"/);
+    assert.match(kitchenSql, /is_system IS TRUE/);
+    assert.match(kitchenSql, /user_id IS NULL/);
+    assert.doesNotMatch(kitchenSql, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bUPSERT\b/i);
+    assert.ok(!kitchenSql.includes("Egyptian Kitchen"));
+
+    const subcategorySql = buildReplayLocalSystemSubcategoryLookupSql({
+      targetColumns: {
+        created_at: "timestamp with time zone",
+        id: "uuid",
+        kitchen_id: "uuid",
+        name: "text",
+        updated_at: "timestamp with time zone",
+      },
+      canonicalRow: systemSubcategoryRow,
+      targetKitchenId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    assert.match(subcategorySql, /^SELECT id::text FROM public\."food_subcategories"/);
+    assert.match(subcategorySql, /kitchen_id IS NOT DISTINCT FROM/);
+    assert.doesNotMatch(subcategorySql, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bUPSERT\b/i);
+  });
+
+  it("remaps only declared replay-local FK references while keeping stable Food identity and other values exact", () => {
+    const food = '[["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["kitchen_id","uuid","11111111-1111-4111-8111-111111111111"],["subcategory_id","uuid","22222222-2222-4222-8222-222222222222"],["updated_at","timestamp with time zone","2026-09-10T10:04:00.000000Z"]]';
+    const remapped = remapCanonicalRowReferences(food, {
+      kitchen_id: "33333333-3333-4333-8333-333333333333",
+      subcategory_id: "44444444-4444-4444-8444-444444444444",
+    });
+    const decoded = decodeCanonicalSegmentRow(remapped);
+    assert.equal(decoded.id.text, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    assert.equal(decoded.kitchen_id.text, "33333333-3333-4333-8333-333333333333");
+    assert.equal(decoded.subcategory_id.text, "44444444-4444-4444-8444-444444444444");
+    assert.equal(decoded.updated_at.text, "2026-09-10T10:04:00.000000Z");
+    assert.throws(() => remapCanonicalRowReferences(food, { id: "55555555-5555-4555-8555-555555555555" }), /reference column/i);
   });
 
   it("neutralizes only verified_source_record_id for food_items, then reconstructs it after source records", () => {
