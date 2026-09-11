@@ -28,6 +28,9 @@ import {
 import {
   seedRuntimeOwnershipForRelation,
 } from "../lib/food-catalog/portability/seed-runtime-ownership.ts";
+import {
+  prepareReplayLocalReferenceComparison,
+} from "../lib/food-catalog/portability/replay-local-reference-comparison.mjs";
 
 const SHA256 = /^[0-9a-f]{64}$/u;
 const SHA40 = /^[0-9a-f]{40}$/u;
@@ -386,16 +389,34 @@ export async function verifyIntegratedRestore(options) {
   const rules = FOOD_CATALOG_PORTABLE_RELATIONS_V1.filter((rule) => rule.requiredProfile === "CORE_PORTABLE" || source.manifest.profile === "FULL_DR");
   const sourceDescriptors = new Map(source.manifest.segments.map((segment) => [segment.name, segment]));
   const targetDescriptors = new Map(target.manifest.segments.map((segment) => [segment.name, segment]));
-  const relationResults = [];
+  const sourceRowsFor = (relation) => {
+    const rule = rules.find((entry) => entry.relation === relation);
+    if (!rule) throw new Error(`Missing canonical registry rule for ${relation}.`);
+    return materialRows(source.materials[rule.segment] ?? "");
+  };
+  const targetRowsFor = (relation) => {
+    const rule = rules.find((entry) => entry.relation === relation);
+    if (!rule) throw new Error(`Missing canonical registry rule for ${relation}.`);
+    return materialRows(target.materials[rule.segment] ?? "");
+  };
+  const replayReferences = prepareReplayLocalReferenceComparison({
+    sourceKitchenRows: sourceRowsFor("food_kitchens"),
+    targetKitchenRows: targetRowsFor("food_kitchens"),
+    sourceSubcategoryRows: sourceRowsFor("food_subcategories"),
+    targetSubcategoryRows: targetRowsFor("food_subcategories"),
+    sourceFoodRows: sourceRowsFor("food_items"),
+  });
+
+  const relationResults = [replayReferences.kitchenResult, replayReferences.subcategoryResult];
   for (const rule of rules) {
-    if (rule.loadMode === "DERIVED_REBUILD") continue;
+    if (rule.loadMode === "DERIVED_REBUILD" || rule.restoreOwnership === "MIXED_REPLAY_LOCAL_REFERENCE") continue;
     const sourceDescriptor = sourceDescriptors.get(rule.segment);
     const targetDescriptor = targetDescriptors.get(rule.segment);
     if (!sourceDescriptor || !targetDescriptor) throw new Error(`Canonical integrated artifact is missing ${rule.segment}.`);
     relationResults.push(comparePortableRelationRows({
       relation: rule.relation,
       stableKey: rule.stableKey,
-      sourceRows: materialRows(source.materials[rule.segment] ?? ""),
+      sourceRows: rule.relation === "food_items" ? replayReferences.foodItemSourceRows : materialRows(source.materials[rule.segment] ?? ""),
       targetRows: materialRows(target.materials[rule.segment] ?? ""),
       restoreOwnership: rule.restoreOwnership ?? "UNIFORM",
       loadMode: rule.loadMode,
@@ -460,6 +481,7 @@ export async function verifyIntegratedRestore(options) {
     snapshotBoundarySha256: source.manifest.snapshotBoundary.sha256,
     restoredTargetIdentitySha256: targetIdentity,
     protectedSegmentsVerified: protectedVerified,
+    replayLocalReferenceMappingCounts: replayReferences.mappingCounts,
     relationComparisonCount: relationResults.length,
     relationComparisons: relationResults,
     ownerBinding,
