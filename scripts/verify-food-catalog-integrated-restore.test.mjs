@@ -59,6 +59,49 @@ describe("Plan 7 integrated restore evidence", () => {
     }), /exact|runtime|mismatch/i);
   });
 
+  it("uses declared replay-local omissions for pure migration-owned preseed validation", () => {
+    const sourceSeed = row([
+      ["created_at","timestamp with time zone","2026-09-10 18:00:00+00"],
+      ["display_name","text","Cuisine"],
+      ["namespace_code","text","cuisine"],
+    ]);
+    const targetSeed = row([
+      ["created_at","timestamp with time zone","2026-09-10 18:05:00+00"],
+      ["display_name","text","Cuisine"],
+      ["namespace_code","text","cuisine"],
+    ]);
+    const seedPolicy = {
+      relation: "food_taxonomy_namespaces",
+      migrationSeedKeys: [["cuisine"]],
+      preseedComparisonOmit: ["created_at"],
+    };
+    const result = comparePortableRelationRows({
+      relation: "food_taxonomy_namespaces",
+      stableKey: ["namespace_code"],
+      sourceRows: [sourceSeed],
+      targetRows: [targetSeed],
+      restoreOwnership: "UNIFORM",
+      loadMode: "VALIDATE_PRESEEDED",
+      seedPolicy,
+    });
+    assert.equal(result.exact, true);
+
+    const semanticallyDifferentTarget = row([
+      ["created_at","timestamp with time zone","2026-09-10 18:05:00+00"],
+      ["display_name","text","Cuisine changed"],
+      ["namespace_code","text","cuisine"],
+    ]);
+    assert.throws(() => comparePortableRelationRows({
+      relation: "food_taxonomy_namespaces",
+      stableKey: ["namespace_code"],
+      sourceRows: [sourceSeed],
+      targetRows: [semanticallyDifferentTarget],
+      restoreOwnership: "UNIFORM",
+      loadMode: "VALIDATE_PRESEEDED",
+      seedPolicy,
+    }), /preseed|semantic|mismatch/i);
+  });
+
   it("requires transient lease fields to be null on the restored target", () => {
     const source = row([["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["lease_owner","text","worker-a"],["lease_token","uuid","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]]);
     const target = row([["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["lease_owner","text",null],["lease_token","uuid",null]]);
