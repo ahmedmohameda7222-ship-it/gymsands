@@ -16,7 +16,7 @@ describe("Plan 7 runtime certification boundary", () => {
 
   it("restore explicitly validates canonical profile completeness before trusted loading", async () => {
     const text = await source("restore-food-catalog-portable.mjs");
-    assert.match(text, /validateCanonicalProfileManifest/);
+    assert.match(text, /validateCanonicalPortableProfileManifestV1/);
     assert.match(text, /certificationEligible/);
   });
 
