@@ -242,6 +242,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          : > "$RUNNER_TEMP/plan7-integrated-error.log"
+          exec 2> >(tee -a "$RUNNER_TEMP/plan7-integrated-error.log" >&2)
           expected="${{ github.event.pull_request.head.sha || github.sha }}"
           node scripts/verify-food-catalog-integrated-restore.mjs \
             --source-artifact-dir "$RUNNER_TEMP/plan7-source-artifact" \
@@ -258,11 +260,21 @@ jobs:
           node - "$RUNNER_TEMP/plan7-integrated-evidence.json" "$RUNNER_TEMP/plan7-verification-input.json" <<'NODE'
           const fs = require('node:fs');
           const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          if (!value.assertionEvaluation?.trusted || !value.assertionEvaluation?.restoreVerified) process.exit(1);
-          if (value.assertionEvaluation.failures.length || value.assertionEvaluation.unknown.length) process.exit(1);
-          if (!value.protectedSegmentsVerified || !value.search?.sameRestoredTargetVerified) process.exit(1);
+          const fail = (message) => { console.error(message); process.exit(1); };
+          if (!value.assertionEvaluation?.trusted || !value.assertionEvaluation?.restoreVerified) fail(`Integrated assertion evaluation is not trusted: ${JSON.stringify(value.assertionEvaluation)}`);
+          if (value.assertionEvaluation.failures.length || value.assertionEvaluation.unknown.length) fail(`Integrated assertion evaluation contains failures/unknowns: ${JSON.stringify(value.assertionEvaluation)}`);
+          if (!value.protectedSegmentsVerified || !value.search?.sameRestoredTargetVerified) fail(`Integrated evidence linkage failed: protectedSegmentsVerified=${value.protectedSegmentsVerified} sameRestoredTargetVerified=${value.search?.sameRestoredTargetVerified}`);
           fs.writeFileSync(process.argv[3], `${JSON.stringify(value.verificationInput, null, 2)}\n`, 'utf8');
           NODE
+
+      - name: Upload integrated restore failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan7-integrated-restore-diagnostics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/plan7-integrated-error.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Build trusted restore verification report
         shell: bash
