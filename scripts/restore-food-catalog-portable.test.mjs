@@ -6,6 +6,7 @@ import { seedRuntimeOwnershipForRelation } from "../lib/food-catalog/portability
 import {
   assertDisposableRestoreTarget,
   buildExactRestoreRowSql,
+  buildFoodItemsUpdatedAtTriggerWindowSql,
   buildFoodItemsVerificationConstraintWindowSql,
   buildPreseedValidationSql,
   decodeCanonicalSegmentRow,
@@ -13,7 +14,7 @@ import {
   buildTransitionalFoodItemsStages,
 } from "./restore-food-catalog-portable.mjs";
 
-const row = '[["amount","numeric","90071992547409931234567890.1200"],["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["is_verified","boolean","true"],["label","text","null"],["optional","text",null],["verified_at","timestamptz","2026-09-10T10:05:00.000000Z"],["verified_source_record_id","uuid","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]]';
+const row = '[["amount","numeric","90071992547409931234567890.1200"],["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["is_verified","boolean","true"],["label","text","null"],["optional","text",null],["updated_at","timestamptz","2026-09-10T10:04:00.000000Z"],["verified_at","timestamptz","2026-09-10T10:05:00.000000Z"],["verified_source_record_id","uuid","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]]';
 
 describe("Plan 7 disposable restore CLI primitives", () => {
   it("decodes canonical rows without converting typed scalar text into JavaScript numbers", () => {
@@ -33,6 +34,7 @@ describe("Plan 7 disposable restore CLI primitives", () => {
         is_verified: "boolean",
         label: "text",
         optional: "text",
+        updated_at: "timestamp with time zone",
         verified_at: "timestamp with time zone",
         verified_source_record_id: "uuid",
       },
@@ -74,6 +76,7 @@ describe("Plan 7 disposable restore CLI primitives", () => {
         is_verified: "boolean",
         label: "text",
         optional: "text",
+        updated_at: "timestamp with time zone",
         verified_at: "timestamp with time zone",
         verified_source_record_id: "uuid",
       },
@@ -87,7 +90,7 @@ describe("Plan 7 disposable restore CLI primitives", () => {
     assert.deepEqual(stages.reconstructAfterRelations, ["food_source_records"]);
   });
 
-  it("opens only the exact Food verification CHECK window and restores it validated from target-catalog authority", () => {
+  it("opens only the exact Food verification CHECK window and reinstalls target-catalog authority before later validation", () => {
     const window = buildFoodItemsVerificationConstraintWindowSql({
       constraintName: "food_items_verification_state_check",
       constraintType: "c",
@@ -95,10 +98,10 @@ describe("Plan 7 disposable restore CLI primitives", () => {
       definition: "CHECK (((is_verified = false) AND (verified_at IS NULL) AND (verified_source_record_id IS NULL)) OR ((is_verified = true) AND (verified_at IS NOT NULL) AND (verified_source_record_id IS NOT NULL)))",
     });
     assert.match(window.dropSql, /^ALTER TABLE public\.food_items DROP CONSTRAINT "food_items_verification_state_check";$/);
-    assert.match(window.restoreSql, /ADD CONSTRAINT "food_items_verification_state_check" CHECK /);
-    assert.match(window.restoreSql, /NOT VALID;/);
-    assert.match(window.restoreSql, /VALIDATE CONSTRAINT "food_items_verification_state_check";/);
-    assert.doesNotMatch(window.dropSql + window.restoreSql, /DISABLE TRIGGER|DROP CONSTRAINT ALL|session_replication_role/i);
+    assert.match(window.installNotValidSql, /ADD CONSTRAINT "food_items_verification_state_check" CHECK /);
+    assert.match(window.installNotValidSql, /NOT VALID;$/);
+    assert.match(window.validateSql, /^ALTER TABLE public\.food_items VALIDATE CONSTRAINT "food_items_verification_state_check";$/);
+    assert.doesNotMatch(window.dropSql + window.installNotValidSql + window.validateSql, /DISABLE TRIGGER|DROP CONSTRAINT ALL|session_replication_role/i);
     assert.throws(() => buildFoodItemsVerificationConstraintWindowSql({
       constraintName: "food_items_lifecycle_status_check",
       constraintType: "c",
@@ -111,6 +114,32 @@ describe("Plan 7 disposable restore CLI primitives", () => {
       validated: true,
       definition: "FOREIGN KEY (id) REFERENCES public.food_items(id)",
     }), /CHECK/i);
+  });
+
+  it("suspends only the exact Git-built food_items updated-at trigger during cycle reconstruction", () => {
+    const window = buildFoodItemsUpdatedAtTriggerWindowSql({
+      triggerName: "food_items_updated_at",
+      enabled: "O",
+      internal: false,
+      functionSchema: "public",
+      functionName: "set_updated_at",
+    });
+    assert.equal(window.disableSql, 'ALTER TABLE public.food_items DISABLE TRIGGER "food_items_updated_at";');
+    assert.equal(window.enableSql, 'ALTER TABLE public.food_items ENABLE TRIGGER "food_items_updated_at";');
+    assert.throws(() => buildFoodItemsUpdatedAtTriggerWindowSql({
+      triggerName: "food_items_updated_at",
+      enabled: "O",
+      internal: false,
+      functionSchema: "public",
+      functionName: "other_trigger_function",
+    }), /set_updated_at/i);
+    assert.throws(() => buildFoodItemsUpdatedAtTriggerWindowSql({
+      triggerName: "food_items_updated_at",
+      enabled: "D",
+      internal: false,
+      functionSchema: "public",
+      functionName: "set_updated_at",
+    }), /enabled/i);
   });
 
   it("requires an explicit disposable-target acknowledgement and rejects provider production hosts", () => {
