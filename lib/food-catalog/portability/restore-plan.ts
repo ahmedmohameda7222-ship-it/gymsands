@@ -71,6 +71,16 @@ export function buildFoodCatalogRestorePlan(rules: readonly PortableRelationRule
     }
   }
 
+  const replayReferenceRules = rules.filter((rule) =>
+    rule.loadMode === "RESTORE_EXACT" && rule.restoreOwnership === "MIXED_REPLAY_LOCAL_REFERENCE",
+  );
+  const satisfiedBeforeReferences = rules
+    .filter((rule) => rule.loadMode === "VALIDATE_PRESEEDED" && !rule.restoreLast)
+    .map((rule) => rule.relation);
+  for (const rule of sortRestoreRulesByDependencies(replayReferenceRules, satisfiedBeforeReferences)) {
+    result.push(step("RESTORE_EXACT", rule));
+  }
+
   if (foodItems?.loadMode === "RECONSTRUCT_TRANSITIONAL_COMPATIBILITY") {
     result.push(step("RESTORE_TRANSITIONAL_WITH_CYCLE_NULL", foodItems, {
       neutralizedColumns: Object.freeze(["verified_source_record_id"]),
@@ -87,13 +97,16 @@ export function buildFoodCatalogRestorePlan(rules: readonly PortableRelationRule
     }));
   }
 
+  const replayReferenceRelations = new Set(replayReferenceRules.map((rule) => rule.relation));
   const dataRules = rules.filter((rule) =>
     rule !== sourceRecordRule
     && rule !== foodItems
+    && !replayReferenceRelations.has(rule.relation)
     && (rule.loadMode === "RESTORE_EXACT" || rule.loadMode === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION"),
   );
   const satisfiedBeforeData = [
-    ...rules.filter((rule) => rule.loadMode === "VALIDATE_PRESEEDED" && !rule.restoreLast).map((rule) => rule.relation),
+    ...satisfiedBeforeReferences,
+    ...replayReferenceRules.map((rule) => rule.relation),
     ...(foodItems ? [foodItems.relation] : []),
     ...(sourceRecordRule ? [sourceRecordRule.relation] : []),
   ];
