@@ -2,7 +2,7 @@ import type { PortableExportProfile } from "./export-contract";
 import {
   evaluateRecoveryEligibility,
   type RecoveryEligibilityResult,
-} from "./recovery-eligibility";
+} from "./recovery-eligibility.ts";
 
 const SHA256 = /^[0-9a-f]{64}$/i;
 const SHA40 = /^[0-9a-f]{40}$/i;
