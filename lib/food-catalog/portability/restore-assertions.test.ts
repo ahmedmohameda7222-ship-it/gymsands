@@ -39,6 +39,26 @@ describe("Plan 7 restore assertion engine", () => {
     expect(evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: failed }).failures).toContain("merge_graph");
   });
 
+  it("treats canonical required IDs as mandatory even when caller evidence attempts mandatory:false", () => {
+    const failedDowngrade = passingAssertions().map((assertion) => assertion.id === "merge_graph"
+      ? { ...assertion, mandatory: false, status: "FAIL" as const }
+      : assertion);
+    const failedResult = evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: failedDowngrade });
+    expect(failedResult).toMatchObject({ trusted: false, restoreVerified: false });
+    expect(failedResult.failures).toContain("merge_graph");
+
+    const unknownDowngrade = passingAssertions().map((assertion) => assertion.id === "merge_graph"
+      ? { ...assertion, mandatory: false, status: "UNKNOWN" as const }
+      : assertion);
+    const unknownResult = evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: unknownDowngrade });
+    expect(unknownResult).toMatchObject({ trusted: false, restoreVerified: false });
+    expect(unknownResult.unknown).toContain("merge_graph");
+
+    const passWithCallerDowngrades = passingAssertions().map((assertion) => ({ ...assertion, mandatory: false }));
+    expect(evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: passWithCallerDowngrades }))
+      .toMatchObject({ trusted: true, restoreVerified: true });
+  });
+
   it("never exposes final DR readiness even when CORE assertions pass", () => {
     const result = evaluateRestoreAssertions({ profile: "CORE_PORTABLE", artifactValid: true, assertions: passingAssertions() });
     expect(result).toMatchObject({ trusted: true, restoreVerified: true });
