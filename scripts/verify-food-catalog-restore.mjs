@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { evaluateRestoreAssertions } from "../lib/food-catalog/portability/restore-assertions.ts";
+import { evaluateRecoveryEligibility } from "../lib/food-catalog/portability/recovery-eligibility.ts";
 
 function requireSha256(value, label) {
   if (typeof value !== "string" || !/^[0-9a-f]{64}$/i.test(value)) {
@@ -40,6 +41,9 @@ export function buildFoodCatalogRestoreVerificationReportV1(input) {
   if (typeof input.artifact?.capturedAt !== "string" || !Number.isFinite(Date.parse(input.artifact.capturedAt))) {
     throw new Error("Artifact capturedAt evidence is required.");
   }
+  if (typeof input.recoveryEvaluation?.evaluationTime !== "string") {
+    throw new Error("Explicit recovery evaluationTime is required.");
+  }
   assertTarget(input.target);
 
   if (!Array.isArray(input.assertions?.evidence)) {
@@ -50,9 +54,15 @@ export function buildFoodCatalogRestoreVerificationReportV1(input) {
     artifactValid: input.artifact.valid === true,
     assertions: input.assertions.evidence,
   });
+  const recoveryEligibility = evaluateRecoveryEligibility({
+    artifactValid: input.artifact.valid === true,
+    capturedAt: input.artifact.capturedAt,
+    evaluationTime: input.recoveryEvaluation.evaluationTime,
+    maxArtifactAgeMs: input.recoveryEvaluation.maxArtifactAgeMs,
+  });
   const trusted = evaluation.trusted;
   const restoreVerified = evaluation.restoreVerified;
-  const recoveryEligible = input.recoveryEligibility?.eligible === true;
+  const recoveryEligible = recoveryEligibility.eligible;
 
   return Object.freeze({
     reportVersion: 2,
@@ -69,7 +79,7 @@ export function buildFoodCatalogRestoreVerificationReportV1(input) {
       missing: Object.freeze([...evaluation.missing]),
       comparisonClasses: Object.freeze([...evaluation.comparisonClasses]),
     }),
-    recoveryEligibility: Object.freeze({ ...input.recoveryEligibility }),
+    recoveryEligibility,
     trusted,
     restoreVerified,
     recoveryEligible,
