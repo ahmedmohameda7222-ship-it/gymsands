@@ -24,6 +24,8 @@ Authoritative export uses one PostgreSQL `REPEATABLE READ READ ONLY` transaction
 
 The artifact manifest is written last. Segment semantic hashes and the snapshot-boundary digest are deterministic. `capturedAt` is cryptographically bound into snapshot evidence. SQL `NULL` is represented as JSON `null`, distinct from literal text `"null"`.
 
+Canonical semantic object keys and default canonical row-column keys are ordered by JavaScript Unicode UTF-16 code-unit relational order (`left < right` / `left > right`), with no locale or collation dependency. `localeCompare`, runner locale, ICU configuration, and operating-system collation are not semantic authority. Array order remains unchanged.
+
 ## Artifact validity versus recovery eligibility
 
 Artifact validity is structural and semantic. It checks supported contract/profile versions, mandatory segments, ownership, snapshot binding, segment and manifest hashes, stable identities, schema/profile declarations, transient exclusions, and secret scanning. Artifact age alone does not invalidate the artifact.
