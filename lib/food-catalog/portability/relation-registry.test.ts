@@ -68,10 +68,26 @@ describe("Plan 7 relation/load-mode registry", () => {
     const foodItems = findPortableRelationRule("food_items");
     expect(foodItems?.transientNeutralize).toContain("verified_source_record_id");
     expect(foodItems?.sourceTransientNeutralize ?? []).not.toContain("verified_source_record_id");
+  });
 
+  it("neutralizes outbox live claims without discarding the durable fencing epoch", () => {
     const outbox = findPortableRelationRule("food_catalog_governance_outbox");
+    const transientClaims = [
+      "claim_owner",
+      "claim_principal_id",
+      "lease_token",
+      "lease_acquired_at",
+      "lease_expires_at",
+    ];
     expect(outbox?.loadMode).toBe("RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION");
-    expect(outbox?.transientNeutralize).toEqual(expect.arrayContaining(["lease_token"]));
+    expect(outbox?.transientNeutralize).toEqual(transientClaims);
+    expect(outbox?.sourceTransientNeutralize).toEqual(transientClaims);
+    expect(outbox?.transientNeutralize).not.toContain("lease_epoch");
+    expect(outbox?.sourceTransientNeutralize).not.toContain("lease_epoch");
+    expect((outbox as any)?.transientStateNeutralize).toEqual([
+      { column: "status", from: "processing", to: "failed" },
+    ]);
+    expect(outbox?.operationallyDisabledAfterRestore).toBe(true);
   });
 
   it("requires every current protected owner-state family only for FULL_DR", () => {
