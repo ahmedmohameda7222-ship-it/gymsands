@@ -125,6 +125,31 @@ describe("Plan 7 integrated restore evidence", () => {
     }), /neutral|transient|null/i);
   });
 
+  it("rejects canonical source artifacts that retain declared source-live lease state", () => {
+    const leakedSource = row([["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["lease_owner","text","worker-a"],["lease_token","uuid","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],["lease_epoch","bigint","3"]]);
+    const neutralSource = row([["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],["lease_owner","text",null],["lease_token","uuid",null],["lease_epoch","bigint","3"]]);
+    assert.throws(() => comparePortableRelationRows({
+      relation: "food_ingestion_runs",
+      stableKey: ["id"],
+      sourceRows: [leakedSource],
+      targetRows: [neutralSource],
+      restoreOwnership: "UNIFORM",
+      loadMode: "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION",
+      transientNeutralize: ["lease_owner","lease_token"],
+      sourceTransientNeutralize: ["lease_owner","lease_token"],
+    }), /source.*transient|source.*lease|null/i);
+    assert.equal(comparePortableRelationRows({
+      relation: "food_ingestion_runs",
+      stableKey: ["id"],
+      sourceRows: [neutralSource],
+      targetRows: [neutralSource],
+      restoreOwnership: "UNIFORM",
+      loadMode: "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION",
+      transientNeutralize: ["lease_owner","lease_token"],
+      sourceTransientNeutralize: ["lease_owner","lease_token"],
+    }).exact, true);
+  });
+
   it("derives transient neutralization proof from every registry-declared relation", async () => {
     const verifier = await import("./verify-food-catalog-integrated-restore.mjs");
     assert.equal(typeof verifier.areDeclaredTransientRelationsNeutralized, "function");
