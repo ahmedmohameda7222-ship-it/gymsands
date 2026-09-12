@@ -48,15 +48,11 @@ function linkedInput() {
     snapshotBoundarySha256: "f".repeat(64),
     restoredTargetIdentitySha256: target,
     canonicalProfileVerified: true,
-    recoveryEligibility: {
-      artifactValid: true,
-      eligible: true,
-      agePolicyApplied: true,
-      ageMs: 60_000,
-      reason: "ELIGIBLE",
+    recoveryEvaluation: {
       capturedAt: "2026-09-10T18:00:00.000Z",
       evaluationTime: "2026-09-10T18:01:00.000Z",
       maxArtifactAgeMs: 60_000,
+      eligible: true,
     },
     restore: {
       headSha: head,
@@ -91,6 +87,7 @@ describe("Plan 7 sole final restore certifier", () => {
     assert.equal(certification.trusted, true);
     assert.equal(certification.protectedSegmentsVerified, true);
     assert.equal(certification.searchVerified, true);
+    assert.equal(certification.recoveryEligibility.reason, "ELIGIBLE");
     assert.equal(certification.recoveryEligible, true);
     assert.equal(certification.drReady, true);
   });
@@ -111,26 +108,22 @@ describe("Plan 7 sole final restore certifier", () => {
 
   it("does not let a caller-supplied eligible=true override the canonical age policy", () => {
     const forged = linkedInput();
-    forged.recoveryEligibility = {
-      artifactValid: true,
-      eligible: true,
-      agePolicyApplied: false,
-      ageMs: 0,
-      reason: "ELIGIBLE",
+    forged.recoveryEvaluation = {
       capturedAt: "2026-09-10T18:00:00.000Z",
       evaluationTime: "2026-09-10T18:01:00.001Z",
       maxArtifactAgeMs: 60_000,
+      eligible: true,
     };
     assert.throws(() => certifyFoodCatalogRestore(forged), /recovery|eligib|old|RPO/i);
   });
 
   it("requires explicit recovery evaluation context before FULL_DR can become DR-ready", () => {
     const ineligible = linkedInput();
-    ineligible.recoveryEligibility.evaluationTime = "2026-09-10T18:01:00.001Z";
+    ineligible.recoveryEvaluation.evaluationTime = "2026-09-10T18:01:00.001Z";
     assert.throws(() => certifyFoodCatalogRestore(ineligible), /recovery|eligib|RPO/i);
 
     const missing = linkedInput();
-    delete missing.recoveryEligibility;
+    delete missing.recoveryEvaluation;
     assert.throws(() => certifyFoodCatalogRestore(missing), /recovery|eligib|RPO/i);
   });
 
@@ -138,13 +131,14 @@ describe("Plan 7 sole final restore certifier", () => {
     const input = linkedInput();
     input.profile = "CORE_PORTABLE";
     input.restore.profile = "CORE_PORTABLE";
-    input.recoveryEligibility.evaluationTime = "2026-09-10T18:01:00.001Z";
+    input.recoveryEvaluation.evaluationTime = "2026-09-10T18:01:00.001Z";
     const certification = certifyFoodCatalogRestore(input);
     assert.equal(certification.restoreVerified, true);
+    assert.equal(certification.recoveryEligible, false);
     assert.equal(certification.drReady, false);
   });
 
-  it("rejects an incomplete canonical manifest before runtime evidence can be promoted", () => {
+  it("binds final recovery evaluation to manifest capturedAt rather than report decisions", () => {
     const incomplete = manifest();
     const restoreReport = {
       headSha: head,
@@ -156,11 +150,12 @@ describe("Plan 7 sole final restore certifier", () => {
       recoveryEligibility: {
         artifactValid: true,
         eligible: true,
+        capturedAt: "1999-01-01T00:00:00.000Z",
+        evaluationTime: incomplete.capturedAt,
+        maxArtifactAgeMs: null,
         agePolicyApplied: false,
         ageMs: 0,
         reason: "ELIGIBLE",
-        capturedAt: incomplete.capturedAt,
-        evaluationTime: incomplete.capturedAt,
       },
       assertions: { failures: [], unknown: [] },
     };
