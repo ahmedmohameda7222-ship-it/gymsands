@@ -22,6 +22,7 @@ export type PortableRelationRule = Readonly<{
   seedOwnership: SeedOwnership;
   restoreOwnership: RestoreOwnership;
   transientNeutralize?: readonly string[];
+  sourceTransientNeutralize?: readonly string[];
   restoreLast?: boolean;
   operationallyDisabledAfterRestore?: boolean;
   note?: string;
@@ -45,6 +46,7 @@ function rule(
     seedOwnership: options.seedOwnership ?? "NONE",
     restoreOwnership: options.restoreOwnership ?? "UNIFORM",
     transientNeutralize: options.transientNeutralize ? Object.freeze([...options.transientNeutralize]) : undefined,
+    sourceTransientNeutralize: options.sourceTransientNeutralize ? Object.freeze([...options.sourceTransientNeutralize]) : undefined,
     restoreLast: options.restoreLast,
     operationallyDisabledAfterRestore: options.operationallyDisabledAfterRestore,
     note: options.note,
@@ -132,7 +134,8 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
   rule("food_ingestion_release_diff_records", H, "RESTORE_EXACT", ["id"]),
   rule("food_ingestion_runs", H, "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION", ["id"], {
     transientNeutralize: ["lease_owner", "lease_token", "lease_acquired_at", "lease_heartbeat_at", "lease_expires_at"],
-    note: "Neutralize the complete live-lease shape atomically; preserve lease_epoch as durable fencing/audit history.",
+    sourceTransientNeutralize: ["lease_owner", "lease_token", "lease_acquired_at", "lease_heartbeat_at", "lease_expires_at"],
+    note: "Exclude source live-lease credentials/timestamps from artifact authority and neutralize them on restore; preserve lease_epoch as durable fencing/audit history.",
   }),
 
   rule("food_catalog_search_nutrition_policies", A, "RESTORE_EXACT", ["policy_version"]),
