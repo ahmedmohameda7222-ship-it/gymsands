@@ -87,6 +87,7 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
     restoreOwnership: "MIXED_KEYED_PRESEEDED_RUNTIME",
     note: "Existing Git-migration keys validate exactly; source-only runtime taxonomy nodes restore exactly.",
   }),
+  rule("food_taxonomy_assignments", A, "RESTORE_EXACT", ["id"]),
   rule("market_scopes", A, "VALIDATE_PRESEEDED", ["scope_code"], {
     seedOwnership: "MIGRATION_OWNED",
     restoreOwnership: "MIXED_KEYED_PRESEEDED_RUNTIME",
