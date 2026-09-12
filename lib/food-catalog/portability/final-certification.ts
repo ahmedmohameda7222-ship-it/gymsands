@@ -1,4 +1,8 @@
 import type { PortableExportProfile } from "./export-contract";
+import {
+  evaluateRecoveryEligibility,
+  type RecoveryEligibilityResult,
+} from "./recovery-eligibility";
 
 const SHA256 = /^[0-9a-f]{64}$/i;
 const SHA40 = /^[0-9a-f]{40}$/i;
@@ -37,12 +41,10 @@ export type LinkedSearchEvidence = {
   staleGenerationIsolationVerified: boolean;
 };
 
-export type RecoveryEligibilityEvidence = Readonly<{
-  artifactValid: boolean;
-  eligible: boolean;
-  agePolicyApplied: boolean;
-  ageMs: number;
-  reason: string;
+export type RecoveryEvaluationContext = Readonly<{
+  capturedAt: string;
+  evaluationTime: string;
+  maxArtifactAgeMs?: number;
 }>;
 
 export type FinalRestoreCertificationInput = {
@@ -52,7 +54,7 @@ export type FinalRestoreCertificationInput = {
   snapshotBoundarySha256: string;
   restoredTargetIdentitySha256: string;
   canonicalProfileVerified: boolean;
-  recoveryEligibility?: RecoveryEligibilityEvidence;
+  recoveryEvaluation?: RecoveryEvaluationContext;
   restore: LinkedRestoreEvidence;
   protected: LinkedProtectedEvidence;
   search: LinkedSearchEvidence;
@@ -71,6 +73,7 @@ export type FinalRestoreCertification = Readonly<{
   trusted: true;
   protectedSegmentsVerified: boolean;
   searchVerified: true;
+  recoveryEligibility: RecoveryEligibilityResult | null;
   recoveryEligible: boolean;
   drReady: boolean;
 }>;
@@ -112,10 +115,17 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
     throw new Error("FULL_DR final certification requires authenticated protected-segment verification.");
   }
 
-  const recoveryEligible = input.recoveryEligibility?.artifactValid === true
-    && input.recoveryEligibility?.eligible === true;
+  const recoveryEligibility = input.recoveryEvaluation
+    ? evaluateRecoveryEligibility({
+        artifactValid: restore.artifactValid,
+        capturedAt: input.recoveryEvaluation.capturedAt,
+        evaluationTime: input.recoveryEvaluation.evaluationTime,
+        maxArtifactAgeMs: input.recoveryEvaluation.maxArtifactAgeMs,
+      })
+    : null;
+  const recoveryEligible = recoveryEligibility?.eligible === true;
   if (input.profile === "FULL_DR" && !recoveryEligible) {
-    throw new Error("FULL_DR final certification requires an explicit eligible recovery/RPO decision from the restore report.");
+    throw new Error("FULL_DR final certification requires canonical recovery/RPO eligibility.");
   }
 
   return Object.freeze({
@@ -131,6 +141,7 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
     trusted: true,
     protectedSegmentsVerified: input.profile === "FULL_DR" ? true : false,
     searchVerified: true,
+    recoveryEligibility,
     recoveryEligible,
     drReady: input.profile === "FULL_DR" && recoveryEligible,
   });
