@@ -11,5 +11,6 @@ test("integrated FULL_DR proves semantic corruption blocks current-generation po
   assert.match(step, /71000000-0000-4000-8000-000000000911/);
   assert.match(step, /71000000-0000-4000-8000-000000000921/);
   assert.match(step, /validation report\/checksum\/blocker gate failed/);
-  assert.match(step, /current_generation_id='71000000-0000-4000-8000-000000000901'/);
+  assert.match(step, /test "\$pointer_after" = "\$pointer_before"/);
+  assert.match(step, /test "\$pointer_after" = "71000000-0000-4000-8000-000000000901\|1"/);
 });
