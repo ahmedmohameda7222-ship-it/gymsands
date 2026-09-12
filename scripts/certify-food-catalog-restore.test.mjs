@@ -53,7 +53,10 @@ function linkedInput() {
       eligible: true,
       agePolicyApplied: true,
       ageMs: 60_000,
-      reason: "ELIGIBLE_WITHIN_CALLER_RPO",
+      reason: "ELIGIBLE",
+      capturedAt: "2026-09-10T18:00:00.000Z",
+      evaluationTime: "2026-09-10T18:01:00.000Z",
+      maxArtifactAgeMs: 60_000,
     },
     restore: {
       headSha: head,
@@ -82,7 +85,7 @@ function linkedInput() {
 }
 
 describe("Plan 7 sole final restore certifier", () => {
-  it("is the only authority allowed to produce FULL_DR drReady after all linked evidence and caller recovery policy pass", () => {
+  it("is the only authority allowed to produce FULL_DR drReady after all linked evidence and canonical recovery policy pass", () => {
     const certification = certifyFoodCatalogRestore(linkedInput());
     assert.equal(certification.restoreVerified, true);
     assert.equal(certification.trusted, true);
@@ -106,10 +109,24 @@ describe("Plan 7 sole final restore certifier", () => {
     assert.throws(() => certifyFoodCatalogRestore(searchMismatch), /search|restored target/i);
   });
 
-  it("requires explicit caller-supplied recovery eligibility before FULL_DR can become DR-ready", () => {
+  it("does not let a caller-supplied eligible=true override the canonical age policy", () => {
+    const forged = linkedInput();
+    forged.recoveryEligibility = {
+      artifactValid: true,
+      eligible: true,
+      agePolicyApplied: false,
+      ageMs: 0,
+      reason: "ELIGIBLE",
+      capturedAt: "2026-09-10T18:00:00.000Z",
+      evaluationTime: "2026-09-10T18:01:00.001Z",
+      maxArtifactAgeMs: 60_000,
+    };
+    assert.throws(() => certifyFoodCatalogRestore(forged), /recovery|eligib|old|RPO/i);
+  });
+
+  it("requires explicit recovery evaluation context before FULL_DR can become DR-ready", () => {
     const ineligible = linkedInput();
-    ineligible.recoveryEligibility.eligible = false;
-    ineligible.recoveryEligibility.reason = "INELIGIBLE_CALLER_RPO_EXCEEDED";
+    ineligible.recoveryEligibility.evaluationTime = "2026-09-10T18:01:00.001Z";
     assert.throws(() => certifyFoodCatalogRestore(ineligible), /recovery|eligib|RPO/i);
 
     const missing = linkedInput();
@@ -121,8 +138,7 @@ describe("Plan 7 sole final restore certifier", () => {
     const input = linkedInput();
     input.profile = "CORE_PORTABLE";
     input.restore.profile = "CORE_PORTABLE";
-    input.recoveryEligibility.eligible = false;
-    input.recoveryEligibility.reason = "CORE_PORTABLE_NOT_DR_PROFILE";
+    input.recoveryEligibility.evaluationTime = "2026-09-10T18:01:00.001Z";
     const certification = certifyFoodCatalogRestore(input);
     assert.equal(certification.restoreVerified, true);
     assert.equal(certification.drReady, false);
@@ -137,7 +153,15 @@ describe("Plan 7 sole final restore certifier", () => {
       target: { restoredTargetIdentitySha256: target },
       restoreVerified: true,
       trusted: true,
-      recoveryEligibility: { artifactValid: true, eligible: true, agePolicyApplied: false, ageMs: 0, reason: "ELIGIBLE_NO_RPO_LIMIT_APPLIED" },
+      recoveryEligibility: {
+        artifactValid: true,
+        eligible: true,
+        agePolicyApplied: false,
+        ageMs: 0,
+        reason: "ELIGIBLE",
+        capturedAt: incomplete.capturedAt,
+        evaluationTime: incomplete.capturedAt,
+      },
       assertions: { failures: [], unknown: [] },
     };
     const integratedEvidence = {
