@@ -7,6 +7,9 @@ export type RecoveryEligibilityInput = Readonly<{
 
 export type RecoveryEligibilityResult = Readonly<{
   artifactValid: boolean;
+  capturedAt: string;
+  evaluationTime: string;
+  maxArtifactAgeMs: number | null;
   eligible: boolean;
   agePolicyApplied: boolean;
   ageMs: number;
@@ -33,15 +36,23 @@ export function evaluateRecoveryEligibility({
   const evaluated = parseInstant(evaluationTime, "evaluationTime");
   const ageMs = evaluated - captured;
   const agePolicyApplied = maxArtifactAgeMs !== undefined;
+  const context = Object.freeze({
+    artifactValid,
+    capturedAt,
+    evaluationTime,
+    maxArtifactAgeMs: maxArtifactAgeMs ?? null,
+    agePolicyApplied,
+    ageMs,
+  });
 
   if (!artifactValid) {
-    return Object.freeze({ artifactValid, eligible: false, agePolicyApplied, ageMs, reason: "ARTIFACT_INVALID" });
+    return Object.freeze({ ...context, eligible: false, reason: "ARTIFACT_INVALID" });
   }
   if (ageMs < 0) {
-    return Object.freeze({ artifactValid, eligible: false, agePolicyApplied, ageMs, reason: "CAPTURE_TIME_IN_FUTURE" });
+    return Object.freeze({ ...context, eligible: false, reason: "CAPTURE_TIME_IN_FUTURE" });
   }
   if (maxArtifactAgeMs !== undefined && ageMs > maxArtifactAgeMs) {
-    return Object.freeze({ artifactValid, eligible: false, agePolicyApplied: true, ageMs, reason: "ARTIFACT_TOO_OLD" });
+    return Object.freeze({ ...context, eligible: false, agePolicyApplied: true, reason: "ARTIFACT_TOO_OLD" });
   }
-  return Object.freeze({ artifactValid, eligible: true, agePolicyApplied, ageMs, reason: "ELIGIBLE" });
+  return Object.freeze({ ...context, eligible: true, reason: "ELIGIBLE" });
 }
