@@ -390,7 +390,7 @@ function restoreReplayLocalReferenceRow({ databaseUrl, relation, stableKey, targ
     const runtimeRow = mappedKitchenId
       ? remapCanonicalRowReferences(canonicalRow, { kitchen_id: mappedKitchenId })
       : canonicalRow;
-    runPsql(databaseUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
+    runPsql(databaseUrl, buildExactRestoreRowSql({ relation, stableKey, targetColumns, canonicalRow: runtimeRow }));
     return;
   }
 
