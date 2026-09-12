@@ -1,17 +1,22 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { REQUIRED_GOLDEN_SEARCH_CASE_IDS } from "../lib/food-catalog/portability/search-restore-verifier.ts";
 
 const SHA40 = /^[0-9a-f]{40}$/u;
+const SHA256 = /^[0-9a-f]{64}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const CURRENT_GENERATION_ID = "71000000-0000-4000-8000-000000000901";
 const STALE_GENERATION_ID = "71000000-0000-4000-8000-000000000903";
 const CURRENT_FOOD_ID = "71000000-0000-4000-8000-000000000101";
 const FIXTURE_OWNER_ID = "71000000-0000-4000-8000-000000000001";
+const GOLDEN_PREFIX = "__PLAN7_GOLDEN__";
+const GOLDEN_SQL = new URL("../supabase/verification/food-catalog-plan7-portability-search-golden-runtime.sql", import.meta.url);
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -33,6 +38,17 @@ function runPsql(databaseUrl, sql) {
   return (result.stdout ?? "").trim();
 }
 
+function runPsqlScript(databaseUrl, sql) {
+  const result = spawnSync("psql", [databaseUrl, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1"], {
+    input: sql,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`Search runtime golden SQL failed: ${(result.stderr ?? "").trim()}`);
+  return result.stdout ?? "";
+}
+
 function jsonQuery(databaseUrl, sql) {
   const text = runPsql(databaseUrl, sql);
   if (!text) throw new Error("Search runtime evidence query returned no JSON.");
@@ -46,7 +62,18 @@ export function buildAuthenticatedSearchSql(searchExpression, userId = FIXTURE_O
   return `WITH plan7_auth_context AS MATERIALIZED (\n  SELECT set_config('request.jwt.claim.sub','${escapedUserId}',true) AS subject\n)\nSELECT (${searchExpression})::text\nFROM plan7_auth_context;`;
 }
 
-export function buildSearchRuntimeEvidence({ headSha, currentGenerationId, currentResult, staleResult, currentRebuild, staleRebuild, documentCounts }) {
+function requireGoldenMatrix(matrix) {
+  const required = [...REQUIRED_GOLDEN_SEARCH_CASE_IDS];
+  if (!matrix || matrix.passed !== true || matrix.caseCount !== required.length) {
+    throw new Error("Restored search golden matrix is missing required cases.");
+  }
+  if (!Array.isArray(matrix.caseIds) || JSON.stringify(matrix.caseIds) !== JSON.stringify(required)) {
+    throw new Error("Restored search golden matrix required-case identity mismatch.");
+  }
+  if (!SHA256.test(String(matrix.resultSha256 ?? ""))) throw new Error("Restored search golden matrix result hash is invalid.");
+}
+
+export function buildSearchRuntimeEvidence({ headSha, currentGenerationId, currentResult, staleResult, currentRebuild, staleRebuild, documentCounts, goldenMatrix }) {
   if (!SHA40.test(headSha)) throw new Error("Search runtime evidence requires an exact head SHA.");
   if (currentGenerationId !== CURRENT_GENERATION_ID) throw new Error("Search runtime evidence is not bound to the expected current generation.");
   const currentItems = Array.isArray(currentResult?.items) ? currentResult.items : [];
@@ -60,8 +87,8 @@ export function buildSearchRuntimeEvidence({ headSha, currentGenerationId, curre
   if (!currentVisible) throw new Error("Canonical V2 search did not return the current-generation fixture Food first.");
   if (!staleGenerationIsolationVerified) throw new Error("Canonical V2 search leaked stale-generation Food into current results.");
   if (!rebuildVerified) throw new Error("Search projection rebuild evidence is incomplete.");
+  requireGoldenMatrix(goldenMatrix);
 
-  const golden = Object.freeze({ currentResult, staleResult });
   return Object.freeze({
     format: "plaivra-food-catalog-restored-search-runtime-evidence",
     version: 1,
@@ -75,7 +102,35 @@ export function buildSearchRuntimeEvidence({ headSha, currentGenerationId, curre
     rebuildVerified: true,
     goldenSearchVerified: true,
     staleGenerationIsolationVerified: true,
-    goldenResultSha256: sha256(stableStringify(golden)),
+    goldenCaseCount: goldenMatrix.caseCount,
+    goldenCaseIds: Object.freeze([...goldenMatrix.caseIds]),
+    goldenMatrixResultSha256: goldenMatrix.resultSha256,
+    goldenResultSha256: sha256(stableStringify({ currentResult, staleResult, goldenMatrixResultSha256: goldenMatrix.resultSha256 })),
+  });
+}
+
+export function captureGoldenSearchMatrix(databaseUrl) {
+  const output = runPsqlScript(databaseUrl, readFileSync(GOLDEN_SQL, "utf8"));
+  const cases = output.split(/\r?\n/u)
+    .filter((line) => line.startsWith(GOLDEN_PREFIX))
+    .map((line) => JSON.parse(line.slice(GOLDEN_PREFIX.length)));
+  const byId = new Map();
+  for (const entry of cases) {
+    if (!entry || typeof entry.id !== "string" || byId.has(entry.id)) throw new Error("Runtime golden matrix emitted malformed or duplicate case evidence.");
+    byId.set(entry.id, entry);
+  }
+  const ordered = REQUIRED_GOLDEN_SEARCH_CASE_IDS.map((id) => {
+    const entry = byId.get(id);
+    if (!entry) throw new Error(`Runtime golden matrix is missing required case ${id}.`);
+    if (entry.passed !== true) throw new Error(`Runtime golden matrix case ${id} failed.`);
+    return entry;
+  });
+  if (cases.length !== ordered.length) throw new Error("Runtime golden matrix emitted unexpected case evidence.");
+  return Object.freeze({
+    passed: true,
+    caseCount: ordered.length,
+    caseIds: Object.freeze(ordered.map((entry) => entry.id)),
+    resultSha256: sha256(stableStringify(ordered)),
   });
 }
 
@@ -91,6 +146,7 @@ export function captureSearchRuntimeEvidence(databaseUrl, headSha) {
     'current',(select count(*) from public.food_catalog_search_documents where generation_id='${CURRENT_GENERATION_ID}'::uuid),
     'stale',(select count(*) from public.food_catalog_search_documents where generation_id='${STALE_GENERATION_ID}'::uuid)
   )::text;`);
+  const goldenMatrix = captureGoldenSearchMatrix(databaseUrl);
   return buildSearchRuntimeEvidence({
     headSha,
     currentGenerationId: pointer,
@@ -99,6 +155,7 @@ export function captureSearchRuntimeEvidence(databaseUrl, headSha) {
     currentRebuild,
     staleRebuild,
     documentCounts: counts,
+    goldenMatrix,
   });
 }
 
