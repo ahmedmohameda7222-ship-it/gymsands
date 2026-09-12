@@ -11,6 +11,11 @@ const CURRENT_FOOD_ID = "71000000-0000-4000-8000-000000000101";
 const STALE_FOOD_ID = "71000000-0000-4000-8000-000000000103";
 const TEMP_FAVORITE_ID = "71000000-0000-4000-8000-000000000f01";
 const CURRENT_GENERATION_ID = "71000000-0000-4000-8000-000000000901";
+const TEMP_SERVICE_PRINCIPAL_ID = "73000000-0000-4000-8000-000000000d10";
+const TEMP_SERVICE_CAPABILITY_ID = "73000000-0000-4000-8000-000000000d11";
+const TEMP_SERVICE_OPERATION_ID = "73000000-0000-4000-8000-000000000d12";
+const TEMP_SERVICE_EVENT_ID = "73000000-0000-4000-8000-000000000d13";
+const TEMP_SERVICE_IDENTITY = "plan7-security-service";
 
 function stableJson(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -138,12 +143,86 @@ select current_setting('plan7.owner_search_ok',true)='true'
   and jsonb_array_length(public.search_food_catalog_v2('','en','Latn','DE',null,20,null,null,'favorites','{}'::jsonb)->'items')=0;
 rollback;`, "personalizedSearchIsolationVerified");
 
+  const authenticatedServiceOnlyDenied = booleanEvidence(databaseUrl, `begin;
+set local role authenticated;
+select set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub','${OWNER_ID}')::text,true);
+do $plan7_authenticated_service_only$
+begin
+  begin
+    perform public.food_catalog_claim_governance_outbox('${TEMP_SERVICE_EVENT_ID}'::uuid,30);
+    raise exception 'Plan7 authenticated service-only outbox execution unexpectedly succeeded';
+  exception when insufficient_privilege then
+    perform set_config('plan7.authenticated_service_only_denied','true',true);
+  end;
+end
+$plan7_authenticated_service_only$;
+select current_setting('plan7.authenticated_service_only_denied',true)='true';
+rollback;`, "authenticatedServiceOnlyDenied");
+
+  const anonUnauthorizedVerified = booleanEvidence(databaseUrl, `begin;
+set local role anon;
+select set_config('request.jwt.claims',jsonb_build_object('role','anon')::text,true);
+do $plan7_anon$
+begin
+  begin
+    perform public.search_food_catalog_v2('','en','Latn','DE',null,20,null,null,'all','{}'::jsonb);
+    raise exception 'Plan7 anon Food Catalog search execution unexpectedly succeeded';
+  exception when insufficient_privilege then
+    perform set_config('plan7.anon_unauthorized','true',true);
+  end;
+end
+$plan7_anon$;
+select current_setting('plan7.anon_unauthorized',true)='true';
+rollback;`, "anonUnauthorizedVerified");
+
+  const serviceOutboxAuthorizedVerified = booleanEvidence(databaseUrl, `begin;
+insert into public.food_catalog_governance_principals(
+  id,principal_type,subject_id,service_identity_sha256,role_class,active,created_at
+) values(
+  '${TEMP_SERVICE_PRINCIPAL_ID}'::uuid,'service','plan7-security-service',
+  encode(extensions.digest(convert_to('${TEMP_SERVICE_IDENTITY}','UTF8'),'sha256'),'hex'),
+  'service',true,'2026-09-10T18:32:00Z'
+);
+insert into public.food_catalog_governance_capability_assignments(
+  id,principal_id,capability,granted_at,reason
+) values(
+  '${TEMP_SERVICE_CAPABILITY_ID}'::uuid,'${TEMP_SERVICE_PRINCIPAL_ID}'::uuid,
+  'food.outbox.deliver','2026-09-10T18:32:01Z','plan7 behavioral security proof'
+);
+insert into public.food_catalog_governance_operations(
+  operation_id,principal_id,principal_type,capability,command_name,target_food_id,policy_version,
+  reason,semantic_checksum_sha256,result_json,replay_count,created_at,completed_at
+) values(
+  '${TEMP_SERVICE_OPERATION_ID}'::uuid,'${TEMP_SERVICE_PRINCIPAL_ID}'::uuid,'service',
+  'food.outbox.deliver','food_catalog_outbox_deliver','${CURRENT_FOOD_ID}'::uuid,'plan6-v1',
+  'plan7 behavioral security proof',repeat('9',64),'{}'::jsonb,0,'2026-09-10T18:32:02Z','2026-09-10T18:32:03Z'
+);
+insert into public.food_catalog_governance_outbox(
+  event_id,operation_id,event_type,payload,status,attempt_count,available_at,lease_epoch,created_at,updated_at
+) values(
+  '${TEMP_SERVICE_EVENT_ID}'::uuid,'${TEMP_SERVICE_OPERATION_ID}'::uuid,'food.catalog.security.proof',
+  jsonb_build_object('foodId','${CURRENT_FOOD_ID}'),'pending',0,'2026-09-10T18:32:04Z',0,
+  '2026-09-10T18:32:04Z','2026-09-10T18:32:04Z'
+);
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+select set_config('request.jwt.claims',jsonb_build_object(
+  'role','service_role','plaivra_food_service_identity','${TEMP_SERVICE_IDENTITY}'
+)::text,true);
+select (
+  public.food_catalog_claim_governance_outbox('${TEMP_SERVICE_EVENT_ID}'::uuid,30)->>'eventId'
+)='${TEMP_SERVICE_EVENT_ID}';
+rollback;`, "serviceOutboxAuthorizedVerified");
+
   return Object.freeze({
     ownerScopedReadVerified,
     wrongOwnerReadDenied,
     ownMutationAllowed,
     wrongOwnerMutationDenied,
     personalizedSearchIsolationVerified,
+    authenticatedServiceOnlyDenied,
+    anonUnauthorizedVerified,
+    serviceOutboxAuthorizedVerified,
   });
 }
 
@@ -170,17 +249,28 @@ export function evaluateFoodCatalogSecurityEvidence(observed) {
     "ownMutationAllowed",
     "wrongOwnerMutationDenied",
     "personalizedSearchIsolationVerified",
+    "authenticatedServiceOnlyDenied",
+    "anonUnauthorizedVerified",
+    "serviceOutboxAuthorizedVerified",
   ];
   for (const name of requiredBehavioral) {
     if (behavioral[name] !== true) throw new Error(`Food Catalog behavioral owner-isolation boundary failed: ${name}.`);
   }
+  const metadata = {
+    relations: observed.relations,
+    policies: observed.policies,
+    privileges: observed.privileges,
+    critical,
+  };
+  const securityRlsAclMetadataIdentitySha256 = sha256(stableJson(metadata));
+  const securityBehavioralIdentitySha256 = sha256(stableJson(behavioral));
   return Object.freeze({
     securityRlsAclIdentitySha256: sha256(stableJson({
-      relations: observed.relations,
-      policies: observed.policies,
-      privileges: observed.privileges,
-      behavioral,
+      metadataIdentitySha256: securityRlsAclMetadataIdentitySha256,
+      behavioralIdentitySha256: securityBehavioralIdentitySha256,
     })),
+    securityRlsAclMetadataIdentitySha256,
+    securityBehavioralIdentitySha256,
     relationCount: observed.relations.length,
     policyCount: observed.policies.length,
     privilegeCount: observed.privileges.length,
