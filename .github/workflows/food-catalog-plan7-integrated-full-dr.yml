@@ -102,6 +102,40 @@ jobs:
           psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
             -c "select status='processing' and claim_owner='plan7-source-worker' and claim_principal_id='71000000-0000-4000-8000-000000000d10'::uuid and lease_token='71000000-0000-4000-8000-000000000d14'::uuid and lease_epoch=9 and attempt_count=4 and last_error is null and delivered_at is null from public.food_catalog_governance_outbox where event_id='71000000-0000-4000-8000-000000000d13'::uuid" | grep '^t$'
 
+      - name: Prove pre-pointer semantic corruption blocks activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          pointer_before="$(psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -c "select current_generation_id::text || '|' || pointer_revision::text from public.food_catalog_current_generation where singleton_key=true")"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { buildPrePointerVerificationSql } from './lib/food-catalog/portability/restore-assertions.ts';
+          const sql = buildPrePointerVerificationSql({
+            currentGenerationId: '71000000-0000-4000-8000-000000000903',
+            currentEventId: '71000000-0000-4000-8000-000000000921',
+            currentValidationReportId: '71000000-0000-4000-8000-000000000911',
+            transientRules: [
+              { relation: 'food_ingestion_runs', fields: ['lease_owner','lease_token','lease_expires_at'] },
+              { relation: 'food_catalog_governance_outbox', fields: ['claim_owner','claim_principal_id','lease_token','lease_acquired_at','lease_expires_at'] },
+            ],
+          });
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'plan7-corrupt-prepointer.sql'), `${sql}\n`, 'utf8');
+          NODE
+          if psql "$PLAN7_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f "$RUNNER_TEMP/plan7-corrupt-prepointer.sql" \
+            > "$RUNNER_TEMP/plan7-corrupt-prepointer.out" \
+            2> "$RUNNER_TEMP/plan7-corrupt-prepointer.err"; then
+            echo "Semantic corruption unexpectedly passed the pre-pointer gate." >&2
+            exit 1
+          fi
+          grep -q 'Plan7 validation report/checksum/blocker gate failed' "$RUNNER_TEMP/plan7-corrupt-prepointer.err"
+          pointer_after="$(psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -c "select current_generation_id::text || '|' || pointer_revision::text from public.food_catalog_current_generation where singleton_key=true")"
+          test "$pointer_after" = "$pointer_before"
+          test "$pointer_after" = "71000000-0000-4000-8000-000000000901|1"
+
       - name: Capture source RLS ACL identity
         shell: bash
         run: |
