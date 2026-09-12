@@ -206,9 +206,10 @@ describe("Plan 7 disposable restore CLI primitives", () => {
     }), /enabled/i);
   });
 
-  it("requires an explicit disposable-target acknowledgement and rejects provider production hosts", () => {
+  it("requires explicit acknowledgement while authorizing only loopback certification targets", () => {
     assert.throws(() => assertDisposableRestoreTarget("postgresql://localhost:5432/restore", false), /disposable/i);
-    assert.throws(() => assertDisposableRestoreTarget("postgresql://project.supabase.co:5432/postgres", true), /production|provider/i);
+    assert.throws(() => assertDisposableRestoreTarget("postgresql://project.supabase.co:5432/postgres", true), /loopback|remote|forbidden/i);
+    assert.throws(() => assertDisposableRestoreTarget("postgresql://staging.internal.example:5432/restore", true), /loopback|remote|forbidden/i);
     assert.doesNotThrow(() => assertDisposableRestoreTarget("postgresql://127.0.0.1:55432/restore", true));
   });
 
