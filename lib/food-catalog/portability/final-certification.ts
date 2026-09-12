@@ -37,6 +37,14 @@ export type LinkedSearchEvidence = {
   staleGenerationIsolationVerified: boolean;
 };
 
+export type RecoveryEligibilityEvidence = Readonly<{
+  artifactValid: boolean;
+  eligible: boolean;
+  agePolicyApplied: boolean;
+  ageMs: number;
+  reason: string;
+}>;
+
 export type FinalRestoreCertificationInput = {
   profile: PortableExportProfile;
   headSha: string;
@@ -44,6 +52,7 @@ export type FinalRestoreCertificationInput = {
   snapshotBoundarySha256: string;
   restoredTargetIdentitySha256: string;
   canonicalProfileVerified: boolean;
+  recoveryEligibility?: RecoveryEligibilityEvidence;
   restore: LinkedRestoreEvidence;
   protected: LinkedProtectedEvidence;
   search: LinkedSearchEvidence;
@@ -62,6 +71,7 @@ export type FinalRestoreCertification = Readonly<{
   trusted: true;
   protectedSegmentsVerified: boolean;
   searchVerified: true;
+  recoveryEligible: boolean;
   drReady: boolean;
 }>;
 
@@ -102,6 +112,12 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
     throw new Error("FULL_DR final certification requires authenticated protected-segment verification.");
   }
 
+  const recoveryEligible = input.recoveryEligibility?.artifactValid === true
+    && input.recoveryEligibility?.eligible === true;
+  if (input.profile === "FULL_DR" && !recoveryEligible) {
+    throw new Error("FULL_DR final certification requires an explicit eligible recovery/RPO decision from the restore report.");
+  }
+
   return Object.freeze({
     certificationVersion: 1,
     profile: input.profile,
@@ -115,6 +131,7 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
     trusted: true,
     protectedSegmentsVerified: input.profile === "FULL_DR" ? true : false,
     searchVerified: true,
-    drReady: input.profile === "FULL_DR",
+    recoveryEligible,
+    drReady: input.profile === "FULL_DR" && recoveryEligible,
   });
 }
