@@ -81,4 +81,47 @@ describe("Plan 7 authoritative export CLI SQL program", () => {
     assert.equal(prepared.lease_epoch.text, "3");
     assert.equal(values.lease_owner.text, "plan7-worker", "preparation must not mutate the source envelope");
   });
+
+  it("converts active outbox processing claims into non-resumable portable state before hashing", async () => {
+    const exporter = await import("./export-food-catalog-portable.mjs");
+    const values = {
+      event_id: { pgType: "uuid", text: "71000000-0000-4000-8000-000000000d11" },
+      status: { pgType: "text", text: "processing" },
+      claim_owner: { pgType: "text", text: "plan7-outbox-worker" },
+      claim_principal_id: { pgType: "uuid", text: "71000000-0000-4000-8000-000000000002" },
+      lease_token: { pgType: "uuid", text: "71000000-0000-4000-8000-000000000d12" },
+      lease_epoch: { pgType: "int8", text: "7" },
+      lease_acquired_at: { pgType: "timestamptz", text: "2026-09-10 18:30:00+00" },
+      lease_expires_at: { pgType: "timestamptz", text: "2026-09-10 18:35:00+00" },
+    };
+    const rule = {
+      relation: "food_catalog_governance_outbox",
+      stableKey: ["event_id"],
+      sourceTransientNeutralize: [
+        "claim_owner",
+        "claim_principal_id",
+        "lease_token",
+        "lease_acquired_at",
+        "lease_expires_at",
+      ],
+      transientStateNeutralize: [{ column: "status", from: "processing", to: "failed" }],
+    };
+    const prepared = exporter.prepareSourcePortableValues(values, rule);
+    assert.equal(prepared.status.text, "failed");
+    for (const column of rule.sourceTransientNeutralize) assert.equal(prepared[column].text, null);
+    assert.equal(prepared.lease_epoch.text, "7");
+    assert.equal(values.status.text, "processing", "portable preparation must not mutate source state");
+
+    const pending = exporter.prepareSourcePortableValues({
+      ...values,
+      status: { pgType: "text", text: "pending" },
+      claim_owner: { pgType: "text", text: null },
+      claim_principal_id: { pgType: "uuid", text: null },
+      lease_token: { pgType: "uuid", text: null },
+      lease_acquired_at: { pgType: "timestamptz", text: null },
+      lease_expires_at: { pgType: "timestamptz", text: null },
+    }, rule);
+    assert.equal(pending.status.text, "pending", "non-processing outbox history must not be rewritten");
+    assert.equal(pending.lease_epoch.text, "7");
+  });
 });
