@@ -43,43 +43,49 @@ function baseInput(profile = "FULL_DR") {
     assertions: {
       evidence: passingAssertions(),
     },
-    recoveryEligibility: {
-      artifactValid: true,
-      eligible: true,
-      agePolicyApplied: true,
-      ageMs: 60_000,
-      reason: "ELIGIBLE",
+    recoveryEvaluation: {
+      evaluationTime: "2026-09-10T18:01:00.000Z",
+      maxArtifactAgeMs: 60_000,
     },
   };
 }
 
 describe("Plan 7 restore verification report", () => {
-  it("derives trusted restore verification from the complete mandatory assertion set", () => {
+  it("derives trusted restore verification and canonical recovery eligibility", () => {
     const report = buildFoodCatalogRestoreVerificationReportV1(baseInput());
     assert.equal(report.reportVersion, 2);
     assert.equal(report.profile, "FULL_DR");
     assert.equal(report.restoreVerified, true);
     assert.equal(report.trusted, true);
     assert.equal(report.recoveryEligible, true);
+    assert.equal(report.recoveryEligibility.ageMs, 60_000);
+    assert.equal(report.recoveryEligibility.reason, "ELIGIBLE");
     assert.equal(report.artifact.snapshotBoundarySha256, hash("b"));
     assert.equal(report.target.postgresVersion, "17.11");
     assert.equal(report.assertions.unknown.length, 0);
     assert.equal(Object.hasOwn(report, "drReady"), false);
   });
 
-  it("does not erase a verified restore when an explicit RPO policy rejects artifact age", () => {
-    const input = baseInput();
-    input.recoveryEligibility = {
-      artifactValid: true,
-      eligible: false,
-      agePolicyApplied: true,
-      ageMs: 86_400_000,
-      reason: "ARTIFACT_TOO_OLD",
-    };
-    const report = buildFoodCatalogRestoreVerificationReportV1(input);
+  it("uses exact-threshold inclusive semantics and rejects one millisecond over", () => {
+    const exact = buildFoodCatalogRestoreVerificationReportV1(baseInput());
+    assert.equal(exact.recoveryEligibility.eligible, true);
+
+    const over = baseInput();
+    over.recoveryEvaluation.evaluationTime = "2026-09-10T18:01:00.001Z";
+    const report = buildFoodCatalogRestoreVerificationReportV1(over);
     assert.equal(report.restoreVerified, true);
     assert.equal(report.recoveryEligible, false);
+    assert.equal(report.recoveryEligibility.reason, "ARTIFACT_TOO_OLD");
     assert.equal(report.readyForRecovery, false);
+  });
+
+  it("ignores caller-supplied fake eligible=true and rejects future capture time", () => {
+    const input = baseInput();
+    input.recoveryEligibility = { eligible: true, reason: "FORGED" };
+    input.recoveryEvaluation = { evaluationTime: "2026-09-10T17:59:59.999Z" };
+    const report = buildFoodCatalogRestoreVerificationReportV1(input);
+    assert.equal(report.recoveryEligible, false);
+    assert.equal(report.recoveryEligibility.reason, "CAPTURE_TIME_IN_FUTURE");
   });
 
   it("does not accept caller trusted/restoreVerified/drReady booleans as evidence", () => {
