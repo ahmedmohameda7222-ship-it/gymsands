@@ -36,8 +36,6 @@ function manifest() {
     semanticRootSha256: "",
     certification: { artifactValid: false, restoreVerified: false, drReady: false },
   };
-  // This synthetic manifest is not canonical-profile complete, so buildFinalCertificationInput
-  // validation is exercised separately through the pure final-certifier input below.
   value.semanticRootSha256 = computeManifestSemanticRoot(value);
   return value;
 }
@@ -50,6 +48,13 @@ function linkedInput() {
     snapshotBoundarySha256: "f".repeat(64),
     restoredTargetIdentitySha256: target,
     canonicalProfileVerified: true,
+    recoveryEligibility: {
+      artifactValid: true,
+      eligible: true,
+      agePolicyApplied: true,
+      ageMs: 60_000,
+      reason: "ELIGIBLE_WITHIN_CALLER_RPO",
+    },
     restore: {
       headSha: head,
       profile: "FULL_DR",
@@ -77,12 +82,13 @@ function linkedInput() {
 }
 
 describe("Plan 7 sole final restore certifier", () => {
-  it("is the only authority allowed to produce FULL_DR drReady after all linked evidence passes", () => {
+  it("is the only authority allowed to produce FULL_DR drReady after all linked evidence and caller recovery policy pass", () => {
     const certification = certifyFoodCatalogRestore(linkedInput());
     assert.equal(certification.restoreVerified, true);
     assert.equal(certification.trusted, true);
     assert.equal(certification.protectedSegmentsVerified, true);
     assert.equal(certification.searchVerified, true);
+    assert.equal(certification.recoveryEligible, true);
     assert.equal(certification.drReady, true);
   });
 
@@ -100,10 +106,23 @@ describe("Plan 7 sole final restore certifier", () => {
     assert.throws(() => certifyFoodCatalogRestore(searchMismatch), /search|restored target/i);
   });
 
+  it("requires explicit caller-supplied recovery eligibility before FULL_DR can become DR-ready", () => {
+    const ineligible = linkedInput();
+    ineligible.recoveryEligibility.eligible = false;
+    ineligible.recoveryEligibility.reason = "INELIGIBLE_CALLER_RPO_EXCEEDED";
+    assert.throws(() => certifyFoodCatalogRestore(ineligible), /recovery|eligib|RPO/i);
+
+    const missing = linkedInput();
+    delete missing.recoveryEligibility;
+    assert.throws(() => certifyFoodCatalogRestore(missing), /recovery|eligib|RPO/i);
+  });
+
   it("never marks CORE_PORTABLE as DR-ready", () => {
     const input = linkedInput();
     input.profile = "CORE_PORTABLE";
     input.restore.profile = "CORE_PORTABLE";
+    input.recoveryEligibility.eligible = false;
+    input.recoveryEligibility.reason = "CORE_PORTABLE_NOT_DR_PROFILE";
     const certification = certifyFoodCatalogRestore(input);
     assert.equal(certification.restoreVerified, true);
     assert.equal(certification.drReady, false);
@@ -118,6 +137,7 @@ describe("Plan 7 sole final restore certifier", () => {
       target: { restoredTargetIdentitySha256: target },
       restoreVerified: true,
       trusted: true,
+      recoveryEligibility: { artifactValid: true, eligible: true, agePolicyApplied: false, ageMs: 0, reason: "ELIGIBLE_NO_RPO_LIMIT_APPLIED" },
       assertions: { failures: [], unknown: [] },
     };
     const integratedEvidence = {

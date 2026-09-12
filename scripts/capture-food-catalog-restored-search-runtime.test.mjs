@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { REQUIRED_GOLDEN_SEARCH_CASE_IDS } from "../lib/food-catalog/portability/search-restore-verifier.ts";
 import {
   buildAuthenticatedSearchSql,
   buildSearchRuntimeEvidence,
@@ -19,6 +20,12 @@ function passing() {
     currentRebuild: { documentCount: 1, projectionChecksumSha256: "b".repeat(64) },
     staleRebuild: { documentCount: 1, projectionChecksumSha256: "c".repeat(64) },
     documentCounts: { current: 1, stale: 1 },
+    goldenMatrix: {
+      passed: true,
+      caseCount: REQUIRED_GOLDEN_SEARCH_CASE_IDS.length,
+      caseIds: [...REQUIRED_GOLDEN_SEARCH_CASE_IDS],
+      resultSha256: "d".repeat(64),
+    },
   };
 }
 
@@ -31,13 +38,16 @@ describe("Plan 7 same-restored-target search evidence", () => {
     assert.throws(() => buildAuthenticatedSearchSql("public.search_food_catalog_v2('Chicken')", "not-a-uuid"), /UUID/i);
   });
 
-  it("binds deterministic search proof to the exact current generation without owning DR readiness", () => {
+  it("binds deterministic search proof to the exact current generation and the executed full golden matrix without owning DR readiness", () => {
     const evidence = buildSearchRuntimeEvidence(passing());
     assert.equal(evidence.headSha, head);
     assert.equal(evidence.currentGenerationId, currentGenerationId);
     assert.equal(evidence.rebuildVerified, true);
     assert.equal(evidence.goldenSearchVerified, true);
     assert.equal(evidence.staleGenerationIsolationVerified, true);
+    assert.equal(evidence.goldenCaseCount, REQUIRED_GOLDEN_SEARCH_CASE_IDS.length);
+    assert.deepEqual(evidence.goldenCaseIds, [...REQUIRED_GOLDEN_SEARCH_CASE_IDS]);
+    assert.equal(evidence.goldenMatrixResultSha256, "d".repeat(64));
     assert.match(evidence.goldenResultSha256, /^[0-9a-f]{64}$/);
     assert.equal(Object.hasOwn(evidence, "drReady"), false);
   });
@@ -52,9 +62,14 @@ describe("Plan 7 same-restored-target search evidence", () => {
     assert.throws(() => buildSearchRuntimeEvidence(leaked), /stale|generation/i);
   });
 
-  it("fails closed when projection rebuild evidence is absent", () => {
+  it("fails closed when projection rebuild or any required runtime golden case is absent", () => {
     const incomplete = passing();
     incomplete.documentCounts.current = 0;
     assert.throws(() => buildSearchRuntimeEvidence(incomplete), /rebuild|projection/i);
+
+    const missingCase = passing();
+    missingCase.goldenMatrix.caseCount -= 1;
+    missingCase.goldenMatrix.caseIds = missingCase.goldenMatrix.caseIds.slice(0, -1);
+    assert.throws(() => buildSearchRuntimeEvidence(missingCase), /golden|matrix|required/i);
   });
 });

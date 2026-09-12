@@ -82,7 +82,7 @@ describe("Plan 7 authoritative export CLI SQL program", () => {
     assert.equal(values.lease_owner.text, "plan7-worker", "preparation must not mutate the source envelope");
   });
 
-  it("neutralizes active outbox claim material before canonical hashing without erasing durable fencing", async () => {
+  it("maps a source processing outbox row to portable pending state while preserving durable delivery history and source authority", async () => {
     const exporter = await import("./export-food-catalog-portable.mjs");
     const transientClaims = [
       "claim_owner",
@@ -94,6 +94,7 @@ describe("Plan 7 authoritative export CLI SQL program", () => {
     const values = {
       event_id: { pgType: "uuid", text: "71000000-0000-4000-8000-000000000d11" },
       status: { pgType: "text", text: "processing" },
+      attempt_count: { pgType: "int4", text: "4" },
       claim_owner: { pgType: "text", text: "plan7-outbox-worker" },
       claim_principal_id: { pgType: "uuid", text: "71000000-0000-4000-8000-000000000002" },
       lease_token: { pgType: "uuid", text: "71000000-0000-4000-8000-000000000d12" },
@@ -105,9 +106,13 @@ describe("Plan 7 authoritative export CLI SQL program", () => {
       relation: "food_catalog_governance_outbox",
       stableKey: ["event_id"],
       sourceTransientNeutralize: transientClaims,
+      sourceValueTransitions: [{ column: "status", from: "processing", to: "pending" }],
     });
     for (const column of transientClaims) assert.equal(prepared[column].text, null);
+    assert.equal(prepared.status.text, "pending");
     assert.equal(prepared.lease_epoch.text, "7");
-    assert.equal(values.claim_owner.text, "plan7-outbox-worker", "portable preparation must not mutate source state");
+    assert.equal(prepared.attempt_count.text, "4");
+    assert.equal(values.status.text, "processing", "portable preparation must not mutate source status");
+    assert.equal(values.claim_owner.text, "plan7-outbox-worker", "portable preparation must not mutate source claim authority");
   });
 });

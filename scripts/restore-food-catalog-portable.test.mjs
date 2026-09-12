@@ -8,6 +8,7 @@ import {
   buildExactRestoreRowSql,
   buildFoodItemsUpdatedAtTriggerWindowSql,
   buildFoodItemsVerificationConstraintWindowSql,
+  buildPrePointerVerificationSql,
   buildPreseedValidationSql,
   buildReplayLocalSystemKitchenLookupSql,
   buildReplayLocalSystemSubcategoryLookupSql,
@@ -65,6 +66,37 @@ describe("Plan 7 disposable restore CLI primitives", () => {
     });
     assert.match(sql, /SELECT|PERFORM|IF/i);
     assert.doesNotMatch(sql, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bUPSERT\b/i);
+  });
+
+  it("keeps the current-generation pointer unavailable until semantic generation, policy, graph, transient, owner and security preflight passes", () => {
+    const sql = buildPrePointerVerificationSql({
+      currentGenerationId: "71000000-0000-4000-8000-000000000901",
+      currentEventId: "71000000-0000-4000-8000-000000000921",
+      currentValidationReportId: "71000000-0000-4000-8000-000000000911",
+      transientRules: [
+        { relation: "food_ingestion_runs", fields: ["lease_owner", "lease_token", "lease_acquired_at", "lease_heartbeat_at", "lease_expires_at"] },
+        { relation: "food_catalog_governance_outbox", fields: ["claim_owner", "claim_principal_id", "lease_token", "lease_acquired_at", "lease_expires_at"] },
+      ],
+    });
+    for (const fragment of [
+      "food_catalog_generation_foods",
+      "food_catalog_generation_validation_reports",
+      "food_catalog_generation_events",
+      "food_catalog_governance_policy_pointer",
+      "WITH RECURSIVE",
+      "food_catalog_generation_redirects",
+      "food_catalog_governance_principals",
+      "account_access_states",
+      "pg_policies",
+      "food_ingestion_runs",
+      "food_catalog_governance_outbox",
+    ]) assert.ok(sql.includes(fragment), `Expected pre-pointer SQL to contain ${fragment}`);
+    assert.match(sql, /generation_checksum_sha256/i);
+    assert.match(sql, /blocker_count\s*=\s*0/i);
+    assert.match(sql, /error_count\s*=\s*0/i);
+    assert.match(sql, /lease_owner IS NOT NULL/i);
+    assert.match(sql, /claim_owner IS NOT NULL/i);
+    assert.doesNotMatch(sql, /UPDATE\s+public\.food_catalog_current_generation/i);
   });
 
   it("treats release-schema applied_at as migration replay-time metadata while still validating version and marker", () => {
