@@ -77,6 +77,10 @@ function linkedInput() {
       goldenSearchVerified: true,
       staleGenerationIsolationVerified: true,
     },
+    security: {
+      securityRlsAclIdentitySha256: "9".repeat(64),
+      verified: true,
+    },
   };
 }
 
@@ -87,12 +91,13 @@ describe("Plan 7 sole final restore certifier", () => {
     assert.equal(certification.trusted, true);
     assert.equal(certification.protectedSegmentsVerified, true);
     assert.equal(certification.searchVerified, true);
+    assert.equal(certification.securityVerified, true);
     assert.equal(certification.recoveryEligibility.reason, "ELIGIBLE");
     assert.equal(certification.recoveryEligible, true);
     assert.equal(certification.drReady, true);
   });
 
-  it("fails closed on artifact-root, target-identity, or same-target search mismatch", () => {
+  it("fails closed on artifact-root, target-identity, same-target search, or unverified security", () => {
     const rootMismatch = linkedInput();
     rootMismatch.search.artifactSemanticRootSha256 = "0".repeat(64);
     assert.throws(() => certifyFoodCatalogRestore(rootMismatch), /linked|root|mismatch/i);
@@ -104,6 +109,10 @@ describe("Plan 7 sole final restore certifier", () => {
     const searchMismatch = linkedInput();
     searchMismatch.search.sameRestoredTargetVerified = false;
     assert.throws(() => certifyFoodCatalogRestore(searchMismatch), /search|restored target/i);
+
+    const securityMismatch = linkedInput();
+    securityMismatch.security.verified = false;
+    assert.throws(() => certifyFoodCatalogRestore(securityMismatch), /security|RLS|ACL|behavioral/i);
   });
 
   it("does not let a caller-supplied eligible=true override the canonical age policy", () => {
@@ -166,6 +175,8 @@ describe("Plan 7 sole final restore certifier", () => {
       snapshotBoundarySha256: incomplete.snapshotBoundary.sha256,
       restoredTargetIdentitySha256: target,
       protectedSegmentsVerified: true,
+      securityRlsAclIdentitySha256: "9".repeat(64),
+      assertionEvaluation: { trusted: true, restoreVerified: true },
       search: { sameRestoredTargetVerified: true, rebuildVerified: true, goldenSearchVerified: true, staleGenerationIsolationVerified: true },
     };
     assert.throws(() => buildFinalCertificationInput({ manifest: incomplete, restoreReport, integratedEvidence, expectedHead: head }), /mandatory|segment|profile|canonical/i);
