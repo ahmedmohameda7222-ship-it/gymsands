@@ -89,12 +89,10 @@ describe("Plan 7 sole final DR-ready authority", () => {
       snapshotBoundarySha256: "c".repeat(64),
       restoredTargetIdentitySha256: "d".repeat(64),
       canonicalProfileVerified: true,
-      recoveryEligibility: {
-        artifactValid: true,
-        eligible: profile === "FULL_DR",
-        agePolicyApplied: false,
-        ageMs: 0,
-        reason: profile === "FULL_DR" ? "ELIGIBLE_NO_RPO_LIMIT_APPLIED" : "CORE_PORTABLE_NOT_DR_PROFILE",
+      recoveryEvaluation: {
+        capturedAt: "2026-09-10T20:00:00.000Z",
+        evaluationTime: "2026-09-10T20:01:00.000Z",
+        maxArtifactAgeMs: 60_000,
       },
       restore: {
         headSha: HEAD,
@@ -126,8 +124,9 @@ describe("Plan 7 sole final DR-ready authority", () => {
     };
   }
 
-  it("allows DR readiness only when all linked restore/search/protected and recovery evidence agrees", () => {
+  it("allows DR readiness only when all linked restore/search/protected and canonical recovery evidence agrees", () => {
     const result = certifyFoodCatalogRestore(linkedInput());
+    expect(result.recoveryEligibility?.reason).toBe("ELIGIBLE");
     expect(result.recoveryEligible).toBe(true);
     expect(result.drReady).toBe(true);
   });
@@ -138,24 +137,28 @@ describe("Plan 7 sole final DR-ready authority", () => {
     expect(() => certifyFoodCatalogRestore(input)).toThrow(/semantic root|linked/i);
   });
 
-  it("fails closed when FULL_DR recovery eligibility is missing or ineligible", () => {
+  it("fails closed when FULL_DR recovery evaluation is missing or one millisecond over", () => {
     const missing = linkedInput();
-    delete missing.recoveryEligibility;
+    delete missing.recoveryEvaluation;
     expect(() => certifyFoodCatalogRestore(missing)).toThrow(/recovery|eligib|RPO/i);
 
     const ineligible = linkedInput();
-    ineligible.recoveryEligibility = {
-      artifactValid: true,
-      eligible: false,
-      agePolicyApplied: true,
-      ageMs: 3_600_000,
-      reason: "INELIGIBLE_CALLER_RPO_EXCEEDED",
+    ineligible.recoveryEvaluation = {
+      capturedAt: "2026-09-10T20:00:00.000Z",
+      evaluationTime: "2026-09-10T20:01:00.001Z",
+      maxArtifactAgeMs: 60_000,
     };
     expect(() => certifyFoodCatalogRestore(ineligible)).toThrow(/recovery|eligib|RPO/i);
   });
 
   it("does not let CORE_PORTABLE become DR-ready", () => {
-    const result = certifyFoodCatalogRestore(linkedInput("CORE_PORTABLE"));
+    const input = linkedInput("CORE_PORTABLE");
+    input.recoveryEvaluation = {
+      capturedAt: "2026-09-10T20:00:00.000Z",
+      evaluationTime: "2026-09-10T20:01:00.001Z",
+      maxArtifactAgeMs: 60_000,
+    };
+    const result = certifyFoodCatalogRestore(input);
     expect(result.trusted).toBe(true);
     expect(result.recoveryEligible).toBe(false);
     expect(result.drReady).toBe(false);
