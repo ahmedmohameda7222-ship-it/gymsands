@@ -39,6 +39,8 @@
 \set ingestion_reconciliation '71000000-0000-4000-8000-000000000a13'
 \set override_revision '71000000-0000-4000-8000-000000000b01'
 \set override_operation '71000000-0000-4000-8000-000000000b11'
+\set personal_correction '71000000-0000-4000-8000-000000000b21'
+\set favorite '71000000-0000-4000-8000-000000000b31'
 \set serving_lineage '71000000-0000-4000-8000-000000000c01'
 \set name_lineage '71000000-0000-4000-8000-000000000c11'
 
@@ -235,7 +237,7 @@ insert into public.food_ingestion_runs(
   '2026-09-10T18:20:00Z','2026-09-10T18:20:30Z','2026-09-10T19:20:00Z'
 );
 
--- Protected FULL_DR authority: live human binding, runtime policy extension, lineage, and personal override.
+-- Protected FULL_DR authority: live human binding, runtime policy extension, lineage, and personal state.
 insert into public.food_catalog_governance_principals(
   id,principal_type,subject_id,role_class,active,created_at
 ) values(:'owner_principal','human',:'owner_uid','owner',true,'2026-09-10T18:21:00Z');
@@ -272,6 +274,16 @@ insert into public.food_personal_override_operations(
   '2026-09-10T18:25:00Z','2026-09-10T18:25:00Z'
 );
 
+-- Current owner Food state remains backup authority until Workstream 2 explicitly migrates/retires it.
+insert into public.food_personal_corrections(
+  id,user_id,food_id,protein_g,note,is_active,created_at,updated_at
+) values(
+  :'personal_correction',:'owner_uid',:'food_current',33.25,'private-plan7-correction',true,
+  '2026-09-10T18:25:30Z','2026-09-10T18:25:30Z'
+);
+insert into public.food_favorites(id,user_id,food_id,created_at)
+values(:'favorite',:'owner_uid',:'food_current','2026-09-10T18:25:40Z');
+
 -- Fixture self-checks are part of the source proof, not certification.
 -- psql variables are intentionally not used inside this dollar-quoted block: psql
 -- does not interpolate :'name' tokens inside dollar-quoted PL/pgSQL bodies.
@@ -297,6 +309,20 @@ begin
       and revision.note='private-plan7-note'
   ) then
     raise exception 'Plan7 source fixture protected personal authority is missing.';
+  end if;
+  if not exists(
+    select 1 from public.food_personal_corrections
+    where id='71000000-0000-4000-8000-000000000b21'::uuid
+      and user_id='71000000-0000-4000-8000-000000000001'::uuid
+      and food_id='71000000-0000-4000-8000-000000000101'::uuid
+      and protein_g=33.25 and is_active
+  ) or not exists(
+    select 1 from public.food_favorites
+    where id='71000000-0000-4000-8000-000000000b31'::uuid
+      and user_id='71000000-0000-4000-8000-000000000001'::uuid
+      and food_id='71000000-0000-4000-8000-000000000101'::uuid
+  ) then
+    raise exception 'Plan7 source fixture current owner Food state is missing.';
   end if;
   if not exists(
     select 1
