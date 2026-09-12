@@ -30,6 +30,8 @@ export const MANDATORY_RESTORE_ASSERTION_IDS = Object.freeze([
   "transient_neutralization",
 ] as const);
 
+const MANDATORY_RESTORE_ASSERTION_ID_SET = new Set<string>(MANDATORY_RESTORE_ASSERTION_IDS);
+
 const COMPARISON_CLASSES: readonly RestoreComparisonClass[] = Object.freeze([
   "BYTE_HASH",
   "EXACT_IDENTITY_VALUE",
@@ -58,9 +60,10 @@ export function evaluateRestoreAssertions(input: Readonly<{
     byId.set(assertion.id, assertion);
   }
 
+  const isCanonicalMandatory = (assertion: RestoreAssertionEvidence) => MANDATORY_RESTORE_ASSERTION_ID_SET.has(assertion.id);
   const missing = MANDATORY_RESTORE_ASSERTION_IDS.filter((id) => !byId.has(id));
   const failures = input.assertions
-    .filter((assertion) => assertion.mandatory && assertion.status === "FAIL")
+    .filter((assertion) => isCanonicalMandatory(assertion) && assertion.status === "FAIL")
     .map((assertion) => assertion.id);
   if (!input.artifactValid) failures.unshift("artifact_validity");
   for (const id of duplicateIds) failures.push(`duplicate:${id}`);
@@ -68,13 +71,13 @@ export function evaluateRestoreAssertions(input: Readonly<{
   const unknown = [
     ...missing,
     ...input.assertions
-      .filter((assertion) => assertion.mandatory && assertion.status === "UNKNOWN")
+      .filter((assertion) => isCanonicalMandatory(assertion) && assertion.status === "UNKNOWN")
       .map((assertion) => assertion.id),
   ];
 
   const observedClasses = new Set(
     input.assertions
-      .filter((assertion) => assertion.mandatory && assertion.status === "PASS")
+      .filter((assertion) => isCanonicalMandatory(assertion) && assertion.status === "PASS")
       .map((assertion) => assertion.comparisonClass),
   );
   for (const comparisonClass of COMPARISON_CLASSES) {
