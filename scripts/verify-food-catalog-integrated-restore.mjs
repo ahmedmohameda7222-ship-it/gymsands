@@ -560,12 +560,8 @@ export async function verifyIntegratedRestore(options) {
         disposableTargetVerified: true,
       }),
       assertions: Object.freeze({ evidence: assertionEvidence }),
-      recoveryEligibility: Object.freeze({
-        artifactValid: true,
-        eligible: true,
-        agePolicyApplied: false,
-        ageMs: Math.max(0, Date.now() - Date.parse(source.manifest.capturedAt)),
-        reason: "ELIGIBLE_NO_RPO_LIMIT_APPLIED",
+      recoveryEvaluation: Object.freeze({
+        evaluationTime: new Date().toISOString(),
       }),
     }),
   });
