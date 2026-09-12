@@ -121,11 +121,17 @@ describe("Plan 7 sole final DR-ready authority", () => {
         goldenSearchVerified: true,
         staleGenerationIsolationVerified: true,
       },
+      security: {
+        securityRlsAclIdentitySha256: "e".repeat(64),
+        verified: true,
+      },
     };
   }
 
-  it("allows DR readiness only when all linked restore/search/protected and canonical recovery evidence agrees", () => {
+  it("allows DR readiness only when linked restore/search/security/protected and canonical recovery evidence agrees", () => {
     const result = certifyFoodCatalogRestore(linkedInput());
+    expect(result.securityVerified).toBe(true);
+    expect(result.securityRlsAclIdentitySha256).toBe("e".repeat(64));
     expect(result.recoveryEligibility?.reason).toBe("ELIGIBLE");
     expect(result.recoveryEligible).toBe(true);
     expect(result.drReady).toBe(true);
@@ -133,8 +139,14 @@ describe("Plan 7 sole final DR-ready authority", () => {
 
   it("fails closed when the search evidence belongs to another artifact", () => {
     const input = linkedInput();
-    input.search.artifactSemanticRootSha256 = "e".repeat(64);
+    input.search.artifactSemanticRootSha256 = "f".repeat(64);
     expect(() => certifyFoodCatalogRestore(input)).toThrow(/semantic root|linked/i);
+  });
+
+  it("fails closed when behavioral security evidence is not verified", () => {
+    const input = linkedInput();
+    input.security = { ...input.security, verified: false };
+    expect(() => certifyFoodCatalogRestore(input)).toThrow(/security|RLS|ACL|behavioral/i);
   });
 
   it("fails closed when FULL_DR recovery evaluation is missing or one millisecond over", () => {
