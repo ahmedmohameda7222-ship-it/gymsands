@@ -62,16 +62,29 @@ describe("Plan 7 relation/load-mode registry", () => {
     expect(outbox?.transientNeutralize).toEqual(expect.arrayContaining(["lease_token"]));
   });
 
-  it("requires protected owner/security families only for FULL_DR", () => {
+  it("requires every current protected owner-state family only for FULL_DR", () => {
     for (const relation of [
       "food_catalog_governance_principals",
       "food_catalog_governance_capability_assignments",
       "food_personal_overrides",
       "food_personal_override_revisions",
       "food_personal_override_operations",
+      "food_personal_corrections",
+      "food_favorites",
     ]) {
       expect(findPortableRelationRule(relation)).toMatchObject({ requiredProfile: "FULL_DR", protected: true });
     }
+
+    for (const relation of ["food_personal_corrections", "food_favorites"]) {
+      expect(findPortableRelationRule(relation)).toMatchObject({
+        classification: "PROTECTED_PORTABLE_AUTHORITY",
+        loadMode: "RESTORE_EXACT",
+        stableKey: ["user_id", "food_id"],
+      });
+      expect(requiredSegmentsForProfile("FULL_DR")).toContain(relation);
+      expect(requiredSegmentsForProfile("CORE_PORTABLE")).not.toContain(relation);
+    }
+
     expect(requiredSegmentsForProfile("FULL_DR").length)
       .toBeGreaterThan(requiredSegmentsForProfile("CORE_PORTABLE").length);
   });
