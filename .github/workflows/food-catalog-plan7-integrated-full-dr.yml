@@ -155,6 +155,7 @@ jobs:
           expected="${{ github.event.pull_request.head.sha || github.sha }}"
           node scripts/capture-food-catalog-restored-search-runtime.mjs \
             --database-url "$PLAN7_DATABASE_URL" \
+            --mode source-adversarial \
             --expected-head "$expected" \
             --output "$RUNNER_TEMP/plan7-source-search.json"
 
@@ -217,6 +218,7 @@ jobs:
           expected="${{ github.event.pull_request.head.sha || github.sha }}"
           node scripts/capture-food-catalog-restored-search-runtime.mjs \
             --database-url "$PLAN7_RESTORE_DATABASE_URL" \
+            --mode restored-authoritative \
             --expected-head "$expected" \
             --output "$RUNNER_TEMP/plan7-target-search.json"
           node - "$RUNNER_TEMP/plan7-source-search.json" "$RUNNER_TEMP/plan7-target-search.json" <<'NODE'
