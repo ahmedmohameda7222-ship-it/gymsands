@@ -11,15 +11,16 @@ const currentGenerationId = "71000000-0000-4000-8000-000000000901";
 const currentFoodId = "71000000-0000-4000-8000-000000000101";
 const ownerId = "71000000-0000-4000-8000-000000000001";
 
-function passing() {
+function passing(mode = "restored-authoritative") {
   return {
+    mode,
     headSha: head,
     currentGenerationId,
     currentResult: { items: [{ id: currentFoodId, name: "Plan7 Portable Chicken" }], nextCursor: null },
     staleResult: { items: [], nextCursor: null },
     currentRebuild: { documentCount: 1, projectionChecksumSha256: "b".repeat(64) },
-    staleRebuild: { documentCount: 1, projectionChecksumSha256: "c".repeat(64) },
-    documentCounts: { current: 1, stale: 1 },
+    staleRebuild: mode === "source-adversarial" ? { documentCount: 1, projectionChecksumSha256: "c".repeat(64) } : null,
+    documentCounts: { current: 1, stale: mode === "source-adversarial" ? 1 : 0 },
     goldenMatrix: {
       passed: true,
       caseCount: REQUIRED_GOLDEN_SEARCH_CASE_IDS.length,
@@ -38,18 +39,34 @@ describe("Plan 7 same-restored-target search evidence", () => {
     assert.throws(() => buildAuthenticatedSearchSql("public.search_food_catalog_v2('Chicken')", "not-a-uuid"), /UUID/i);
   });
 
-  it("binds deterministic search proof to the exact current generation and the executed full golden matrix without owning DR readiness", () => {
+  it("requires authoritative restored evidence to rebuild current only with zero stale SearchDocuments", () => {
     const evidence = buildSearchRuntimeEvidence(passing());
-    assert.equal(evidence.headSha, head);
+    assert.equal(evidence.mode, "restored-authoritative");
     assert.equal(evidence.currentGenerationId, currentGenerationId);
     assert.equal(evidence.rebuildVerified, true);
+    assert.equal(evidence.authoritativeCurrentOnlyRebuildVerified, true);
+    assert.equal(evidence.staleAdversarialFixtureVerified, false);
+    assert.equal(evidence.documentCounts.stale, 0);
+    assert.equal(evidence.staleProjectionChecksumSha256, null);
     assert.equal(evidence.goldenSearchVerified, true);
     assert.equal(evidence.staleGenerationIsolationVerified, true);
     assert.equal(evidence.goldenCaseCount, REQUIRED_GOLDEN_SEARCH_CASE_IDS.length);
-    assert.deepEqual(evidence.goldenCaseIds, [...REQUIRED_GOLDEN_SEARCH_CASE_IDS]);
-    assert.equal(evidence.goldenMatrixResultSha256, "d".repeat(64));
     assert.match(evidence.goldenResultSha256, /^[0-9a-f]{64}$/);
     assert.equal(Object.hasOwn(evidence, "drReady"), false);
+  });
+
+  it("keeps stale-generation adversarial rebuild in source-only evidence", () => {
+    const evidence = buildSearchRuntimeEvidence(passing("source-adversarial"));
+    assert.equal(evidence.authoritativeCurrentOnlyRebuildVerified, false);
+    assert.equal(evidence.staleAdversarialFixtureVerified, true);
+    assert.equal(evidence.documentCounts.stale, 1);
+    assert.match(evidence.staleProjectionChecksumSha256, /^[0-9a-f]{64}$/);
+  });
+
+  it("fails closed when restored authoritative evidence contains stale projection documents", () => {
+    const contaminated = passing();
+    contaminated.documentCounts.stale = 1;
+    assert.throws(() => buildSearchRuntimeEvidence(contaminated), /current-only|rebuild|projection/i);
   });
 
   it("fails closed when current search misses the current Food or stale-generation data leaks", () => {
