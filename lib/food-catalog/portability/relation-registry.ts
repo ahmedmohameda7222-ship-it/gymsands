@@ -10,11 +10,6 @@ export type RestoreOwnership =
   | "MIXED_KEYED_PRESEEDED_RUNTIME"
   | "MIXED_REPLAY_LOCAL_REFERENCE"
   | "MUTABLE_PRESEEDED_SINGLETON";
-export type TransientStateNeutralization = Readonly<{
-  column: string;
-  from: string;
-  to: string;
-}>;
 
 export type PortableRelationRule = Readonly<{
   segment: string;
@@ -28,7 +23,6 @@ export type PortableRelationRule = Readonly<{
   restoreOwnership: RestoreOwnership;
   transientNeutralize?: readonly string[];
   sourceTransientNeutralize?: readonly string[];
-  transientStateNeutralize?: readonly TransientStateNeutralization[];
   restoreLast?: boolean;
   operationallyDisabledAfterRestore?: boolean;
   note?: string;
@@ -53,9 +47,6 @@ function rule(
     restoreOwnership: options.restoreOwnership ?? "UNIFORM",
     transientNeutralize: options.transientNeutralize ? Object.freeze([...options.transientNeutralize]) : undefined,
     sourceTransientNeutralize: options.sourceTransientNeutralize ? Object.freeze([...options.sourceTransientNeutralize]) : undefined,
-    transientStateNeutralize: options.transientStateNeutralize
-      ? Object.freeze(options.transientStateNeutralize.map((entry) => Object.freeze({ ...entry })))
-      : undefined,
     restoreLast: options.restoreLast,
     operationallyDisabledAfterRestore: options.operationallyDisabledAfterRestore,
     note: options.note,
@@ -188,9 +179,8 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
     protected: true,
     transientNeutralize: ["claim_owner", "claim_principal_id", "lease_token", "lease_acquired_at", "lease_expires_at"],
     sourceTransientNeutralize: ["claim_owner", "claim_principal_id", "lease_token", "lease_acquired_at", "lease_expires_at"],
-    transientStateNeutralize: [{ column: "status", from: "processing", to: "failed" }],
     operationallyDisabledAfterRestore: true,
-    note: "Preserve durable outbox history/fencing epoch while converting live processing claims into non-resumable failed state; delivery remains disabled until reconciliation.",
+    note: "Preserve durable outbox history/fencing epoch while neutralizing source/restore live claim authority; delivery remains disabled until replay reconciliation. Processing-row status transition remains a Planner policy decision and is not invented by the registry.",
   }),
   rule("food_catalog_serving_fact_lineages", PA, "RESTORE_EXACT", ["lineage_id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_catalog_serving_fact_revisions", PA, "RESTORE_EXACT", ["serving_option_id"], { requiredProfile: "FULL_DR", protected: true }),
