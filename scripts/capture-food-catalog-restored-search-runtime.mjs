@@ -17,7 +17,7 @@ const CURRENT_FOOD_ID = "71000000-0000-4000-8000-000000000101";
 const FIXTURE_OWNER_ID = "71000000-0000-4000-8000-000000000001";
 const GOLDEN_PREFIX = "__PLAN7_GOLDEN__";
 const GOLDEN_SQL = new URL("../supabase/verification/food-catalog-plan7-portability-search-golden-runtime.sql", import.meta.url);
-const SEARCH_MODES = new Set(["source-adversarial", "restored-authoritative", "null-current"]);
+const SEARCH_MODES = new Set(["auto", "source-adversarial", "restored-authoritative", "null-current"]);
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -170,8 +170,16 @@ export function captureNullCurrentSearchEvidence(databaseUrl, headSha) {
   });
 }
 
+export function inferSearchRuntimeMode(databaseUrl, requestedMode, env = process.env) {
+  if (requestedMode !== "auto") return requestedMode;
+  const sourceUrl = env.PLAN7_DATABASE_URL;
+  const restoreUrl = env.PLAN7_RESTORE_DATABASE_URL;
+  if (sourceUrl && restoreUrl && sourceUrl !== restoreUrl && databaseUrl === sourceUrl) return "source-adversarial";
+  return "restored-authoritative";
+}
+
 export function captureSearchRuntimeEvidence(databaseUrl, headSha, mode = "restored-authoritative") {
-  if (!SEARCH_MODES.has(mode) || mode === "null-current") throw new Error("Search runtime capture mode is invalid for a non-null current generation.");
+  if (mode !== "source-adversarial" && mode !== "restored-authoritative") throw new Error("Search runtime capture mode is invalid for a non-null current generation.");
   const pointer = runPsql(databaseUrl, "select coalesce(current_generation_id::text,'') from public.food_catalog_current_generation where singleton_key=true;");
   if (pointer !== CURRENT_GENERATION_ID) throw new Error(`Expected current generation ${CURRENT_GENERATION_ID}, observed ${pointer || "<null>"}.`);
 
@@ -201,7 +209,7 @@ export function captureSearchRuntimeEvidence(databaseUrl, headSha, mode = "resto
 }
 
 function parseArgs(argv) {
-  const options = { mode: "restored-authoritative" };
+  const options = { mode: "auto" };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     const next = () => {
@@ -222,9 +230,10 @@ function parseArgs(argv) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const evidence = options.mode === "null-current"
+  const mode = inferSearchRuntimeMode(options.databaseUrl, options.mode);
+  const evidence = mode === "null-current"
     ? captureNullCurrentSearchEvidence(options.databaseUrl, options.expectedHead)
-    : captureSearchRuntimeEvidence(options.databaseUrl, options.expectedHead, options.mode);
+    : captureSearchRuntimeEvidence(options.databaseUrl, options.expectedHead, mode);
   await writeFile(resolve(options.output), `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify(evidence)}\n`);
 }
