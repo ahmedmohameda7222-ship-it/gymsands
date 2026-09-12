@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const OWNER_ID = "71000000-0000-4000-8000-000000000001";
