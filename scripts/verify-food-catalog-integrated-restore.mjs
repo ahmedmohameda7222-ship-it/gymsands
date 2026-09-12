@@ -35,6 +35,17 @@ import {
 const SHA256 = /^[0-9a-f]{64}$/u;
 const SHA40 = /^[0-9a-f]{40}$/u;
 const CANONICAL_REGISTRY_AUTHORITY = "CANONICAL_REGISTRY_V1";
+const PROTECTED_OWNER_STATE_RELATIONS = Object.freeze([
+  "food_catalog_governance_principals",
+  "food_catalog_governance_capability_assignments",
+  "food_catalog_governance_policy_versions",
+  "food_catalog_governance_policy_pointer",
+  "food_personal_override_revisions",
+  "food_personal_overrides",
+  "food_personal_override_operations",
+  "food_personal_corrections",
+  "food_favorites",
+]);
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -164,6 +175,11 @@ export function areDeclaredTransientRelationsNeutralized(rules, relationResults)
     .every((rule) => resultsByRelation.get(rule.relation)?.transientNeutralized === true);
 }
 
+export function areProtectedOwnerStateRelationsVerified(relationsByName) {
+  return PROTECTED_OWNER_STATE_RELATIONS
+    .every((relation) => relationsByName.get(relation)?.exact === true);
+}
+
 function assertion(id, comparisonClass, passed, detail) {
   return Object.freeze({
     id,
@@ -227,8 +243,8 @@ function runPsql(databaseUrl, sql) {
   return (result.stdout ?? "").trim();
 }
 
-function queryOwnerBindingEvidence(databaseUrl) {
-  const sql = `WITH required_owner AS (
+export function buildOwnerBindingEvidenceSql() {
+  return `WITH required_owner AS (
   SELECT human_user_id AS user_id, 'governance'::text AS source
   FROM public.food_catalog_governance_principals
   WHERE principal_type='human' AND active AND revoked_at IS NULL
@@ -238,6 +254,10 @@ function queryOwnerBindingEvidence(databaseUrl) {
   SELECT user_id, 'personal_override_revision'::text AS source FROM public.food_personal_override_revisions
   UNION
   SELECT user_id, 'personal_override_operation'::text AS source FROM public.food_personal_override_operations
+  UNION
+  SELECT user_id, 'personal_correction'::text AS source FROM public.food_personal_corrections
+  UNION
+  SELECT user_id, 'favorite'::text AS source FROM public.food_favorites
 ), owner_id AS (
   SELECT DISTINCT user_id FROM required_owner WHERE user_id IS NOT NULL
 ), evidence AS (
@@ -249,7 +269,10 @@ function queryOwnerBindingEvidence(databaseUrl) {
   FROM owner_id owner
 )
 SELECT coalesce(json_agg(evidence ORDER BY user_id),'[]'::json)::text FROM evidence;`;
-  const rows = JSON.parse(runPsql(databaseUrl, sql) || "[]");
+}
+
+function queryOwnerBindingEvidence(databaseUrl) {
+  const rows = JSON.parse(runPsql(databaseUrl, buildOwnerBindingEvidenceSql()) || "[]");
   for (const row of rows) {
     if (Number(row.auth_matches) !== 1 || Number(row.profile_matches) !== 1 || Number(row.active_access_matches) !== 1) {
       throw new Error(`Owner identity binding failed closed for ${row.user_id}.`);
@@ -471,7 +494,7 @@ export async function verifyIntegratedRestore(options) {
     generationVerified: verifiedRelations(["food_catalog_generations","food_catalog_generation_foods","food_catalog_generation_servings","food_catalog_generation_names","food_catalog_generation_taxonomy","food_catalog_generation_markets","food_catalog_generation_verification","food_catalog_generation_redirects","food_catalog_generation_validation_reports","food_catalog_generation_validation_findings","food_catalog_generation_events"]),
     pointerVerified: verifiedRelations(["food_catalog_current_generation","food_catalog_governance_policy_pointer","release_schema_compatibility"]),
     mergeGraphVerified: mergeGraph.verified,
-    governanceOwnerVerified: ownerBinding.verified && verifiedRelations(["food_catalog_governance_principals","food_catalog_governance_capability_assignments","food_catalog_governance_policy_versions","food_catalog_governance_policy_pointer","food_personal_override_revisions","food_personal_overrides","food_personal_override_operations"]),
+    governanceOwnerVerified: ownerBinding.verified && areProtectedOwnerStateRelationsVerified(relationsByName),
     consumerReferencesVerified: consumerReference.verified,
     securityVerified: true,
     migrationSchemaVerified: targetProfile.compatible === true,
