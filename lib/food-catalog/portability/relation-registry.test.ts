@@ -46,7 +46,7 @@ describe("Plan 7 relation/load-mode registry", () => {
     });
   });
 
-  it("neutralizes the complete ingestion lease shape while preserving durable fencing history", () => {
+  it("separates source-live ingestion lease state from restore-only reconstruction transients", () => {
     const ingestionRun = findPortableRelationRule("food_ingestion_runs");
     expect(ingestionRun?.loadMode).toBe("RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION");
     expect(ingestionRun?.transientNeutralize).toEqual([
@@ -56,7 +56,18 @@ describe("Plan 7 relation/load-mode registry", () => {
       "lease_heartbeat_at",
       "lease_expires_at",
     ]);
-    expect(ingestionRun?.transientNeutralize).not.toContain("lease_epoch");
+    expect(ingestionRun?.sourceTransientNeutralize).toEqual([
+      "lease_owner",
+      "lease_token",
+      "lease_acquired_at",
+      "lease_heartbeat_at",
+      "lease_expires_at",
+    ]);
+    expect(ingestionRun?.sourceTransientNeutralize).not.toContain("lease_epoch");
+
+    const foodItems = findPortableRelationRule("food_items");
+    expect(foodItems?.transientNeutralize).toContain("verified_source_record_id");
+    expect(foodItems?.sourceTransientNeutralize ?? []).not.toContain("verified_source_record_id");
 
     const outbox = findPortableRelationRule("food_catalog_governance_outbox");
     expect(outbox?.loadMode).toBe("RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION");
