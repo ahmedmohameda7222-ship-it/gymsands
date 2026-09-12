@@ -41,6 +41,11 @@ export type LinkedSearchEvidence = {
   staleGenerationIsolationVerified: boolean;
 };
 
+export type LinkedSecurityEvidence = Readonly<{
+  securityRlsAclIdentitySha256: string;
+  verified: boolean;
+}>;
+
 export type RecoveryEvaluationContext = Readonly<{
   capturedAt: string;
   evaluationTime: string;
@@ -58,6 +63,7 @@ export type FinalRestoreCertificationInput = {
   restore: LinkedRestoreEvidence;
   protected: LinkedProtectedEvidence;
   search: LinkedSearchEvidence;
+  security: LinkedSecurityEvidence;
 };
 
 export type FinalRestoreCertification = Readonly<{
@@ -73,6 +79,8 @@ export type FinalRestoreCertification = Readonly<{
   trusted: true;
   protectedSegmentsVerified: boolean;
   searchVerified: true;
+  securityVerified: true;
+  securityRlsAclIdentitySha256: string;
   recoveryEligibility: RecoveryEligibilityResult | null;
   recoveryEligible: boolean;
   drReady: boolean;
@@ -83,6 +91,7 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
   requireSha(input.artifactSemanticRootSha256, SHA256, "artifact semantic root");
   requireSha(input.snapshotBoundarySha256, SHA256, "snapshot-boundary SHA");
   requireSha(input.restoredTargetIdentitySha256, SHA256, "restored target identity SHA");
+  requireSha(input.security.securityRlsAclIdentitySha256, SHA256, "security RLS/ACL identity SHA");
   if (!input.canonicalProfileVerified) throw new Error("Canonical profile completeness is required for final certification.");
 
   const restore = input.restore;
@@ -110,6 +119,9 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
   }
   if (!search.sameRestoredTargetVerified || !search.rebuildVerified || !search.goldenSearchVerified || !search.staleGenerationIsolationVerified) {
     throw new Error("Final certification requires verified search rebuild/golden/stale-generation evidence from the same restored target.");
+  }
+  if (!input.security.verified) {
+    throw new Error("Final certification requires verified behavioral and metadata RLS/ACL security evidence.");
   }
   if (input.profile === "FULL_DR" && !protectedEvidence.verified) {
     throw new Error("FULL_DR final certification requires authenticated protected-segment verification.");
@@ -141,6 +153,8 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
     trusted: true,
     protectedSegmentsVerified: input.profile === "FULL_DR" ? true : false,
     searchVerified: true,
+    securityVerified: true,
+    securityRlsAclIdentitySha256: input.security.securityRlsAclIdentitySha256,
     recoveryEligibility,
     recoveryEligible,
     drReady: input.profile === "FULL_DR" && recoveryEligible,
