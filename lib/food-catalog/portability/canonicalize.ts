@@ -12,6 +12,11 @@ export function sha256Hex(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+export function compareCanonicalUnicodeCodeUnits(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
 export function canonicalizeDecimalText(input: string): string {
   const value = input.trim();
   const match = DECIMAL.exec(value);
@@ -181,7 +186,7 @@ function serializeJsonNode(node: JsonNode): string {
     case "number": return node.value;
     case "array": return `[${node.value.map(serializeJsonNode).join(",")}]`;
     case "object": return `{${[...node.value.entries()]
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareCanonicalUnicodeCodeUnits(left, right))
       .map(([key, value]) => `${JSON.stringify(key)}:${serializeJsonNode(value)}`)
       .join(",")}}`;
   }
@@ -216,7 +221,7 @@ export function canonicalizePostgresScalar(scalar: LosslessPostgresScalar): stri
 
 export function canonicalizeLosslessRow(
   row: Readonly<Record<string, LosslessPostgresScalar>>,
-  columnOrder: readonly string[] = Object.keys(row).sort(),
+  columnOrder: readonly string[] = Object.keys(row).sort(compareCanonicalUnicodeCodeUnits),
 ): string {
   return `[${columnOrder.map((column) => {
     const scalar = row[column];
