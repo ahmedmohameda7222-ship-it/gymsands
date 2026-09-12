@@ -181,6 +181,8 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
   rule("food_catalog_serving_fact_revisions", PA, "RESTORE_EXACT", ["serving_option_id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_catalog_name_fact_lineages", PA, "RESTORE_EXACT", ["lineage_id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_catalog_name_fact_revisions", PA, "RESTORE_EXACT", ["name_fact_id"], { requiredProfile: "FULL_DR", protected: true }),
+  rule("food_personal_corrections", PA, "RESTORE_EXACT", ["user_id", "food_id"], { requiredProfile: "FULL_DR", protected: true }),
+  rule("food_favorites", PA, "RESTORE_EXACT", ["user_id", "food_id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_personal_override_revisions", PA, "RESTORE_EXACT", ["id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_personal_overrides", PA, "RESTORE_EXACT", ["user_id", "food_id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_personal_override_operations", PH, "RESTORE_EXACT", ["user_id", "operation_id"], { requiredProfile: "FULL_DR", protected: true }),
