@@ -89,6 +89,13 @@ describe("Plan 7 sole final DR-ready authority", () => {
       snapshotBoundarySha256: "c".repeat(64),
       restoredTargetIdentitySha256: "d".repeat(64),
       canonicalProfileVerified: true,
+      recoveryEligibility: {
+        artifactValid: true,
+        eligible: profile === "FULL_DR",
+        agePolicyApplied: false,
+        ageMs: 0,
+        reason: profile === "FULL_DR" ? "ELIGIBLE_NO_RPO_LIMIT_APPLIED" : "CORE_PORTABLE_NOT_DR_PROFILE",
+      },
       restore: {
         headSha: HEAD,
         profile,
@@ -119,8 +126,10 @@ describe("Plan 7 sole final DR-ready authority", () => {
     };
   }
 
-  it("allows DR readiness only when all linked restore/search/protected evidence agrees", () => {
-    expect(certifyFoodCatalogRestore(linkedInput()).drReady).toBe(true);
+  it("allows DR readiness only when all linked restore/search/protected and recovery evidence agrees", () => {
+    const result = certifyFoodCatalogRestore(linkedInput());
+    expect(result.recoveryEligible).toBe(true);
+    expect(result.drReady).toBe(true);
   });
 
   it("fails closed when the search evidence belongs to another artifact", () => {
@@ -129,9 +138,26 @@ describe("Plan 7 sole final DR-ready authority", () => {
     expect(() => certifyFoodCatalogRestore(input)).toThrow(/semantic root|linked/i);
   });
 
+  it("fails closed when FULL_DR recovery eligibility is missing or ineligible", () => {
+    const missing = linkedInput();
+    delete missing.recoveryEligibility;
+    expect(() => certifyFoodCatalogRestore(missing)).toThrow(/recovery|eligib|RPO/i);
+
+    const ineligible = linkedInput();
+    ineligible.recoveryEligibility = {
+      artifactValid: true,
+      eligible: false,
+      agePolicyApplied: true,
+      ageMs: 3_600_000,
+      reason: "INELIGIBLE_CALLER_RPO_EXCEEDED",
+    };
+    expect(() => certifyFoodCatalogRestore(ineligible)).toThrow(/recovery|eligib|RPO/i);
+  });
+
   it("does not let CORE_PORTABLE become DR-ready", () => {
     const result = certifyFoodCatalogRestore(linkedInput("CORE_PORTABLE"));
     expect(result.trusted).toBe(true);
+    expect(result.recoveryEligible).toBe(false);
     expect(result.drReady).toBe(false);
   });
 });
