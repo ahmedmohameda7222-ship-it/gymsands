@@ -79,7 +79,13 @@ export function buildSingleSnapshotPsqlProgram({ profile, relations }) {
     assertIdentifier(spec.relation);
     assertIdentifier(spec.segment ?? spec.relation);
     if (!Array.isArray(spec.stableKey) || spec.stableKey.length === 0) throw new Error(`Stable key is required for ${spec.relation}.`);
-    spec.stableKey.forEach(assertIdentifier);
+    const stableKey = spec.stableKey.map(assertIdentifier);
+    const sourceTransient = (spec.sourceTransientNeutralize ?? []).map(assertIdentifier);
+    for (const column of sourceTransient) {
+      if (stableKey.includes(column)) {
+        throw new Error(`Source-transient field ${spec.relation}.${column} cannot be part of the stable key.`);
+      }
+    }
   });
 
   return `\\set ON_ERROR_STOP on
@@ -206,7 +212,29 @@ function canonicalRuleIdentity(rule) {
     stableKey: [...rule.stableKey],
     requiredProfile: rule.requiredProfile,
     protected: Boolean(rule.protected),
+    sourceTransientNeutralize: [...(rule.sourceTransientNeutralize ?? [])],
   });
+}
+
+export function prepareSourcePortableValues(values, rule) {
+  if (!values || typeof values !== "object" || Array.isArray(values)) {
+    throw new Error(`Malformed source export values for ${rule?.relation ?? "unknown relation"}.`);
+  }
+  const sourceTransient = rule?.sourceTransientNeutralize ?? [];
+  if (sourceTransient.length === 0) return values;
+  const stableKey = new Set(rule?.stableKey ?? []);
+  const prepared = { ...values };
+  for (const column of sourceTransient) {
+    if (stableKey.has(column)) {
+      throw new Error(`Source-transient field ${rule.relation}.${column} cannot be part of the stable key.`);
+    }
+    const scalar = values[column];
+    if (!scalar || typeof scalar !== "object" || !Object.hasOwn(scalar, "text")) {
+      throw new Error(`Declared source-transient field ${rule.relation}.${column} is missing from the export row.`);
+    }
+    prepared[column] = { ...scalar, text: null };
+  }
+  return prepared;
 }
 
 async function assertRegistryAuthority(profile, rules, registryAuthority) {
@@ -372,8 +400,9 @@ export async function runAuthoritativeExport({
       if (envelope.segment !== active.name || !envelope.values || typeof envelope.values !== "object") {
         throw new Error(`Malformed row envelope for ${active.name}.`);
       }
+      const portableValues = prepareSourcePortableValues(envelope.values, active.rule);
       const key = JSON.stringify(active.rule.stableKey.map((column) => {
-        const scalar = envelope.values[column];
+        const scalar = portableValues[column];
         if (!scalar || scalar.text === null) throw new Error(`Missing/non-null stable key ${column} in ${active.name}.`);
         return canonicalizePostgresScalar(scalar);
       }));
@@ -383,7 +412,7 @@ export async function runAuthoritativeExport({
         if (comparison > 0) throw new Error(`Non-monotonic stable key ${key} in ${active.name}.`);
       }
       active.previousKey = key;
-      const canonical = `${canonicalizeLosslessRow(envelope.values)}\n`;
+      const canonical = `${canonicalizeLosslessRow(portableValues)}\n`;
       const canonicalBytes = Buffer.from(canonical, "utf8");
       active.hash.update(canonicalBytes);
       if (active.rule.protected) {
