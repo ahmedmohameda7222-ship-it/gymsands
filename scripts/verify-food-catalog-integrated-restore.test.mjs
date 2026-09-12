@@ -4,6 +4,7 @@ import {
   comparePortableRelationRows,
   buildFinalAssertionEvidence,
   computeRestoredTargetIdentitySha256,
+  requireLinkedSearchEvidence,
 } from "./verify-food-catalog-integrated-restore.mjs";
 
 const row = (entries) => JSON.stringify(entries);
@@ -11,6 +12,40 @@ const exact = row([
   ["id","uuid","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
   ["value","numeric","90071992547409931234567890.1200"],
 ]);
+
+function linkedSearchEvidence() {
+  const head = "a".repeat(40);
+  const generation = "71000000-0000-4000-8000-000000000901";
+  const golden = "b".repeat(64);
+  return {
+    head,
+    generation,
+    manifest: { snapshotBoundary: { currentGenerationId: generation } },
+    source: {
+      mode: "source-adversarial",
+      providerNetworkUsed: false,
+      headSha: head,
+      rebuildVerified: true,
+      staleGenerationIsolationVerified: true,
+      staleAdversarialFixtureVerified: true,
+      authoritativeCurrentOnlyRebuildVerified: false,
+      currentGenerationId: generation,
+      goldenResultSha256: golden,
+    },
+    target: {
+      mode: "restored-authoritative",
+      providerNetworkUsed: false,
+      headSha: head,
+      rebuildVerified: true,
+      staleGenerationIsolationVerified: true,
+      staleAdversarialFixtureVerified: false,
+      authoritativeCurrentOnlyRebuildVerified: true,
+      currentGenerationId: generation,
+      goldenResultSha256: golden,
+      documentCounts: { current: 1, stale: 0 },
+    },
+  };
+}
 
 describe("Plan 7 integrated restore evidence", () => {
   it("requires exact typed row equality for ordinary portable authority", () => {
@@ -224,5 +259,22 @@ describe("Plan 7 integrated restore evidence", () => {
     const b = computeRestoredTargetIdentitySha256({ migrationLedgerIdentity: "a".repeat(64), schemaFingerprintSha256: "b".repeat(64), securityRlsAclIdentitySha256: "c".repeat(64), ownerBindingSha256: "e".repeat(64) });
     assert.match(a, /^[0-9a-f]{64}$/);
     assert.notEqual(a, b);
+  });
+
+  it("fails closed unless source search is adversarial and restored search is authoritative current-only", () => {
+    const linked = linkedSearchEvidence();
+    assert.equal(requireLinkedSearchEvidence(linked.source, linked.target, linked.manifest, linked.head), true);
+
+    const wrongSource = { ...linked.source, mode: "restored-authoritative", staleAdversarialFixtureVerified: false };
+    assert.throws(
+      () => requireLinkedSearchEvidence(wrongSource, linked.target, linked.manifest, linked.head),
+      /source|adversarial|mode/i,
+    );
+
+    const wrongTarget = { ...linked.target, mode: "source-adversarial", authoritativeCurrentOnlyRebuildVerified: false, documentCounts: { current: 1, stale: 1 } };
+    assert.throws(
+      () => requireLinkedSearchEvidence(linked.source, wrongTarget, linked.manifest, linked.head),
+      /target|authoritative|current-only|mode/i,
+    );
   });
 });
