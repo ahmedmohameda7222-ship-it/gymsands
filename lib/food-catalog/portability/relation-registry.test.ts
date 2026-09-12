@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
   FOOD_CATALOG_PORTABLE_RELATIONS_V1,
@@ -87,6 +88,15 @@ describe("Plan 7 relation/load-mode registry", () => {
 
     expect(requiredSegmentsForProfile("FULL_DR").length)
       .toBeGreaterThan(requiredSegmentsForProfile("CORE_PORTABLE").length);
+  });
+
+  it("keeps current transitional owner rows populated in the canonical integrated FULL_DR fixture", async () => {
+    const fixture = await readFile(
+      new URL("../../../supabase/verification/food-catalog-plan7-portability-source-fixture.sql", import.meta.url),
+      "utf8",
+    );
+    expect(fixture).toMatch(/insert into public\.food_personal_corrections\b/i);
+    expect(fixture).toMatch(/insert into public\.food_favorites\b/i);
   });
 
   it("has unique logical segment names and stable-key declarations", () => {
