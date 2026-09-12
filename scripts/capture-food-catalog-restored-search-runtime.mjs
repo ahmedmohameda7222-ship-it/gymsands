@@ -17,6 +17,7 @@ const CURRENT_FOOD_ID = "71000000-0000-4000-8000-000000000101";
 const FIXTURE_OWNER_ID = "71000000-0000-4000-8000-000000000001";
 const GOLDEN_PREFIX = "__PLAN7_GOLDEN__";
 const GOLDEN_SQL = new URL("../supabase/verification/food-catalog-plan7-portability-search-golden-runtime.sql", import.meta.url);
+const SEARCH_MODES = new Set(["source-adversarial", "restored-authoritative", "null-current"]);
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -73,33 +74,49 @@ function requireGoldenMatrix(matrix) {
   if (!SHA256.test(String(matrix.resultSha256 ?? ""))) throw new Error("Restored search golden matrix result hash is invalid.");
 }
 
-export function buildSearchRuntimeEvidence({ headSha, currentGenerationId, currentResult, staleResult, currentRebuild, staleRebuild, documentCounts, goldenMatrix }) {
+export function buildSearchRuntimeEvidence({
+  mode,
+  headSha,
+  currentGenerationId,
+  currentResult,
+  staleResult,
+  currentRebuild,
+  staleRebuild = null,
+  documentCounts,
+  goldenMatrix,
+}) {
+  if (mode !== "source-adversarial" && mode !== "restored-authoritative") throw new Error("Search runtime evidence mode must be source-adversarial or restored-authoritative.");
   if (!SHA40.test(headSha)) throw new Error("Search runtime evidence requires an exact head SHA.");
   if (currentGenerationId !== CURRENT_GENERATION_ID) throw new Error("Search runtime evidence is not bound to the expected current generation.");
   const currentItems = Array.isArray(currentResult?.items) ? currentResult.items : [];
   const staleItems = Array.isArray(staleResult?.items) ? staleResult.items : [];
   const currentVisible = currentItems.length > 0 && currentItems[0]?.id === CURRENT_FOOD_ID;
   const staleGenerationIsolationVerified = staleItems.length === 0;
-  const rebuildVerified = Boolean(currentRebuild?.projectionChecksumSha256)
-    && Boolean(staleRebuild?.projectionChecksumSha256)
-    && Number(documentCounts?.current) > 0
-    && Number(documentCounts?.stale) > 0;
+  const currentProjectionVerified = SHA256.test(String(currentRebuild?.projectionChecksumSha256 ?? ""))
+    && Number(documentCounts?.current) > 0;
+  const staleBoundaryVerified = mode === "source-adversarial"
+    ? SHA256.test(String(staleRebuild?.projectionChecksumSha256 ?? "")) && Number(documentCounts?.stale) > 0
+    : staleRebuild === null && Number(documentCounts?.stale) === 0;
+  const rebuildVerified = currentProjectionVerified && staleBoundaryVerified;
   if (!currentVisible) throw new Error("Canonical V2 search did not return the current-generation fixture Food first.");
   if (!staleGenerationIsolationVerified) throw new Error("Canonical V2 search leaked stale-generation Food into current results.");
-  if (!rebuildVerified) throw new Error("Search projection rebuild evidence is incomplete.");
+  if (!rebuildVerified) throw new Error("Search projection rebuild evidence is incomplete or violated restored current-only boundaries.");
   requireGoldenMatrix(goldenMatrix);
 
   return Object.freeze({
     format: "plaivra-food-catalog-restored-search-runtime-evidence",
-    version: 1,
+    version: 2,
+    mode,
     headSha,
     providerNetworkUsed: false,
     currentGenerationId,
     currentFoodId: CURRENT_FOOD_ID,
     currentProjectionChecksumSha256: String(currentRebuild.projectionChecksumSha256),
-    staleProjectionChecksumSha256: String(staleRebuild.projectionChecksumSha256),
+    staleProjectionChecksumSha256: staleRebuild ? String(staleRebuild.projectionChecksumSha256) : null,
     documentCounts: Object.freeze({ current: Number(documentCounts.current), stale: Number(documentCounts.stale) }),
     rebuildVerified: true,
+    authoritativeCurrentOnlyRebuildVerified: mode === "restored-authoritative",
+    staleAdversarialFixtureVerified: mode === "source-adversarial",
     goldenSearchVerified: true,
     staleGenerationIsolationVerified: true,
     goldenCaseCount: goldenMatrix.caseCount,
@@ -134,11 +151,34 @@ export function captureGoldenSearchMatrix(databaseUrl) {
   });
 }
 
-export function captureSearchRuntimeEvidence(databaseUrl, headSha) {
+export function captureNullCurrentSearchEvidence(databaseUrl, headSha) {
+  if (!SHA40.test(headSha)) throw new Error("NULL-current search evidence requires an exact head SHA.");
   const pointer = runPsql(databaseUrl, "select coalesce(current_generation_id::text,'') from public.food_catalog_current_generation where singleton_key=true;");
-  if (pointer !== CURRENT_GENERATION_ID) throw new Error(`Expected restored current generation ${CURRENT_GENERATION_ID}, observed ${pointer || "<null>"}.`);
+  if (pointer !== "") throw new Error("NULL-current search evidence requires a null current-generation pointer.");
+  const documentCount = Number(runPsql(databaseUrl, "select count(*)::text from public.food_catalog_search_documents;"));
+  if (documentCount !== 0) throw new Error("NULL-current search evidence requires zero SearchDocuments.");
+  return Object.freeze({
+    format: "plaivra-food-catalog-null-current-search-evidence",
+    version: 1,
+    mode: "null-current",
+    headSha,
+    currentGenerationId: null,
+    searchDocumentCount: 0,
+    rebuildInvoked: false,
+    nullCurrentSearchVerified: true,
+    providerNetworkUsed: false,
+  });
+}
 
-  const staleRebuild = jsonQuery(databaseUrl, `select public.rebuild_food_catalog_search_projection_v2('${STALE_GENERATION_ID}'::uuid,'search-projection-v2',null)::text;`);
+export function captureSearchRuntimeEvidence(databaseUrl, headSha, mode = "restored-authoritative") {
+  if (!SEARCH_MODES.has(mode) || mode === "null-current") throw new Error("Search runtime capture mode is invalid for a non-null current generation.");
+  const pointer = runPsql(databaseUrl, "select coalesce(current_generation_id::text,'') from public.food_catalog_current_generation where singleton_key=true;");
+  if (pointer !== CURRENT_GENERATION_ID) throw new Error(`Expected current generation ${CURRENT_GENERATION_ID}, observed ${pointer || "<null>"}.`);
+
+  let staleRebuild = null;
+  if (mode === "source-adversarial") {
+    staleRebuild = jsonQuery(databaseUrl, `select public.rebuild_food_catalog_search_projection_v2('${STALE_GENERATION_ID}'::uuid,'search-projection-v2',null)::text;`);
+  }
   const currentRebuild = jsonQuery(databaseUrl, `select public.rebuild_food_catalog_search_projection_v2('${CURRENT_GENERATION_ID}'::uuid,'search-projection-v2',null)::text;`);
   const currentResult = jsonQuery(databaseUrl, buildAuthenticatedSearchSql("public.search_food_catalog_v2('Plan7 Portable Chicken','en','Latn','DE',null,20,null,null,'all','{}'::jsonb)"));
   const staleResult = jsonQuery(databaseUrl, buildAuthenticatedSearchSql("public.search_food_catalog_v2('Plan7 Stale Turkey','en','Latn','GLOBAL',null,20,null,null,'all','{}'::jsonb)"));
@@ -148,6 +188,7 @@ export function captureSearchRuntimeEvidence(databaseUrl, headSha) {
   )::text;`);
   const goldenMatrix = captureGoldenSearchMatrix(databaseUrl);
   return buildSearchRuntimeEvidence({
+    mode,
     headSha,
     currentGenerationId: pointer,
     currentResult,
@@ -160,7 +201,7 @@ export function captureSearchRuntimeEvidence(databaseUrl, headSha) {
 }
 
 function parseArgs(argv) {
-  const options = {};
+  const options = { mode: "restored-authoritative" };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     const next = () => {
@@ -171,15 +212,19 @@ function parseArgs(argv) {
     if (value === "--database-url") options.databaseUrl = next();
     else if (value === "--expected-head") options.expectedHead = next();
     else if (value === "--output") options.output = next();
+    else if (value === "--mode") options.mode = next();
     else throw new Error(`Unknown search runtime evidence argument ${value}.`);
   }
   if (!options.databaseUrl || !options.expectedHead || !options.output) throw new Error("--database-url, --expected-head and --output are required.");
+  if (!SEARCH_MODES.has(options.mode)) throw new Error(`Unsupported search runtime evidence mode ${options.mode}.`);
   return options;
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const evidence = captureSearchRuntimeEvidence(options.databaseUrl, options.expectedHead);
+  const evidence = options.mode === "null-current"
+    ? captureNullCurrentSearchEvidence(options.databaseUrl, options.expectedHead)
+    : captureSearchRuntimeEvidence(options.databaseUrl, options.expectedHead, options.mode);
   await writeFile(resolve(options.output), `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify(evidence)}\n`);
 }
