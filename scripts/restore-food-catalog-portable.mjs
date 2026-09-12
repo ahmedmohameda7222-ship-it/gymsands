@@ -64,11 +64,12 @@ export function assertDisposableRestoreTarget(databaseUrl, acknowledged) {
   let parsed;
   try { parsed = new URL(databaseUrl); } catch { throw new Error("Disposable restore target URL is invalid."); }
   if (!/^postgres(?:ql)?:$/u.test(parsed.protocol)) throw new Error("Disposable restore target must be PostgreSQL.");
-  const host = parsed.hostname.toLowerCase();
-  if (host.endsWith(".supabase.co") || host.includes("prod") || host.includes("production")) {
-    throw new Error("Provider/production-looking hosts are forbidden for Plan 7 disposable restore.");
+  const rawHost = parsed.hostname.toLowerCase();
+  const host = rawHost.startsWith("[") && rawHost.endsWith("]") ? rawHost.slice(1, -1) : rawHost;
+  if (!LOOPBACK.has(host)) {
+    throw new Error("Plan 7 certification restore target must be an isolated loopback PostgreSQL harness; remote hosts are forbidden.");
   }
-  return Object.freeze({ acknowledged: true, loopback: LOOPBACK.has(host), host });
+  return Object.freeze({ acknowledged: true, loopback: true, host });
 }
 
 export function decodeCanonicalSegmentRow(line) {
@@ -389,7 +390,7 @@ function restoreReplayLocalReferenceRow({ databaseUrl, relation, stableKey, targ
     const runtimeRow = mappedKitchenId
       ? remapCanonicalRowReferences(canonicalRow, { kitchen_id: mappedKitchenId })
       : canonicalRow;
-    runPsql(databaseUrl, buildExactRestoreRowSql({ relation, stableKey, targetColumns, canonicalRow: runtimeRow }));
+    runPsql(databaseUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
     return;
   }
 
