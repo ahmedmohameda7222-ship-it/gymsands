@@ -4,6 +4,7 @@ import { REQUIRED_GOLDEN_SEARCH_CASE_IDS } from "../lib/food-catalog/portability
 import {
   buildAuthenticatedSearchSql,
   buildSearchRuntimeEvidence,
+  inferSearchRuntimeMode,
 } from "./capture-food-catalog-restored-search-runtime.mjs";
 
 const head = "a".repeat(40);
@@ -37,6 +38,14 @@ describe("Plan 7 same-restored-target search evidence", () => {
     assert.match(sql, new RegExp(`set_config\\('request\\.jwt\\.claim\\.sub','${ownerId}',true\\)`));
     assert.match(sql, /SELECT \(public\.search_food_catalog_v2\('Chicken'\)\)::text\s+FROM plan7_auth_context;/i);
     assert.throws(() => buildAuthenticatedSearchSql("public.search_food_catalog_v2('Chicken')", "not-a-uuid"), /UUID/i);
+  });
+
+  it("infers stale adversarial mode only for the distinct source database URL", () => {
+    const env = { PLAN7_DATABASE_URL: "postgres://source", PLAN7_RESTORE_DATABASE_URL: "postgres://target" };
+    assert.equal(inferSearchRuntimeMode("postgres://source", "auto", env), "source-adversarial");
+    assert.equal(inferSearchRuntimeMode("postgres://target", "auto", env), "restored-authoritative");
+    assert.equal(inferSearchRuntimeMode("postgres://other", "auto", env), "restored-authoritative");
+    assert.equal(inferSearchRuntimeMode("postgres://source", "restored-authoritative", env), "restored-authoritative");
   });
 
   it("requires authoritative restored evidence to rebuild current only with zero stale SearchDocuments", () => {
