@@ -352,9 +352,15 @@ async function readArtifact(artifactDir, keyProvider) {
   return { manifest, materials, protectedCount };
 }
 
-function requireLinkedSearchEvidence(sourceSearch, targetSearch, manifest, expectedHead) {
+export function requireLinkedSearchEvidence(sourceSearch, targetSearch, manifest, expectedHead) {
   if (sourceSearch.providerNetworkUsed || targetSearch.providerNetworkUsed) throw new Error("Integrated search proof must remain provider-network isolated.");
   if (sourceSearch.headSha !== expectedHead || targetSearch.headSha !== expectedHead) throw new Error("Integrated search evidence head SHA mismatch.");
+  if (sourceSearch.mode !== "source-adversarial" || sourceSearch.staleAdversarialFixtureVerified !== true) {
+    throw new Error("Integrated source search evidence must be source-adversarial with stale fixture proof.");
+  }
+  if (targetSearch.mode !== "restored-authoritative" || targetSearch.authoritativeCurrentOnlyRebuildVerified !== true || Number(targetSearch.documentCounts?.stale) !== 0) {
+    throw new Error("Integrated target search evidence must be restored-authoritative and current-only with zero stale documents.");
+  }
   if (!sourceSearch.rebuildVerified || !targetSearch.rebuildVerified || !targetSearch.staleGenerationIsolationVerified) {
     throw new Error("Integrated search rebuild/stale-generation evidence is incomplete.");
   }
