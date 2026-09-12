@@ -17,6 +17,11 @@ describe("Plan 7 relation/load-mode registry", () => {
       classification: "DERIVED_REBUILD",
       loadMode: "DERIVED_REBUILD",
     });
+    expect(findPortableRelationRule("food_taxonomy_assignments")).toMatchObject({
+      classification: "PORTABLE_AUTHORITY",
+      loadMode: "RESTORE_EXACT",
+      stableKey: ["id"],
+    });
   });
 
   it("validates migration-owned seed/singleton state rather than blind upsert", () => {
@@ -70,7 +75,7 @@ describe("Plan 7 relation/load-mode registry", () => {
     expect(foodItems?.sourceTransientNeutralize ?? []).not.toContain("verified_source_record_id");
   });
 
-  it("neutralizes outbox live claims without discarding durable fencing or inventing an unfrozen status transition", () => {
+  it("maps source processing outbox state to portable pending while preserving durable fencing and attempts", () => {
     const outbox = findPortableRelationRule("food_catalog_governance_outbox");
     const transientClaims = [
       "claim_owner",
@@ -84,7 +89,9 @@ describe("Plan 7 relation/load-mode registry", () => {
     expect(outbox?.sourceTransientNeutralize).toEqual(transientClaims);
     expect(outbox?.transientNeutralize).not.toContain("lease_epoch");
     expect(outbox?.sourceTransientNeutralize).not.toContain("lease_epoch");
-    expect((outbox as any)?.transientStateNeutralize).toBeUndefined();
+    expect(outbox?.sourceValueTransitions).toEqual([
+      { column: "status", from: "processing", to: "pending" },
+    ]);
     expect(outbox?.operationallyDisabledAfterRestore).toBe(true);
   });
 
