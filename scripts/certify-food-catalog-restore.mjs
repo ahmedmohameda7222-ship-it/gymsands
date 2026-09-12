@@ -54,6 +54,7 @@ export function buildFinalCertificationInput({ manifest, restoreReport, integrat
     snapshotBoundarySha256: manifest.snapshotBoundary.sha256,
     restoredTargetIdentitySha256: targetIdentity,
     canonicalProfileVerified: true,
+    recoveryEligibility: restoreReport.recoveryEligibility,
     restore: {
       headSha: restoreReport.headSha,
       profile: restoreReport.profile,
