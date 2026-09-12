@@ -70,7 +70,7 @@ describe("Plan 7 relation/load-mode registry", () => {
     expect(foodItems?.sourceTransientNeutralize ?? []).not.toContain("verified_source_record_id");
   });
 
-  it("neutralizes outbox live claims without discarding the durable fencing epoch", () => {
+  it("neutralizes outbox live claims without discarding durable fencing or inventing an unfrozen status transition", () => {
     const outbox = findPortableRelationRule("food_catalog_governance_outbox");
     const transientClaims = [
       "claim_owner",
@@ -84,9 +84,7 @@ describe("Plan 7 relation/load-mode registry", () => {
     expect(outbox?.sourceTransientNeutralize).toEqual(transientClaims);
     expect(outbox?.transientNeutralize).not.toContain("lease_epoch");
     expect(outbox?.sourceTransientNeutralize).not.toContain("lease_epoch");
-    expect((outbox as any)?.transientStateNeutralize).toEqual([
-      { column: "status", from: "processing", to: "failed" },
-    ]);
+    expect((outbox as any)?.transientStateNeutralize).toBeUndefined();
     expect(outbox?.operationallyDisabledAfterRestore).toBe(true);
   });
 
