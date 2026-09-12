@@ -39,6 +39,20 @@ describe("Plan 7 lossless PostgreSQL scalar canonicalization", () => {
     );
   });
 
+  it("orders semantic JSON keys by an explicit locale-independent Unicode code-unit contract", () => {
+    const originalLocaleCompare = String.prototype.localeCompare;
+    let canonical = "";
+    try {
+      String.prototype.localeCompare = function forbiddenLocaleCompare() {
+        throw new Error("localeCompare must not participate in Plan 7 semantic canonicalization");
+      };
+      canonical = canonicalizeLosslessJsonText('{"😀":6,"中":5,"ع":4,"Ω":3,"ä":1,"a":2}');
+    } finally {
+      String.prototype.localeCompare = originalLocaleCompare;
+    }
+    expect(canonical).toBe('{"a":2,"ä":1,"Ω":3,"ع":4,"中":5,"😀":6}');
+  });
+
   it("keeps NULL distinct from numeric zero", () => {
     expect(canonicalizePostgresScalar({ pgType: "numeric", text: null })).toBeNull();
     expect(canonicalizePostgresScalar({ pgType: "numeric", text: "0" })).toBe("0");
