@@ -170,6 +170,30 @@ describe("Plan 7 integrated restore evidence", () => {
     assert.deepEqual(new Set(evidence.map((entry) => entry.comparisonClass)), new Set(["BYTE_HASH","EXACT_IDENTITY_VALUE","SEMANTIC"]));
   });
 
+  it("binds current corrections and favorites into owner evidence and the governance/personal assertion", async () => {
+    const verifier = await import("./verify-food-catalog-integrated-restore.mjs");
+    assert.equal(typeof verifier.buildOwnerBindingEvidenceSql, "function");
+    assert.equal(typeof verifier.areProtectedOwnerStateRelationsVerified, "function");
+    const sql = verifier.buildOwnerBindingEvidenceSql();
+    assert.match(sql, /food_personal_corrections/);
+    assert.match(sql, /food_favorites/);
+
+    const verified = new Map([
+      ["food_catalog_governance_principals", { exact: true }],
+      ["food_catalog_governance_capability_assignments", { exact: true }],
+      ["food_catalog_governance_policy_versions", { exact: true }],
+      ["food_catalog_governance_policy_pointer", { exact: true }],
+      ["food_personal_override_revisions", { exact: true }],
+      ["food_personal_overrides", { exact: true }],
+      ["food_personal_override_operations", { exact: true }],
+      ["food_personal_corrections", { exact: true }],
+      ["food_favorites", { exact: true }],
+    ]);
+    assert.equal(verifier.areProtectedOwnerStateRelationsVerified(verified), true);
+    verified.set("food_favorites", { exact: false });
+    assert.equal(verifier.areProtectedOwnerStateRelationsVerified(verified), false);
+  });
+
   it("binds the restored target identity to schema, security and owner-mapping evidence", () => {
     const a = computeRestoredTargetIdentitySha256({ migrationLedgerIdentity: "a".repeat(64), schemaFingerprintSha256: "b".repeat(64), securityRlsAclIdentitySha256: "c".repeat(64), ownerBindingSha256: "d".repeat(64) });
     const b = computeRestoredTargetIdentitySha256({ migrationLedgerIdentity: "a".repeat(64), schemaFingerprintSha256: "b".repeat(64), securityRlsAclIdentitySha256: "c".repeat(64), ownerBindingSha256: "e".repeat(64) });
