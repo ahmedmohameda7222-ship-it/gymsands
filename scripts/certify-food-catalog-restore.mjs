@@ -7,6 +7,7 @@ import { certifyFoodCatalogRestore } from "../lib/food-catalog/portability/final
 import { validateCanonicalPortableProfileManifestV1 } from "../lib/food-catalog/portability/profile-certification.ts";
 
 const SHA40 = /^[0-9a-f]{40}$/u;
+const SHA256 = /^[0-9a-f]{64}$/u;
 
 function parseArgs(argv) {
   const options = {};
@@ -46,6 +47,12 @@ export function buildFinalCertificationInput({ manifest, restoreReport, integrat
   }
   const targetIdentity = integratedEvidence.restoredTargetIdentitySha256;
   if (restoreReport.target?.restoredTargetIdentitySha256 !== targetIdentity) throw new Error("Final certification restored-target identity linkage failed.");
+
+  const securityIdentity = integratedEvidence.securityRlsAclIdentitySha256;
+  const securityVerified = SHA256.test(String(securityIdentity ?? ""))
+    && integratedEvidence.assertionEvaluation?.trusted === true
+    && integratedEvidence.assertionEvaluation?.restoreVerified === true;
+  if (!securityVerified) throw new Error("Final certification requires linked behavioral and metadata security evidence.");
 
   const canonicalRecovery = restoreReport.recoveryEligibility;
   const recoveryEvaluation = canonicalRecovery && typeof canonicalRecovery.evaluationTime === "string"
@@ -92,6 +99,10 @@ export function buildFinalCertificationInput({ manifest, restoreReport, integrat
       rebuildVerified: integratedEvidence.search?.rebuildVerified === true,
       goldenSearchVerified: integratedEvidence.search?.goldenSearchVerified === true,
       staleGenerationIsolationVerified: integratedEvidence.search?.staleGenerationIsolationVerified === true,
+    },
+    security: {
+      securityRlsAclIdentitySha256: securityIdentity,
+      verified: true,
     },
   };
 }
