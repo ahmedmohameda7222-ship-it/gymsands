@@ -93,10 +93,14 @@ jobs:
           set -euo pipefail
           psql "$PLAN7_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
             -f supabase/verification/food-catalog-plan7-portability-source-fixture.sql
+          psql "$PLAN7_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f supabase/verification/food-catalog-plan7-portability-governance-outbox-fixture.sql
           psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
             -c "select count(*)=3 from public.food_items where id::text like '71000000-%'" | grep '^t$'
           psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
             -c "select current_generation_id='71000000-0000-4000-8000-000000000901'::uuid and pointer_revision=1 from public.food_catalog_current_generation where singleton_key" | grep '^t$'
+          psql "$PLAN7_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -c "select status='processing' and claim_owner='plan7-source-worker' and claim_principal_id='71000000-0000-4000-8000-000000000d10'::uuid and lease_token='71000000-0000-4000-8000-000000000d14'::uuid and lease_epoch=9 and attempt_count=4 and last_error is null and delivered_at is null from public.food_catalog_governance_outbox where event_id='71000000-0000-4000-8000-000000000d13'::uuid" | grep '^t$'
 
       - name: Capture source RLS ACL identity
         shell: bash
