@@ -47,6 +47,17 @@ export function buildFinalCertificationInput({ manifest, restoreReport, integrat
   const targetIdentity = integratedEvidence.restoredTargetIdentitySha256;
   if (restoreReport.target?.restoredTargetIdentitySha256 !== targetIdentity) throw new Error("Final certification restored-target identity linkage failed.");
 
+  const canonicalRecovery = restoreReport.recoveryEligibility;
+  const recoveryEvaluation = canonicalRecovery && typeof canonicalRecovery.evaluationTime === "string"
+    ? {
+        capturedAt: manifest.capturedAt,
+        evaluationTime: canonicalRecovery.evaluationTime,
+        ...(canonicalRecovery.maxArtifactAgeMs === null || canonicalRecovery.maxArtifactAgeMs === undefined
+          ? {}
+          : { maxArtifactAgeMs: canonicalRecovery.maxArtifactAgeMs }),
+      }
+    : undefined;
+
   return {
     profile: manifest.profile,
     headSha: expectedHead,
@@ -54,7 +65,7 @@ export function buildFinalCertificationInput({ manifest, restoreReport, integrat
     snapshotBoundarySha256: manifest.snapshotBoundary.sha256,
     restoredTargetIdentitySha256: targetIdentity,
     canonicalProfileVerified: true,
-    recoveryEligibility: restoreReport.recoveryEligibility,
+    recoveryEvaluation,
     restore: {
       headSha: restoreReport.headSha,
       profile: restoreReport.profile,
