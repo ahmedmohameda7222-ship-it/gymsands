@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { REQUIRED_GOLDEN_SEARCH_CASE_IDS } from "../lib/food-catalog/portability/search-restore-verifier.ts";
 import {
@@ -46,6 +47,14 @@ describe("Plan 7 same-restored-target search evidence", () => {
     assert.equal(inferSearchRuntimeMode("postgres://target", "auto", env), "restored-authoritative");
     assert.equal(inferSearchRuntimeMode("postgres://other", "auto", env), "restored-authoritative");
     assert.equal(inferSearchRuntimeMode("postgres://source", "restored-authoritative", env), "restored-authoritative");
+  });
+
+  it("requires integrated certification to declare source adversarial and restored authoritative modes explicitly", () => {
+    const workflow = readFileSync(".github/workflows/food-catalog-plan7-integrated-full-dr.yml", "utf8");
+    const sourceStep = workflow.match(/- name: Capture source canonical V2 search behavior[\s\S]*?- name: Replay exact Git migrations for clean target/)?.[0] ?? "";
+    const targetStep = workflow.match(/- name: Rebuild and capture canonical V2 search on same restored target[\s\S]*?- name: Export canonical FULL_DR restored-target readback/)?.[0] ?? "";
+    assert.match(sourceStep, /--mode\s+source-adversarial/);
+    assert.match(targetStep, /--mode\s+restored-authoritative/);
   });
 
   it("requires authoritative restored evidence to rebuild current only with zero stale SearchDocuments", () => {
