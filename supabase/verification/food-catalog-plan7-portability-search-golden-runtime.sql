@@ -20,13 +20,16 @@ insert into public.food_catalog_generation_names(generation_id,food_id,name_fact
   ('71000000-0000-4000-8000-000000000901','71000000-0000-4000-8000-000000000101','71000000-0000-4000-8000-000000000e11'),
   ('71000000-0000-4000-8000-000000000901','71000000-0000-4000-8000-000000000101','71000000-0000-4000-8000-000000000e12');
 
+-- Runtime-only golden assignments exercise canonical market semantics without
+-- inventing new market scopes: SA is a migration-seeded child of GCC.
 insert into public.food_market_assignments(
   id,food_id,scope_code,relevance_level,source_record_id,assignment_action,policy_version,created_at
-) values (
-  '71000000-0000-4000-8000-000000000e21','71000000-0000-4000-8000-000000000101','GLOBAL','primary','71000000-0000-4000-8000-000000000201','assign','plan7-fixture-v1','2026-09-10T18:30:12Z'
-);
-insert into public.food_catalog_generation_markets(generation_id,food_id,market_assignment_id)
-values('71000000-0000-4000-8000-000000000901','71000000-0000-4000-8000-000000000101','71000000-0000-4000-8000-000000000e21');
+) values
+  ('71000000-0000-4000-8000-000000000e21','71000000-0000-4000-8000-000000000101','GLOBAL','primary','71000000-0000-4000-8000-000000000201','assign','plan7-fixture-v1','2026-09-10T18:30:12Z'),
+  ('71000000-0000-4000-8000-000000000e22','71000000-0000-4000-8000-000000000101','GCC','secondary','71000000-0000-4000-8000-000000000201','assign','plan7-fixture-v1','2026-09-10T18:30:13Z');
+insert into public.food_catalog_generation_markets(generation_id,food_id,market_assignment_id) values
+  ('71000000-0000-4000-8000-000000000901','71000000-0000-4000-8000-000000000101','71000000-0000-4000-8000-000000000e21'),
+  ('71000000-0000-4000-8000-000000000901','71000000-0000-4000-8000-000000000101','71000000-0000-4000-8000-000000000e22');
 
 insert into public.user_food_items(
   id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,category,cuisine,nutrition_basis_amount,nutrition_basis_unit,created_at,updated_at
@@ -75,7 +78,7 @@ with q as (select pg_temp.plan7_search('Plan7 Tragbares Huhn','de','Latn','DE') 
 select pg_temp.plan7_case('locale_script',r,r->'items'->0->>'id'='71000000-0000-4000-8000-000000000101' and r->'items'->0->>'locale'='de') from q;
 with q as (select pg_temp.plan7_search('Plan7 Portable Chicken','en','Latn','DE') r)
 select pg_temp.plan7_case('market_direct',r,r->'items'->0->>'id'='71000000-0000-4000-8000-000000000101') from q;
-with q as (select pg_temp.plan7_search('Plan7 Portable Chicken','en','Latn','DE-BY') r)
+with q as (select pg_temp.plan7_search('Plan7 Portable Chicken','en','Latn','SA') r)
 select pg_temp.plan7_case('market_parent',r,r->'items'->0->>'id'='71000000-0000-4000-8000-000000000101') from q;
 with q as (select pg_temp.plan7_search('Plan7 Portable Chicken','en','Latn','GLOBAL') r)
 select pg_temp.plan7_case('market_global',r,r->'items'->0->>'id'='71000000-0000-4000-8000-000000000101') from q;
