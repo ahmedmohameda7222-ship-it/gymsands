@@ -117,6 +117,7 @@ export function comparePortableRelationRows({
   loadMode,
   seedPolicy,
   transientNeutralize = [],
+  sourceTransientNeutralize = [],
 }) {
   const source = rowsByStableKey(sourceRows, stableKey, relation);
   const target = rowsByStableKey(targetRows, stableKey, relation);
@@ -129,6 +130,14 @@ export function comparePortableRelationRows({
     const key = JSON.parse(token);
 
     if (loadMode === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION") {
+      const { map: sourceMap } = parseCanonicalRow(sourceLine);
+      for (const column of sourceTransientNeutralize) {
+        const scalar = sourceMap.get(column);
+        if (!scalar || scalar.text !== null) {
+          transientNeutralized = false;
+          throw new Error(`Source transient field ${relation}.${column} was retained instead of neutralized to NULL.`);
+        }
+      }
       const { map: targetMap } = parseCanonicalRow(targetLine);
       for (const column of transientNeutralize) {
         const scalar = targetMap.get(column);
@@ -456,6 +465,7 @@ export async function verifyIntegratedRestore(options) {
       loadMode: rule.loadMode,
       seedPolicy: seedRuntimeOwnershipForRelation(rule.relation),
       transientNeutralize: rule.transientNeutralize ?? [],
+      sourceTransientNeutralize: rule.sourceTransientNeutralize ?? [],
     }));
   }
 
