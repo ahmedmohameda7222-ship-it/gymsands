@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { buildPrePointerVerificationSql } from "./pre-pointer-verification.mjs";
 import {
   MANDATORY_RESTORE_ASSERTION_IDS,
   assertExactOwnerBindings,
@@ -94,5 +96,29 @@ describe("Plan 7 restore assertion engine", () => {
   it("requires restore-time lease/claim fields to be neutralized exactly", () => {
     expect(assertTransientNeutralization({ lease_owner: null, lease_token: null, lease_expires_at: null }, ["lease_owner", "lease_token", "lease_expires_at"])).toBe(true);
     expect(() => assertTransientNeutralization({ lease_owner: "worker", lease_token: null }, ["lease_owner", "lease_token"])).toThrow(/neutral/i);
+  });
+
+  it("requires canonical Plan 3 composition recomputation and selected verification/activation/finding semantics before pointer restore", () => {
+    const sql = buildPrePointerVerificationSql({
+      currentGenerationId: "71000000-0000-4000-8000-000000000901",
+      currentEventId: "71000000-0000-4000-8000-000000000921",
+      currentValidationReportId: "71000000-0000-4000-8000-000000000911",
+      transientRules: [],
+    });
+    for (const requiredRelation of [
+      "food_verification_assertions",
+      "food_catalog_activation_set_members",
+      "food_catalog_activation_sets",
+      "food_catalog_activation_events",
+      "food_catalog_generation_validation_findings",
+    ]) expect(sql).toContain(requiredRelation);
+    expect(sql).toMatch(/assertion_scope/i);
+    expect(sql).toMatch(/source_legal_accepted/i);
+    expect(sql).toMatch(/eligibility/i);
+    expect(sql).toMatch(/blocking/i);
+
+    const loader = readFileSync("scripts/restore-food-catalog-portable.mjs", "utf8");
+    expect(loader).toMatch(/computeGenerationCompositionChecksum/);
+    expect(loader).toMatch(/PRE_POINTER_VERIFY[\s\S]*canonical[\s_-]*composition/i);
   });
 });
