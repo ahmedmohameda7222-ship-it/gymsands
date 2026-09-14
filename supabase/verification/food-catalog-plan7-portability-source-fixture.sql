@@ -155,8 +155,8 @@ insert into public.food_catalog_generations(
   activation_policy_version,trust_policy_version,projection_version,change_manifest_checksum_sha256,
   composition_checksum_sha256,authority_reference,created_at,sealed_at
 ) values
-  (:'generation_stale',null,7000,'plan7-fixture-v1','plan7-fixture-v1','plan7-fixture-v1','plan7-fixture-v1','search-projection-v2',repeat('3',64),repeat('4',64),'fixture://plan7/stale-generation','2026-09-10T18:15:00Z','2026-09-10T18:15:00Z'),
-  (:'generation_current',null,7001,'plan7-fixture-v1','plan7-fixture-v1','plan7-fixture-v1','plan7-fixture-v1','search-projection-v2',repeat('5',64),repeat('6',64),'fixture://plan7/current-generation','2026-09-10T18:15:00Z','2026-09-10T18:15:00Z');
+  (:'generation_stale',null,7000,'plan7-fixture-v1','plan7-fixture-v1','plan7-fixture-v1','plan7-fixture-v1','search-projection-v2',repeat('3',64),'b786ba0ee5f72dc038e5429762db443b3b9928e75c0c8a1b18c37ea60668e750','fixture://plan7/stale-generation','2026-09-10T18:15:00Z','2026-09-10T18:15:00Z'),
+  (:'generation_current',null,7001,'plan7-fixture-v1','plan7-fixture-v1','plan7-fixture-v1','plan7-fixture-v1','search-projection-v2',repeat('5',64),'d46160821cd09ae8fa33809f915ce93e367a6c2cf04d3df9a4a3e0e96eb57cd6','fixture://plan7/current-generation','2026-09-10T18:15:00Z','2026-09-10T18:15:00Z');
 insert into public.food_catalog_generation_foods(
   generation_id,food_id,lifecycle,nutrition_revision_id,activation_set_id,activation_set_member_id,activation_grant_event_id
 ) values
@@ -182,13 +182,13 @@ insert into public.food_catalog_generation_validation_reports(
   id,generation_id,generation_checksum_sha256,validator_set_version,policy_version,report_checksum_sha256,
   blocker_count,error_count,warning_count,info_count,created_at
 ) values(
-  :'validation_report',:'generation_current',repeat('6',64),'plan7-fixture-v1','plan7-fixture-v1',repeat('7',64),0,0,0,0,'2026-09-10T18:16:00Z'
+  :'validation_report',:'generation_current','d46160821cd09ae8fa33809f915ce93e367a6c2cf04d3df9a4a3e0e96eb57cd6','food-catalog-generation-validator-set-v1','plan7-fixture-v1','ed1ece83150ea16ccfd0f03498a835508437e6398851d28c58a884757157699a',0,0,0,0,'2026-09-10T18:16:00Z'
 );
 insert into public.food_catalog_generation_events(
   id,event_type,operation_id,command_checksum_sha256,from_generation_id,to_generation_id,
   generation_checksum_sha256,validation_report_id,principal_id,principal_type,authority_reference,reason_code,policy_version,created_at
 ) values(
-  :'generation_event','promote',:'op_promote',repeat('c',64),null,:'generation_current',repeat('6',64),:'validation_report',
+  :'generation_event','promote',:'op_promote',repeat('c',64),null,:'generation_current','d46160821cd09ae8fa33809f915ce93e367a6c2cf04d3df9a4a3e0e96eb57cd6',:'validation_report',
   'plan7-fixture','service','fixture://plan7/promotion','fixture','plan7-fixture-v1','2026-09-10T18:17:00Z'
 );
 update public.food_catalog_current_generation
@@ -296,6 +296,19 @@ begin
       and pointer_revision=1
   ) then
     raise exception 'Plan7 source fixture current pointer was not established.';
+  end if;
+  if not exists(
+    select 1 from public.food_catalog_generations
+    where id='71000000-0000-4000-8000-000000000901'::uuid
+      and composition_checksum_sha256='d46160821cd09ae8fa33809f915ce93e367a6c2cf04d3df9a4a3e0e96eb57cd6'
+  ) or not exists(
+    select 1 from public.food_catalog_generation_validation_reports
+    where id='71000000-0000-4000-8000-000000000911'::uuid
+      and generation_checksum_sha256='d46160821cd09ae8fa33809f915ce93e367a6c2cf04d3df9a4a3e0e96eb57cd6'
+      and validator_set_version='food-catalog-generation-validator-set-v1'
+      and report_checksum_sha256='ed1ece83150ea16ccfd0f03498a835508437e6398851d28c58a884757157699a'
+  ) then
+    raise exception 'Plan7 source fixture canonical Plan3 generation authority is missing.';
   end if;
   if not exists(select 1 from public.food_taxonomy_nodes where node_code='plan7_runtime_protein')
      or not exists(select 1 from public.market_scopes where scope_code='PLAN7_TEST') then
