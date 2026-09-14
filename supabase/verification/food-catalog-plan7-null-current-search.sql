@@ -1,4 +1,6 @@
 \set ON_ERROR_STOP on
+\pset tuples_only on
+\pset format unaligned
 
 -- Plan 7 Workstream 1: executable NULL-current Search V2 proof.
 -- This runs against an exact-Git disposable database before any Plan 7 fixture
@@ -88,7 +90,7 @@ begin
 end
 $plan7_null_current_postconditions$;
 
-select json_build_object(
+select '__PLAN7_NULL_CURRENT__' || json_build_object(
   'currentGenerationId', null,
   'searchDocumentCount', (select count(*) from public.food_catalog_search_documents),
   'generationCountBefore', current_setting('plan7.generation_count_before')::bigint,
@@ -97,6 +99,6 @@ select json_build_object(
   'rebuildInvoked', false,
   'canonicalRpcInvoked', true,
   'nullCurrentSearchVerified', true
-)::text as plan7_null_current_search_evidence;
+)::text;
 
 rollback;
