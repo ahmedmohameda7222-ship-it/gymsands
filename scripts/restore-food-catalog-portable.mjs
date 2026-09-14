@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -74,6 +75,34 @@ export function decodeCanonicalSegmentRow(line) {
     result[column] = Object.freeze({ pgType, text });
   }
   return Object.freeze(result);
+}
+
+export function materializeRestoreLocalBindings(canonicalRow, rule, unreachableSha256 = () => randomBytes(32).toString("hex")) {
+  const bindings = rule?.restoreLocalBindings ?? [];
+  if (bindings.length === 0) return canonicalRow;
+  let tuples;
+  try { tuples = JSON.parse(canonicalRow); } catch { throw new Error(`Restore-local binding row for ${rule?.relation ?? "unknown relation"} is not valid JSON.`); }
+  if (!Array.isArray(tuples)) throw new Error(`Restore-local binding row for ${rule?.relation ?? "unknown relation"} must be a canonical tuple array.`);
+  const locations = new Map();
+  for (let index = 0; index < tuples.length; index += 1) {
+    const tuple = tuples[index];
+    if (!Array.isArray(tuple) || tuple.length !== 3 || typeof tuple[0] !== "string") throw new Error(`Restore-local binding row for ${rule?.relation ?? "unknown relation"} is malformed.`);
+    if (locations.has(tuple[0])) throw new Error(`Restore-local binding row duplicates column ${tuple[0]}.`);
+    locations.set(tuple[0], index);
+  }
+  const materialized = tuples.map((tuple) => [...tuple]);
+  for (const binding of bindings) {
+    if (binding?.strategy !== "UNREACHABLE_SHA256") throw new Error(`Unsupported restore-local binding strategy for ${rule.relation}.`);
+    const discriminatorIndex = locations.get(binding.discriminatorColumn);
+    const targetIndex = locations.get(binding.column);
+    if (discriminatorIndex === undefined || targetIndex === undefined) throw new Error(`Restore-local binding columns are missing from ${rule.relation}.`);
+    if (materialized[discriminatorIndex][2] !== binding.discriminatorValue) continue;
+    if (materialized[targetIndex][2] !== null) throw new Error(`Portable artifact retained environment-specific execution binding ${rule.relation}.${binding.column}.`);
+    const digest = unreachableSha256();
+    if (typeof digest !== "string" || !SHA256.test(digest)) throw new Error(`Restore-local binding for ${rule.relation}.${binding.column} must be a lowercase SHA-256 digest.`);
+    materialized[targetIndex][2] = digest;
+  }
+  return JSON.stringify(materialized);
 }
 
 export async function decodeProtectedArtifactMaterial({ descriptor, ciphertext, keyProvider }) {
@@ -316,8 +345,9 @@ export async function restorePortableArtifact({ artifactDir, targetUrl, relation
       for (const canonicalRow of rows) runPsql(targetUrl, buildMutableSingletonRestoreSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
     } else if (action.kind === "RESTORE_EXACT") {
       for (const canonicalRow of rows) {
-        if (rule.restoreOwnership === "MIXED_REPLAY_LOCAL_REFERENCE") restoreReplayLocalReferenceRow({ databaseUrl: targetUrl, relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, referenceMaps });
-        else runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow }));
+        const restoreRow = materializeRestoreLocalBindings(canonicalRow, rule);
+        if (rule.restoreOwnership === "MIXED_REPLAY_LOCAL_REFERENCE") restoreReplayLocalReferenceRow({ databaseUrl: targetUrl, relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow: restoreRow, referenceMaps });
+        else runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow: restoreRow }));
       }
     } else if (action.kind === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, forceNullColumns: [...(rule.transientNeutralize ?? [])], comparisonOmitColumns: [...(rule.transientNeutralize ?? [])] }));
