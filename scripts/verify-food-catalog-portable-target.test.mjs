@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFile } from "node:fs/promises";
 import {
   buildPortableTargetProfileSql,
   evaluatePortableTargetProfile,
@@ -34,6 +35,27 @@ describe("Plan 7 portable restore target profile", () => {
       "auth.users",
       "supabase_migrations.schema_migrations",
     ]) assert.ok(sql.includes(fragment), `Expected target profile SQL to contain ${fragment}`);
+  });
+
+  it("uses the same authoritative non-column schema identity definition as export", async () => {
+    const source = await readFile(new URL("./verify-food-catalog-portable-target.mjs", import.meta.url), "utf8");
+    assert.match(source, /schema-identity\.mjs/);
+    assert.match(source, /buildFoodCatalogSchemaIdentitySql/);
+    const sql = buildPortableTargetProfileSql();
+    for (const fragment of [
+      "user_food_favorites",
+      "pg_get_expr",
+      "attgenerated",
+      "attidentity",
+      "pg_constraint",
+      "pg_get_constraintdef",
+      "pg_policies",
+      "pg_trigger",
+      "pg_get_triggerdef",
+      "pg_proc",
+      "pg_get_functiondef",
+      "aclexplode",
+    ]) assert.ok(sql.includes(fragment), `Expected target schema fingerprint SQL to contain ${fragment}`);
   });
 
   it("accepts only an exact compatible target profile", () => {
