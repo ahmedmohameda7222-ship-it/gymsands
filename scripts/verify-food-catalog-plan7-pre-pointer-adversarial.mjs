@@ -92,7 +92,7 @@ export function runPrePointerAdversarialProof(databaseUrl) {
       name: "composition",
       corruptSql: `
 INSERT INTO public.food_names(id,food_id,language_tag,name_role,name_text,normalized_text,script_code,origin,source_record_id,policy_version,created_at)
-VALUES('${EXTRA_NAME_ID}'::uuid,'${FOOD_ID}'::uuid,'en','alias','Plan7 Portable Poultry','plan7 portable poultry','Latn','curated','${SOURCE_ID}'::uuid,'plan7-fixture-v1','2026-09-10T18:15:30Z');
+VALUES('${EXTRA_NAME_ID}'::uuid,'${FOOD_ID}'::uuid,'en','search_alias','Plan7 Portable Poultry','plan7 portable poultry','Latn','curated','${SOURCE_ID}'::uuid,'plan7-fixture-v1','2026-09-10T18:15:30Z');
 INSERT INTO public.food_catalog_generation_names(generation_id,food_id,name_fact_id)
 VALUES('${GENERATION_ID}'::uuid,'${FOOD_ID}'::uuid,'${EXTRA_NAME_ID}'::uuid);`,
       cleanupSql: `
