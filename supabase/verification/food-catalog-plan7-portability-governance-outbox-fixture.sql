@@ -11,7 +11,9 @@
 insert into public.food_catalog_governance_principals(
   id,principal_type,subject_id,service_identity_sha256,role_class,active,created_at
 ) values(
-  :'service_principal','service','plan7-portability-service',repeat('7',64),'service',true,'2026-09-10T18:26:00Z'
+  :'service_principal','service','plan7-portability-service',
+  encode(extensions.digest(convert_to('plan7-source-service-identity','UTF8'),'sha256'),'hex'),
+  'service',true,'2026-09-10T18:26:00Z'
 );
 
 insert into public.food_catalog_governance_capability_assignments(
@@ -70,6 +72,7 @@ begin
       and outbox.delivered_at is null
       and operation.capability='food.outbox.deliver'
       and principal.principal_type='service'
+      and principal.service_identity_sha256=encode(extensions.digest(convert_to('plan7-source-service-identity','UTF8'),'sha256'),'hex')
   ) then
     raise exception 'Plan7 source governance processing-outbox fixture was not established.';
   end if;
