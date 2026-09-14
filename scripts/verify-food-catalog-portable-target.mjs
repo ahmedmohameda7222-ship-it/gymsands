@@ -3,29 +3,20 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { buildFoodCatalogSchemaIdentitySql } from "./schema-identity.mjs";
 
 const REQUIRED_EXTENSIONS = ["pgcrypto", "pg_trgm", "uuid-ossp"];
 const REQUIRED_ROLES = ["anon", "authenticated", "service_role", "authenticator"];
 const SHA256 = /^[0-9a-f]{64}$/;
 
 export function buildPortableTargetProfileSql() {
+  const schemaIdentitySql = buildFoodCatalogSchemaIdentitySql();
   return `WITH migration AS (
   SELECT count(*)::text AS migration_count,
          coalesce(max(version)::text, '') AS latest_migration,
          coalesce(string_agg(version::text, ',' ORDER BY version), '') AS ledger_input
   FROM supabase_migrations.schema_migrations
-), schema_identity AS (
-  SELECT coalesce(string_agg(
-    n.nspname || '.' || c.relname || ':' || a.attnum::text || ':' || a.attname || ':' || format_type(a.atttypid,a.atttypmod) || ':' || a.attnotnull::text,
-    E'\\n' ORDER BY n.nspname,c.relname,a.attnum
-  ), '') AS identity_input
-  FROM pg_class c
-  JOIN pg_namespace n ON n.oid=c.relnamespace
-  JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
-  WHERE n.nspname='public'
-    AND (c.relname LIKE 'food_%' OR c.relname IN ('market_scopes','market_scope_memberships','release_schema_compatibility'))
-    AND c.relkind IN ('r','p')
-)
+), ${schemaIdentitySql}
 SELECT json_build_object(
   'serverVersionNum', current_setting('server_version_num'),
   'extensions', (SELECT coalesce(json_agg(extname ORDER BY extname), '[]'::json) FROM pg_extension WHERE extname IN ('pgcrypto','pg_trgm','uuid-ossp')),
