@@ -103,7 +103,10 @@ describe("Plan 7 restore assertion engine", () => {
       currentGenerationId: "71000000-0000-4000-8000-000000000901",
       currentEventId: "71000000-0000-4000-8000-000000000921",
       currentValidationReportId: "71000000-0000-4000-8000-000000000911",
-      transientRules: [],
+      transientRules: [
+        { relation: "food_ingestion_runs", fields: ["lease_owner", "lease_token", "lease_acquired_at", "lease_heartbeat_at", "lease_expires_at"] },
+        { relation: "food_catalog_governance_outbox", fields: ["claim_owner", "claim_principal_id", "lease_token", "lease_acquired_at", "lease_expires_at"] },
+      ],
     });
     for (const requiredRelation of [
       "food_verification_assertions",
