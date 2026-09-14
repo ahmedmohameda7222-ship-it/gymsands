@@ -92,7 +92,32 @@ describe("Plan 7 relation/load-mode registry", () => {
     expect(outbox?.sourceValueTransitions).toEqual([
       { column: "status", from: "processing", to: "pending" },
     ]);
-    expect(outbox?.operationallyDisabledAfterRestore).toBe(true);
+  });
+
+  it("makes Service execution binding environment-local while preserving principal and capability history", () => {
+    const principals = findPortableRelationRule("food_catalog_governance_principals");
+    expect(principals).toMatchObject({
+      classification: "PROTECTED_PORTABLE_AUTHORITY",
+      loadMode: "RESTORE_EXACT",
+      stableKey: ["id"],
+      requiredProfile: "FULL_DR",
+      protected: true,
+      sourceTransientNeutralize: ["service_identity_sha256"],
+      restoreLocalBindings: [
+        {
+          column: "service_identity_sha256",
+          discriminatorColumn: "principal_type",
+          discriminatorValue: "service",
+          strategy: "UNREACHABLE_SHA256",
+        },
+      ],
+    });
+    expect(findPortableRelationRule("food_catalog_governance_capability_assignments")).toMatchObject({
+      loadMode: "RESTORE_EXACT",
+      requiredProfile: "FULL_DR",
+      protected: true,
+    });
+    expect(findPortableRelationRule("food_catalog_governance_outbox")?.operationallyDisabledAfterRestore).toBeUndefined();
   });
 
   it("requires every current protected owner-state family only for FULL_DR", () => {
