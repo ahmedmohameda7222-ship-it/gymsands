@@ -63,6 +63,17 @@ describe("Plan 7 same-restored-target search evidence", () => {
     assert.doesNotMatch(goldenSql, /rebuild_food_catalog_search_projection_v2\s*\(/i);
   });
 
+  it("requires NULL-current database verification to execute the canonical authenticated Search V2 RPC", () => {
+    const sql = readFileSync("supabase/verification/food-catalog-plan7-null-current-search.sql", "utf8");
+    assert.match(sql, /set\s+local\s+role\s+authenticated/i);
+    assert.match(sql, /set_config\s*\(\s*'request\.jwt\.claim\.sub'/i);
+    assert.match(sql, /public\.search_food_catalog_v2\s*\(/i);
+    assert.match(sql, /jsonb_array_length\s*\([^)]*items[^)]*\)\s*<>?\s*0|jsonb_array_length\s*\([^)]*items[^)]*\)\s*=\s*0/i);
+    assert.match(sql, /nextCursor/i);
+    assert.match(sql, /generation_count_before/i);
+    assert.doesNotMatch(sql, /select\s+public\.rebuild_food_catalog_search_projection_v2\s*\(/i);
+  });
+
   it("orchestrates stale rebuild only for source-adversarial capture", () => {
     const sourceSql = buildSearchRuntimeCaptureSql("source-adversarial");
     const targetSql = buildSearchRuntimeCaptureSql("restored-authoritative");
