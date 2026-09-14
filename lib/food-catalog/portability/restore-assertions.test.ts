@@ -108,20 +108,26 @@ describe("Plan 7 restore assertion engine", () => {
         { relation: "food_catalog_governance_outbox", fields: ["claim_owner", "claim_principal_id", "lease_token", "lease_acquired_at", "lease_expires_at"] },
       ],
     });
-    for (const requiredRelation of [
+    expect(sql).toContain("food_catalog_generation_validation_reports");
+    expect(sql).toContain("food_catalog_generation_events");
+    expect(sql).toContain("RESTORE_POINTER_FIELDS_LAST").toBe(false);
+
+    const runtime = readFileSync("lib/food-catalog/portability/pre-pointer-generation-runtime.mjs", "utf8");
+    for (const fragment of [
+      "validateGenerationSemanticSnapshot",
+      "computeGenerationCompositionChecksum",
       "food_verification_assertions",
       "food_catalog_activation_set_members",
       "food_catalog_activation_sets",
       "food_catalog_activation_events",
       "food_catalog_generation_validation_findings",
-    ]) expect(sql).toContain(requiredRelation);
-    expect(sql).toMatch(/assertion_scope/i);
-    expect(sql).toMatch(/source_legal_accepted/i);
-    expect(sql).toMatch(/eligibility/i);
-    expect(sql).toMatch(/blocking/i);
+      "sourceLegalAccepted",
+      "eligibility",
+      "blocking",
+    ]) expect(runtime).toContain(fragment);
 
-    const loader = readFileSync("scripts/restore-food-catalog-portable.mjs", "utf8");
-    expect(loader).toMatch(/computeGenerationCompositionChecksum/);
-    expect(loader).toMatch(/PRE_POINTER_VERIFY[\s\S]*canonical[\s_-]*composition/i);
+    const wrapper = readFileSync("lib/food-catalog/portability/pre-pointer-verification.mjs", "utf8");
+    expect(wrapper).toMatch(/restore-food-catalog-portable\.mjs/);
+    expect(wrapper).toMatch(/verifyCanonicalPrePointerGeneration/);
   });
 });
