@@ -16,7 +16,13 @@ const STALE_GENERATION_ID = "71000000-0000-4000-8000-000000000903";
 const CURRENT_FOOD_ID = "71000000-0000-4000-8000-000000000101";
 const FIXTURE_OWNER_ID = "71000000-0000-4000-8000-000000000001";
 const GOLDEN_PREFIX = "__PLAN7_GOLDEN__";
+const CURRENT_REBUILD_PREFIX = "__PLAN7_CURRENT_REBUILD__";
+const STALE_REBUILD_PREFIX = "__PLAN7_STALE_REBUILD__";
+const CURRENT_RESULT_PREFIX = "__PLAN7_CURRENT_RESULT__";
+const STALE_RESULT_PREFIX = "__PLAN7_STALE_RESULT__";
+const DOCUMENT_COUNTS_PREFIX = "__PLAN7_DOCUMENT_COUNTS__";
 const GOLDEN_SQL = new URL("../supabase/verification/food-catalog-plan7-portability-search-golden-runtime.sql", import.meta.url);
+const GOLDEN_FIXTURE_SQL = new URL("../supabase/verification/food-catalog-plan7-portability-search-golden-fixture.sql", import.meta.url);
 const SEARCH_MODES = new Set(["auto", "source-adversarial", "restored-authoritative", "null-current"]);
 
 function sha256(value) {
@@ -56,11 +62,46 @@ function jsonQuery(databaseUrl, sql) {
   return JSON.parse(text);
 }
 
+function parseMarkedJson(output, prefix, { required = true } = {}) {
+  const lines = output.split(/\r?\n/u).filter((line) => line.startsWith(prefix));
+  if (lines.length === 0 && !required) return null;
+  if (lines.length !== 1) throw new Error(`Search runtime evidence expected exactly one ${prefix} record.`);
+  return JSON.parse(lines[0].slice(prefix.length));
+}
+
 export function buildAuthenticatedSearchSql(searchExpression, userId = FIXTURE_OWNER_ID) {
   if (typeof searchExpression !== "string" || !searchExpression.trim()) throw new Error("Authenticated search expression is required.");
   if (!UUID.test(userId)) throw new Error("Authenticated search fixture owner must be a UUID.");
   const escapedUserId = userId.replaceAll("'", "''");
   return `WITH plan7_auth_context AS MATERIALIZED (\n  SELECT set_config('request.jwt.claim.sub','${escapedUserId}',true) AS subject\n)\nSELECT (${searchExpression})::text\nFROM plan7_auth_context;`;
+}
+
+export function buildSearchRuntimeCaptureSql(mode) {
+  if (mode !== "source-adversarial" && mode !== "restored-authoritative") {
+    throw new Error("Search runtime capture mode is invalid for a non-null current generation.");
+  }
+  const fixtureSql = readFileSync(GOLDEN_FIXTURE_SQL, "utf8").trim();
+  const goldenSql = readFileSync(GOLDEN_SQL, "utf8").trim();
+  const staleRebuildSql = mode === "source-adversarial"
+    ? `select '${STALE_REBUILD_PREFIX}' || public.rebuild_food_catalog_search_projection_v2('${STALE_GENERATION_ID}'::uuid,'search-projection-v2','plan7-runtime-golden-v1')::text;`
+    : "";
+  return `\\set ON_ERROR_STOP on
+\\pset tuples_only on
+\\pset format unaligned
+begin;
+select set_config('request.jwt.claim.sub','${FIXTURE_OWNER_ID}',true);
+${fixtureSql}
+${staleRebuildSql}
+select '${CURRENT_REBUILD_PREFIX}' || public.rebuild_food_catalog_search_projection_v2('${CURRENT_GENERATION_ID}'::uuid,'search-projection-v2','plan7-runtime-golden-v1')::text;
+select '${CURRENT_RESULT_PREFIX}' || public.search_food_catalog_v2('Plan7 Portable Chicken','en','Latn','DE',null,20,null,null,'all','{}'::jsonb)::text;
+select '${STALE_RESULT_PREFIX}' || public.search_food_catalog_v2('Plan7 Stale Turkey','en','Latn','GLOBAL',null,20,null,null,'all','{}'::jsonb)::text;
+select '${DOCUMENT_COUNTS_PREFIX}' || json_build_object(
+  'current',(select count(*) from public.food_catalog_search_documents where generation_id='${CURRENT_GENERATION_ID}'::uuid),
+  'stale',(select count(*) from public.food_catalog_search_documents where generation_id='${STALE_GENERATION_ID}'::uuid)
+)::text;
+${goldenSql}
+rollback;
+`;
 }
 
 function requireGoldenMatrix(matrix) {
@@ -126,8 +167,7 @@ export function buildSearchRuntimeEvidence({
   });
 }
 
-export function captureGoldenSearchMatrix(databaseUrl) {
-  const output = runPsqlScript(databaseUrl, readFileSync(GOLDEN_SQL, "utf8"));
+export function parseGoldenSearchMatrix(output) {
   const cases = output.split(/\r?\n/u)
     .filter((line) => line.startsWith(GOLDEN_PREFIX))
     .map((line) => JSON.parse(line.slice(GOLDEN_PREFIX.length)));
@@ -183,18 +223,13 @@ export function captureSearchRuntimeEvidence(databaseUrl, headSha, mode = "resto
   const pointer = runPsql(databaseUrl, "select coalesce(current_generation_id::text,'') from public.food_catalog_current_generation where singleton_key=true;");
   if (pointer !== CURRENT_GENERATION_ID) throw new Error(`Expected current generation ${CURRENT_GENERATION_ID}, observed ${pointer || "<null>"}.`);
 
-  let staleRebuild = null;
-  if (mode === "source-adversarial") {
-    staleRebuild = jsonQuery(databaseUrl, `select public.rebuild_food_catalog_search_projection_v2('${STALE_GENERATION_ID}'::uuid,'search-projection-v2',null)::text;`);
-  }
-  const currentRebuild = jsonQuery(databaseUrl, `select public.rebuild_food_catalog_search_projection_v2('${CURRENT_GENERATION_ID}'::uuid,'search-projection-v2',null)::text;`);
-  const currentResult = jsonQuery(databaseUrl, buildAuthenticatedSearchSql("public.search_food_catalog_v2('Plan7 Portable Chicken','en','Latn','DE',null,20,null,null,'all','{}'::jsonb)"));
-  const staleResult = jsonQuery(databaseUrl, buildAuthenticatedSearchSql("public.search_food_catalog_v2('Plan7 Stale Turkey','en','Latn','GLOBAL',null,20,null,null,'all','{}'::jsonb)"));
-  const counts = jsonQuery(databaseUrl, `select json_build_object(
-    'current',(select count(*) from public.food_catalog_search_documents where generation_id='${CURRENT_GENERATION_ID}'::uuid),
-    'stale',(select count(*) from public.food_catalog_search_documents where generation_id='${STALE_GENERATION_ID}'::uuid)
-  )::text;`);
-  const goldenMatrix = captureGoldenSearchMatrix(databaseUrl);
+  const output = runPsqlScript(databaseUrl, buildSearchRuntimeCaptureSql(mode));
+  const currentRebuild = parseMarkedJson(output, CURRENT_REBUILD_PREFIX);
+  const staleRebuild = parseMarkedJson(output, STALE_REBUILD_PREFIX, { required: mode === "source-adversarial" });
+  const currentResult = parseMarkedJson(output, CURRENT_RESULT_PREFIX);
+  const staleResult = parseMarkedJson(output, STALE_RESULT_PREFIX);
+  const counts = parseMarkedJson(output, DOCUMENT_COUNTS_PREFIX);
+  const goldenMatrix = parseGoldenSearchMatrix(output);
   return buildSearchRuntimeEvidence({
     mode,
     headSha,
