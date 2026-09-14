@@ -215,6 +215,7 @@ export function buildFinalAssertionEvidence(input) {
     assertion("governance_personal_overrides", "EXACT_IDENTITY_VALUE", input.governanceOwnerVerified, "Protected governance/personal authority and external owner bindings were restored and validated."),
     assertion("frozen_consumer_references", "SEMANTIC", input.consumerReferencesVerified, "Controlled frozen consumer reference preserves the stable Food ID and immutable snapshot checksum."),
     assertion("security_rls_acl_identity", "SEMANTIC", input.securityVerified, "RLS/policy/ACL/function privilege identity matches source authority and critical boundaries pass."),
+    assertion("service_execution_binding", "SEMANTIC", input.serviceExecutionBindingVerified, "Durable Service principal/capability history survived while restored source/random/auth execution identities cannot claim normalized pending outbox authority."),
     assertion("migration_schema_fingerprint", "BYTE_HASH", input.migrationSchemaVerified, "Target PostgreSQL capability, migration ledger and schema fingerprint match artifact/Git authority."),
     assertion("transient_neutralization", "SEMANTIC", input.transientNeutralizationVerified, "Every declared resumable lease/claim field is NULL on the restored target."),
   ]);
@@ -371,6 +372,23 @@ export function requireLinkedSearchEvidence(sourceSearch, targetSearch, manifest
   return true;
 }
 
+export function evaluateRestoredServiceAuthorityEvidence(observed) {
+  const requiredTrue = [
+    "sourceServiceIdentityRejected",
+    "authenticatedClaimRejected",
+    "randomServiceIdentityRejected",
+    "principalHistoryPreserved",
+    "capabilityHistoryPreserved",
+    "outboxPendingUnclaimed",
+    "serviceExecutionBindingUnavailable",
+  ];
+  for (const field of requiredTrue) {
+    if (observed?.[field] !== true) throw new Error(`Restored Service execution binding evidence failed: ${field}.`);
+  }
+  if (observed.automaticDeliveryObserved !== false) throw new Error("Restored Service execution binding evidence observed automatic delivery.");
+  return Object.freeze({ verified: true, automaticDeliveryObserved: false });
+}
+
 async function verifyConsumerReference(databaseUrl, fixturePath) {
   const fixture = JSON.parse(await readFile(resolve(fixturePath), "utf8"));
   if (typeof fixture.foodId !== "string" || typeof fixture.frozenSnapshot !== "object" || fixture.frozenSnapshot === null) {
@@ -400,6 +418,7 @@ function parseArgs(argv) {
     else if (value === "--restore-evidence") options.restoreEvidencePath = next();
     else if (value === "--source-security") options.sourceSecurityPath = next();
     else if (value === "--target-security") options.targetSecurityPath = next();
+    else if (value === "--target-service-authority") options.targetServiceAuthorityPath = next();
     else if (value === "--source-search") options.sourceSearchPath = next();
     else if (value === "--target-search") options.targetSearchPath = next();
     else if (value === "--consumer-reference") options.consumerReferencePath = next();
@@ -407,7 +426,7 @@ function parseArgs(argv) {
     else if (value === "--output") options.output = next();
     else throw new Error(`Unknown integrated restore verifier argument ${value}.`);
   }
-  const required = ["sourceArtifactDir","targetArtifactDir","targetUrl","restoreEvidencePath","sourceSecurityPath","targetSecurityPath","sourceSearchPath","targetSearchPath","consumerReferencePath","expectedHead","output"];
+  const required = ["sourceArtifactDir","targetArtifactDir","targetUrl","restoreEvidencePath","sourceSecurityPath","targetSecurityPath","targetServiceAuthorityPath","sourceSearchPath","targetSearchPath","consumerReferencePath","expectedHead","output"];
   for (const field of required) if (!options[field]) throw new Error(`Missing required integrated restore verifier option ${field}.`);
   if (!SHA40.test(options.expectedHead)) throw new Error("Integrated restore verifier expected head must be an exact commit SHA.");
   return options;
@@ -480,6 +499,7 @@ export async function verifyIntegratedRestore(options) {
   if (!sourceSecurity.criticalBoundariesVerified || !targetSecurity.criticalBoundariesVerified) throw new Error("Critical Food Catalog RLS/ACL boundary verification failed.");
   if (sourceSecurity.securityRlsAclIdentitySha256 !== targetSecurity.securityRlsAclIdentitySha256) throw new Error("Restored RLS/ACL/policy identity differs from source Git-migrated authority.");
   if (!SHA256.test(targetSecurity.securityRlsAclIdentitySha256 ?? "")) throw new Error("Target security identity digest is malformed.");
+  const serviceExecutionBinding = evaluateRestoredServiceAuthorityEvidence(JSON.parse(await readFile(resolve(options.targetServiceAuthorityPath), "utf8")));
 
   const ownerBinding = queryOwnerBindingEvidence(options.targetUrl);
   const targetIdentity = computeRestoredTargetIdentitySha256({
@@ -513,6 +533,7 @@ export async function verifyIntegratedRestore(options) {
     governanceOwnerVerified: ownerBinding.verified && areProtectedOwnerStateRelationsVerified(relationsByName),
     consumerReferencesVerified: consumerReference.verified,
     securityVerified: true,
+    serviceExecutionBindingVerified: serviceExecutionBinding.verified,
     migrationSchemaVerified: targetProfile.compatible === true,
     transientNeutralizationVerified: transientVerified,
   });
@@ -536,6 +557,7 @@ export async function verifyIntegratedRestore(options) {
     ownerBinding,
     mergeGraph,
     consumerReference,
+    serviceExecutionBinding,
     securityRlsAclIdentitySha256: targetSecurity.securityRlsAclIdentitySha256,
     search: Object.freeze({
       sameRestoredTargetVerified: true,
