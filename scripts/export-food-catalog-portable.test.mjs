@@ -43,6 +43,20 @@ describe("Plan 7 authoritative export CLI SQL program", () => {
     ]) assert.ok(sql.includes(fragment), `Expected authoritative schema fingerprint SQL to contain ${fragment}`);
   });
 
+  it("requires disposable PostgreSQL runtime proof that non-column authority changes the fingerprint", async () => {
+    const workflow = await readFile(new URL("../.github/workflows/food-catalog-portable-export-qa.yml", import.meta.url), "utf8");
+    assert.match(workflow, /verify-food-catalog-schema-identity-sensitivity\.mjs/);
+    const verifier = await readFile(new URL("./verify-food-catalog-schema-identity-sensitivity.mjs", import.meta.url), "utf8");
+    for (const fragment of [
+      "constraintChanged",
+      "policyChanged",
+      "triggerChanged",
+      "functionDefinitionChanged",
+      "functionAclChanged",
+      "buildFoodCatalogSchemaIdentitySql",
+    ]) assert.ok(verifier.includes(fragment), `Expected runtime schema identity proof to contain ${fragment}`);
+  });
+
   it("streams stable-key relation data without OFFSET pagination", () => {
     const sql = buildSingleSnapshotPsqlProgram({
       profile: "CORE_PORTABLE",
