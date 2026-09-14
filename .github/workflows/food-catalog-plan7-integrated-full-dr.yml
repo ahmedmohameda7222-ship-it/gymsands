@@ -73,6 +73,7 @@ jobs:
           node --test \
             scripts/verify-food-catalog-integrated-restore.test.mjs \
             scripts/capture-food-catalog-restored-search-runtime.test.mjs \
+            scripts/food-catalog-plan7-restored-service-binding.test.mjs \
             scripts/certify-food-catalog-restore.test.mjs
 
       - name: Replay exact Git migrations for source
@@ -232,6 +233,29 @@ jobs:
             -c "select lease_owner is null and lease_token is null and lease_expires_at is null from public.food_ingestion_runs where id='71000000-0000-4000-8000-000000000a11'::uuid" \
             | grep '^t$'
 
+      - name: Prove restored source Service execution binding is unavailable
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/capture-food-catalog-restored-service-authority.mjs \
+            --database-url "$PLAN7_RESTORE_DATABASE_URL" \
+            --source-identity "plan7-source-service-identity" \
+            --output "$RUNNER_TEMP/plan7-target-service-authority.json"
+          node - "$RUNNER_TEMP/plan7-target-service-authority.json" <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          for (const field of [
+            'sourceServiceIdentityRejected',
+            'authenticatedClaimRejected',
+            'randomServiceIdentityRejected',
+            'principalHistoryPreserved',
+            'capabilityHistoryPreserved',
+            'outboxPendingUnclaimed',
+            'serviceExecutionBindingUnavailable',
+          ]) if (value[field] !== true) process.exit(1);
+          if (value.automaticDeliveryObserved !== false) process.exit(1);
+          NODE
+
       - name: Capture restored target RLS ACL identity
         shell: bash
         run: |
@@ -292,6 +316,7 @@ jobs:
             --restore-evidence "$RUNNER_TEMP/plan7-loader-evidence.json" \
             --source-security "$RUNNER_TEMP/plan7-source-security.json" \
             --target-security "$RUNNER_TEMP/plan7-target-security.json" \
+            --target-service-authority "$RUNNER_TEMP/plan7-target-service-authority.json" \
             --source-search "$RUNNER_TEMP/plan7-source-search.json" \
             --target-search "$RUNNER_TEMP/plan7-target-search.json" \
             --consumer-reference "test/fixtures/food-catalog/plan7-consumer-reference-v1.json" \
@@ -304,6 +329,7 @@ jobs:
           if (!value.assertionEvaluation?.trusted || !value.assertionEvaluation?.restoreVerified) fail(`Integrated assertion evaluation is not trusted: ${JSON.stringify(value.assertionEvaluation)}`);
           if (value.assertionEvaluation.failures.length || value.assertionEvaluation.unknown.length) fail(`Integrated assertion evaluation contains failures/unknowns: ${JSON.stringify(value.assertionEvaluation)}`);
           if (!value.protectedSegmentsVerified || !value.search?.sameRestoredTargetVerified) fail(`Integrated evidence linkage failed: protectedSegmentsVerified=${value.protectedSegmentsVerified} sameRestoredTargetVerified=${value.search?.sameRestoredTargetVerified}`);
+          if (!value.serviceExecutionBinding?.verified) fail(`Restored Service execution binding proof is missing: ${JSON.stringify(value.serviceExecutionBinding)}`);
           fs.writeFileSync(process.argv[3], `${JSON.stringify(value.verificationInput, null, 2)}\n`, 'utf8');
           NODE
 
