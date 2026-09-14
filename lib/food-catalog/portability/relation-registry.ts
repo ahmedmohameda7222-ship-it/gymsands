@@ -17,6 +17,13 @@ export type SourceValueTransition = Readonly<{
   to: string;
 }>;
 
+export type RestoreLocalBinding = Readonly<{
+  column: string;
+  discriminatorColumn: string;
+  discriminatorValue: string;
+  strategy: "UNREACHABLE_SHA256";
+}>;
+
 export type PortableRelationRule = Readonly<{
   segment: string;
   relation: string;
@@ -30,8 +37,8 @@ export type PortableRelationRule = Readonly<{
   transientNeutralize?: readonly string[];
   sourceTransientNeutralize?: readonly string[];
   sourceValueTransitions?: readonly SourceValueTransition[];
+  restoreLocalBindings?: readonly RestoreLocalBinding[];
   restoreLast?: boolean;
-  operationallyDisabledAfterRestore?: boolean;
   note?: string;
 }>;
 
@@ -57,8 +64,10 @@ function rule(
     sourceValueTransitions: options.sourceValueTransitions
       ? Object.freeze(options.sourceValueTransitions.map((entry) => Object.freeze({ ...entry })))
       : undefined,
+    restoreLocalBindings: options.restoreLocalBindings
+      ? Object.freeze(options.restoreLocalBindings.map((entry) => Object.freeze({ ...entry })))
+      : undefined,
     restoreLast: options.restoreLast,
-    operationallyDisabledAfterRestore: options.operationallyDisabledAfterRestore,
     note: options.note,
   });
 }
@@ -157,7 +166,18 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
     note: "Source compatibility is evidence only and never target promotion authority.",
   }),
 
-  rule("food_catalog_governance_principals", PA, "RESTORE_EXACT", ["id"], { requiredProfile: "FULL_DR", protected: true }),
+  rule("food_catalog_governance_principals", PA, "RESTORE_EXACT", ["id"], {
+    requiredProfile: "FULL_DR",
+    protected: true,
+    sourceTransientNeutralize: ["service_identity_sha256"],
+    restoreLocalBindings: [{
+      column: "service_identity_sha256",
+      discriminatorColumn: "principal_type",
+      discriminatorValue: "service",
+      strategy: "UNREACHABLE_SHA256",
+    }],
+    note: "Principal/audit identity is portable, but Service execution binding is environment-local. Source service identity digests are excluded from artifact authority and Service rows receive an unreachable restore-local SHA-256 binding until separate rebind/replay reconciliation.",
+  }),
   rule("food_catalog_governance_capability_assignments", PH, "RESTORE_EXACT", ["id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_catalog_governance_policy_versions", PA, "VALIDATE_PRESEEDED", ["policy_version"], {
     requiredProfile: "FULL_DR",
@@ -190,8 +210,7 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
     transientNeutralize: ["claim_owner", "claim_principal_id", "lease_token", "lease_acquired_at", "lease_expires_at"],
     sourceTransientNeutralize: ["claim_owner", "claim_principal_id", "lease_token", "lease_acquired_at", "lease_expires_at"],
     sourceValueTransitions: [{ column: "status", from: "processing", to: "pending" }],
-    operationallyDisabledAfterRestore: true,
-    note: "Portable authority maps live source processing rows to pending, clears five live claim fields, and preserves attempt_count plus lease_epoch durable fencing history. Source execution state is never mutated; delivery remains disabled until replay reconciliation.",
+    note: "Portable authority maps live source processing rows to pending, clears five live claim fields, and preserves attempt_count plus lease_epoch durable fencing history. Delivery remains unavailable because restored Service principals have no reusable source execution binding until separate rebind/replay reconciliation.",
   }),
   rule("food_catalog_serving_fact_lineages", PA, "RESTORE_EXACT", ["lineage_id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_catalog_serving_fact_revisions", PA, "RESTORE_EXACT", ["serving_option_id"], { requiredProfile: "FULL_DR", protected: true }),
