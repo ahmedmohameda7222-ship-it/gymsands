@@ -117,7 +117,7 @@ describe("Plan 7 relation/load-mode registry", () => {
       requiredProfile: "FULL_DR",
       protected: true,
     });
-    expect(findPortableRelationRule("food_catalog_governance_outbox")?.operationallyDisabledAfterRestore).toBeUndefined();
+    expect(findPortableRelationRule("food_catalog_governance_outbox")).not.toHaveProperty("operationallyDisabledAfterRestore");
   });
 
   it("requires every current protected owner-state family only for FULL_DR", () => {
