@@ -8,6 +8,7 @@ import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline";
 import { spawn } from "node:child_process";
+import { buildFoodCatalogSchemaIdentitySql } from "./schema-identity.mjs";
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 const SHA40 = /^[0-9a-f]{40}$/;
@@ -85,6 +86,7 @@ export function buildSingleSnapshotPsqlProgram({ profile, relations }) {
     }
     validateSourceValueTransitions(spec, stableKey);
   });
+  const schemaIdentitySql = buildFoodCatalogSchemaIdentitySql();
 
   return `\\set ON_ERROR_STOP on
 \\pset tuples_only on
@@ -96,18 +98,7 @@ WITH migration AS (
          coalesce(max(version)::text, '') AS latest_migration,
          coalesce(string_agg(version::text, ',' ORDER BY version), '') AS migration_ledger_input
   FROM supabase_migrations.schema_migrations
-), schema_identity AS (
-  SELECT coalesce(string_agg(
-    n.nspname || '.' || c.relname || ':' || a.attnum::text || ':' || a.attname || ':' || format_type(a.atttypid,a.atttypmod) || ':' || a.attnotnull::text,
-    E'\\n' ORDER BY n.nspname,c.relname,a.attnum
-  ), '') AS identity_input
-  FROM pg_class c
-  JOIN pg_namespace n ON n.oid=c.relnamespace
-  JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
-  WHERE n.nspname='public'
-    AND (c.relname LIKE 'food_%' OR c.relname IN ('market_scopes','market_scope_memberships','release_schema_compatibility'))
-    AND c.relkind IN ('r','p')
-)
+), ${schemaIdentitySql}
 SELECT '__PLAN7_META__' || json_build_object(
   'environment', current_database(),
   'postgresSnapshot', pg_export_snapshot(),
