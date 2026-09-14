@@ -5,6 +5,7 @@ import {
   buildFinalAssertionEvidence,
   computeRestoredTargetIdentitySha256,
   requireLinkedSearchEvidence,
+  evaluateRestoredServiceAuthorityEvidence,
 } from "./verify-food-catalog-integrated-restore.mjs";
 
 const row = (entries) => JSON.stringify(entries);
@@ -207,6 +208,30 @@ describe("Plan 7 integrated restore evidence", () => {
     assert.equal(verifier.areDeclaredTransientRelationsNeutralized(rules, [bothVerified[0], bothVerified[2]]), false);
   });
 
+  it("requires restored Service authority isolation as a mandatory semantic assertion", () => {
+    const evidence = evaluateRestoredServiceAuthorityEvidence({
+      sourceServiceIdentityRejected: true,
+      authenticatedClaimRejected: true,
+      randomServiceIdentityRejected: true,
+      principalHistoryPreserved: true,
+      capabilityHistoryPreserved: true,
+      outboxPendingUnclaimed: true,
+      serviceExecutionBindingUnavailable: true,
+      automaticDeliveryObserved: false,
+    });
+    assert.deepEqual(evidence, { verified: true, automaticDeliveryObserved: false });
+    assert.throws(() => evaluateRestoredServiceAuthorityEvidence({
+      sourceServiceIdentityRejected: false,
+      authenticatedClaimRejected: true,
+      randomServiceIdentityRejected: true,
+      principalHistoryPreserved: true,
+      capabilityHistoryPreserved: true,
+      outboxPendingUnclaimed: true,
+      serviceExecutionBindingUnavailable: true,
+      automaticDeliveryObserved: false,
+    }), /Service|execution|binding|source/i);
+  });
+
   it("builds all mandatory assertions from runtime proof classes without caller trust booleans", () => {
     const evidence = buildFinalAssertionEvidence({
       artifactHashesVerified: true,
@@ -222,12 +247,14 @@ describe("Plan 7 integrated restore evidence", () => {
       governanceOwnerVerified: true,
       consumerReferencesVerified: true,
       securityVerified: true,
+      serviceExecutionBindingVerified: true,
       migrationSchemaVerified: true,
       transientNeutralizationVerified: true,
     });
-    assert.equal(evidence.length, 16);
+    assert.equal(evidence.length, 17);
     assert.ok(evidence.every((entry) => entry.status === "PASS" && entry.mandatory));
     assert.deepEqual(new Set(evidence.map((entry) => entry.comparisonClass)), new Set(["BYTE_HASH","EXACT_IDENTITY_VALUE","SEMANTIC"]));
+    assert.equal(evidence.find((entry) => entry.id === "service_execution_binding")?.status, "PASS");
   });
 
   it("binds current corrections and favorites into owner evidence and the governance/personal assertion", async () => {
