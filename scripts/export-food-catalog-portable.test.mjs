@@ -82,6 +82,28 @@ describe("Plan 7 authoritative export CLI SQL program", () => {
     assert.equal(values.lease_owner.text, "plan7-worker", "preparation must not mutate the source envelope");
   });
 
+  it("removes source Service execution binding from canonical FULL_DR artifact material", async () => {
+    const exporter = await import("./export-food-catalog-portable.mjs");
+    const registry = await import("../lib/food-catalog/portability/relation-registry.ts");
+    const rule = registry.findPortableRelationRule("food_catalog_governance_principals");
+    assert.ok(rule, "Service principal portability rule is required");
+    const sourceDigest = "7".repeat(64);
+    const values = {
+      id: { pgType: "uuid", text: "71000000-0000-4000-8000-000000000d10" },
+      principal_type: { pgType: "text", text: "service" },
+      subject_id: { pgType: "text", text: "plan7-portability-service" },
+      human_user_id: { pgType: "uuid", text: null },
+      service_identity_sha256: { pgType: "text", text: sourceDigest },
+      role_class: { pgType: "text", text: "service" },
+      active: { pgType: "boolean", text: "true" },
+      created_at: { pgType: "timestamptz", text: "2026-09-10 18:26:00+00" },
+      revoked_at: { pgType: "timestamptz", text: null },
+    };
+    const prepared = exporter.prepareSourcePortableValues(values, rule);
+    assert.equal(prepared.service_identity_sha256.text, null);
+    assert.equal(values.service_identity_sha256.text, sourceDigest, "source row must remain untouched");
+  });
+
   it("maps a source processing outbox row to portable pending state while preserving durable delivery history and source authority", async () => {
     const exporter = await import("./export-food-catalog-portable.mjs");
     const transientClaims = [
