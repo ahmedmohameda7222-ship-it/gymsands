@@ -110,7 +110,7 @@ describe("Plan 7 restore assertion engine", () => {
     });
     expect(sql).toContain("food_catalog_generation_validation_reports");
     expect(sql).toContain("food_catalog_generation_events");
-    expect(sql).toContain("RESTORE_POINTER_FIELDS_LAST").toBe(false);
+    expect(sql).not.toContain("RESTORE_POINTER_FIELDS_LAST");
 
     const runtime = readFileSync("lib/food-catalog/portability/pre-pointer-generation-runtime.mjs", "utf8");
     for (const fragment of [
