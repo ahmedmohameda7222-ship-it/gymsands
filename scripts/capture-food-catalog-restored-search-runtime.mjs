@@ -16,6 +16,7 @@ const STALE_GENERATION_ID = "71000000-0000-4000-8000-000000000903";
 const CURRENT_FOOD_ID = "71000000-0000-4000-8000-000000000101";
 const FIXTURE_OWNER_ID = "71000000-0000-4000-8000-000000000001";
 const GOLDEN_PREFIX = "__PLAN7_GOLDEN__";
+const NULL_CURRENT_PREFIX = "__PLAN7_NULL_CURRENT__";
 const CURRENT_REBUILD_PREFIX = "__PLAN7_CURRENT_REBUILD__";
 const STALE_REBUILD_PREFIX = "__PLAN7_STALE_REBUILD__";
 const CURRENT_RESULT_PREFIX = "__PLAN7_CURRENT_RESULT__";
@@ -23,6 +24,7 @@ const STALE_RESULT_PREFIX = "__PLAN7_STALE_RESULT__";
 const DOCUMENT_COUNTS_PREFIX = "__PLAN7_DOCUMENT_COUNTS__";
 const GOLDEN_SQL = new URL("../supabase/verification/food-catalog-plan7-portability-search-golden-runtime.sql", import.meta.url);
 const GOLDEN_FIXTURE_SQL = new URL("../supabase/verification/food-catalog-plan7-portability-search-golden-fixture.sql", import.meta.url);
+const NULL_CURRENT_SQL = new URL("../supabase/verification/food-catalog-plan7-null-current-search.sql", import.meta.url);
 const SEARCH_MODES = new Set(["auto", "source-adversarial", "restored-authoritative", "null-current"]);
 
 function sha256(value) {
@@ -54,12 +56,6 @@ function runPsqlScript(databaseUrl, sql) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`Search runtime golden SQL failed: ${(result.stderr ?? "").trim()}`);
   return result.stdout ?? "";
-}
-
-function jsonQuery(databaseUrl, sql) {
-  const text = runPsql(databaseUrl, sql);
-  if (!text) throw new Error("Search runtime evidence query returned no JSON.");
-  return JSON.parse(text);
 }
 
 function parseMarkedJson(output, prefix, { required = true } = {}) {
@@ -193,20 +189,28 @@ export function parseGoldenSearchMatrix(output) {
 
 export function captureNullCurrentSearchEvidence(databaseUrl, headSha) {
   if (!SHA40.test(headSha)) throw new Error("NULL-current search evidence requires an exact head SHA.");
-  const pointer = runPsql(databaseUrl, "select coalesce(current_generation_id::text,'') from public.food_catalog_current_generation where singleton_key=true;");
-  if (pointer !== "") throw new Error("NULL-current search evidence requires a null current-generation pointer.");
-  const documentCount = Number(runPsql(databaseUrl, "select count(*)::text from public.food_catalog_search_documents;"));
-  if (documentCount !== 0) throw new Error("NULL-current search evidence requires zero SearchDocuments.");
+  const output = runPsqlScript(databaseUrl, readFileSync(NULL_CURRENT_SQL, "utf8"));
+  const runtime = parseMarkedJson(output, NULL_CURRENT_PREFIX);
+  const searchItems = Array.isArray(runtime?.searchResult?.items) ? runtime.searchResult.items : null;
+  const valid = runtime?.currentGenerationId === null
+    && Number(runtime?.searchDocumentCount) === 0
+    && Number.isInteger(Number(runtime?.generationCountBefore))
+    && Number(runtime?.generationCountBefore) === Number(runtime?.generationCountAfter)
+    && runtime?.rebuildInvoked === false
+    && runtime?.canonicalRpcInvoked === true
+    && runtime?.nullCurrentSearchVerified === true
+    && searchItems !== null
+    && searchItems.length === 0
+    && runtime?.searchResult?.nextCursor === null
+    && Object.keys(runtime.searchResult).sort().join(",") === "items,nextCursor";
+  if (!valid) throw new Error("NULL-current Search V2 runtime evidence is incomplete or not canonical.");
   return Object.freeze({
     format: "plaivra-food-catalog-null-current-search-evidence",
-    version: 1,
+    version: 2,
     mode: "null-current",
     headSha,
-    currentGenerationId: null,
-    searchDocumentCount: 0,
-    rebuildInvoked: false,
-    nullCurrentSearchVerified: true,
     providerNetworkUsed: false,
+    ...runtime,
   });
 }
 
