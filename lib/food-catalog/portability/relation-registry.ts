@@ -218,6 +218,11 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
   rule("food_catalog_name_fact_revisions", PA, "RESTORE_EXACT", ["name_fact_id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_personal_corrections", PA, "RESTORE_EXACT", ["user_id", "food_id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_favorites", PA, "RESTORE_EXACT", ["user_id", "food_id"], { requiredProfile: "FULL_DR", protected: true }),
+  rule("user_food_favorites", PA, "RESTORE_EXACT", ["user_id", "food_key"], {
+    requiredProfile: "FULL_DR",
+    protected: true,
+    note: "Transitional heterogeneous owner favorite state is preserved exactly, including food_key and label, until separate row-classified reconciliation; Workstream 1 performs no blanket conversion to food_favorites.",
+  }),
   rule("food_personal_override_revisions", PA, "RESTORE_EXACT", ["id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_personal_overrides", PA, "RESTORE_EXACT", ["user_id", "food_id"], { requiredProfile: "FULL_DR", protected: true }),
   rule("food_personal_override_operations", PH, "RESTORE_EXACT", ["user_id", "operation_id"], { requiredProfile: "FULL_DR", protected: true }),
