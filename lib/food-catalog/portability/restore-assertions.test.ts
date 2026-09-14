@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { buildPrePointerVerificationSql } from "./pre-pointer-verification.mjs";
 import {
   MANDATORY_RESTORE_ASSERTION_IDS,
   assertExactOwnerBindings,
   assertRedirectGraph,
   assertTransientNeutralization,
+  buildPrePointerVerificationSql,
   compareExactTypedRows,
   compareHashEvidence,
   evaluateRestoreAssertions,
