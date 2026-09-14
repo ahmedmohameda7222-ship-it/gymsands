@@ -5,8 +5,8 @@ import {
   type GenerationFoodSelection,
   type GenerationRedirectSelection,
   type GenerationVerificationSelection,
-} from "./domain/generations";
-import { sha256Canonical } from "./canonical-hash";
+} from "./domain/generations.ts";
+import { sha256Canonical } from "./canonical-hash.ts";
 
 export type GenerationServingSelection = {
   foodId: string;
