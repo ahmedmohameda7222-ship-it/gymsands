@@ -57,6 +57,11 @@ describe("Plan 7 same-restored-target search evidence", () => {
     assert.match(targetStep, /--mode\s+restored-authoritative/);
   });
 
+  it("keeps golden matrix SQL free of hidden projection rebuilds", () => {
+    const goldenSql = readFileSync("supabase/verification/food-catalog-plan7-portability-search-golden-runtime.sql", "utf8");
+    assert.doesNotMatch(goldenSql, /rebuild_food_catalog_search_projection_v2\s*\(/i);
+  });
+
   it("requires authoritative restored evidence to rebuild current only with zero stale SearchDocuments", () => {
     const evidence = buildSearchRuntimeEvidence(passing());
     assert.equal(evidence.mode, "restored-authoritative");
