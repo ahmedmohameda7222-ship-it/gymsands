@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { REQUIRED_GOLDEN_SEARCH_CASE_IDS } from "../lib/food-catalog/portability/search-restore-verifier.ts";
 import {
   buildAuthenticatedSearchSql,
+  buildSearchRuntimeCaptureSql,
   buildSearchRuntimeEvidence,
   inferSearchRuntimeMode,
 } from "./capture-food-catalog-restored-search-runtime.mjs";
@@ -60,6 +61,18 @@ describe("Plan 7 same-restored-target search evidence", () => {
   it("keeps golden matrix SQL free of hidden projection rebuilds", () => {
     const goldenSql = readFileSync("supabase/verification/food-catalog-plan7-portability-search-golden-runtime.sql", "utf8");
     assert.doesNotMatch(goldenSql, /rebuild_food_catalog_search_projection_v2\s*\(/i);
+  });
+
+  it("orchestrates stale rebuild only for source-adversarial capture", () => {
+    const sourceSql = buildSearchRuntimeCaptureSql("source-adversarial");
+    const targetSql = buildSearchRuntimeCaptureSql("restored-authoritative");
+    const staleId = "71000000-0000-4000-8000-000000000903";
+    const currentId = "71000000-0000-4000-8000-000000000901";
+    assert.match(sourceSql, new RegExp(`rebuild_food_catalog_search_projection_v2\\('${staleId}'`));
+    assert.match(sourceSql, new RegExp(`rebuild_food_catalog_search_projection_v2\\('${currentId}'`));
+    assert.doesNotMatch(targetSql, new RegExp(`rebuild_food_catalog_search_projection_v2\\('${staleId}'`));
+    assert.match(targetSql, new RegExp(`rebuild_food_catalog_search_projection_v2\\('${currentId}'`));
+    assert.equal((targetSql.match(/rebuild_food_catalog_search_projection_v2\s*\(/gi) ?? []).length, 1);
   });
 
   it("requires authoritative restored evidence to rebuild current only with zero stale SearchDocuments", () => {
