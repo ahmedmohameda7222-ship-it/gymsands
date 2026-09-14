@@ -10,6 +10,8 @@ const OTHER_OWNER_ID = "72000000-0000-4000-8000-000000000001";
 const CURRENT_FOOD_ID = "71000000-0000-4000-8000-000000000101";
 const STALE_FOOD_ID = "71000000-0000-4000-8000-000000000103";
 const TEMP_FAVORITE_ID = "71000000-0000-4000-8000-000000000f01";
+const TRANSITIONAL_FAVORITE_KEY = "legacy:plan7-portable-chicken";
+const TEMP_TRANSITIONAL_FAVORITE_KEY = "legacy:plan7-security-temp";
 const CURRENT_GENERATION_ID = "71000000-0000-4000-8000-000000000901";
 const TEMP_SERVICE_PRINCIPAL_ID = "73000000-0000-4000-8000-000000000d10";
 const TEMP_SERVICE_CAPABILITY_ID = "73000000-0000-4000-8000-000000000d11";
@@ -42,7 +44,7 @@ export function buildFoodCatalogSecurityEvidenceSql() {
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname='public'
     AND c.relkind IN ('r','p')
-    AND (c.relname LIKE 'food_%' OR c.relname IN ('market_scopes','market_scope_memberships','release_schema_compatibility'))
+    AND (c.relname LIKE 'food_%' OR c.relname IN ('user_food_favorites','market_scopes','market_scope_memberships','release_schema_compatibility'))
 ), policy_rows AS (
   SELECT tablename,policyname,permissive,roles::text,cmd,coalesce(qual,'') AS qual,coalesce(with_check,'') AS with_check
   FROM pg_policies
@@ -130,6 +132,41 @@ end
 $plan7_rls$;
 select current_setting('plan7.wrong_owner_mutation_denied',true)='true';
 rollback;`, "wrongOwnerMutationDenied");
+
+  const transitionalOwnerScopedReadVerified = booleanEvidence(databaseUrl, `begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','${OWNER_ID}',true);
+select exists(select 1 from public.user_food_favorites where user_id='${OWNER_ID}'::uuid and food_key='${TRANSITIONAL_FAVORITE_KEY}' and label='Plan7 Legacy Favorite');
+rollback;`, "transitionalOwnerScopedReadVerified");
+
+  const transitionalWrongOwnerReadDenied = booleanEvidence(databaseUrl, `begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','${OTHER_OWNER_ID}',true);
+select not exists(select 1 from public.user_food_favorites where user_id='${OWNER_ID}'::uuid and food_key='${TRANSITIONAL_FAVORITE_KEY}');
+rollback;`, "transitionalWrongOwnerReadDenied");
+
+  const transitionalOwnMutationAllowed = booleanEvidence(databaseUrl, `begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','${OWNER_ID}',true);
+insert into public.user_food_favorites(user_id,food_key,label,created_at) values('${OWNER_ID}','${TEMP_TRANSITIONAL_FAVORITE_KEY}','Plan7 Security Temp','2026-09-10T18:31:30Z');
+select exists(select 1 from public.user_food_favorites where user_id='${OWNER_ID}'::uuid and food_key='${TEMP_TRANSITIONAL_FAVORITE_KEY}');
+rollback;`, "transitionalOwnMutationAllowed");
+
+  const transitionalWrongOwnerMutationDenied = booleanEvidence(databaseUrl, `begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','${OTHER_OWNER_ID}',true);
+do $plan7_transitional_rls$
+begin
+  begin
+    insert into public.user_food_favorites(user_id,food_key,label,created_at) values('${OWNER_ID}','${TEMP_TRANSITIONAL_FAVORITE_KEY}','Plan7 Security Temp','2026-09-10T18:31:30Z');
+    raise exception 'Plan7 wrong-owner transitional favorite mutation unexpectedly succeeded';
+  exception when insufficient_privilege then
+    perform set_config('plan7.transitional_wrong_owner_mutation_denied','true',true);
+  end;
+end
+$plan7_transitional_rls$;
+select current_setting('plan7.transitional_wrong_owner_mutation_denied',true)='true';
+rollback;`, "transitionalWrongOwnerMutationDenied");
 
   const personalizedSearchIsolationVerified = booleanEvidence(databaseUrl, `begin;
 select public.rebuild_food_catalog_search_projection_v2('${CURRENT_GENERATION_ID}'::uuid,'search-projection-v2',null);
@@ -219,6 +256,10 @@ rollback;`, "serviceOutboxAuthorizedVerified");
     wrongOwnerReadDenied,
     ownMutationAllowed,
     wrongOwnerMutationDenied,
+    transitionalOwnerScopedReadVerified,
+    transitionalWrongOwnerReadDenied,
+    transitionalOwnMutationAllowed,
+    transitionalWrongOwnerMutationDenied,
     personalizedSearchIsolationVerified,
     authenticatedServiceOnlyDenied,
     anonUnauthorizedVerified,
@@ -248,6 +289,10 @@ export function evaluateFoodCatalogSecurityEvidence(observed) {
     "wrongOwnerReadDenied",
     "ownMutationAllowed",
     "wrongOwnerMutationDenied",
+    "transitionalOwnerScopedReadVerified",
+    "transitionalWrongOwnerReadDenied",
+    "transitionalOwnMutationAllowed",
+    "transitionalWrongOwnerMutationDenied",
     "personalizedSearchIsolationVerified",
     "authenticatedServiceOnlyDenied",
     "anonUnauthorizedVerified",
