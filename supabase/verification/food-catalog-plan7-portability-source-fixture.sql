@@ -274,7 +274,7 @@ insert into public.food_personal_override_operations(
   '2026-09-10T18:25:00Z','2026-09-10T18:25:00Z'
 );
 
--- Current owner Food state remains backup authority until Workstream 2 explicitly migrates/retires it.
+-- Current and transitional owner Food state remain backup authority until Workstream 2 explicitly reconciles/retires them.
 insert into public.food_personal_corrections(
   id,user_id,food_id,protein_g,note,is_active,created_at,updated_at
 ) values(
@@ -283,6 +283,8 @@ insert into public.food_personal_corrections(
 );
 insert into public.food_favorites(id,user_id,food_id,created_at)
 values(:'favorite',:'owner_uid',:'food_current','2026-09-10T18:25:40Z');
+insert into public.user_food_favorites(user_id,food_key,label,created_at)
+values(:'owner_uid','legacy:plan7-portable-chicken','Plan7 Legacy Favorite','2026-09-10T18:25:45Z');
 
 -- Fixture self-checks are part of the source proof, not certification.
 -- psql variables are intentionally not used inside this dollar-quoted block: psql
@@ -334,8 +336,13 @@ begin
     where id='71000000-0000-4000-8000-000000000b31'::uuid
       and user_id='71000000-0000-4000-8000-000000000001'::uuid
       and food_id='71000000-0000-4000-8000-000000000101'::uuid
+  ) or not exists(
+    select 1 from public.user_food_favorites
+    where user_id='71000000-0000-4000-8000-000000000001'::uuid
+      and food_key='legacy:plan7-portable-chicken'
+      and label='Plan7 Legacy Favorite'
   ) then
-    raise exception 'Plan7 source fixture current owner Food state is missing.';
+    raise exception 'Plan7 source fixture current/transitional owner Food state is missing.';
   end if;
   if not exists(
     select 1
