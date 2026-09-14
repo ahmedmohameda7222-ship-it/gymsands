@@ -19,6 +19,30 @@ describe("Plan 7 authoritative export CLI SQL program", () => {
     ]) assert.ok(sql.includes(fragment), `Expected SQL to contain ${fragment}`);
   });
 
+  it("fingerprints non-column schema authority through one shared definition", async () => {
+    const source = await readFile(new URL("./export-food-catalog-portable.mjs", import.meta.url), "utf8");
+    assert.match(source, /schema-identity\.mjs/);
+    assert.match(source, /buildFoodCatalogSchemaIdentitySql/);
+    const sql = buildSingleSnapshotPsqlProgram({
+      profile: "CORE_PORTABLE",
+      relations: [{ relation: "food_items", stableKey: ["id"] }],
+    });
+    for (const fragment of [
+      "user_food_favorites",
+      "pg_get_expr",
+      "attgenerated",
+      "attidentity",
+      "pg_constraint",
+      "pg_get_constraintdef",
+      "pg_policies",
+      "pg_trigger",
+      "pg_get_triggerdef",
+      "pg_proc",
+      "pg_get_functiondef",
+      "aclexplode",
+    ]) assert.ok(sql.includes(fragment), `Expected authoritative schema fingerprint SQL to contain ${fragment}`);
+  });
+
   it("streams stable-key relation data without OFFSET pagination", () => {
     const sql = buildSingleSnapshotPsqlProgram({
       profile: "CORE_PORTABLE",
