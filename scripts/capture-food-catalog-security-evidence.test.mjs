@@ -6,18 +6,25 @@ import {
   evaluateFoodCatalogSecurityEvidence,
 } from "./capture-food-catalog-security-evidence.mjs";
 
-test("security evidence SQL preserves canonical pg_policies predicate aliases", () => {
+test("security evidence SQL preserves canonical pg_policies predicate aliases and transitional owner metadata", () => {
   const sql = buildFoodCatalogSecurityEvidenceSql();
 
   assert.match(sql, /coalesce\(qual,''\)\s+AS\s+qual/i);
   assert.match(sql, /coalesce\(with_check,''\)\s+AS\s+with_check/i);
   assert.match(sql, /'qual',qual,'withCheck',with_check/);
+  assert.match(sql, /user_food_favorites/);
 });
 
 function completeObserved() {
   return {
-    relations: [{ name: "food_catalog_search_documents", rls: true, forceRls: false, acl: "" }],
-    policies: [{ table: "food_favorites", name: "food_favorites_select_own" }],
+    relations: [
+      { name: "food_catalog_search_documents", rls: true, forceRls: false, acl: "" },
+      { name: "user_food_favorites", rls: true, forceRls: false, acl: "" },
+    ],
+    policies: [
+      { table: "food_favorites", name: "food_favorites_select_own" },
+      { table: "user_food_favorites", name: "user_food_favorites_own_all" },
+    ],
     privileges: [{ table: "food_favorites", grantee: "authenticated", privilege: "SELECT" }],
     critical: {
       searchDocumentsRls: true,
@@ -33,6 +40,10 @@ function completeObserved() {
       wrongOwnerReadDenied: true,
       ownMutationAllowed: true,
       wrongOwnerMutationDenied: true,
+      transitionalOwnerScopedReadVerified: true,
+      transitionalWrongOwnerReadDenied: true,
+      transitionalOwnMutationAllowed: true,
+      transitionalWrongOwnerMutationDenied: true,
       personalizedSearchIsolationVerified: true,
       authenticatedServiceOnlyDenied: true,
       anonUnauthorizedVerified: true,
@@ -47,15 +58,17 @@ test("security evidence summary fails closed when a critical boundary is false",
   assert.throws(() => evaluateFoodCatalogSecurityEvidence(observed), /personalOverrideDirectMutationDenied/);
 });
 
-test("security evidence requires behavioral owner isolation in addition to matching metadata", () => {
+test("security evidence requires current and transitional behavioral owner isolation in addition to matching metadata", () => {
   const observed = completeObserved();
   const summary = evaluateFoodCatalogSecurityEvidence(observed);
   assert.equal(summary.criticalBoundariesVerified, true);
   assert.equal(summary.behavioralBoundariesVerified, true);
 
-  const wrongOwnerLeak = structuredClone(observed);
-  wrongOwnerLeak.behavioral.wrongOwnerReadDenied = false;
-  assert.throws(() => evaluateFoodCatalogSecurityEvidence(wrongOwnerLeak), /wrongOwnerReadDenied|behavioral/i);
+  for (const field of ["wrongOwnerReadDenied", "transitionalWrongOwnerReadDenied", "transitionalWrongOwnerMutationDenied"]) {
+    const leak = structuredClone(observed);
+    leak.behavioral[field] = false;
+    assert.throws(() => evaluateFoodCatalogSecurityEvidence(leak), new RegExp(`${field}|behavioral`, "i"));
+  }
 });
 
 test("security evidence fails closed without actual anon, authenticated service-only, and positive service execution proof", () => {
