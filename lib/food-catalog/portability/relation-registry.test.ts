@@ -120,7 +120,7 @@ describe("Plan 7 relation/load-mode registry", () => {
     expect(findPortableRelationRule("food_catalog_governance_outbox")).not.toHaveProperty("operationallyDisabledAfterRestore");
   });
 
-  it("requires every current protected owner-state family only for FULL_DR", () => {
+  it("requires every current and transitional protected owner-state family only for FULL_DR", () => {
     for (const relation of [
       "food_catalog_governance_principals",
       "food_catalog_governance_capability_assignments",
@@ -129,6 +129,7 @@ describe("Plan 7 relation/load-mode registry", () => {
       "food_personal_override_operations",
       "food_personal_corrections",
       "food_favorites",
+      "user_food_favorites",
     ]) {
       expect(findPortableRelationRule(relation)).toMatchObject({ requiredProfile: "FULL_DR", protected: true });
     }
@@ -143,17 +144,43 @@ describe("Plan 7 relation/load-mode registry", () => {
       expect(requiredSegmentsForProfile("CORE_PORTABLE")).not.toContain(relation);
     }
 
+    expect(findPortableRelationRule("user_food_favorites")).toMatchObject({
+      classification: "PROTECTED_PORTABLE_AUTHORITY",
+      loadMode: "RESTORE_EXACT",
+      stableKey: ["user_id", "food_key"],
+      requiredProfile: "FULL_DR",
+      protected: true,
+    });
+    expect(requiredSegmentsForProfile("FULL_DR")).toContain("user_food_favorites");
+    expect(requiredSegmentsForProfile("CORE_PORTABLE")).not.toContain("user_food_favorites");
+
     expect(requiredSegmentsForProfile("FULL_DR").length)
       .toBeGreaterThan(requiredSegmentsForProfile("CORE_PORTABLE").length);
   });
 
-  it("keeps current transitional owner rows populated in the canonical integrated FULL_DR fixture", async () => {
+  it("keeps current and transitional owner rows populated in the canonical integrated FULL_DR fixture", async () => {
     const fixture = await readFile(
       new URL("../../../supabase/verification/food-catalog-plan7-portability-source-fixture.sql", import.meta.url),
       "utf8",
     );
     expect(fixture).toMatch(/insert into public\.food_personal_corrections\b/i);
     expect(fixture).toMatch(/insert into public\.food_favorites\b/i);
+    expect(fixture).toMatch(/insert into public\.user_food_favorites\b/i);
+    expect(fixture).toMatch(/legacy:plan7-portable-chicken/i);
+  });
+
+  it("covers transitional user_food_favorites in RLS metadata and behavioral owner isolation", async () => {
+    const securityEvidence = await readFile(
+      new URL("../../../scripts/capture-food-catalog-security-evidence.mjs", import.meta.url),
+      "utf8",
+    );
+    expect(securityEvidence).toMatch(/user_food_favorites/);
+    for (const field of [
+      "transitionalOwnerScopedReadVerified",
+      "transitionalWrongOwnerReadDenied",
+      "transitionalOwnMutationAllowed",
+      "transitionalWrongOwnerMutationDenied",
+    ]) expect(securityEvidence).toContain(field);
   });
 
   it("has unique logical segment names and stable-key declarations", () => {
