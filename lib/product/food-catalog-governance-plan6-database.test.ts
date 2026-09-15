@@ -5,6 +5,7 @@ const MIGRATION = "supabase/migrations/20260908100000_food_catalog_governance_co
 const VERIFIER = "supabase/verification/food-catalog-governance-control-plane.sql";
 const LEDGER = "supabase/migration-ledger.json";
 const EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
+const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
 
 function read(path: string) { return readFileSync(path, "utf8"); }
 
@@ -91,7 +92,12 @@ describe("Food Catalog Plan 6 database authority", () => {
   });
 
   it("records both Plan 6 migrations as applied Production aliases after exactness reconciliation", () => {
-    const ledger = JSON.parse(read(LEDGER)) as { pendingCount: number; unresolvedCount: number; historyRepair: { state: string }; entries: Array<Record<string, unknown>> };
+    const ledger = JSON.parse(read(LEDGER)) as {
+      pendingCount: number;
+      unresolvedCount: number;
+      historyRepair: { state: string; pendingCount: number; unresolvedCount: number };
+      entries: Array<Record<string, unknown>>;
+    };
     const entry = ledger.entries.find((item) => item.localFile === "20260908100000_food_catalog_governance_control_plane.sql");
     const correction = ledger.entries.find((item) => item.localFile === EXACTNESS_CORRECTION);
     expect(entry).toEqual(expect.objectContaining({
@@ -104,9 +110,20 @@ describe("Food Catalog Plan 6 database authority", () => {
       productionVersion: "20260910071241",
       productionName: "food_catalog_governance_gtin_lock_exactness",
     }));
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
-    expect(ledger.historyRepair.state).toBe("reconciled");
+    const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
+    expect(pendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: PLAN7_PENDING_MIGRATION,
+        state: "pending",
+      }),
+    ]);
+    expect(pendingEntries[0].productionVersion).toBeUndefined();
+    expect(pendingEntries[0].productionName).toBeUndefined();
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.state).toBe("pending");
+    expect(ledger.historyRepair.pendingCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
   });
 
   it("removes the Plan 2 temporary food-curation direct-access exception", () => {
