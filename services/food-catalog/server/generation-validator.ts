@@ -15,6 +15,7 @@ import {
   type GenerationBlockingReason,
   type GenerationValidationSnapshot,
 } from "@/lib/food-catalog/generation-validation-core";
+import { computeGenerationValidationReportChecksum } from "@/lib/food-catalog/generation-validation-report";
 import { sha256Canonical } from "./canonical-hash";
 import { FoodCatalogGenerationError } from "./generation-errors";
 import type { GenerationCommandResult } from "./generation-contracts";
@@ -61,21 +62,6 @@ function requireValidationReadStore(readStore: FoodCatalogGenerationReadStore): 
       "Generation validation requires exact generation-scoped Food and redirect enumeration capability.",
     );
   }
-}
-
-function reportSemanticPayload(report: Omit<GenerationValidationReport, "id" | "reportChecksumSha256">) {
-  return {
-    generationId: report.generationId,
-    generationChecksumSha256: report.generationChecksumSha256,
-    validatorSetVersion: report.validatorSetVersion,
-    policyVersion: report.policyVersion,
-    blockerCount: report.blockerCount,
-    errorCount: report.errorCount,
-    warningCount: report.warningCount,
-    infoCount: report.infoCount,
-    findings: report.findings.map(({ id: _id, ...entry }) => entry),
-    verificationStates: report.verificationStates,
-  };
 }
 
 export async function validateStoredGeneration(
@@ -231,7 +217,7 @@ export async function validateStoredGeneration(
   return {
     id: randomUUID(),
     ...reportWithoutChecksum,
-    reportChecksumSha256: sha256Canonical(reportSemanticPayload(reportWithoutChecksum)),
+    reportChecksumSha256: computeGenerationValidationReportChecksum(reportWithoutChecksum),
   };
 }
 

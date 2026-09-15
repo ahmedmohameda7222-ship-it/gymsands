@@ -80,12 +80,21 @@ export function runPrePointerAdversarialProof(databaseUrl) {
     throw new Error(`Plan7 adversarial source pointer prerequisite is unexpected: ${originalPointer}`);
   }
   const originalUpdatedAt = parts.slice(4).join("|").replaceAll("'", "''");
+  const originalReportChecksum = runPsql(
+    databaseUrl,
+    `SELECT report_checksum_sha256 FROM public.food_catalog_generation_validation_reports WHERE id='${REPORT_ID}'::uuid;`,
+    { tuplesOnly: true },
+  );
+  if (!/^[0-9a-f]{64}$/.test(originalReportChecksum)) {
+    throw new Error(`Plan7 adversarial validation-report checksum prerequisite is unexpected: ${originalReportChecksum}`);
+  }
 
   runPsql(databaseUrl, `UPDATE public.food_catalog_current_generation SET current_generation_id=NULL,current_event_id=NULL,current_validation_report_id=NULL,pointer_revision=0 WHERE singleton_key;`);
   const preRestorePointer = pointerState(databaseUrl);
   if (!preRestorePointer.startsWith("NULL|NULL|NULL|0|")) throw new Error(`Plan7 adversarial pre-restore pointer was not neutral: ${preRestorePointer}`);
 
   const results = [];
+  let reportSemanticChecksumCase;
   try {
     results.push(withCorruption({
       databaseUrl,
@@ -149,10 +158,26 @@ UPDATE public.food_catalog_generation_validation_reports SET generation_checksum
       cleanupSql: `
 UPDATE public.food_catalog_generation_validation_reports SET generation_checksum_sha256='${EXPECTED_CHECKSUM}' WHERE id='${REPORT_ID}'::uuid;
 ALTER TABLE public.food_catalog_generation_validation_reports ENABLE TRIGGER food_catalog_generation_validation_reports_immutable;`,
-      expectedPattern: /validation report linkage|generation_checksum|authority/i,
+      expectedPattern: /validation report linkage|generation_checksum|authority|semantic checksum/i,
       pointerBefore: preRestorePointer,
       triggerAssertions: [{ relation: "food_catalog_generation_validation_reports", trigger: "food_catalog_generation_validation_reports_immutable" }],
     }));
+
+    reportSemanticChecksumCase = withCorruption({
+      databaseUrl,
+      name: "report-semantic-checksum",
+      corruptSql: `
+ALTER TABLE public.food_catalog_generation_validation_reports DISABLE TRIGGER food_catalog_generation_validation_reports_immutable;
+UPDATE public.food_catalog_generation_validation_reports
+SET report_checksum_sha256=CASE WHEN report_checksum_sha256=repeat('0',64) THEN repeat('1',64) ELSE repeat('0',64) END
+WHERE id='${REPORT_ID}'::uuid;`,
+      cleanupSql: `
+UPDATE public.food_catalog_generation_validation_reports SET report_checksum_sha256='${originalReportChecksum}' WHERE id='${REPORT_ID}'::uuid;
+ALTER TABLE public.food_catalog_generation_validation_reports ENABLE TRIGGER food_catalog_generation_validation_reports_immutable;`,
+      expectedPattern: /validation report semantic checksum|report_checksum/i,
+      pointerBefore: preRestorePointer,
+      triggerAssertions: [{ relation: "food_catalog_generation_validation_reports", trigger: "food_catalog_generation_validation_reports_immutable" }],
+    });
 
     results.push(withCorruption({
       databaseUrl,
@@ -164,7 +189,7 @@ VALUES('${BLOCKING_FINDING_ID}'::uuid,'${REPORT_ID}'::uuid,99,'PLAN7_ADVERSARIAL
 ALTER TABLE public.food_catalog_generation_validation_findings DISABLE TRIGGER food_catalog_generation_validation_findings_immutable;
 DELETE FROM public.food_catalog_generation_validation_findings WHERE id='${BLOCKING_FINDING_ID}'::uuid;
 ALTER TABLE public.food_catalog_generation_validation_findings ENABLE TRIGGER food_catalog_generation_validation_findings_immutable;`,
-      expectedPattern: /stored validation findings contain blockers|blocker/i,
+      expectedPattern: /stored validation findings contain blockers|blocker|semantic checksum/i,
       pointerBefore: preRestorePointer,
       triggerAssertions: [{ relation: "food_catalog_generation_validation_findings", trigger: "food_catalog_generation_validation_findings_immutable" }],
     }));
@@ -176,7 +201,7 @@ ALTER TABLE public.food_catalog_generation_validation_findings ENABLE TRIGGER fo
       reportId: REPORT_ID,
       expectedChecksum: EXPECTED_CHECKSUM,
     });
-    if (!clean.verified || clean.recomputedChecksum !== EXPECTED_CHECKSUM || clean.blockerCount !== 0) {
+    if (!clean.verified || clean.recomputedChecksum !== EXPECTED_CHECKSUM || clean.blockerCount !== 0 || clean.reportChecksumSha256 !== clean.recomputedReportChecksumSha256) {
       throw new Error("Plan7 adversarial cleanup did not restore canonical pre-pointer validity.");
     }
     assertPointer(databaseUrl, preRestorePointer, "clean canonical verification");
@@ -185,11 +210,15 @@ ALTER TABLE public.food_catalog_generation_validation_findings ENABLE TRIGGER fo
   }
 
   assertPointer(databaseUrl, originalPointer, "adversarial harness final restoration");
+  if (!reportSemanticChecksumCase?.blocked || !reportSemanticChecksumCase.pointerUnchanged) {
+    throw new Error("Plan7 validation-report semantic checksum corruption was not proven fail-closed.");
+  }
   return Object.freeze({
     format: "plaivra-food-catalog-plan7-pre-pointer-adversarial",
     version: 1,
     canonicalChecksumSha256: EXPECTED_CHECKSUM,
-    preRestorePointerUnchangedAcrossFailures: results.every((entry) => entry.pointerUnchanged),
+    preRestorePointerUnchangedAcrossFailures: results.every((entry) => entry.pointerUnchanged) && reportSemanticChecksumCase.pointerUnchanged,
+    reportSemanticChecksumCase: Object.freeze(reportSemanticChecksumCase),
     corruptionCases: Object.freeze(results),
     finalSourcePointerRestored: true,
   });
