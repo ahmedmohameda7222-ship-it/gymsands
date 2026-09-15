@@ -3,7 +3,7 @@
 **Project:** `bkwezjxvapaeasfvlhvv`
 **Current reconciliation date:** 2026-09-10
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Plan 6 governance control plane and its forward-only GTIN-lock exactness correction are both mapped to verified Production identities; migration history is reconciled
+**Status:** Production migration history is reconciled through the Plan 6 GTIN-lock exactness correction; one repository-only Plan 7 Workstream 1 reconciliation-gate migration is pending and unapplied
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -28,13 +28,14 @@ The current repository/machine-ledger state records:
 
 - `20260908100000_food_catalog_governance_control_plane.sql`: `applied_version_alias` → `20260909081402_food_catalog_governance_control_plane`
 - `20260909083000_food_catalog_governance_gtin_lock_exactness.sql`: `applied_version_alias` → `20260910071241_food_catalog_governance_gtin_lock_exactness`
-- `pendingCount = 0`
+- `20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql`: `pending` (repository-only; not applied to Production)
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- migration-ledger `release_ready = true`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- migration-ledger `release_ready = false`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`. Applied migrations must not be replayed.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`. Applied migrations must not be replayed. The pending Plan 7 migration has no Production version or name because it has not been applied.
 
 ## Food Catalog Plan 6 governance control plane — Production exactness reconciled 2026-09-10
 
@@ -197,7 +198,6 @@ Immediate structural/security read-back proved:
 - `food_items.serving_size` is nullable as required for structured serving evidence.
 
 Rollback-only synthetic Production verification then proved the executable boundaries without leaving Product data behind:
-
 - zero-record dry-run reconciliation starts and completes successfully;
 - successful reconciliation freezes the semantic batch and rejects a fresh mutable dry-run attempt;
 - inherited Batch 0 `service_role` direct DML is rejected for Plan 4 semantic authority;

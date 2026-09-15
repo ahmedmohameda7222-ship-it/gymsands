@@ -1,0 +1,69 @@
+{
+  "fixtureVersion": 1,
+  "restoredGenerationId": "a5700000-0000-4000-8000-000000000001",
+  "currentGenerationId": "a5700000-0000-4000-8000-000000000001",
+  "projectionVersion": "search-projection-v2",
+  "nutritionPolicyVersion": null,
+  "protectedFixtureVerified": true,
+  "providerNetworkUsed": false,
+  "datasets": {
+    "populated": {
+      "foodIds": [
+        "a5000000-0000-4000-8000-000000000001",
+        "a5000000-0000-4000-8000-000000000002",
+        "a5000000-0000-4000-8000-000000000003"
+      ],
+      "ownerId": "a6000000-0000-4000-8000-000000000001",
+      "fixedTimestamp": "2026-09-10T18:00:00.000Z",
+      "locale": "en",
+      "script": "Latn",
+      "marketScopes": ["DE-BY", "DE", "GLOBAL"],
+      "taxonomy": ["protein-foods"],
+      "redirect": {
+        "sourceFoodId": "a5000000-0000-4000-8000-000000000003",
+        "targetFoodId": "a5000000-0000-4000-8000-000000000001"
+      },
+      "hasFavorite": true,
+      "hasRecentLog": true,
+      "hasMyFood": true,
+      "hasProtectedOwnerState": true,
+      "hasSecurityFixture": true
+    },
+    "zeroRow": {
+      "foodIds": [],
+      "fixedTimestamp": "2026-09-10T18:00:00.000Z"
+    }
+  },
+  "preconditions": {
+    "artifactCorruption": false,
+    "precisionLoss": false,
+    "tornExport": false,
+    "wrongOwner": false,
+    "nonceReuse": false,
+    "preseedMismatch": false,
+    "globalServingDisplayAuthorityPresent": false,
+    "observedGlobalServingLabels": [null, null, null]
+  },
+  "queryCases": [
+    {"id":"exact","query":"Chicken Breast","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"alias","query":"Chicken Fillet","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"prefix","query":"Chick","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"contains","query":"Breast","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"locale_script","query":"Huhn","languageTag":"de","scriptCode":"Latn","marketScopeCode":"DE","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"market_direct","query":"Chicken","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"market_parent","query":"Chicken","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000002","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000002","servingLabel":null}],"nextCursor":null}},
+    {"id":"market_global","query":"Chicken","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"category","query":"","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":"protein-foods","cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"current_cuisine","query":"","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"nullable_numerics","query":"","languageTag":"en","scriptCode":"Latn","marketScopeCode":"GLOBAL","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{"protein":{"operator":"gt","value":0}},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","protein":31,"servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","protein":31,"servingLabel":null}],"nextCursor":null}},
+    {"id":"presets","query":"","languageTag":"en","scriptCode":"Latn","marketScopeCode":"GLOBAL","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{"presets":[]},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"favorites","query":"","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"favorites","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"recent","query":"","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"recent","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":null}},
+    {"id":"my_food","query":"My Food","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"my_food","filters":{},"expected":{"items":[{"userFoodId":"a7000000-0000-4000-8000-000000000001","source":"user"}],"nextCursor":null},"actual":{"items":[{"userFoodId":"a7000000-0000-4000-8000-000000000001","source":"user"}],"nextCursor":null}},
+    {"id":"cursor_continuation","query":"Chicken","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":1,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":"fixture-cursor-v1"},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","servingLabel":null}],"nextCursor":"fixture-cursor-v1"}},
+    {"id":"cursor_context_mismatch","query":"Chicken","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"error":"Cursor does not match Food Catalog search context."},"actual":{"error":"Cursor does not match Food Catalog search context."}},
+    {"id":"redirect","query":"Merged Chicken","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","redirectedFrom":"a5000000-0000-4000-8000-000000000003","servingLabel":null}],"nextCursor":null},"actual":{"items":[{"foodId":"a5000000-0000-4000-8000-000000000001","redirectedFrom":"a5000000-0000-4000-8000-000000000003","servingLabel":null}],"nextCursor":null}},
+    {"id":"stale_generation_isolation","query":"Old Food","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[],"nextCursor":null},"actual":{"items":[],"nextCursor":null}},
+    {"id":"zero_row","query":"No Match","languageTag":"en","scriptCode":"Latn","marketScopeCode":"DE-BY","limit":20,"category":null,"cuisine":null,"scope":"all","filters":{},"expected":{"items":[],"nextCursor":null},"actual":{"items":[],"nextCursor":null}}
+  ]
+}

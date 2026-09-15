@@ -46,7 +46,14 @@ function canonicalExportClient() {
     return builder;
   });
 
-  return { client: { from } as unknown as SupabaseClient, calls };
+  const rpc = vi.fn(async (name: string) => {
+    if (name !== "food_catalog_export_owner_correction_report_payloads_v1") {
+      throw new Error(`Unexpected RPC ${name}`);
+    }
+    return { data: [], error: null };
+  });
+
+  return { client: { from, rpc } as unknown as SupabaseClient, calls };
 }
 
 function deletionClient() {

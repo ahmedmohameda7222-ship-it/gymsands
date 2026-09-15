@@ -8,6 +8,7 @@ const PLAN5_MIGRATION = "20260906183000_food_catalog_search_projection_v2.sql";
 const PLAN5_SERVING_CORRECTION = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 const PLAN6_MIGRATION = "20260908100000_food_catalog_governance_control_plane.sql";
 const PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
+const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
 const migrationFiles = readdirSync("supabase/migrations").filter((name) => name.endsWith(SUFFIX));
 const sql = readFileSync(MIGRATION, "utf8").toLowerCase();
 const applyOnlySql = sql.split("create or replace function public.food_catalog_create_activation_set_v1")[0];
@@ -115,11 +116,11 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
   it("preserves verified Plan 3/4/5 aliases after Plan 6 exactness reconciliation", () => {
     expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.productionRecordCount).toBe(123);
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
-    expect(ledger.historyRepair.state).toBe("reconciled");
-    expect(ledger.historyRepair.pendingCount).toBe(0);
-    expect(ledger.historyRepair.unresolvedCount).toBe(0);
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.state).toBe("pending");
+    expect(ledger.historyRepair.pendingCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
 
     const entry = ledger.entries.find((item) => item.localFile === "20260902150000_food_catalog_generation_authority.sql");
     expect(entry).toEqual({
@@ -137,7 +138,14 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
       productionName: "food_catalog_governance_control_plane",
     }));
     const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
-    expect(pendingEntries).toEqual([]);
+    expect(pendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: PLAN7_PENDING_MIGRATION,
+        state: "pending",
+      }),
+    ]);
+    expect(pendingEntries[0].productionVersion).toBeUndefined();
+    expect(pendingEntries[0].productionName).toBeUndefined();
     const plan6Correction = ledger.entries.find((item) => item.localFile === PLAN6_EXACTNESS_CORRECTION);
     expect(plan6Correction).toEqual(expect.objectContaining({
       state: "applied_version_alias",

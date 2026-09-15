@@ -67,3 +67,14 @@ test("permanent verification chain covers current Active Workout and Nutrition a
   assert.equal(finalClosure >= 0 && finalClosure < productionPreflight, true);
   assert.equal(nullableMealPlan >= 0 && nullableMealPlan < productionPreflight, true);
 });
+
+test("permanent verification chain executes Plan 7 NULL-current Search V2 proof before production preflight", () => {
+  const nullCurrent = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/food-catalog-plan7-null-current-search.sql",
+  );
+  const productionPreflight = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/production-release-migration-preflight.sql",
+  );
+  assert.notEqual(nullCurrent, -1, "Plan 7 NULL-current search proof must be part of canonical database verification.");
+  assert.ok(nullCurrent < productionPreflight, "Plan 7 NULL-current search proof must execute before production preflight.");
+});
