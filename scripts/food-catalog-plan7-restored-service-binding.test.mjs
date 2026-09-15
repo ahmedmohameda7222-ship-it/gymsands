@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 
 const sourcePrincipalId = "71000000-0000-4000-8000-000000000d10";
 const sourceIdentity = "plan7-source-service-identity";
-const gateMigrationPath = "supabase/migrations/20260915120000_food_catalog_governance_outbox_reconciliation_gate.sql";
+const gateMigrationPath = "supabase/migrations/20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
 
 describe("Plan 7 restored Service execution binding", () => {
   it("materializes an unreachable restore-local SHA-256 only for Service rows", async () => {

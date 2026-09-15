@@ -14,7 +14,23 @@ import {
 
 const reviewedCommit = "1111111111111111111111111111111111111111";
 const currentLedger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
-const ledger = structuredClone(currentLedger);
+
+function reconciledLedgerFixture(source) {
+  return {
+    ...structuredClone(source),
+    pendingCount: 0,
+    unresolvedCount: 0,
+    historyRepair: {
+      ...structuredClone(source.historyRepair),
+      state: "reconciled",
+      pendingCount: 0,
+      unresolvedCount: 0,
+    },
+    entries: source.entries.filter((entry) => entry.state !== "pending").map((entry) => structuredClone(entry)),
+  };
+}
+
+const ledger = reconciledLedgerFixture(currentLedger);
 
 function successfulPreflight(overrides = {}) {
   return {
@@ -78,19 +94,36 @@ function validRequest(overrides = {}) {
   };
 }
 
-test("current repository ledger satisfies normal release-ready invariants", () => {
+test("current repository ledger truthfully blocks release readiness on the pending Plan 7 migration", () => {
   const state = deriveMigrationLedgerState(currentLedger);
-  assert.equal(state.reconciliationState, "reconciled");
-  assert.equal(state.pendingCount, 0);
+  const pendingEntries = currentLedger.entries.filter((entry) => entry.state === "pending");
+  assert.equal(state.reconciliationState, "pending");
+  assert.equal(state.pendingCount, 1);
   assert.equal(state.schemaAppliedUntrackedCount, 0);
   assert.equal(state.ledgerDriftReviewCount, 0);
-  assert.equal(state.unresolvedCount, 0);
-  assert.equal(state.releaseReady, true);
+  assert.equal(state.unresolvedCount, 1);
+  assert.equal(state.releaseReady, false);
   assert.equal(state.latestAppliedMigrationVersion, TARGET_MARKER);
+  assert.deepEqual(pendingEntries.map((entry) => ({
+    localFile: entry.localFile,
+    productionVersion: entry.productionVersion,
+    productionName: entry.productionName,
+  })), [{
+    localFile: "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql",
+    productionVersion: undefined,
+    productionName: undefined,
+  }]);
+});
+
+test("promotion rejects the actual pending repository ledger", () => {
+  assert.throws(
+    () => validatePromotionRequest({ ...validRequest(), ledger: currentLedger }),
+    /Repository migration ledger is not release-ready/,
+  );
 });
 
 test("still rejects a synthetically unresolved repository ledger", () => {
-  const unresolvedLedger = structuredClone(currentLedger);
+  const unresolvedLedger = structuredClone(ledger);
   const correction = unresolvedLedger.entries.find((entry) => entry.localFile === "20260909083000_food_catalog_governance_gtin_lock_exactness.sql");
   correction.state = "pending";
   delete correction.productionVersion;
