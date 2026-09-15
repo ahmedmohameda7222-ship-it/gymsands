@@ -152,12 +152,20 @@ async function loadPlan7PersonalOverrideExport(supabase: SupabaseClient, userId:
   );
 }
 
+async function loadOwnerCorrectionReportMemberPayloads(supabase: SupabaseClient) {
+  const result = await supabase.rpc("food_catalog_export_owner_correction_report_payloads_v1");
+  if (result.error) {
+    throw new Error(`Correction report member payload export failed: ${result.error.message}`);
+  }
+  return result.data ?? [];
+}
+
 export async function buildCurrentUserDataExport(
   supabase: SupabaseClient,
   user: Pick<User, "id" | "email" | "created_at">
 ) {
   const result = await buildLegacyCurrentUserDataExport(supabase, user);
-  const [timelineResult, performanceMetricResult, setDetailResult, setSegmentResult, setSegmentMetricResult, prescriptionSetResult, prescriptionTargetResult, setupNoteResult, canonicalNutrition, personalOverrides] = await Promise.all([
+  const [timelineResult, performanceMetricResult, setDetailResult, setSegmentResult, setSegmentMetricResult, prescriptionSetResult, prescriptionTargetResult, setupNoteResult, canonicalNutrition, personalOverrides, correctionReportMemberPayloads] = await Promise.all([
     loadAllTimelineRows(supabase, user.id),
     loadAllPerformanceMetricValues(supabase, user.id),
     loadAllOwnedRows(supabase, user.id, "exercise_log_set_details", setDetailSelection, "exercise_log_id"),
@@ -168,6 +176,7 @@ export async function buildCurrentUserDataExport(
     loadAllOwnedRows(supabase, user.id, "exercise_setup_notes", setupNoteSelection, ["created_at", "id"]),
     loadCanonicalNutritionExport(supabase, user.id),
     loadPlan7PersonalOverrideExport(supabase, user.id),
+    loadOwnerCorrectionReportMemberPayloads(supabase),
   ]);
 
   if (timelineResult.error) result.warnings.push("Workout session timeline events could not be included in this export.");
@@ -199,6 +208,7 @@ export async function buildCurrentUserDataExport(
     if (exportResult.error) result.warnings.push(`${spec.table} could not be included in this export.`);
     nutrition[spec.exportKey] = exportResult.data ?? [];
   }
+  nutrition.correction_report_member_payloads = correctionReportMemberPayloads;
 
   // Canonical consumer rows retain the exact frozen facts used historically.
   // `frozen_snapshot`, `frozen_recipe_snapshot`, and `frozen_item_snapshot`
