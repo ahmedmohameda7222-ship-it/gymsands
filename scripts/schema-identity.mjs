@@ -1,7 +1,6 @@
 const FOOD_CATALOG_RELATION_PREDICATE = `(
       c.relname LIKE 'food_%'
-      OR c.relname = 'user_food_favorites'
-      OR c.relname IN ('market_scopes','market_scope_memberships','release_schema_compatibility')
+      OR c.relname IN ('user_food_favorites','user_food_items','market_scopes','market_scope_memberships','release_schema_compatibility')
     )`;
 
 export function buildFoodCatalogSchemaIdentitySql() {
@@ -83,9 +82,11 @@ export function buildFoodCatalogSchemaIdentitySql() {
       p.proacl
     FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public'
-      AND p.prokind IN ('f','p')
-      AND (p.proname LIKE 'food_%' OR p.proname LIKE '%food_catalog%')
+    WHERE p.prokind IN ('f','p')
+      AND (
+        (n.nspname = 'public' AND (p.proname LIKE 'food_%' OR p.proname LIKE '%food_catalog%'))
+        OR (n.nspname = 'private' AND p.proname LIKE 'food_catalog_%')
+      )
   ), function_parts AS (
     SELECT
       'function'::text AS part_kind,

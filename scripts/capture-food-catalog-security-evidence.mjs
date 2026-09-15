@@ -4,12 +4,15 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { buildFoodCatalogSchemaIdentitySql } from "./schema-identity.mjs";
 
 const OWNER_ID = "71000000-0000-4000-8000-000000000001";
 const OTHER_OWNER_ID = "72000000-0000-4000-8000-000000000001";
 const CURRENT_FOOD_ID = "71000000-0000-4000-8000-000000000101";
 const STALE_FOOD_ID = "71000000-0000-4000-8000-000000000103";
 const TEMP_FAVORITE_ID = "71000000-0000-4000-8000-000000000f01";
+const TEMP_USER_FOOD_ITEM_ID = "71000000-0000-4000-8000-000000000f11";
+const TEMP_WRONG_OWNER_USER_FOOD_ITEM_ID = "71000000-0000-4000-8000-000000000f12";
 const TRANSITIONAL_FAVORITE_KEY = "legacy:plan7-portable-chicken";
 const TEMP_TRANSITIONAL_FAVORITE_KEY = "legacy:plan7-security-temp";
 const CURRENT_GENERATION_ID = "71000000-0000-4000-8000-000000000901";
@@ -18,6 +21,7 @@ const TEMP_SERVICE_CAPABILITY_ID = "73000000-0000-4000-8000-000000000d11";
 const TEMP_SERVICE_OPERATION_ID = "73000000-0000-4000-8000-000000000d12";
 const TEMP_SERVICE_EVENT_ID = "73000000-0000-4000-8000-000000000d13";
 const TEMP_SERVICE_IDENTITY = "plan7-security-service";
+const SHA256 = /^[0-9a-f]{64}$/;
 
 function stableJson(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -31,11 +35,21 @@ function sha256(value) {
 
 function psql(databaseUrl, sql) {
   const result = spawnSync("psql", [databaseUrl,"-X","-q","-A","-t","-v","ON_ERROR_STOP=1","-c",sql], {
-    encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
+    encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`RLS/ACL behavioral evidence query failed: ${(result.stderr ?? "").trim()}`);
   return (result.stdout ?? "").trim().split(/\r?\n/u).filter(Boolean).at(-1) ?? "";
+}
+
+function userFoodInsertSql(id, userId, foodName) {
+  return `insert into public.user_food_items(
+  id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,
+  nutrition_basis_amount,nutrition_basis_unit,notes,category,deleted_at
+) values(
+  '${id}'::uuid,'${userId}'::uuid,'${foodName}','100 g',100,10,5,2,
+  100,'g','plan7 security proof','Custom',null
+);`;
 }
 
 export function buildFoodCatalogSecurityEvidenceSql() {
@@ -44,7 +58,7 @@ export function buildFoodCatalogSecurityEvidenceSql() {
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname='public'
     AND c.relkind IN ('r','p')
-    AND (c.relname LIKE 'food_%' OR c.relname IN ('user_food_favorites','market_scopes','market_scope_memberships','release_schema_compatibility'))
+    AND (c.relname LIKE 'food_%' OR c.relname IN ('user_food_favorites','user_food_items','market_scopes','market_scope_memberships','release_schema_compatibility'))
 ), policy_rows AS (
   SELECT tablename,policyname,permissive,roles::text,cmd,coalesce(qual,'') AS qual,coalesce(with_check,'') AS with_check
   FROM pg_policies
@@ -95,6 +109,76 @@ function booleanEvidence(databaseUrl, sql, label) {
   const value = psql(databaseUrl, sql);
   if (value !== "t") throw new Error(`Food Catalog behavioral security boundary failed: ${label}.`);
   return true;
+}
+
+function schemaIdentityFingerprintSql() {
+  return `WITH ${buildFoodCatalogSchemaIdentitySql()}
+SELECT encode(convert_to(schema_identity.identity_input,'UTF8'),'hex')
+FROM schema_identity;`;
+}
+
+function schemaIdentityFingerprint(databaseUrl, sql = schemaIdentityFingerprintSql()) {
+  const identityHex = psql(databaseUrl, sql);
+  if (!/^(?:[0-9a-f]{2})*$/u.test(identityHex)) throw new Error("Food Catalog schema identity input was not canonical UTF-8 hex.");
+  return sha256(Buffer.from(identityHex, "hex"));
+}
+
+function rollbackOnlySchemaIdentityFingerprint(databaseUrl, mutationSql) {
+  return schemaIdentityFingerprint(databaseUrl, `begin;
+${mutationSql}
+${schemaIdentityFingerprintSql()}
+rollback;`);
+}
+
+export function captureFoodCatalogSchemaIdentityAdversarialEvidence(databaseUrl) {
+  const baselineSha256 = schemaIdentityFingerprint(databaseUrl);
+  if (!SHA256.test(baselineSha256)) throw new Error("Food Catalog baseline schema identity is not SHA-256.");
+
+  const userFoodItemsMutationSha256 = rollbackOnlySchemaIdentityFingerprint(databaseUrl,
+    "alter table public.user_food_items alter column category set default 'Plan7 schema identity drift';");
+  if (userFoodItemsMutationSha256 === baselineSha256) throw new Error("Schema identity did not detect public.user_food_items drift.");
+  const userFoodItemsRollbackSha256 = schemaIdentityFingerprint(databaseUrl);
+  if (userFoodItemsRollbackSha256 !== baselineSha256) throw new Error("public.user_food_items adversarial mutation did not roll back cleanly.");
+
+  const privateFoodCatalogMutationSha256 = rollbackOnlySchemaIdentityFingerprint(databaseUrl, `do $plan7_private_acl$
+declare
+  v_proc oid;
+  v_signature text;
+  v_public_execute boolean;
+begin
+  select p.oid,p.oid::regprocedure::text,
+         exists(
+           select 1
+           from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl
+           where acl.grantee=0 and acl.privilege_type='EXECUTE'
+         )
+  into v_proc,v_signature,v_public_execute
+  from pg_proc p
+  join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='private'
+    and p.prokind='f'
+    and p.proname like 'food_catalog_%'
+  order by p.proname collate "C",pg_get_function_identity_arguments(p.oid) collate "C"
+  limit 1;
+  if v_proc is null then
+    raise exception 'No private.food_catalog_* function is available for Plan7 schema identity proof';
+  end if;
+  if v_public_execute then
+    execute format('revoke execute on function %s from public',v_signature);
+  else
+    execute format('grant execute on function %s to public',v_signature);
+  end if;
+end
+$plan7_private_acl$;`);
+  if (privateFoodCatalogMutationSha256 === baselineSha256) throw new Error("Schema identity did not detect private.food_catalog_* ACL drift.");
+  const privateFoodCatalogRollbackSha256 = schemaIdentityFingerprint(databaseUrl);
+  if (privateFoodCatalogRollbackSha256 !== baselineSha256) throw new Error("private.food_catalog_* adversarial ACL mutation did not roll back cleanly.");
+
+  return Object.freeze({
+    userFoodItemsDriftDetected: true,
+    privateFoodCatalogAclDriftDetected: true,
+    rollbackVerified: true,
+  });
 }
 
 export function captureFoodCatalogBehavioralSecurityEvidence(databaseUrl) {
@@ -167,6 +251,64 @@ end
 $plan7_transitional_rls$;
 select current_setting('plan7.transitional_wrong_owner_mutation_denied',true)='true';
 rollback;`, "transitionalWrongOwnerMutationDenied");
+
+  const myFoodsOwnerScopedReadVerified = booleanEvidence(databaseUrl, `begin;
+${userFoodInsertSql(TEMP_USER_FOOD_ITEM_ID, OWNER_ID, "Plan7 My Foods Read Probe")}
+set local role authenticated;
+select set_config('request.jwt.claim.sub','${OWNER_ID}',true);
+select exists(select 1 from public.user_food_items where id='${TEMP_USER_FOOD_ITEM_ID}'::uuid and user_id='${OWNER_ID}'::uuid);
+rollback;`, "myFoodsOwnerScopedReadVerified");
+
+  const myFoodsWrongOwnerReadDenied = booleanEvidence(databaseUrl, `begin;
+${userFoodInsertSql(TEMP_USER_FOOD_ITEM_ID, OWNER_ID, "Plan7 My Foods Isolation Probe")}
+set local role authenticated;
+select set_config('request.jwt.claim.sub','${OTHER_OWNER_ID}',true);
+select not exists(select 1 from public.user_food_items where id='${TEMP_USER_FOOD_ITEM_ID}'::uuid and user_id='${OWNER_ID}'::uuid);
+rollback;`, "myFoodsWrongOwnerReadDenied");
+
+  const myFoodsOwnerInsertUpdateDeleteVerified = booleanEvidence(databaseUrl, `begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','${OWNER_ID}',true);
+${userFoodInsertSql(TEMP_USER_FOOD_ITEM_ID, OWNER_ID, "Plan7 My Foods Mutation Probe")}
+select set_config('plan7.my_foods_insert_verified',exists(
+  select 1 from public.user_food_items where id='${TEMP_USER_FOOD_ITEM_ID}'::uuid and user_id='${OWNER_ID}'::uuid
+)::text,true);
+update public.user_food_items set notes='plan7 owner update verified' where id='${TEMP_USER_FOOD_ITEM_ID}'::uuid;
+select set_config('plan7.my_foods_update_verified',exists(
+  select 1 from public.user_food_items where id='${TEMP_USER_FOOD_ITEM_ID}'::uuid and notes='plan7 owner update verified'
+)::text,true);
+delete from public.user_food_items where id='${TEMP_USER_FOOD_ITEM_ID}'::uuid;
+select current_setting('plan7.my_foods_insert_verified',true)='true'
+  and current_setting('plan7.my_foods_update_verified',true)='true'
+  and not exists(select 1 from public.user_food_items where id='${TEMP_USER_FOOD_ITEM_ID}'::uuid);
+rollback;`, "myFoodsOwnerInsertUpdateDeleteVerified");
+
+  const myFoodsWrongOwnerMutationDenied = booleanEvidence(databaseUrl, `begin;
+${userFoodInsertSql(TEMP_USER_FOOD_ITEM_ID, OWNER_ID, "Plan7 My Foods Wrong Owner Probe")}
+set local role authenticated;
+select set_config('request.jwt.claim.sub','${OTHER_OWNER_ID}',true);
+with changed as (
+  update public.user_food_items set notes='wrong owner update' where id='${TEMP_USER_FOOD_ITEM_ID}'::uuid returning 1
+)
+select set_config('plan7.my_foods_wrong_update_denied',(count(*)=0)::text,true) from changed;
+with removed as (
+  delete from public.user_food_items where id='${TEMP_USER_FOOD_ITEM_ID}'::uuid returning 1
+)
+select set_config('plan7.my_foods_wrong_delete_denied',(count(*)=0)::text,true) from removed;
+do $plan7_my_foods_rls$
+begin
+  begin
+    ${userFoodInsertSql(TEMP_WRONG_OWNER_USER_FOOD_ITEM_ID, OWNER_ID, "Plan7 My Foods Wrong Owner Insert")}
+    raise exception 'Plan7 wrong-owner My Foods insert unexpectedly succeeded';
+  exception when insufficient_privilege then
+    perform set_config('plan7.my_foods_wrong_insert_denied','true',true);
+  end;
+end
+$plan7_my_foods_rls$;
+select current_setting('plan7.my_foods_wrong_update_denied',true)='true'
+  and current_setting('plan7.my_foods_wrong_delete_denied',true)='true'
+  and current_setting('plan7.my_foods_wrong_insert_denied',true)='true';
+rollback;`, "myFoodsWrongOwnerMutationDenied");
 
   const personalizedSearchIsolationVerified = booleanEvidence(databaseUrl, `begin;
 select public.rebuild_food_catalog_search_projection_v2('${CURRENT_GENERATION_ID}'::uuid,'search-projection-v2',null);
@@ -260,6 +402,10 @@ rollback;`, "serviceOutboxAuthorizedVerified");
     transitionalWrongOwnerReadDenied,
     transitionalOwnMutationAllowed,
     transitionalWrongOwnerMutationDenied,
+    myFoodsOwnerScopedReadVerified,
+    myFoodsWrongOwnerReadDenied,
+    myFoodsOwnerInsertUpdateDeleteVerified,
+    myFoodsWrongOwnerMutationDenied,
     personalizedSearchIsolationVerified,
     authenticatedServiceOnlyDenied,
     anonUnauthorizedVerified,
@@ -293,6 +439,10 @@ export function evaluateFoodCatalogSecurityEvidence(observed) {
     "transitionalWrongOwnerReadDenied",
     "transitionalOwnMutationAllowed",
     "transitionalWrongOwnerMutationDenied",
+    "myFoodsOwnerScopedReadVerified",
+    "myFoodsWrongOwnerReadDenied",
+    "myFoodsOwnerInsertUpdateDeleteVerified",
+    "myFoodsWrongOwnerMutationDenied",
     "personalizedSearchIsolationVerified",
     "authenticatedServiceOnlyDenied",
     "anonUnauthorizedVerified",
@@ -300,6 +450,10 @@ export function evaluateFoodCatalogSecurityEvidence(observed) {
   ];
   for (const name of requiredBehavioral) {
     if (behavioral[name] !== true) throw new Error(`Food Catalog behavioral owner-isolation boundary failed: ${name}.`);
+  }
+  const schemaIdentityAdversarial = observed.schemaIdentityAdversarial ?? {};
+  for (const name of ["userFoodItemsDriftDetected","privateFoodCatalogAclDriftDetected","rollbackVerified"]) {
+    if (schemaIdentityAdversarial[name] !== true) throw new Error(`Food Catalog adversarial schema identity boundary failed: ${name}.`);
   }
   const metadata = {
     relations: observed.relations,
@@ -309,18 +463,22 @@ export function evaluateFoodCatalogSecurityEvidence(observed) {
   };
   const securityRlsAclMetadataIdentitySha256 = sha256(stableJson(metadata));
   const securityBehavioralIdentitySha256 = sha256(stableJson(behavioral));
+  const securitySchemaIdentityAdversarialSha256 = sha256(stableJson(schemaIdentityAdversarial));
   return Object.freeze({
     securityRlsAclIdentitySha256: sha256(stableJson({
       metadataIdentitySha256: securityRlsAclMetadataIdentitySha256,
       behavioralIdentitySha256: securityBehavioralIdentitySha256,
+      schemaIdentityAdversarialSha256: securitySchemaIdentityAdversarialSha256,
     })),
     securityRlsAclMetadataIdentitySha256,
     securityBehavioralIdentitySha256,
+    securitySchemaIdentityAdversarialSha256,
     relationCount: observed.relations.length,
     policyCount: observed.policies.length,
     privilegeCount: observed.privileges.length,
     criticalBoundariesVerified: true,
     behavioralBoundariesVerified: true,
+    schemaIdentityAdversarialVerified: true,
   });
 }
 
@@ -332,7 +490,11 @@ export function captureFoodCatalogSecurityEvidence(databaseUrl) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`RLS/ACL evidence query failed: ${(result.stderr ?? "").trim()}`);
   const metadata = JSON.parse((result.stdout ?? "").trim());
-  const observed = Object.freeze({ ...metadata, behavioral: captureFoodCatalogBehavioralSecurityEvidence(databaseUrl) });
+  const observed = Object.freeze({
+    ...metadata,
+    behavioral: captureFoodCatalogBehavioralSecurityEvidence(databaseUrl),
+    schemaIdentityAdversarial: captureFoodCatalogSchemaIdentityAdversarialEvidence(databaseUrl),
+  });
   const summary = evaluateFoodCatalogSecurityEvidence(observed);
   return Object.freeze({
     ...summary,
