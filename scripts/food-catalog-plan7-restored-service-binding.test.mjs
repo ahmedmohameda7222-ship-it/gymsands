@@ -80,7 +80,7 @@ describe("Plan 7 restored Service execution binding", () => {
     assert.match(migration, /grant execute on function public\.food_catalog_finish_governance_outbox\(uuid,uuid,boolean,text,integer\) to service_role/);
   });
 
-  it("proves the rebound Service stays blocked until reconciliation, then preserves Plan 6 lease fencing without durable test mutation", () => {
+  it("proves exact-binding reconciliation, Plan 6 lease fencing, and credential rotation invalidation without durable test mutation", () => {
     const capture = readFileSync("scripts/capture-food-catalog-restored-service-authority.mjs", "utf8");
     for (const field of [
       "sourceServiceIdentityRejected",
@@ -92,8 +92,21 @@ describe("Plan 7 restored Service execution binding", () => {
       "targetServiceRebound",
       "reboundServiceRejectedBeforeReconciliation",
       "pendingBeforeReconciliation",
+      "wrongPrincipalReconciliationRejected",
       "reconciliationReplayIdempotent",
+      "currentBindingReconciliationClaimSucceeded",
+      "attemptCountIncremented",
+      "leaseEpochIncremented",
+      "staleLeaseFinishRejected",
       "leaseAndFencingSemanticsIntact",
+      "rotatedServiceRebound",
+      "previousServiceIdentityRejectedAfterRotation",
+      "previousBindingReconciliationIneffective",
+      "rotatedServiceRejectedBeforeReconciliation",
+      "rotationInvalidatedPriorReconciliation",
+      "rotatedReconciliationReplayIdempotent",
+      "rotatedBindingReconciliationClaimSucceeded",
+      "deliveryAvailableAfterRotatedReconciliation",
       "historyIntactAfterReconciliation",
       "proofTransactionRolledBack",
       "serviceExecutionBindingUnavailableImmediatelyAfterRestore",
@@ -103,12 +116,18 @@ describe("Plan 7 restored Service execution binding", () => {
 
     assert.match(capture, /food_catalog_manage_governance_principal/);
     assert.match(capture, /food_catalog_complete_governance_outbox_reconciliation/);
+    assert.match(capture, /TARGET_ROTATION_OPERATION_ID/);
+    assert.match(capture, /ROTATED_RECONCILIATION_OPERATION_ID/);
+    assert.match(capture, /exception when foreign_key_violation/);
+    assert.match(capture, /serviceBindingGeneration'='2'/);
     assert.match(capture, /Plan7 rebound Service unexpectedly claimed before reconciliation/);
+    assert.match(capture, /Plan7 previous Service identity unexpectedly authorized after rotation/);
+    assert.match(capture, /Plan7 rotated Service unexpectedly claimed before generation 2 reconciliation/);
     assert.match(capture, /attemptCount'\)::integer<>5/);
     assert.match(capture, /leaseEpoch'\)::bigint<>10/);
     assert.match(capture, /exception when serialization_failure/);
     assert.match(capture, /raise exception 'rollback successful Plan7 lease proof' using errcode='PZ701'/);
-    assert.match(capture, /not exists\([\s\S]*operation_id in \('\$\{TARGET_REBIND_OPERATION_ID\}'::uuid,'\$\{RECONCILIATION_OPERATION_ID\}'::uuid\)/);
+    assert.match(capture, /raise exception 'rollback successful Plan7 rotated lease proof' using errcode='PZ702'/);
   });
 
   it("keeps the integrated FULL_DR chain responsible for dynamic restored-Service authority proof", () => {
@@ -116,13 +135,25 @@ describe("Plan 7 restored Service execution binding", () => {
     const step = workflow.match(/- name: Prove restored source Service execution binding is unavailable[\s\S]*?- name: Capture restored target RLS ACL identity/)?.[0] ?? "";
     assert.match(step, /capture-food-catalog-restored-service-authority\.mjs/);
     assert.match(step, new RegExp(sourceIdentity));
-    assert.match(step, /sourceServiceIdentityRejected/);
-    assert.match(step, /authenticatedClaimRejected/);
-    assert.match(step, /randomServiceIdentityRejected/);
-    assert.match(step, /principalHistoryPreserved/);
-    assert.match(step, /capabilityHistoryPreserved/);
-    assert.match(step, /outboxPendingUnclaimed/);
-    assert.match(step, /serviceExecutionBindingUnavailable/);
+    for (const field of [
+      "sourceServiceIdentityRejected",
+      "authenticatedClaimRejected",
+      "randomServiceIdentityRejected",
+      "principalHistoryPreserved",
+      "capabilityHistoryPreserved",
+      "outboxPendingUnclaimed",
+      "wrongPrincipalReconciliationRejected",
+      "reconciliationReplayIdempotent",
+      "attemptCountIncremented",
+      "leaseEpochIncremented",
+      "staleLeaseFinishRejected",
+      "rotationInvalidatedPriorReconciliation",
+      "rotatedServiceRejectedBeforeReconciliation",
+      "rotatedReconciliationReplayIdempotent",
+      "deliveryAvailableAfterRotatedReconciliation",
+      "proofTransactionRolledBack",
+      "serviceExecutionBindingUnavailable",
+    ]) assert.match(step, new RegExp(field));
     assert.match(step, /automaticDeliveryObserved/);
   });
 });
