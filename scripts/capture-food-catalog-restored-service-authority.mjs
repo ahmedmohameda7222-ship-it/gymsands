@@ -306,9 +306,7 @@ end
 $plan7_previous_identity_after_rotation$;
 
 reset role;
-set local role service_role;
-select set_config('request.jwt.claims','${rotatedServiceClaims}',true);
-do $plan7_rotated_pre_reconciliation$
+do $plan7_rotation_history$
 begin
   if not exists(
     select 1
@@ -320,6 +318,13 @@ begin
   ) then
     raise exception 'Plan7 generation 1 reconciliation history disappeared before rotation proof';
   end if;
+end
+$plan7_rotation_history$;
+
+set local role service_role;
+select set_config('request.jwt.claims','${rotatedServiceClaims}',true);
+do $plan7_rotated_pre_reconciliation$
+begin
   begin
     perform public.food_catalog_claim_governance_outbox('${OUTBOX_EVENT_ID}'::uuid,30);
     raise exception 'Plan7 rotated Service unexpectedly claimed before generation 2 reconciliation';
