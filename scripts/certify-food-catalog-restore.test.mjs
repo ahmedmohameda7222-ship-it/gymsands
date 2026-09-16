@@ -93,6 +93,8 @@ describe("Plan 7 sole final restore certifier", () => {
     assert.equal(certification.searchVerified, true);
     assert.equal(certification.securityVerified, true);
     assert.equal(certification.recoveryEligibility.reason, "ELIGIBLE");
+    assert.equal(certification.recoveryEligibility.agePolicyApplied, true);
+    assert.equal(certification.recoveryEligibility.maxArtifactAgeMs, 60_000);
     assert.equal(certification.recoveryEligible, true);
     assert.equal(certification.drReady, true);
   });
@@ -134,6 +136,12 @@ describe("Plan 7 sole final restore certifier", () => {
     const missing = linkedInput();
     delete missing.recoveryEvaluation;
     assert.throws(() => certifyFoodCatalogRestore(missing), /recovery|eligib|RPO/i);
+  });
+
+  it("rejects FULL_DR recovery evaluation without explicit maxArtifactAgeMs", () => {
+    const missingMaxAge = linkedInput();
+    delete missingMaxAge.recoveryEvaluation.maxArtifactAgeMs;
+    assert.throws(() => certifyFoodCatalogRestore(missingMaxAge), /max.*artifact.*age|recovery|RPO/i);
   });
 
   it("never marks CORE_PORTABLE as DR-ready", () => {

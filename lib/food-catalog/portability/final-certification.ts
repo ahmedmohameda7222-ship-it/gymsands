@@ -49,7 +49,7 @@ export type LinkedSecurityEvidence = Readonly<{
 export type RecoveryEvaluationContext = Readonly<{
   capturedAt: string;
   evaluationTime: string;
-  maxArtifactAgeMs?: number;
+  maxArtifactAgeMs: number;
 }>;
 
 export type FinalRestoreCertificationInput = {
@@ -126,6 +126,15 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
   if (input.profile === "FULL_DR" && !protectedEvidence.verified) {
     throw new Error("FULL_DR final certification requires authenticated protected-segment verification.");
   }
+  if (input.profile === "FULL_DR") {
+    if (!input.recoveryEvaluation) {
+      throw new Error("FULL_DR final certification requires explicit recovery/RPO evaluation context.");
+    }
+    const maxArtifactAgeMs = input.recoveryEvaluation.maxArtifactAgeMs;
+    if (typeof maxArtifactAgeMs !== "number" || !Number.isFinite(maxArtifactAgeMs) || maxArtifactAgeMs < 0) {
+      throw new Error("FULL_DR final certification requires an explicit finite non-negative maxArtifactAgeMs recovery/RPO policy.");
+    }
+  }
 
   const recoveryEligibility = input.recoveryEvaluation
     ? evaluateRecoveryEligibility({
@@ -136,8 +145,9 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
       })
     : null;
   const recoveryEligible = recoveryEligibility?.eligible === true;
-  if (input.profile === "FULL_DR" && !recoveryEligible) {
-    throw new Error("FULL_DR final certification requires canonical recovery/RPO eligibility.");
+  const recoveryAgePolicyApplied = recoveryEligibility?.agePolicyApplied === true;
+  if (input.profile === "FULL_DR" && (!recoveryAgePolicyApplied || !recoveryEligible)) {
+    throw new Error("FULL_DR final certification requires canonical recovery/RPO eligibility with an explicit age policy.");
   }
 
   return Object.freeze({
@@ -157,6 +167,6 @@ export function certifyFoodCatalogRestore(input: FinalRestoreCertificationInput)
     securityRlsAclIdentitySha256: input.security.securityRlsAclIdentitySha256,
     recoveryEligibility,
     recoveryEligible,
-    drReady: input.profile === "FULL_DR" && recoveryEligible,
+    drReady: input.profile === "FULL_DR" && recoveryEligible && recoveryAgePolicyApplied,
   });
 }

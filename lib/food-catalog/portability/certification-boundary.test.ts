@@ -133,6 +133,8 @@ describe("Plan 7 sole final DR-ready authority", () => {
     expect(result.securityVerified).toBe(true);
     expect(result.securityRlsAclIdentitySha256).toBe("e".repeat(64));
     expect(result.recoveryEligibility?.reason).toBe("ELIGIBLE");
+    expect(result.recoveryEligibility?.agePolicyApplied).toBe(true);
+    expect(result.recoveryEligibility?.maxArtifactAgeMs).toBe(60_000);
     expect(result.recoveryEligible).toBe(true);
     expect(result.drReady).toBe(true);
   });
@@ -161,6 +163,15 @@ describe("Plan 7 sole final DR-ready authority", () => {
       maxArtifactAgeMs: 60_000,
     };
     expect(() => certifyFoodCatalogRestore(ineligible)).toThrow(/recovery|eligib|RPO/i);
+  });
+
+  it("fails closed when FULL_DR recovery evaluation omits maxArtifactAgeMs", () => {
+    const missingMaxAge = linkedInput() as any;
+    missingMaxAge.recoveryEvaluation = {
+      capturedAt: "2026-09-10T20:00:00.000Z",
+      evaluationTime: "2026-09-10T20:01:00.000Z",
+    };
+    expect(() => certifyFoodCatalogRestore(missingMaxAge)).toThrow(/max.*artifact.*age|recovery|RPO/i);
   });
 
   it("does not let CORE_PORTABLE become DR-ready", () => {
