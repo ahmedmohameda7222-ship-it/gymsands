@@ -113,6 +113,7 @@ function completeSecurityObserved() {
     schemaIdentityAdversarial: {
       userFoodItemsDriftDetected: true,
       privateFoodCatalogAclDriftDetected: true,
+      searchNormalizationHelperDriftDetected: true,
       unrelatedPrivateFunctionExcluded: true,
       rollbackVerified: true,
     },
@@ -164,6 +165,13 @@ export function verifyFoodCatalogSchemaIdentitySensitivity(databaseUrl) {
   if (!databaseUrl) throw new Error("PLAN7_DATABASE_URL is required for disposable schema identity sensitivity proof.");
 
   const securityCertificationContractVerified = verifySecurityCertificationContract();
+  const searchNormalizationHelperExists = booleanScalar(
+    databaseUrl,
+    "select to_regprocedure('private.normalize_nutrition_food_search_text(text)') is not null;",
+  );
+  if (!searchNormalizationHelperExists) {
+    throw new Error("Real private.normalize_nutrition_food_search_text(text) is required for schema identity sensitivity proof.");
+  }
   const userFoodItemsPreexisting = booleanScalar(databaseUrl, "select to_regclass('public.user_food_items') is not null;");
   const privateSchemaPreexisting = booleanScalar(databaseUrl, "select exists(select 1 from pg_namespace where nspname='private');");
   if (!privateSchemaPreexisting) psql(databaseUrl, "CREATE SCHEMA private;");
@@ -199,6 +207,26 @@ CREATE POLICY user_food_items_own_all ON ${USER_FOOD_TABLE} FOR ALL TO public US
     const privateFoodCatalogAclDriftDetected = changed(baselineSha256, privateFoodCatalogAclSha256, "private.food_catalog_* function ACL mutation");
     const privateFoodRollbackSha256 = fingerprint(databaseUrl);
     const privateFoodRollbackVerified = unchanged(baselineSha256, privateFoodRollbackSha256, "private Food Catalog helper rollback");
+
+    const searchNormalizationHelperSha256 = fingerprintDuringRollbackOnlyMutation(databaseUrl, `CREATE OR REPLACE FUNCTION private.normalize_nutrition_food_search_text(p_value text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog
+AS $function$
+  SELECT 'plan7-schema-identity-drift'::text
+$function$;`);
+    const searchNormalizationHelperDriftDetected = changed(
+      baselineSha256,
+      searchNormalizationHelperSha256,
+      "private.normalize_nutrition_food_search_text definition mutation",
+    );
+    const searchNormalizationHelperRollbackSha256 = fingerprint(databaseUrl);
+    const searchNormalizationHelperRollbackVerified = unchanged(
+      baselineSha256,
+      searchNormalizationHelperRollbackSha256,
+      "Search normalization helper rollback",
+    );
 
     const unrelatedPrivateFunctionSha256 = fingerprintDuringRollbackOnlyMutation(databaseUrl, `REVOKE EXECUTE ON FUNCTION ${PRIVATE_UNRELATED_FUNCTION}() FROM PUBLIC;`);
     const unrelatedPrivateFunctionExcluded = unchanged(baselineSha256, unrelatedPrivateFunctionSha256, "unrelated private function ACL mutation");
@@ -241,8 +269,13 @@ AS $$ BEGIN NEW.value := NEW.value; RETURN NEW; END $$;
       securityCertificationContractVerified,
       userFoodItemsDriftDetected,
       privateFoodCatalogAclDriftDetected,
+      searchNormalizationHelperDriftDetected,
       unrelatedPrivateFunctionExcluded,
-      rollbackVerified: userFoodRollbackVerified && privateFoodRollbackVerified && unrelatedPrivateRollbackVerified,
+      rollbackVerified:
+        userFoodRollbackVerified &&
+        privateFoodRollbackVerified &&
+        searchNormalizationHelperRollbackVerified &&
+        unrelatedPrivateRollbackVerified,
       constraintChanged,
       policyChanged,
       triggerChanged,
@@ -252,6 +285,7 @@ AS $$ BEGIN NEW.value := NEW.value; RETURN NEW; END $$;
         baselineSha256,
         userFoodItemsSha256,
         privateFoodCatalogAclSha256,
+        searchNormalizationHelperSha256,
         unrelatedPrivateFunctionSha256,
         constraintSha256,
         prePolicySha256,

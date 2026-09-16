@@ -62,6 +62,7 @@ function completeObserved() {
     schemaIdentityAdversarial: {
       userFoodItemsDriftDetected: true,
       privateFoodCatalogAclDriftDetected: true,
+      searchNormalizationHelperDriftDetected: true,
       rollbackVerified: true,
     },
   };
@@ -103,7 +104,7 @@ test("security evidence fails closed without actual anon, authenticated service-
 });
 
 test("security certification fails closed without adversarial schema identity drift detection", () => {
-  for (const field of ["userFoodItemsDriftDetected", "privateFoodCatalogAclDriftDetected", "rollbackVerified"]) {
+  for (const field of ["userFoodItemsDriftDetected", "privateFoodCatalogAclDriftDetected", "searchNormalizationHelperDriftDetected", "rollbackVerified"]) {
     const missing = completeObserved();
     missing.schemaIdentityAdversarial[field] = false;
     assert.throws(() => evaluateFoodCatalogSecurityEvidence(missing), new RegExp(`${field}|schema identity|adversarial`, "i"));

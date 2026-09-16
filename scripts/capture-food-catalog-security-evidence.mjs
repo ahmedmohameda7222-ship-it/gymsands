@@ -174,9 +174,27 @@ $plan7_private_acl$;`);
   const privateFoodCatalogRollbackSha256 = schemaIdentityFingerprint(databaseUrl);
   if (privateFoodCatalogRollbackSha256 !== baselineSha256) throw new Error("private.food_catalog_* adversarial ACL mutation did not roll back cleanly.");
 
+  booleanEvidence(
+    databaseUrl,
+    "select to_regprocedure('private.normalize_nutrition_food_search_text(text)') is not null;",
+    "searchNormalizationHelperExists",
+  );
+  const searchNormalizationHelperMutationSha256 = rollbackOnlySchemaIdentityFingerprint(databaseUrl, `create or replace function private.normalize_nutrition_food_search_text(p_value text)
+returns text
+language sql
+immutable
+set search_path = pg_catalog
+as $function$
+  select 'plan7-schema-identity-drift'::text
+$function$;`);
+  if (searchNormalizationHelperMutationSha256 === baselineSha256) throw new Error("Schema identity did not detect Search normalization helper definition drift.");
+  const searchNormalizationHelperRollbackSha256 = schemaIdentityFingerprint(databaseUrl);
+  if (searchNormalizationHelperRollbackSha256 !== baselineSha256) throw new Error("Search normalization helper adversarial mutation did not roll back cleanly.");
+
   return Object.freeze({
     userFoodItemsDriftDetected: true,
     privateFoodCatalogAclDriftDetected: true,
+    searchNormalizationHelperDriftDetected: true,
     rollbackVerified: true,
   });
 }
@@ -452,7 +470,7 @@ export function evaluateFoodCatalogSecurityEvidence(observed) {
     if (behavioral[name] !== true) throw new Error(`Food Catalog behavioral owner-isolation boundary failed: ${name}.`);
   }
   const schemaIdentityAdversarial = observed.schemaIdentityAdversarial ?? {};
-  for (const name of ["userFoodItemsDriftDetected","privateFoodCatalogAclDriftDetected","rollbackVerified"]) {
+  for (const name of ["userFoodItemsDriftDetected","privateFoodCatalogAclDriftDetected","searchNormalizationHelperDriftDetected","rollbackVerified"]) {
     if (schemaIdentityAdversarial[name] !== true) throw new Error(`Food Catalog adversarial schema identity boundary failed: ${name}.`);
   }
   const metadata = {
