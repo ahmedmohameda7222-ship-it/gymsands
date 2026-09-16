@@ -7,6 +7,7 @@ const PLAN5_SERVING_CORRECTION = "20260907165500_food_catalog_search_serving_sem
 const PLAN6_MIGRATION_FILE = "20260908100000_food_catalog_governance_control_plane.sql";
 const PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
 const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
+const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
 const MIGRATION_PATH = `supabase/migrations/${MIGRATION_FILE}`;
 const VERIFICATION_PATH = "supabase/verification/food-catalog-ingestion-v2-authority.sql";
 const RECONCILIATION_DOC = "docs/architecture/migration-ledger-reconciliation.md";
@@ -232,11 +233,11 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
   it("records verified Plan 4/5 aliases after Plan 6 exactness reconciliation", () => {
     expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.productionRecordCount).toBe(123);
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.pendingCount).toBe(2);
+    expect(ledger.unresolvedCount).toBe(2);
     expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.pendingCount).toBe(2);
+    expect(ledger.historyRepair.unresolvedCount).toBe(2);
     expect(ledger.historyRepair.schemaAppliedUntrackedCount).toBe(0);
     expect(releaseCompatibility.databaseMigrationMarkerVersion).toBe("20260724232734");
 
@@ -252,9 +253,15 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
         localFile: PLAN7_PENDING_MIGRATION,
         state: "pending",
       }),
+      expect.objectContaining({
+        localFile: PLAN7_OWNER_EXPORT_MIGRATION,
+        state: "pending",
+      }),
     ]);
-    expect(pendingEntries[0].productionVersion).toBeUndefined();
-    expect(pendingEntries[0].productionName).toBeUndefined();
+    for (const pendingEntry of pendingEntries) {
+      expect(pendingEntry.productionVersion).toBeUndefined();
+      expect(pendingEntry.productionName).toBeUndefined();
+    }
     const plan6Correction = ledger.entries.find((entry) => entry.localFile === PLAN6_EXACTNESS_CORRECTION);
     expect(plan6Correction).toEqual(expect.objectContaining({
       state: "applied_version_alias",
@@ -292,8 +299,10 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(reconciliationDoc).toContain("20260906200129_food_catalog_search_projection_v2");
     expect(reconciliationDoc).toContain("20260907215257_food_catalog_search_serving_semantics_correction");
     expect(reconciliationDoc).toContain("physical production migration records: **123**");
-    expect(reconciliationDoc).toContain("`pendingcount = 1`");
-    expect(reconciliationDoc).toContain("`unresolvedcount = 1`");
+    expect(reconciliationDoc).toContain("`pendingcount = 2`");
+    expect(reconciliationDoc).toContain("`unresolvedcount = 2`");
+    expect(reconciliationDoc).toContain(PLAN7_PENDING_MIGRATION);
+    expect(reconciliationDoc).toContain(PLAN7_OWNER_EXPORT_MIGRATION);
     expect(reconciliationDoc).toContain(PLAN6_MIGRATION_FILE);
     expect(reconciliationDoc).toContain(PLAN6_EXACTNESS_CORRECTION);
     expect(reconciliationDoc).toContain("20260910071241_food_catalog_governance_gtin_lock_exactness");

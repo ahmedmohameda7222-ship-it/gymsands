@@ -6,6 +6,7 @@ const VERIFIER = "supabase/verification/food-catalog-governance-control-plane.sq
 const LEDGER = "supabase/migration-ledger.json";
 const EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
 const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
+const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
 
 function read(path: string) { return readFileSync(path, "utf8"); }
 
@@ -116,14 +117,20 @@ describe("Food Catalog Plan 6 database authority", () => {
         localFile: PLAN7_PENDING_MIGRATION,
         state: "pending",
       }),
+      expect.objectContaining({
+        localFile: PLAN7_OWNER_EXPORT_MIGRATION,
+        state: "pending",
+      }),
     ]);
-    expect(pendingEntries[0].productionVersion).toBeUndefined();
-    expect(pendingEntries[0].productionName).toBeUndefined();
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
+    for (const pendingEntry of pendingEntries) {
+      expect(pendingEntry).not.toHaveProperty("productionVersion");
+      expect(pendingEntry).not.toHaveProperty("productionName");
+    }
+    expect(ledger.pendingCount).toBe(2);
+    expect(ledger.unresolvedCount).toBe(2);
     expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.pendingCount).toBe(2);
+    expect(ledger.historyRepair.unresolvedCount).toBe(2);
   });
 
   it("removes the Plan 2 temporary food-curation direct-access exception", () => {

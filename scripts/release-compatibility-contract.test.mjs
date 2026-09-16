@@ -10,6 +10,7 @@ const PLAN5_SERVING_CORRECTION = "20260907165500_food_catalog_search_serving_sem
 const PLAN6_MIGRATION = "20260908100000_food_catalog_governance_control_plane.sql";
 const PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
 const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
+const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
 const ledger = JSON.parse(
   readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"),
 );
@@ -30,9 +31,11 @@ test("declared database marker remains distinct from the applied physical head w
   assert.equal(resolved.expectedDatabaseMigrationVersion, "20260724232734");
   assert.equal(resolved.latestAppliedMigrationVersion, "20260910071241");
   assert.ok(resolved.latestAppliedMigrationVersion.localeCompare(resolved.expectedDatabaseMigrationVersion) > 0);
-  assert.deepEqual(pendingEntries.map((entry) => entry.localFile), [PLAN7_PENDING_MIGRATION]);
-  assert.equal(pendingEntries[0].productionVersion, undefined);
-  assert.equal(pendingEntries[0].productionName, undefined);
+  assert.deepEqual(pendingEntries.map((entry) => entry.localFile), [PLAN7_PENDING_MIGRATION, PLAN7_OWNER_EXPORT_MIGRATION]);
+  for (const pendingEntry of pendingEntries) {
+    assert.equal(pendingEntry.productionVersion, undefined);
+    assert.equal(pendingEntry.productionName, undefined);
+  }
   assert.equal(plan4.state, "applied_version_alias");
   assert.equal(plan5.state, "applied_version_alias");
   assert.equal(correction.state, "applied_version_alias");
@@ -43,10 +46,10 @@ test("declared database marker remains distinct from the applied physical head w
   assert.equal(plan6Correction.productionVersion, "20260910071241");
   assert.equal(plan6Correction.productionName, "food_catalog_governance_gtin_lock_exactness");
   assert.equal(resolved.migrationLedgerReconciliationState, "pending");
-  assert.equal(ledger.pendingCount, 1);
-  assert.equal(resolved.pendingMigrationCount, 1);
+  assert.equal(ledger.pendingCount, 2);
+  assert.equal(resolved.pendingMigrationCount, 2);
   assert.equal(resolved.schemaAppliedUntrackedCount, 0);
-  assert.equal(resolved.unresolvedMigrationCount, 1);
+  assert.equal(resolved.unresolvedMigrationCount, 2);
 });
 
 test("Next build metadata preserves the declared marker and exposes the pending Plan 7 migration", async () => {
@@ -56,9 +59,9 @@ test("Next build metadata preserves the declared marker and exposes the pending 
   assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, "20260724232734");
   assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20260910071241");
   assert.equal(releaseMetadata.migrationLedgerReconciliationState, "pending");
-  assert.equal(releaseMetadata.pendingMigrationCount, "1");
+  assert.equal(releaseMetadata.pendingMigrationCount, "2");
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, "0");
-  assert.equal(releaseMetadata.unresolvedMigrationCount, "1");
+  assert.equal(releaseMetadata.unresolvedMigrationCount, "2");
 });
 
 test("rejects a marker that is not represented by a resolved Production migration", () => {

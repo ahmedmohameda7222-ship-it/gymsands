@@ -98,10 +98,10 @@ test("current repository ledger truthfully blocks release readiness on the pendi
   const state = deriveMigrationLedgerState(currentLedger);
   const pendingEntries = currentLedger.entries.filter((entry) => entry.state === "pending");
   assert.equal(state.reconciliationState, "pending");
-  assert.equal(state.pendingCount, 1);
+  assert.equal(state.pendingCount, 2);
   assert.equal(state.schemaAppliedUntrackedCount, 0);
   assert.equal(state.ledgerDriftReviewCount, 0);
-  assert.equal(state.unresolvedCount, 1);
+  assert.equal(state.unresolvedCount, 2);
   assert.equal(state.releaseReady, false);
   assert.equal(state.latestAppliedMigrationVersion, TARGET_MARKER);
   assert.deepEqual(pendingEntries.map((entry) => ({
@@ -110,6 +110,10 @@ test("current repository ledger truthfully blocks release readiness on the pendi
     productionName: entry.productionName,
   })), [{
     localFile: "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql",
+    productionVersion: undefined,
+    productionName: undefined,
+  }, {
+    localFile: "20260915170012_food_catalog_owner_correction_export.sql",
     productionVersion: undefined,
     productionName: undefined,
   }]);

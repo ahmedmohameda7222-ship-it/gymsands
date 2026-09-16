@@ -13,6 +13,7 @@ const PLAN5_SERVING_CORRECTION = "20260907165500_food_catalog_search_serving_sem
 const PLAN6_MIGRATION = "20260908100000_food_catalog_governance_control_plane.sql";
 const PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
 const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
+const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
 const INTERNAL_TABLES = [
   "food_ingestion_batches",
   "food_ingestion_runs",
@@ -68,7 +69,7 @@ function readableRuntimePaths(paths: string[]): string[] {
 }
 
 describe("Food Catalog Batch 0 ingestion boundary", () => {
-  it("preserves finalized Batch 0 authority while recording later Production aliases and the pending Plan 7 migration", () => {
+  it("preserves finalized Batch 0 authority while recording later Production aliases and the pending Plan 7 migrations", () => {
     const base = readLedgerAt(APPROVED_BASE_SHA);
     const batch0 = readLedgerAt(BATCH0_FINAL_SHA);
     const current = readCurrentLedger();
@@ -162,16 +163,22 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         localFile: PLAN7_PENDING_MIGRATION,
         state: "pending",
       }),
+      expect.objectContaining({
+        localFile: PLAN7_OWNER_EXPORT_MIGRATION,
+        state: "pending",
+      }),
     ]);
-    expect(currentPendingEntries[0].productionVersion).toBeUndefined();
-    expect(currentPendingEntries[0].productionName).toBeUndefined();
-    expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(1);
+    for (const pendingEntry of currentPendingEntries) {
+      expect(pendingEntry).not.toHaveProperty("productionVersion");
+      expect(pendingEntry).not.toHaveProperty("productionName");
+    }
+    expect(current.pendingCount).toBe(2);
+    expect(current.unresolvedCount).toBe(2);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
         state: "pending",
-        pendingCount: 1,
-        unresolvedCount: 1,
+        pendingCount: 2,
+        unresolvedCount: 2,
       })
     );
   });
