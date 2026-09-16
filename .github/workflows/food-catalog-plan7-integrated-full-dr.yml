@@ -318,6 +318,7 @@ jobs:
           : > "$RUNNER_TEMP/plan7-integrated-error.log"
           exec 2> >(tee -a "$RUNNER_TEMP/plan7-integrated-error.log" >&2)
           expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          # 1h applies only to fresh same-run FULL_DR CI certification; other recovery/cutover callers must set their own explicit RPO.
           node scripts/verify-food-catalog-integrated-restore.mjs \
             --source-artifact-dir "$RUNNER_TEMP/plan7-source-artifact" \
             --target-artifact-dir "$RUNNER_TEMP/plan7-target-readback" \
@@ -330,6 +331,7 @@ jobs:
             --target-search "$RUNNER_TEMP/plan7-target-search.json" \
             --consumer-reference "test/fixtures/food-catalog/plan7-consumer-reference-v1.json" \
             --expected-head "$expected" \
+            --max-artifact-age-ms 3600000 \
             --output "$RUNNER_TEMP/plan7-integrated-evidence.json"
           node - "$RUNNER_TEMP/plan7-integrated-evidence.json" "$RUNNER_TEMP/plan7-verification-input.json" <<'NODE'
           const fs = require('node:fs');
@@ -383,6 +385,7 @@ jobs:
           if (value.profile !== 'FULL_DR') process.exit(1);
           if (!value.linkedEvidenceVerified || !value.canonicalProfileVerified) process.exit(1);
           if (!value.restoreVerified || !value.trusted || !value.protectedSegmentsVerified || !value.searchVerified || !value.drReady) process.exit(1);
+          if (value.recoveryEligible !== true || value.recoveryEligibility?.agePolicyApplied !== true || value.recoveryEligibility?.maxArtifactAgeMs !== 3600000) process.exit(1);
           NODE
 
       - name: Exact-head and Production-safety integrity

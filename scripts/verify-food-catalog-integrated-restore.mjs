@@ -403,7 +403,7 @@ async function verifyConsumerReference(databaseUrl, fixturePath) {
   return Object.freeze({ verified: true, foodId: fixture.foodId, frozenSnapshotSha256: expectedHash });
 }
 
-function parseArgs(argv) {
+export function parseIntegratedRestoreArgs(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
@@ -423,12 +423,18 @@ function parseArgs(argv) {
     else if (value === "--target-search") options.targetSearchPath = next();
     else if (value === "--consumer-reference") options.consumerReferencePath = next();
     else if (value === "--expected-head") options.expectedHead = next();
+    else if (value === "--max-artifact-age-ms") options.maxArtifactAgeMs = next();
     else if (value === "--output") options.output = next();
     else throw new Error(`Unknown integrated restore verifier argument ${value}.`);
   }
-  const required = ["sourceArtifactDir","targetArtifactDir","targetUrl","restoreEvidencePath","sourceSecurityPath","targetSecurityPath","targetServiceAuthorityPath","sourceSearchPath","targetSearchPath","consumerReferencePath","expectedHead","output"];
+  const required = ["sourceArtifactDir","targetArtifactDir","targetUrl","restoreEvidencePath","sourceSecurityPath","targetSecurityPath","targetServiceAuthorityPath","sourceSearchPath","targetSearchPath","consumerReferencePath","expectedHead","maxArtifactAgeMs","output"];
   for (const field of required) if (!options[field]) throw new Error(`Missing required integrated restore verifier option ${field}.`);
   if (!SHA40.test(options.expectedHead)) throw new Error("Integrated restore verifier expected head must be an exact commit SHA.");
+  const maxArtifactAgeMs = Number(options.maxArtifactAgeMs);
+  if (!Number.isFinite(maxArtifactAgeMs) || !Number.isInteger(maxArtifactAgeMs) || maxArtifactAgeMs <= 0) {
+    throw new Error("Integrated restore verifier max artifact age must be a finite positive integer in milliseconds.");
+  }
+  options.maxArtifactAgeMs = maxArtifactAgeMs;
   return options;
 }
 
@@ -590,6 +596,7 @@ export async function verifyIntegratedRestore(options) {
       assertions: Object.freeze({ evidence: assertionEvidence }),
       recoveryEvaluation: Object.freeze({
         evaluationTime: new Date().toISOString(),
+        maxArtifactAgeMs: options.maxArtifactAgeMs,
       }),
     }),
   });
@@ -597,7 +604,7 @@ export async function verifyIntegratedRestore(options) {
 }
 
 async function main() {
-  const options = parseArgs(process.argv.slice(2));
+  const options = parseIntegratedRestoreArgs(process.argv.slice(2));
   const result = await verifyIntegratedRestore(options);
   await writeFile(resolve(options.output), `${JSON.stringify(result, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify({

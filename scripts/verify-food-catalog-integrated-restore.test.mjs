@@ -304,4 +304,25 @@ describe("Plan 7 integrated restore evidence", () => {
       /target|authoritative|current-only|mode/i,
     );
   });
+
+it("requires an explicit positive integer max artifact age for canonical FULL_DR invocation", async () => {
+  const verifier = await import("./verify-food-catalog-integrated-restore.mjs");
+  assert.equal(typeof verifier.parseIntegratedRestoreArgs, "function");
+  const base = [
+    "--source-artifact-dir", "source", "--target-artifact-dir", "target",
+    "--target-url", "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    "--restore-evidence", "restore.json", "--source-security", "source-security.json",
+    "--target-security", "target-security.json", "--target-service-authority", "service.json",
+    "--source-search", "source-search.json", "--target-search", "target-search.json",
+    "--consumer-reference", "consumer.json", "--expected-head", "a".repeat(40),
+    "--output", "output.json",
+  ];
+  assert.throws(() => verifier.parseIntegratedRestoreArgs(base), /max.*artifact.*age|required/i);
+  assert.throws(() => verifier.parseIntegratedRestoreArgs([...base, "--max-artifact-age-ms", "nope"]), /max.*artifact.*age|positive|integer/i);
+  assert.throws(() => verifier.parseIntegratedRestoreArgs([...base, "--max-artifact-age-ms", "0"]), /max.*artifact.*age|positive|integer/i);
+  assert.throws(() => verifier.parseIntegratedRestoreArgs([...base, "--max-artifact-age-ms", "-1"]), /max.*artifact.*age|positive|integer/i);
+  const parsed = verifier.parseIntegratedRestoreArgs([...base, "--max-artifact-age-ms", "3600000"]);
+  assert.equal(parsed.maxArtifactAgeMs, 3600000);
+});
+
 });
