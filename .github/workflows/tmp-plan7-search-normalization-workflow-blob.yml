@@ -1,0 +1,32 @@
+name: Plan7 Materialize Canonical Replay Workflow Blob
+
+on:
+  push:
+    branches:
+      - tmp-plan7-search-normalization-workflow-blob
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create modified workflow blob
+        env:
+          CANDIDATE_SHA: 4ee0dfadc216cf487d8765a6217e0782fb9c5d44
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cp .github/scripts/tmp-plan7-move-schema-sensitivity.py /tmp/plan7-move-schema-sensitivity.py
+          git checkout --detach "$CANDIDATE_SHA"
+          python /tmp/plan7-move-schema-sensitivity.py
+          git diff --check
+          blob_sha="$(gh api --method POST repos/${GITHUB_REPOSITORY}/git/blobs --input - --jq .sha <<JSON
+          {"content":$(python -c 'import json, pathlib; print(json.dumps(pathlib.Path(".github/workflows/food-catalog-portable-export-qa.yml").read_text()))'),"encoding":"utf-8"}
+          JSON
+          )"
+          echo "MODIFIED_WORKFLOW_BLOB_SHA=$blob_sha"
