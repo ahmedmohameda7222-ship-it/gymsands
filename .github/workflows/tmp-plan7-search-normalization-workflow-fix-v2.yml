@@ -1,0 +1,32 @@
+name: Plan7 Move Schema Sensitivity To Canonical Replay V2
+
+on:
+  push:
+    branches:
+      - tmp-plan7-search-normalization-workflow-fix-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch candidate workflow only
+        env:
+          CANDIDATE_SHA: 4ee0dfadc216cf487d8765a6217e0782fb9c5d44
+        run: |
+          set -euo pipefail
+          cp .github/scripts/tmp-plan7-move-schema-sensitivity.py /tmp/plan7-move-schema-sensitivity.py
+          git checkout --detach "$CANDIDATE_SHA"
+          python /tmp/plan7-move-schema-sensitivity.py
+          git diff --check
+          git diff -- .github/workflows/food-catalog-portable-export-qa.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/food-catalog-portable-export-qa.yml
+          git commit -m "fix(plan7): move schema sensitivity to canonical replay"
+          git push --force origin HEAD:refs/heads/tmp-plan7-search-normalization-workflow-fix-v2
