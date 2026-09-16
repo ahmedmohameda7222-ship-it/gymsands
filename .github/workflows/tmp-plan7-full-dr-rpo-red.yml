@@ -77,7 +77,7 @@ jobs:
             assert.equal(parsed.maxArtifactAgeMs, 3600000);
           });
           '''
-          marker = '\n});\n'
+          marker = '\n});'
           pos = text.rfind(marker)
           if pos < 0:
               raise SystemExit('test suite terminator not found')
