@@ -29,14 +29,18 @@ test("schema identity fingerprints user_food_items through the canonical relatio
   assert.match(sql, /pg_get_triggerdef/);
 });
 
-test("schema identity preserves public Food Catalog functions and adds only private.food_catalog_* helpers with ACLs", () => {
+test("schema identity preserves public Food Catalog functions and exactly allowlists the Search normalization dependency in private scope", () => {
   const sql = buildFoodCatalogSchemaIdentitySql();
   const functionScope = section(sql, "function_scope AS (", "), function_parts AS (");
 
   assert.match(functionScope, /n\.nspname = 'public'[\s\S]*p\.proname LIKE 'food_%'[\s\S]*p\.proname LIKE '%food_catalog%'/);
   assert.match(functionScope, /n\.nspname = 'private'[\s\S]*p\.proname LIKE 'food_catalog_%'/);
+  assert.match(functionScope, /p\.proname = 'normalize_nutrition_food_search_text'/);
+  assert.doesNotMatch(functionScope, /p\.proname\s+LIKE\s+'normalize_%'/i);
+  assert.doesNotMatch(functionScope, /p\.proname\s+LIKE\s+'nutrition_%'/i);
   assert.doesNotMatch(functionScope, /n\.nspname\s+IN\s*\([^)]*'private'/i);
   assert.doesNotMatch(functionScope, /n\.nspname = 'private'\s+AND\s+p\.proname\s+LIKE\s+'%'/i);
+  assert.doesNotMatch(functionScope, /nutrition_food_per_100/);
 
   assert.match(sql, /pg_get_function_identity_arguments\(f\.oid\)/);
   assert.match(sql, /pg_get_functiondef\(f\.oid\)/);

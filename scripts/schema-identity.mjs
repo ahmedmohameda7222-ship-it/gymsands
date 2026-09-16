@@ -85,7 +85,13 @@ export function buildFoodCatalogSchemaIdentitySql() {
     WHERE p.prokind IN ('f','p')
       AND (
         (n.nspname = 'public' AND (p.proname LIKE 'food_%' OR p.proname LIKE '%food_catalog%'))
-        OR (n.nspname = 'private' AND p.proname LIKE 'food_catalog_%')
+        OR (
+          n.nspname = 'private'
+          AND (
+            p.proname LIKE 'food_catalog_%'
+            OR p.proname = 'normalize_nutrition_food_search_text'
+          )
+        )
       )
   ), function_parts AS (
     SELECT
