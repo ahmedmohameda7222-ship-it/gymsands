@@ -1,0 +1,74 @@
+name: Temporary Plan 7 FULL_DR RPO RED
+
+on:
+  push:
+    branches: [tmp-plan7-full-dr-rpo-red]
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 468cc24d42ce441155aa81401abae3d7930b310a
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Inject focused RED contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/verify-food-catalog-integrated-restore.test.mjs')
+          text = p.read_text()
+          block = r'''
+
+  it("requires an explicit positive integer max artifact age for canonical FULL_DR invocation", async () => {
+    const verifier = await import("./verify-food-catalog-integrated-restore.mjs");
+    assert.equal(typeof verifier.parseIntegratedRestoreArgs, "function");
+    const base = [
+      "--source-artifact-dir", "source",
+      "--target-artifact-dir", "target",
+      "--target-url", "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+      "--restore-evidence", "restore.json",
+      "--source-security", "source-security.json",
+      "--target-security", "target-security.json",
+      "--target-service-authority", "service.json",
+      "--source-search", "source-search.json",
+      "--target-search", "target-search.json",
+      "--consumer-reference", "consumer.json",
+      "--expected-head", "a".repeat(40),
+      "--output", "output.json",
+    ];
+    assert.throws(() => verifier.parseIntegratedRestoreArgs(base), /max.*artifact.*age|required/i);
+    assert.throws(() => verifier.parseIntegratedRestoreArgs([...base, "--max-artifact-age-ms", "nope"]), /max.*artifact.*age|positive|integer/i);
+    assert.throws(() => verifier.parseIntegratedRestoreArgs([...base, "--max-artifact-age-ms", "0"]), /max.*artifact.*age|positive|integer/i);
+    assert.throws(() => verifier.parseIntegratedRestoreArgs([...base, "--max-artifact-age-ms", "-1"]), /max.*artifact.*age|positive|integer/i);
+    const parsed = verifier.parseIntegratedRestoreArgs([...base, "--max-artifact-age-ms", "3600000"]);
+    assert.equal(parsed.maxArtifactAgeMs, 3600000);
+  });
+'''
+          marker = '\n});\n'
+          pos = text.rfind(marker)
+          if pos < 0:
+              raise SystemExit('test suite terminator not found')
+          p.write_text(text[:pos] + block + text[pos:])
+          PY
+      - name: Prove RED
+        shell: bash
+        run: |
+          set +e
+          node --test scripts/verify-food-catalog-integrated-restore.test.mjs > red.log 2>&1
+          status=$?
+          cat red.log
+          if [ "$status" -eq 0 ]; then
+            echo "Expected focused contract to fail before implementation." >&2
+            exit 1
+          fi
+          grep -E "parseIntegratedRestoreArgs|function|assert" red.log >/dev/null
+          echo "EXPECTED_RED_CONFIRMED"
