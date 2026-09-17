@@ -73,19 +73,33 @@ jobs:
             'source',jsonb_build_object('provider','synthetic-reference','dataset','plan7-red','sourceVersion','2026.09','sourceReleaseDate','2026-09-17','licenseName','Fixture License','licenseReference','fixture-license','sourceReference','fixture://plan7-red','sourceChecksumSha256',repeat('c',64),'importerVersion','plan7-red','configChecksumSha256',repeat('d',64)),
             'expectedMutations',jsonb_build_object('input',0,'accepted',0,'rejected',0,'matched',0,'created',0,'possibleDuplicate',0,'quarantined',0)
           ));
-          update public.food_ingestion_batches set review_state='reviewed', reviewed_at=clock_timestamp()
-          where semantic_identity_checksum_sha256=repeat('b',64);
-          update public.food_ingestion_batches set review_state='approved', approved_at=clock_timestamp(), approval_reference='plan7-red'
-          where semantic_identity_checksum_sha256=repeat('b',64);
-          select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
+          create temporary table plan7_red_ids as
+          select batch.id batch_id, run.id dry_run_id
+          from public.food_ingestion_batches batch
+          join public.food_ingestion_runs run on run.batch_id=batch.id
+          where batch.semantic_identity_checksum_sha256=repeat('b',64) and run.execution_mode='dry_run';
+          select public.food_catalog_ingestion_record_reconciliation_v2(jsonb_build_object(
             'operationId','72000000-0000-4000-8000-000000000002','commandChecksumSha256',repeat('2',64),
+            'runId',(select dry_run_id from plan7_red_ids),'manifestContentChecksumSha256',repeat('a',64),
+            'semanticIdentityChecksumSha256',repeat('b',64),'completed',true
+          ));
+          select public.food_catalog_ingestion_complete_run_v2(jsonb_build_object(
+            'operationId','72000000-0000-4000-8000-000000000003','commandChecksumSha256',repeat('3',64),
+            'runId',(select dry_run_id from plan7_red_ids)
+          ));
+          update public.food_ingestion_batches set review_state='reviewed', reviewed_at=clock_timestamp()
+          where id=(select batch_id from plan7_red_ids);
+          update public.food_ingestion_batches set review_state='approved', approved_at=clock_timestamp(), approval_reference='plan7-red'
+          where id=(select batch_id from plan7_red_ids);
+          select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
+            'operationId','72000000-0000-4000-8000-000000000004','commandChecksumSha256',repeat('4',64),
             'executionMode','production','attemptNumber',1,'manifestContentChecksumSha256',repeat('a',64),
             'semanticIdentityChecksumSha256',repeat('b',64),
             'source',jsonb_build_object('provider','synthetic-reference','dataset','plan7-red','sourceVersion','2026.09','sourceReleaseDate','2026-09-17','licenseName','Fixture License','licenseReference','fixture-license','sourceReference','fixture://plan7-red','sourceChecksumSha256',repeat('c',64),'importerVersion','plan7-red','configChecksumSha256',repeat('d',64)),
             'expectedMutations',jsonb_build_object('input',0,'accepted',0,'rejected',0,'matched',0,'created',0,'possibleDuplicate',0,'quarantined',0)
           ));
           create temporary table plan7_red_run as
-          select id, status, lease_epoch from public.food_ingestion_runs where execution_mode='production' and attempt_number=1 and batch_id=(select id from public.food_ingestion_batches where semantic_identity_checksum_sha256=repeat('b',64));
+          select id, status, lease_epoch from public.food_ingestion_runs where execution_mode='production' and attempt_number=1 and batch_id=(select batch_id from plan7_red_ids);
           create table public.food_catalog_ingestion_restore_blocks(
             run_id uuid primary key references public.food_ingestion_runs(id),
             restored_status text not null check (restored_status in ('prepared','running')),
@@ -94,7 +108,7 @@ jobs:
           );
           create temporary table plan7_red_command(command jsonb not null);
           insert into plan7_red_command values (jsonb_build_object(
-            'operationId','72000000-0000-4000-8000-000000000003','commandChecksumSha256',repeat('3',64),
+            'operationId','72000000-0000-4000-8000-000000000005','commandChecksumSha256',repeat('5',64),
             'runId',(select id from plan7_red_run),'leaseOwner','plan7-red-worker','leaseToken','72000000-0000-4000-8000-000000000101','leaseSeconds',120
           ));
           select public.food_catalog_ingestion_acquire_lease_v2((select command from plan7_red_command));
