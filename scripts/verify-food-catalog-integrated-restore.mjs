@@ -6,7 +6,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
-import { decodeProtectedArtifactMaterial } from "./restore-food-catalog-portable.mjs";
+import {
+  assertDisposableRestoreTarget,
+  decodeProtectedArtifactMaterial,
+} from "./restore-food-catalog-portable.mjs";
 import { captureRestoredServiceAuthority } from "./capture-food-catalog-restored-service-authority.mjs";
 import { captureFoodCatalogSecurityEvidence } from "./capture-food-catalog-security-evidence.mjs";
 import { captureSearchRuntimeEvidence } from "./capture-food-catalog-restored-search-runtime.mjs";
@@ -619,6 +622,7 @@ export function parseIntegratedRestoreArgs(argv) {
 }
 
 export async function verifyIntegratedRestore(options) {
+  const disposableTarget = assertDisposableRestoreTarget(options.targetUrl, true);
   const binding = createEnvironmentProtectedSegmentKeyBinding(process.env);
   const source = await readArtifact(options.sourceArtifactDir, binding.keyProvider);
   const recordedTarget = await readArtifact(options.targetArtifactDir, binding.keyProvider);
@@ -815,7 +819,7 @@ export async function verifyIntegratedRestore(options) {
         securityRlsAclIdentitySha256: targetSecurity.securityRlsAclIdentitySha256,
         restoredTargetIdentitySha256: targetIdentity,
         authRlsCompatibilityVerified: true,
-        disposableTargetVerified: true,
+        disposableTargetVerified: disposableTarget.loopback === true,
       }),
       assertions: Object.freeze({ evidence: assertionEvidence }),
       recoveryEvaluation: Object.freeze({
