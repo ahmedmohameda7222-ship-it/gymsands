@@ -73,7 +73,9 @@ jobs:
             'source',jsonb_build_object('provider','synthetic-reference','dataset','plan7-red','sourceVersion','2026.09','sourceReleaseDate','2026-09-17','licenseName','Fixture License','licenseReference','fixture-license','sourceReference','fixture://plan7-red','sourceChecksumSha256',repeat('c',64),'importerVersion','plan7-red','configChecksumSha256',repeat('d',64)),
             'expectedMutations',jsonb_build_object('input',0,'accepted',0,'rejected',0,'matched',0,'created',0,'possibleDuplicate',0,'quarantined',0)
           ));
-          update public.food_ingestion_batches set review_state='approved', reviewed_at=clock_timestamp(), approved_at=clock_timestamp(), approval_reference='plan7-red'
+          update public.food_ingestion_batches set review_state='reviewed', reviewed_at=clock_timestamp()
+          where semantic_identity_checksum_sha256=repeat('b',64);
+          update public.food_ingestion_batches set review_state='approved', approved_at=clock_timestamp(), approval_reference='plan7-red'
           where semantic_identity_checksum_sha256=repeat('b',64);
           select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
             'operationId','72000000-0000-4000-8000-000000000002','commandChecksumSha256',repeat('2',64),
