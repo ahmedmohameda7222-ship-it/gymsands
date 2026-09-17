@@ -1,0 +1,502 @@
+exit_status=1
+===== tail -n 500 =====
+✔ styling build configuration selects rendered UI QA and production build (1.541463ms)
+✔ build authority scripts execute the production build gate (0.496184ms)
+✔ test-only source changes avoid build and rendered browser QA (0.270229ms)
+✔ non-database integration-test changes select the job that runs the integration suite (0.187904ms)
+✔ database integration-test changes remain on database validation without a build (0.11176ms)
+✔ integration runner and configuration changes execute live database integration (0.216728ms)
+✔ central workflow and CI wrapper changes exercise every live affected gate (0.300677ms)
+✔ unclassified execution scripts fail safe to all live validation gates (0.152177ms)
+✔ script test files remain lightweight and do not trigger broad fallback (0.163287ms)
+✔ package manifest comparison distinguishes scripts from dependencies (0.701682ms)
+✔ QA or validation package script changes select all rendered suites (0.184978ms)
+✔ dependency changes select audit, integration and build (0.165802ms)
+✔ deleted runtime paths cannot be hidden by accompanying documentation (0.125827ms)
+✔ git diff includes deletions and emits both sides of renames (0.199195ms)
+✔ unknown non-document paths fail safe to the broad affected scopes (0.137238ms)
+✔ empty diffs fail safe instead of silently skipping validation (0.167556ms)
+✔ Workout History implementation paths select only History rendered QA (0.246313ms)
+✔ Active Workout implementation paths select only Active Workout rendered QA (0.391647ms)
+✔ Train implementation paths select only Train rendered QA (0.165973ms)
+✔ shared layouts select every rendered suite (0.235393ms)
+✔ messages select every rendered suite (0.155353ms)
+✔ global styles select every rendered suite (0.175531ms)
+✔ test-only domain paths do not activate rendered QA (0.154661ms)
+✔ mixed History and Active paths union only those rendered scopes (0.145624ms)
+✔ unknown runtime UI paths fail closed to all rendered suites (0.14886ms)
+✔ unknown non-runtime execution authority keeps broad safe lanes (0.159029ms)
+✔ Exercise Detail V2 runtime QA is an exact-head permanent PR gate (1.548246ms)
+✔ rendered matrix keeps the six-route, viewport, locale, theme, motion and scaling authority (0.659081ms)
+▶ Plan 7 authoritative export CLI SQL program
+  ✔ uses one read-only REPEATABLE READ PostgreSQL transaction and snapshot-bound observations (3.212629ms)
+  ✔ fingerprints non-column schema authority through one shared definition (8.73667ms)
+  ✔ requires disposable PostgreSQL runtime proof that non-column authority changes the fingerprint (2.500769ms)
+  ✔ streams stable-key relation data without OFFSET pagination (0.49392ms)
+  ✔ refuses relation identifiers or stable keys that are not SQL identifiers (0.607504ms)
+  ✔ registers the psql close listener before stdout can finish so finalization cannot miss the event (5.523161ms)
+(node:2450) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/gymsands/gymsands/lib/food-catalog/portability/relation-registry.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/runner/work/gymsands/gymsands/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✔ routes protected FULL_DR relations to encrypted transport instead of refusing or writing plaintext segments (3.179277ms)
+  ✔ neutralizes declared source-live lease scalars before canonical artifact material without erasing durable fencing (0.733511ms)
+  ✔ removes source Service execution binding from canonical FULL_DR artifact material (100.417373ms)
+  ✔ maps a source processing outbox row to portable pending state while preserving durable delivery history and source authority (0.565134ms)
+✔ Plan 7 authoritative export CLI SQL program (129.706805ms)
+✔ full database verification executes Food Catalog Batch 0 lifecycle verification before release preflight (1.272967ms)
+✔ registers Plan 3 verifier before release preflight (1.331377ms)
+(node:2475) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/gymsands/gymsands/lib/food-catalog/portability/validate-artifact.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/runner/work/gymsands/gymsands/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ restore reconstructs blocks only for nonterminal Production ingestion history (1.92276ms)
+✔ restore block reconstruction is empty without nonterminal Production history (0.20717ms)
+✔ forward migration supplies the target-local guard before replay (1.335024ms)
+✔ acquire authority is byte-preserved after removing only the restore guard (0.466679ms)
+✔ restore-block relation remains target-local and outside portable registry (0.181242ms)
+✔ registers Plan 4 ingestion V2 verifiers after Plan 3 authority and before release preflight (1.111694ms)
+✔ Food Catalog Intelligence core verification runs before release preflight (2.720393ms)
+(node:2496) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/gymsands/gymsands/lib/food-catalog/canonical-hash.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/runner/work/gymsands/gymsands/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ shared generation validation report checksum preserves Plan 3 semantic payload compatibility (3.604889ms)
+✔ integrated FULL_DR runs the canonical Plan3-strength pre-pointer adversarial matrix (1.008078ms)
+(node:2503) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/gymsands/gymsands/lib/food-catalog/portability/validate-artifact.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/runner/work/gymsands/gymsands/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Plan 7 restored Service execution binding
+  ✔ materializes an unreachable restore-local SHA-256 only for Service rows (187.825611ms)
+  ✔ uses a realistic source Service identity whose digest is portable-neutralized rather than copied (1.00368ms)
+  ✔ uses the canonical governance operation ledger as the durable rebind/reconciliation gate without schema expansion (2.778271ms)
+  ✔ proves exact-binding reconciliation, Plan 6 lease fencing, and credential rotation invalidation without durable test mutation (0.762586ms)
+  ✔ keeps the integrated FULL_DR chain responsible for dynamic restored-Service authority proof (1.236769ms)
+✔ Plan 7 restored Service execution binding (195.484995ms)
+✔ reads rotation history before entering rotated service_role while keeping the real claim inside it (1.228583ms)
+✔ permits only the disposable local Supabase database (3.487698ms)
+✔ parses only explicit local Supabase environment assignments (1.313453ms)
+✔ extracts a committed 5,000-session setup from the deterministic fixture (18.702888ms)
+✔ prepares the measured detail session through the atomic projection contract (0.733781ms)
+✔ cleanup remains executable SQL scoped to the deterministic fixture owner (1.050749ms)
+✔ benchmark enforces psql errors through the CLI variable contract (3.781842ms)
+✔ schema probe covers the complete direct workout-session read contract (0.81227ms)
+✔ schema readiness retries PostgREST and preserves service-role authorization (0.714786ms)
+✔ schema readiness reports the underlying PostgREST failure without exposing credentials (0.686914ms)
+✔ benchmark starts only the missing API service plane (0.646427ms)
+✔ benchmark preserves the migrated database while activating PostgREST (12.8985ms)
+✔ real benchmark executes the versioned list and detail services (4.087156ms)
+MIGRATION_RECONCILIATION_SHA256={"supabase/migrations/20260711213000_adaptive_onboarding_v2.sql":"788e5106e103ff0273cf904514c2a3f3fb27f7283c769036339e7a1e3a01e031","supabase/migrations/20260712173000_persistent_meal_plan_skip_status.sql":"5523852f9c9726e60b700d5d25581948f6d5586ac632717f008d8b7dbc6b7d67","supabase/migrations/20260712195000_nutrition_target_date_overrides.sql":"86fd52e397153091aa7a26d36d9957b00c414c7ade0b5d6325808cc76b21625a","supabase/migrations/20260713153000_meal_plan_atomic_execution.sql":"c7d2d776a15f2d8b5e7f43be0acfe2fcc84b893e699ca47cd679fb3ed016ae84","supabase/migrations/20260713160000_train_section_atomic_integrity.sql":"e31c895dbfc1b6bb36c2bbfa58fa231013082d8599cb2dfb50306745ea1eb043","supabase/migrations/20260713170000_finalize_train_schedule_delete_integrity.sql":"f05a4d22f8d63aeb48a8b9004d91aba9dd77c7f0acca602bcb7f37018134b59e","supabase/migrations/20260714030000_harden_train_plan_rpc_execution.sql":"7038cb9830ea4aa9bfc83d6cca582d0860c565061bbd8328cf7feae8c27ca896","supabase/migrations/20260715010000_restrict_nutrition_target_override_acl.sql":"c70d245f1dc11f2d8257d15e987d1014b36d7b665e983994ea8848f3db69afb5"}
+✔ captures SHA-256 for the exact reconciliation migration bytes (3.954587ms)
+✔ accepts exactly the intended authenticated CRUD ACL (2.371446ms)
+✔ rejects a missing required CRUD privilege (0.412035ms)
+✔ rejects extra TRUNCATE (0.298082ms)
+✔ rejects extra TRIGGER (1.792706ms)
+✔ rejects extra REFERENCES (0.227889ms)
+✔ rejects extra MAINTAIN (0.165822ms)
+✔ normalizes duplicates and case without weakening exactness (0.224202ms)
+✔ Vercel compute is colocated with the Frankfurt database region contract (2.654408ms)
+✔ performance budgets remain versioned, positive, and machine readable (0.745534ms)
+✔ performance deployment authorities run core, CI, and build without unrelated database replay (3.205907ms)
+✔ phase-close Quality delegates chronological replay to the permanent helper (1.732893ms)
+✔ synthetic future migration version sorts after the complete repository chain (0.484302ms)
+✔ helper rejects a linked Supabase repository (1.360452ms)
+✔ migration-history validation requires every migration exactly once (0.580054ms)
+✔ compatibility bridge is explicit, exact, and local-only (0.272814ms)
+✔ AW-3C replay reproduces the released AW-3B marker before the pending migration (0.209164ms)
+✔ canonical full Quality is PR-bound and runs only at ready-for-review phase closure (0.517394ms)
+✔ automatic PR Quality is path-scoped, parallel and fail-safe (0.318981ms)
+✔ integration validation isolates legacy fixtures and exports both database authorities (0.55792ms)
+✔ permanent validation names are generic and every release gate is retained (1.107164ms)
+✔ Quality executes the permanent AW-2B schema and command integration SQL (0.289745ms)
+✔ applied AW-2A migrations remain byte-for-byte immutable (0.978853ms)
+▶ Plan 7 runtime certification boundary
+  ✔ binds canonical versus diagnostic registry authority into export artifacts (8.37577ms)
+  ✔ restore explicitly validates canonical profile completeness before trusted loading (1.979497ms)
+  ✔ search verifier reports search facts but cannot manufacture drReady (1.723897ms)
+  ✔ restore report derives trust from mandatory assertion evidence instead of caller trusted booleans (3.907217ms)
+✔ Plan 7 runtime certification boundary (18.13582ms)
+(node:2572) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/gymsands/gymsands/lib/food-catalog/portability/validate-artifact.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/runner/work/gymsands/gymsands/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Plan 7 certification restore target safety
+  ✔ rejects every arbitrary remote PostgreSQL target even when the caller acknowledges disposable intent (1.740097ms)
+  ✔ requires explicit disposable intent but accepts the isolated loopback PostgreSQL harness (0.448515ms)
+✔ Plan 7 certification restore target safety (3.78138ms)
+✔ PR Quality identity, trigger and concurrency remain stable (1.813765ms)
+✔ exact PR head checkout and stable job names remain present (0.376138ms)
+✔ scope exposes all rendered selector outputs (0.381148ms)
+✔ automatic PR Quality owns one complete unit suite with isolated heavy identity coverage (0.456009ms)
+✔ rendered selection uses current canonical runners only (0.526081ms)
+✔ one build, one server and one wait are shared by selected rendered suites (0.278174ms)
+✔ rendered evidence and focused diagnostics remain bounded (0.288734ms)
+✔ required summary remains always-run (0.233039ms)
+✔ PR workflow introduces no Production credential secrets (0.421614ms)
+✔ rendered QA preserves the 126-route matrix and isolates every observation (1.827532ms)
+✔ today-workout is redirected before the React route lifecycle (0.346302ms)
+✔ authenticated evidence is fail-closed and always emits a safe failure summary (2.063996ms)
+✔ post-deploy readiness gates are production-only while artifact identity stays universal (0.331925ms)
+✔ status parser accepts quoted Supabase CLI environment output (7.029668ms)
+✔ database-only stack requires a data-preserving service-plane restart (0.263507ms)
+✔ minimal stack retains the services required by the REST API contract (0.681052ms)
+✔ readiness validation accepts only the disposable local API and database ports (3.74948ms)
+✔ local service-role parity repair is read-only and refreshes PostgREST (0.640956ms)
+✔ service-role parity repair cannot target a non-disposable endpoint (0.332757ms)
+✔ service-role parity repair uses psql error-stop on the validated local database (0.340181ms)
+✔ rejects foreign repository source (32.363347ms)
+✔ rejects non-main source branch (5.841433ms)
+✔ rejects unsupported source event (2.902321ms)
+✔ rejects unknown conclusion (2.869193ms)
+✔ ignores cancelled run without API mutation (3.978872ms)
+✔ success with no open incident performs no mutation (47.487043ms)
+✔ first actionable failure after success opens no issue (15.271006ms)
+✔ second consecutive actionable failure creates exactly one issue (16.517994ms)
+✔ created issue has exact marker title owner assignee bug label and attempt identity (27.171905ms)
+✔ existing open incident receives one update comment (17.499121ms)
+✔ replaying same completion attempt creates no duplicate issue or comment (35.112739ms)
+✔ success comments recovery and closes active incident (26.594105ms)
+✔ later independent failure episode creates new issue instead of reopening closed incident (11.760154ms)
+✔ pull requests returned by issues API are ignored (11.297444ms)
+✔ nearest previous relevant run skips cancelled neutral and skipped runs (11.479907ms)
+✔ GitHub API failure exits non-zero without raw body leakage (5.974109ms)
+✔ token is never written to stdout stderr summary issue or comment (11.042975ms)
+✔ unsafe strings injected into mock payloads do not enter issue or comment content (14.411643ms)
+✔ bounded API timeout is classified safely (46.509559ms)
+✔ workflow contract uses workflow_run trusted checkout Node 24 exact permissions and serialized concurrency (1.661874ms)
+✔ workflow has no forbidden triggers provider actions external routing or extra secret authority (1.141294ms)
+✔ workflow and script do not download source artifacts logs or execute source-run code (1.146228ms)
+✔ unordered history selects the greatest lower relevant run number (8.223354ms)
+✔ older failure is ignored when a newer relevant success exists (4.645448ms)
+✔ older success cannot close incident after a newer failure (5.662392ms)
+✔ same-run older attempt is ignored before issue access (4.102515ms)
+✔ rerun success has distinct attempt marker recovers once and closes incident (19.709441ms)
+✔ same-run failure attempts do not satisfy the consecutive-run threshold (5.415805ms)
+✔ conflicting run number and run ID fails safely before issue mutation (6.858955ms)
+✔ exact attempt replay remains idempotent while later attempt is distinct (8.600445ms)
+✔ PR and canonical Quality share the exact lockfile-authoritative Production audit (3.32998ms)
+✔ lockfile-only npm audit ignores extraneous runner node_modules (444.446606ms)
+✔ a moderate advisory for a lock-declared Production package still fails (456.055483ms)
+✖ current repository ledger truthfully blocks release readiness on the pending Plan 7 migration (3.109675ms)
+✔ promotion rejects the actual pending repository ledger (1.194399ms)
+✔ still rejects a synthetically unresolved repository ledger (1.331277ms)
+✔ dry-run performs all checks and no write (1.599151ms)
+✔ rejects wrong and Activity Catalog project refs (0.352454ms)
+✔ rejects wrong current and target markers (0.391397ms)
+✔ rejects a target that is not the reconciled ledger head (1.059004ms)
+✔ rejects unsuccessful or mismatched preflight evidence (2.118829ms)
+✔ rejects an unexpected current database marker (0.668509ms)
+✔ apply requires explicit confirmation (0.670062ms)
+✔ apply rejects Stage-1-only preflight evidence (0.452072ms)
+✔ compare-and-set zero and multiple row results fail closed (1.494604ms)
+✔ apply changes only marker and applied timestamp (1.220899ms)
+✔ redacted evidence contains no credentials or secret values (1.693058ms)
+✔ canonical Quality supplies the Activity Catalog V2 production environment contract (1.095834ms)
+✔ Stage-1 cannot authorize and exact Production token is identity bound (1.988113ms)
+✔ Plaivra direct and recognized pooler targets are accepted with redacted identity (0.972962ms)
+✔ Activity Catalog, other projects, generic hosts and localhost are rejected (0.608596ms)
+✔ synthetic pending ledgers remain reviewable but cannot become release-ready (11.611595ms)
+✔ future reconciled physical migrations do not silently promote the compatibility marker (1.968777ms)
+✔ generic workflow and evidence code derive release identity without a pinned AW-2A migration (0.951752ms)
+✔ same-head orchestration is exact, fail-closed, and diagnostically complete (0.612063ms)
+✔ promotion target validation precedes adapter construction (0.30271ms)
+✔ Quality workflow is the single canonical PR producer with all release gates (1.958629ms)
+✔ Release preflight workflow consumes the exact run-keyed artifact read-only (0.268415ms)
+✔ canonical artifact validation accepts exact matching evidence (29.831596ms)
+✔ failed or stale gate cannot generate a release-valid manifest (15.262209ms)
+✔ preflight rejects wrong commit, base, run, missing evidence, nonzero exit and tampering (73.505173ms)
+✔ Exact Release accepts only the supplied successful canonical PR Quality run (1.045348ms)
+✔ Exact Release accepts exactly one immutable run-keyed Quality artifact (0.545427ms)
+✔ preflight rejects an unexpected migration while accepting exact pending metadata (10.845853ms)
+✔ exact release validation binds Quality and preflight to artifact-only evidence (0.894044ms)
+✔ Stage-1 preflight cannot authorize marker promotion (0.500272ms)
+✔ promotion source is guarded and never targets Activity Catalog (0.356792ms)
+✖ declared database marker remains distinct from the applied physical head while Plan 7 is pending (17.502668ms)
+✖ Next build metadata preserves the declared marker and exposes the pending Plan 7 migration (37.778832ms)
+✔ rejects a marker that is not represented by a resolved Production migration (0.808753ms)
+✔ rejects unresolved marker entries (1.011067ms)
+✔ next.config bundles deterministic release and migration metadata (57.753212ms)
+✔ post-deploy smoke rejects abbreviated release SHAs before network access (45.861875ms)
+✔ release manifest rejects abbreviated release SHAs (80.124537ms)
+✔ release manifest records exact installed runtime versions and lockfile identity (375.66944ms)
+✔ built metadata verification accepts reconciled ledger metadata while runtime readiness remains fail-closed (2.837864ms)
+✔ Netlify production release gate rejects nonstandard SHA lengths (66.69871ms)
+✔ defaults programmatic evaluation to strict release mode (3.135404ms)
+✔ defaults omitted mode to release even in a pull-request environment (0.279506ms)
+✔ strict release mode rejects a valid pending-only migration state (0.595721ms)
+✔ default release mode rejects a valid pending-only migration state (0.314132ms)
+✔ review mode accepts a valid pending-only migration state without claiming release readiness (0.322077ms)
+✔ review mode rejects schema-applied-untracked migration state (0.342765ms)
+✔ review mode rejects unresolved counts that differ from pending counts (0.301017ms)
+✔ both modes reject an old deployment artifact as a substitute for the reviewed SHA (0.389724ms)
+✔ both modes reject manifest count drift (0.571777ms)
+✔ review mode still distinguishes missing and failed quality evidence (0.549785ms)
+✔ review mode still rejects commit-mismatched and stale quality evidence (0.389423ms)
+✔ reconciled state passes both review and release modes (0.207862ms)
+✔ rejects a manifest whose Next.js evidence differs from the installed runtime (0.797753ms)
+✔ unknown modes fail closed (0.779047ms)
+✖ release consumers preserve the declared marker while the Plan 7 repository migration blocks release readiness (19.454112ms)
+✔ preflight preserves the declared compatibility marker and fails closed on the pending migration ledger (3.165ms)
+✔ reconciled fixtures still prove marker-versus-physical-head semantics (2.54869ms)
+✔ release authority fails closed when the declared marker is absent (0.99334ms)
+✔ Markdown prose detector covers direct, template, resolve, and const-bound reads (12.553199ms)
+✔ historical evidence and local agent tooling stay out of the active repository (1.818764ms)
+✔ current product, control, architecture, native, release and machine authorities remain present (0.518466ms)
+✔ tests enforce code and structured contracts instead of Markdown prose (1030.627326ms)
+(node:2757) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/gymsands/gymsands/lib/food-catalog/portability/protected-segments.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/runner/work/gymsands/gymsands/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Plan 7 disposable restore CLI primitives
+  ✔ decodes canonical rows without converting typed scalar text into JavaScript numbers (4.509371ms)
+  ✔ hex-encodes scalar material and makes conflicting stable IDs fail instead of overwriting (5.557916ms)
+  ✔ validates migration-seeded rows without INSERT, UPDATE, UPSERT or DELETE (0.611742ms)
+  ✔ keeps the current-generation pointer unavailable until semantic generation, policy, graph, transient, owner and security preflight passes (4.235806ms)
+  ✔ treats release-schema applied_at as migration replay-time metadata while still validating version and marker (0.26528ms)
+  ✔ treats only Git-migration system kitchen/subcategory identities as replay-local references (0.808813ms)
+  ✔ resolves migration-owned system kitchen/subcategory rows read-only by semantic identity (0.824903ms)
+  ✔ remaps only declared replay-local FK references while keeping stable Food identity and other values exact (1.349211ms)
+  ✔ neutralizes only verified_source_record_id for food_items, then reconstructs it after source records (1.027605ms)
+  ✔ opens only the exact Food verification CHECK window and reinstalls target-catalog authority before later validation (0.698325ms)
+  ✔ suspends only the exact Git-built food_items updated-at trigger during cycle reconstruction (0.468823ms)
+  ✔ requires explicit acknowledgement while authorizing only loopback certification targets (0.729484ms)
+  ✔ decrypts and authenticates protected artifact bytes through the external key provider before row replay (3.874475ms)
+✔ Plan 7 disposable restore CLI primitives (27.542927ms)
+✔ successful checks keep the console concise and retain the full log (56.133887ms)
+✔ failed checks print only a bounded tail and write a focused summary (79.169544ms)
+✔ database verification remains local-only (1.966623ms)
+✔ permanent verification chain covers current Active Workout and Nutrition authorities (0.506514ms)
+✔ permanent verification chain executes Plan 7 NULL-current Search V2 proof before production preflight (0.341593ms)
+✔ permanent verification chain covers restored ingestion reactivation gate before production preflight (1.70465ms)
+✔ rejects remote or ambiguously named explicit test databases (2.348393ms)
+✔ CI local authority selects an isolated PostgreSQL container and preserves the replayed AW-2A URL (0.445278ms)
+✔ explicit local test and AW-2A URLs run without creating a container (0.349648ms)
+✔ published Docker ports are parsed fail closed (0.490093ms)
+✔ integration execution fails closed without a replayed local database authority (0.254429ms)
+✔ disposable PostgreSQL remains inspectable until explicit cleanup (0.233659ms)
+✔ only proven container termination or unhealthy state is retryable (0.243128ms)
+✔ disposable PostgreSQL readiness waits past the temporary bootstrap server (0.195679ms)
+✔ integration execution launches the installed Vitest entrypoint without a platform shell shim (1.137923ms)
+✔ expected barcode provider 503 is bounded to the barcode fallback scenario (13.83034ms)
+✔ Nutrition V1 rendered QA exports the complete approved scenario and viewport matrix (595.524757ms)
+✔ offline Meal Plan conflict scenario stays pinned to the fixture date and fixture week (13.031556ms)
+✔ approved RTL screenshot scenarios exercise the real Arabic product locale (0.572448ms)
+✔ Shopping rendered evidence visibly seeds Needed, Purchased, and Don't need states (3.270228ms)
+✔ offline Meal Plan rendered evidence explicitly proves queued, attention, conflict, partial, and estimated truth (2.427662ms)
+✔ Recipe editor QA fixtures contain a real working draft and drive editor, ingredient-search, and autosave-failure states (1.663171ms)
+✔ Cooking completion QA restores a completed session and asserts all approved post-cooking actions (1.650267ms)
+✔ rendered evidence matching tolerates CSS text transforms without masking missing content (0.685671ms)
+✔ expected Recipe autosave 503 is bounded to the injected failure scenario instead of globally hiding console errors (2.83063ms)
+✔ Food Library QA scenarios explicitly drive and assert Create, duplicate, edit-delete, serving, correction, and barcode states (2.452108ms)
+✔ barcode fallback interaction targets the Barcode textbox rather than the dialog accessible name (2.151972ms)
+✔ Playwright init fixture passes Node constants through the serializable argument boundary (1.146319ms)
+✔ Nutrition V1 screenshot names are deterministic, portable, and collision resistant (0.7059ms)
+✔ Nutrition V1 rendered QA captures runtime, layout, target, locale, focus, and evidence failures (2.115844ms)
+✔ Nutrition V1 QA applies locale preferences only after the document root exists (1.403543ms)
+✔ Nutrition V1 touch-target audit excludes only currently clipped sr-only helpers (1.640279ms)
+✔ canonical rendered QA invokes the bounded Nutrition V1 suite (6.196518ms)
+✔ streams and retains stdout and stderr with exit zero (53.612511ms)
+✔ records and propagates a nonzero command exit (44.493216ms)
+✔ passes command arguments without shell interpolation (52.493503ms)
+✔ does not record command arguments or secret values in metadata (39.571598ms)
+✔ leaves no false-passing partial evidence (41.059767ms)
+✔ covers the exact WH-10 viewport, language, theme, and scenario contract (1.660056ms)
+✔ runner captures PNGs, inspects pixels and DOM, and emits machine evidence (6.734231ms)
+✔ schema identity fingerprints user_food_items through the canonical relation pipeline (1.691966ms)
+✔ schema identity preserves public Food Catalog functions and exactly allowlists the Search normalization dependency in private scope (0.723182ms)
+✔ qa:train has one current canonical entrypoint (1.291992ms)
+✔ Train mock and rendered QA share one stable persisted-set identity contract (0.389063ms)
+✔ current Train base proves hydration and canonical session-store projection (0.29748ms)
+✔ rendered sign-off uses production build and start (0.188335ms)
+✔ rejects malformed expected commit before network work (3.006801ms)
+✔ rejects unsafe non-local HTTP Production target (0.352604ms)
+✔ passes when health, version, and public surfaces match (88.096318ms)
+✔ retries an initially stale commit and passes after convergence (60.493308ms)
+✔ fails closed after bounded attempts when commit never converges (37.030733ms)
+✔ fails when environment differs (15.311475ms)
+✔ fails when release readiness is false (12.610236ms)
+✔ fails when schema identities disagree (12.12438ms)
+✔ fails when migration identities disagree (33.650214ms)
+✔ fails when migration ledger facts are not reconciled (37.21629ms)
+✔ fails when health and version release identities disagree (10.819915ms)
+✔ fails on invalid JSON (10.310145ms)
+✔ fails on unavailable public surface (16.995327ms)
+✔ writes sanitized evidence on success (13.263656ms)
+✔ writes sanitized evidence on failure (10.750159ms)
+✔ evidence excludes bodies and injected private content (14.968901ms)
+✔ durations and attempt counts are bounded numeric values (29.991932ms)
+✔ runs all six endpoint timeouts concurrently within one request window (93.90549ms)
+✔ catches public response-body termination and writes sanitized failure evidence (15.430576ms)
+✔ workflow budget leaves material margin below the job timeout (4.663843ms)
+✔ workflow preserves scheduled continuity and adds exact main convergence (2.093192ms)
+✔ does not enforce provider configuration for ordinary local builds (6.162053ms)
+✔ accepts complete core production configuration (0.583589ms)
+✔ rejects missing and malformed core production configuration without values (0.755954ms)
+✔ validates MCP and OAuth configuration only when enabled (0.463783ms)
+✔ validates Stripe configuration only when checkout is enabled (0.495082ms)
+✔ requires explicit canonical Activity Catalog V2 production configuration (0.853367ms)
+✔ validates privacy execution key and retention periods conditionally (0.591243ms)
+(node:2939) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/gymsands/gymsands/lib/food-catalog/portability/validate-artifact.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/runner/work/gymsands/gymsands/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Plan 7 integrated restore evidence
+  ✔ requires exact typed row equality for ordinary portable authority (4.448246ms)
+  ✔ permits declared migration replay-time columns only for known seed keys (0.639514ms)
+  ✔ uses declared replay-local omissions for pure migration-owned preseed validation (0.612092ms)
+  ✔ requires transient lease fields to be null on the restored target (0.496114ms)
+  ✔ rejects canonical source artifacts that retain declared source-live lease state (0.46693ms)
+  ✔ derives transient neutralization proof from every registry-declared relation (0.53113ms)
+  ✔ requires restored Service authority isolation as a mandatory semantic assertion (0.576065ms)
+  ✔ requires restored nonterminal ingestion history to stay execution-blocked (0.806348ms)
+  ✔ builds all mandatory assertions from runtime proof classes without caller trust booleans (1.396009ms)
+  ✔ binds current corrections and favorites into owner evidence and the governance/personal assertion (0.888613ms)
+  ✔ binds the restored target identity to schema, security and owner-mapping evidence (1.451342ms)
+  ✔ fails closed unless source search is adversarial and restored search is authoritative current-only (0.639064ms)
+  ✔ requires an explicit positive integer max artifact age for canonical FULL_DR invocation (1.918683ms)
+✔ Plan 7 integrated restore evidence (17.878376ms)
+▶ Plan 7 portable restore target profile
+  ✔ checks PostgreSQL 17, required extensions, auth/RLS compatibility roles and schema/migration identity (3.20221ms)
+  ✔ uses the same authoritative non-column schema identity definition as export (10.009307ms)
+  ✔ accepts only an exact compatible target profile (0.697282ms)
+  ✔ fails closed on PostgreSQL 16 (2.600727ms)
+  ✔ fails closed on missing extension (0.181ms)
+  ✔ fails closed on missing auth role (1.125469ms)
+  ✔ fails closed on missing auth.users (0.450348ms)
+  ✔ fails closed on wrong migration ledger (0.365168ms)
+  ✔ fails closed on wrong schema fingerprint (0.510812ms)
+✔ Plan 7 portable restore target profile (21.875753ms)
+(node:2957) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/gymsands/gymsands/lib/food-catalog/portability/restore-assertions.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/runner/work/gymsands/gymsands/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Plan 7 restore verification report
+  ✔ derives trusted restore verification and canonical recovery eligibility (2.998286ms)
+  ✔ uses exact-threshold inclusive semantics and rejects one millisecond over (0.546058ms)
+  ✔ ignores caller-supplied fake eligible=true and rejects future capture time (2.385131ms)
+  ✔ does not accept caller trusted/restoreVerified/drReady booleans as evidence (1.447946ms)
+  ✔ fails closed when target or mandatory runtime assertion evidence is untrusted (3.014697ms)
+✔ Plan 7 restore verification report (15.946498ms)
+(node:2964) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/gymsands/gymsands/lib/food-catalog/portability/search-restore-verifier.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/runner/work/gymsands/gymsands/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Plan 7 restored search verification script
+  ✔ builds SQL that checks the exact current pointer, rebuilds first, then calls only canonical V2 search (2.065109ms)
+  ✔ publishes non-sensitive exact-head CORE regression evidence without any final DR authority (2.340648ms)
+  ✔ keeps FULL_DR protected fixture observations subordinate to final linked certification (2.282999ms)
+  ✔ fails closed on exact-head mismatch, provider network use, or corrupted golden output (2.183442ms)
+  ✔ runs canonical search runtime verification on an exact-head Git-migrated local PostgreSQL 17 target (0.422626ms)
+  ✔ retains deterministic encrypted protected export/restore as a focused crypto proof (0.256133ms)
+✔ Plan 7 restored search verification script (11.268901ms)
+✔ fails with a stable code when the exact route trace is missing (8.894819ms)
+✔ fails when one deployed required font is missing from the trace (27.26576ms)
+✔ fails when a deployed font does not match the repository-owned source (15.761471ms)
+✔ rejects a trace that depends on source-checkout font paths (10.731598ms)
+✔ fails when a configured report branding asset is missing (16.497722ms)
+✔ accepts deployed hashed fonts and proves isolated asset readability (23.950436ms)
+✔ locates the deterministic Next 16 route trace by default (12.713149ms)
+✔ normalizes Windows and Linux trace separators (0.208914ms)
+✔ does not leak raw build-output paths through verifier errors (1.600775ms)
+✔ dedicated Workout History commands remain explicit (0.986989ms)
+✔ PR Quality retains current rendered authorities and focused History evidence (0.275889ms)
+✔ canonical Quality records History tests, database, performance, render inspection, and acceptance (0.215566ms)
+✔ P8A preserves canonical Workout History QA before report-specific evidence (0.980466ms)
+✔ P8A report QA requires exact-head multilingual and multi-viewport evidence (0.463704ms)
+✔ P8A runtime JavaScript uses package and lockfile authority (1.156458ms)
+✔ P8A build authority verifies exact traced runtime fonts and vector branding (0.483681ms)
+ℹ tests 407
+ℹ suites 11
+ℹ pass 403
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4516.115421
+
+✖ failing tests:
+
+test at scripts/promote-release-schema-compatibility.test.mjs:97:1
+✖ current repository ledger truthfully blocks release readiness on the pending Plan 7 migration (3.109675ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  3 !== 2
+  
+      at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:101:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.start (node:internal/test_runner/test:1257:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 3,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/release-compatibility-contract.test.mjs:21:1
+✖ declared database marker remains distinct from the applied physical head while Plan 7 is pending (17.502668ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      '20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql',
+      '20260915170012_food_catalog_owner_correction_export.sql',
+  +   '20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql'
+    ]
+  
+      at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/release-compatibility-contract.test.mjs:34:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.start (node:internal/test_runner/test:1257:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ '20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql', '20260915170012_food_catalog_owner_correction_export.sql', '20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql' ],
+    expected: [ '20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql', '20260915170012_food_catalog_owner_correction_export.sql' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/release-compatibility-contract.test.mjs:55:1
+✖ Next build metadata preserves the declared marker and exposes the pending Plan 7 migration (37.778832ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '3' !== '2'
+  
+      at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/release-compatibility-contract.test.mjs:62:10)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '3',
+    expected: '2',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/release-target-compatibility.test.mjs:35:1
+✖ release consumers preserve the declared marker while the Plan 7 repository migration blocks release readiness (19.454112ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      '20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql',
+      '20260915170012_food_catalog_owner_correction_export.sql',
+  +   '20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql'
+    ]
+  
+      at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/release-target-compatibility.test.mjs:49:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.start (node:internal/test_runner/test:1257:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ '20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql', '20260915170012_food_catalog_owner_correction_export.sql', '20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql' ],
+    expected: [ '20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql', '20260915170012_food_catalog_owner_correction_export.sql' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
