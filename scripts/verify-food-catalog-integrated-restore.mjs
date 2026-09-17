@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { decodeProtectedArtifactMaterial } from "./restore-food-catalog-portable.mjs";
 import { captureRestoredServiceAuthority } from "./capture-food-catalog-restored-service-authority.mjs";
+import { captureFoodCatalogSecurityEvidence } from "./capture-food-catalog-security-evidence.mjs";
+import { captureSearchRuntimeEvidence } from "./capture-food-catalog-restored-search-runtime.mjs";
+import { runAuthoritativeExport } from "./export-food-catalog-portable.mjs";
 import {
   evaluatePortableTargetProfile,
   queryPortableTargetProfile,
@@ -440,6 +444,67 @@ async function readArtifact(artifactDir, keyProvider) {
   return { manifest, materials, protectedCount };
 }
 
+function durableSnapshotBoundary(boundary) {
+  return Object.freeze({
+    migrationCount: boundary?.migrationCount,
+    latestMigration: boundary?.latestMigration,
+    migrationLedgerIdentity: boundary?.migrationLedgerIdentity,
+    currentGenerationId: boundary?.currentGenerationId,
+    pointerRevision: boundary?.pointerRevision,
+    compatibilityVersion: boundary?.compatibilityVersion,
+    compatibilityMarker: boundary?.compatibilityMarker,
+  });
+}
+
+export function assertRecordedTargetReadbackMatchesLive(recorded, live, rules) {
+  if (recorded?.manifest?.profile !== "FULL_DR" || live?.manifest?.profile !== "FULL_DR") {
+    throw new Error("Recorded target readback and fresh live target readback must both be FULL_DR.");
+  }
+  if (recorded.manifest.sourceRepositoryCommit !== live.manifest.sourceRepositoryCommit) {
+    throw new Error("Recorded target readback repository commit does not match fresh live target readback.");
+  }
+  if (recorded.manifest.sourceSchemaFingerprintSha256 !== live.manifest.sourceSchemaFingerprintSha256) {
+    throw new Error("Recorded target readback schema fingerprint does not match fresh live target readback.");
+  }
+  if (stableStringify(durableSnapshotBoundary(recorded.manifest.snapshotBoundary)) !== stableStringify(durableSnapshotBoundary(live.manifest.snapshotBoundary))) {
+    throw new Error("Recorded target readback durable snapshot boundary does not match fresh live target readback.");
+  }
+  const recordedDescriptors = new Map(recorded.manifest.segments.map((segment) => [segment.name, segment]));
+  const liveDescriptors = new Map(live.manifest.segments.map((segment) => [segment.name, segment]));
+  for (const rule of rules) {
+    if (rule.loadMode === "DERIVED_REBUILD") continue;
+    const recordedDescriptor = recordedDescriptors.get(rule.segment);
+    const liveDescriptor = liveDescriptors.get(rule.segment);
+    if (!recordedDescriptor || !liveDescriptor) throw new Error(`Recorded/live target readback is missing ${rule.segment}.`);
+    if (recordedDescriptor.rowCount !== liveDescriptor.rowCount || recordedDescriptor.plaintextSemanticSha256 !== liveDescriptor.plaintextSemanticSha256) {
+      throw new Error(`Recorded target readback segment ${rule.segment} does not match fresh live target readback.`);
+    }
+    if ((recorded.materials[rule.segment] ?? "") !== (live.materials[rule.segment] ?? "")) {
+      throw new Error(`Recorded target readback material ${rule.segment} does not match fresh live target readback.`);
+    }
+  }
+  return true;
+}
+
+async function recaptureLiveTargetArtifact({ databaseUrl, expectedHead, rules, binding }) {
+  const outputDir = await mkdtemp(join(tmpdir(), "plaivra-plan7-live-target-"));
+  try {
+    await runAuthoritativeExport({
+      databaseUrl,
+      outputDir,
+      profile: "FULL_DR",
+      sourceRepositoryCommit: expectedHead,
+      rules,
+      registryAuthority: CANONICAL_REGISTRY_AUTHORITY,
+      protectedKeyProvider: binding.keyProvider,
+      protectedKeyId: binding.keyId,
+    });
+    return await readArtifact(outputDir, binding.keyProvider);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+}
+
 export function requireLinkedSearchEvidence(sourceSearch, targetSearch, manifest, expectedHead) {
   if (sourceSearch.providerNetworkUsed || targetSearch.providerNetworkUsed) throw new Error("Integrated search proof must remain provider-network isolated.");
   if (sourceSearch.headSha !== expectedHead || targetSearch.headSha !== expectedHead) throw new Error("Integrated search evidence head SHA mismatch.");
@@ -556,9 +621,9 @@ export function parseIntegratedRestoreArgs(argv) {
 export async function verifyIntegratedRestore(options) {
   const binding = createEnvironmentProtectedSegmentKeyBinding(process.env);
   const source = await readArtifact(options.sourceArtifactDir, binding.keyProvider);
-  const target = await readArtifact(options.targetArtifactDir, binding.keyProvider);
-  if (source.manifest.profile !== "FULL_DR" || target.manifest.profile !== "FULL_DR") throw new Error("Integrated certification proof requires FULL_DR source and target-readback artifacts.");
-  if (source.manifest.sourceRepositoryCommit !== options.expectedHead || target.manifest.sourceRepositoryCommit !== options.expectedHead) {
+  const recordedTarget = await readArtifact(options.targetArtifactDir, binding.keyProvider);
+  if (source.manifest.profile !== "FULL_DR" || recordedTarget.manifest.profile !== "FULL_DR") throw new Error("Integrated certification proof requires FULL_DR source and target-readback artifacts.");
+  if (source.manifest.sourceRepositoryCommit !== options.expectedHead || recordedTarget.manifest.sourceRepositoryCommit !== options.expectedHead) {
     throw new Error("Integrated artifact repository commit does not match exact CI head.");
   }
 
@@ -576,6 +641,15 @@ export async function verifyIntegratedRestore(options) {
   });
 
   const rules = FOOD_CATALOG_PORTABLE_RELATIONS_V1.filter((rule) => rule.requiredProfile === "CORE_PORTABLE" || source.manifest.profile === "FULL_DR");
+  const target = await recaptureLiveTargetArtifact({
+    databaseUrl: options.targetUrl,
+    expectedHead: options.expectedHead,
+    rules,
+    binding,
+  });
+  assertRecordedTargetReadbackMatchesLive(recordedTarget, target, rules);
+  if (target.manifest.sourceRepositoryCommit !== options.expectedHead) throw new Error("Fresh live target readback repository commit does not match exact CI head.");
+
   const sourceDescriptors = new Map(source.manifest.segments.map((segment) => [segment.name, segment]));
   const targetDescriptors = new Map(target.manifest.segments.map((segment) => [segment.name, segment]));
   const sourceRowsFor = (relation) => {
@@ -616,7 +690,11 @@ export async function verifyIntegratedRestore(options) {
   }
 
   const sourceSecurity = JSON.parse(await readFile(resolve(options.sourceSecurityPath), "utf8"));
-  const targetSecurity = JSON.parse(await readFile(resolve(options.targetSecurityPath), "utf8"));
+  const recordedTargetSecurity = JSON.parse(await readFile(resolve(options.targetSecurityPath), "utf8"));
+  const targetSecurity = captureFoodCatalogSecurityEvidence(options.targetUrl);
+  if (stableStringify(recordedTargetSecurity) !== stableStringify(targetSecurity)) {
+    throw new Error("Recorded target security evidence does not match a fresh proof on the current target.");
+  }
   if (!sourceSecurity.criticalBoundariesVerified || !targetSecurity.criticalBoundariesVerified) throw new Error("Critical Food Catalog RLS/ACL boundary verification failed.");
   if (sourceSecurity.securityRlsAclIdentitySha256 !== targetSecurity.securityRlsAclIdentitySha256) throw new Error("Restored RLS/ACL/policy identity differs from source Git-migrated authority.");
   if (!SHA256.test(targetSecurity.securityRlsAclIdentitySha256 ?? "")) throw new Error("Target security identity digest is malformed.");
@@ -654,7 +732,11 @@ export async function verifyIntegratedRestore(options) {
   const mergeGraph = verifyMergeGraph(options.targetUrl);
   const consumerReference = await verifyConsumerReference(options.targetUrl, options.consumerReferencePath);
   const sourceSearch = JSON.parse(await readFile(resolve(options.sourceSearchPath), "utf8"));
-  const targetSearch = JSON.parse(await readFile(resolve(options.targetSearchPath), "utf8"));
+  const recordedTargetSearch = JSON.parse(await readFile(resolve(options.targetSearchPath), "utf8"));
+  const targetSearch = captureSearchRuntimeEvidence(options.targetUrl, options.expectedHead, "restored-authoritative");
+  if (stableStringify(recordedTargetSearch) !== stableStringify(targetSearch)) {
+    throw new Error("Recorded restored search evidence does not match a fresh proof on the current target.");
+  }
   requireLinkedSearchEvidence(sourceSearch, targetSearch, source.manifest, options.expectedHead);
 
   const relationsByName = new Map(relationResults.map((entry) => [entry.relation, entry]));
@@ -695,6 +777,8 @@ export async function verifyIntegratedRestore(options) {
     snapshotBoundarySha256: source.manifest.snapshotBoundary.sha256,
     restoredTargetIdentitySha256: targetIdentity,
     protectedSegmentsVerified: protectedVerified,
+    liveTargetReadbackVerified: true,
+    liveTargetSecurityVerified: true,
     replayLocalReferenceMappingCounts: replayReferences.mappingCounts,
     relationComparisonCount: relationResults.length,
     relationComparisons: relationResults,
@@ -706,6 +790,7 @@ export async function verifyIntegratedRestore(options) {
     securityRlsAclIdentitySha256: targetSecurity.securityRlsAclIdentitySha256,
     search: Object.freeze({
       sameRestoredTargetVerified: true,
+      liveTargetVerified: true,
       rebuildVerified: targetSearch.rebuildVerified === true,
       goldenSearchVerified: sourceSearch.goldenResultSha256 === targetSearch.goldenResultSha256,
       staleGenerationIsolationVerified: targetSearch.staleGenerationIsolationVerified === true,
