@@ -342,7 +342,7 @@ export async function restorePortableArtifact({ artifactDir, targetUrl, relation
     const rule = action.relation ? rulesByRelation.get(action.relation) : undefined; const descriptor = rule ? segmentsByName.get(rule.segment) : undefined;
     if (["VERIFY_TARGET_PROFILE", "MARK_RESTORE_UNTRUSTED_PENDING_ASSERTIONS", "MARK_DERIVED_REBUILD_PENDING"].includes(action.kind)) { evidence.appliedSteps.push(action.kind + (action.relation ? `:${action.relation}` : "")); continue; }
     if (action.kind === "PRE_POINTER_VERIFY") {
-      runPsql(targetUrl, buildPrePointerVerificationSql(pointerPreflightInput(manifest, materials, rules)));
+      runPsql(targetUrl, buildPrePointerVerificationSql(pointerPreflightInput(manifest, materials, rules), targetUrl));
       evidence.appliedSteps.push(action.kind); continue;
     }
     if (!rule || !descriptor) throw new Error(`Restore plan references unknown relation ${action.relation ?? "<none>"}.`);
