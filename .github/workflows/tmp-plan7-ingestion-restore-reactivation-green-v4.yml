@@ -1,0 +1,193 @@
+name: Plan7 Restored Ingestion Reactivation GREEN v4
+
+on:
+  push:
+    branches:
+      - tmp-plan7-ingestion-restore-reactivation-green-v2-20260917
+
+permissions:
+  contents: write
+
+jobs:
+  green-v4:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      START_SHA: 796a48dc23bb3e11efed702c63133cfac396e7f1
+      RESULT_BRANCH: tmp-plan7-ingestion-restore-reactivation-green-result-v3-20260917
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PLAN7_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PLAN7_RESTORE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      SUPABASE_TELEMETRY_DISABLED: "1"
+      DO_NOT_TRACK: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Preserve controller and reset to exact RED head
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .github/tmp/plan7-ingestion-restore-reactivation-green-v2.py /tmp/plan7-green-v2.py
+          python .github/tmp/plan7-green-v2-controller-hotfix.py
+          git checkout --detach "$START_SHA"
+          test "$(git rev-parse HEAD)" = "$START_SHA"
+      - name: Apply narrow GREEN implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python /tmp/plan7-green-v2.py
+          test "$(cat .plan7-green-v2-base)" = "$START_SHA"
+          rm .plan7-green-v2-base
+          python - <<'PY'
+          from pathlib import Path
+
+          MIG = "20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql"
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count} occurrences, found {actual}: {old!r}")
+              p.write_text(text.replace(old, new, count))
+
+          p = "scripts/promote-release-schema-compatibility.test.mjs"
+          replace(p, 'assert.equal(state.pendingCount, 2);', 'assert.equal(state.pendingCount, 3);')
+          replace(p, 'assert.equal(state.unresolvedCount, 2);', 'assert.equal(state.unresolvedCount, 3);')
+          replace(
+              p,
+              '  }, {\n    localFile: "20260915170012_food_catalog_owner_correction_export.sql",\n    productionVersion: undefined,\n    productionName: undefined,\n  }]);',
+              '  }, {\n    localFile: "20260915170012_food_catalog_owner_correction_export.sql",\n    productionVersion: undefined,\n    productionName: undefined,\n  }, {\n    localFile: "' + MIG + '",\n    productionVersion: undefined,\n    productionName: undefined,\n  }]);',
+          )
+
+          p = "scripts/release-compatibility-contract.test.mjs"
+          replace(
+              p,
+              'const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";',
+              'const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";\nconst PLAN7_RESTORE_REACTIVATION_MIGRATION = "' + MIG + '";',
+          )
+          replace(
+              p,
+              '[PLAN7_PENDING_MIGRATION, PLAN7_OWNER_EXPORT_MIGRATION]',
+              '[PLAN7_PENDING_MIGRATION, PLAN7_OWNER_EXPORT_MIGRATION, PLAN7_RESTORE_REACTIVATION_MIGRATION]',
+          )
+          replace(p, 'assert.equal(ledger.pendingCount, 2);', 'assert.equal(ledger.pendingCount, 3);')
+          replace(p, 'assert.equal(resolved.pendingMigrationCount, 2);', 'assert.equal(resolved.pendingMigrationCount, 3);')
+          replace(p, 'assert.equal(resolved.unresolvedMigrationCount, 2);', 'assert.equal(resolved.unresolvedMigrationCount, 3);')
+          replace(p, 'assert.equal(releaseMetadata.pendingMigrationCount, "2");', 'assert.equal(releaseMetadata.pendingMigrationCount, "3");')
+          replace(p, 'assert.equal(releaseMetadata.unresolvedMigrationCount, "2");', 'assert.equal(releaseMetadata.unresolvedMigrationCount, "3");')
+
+          p = "scripts/release-target-compatibility.test.mjs"
+          replace(
+              p,
+              'const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";',
+              'const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";\nconst PLAN7_RESTORE_REACTIVATION_MIGRATION = "' + MIG + '";',
+          )
+          replace(
+              p,
+              '[PLAN7_PENDING_MIGRATION, PLAN7_OWNER_EXPORT_MIGRATION]',
+              '[PLAN7_PENDING_MIGRATION, PLAN7_OWNER_EXPORT_MIGRATION, PLAN7_RESTORE_REACTIVATION_MIGRATION]',
+          )
+          for old, new in [
+              ('assert.equal(ledger.pendingCount, 2);', 'assert.equal(ledger.pendingCount, 3);'),
+              ('assert.equal(releaseTarget.pendingCount, 2);', 'assert.equal(releaseTarget.pendingCount, 3);'),
+              ('assert.equal(releaseTarget.unresolvedCount, 2);', 'assert.equal(releaseTarget.unresolvedCount, 3);'),
+              ('assert.equal(qualityTarget.pendingCount, 2);', 'assert.equal(qualityTarget.pendingCount, 3);'),
+              ('assert.equal(qualityTarget.unresolvedCount, 2);', 'assert.equal(qualityTarget.unresolvedCount, 3);'),
+              ('assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "2");', 'assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "3");'),
+              ('assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "2");', 'assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "3");'),
+          ]:
+              replace(p, old, new)
+          PY
+          git diff --check
+      - name: Install dependencies
+        run: npm ci
+      - name: Prove stale release contracts are GREEN
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            scripts/promote-release-schema-compatibility.test.mjs \
+            scripts/release-compatibility-contract.test.mjs \
+            scripts/release-target-compatibility.test.mjs
+      - name: Run focused GREEN contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            scripts/food-catalog-ingestion-restore-reactivation-gate.test.mjs \
+            scripts/restore-food-catalog-portable.test.mjs \
+            scripts/verify-food-catalog-integrated-restore.test.mjs \
+            scripts/run-database-verification.test.mjs \
+            scripts/check-migration-ledger.test.mjs
+          npm run migration:ledger:check
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Replay migrations and prove permanent database authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/replay-local-migration-chain.mjs --log /tmp/plan7-green-v4-replay.log --prove-future-order
+          supabase db lint --local --schema public --level error --fail-on error
+          node scripts/run-database-verification.mjs
+      - name: Verify full script suite
+        run: npm run test:scripts
+      - name: Verify lint and typecheck
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+          PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+          PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+          PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+          PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+          PLAIVRA_RELEASE_ENVIRONMENT: ci
+          PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+          PLAIVRA_ACTIVITY_CATALOG_MODE: library_v2_with_legacy_fallback
+          PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
+          PLAIVRA_ACTIVITY_CATALOG_API_KEY: ci-placeholder-catalog-key-long-enough
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run typecheck
+      - name: Commit validated GREEN result
+        shell: bash
+        run: |
+          set -euo pipefail
+          allowed='^(scripts/restore-food-catalog-portable\.mjs|scripts/food-catalog-ingestion-restore-reactivation-gate\.test\.mjs|scripts/verify-food-catalog-integrated-restore\.mjs|scripts/verify-food-catalog-integrated-restore\.test\.mjs|scripts/run-database-verification\.test\.mjs|scripts/promote-release-schema-compatibility\.test\.mjs|scripts/release-compatibility-contract\.test\.mjs|scripts/release-target-compatibility\.test\.mjs|supabase/migrations/20260917023000_food_catalog_ingestion_restore_reactivation_gate\.sql|supabase/verification/food-catalog-plan7-ingestion-restore-reactivation-gate\.sql|supabase/migration-ledger\.json|docs/architecture/migration-ledger-reconciliation\.md|\.github/workflows/food-catalog-plan7-integrated-full-dr\.yml)$'
+          changed="$(git status --porcelain | sed -E 's/^.. //' | sort)"
+          echo "$changed"
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            echo "$file" | grep -Eq "$allowed"
+          done <<< "$changed"
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            scripts/restore-food-catalog-portable.mjs \
+            scripts/food-catalog-ingestion-restore-reactivation-gate.test.mjs \
+            scripts/verify-food-catalog-integrated-restore.mjs \
+            scripts/verify-food-catalog-integrated-restore.test.mjs \
+            scripts/run-database-verification.test.mjs \
+            scripts/promote-release-schema-compatibility.test.mjs \
+            scripts/release-compatibility-contract.test.mjs \
+            scripts/release-target-compatibility.test.mjs \
+            supabase/migrations/20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql \
+            supabase/verification/food-catalog-plan7-ingestion-restore-reactivation-gate.sql \
+            supabase/migration-ledger.json \
+            docs/architecture/migration-ledger-reconciliation.md \
+            .github/workflows/food-catalog-plan7-integrated-full-dr.yml
+          git commit -m 'fix(plan7): block restored ingestion reactivation'
+          test "$(git rev-list --count "$START_SHA"..HEAD)" = "1"
+          git push --force origin HEAD:"refs/heads/$RESULT_BRANCH"
+          echo "FINAL_GREEN_SHA=$(git rev-parse HEAD)"
