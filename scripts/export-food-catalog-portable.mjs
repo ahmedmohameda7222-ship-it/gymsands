@@ -120,6 +120,21 @@ COMMIT;
 
 function sha256(value) { return createHash("sha256").update(value).digest("hex"); }
 function compareCodeUnits(left, right) { return left === right ? 0 : left < right ? -1 : 1; }
+function stableKeyTextTuple(values, stableKey, segment) {
+  return stableKey.map((column) => {
+    const scalar = values[column];
+    if (!scalar || scalar.text === null) throw new Error(`Missing/non-null stable key ${column} in ${segment}.`);
+    if (typeof scalar.text !== "string") throw new Error(`Malformed stable key ${column} in ${segment}.`);
+    return scalar.text;
+  });
+}
+function compareStableKeyTextTuples(left, right) {
+  for (let index = 0; index < left.length; index += 1) {
+    const comparison = compareCodeUnits(left[index], right[index]);
+    if (comparison !== 0) return comparison;
+  }
+  return 0;
+}
 function snapshotBoundarySha(boundary) {
   return sha256(JSON.stringify({
     environment: boundary.environment, postgresSnapshot: boundary.postgresSnapshot, capturedAt: boundary.capturedAt,
@@ -224,7 +239,7 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
     protectedKey = await runtime.loadAes256ProtectedSegmentKey(protectedKeyProvider, protectedKeyId);
     nonceGuard = runtime.createProtectedSegmentNonceReuseGuard();
   }
-  const { canonicalizeLosslessRow, canonicalizePostgresScalar } = await loadRuntimeCanonicalizer();
+  const { canonicalizeLosslessRow } = await loadRuntimeCanonicalizer();
   const target = resolve(outputDir); const staging = `${target}.partial-${process.pid}`;
   await rm(staging, { recursive: true, force: true }); await mkdir(resolve(staging, "segments"), { recursive: true });
   const child = spawn("psql", [databaseUrl, "-X", "-q", "-v", "ON_ERROR_STOP=1"], { stdio: ["pipe", "pipe", "pipe"], env: process.env });
@@ -262,8 +277,13 @@ export async function runAuthoritativeExport({ databaseUrl, outputDir, profile, 
       const envelope = JSON.parse(Buffer.from(line, "hex").toString("utf8"));
       if (envelope.segment !== active.name || !envelope.values || typeof envelope.values !== "object") throw new Error(`Malformed row envelope for ${active.name}.`);
       const portableValues = prepareSourcePortableValues(envelope.values, active.rule);
-      const key = JSON.stringify(active.rule.stableKey.map((column) => { const scalar = portableValues[column]; if (!scalar || scalar.text === null) throw new Error(`Missing/non-null stable key ${column} in ${active.name}.`); return canonicalizePostgresScalar(scalar); }));
-      if (active.previousKey !== undefined) { const comparison = compareCodeUnits(active.previousKey, key); if (comparison === 0) throw new Error(`Duplicate stable key ${key} in ${active.name}.`); if (comparison > 0) throw new Error(`Non-monotonic stable key ${key} in ${active.name}.`); }
+      const key = stableKeyTextTuple(portableValues, active.rule.stableKey, active.name);
+      if (active.previousKey !== undefined) {
+        const comparison = compareStableKeyTextTuples(active.previousKey, key);
+        const keyDisplay = JSON.stringify(key);
+        if (comparison === 0) throw new Error(`Duplicate stable key ${keyDisplay} in ${active.name}.`);
+        if (comparison > 0) throw new Error(`Non-monotonic stable key ${keyDisplay} in ${active.name}.`);
+      }
       active.previousKey = key;
       const canonicalBytes = Buffer.from(`${canonicalizeLosslessRow(portableValues)}\n`, "utf8"); active.hash.update(canonicalBytes);
       if (active.rule.protected) await writeChunk(active.stream, active.cipher.update(canonicalBytes)); else await writeChunk(active.stream, canonicalBytes);
