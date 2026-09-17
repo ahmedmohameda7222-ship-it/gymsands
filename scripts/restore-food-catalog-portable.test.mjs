@@ -3,12 +3,12 @@ import { describe, it } from "node:test";
 import { randomBytes } from "node:crypto";
 import { encryptProtectedSegment } from "../lib/food-catalog/portability/protected-segments.ts";
 import { seedRuntimeOwnershipForRelation } from "../lib/food-catalog/portability/seed-runtime-ownership.ts";
+import { buildPrePointerVerificationSql as buildStaticPrePointerVerificationSql } from "../lib/food-catalog/portability/restore-assertions.ts";
 import {
   assertDisposableRestoreTarget,
   buildExactRestoreRowSql,
   buildFoodItemsUpdatedAtTriggerWindowSql,
   buildFoodItemsVerificationConstraintWindowSql,
-  buildPrePointerVerificationSql,
   buildPreseedValidationSql,
   buildReplayLocalSystemKitchenLookupSql,
   buildReplayLocalSystemSubcategoryLookupSql,
@@ -69,7 +69,7 @@ describe("Plan 7 disposable restore CLI primitives", () => {
   });
 
   it("keeps the current-generation pointer unavailable until semantic generation, policy, graph, transient, owner and security preflight passes", () => {
-    const sql = buildPrePointerVerificationSql({
+    const sql = buildStaticPrePointerVerificationSql({
       currentGenerationId: "71000000-0000-4000-8000-000000000901",
       currentEventId: "71000000-0000-4000-8000-000000000921",
       currentValidationReportId: "71000000-0000-4000-8000-000000000911",
