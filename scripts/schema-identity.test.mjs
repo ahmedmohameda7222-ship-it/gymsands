@@ -36,6 +36,10 @@ test("schema identity preserves public Food Catalog functions and exactly allowl
   assert.match(functionScope, /n\.nspname = 'public'[\s\S]*p\.proname LIKE 'food_%'[\s\S]*p\.proname LIKE '%food_catalog%'/);
   assert.match(functionScope, /n\.nspname = 'private'[\s\S]*p\.proname LIKE 'food_catalog_%'/);
   assert.match(functionScope, /p\.proname = 'normalize_nutrition_food_search_text'/);
+  assert.match(functionScope, /n\.nspname = 'public'[\s\S]*p\.proname = 'purge_account_application_data_atomic'/,
+    "Canonical public account purge must be fingerprinted because the Food Catalog deletion RPC delegates to it.");
+  assert.match(functionScope, /n\.nspname = 'private'[\s\S]*p\.proname LIKE '%purge_account_application_data_atomic'/,
+    "Delegated private account-purge graph must be fingerprinted so purge-body drift changes schema identity.");
   assert.doesNotMatch(functionScope, /p\.proname\s+LIKE\s+'normalize_%'/i);
   assert.doesNotMatch(functionScope, /p\.proname\s+LIKE\s+'nutrition_%'/i);
   assert.doesNotMatch(functionScope, /n\.nspname\s+IN\s*\([^)]*'private'/i);
