@@ -1,0 +1,81 @@
+name: Plan7 Verify Exact Result v6
+
+on:
+  push:
+    branches:
+      - tmp-plan7-ingestion-restore-reactivation-green-v2-20260917
+
+permissions:
+  contents: read
+
+jobs:
+  verify-exact-result:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      RESULT_SHA: 115e022b51d96eadb956ab8e028c6bed395b3926
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PLAN7_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PLAN7_RESTORE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      SUPABASE_TELEMETRY_DISABLED: "1"
+      DO_NOT_TRACK: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RESULT_SHA }}
+          fetch-depth: 0
+      - name: Prove exact candidate
+        run: test "$(git rev-parse HEAD)" = "$RESULT_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify focused contracts and ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            scripts/food-catalog-ingestion-restore-reactivation-gate.test.mjs \
+            scripts/restore-food-catalog-portable.test.mjs \
+            scripts/verify-food-catalog-integrated-restore.test.mjs \
+            scripts/run-database-verification.test.mjs \
+            scripts/check-migration-ledger.test.mjs \
+            scripts/promote-release-schema-compatibility.test.mjs \
+            scripts/release-compatibility-contract.test.mjs \
+            scripts/release-target-compatibility.test.mjs
+          npm run migration:ledger:check
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Replay and verify database authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/replay-local-migration-chain.mjs --log /tmp/plan7-exact-result-replay.log --prove-future-order
+          supabase db lint --local --schema public --level error --fail-on error
+          node scripts/run-database-verification.mjs
+      - name: Verify full script suite
+        run: npm run test:scripts
+      - name: Verify lint and typecheck
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+          PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+          PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+          PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+          PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+          PLAIVRA_RELEASE_ENVIRONMENT: ci
+          PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+          PLAIVRA_ACTIVITY_CATALOG_MODE: library_v2_with_legacy_fallback
+          PLAIVRA_ACTIVITY_CATALOG_BASE_URL: https://plaivra-activity-catalog-api.vercel.app
+          PLAIVRA_ACTIVITY_CATALOG_API_KEY: ci-placeholder-catalog-key-long-enough
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run typecheck
