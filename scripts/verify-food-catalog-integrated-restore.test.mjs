@@ -279,27 +279,32 @@ describe("Plan 7 integrated restore evidence", () => {
     assert.equal(evidence.find((entry) => entry.id === "service_execution_binding")?.status, "PASS");
   });
 
-  it("binds current corrections and favorites into owner evidence and the governance/personal assertion", async () => {
+  it("binds every protected owner-state family into owner evidence and the governance/personal assertion", async () => {
     const verifier = await import("./verify-food-catalog-integrated-restore.mjs");
     assert.equal(typeof verifier.buildOwnerBindingEvidenceSql, "function");
     assert.equal(typeof verifier.areProtectedOwnerStateRelationsVerified, "function");
     const sql = verifier.buildOwnerBindingEvidenceSql();
     assert.match(sql, /food_personal_corrections/);
     assert.match(sql, /food_favorites/);
+    assert.match(sql, /user_food_favorites/);
+    assert.match(sql, /food_catalog_correction_report_member_payloads/);
+    assert.match(sql, /reporter_user_id/);
 
     const verified = new Map([
       ["food_catalog_governance_principals", { exact: true }],
       ["food_catalog_governance_capability_assignments", { exact: true }],
       ["food_catalog_governance_policy_versions", { exact: true }],
       ["food_catalog_governance_policy_pointer", { exact: true }],
+      ["food_catalog_correction_report_member_payloads", { exact: true }],
       ["food_personal_override_revisions", { exact: true }],
       ["food_personal_overrides", { exact: true }],
       ["food_personal_override_operations", { exact: true }],
       ["food_personal_corrections", { exact: true }],
       ["food_favorites", { exact: true }],
+      ["user_food_favorites", { exact: true }],
     ]);
     assert.equal(verifier.areProtectedOwnerStateRelationsVerified(verified), true);
-    verified.set("food_favorites", { exact: false });
+    verified.set("user_food_favorites", { exact: false });
     assert.equal(verifier.areProtectedOwnerStateRelationsVerified(verified), false);
   });
 
@@ -332,7 +337,7 @@ it("requires an explicit positive integer max artifact age for canonical FULL_DR
   assert.equal(typeof verifier.parseIntegratedRestoreArgs, "function");
   const base = [
     "--source-artifact-dir", "source", "--target-artifact-dir", "target",
-    "--target-url", "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    "--target-url", "postgresql://127.0.0.1:54322/postgres",
     "--restore-evidence", "restore.json", "--source-security", "source-security.json",
     "--target-security", "target-security.json", "--target-service-authority", "service.json",
     "--source-search", "source-search.json", "--target-search", "target-search.json",
