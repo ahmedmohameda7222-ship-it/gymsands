@@ -16,6 +16,8 @@ const CAPTURED_FUNCTION = "public.food_plan7_schema_identity_probe_fn";
 const USER_FOOD_TABLE = "public.user_food_items";
 const PRIVATE_CAPTURED_FUNCTION = "private.food_catalog_plan7_schema_identity_probe_fn";
 const PRIVATE_UNRELATED_FUNCTION = "private.plan7_schema_identity_unrelated_probe_fn";
+const CANONICAL_ACCOUNT_PURGE = "public.purge_account_application_data_atomic";
+const DELEGATED_ACCOUNT_PURGE = "private.nutrition_v1_final_review_core_purge_account_application_data_atomic";
 
 function psql(databaseUrl, sql, { tuples = false } = {}) {
   const args = [databaseUrl, "-X", "-v", "ON_ERROR_STOP=1"];
@@ -172,6 +174,20 @@ export function verifyFoodCatalogSchemaIdentitySensitivity(databaseUrl) {
   if (!searchNormalizationHelperExists) {
     throw new Error("Real private.normalize_nutrition_food_search_text(text) is required for schema identity sensitivity proof.");
   }
+  const canonicalAccountPurgeExists = booleanScalar(
+    databaseUrl,
+    "select to_regprocedure('public.purge_account_application_data_atomic(uuid)') is not null;",
+  );
+  if (!canonicalAccountPurgeExists) {
+    throw new Error("Canonical public.purge_account_application_data_atomic(uuid) is required for schema identity sensitivity proof.");
+  }
+  const delegatedAccountPurgeExists = booleanScalar(
+    databaseUrl,
+    "select to_regprocedure('private.nutrition_v1_final_review_core_purge_account_application_data_atomic(uuid)') is not null;",
+  );
+  if (!delegatedAccountPurgeExists) {
+    throw new Error("Delegated private Nutrition V1 account purge is required for schema identity sensitivity proof.");
+  }
   const userFoodItemsPreexisting = booleanScalar(databaseUrl, "select to_regclass('public.user_food_items') is not null;");
   const privateSchemaPreexisting = booleanScalar(databaseUrl, "select exists(select 1 from pg_namespace where nspname='private');");
   if (!privateSchemaPreexisting) psql(databaseUrl, "CREATE SCHEMA private;");
@@ -197,6 +213,50 @@ CREATE POLICY user_food_items_own_all ON ${USER_FOOD_TABLE} FOR ALL TO public US
 `);
 
     const baselineSha256 = fingerprint(databaseUrl);
+
+    const canonicalAccountPurgeSha256 = fingerprintDuringRollbackOnlyMutation(databaseUrl, `CREATE OR REPLACE FUNCTION ${CANONICAL_ACCOUNT_PURGE}(p_user_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $plan7_schema_identity_public_purge$
+BEGIN
+  RETURN '{}'::jsonb;
+END
+$plan7_schema_identity_public_purge$;`);
+    const canonicalAccountPurgeDriftDetected = changed(
+      baselineSha256,
+      canonicalAccountPurgeSha256,
+      "canonical public account-purge definition mutation",
+    );
+    const canonicalAccountPurgeRollbackSha256 = fingerprint(databaseUrl);
+    const canonicalAccountPurgeRollbackVerified = unchanged(
+      baselineSha256,
+      canonicalAccountPurgeRollbackSha256,
+      "canonical public account-purge rollback",
+    );
+
+    const delegatedAccountPurgeSha256 = fingerprintDuringRollbackOnlyMutation(databaseUrl, `CREATE OR REPLACE FUNCTION ${DELEGATED_ACCOUNT_PURGE}(p_user_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $plan7_schema_identity_private_purge$
+BEGIN
+  RETURN '{}'::jsonb;
+END
+$plan7_schema_identity_private_purge$;`);
+    const delegatedAccountPurgeDriftDetected = changed(
+      baselineSha256,
+      delegatedAccountPurgeSha256,
+      "delegated private account-purge definition mutation",
+    );
+    const delegatedAccountPurgeRollbackSha256 = fingerprint(databaseUrl);
+    const delegatedAccountPurgeRollbackVerified = unchanged(
+      baselineSha256,
+      delegatedAccountPurgeRollbackSha256,
+      "delegated private account-purge rollback",
+    );
 
     const userFoodItemsSha256 = fingerprintDuringRollbackOnlyMutation(databaseUrl, `ALTER TABLE ${USER_FOOD_TABLE} ALTER COLUMN category SET DEFAULT 'Plan7 schema identity drift';`);
     const userFoodItemsDriftDetected = changed(baselineSha256, userFoodItemsSha256, "public.user_food_items default mutation");
@@ -267,11 +327,15 @@ AS $$ BEGIN NEW.value := NEW.value; RETURN NEW; END $$;
     return Object.freeze({
       verified: true,
       securityCertificationContractVerified,
+      canonicalAccountPurgeDriftDetected,
+      delegatedAccountPurgeDriftDetected,
       userFoodItemsDriftDetected,
       privateFoodCatalogAclDriftDetected,
       searchNormalizationHelperDriftDetected,
       unrelatedPrivateFunctionExcluded,
       rollbackVerified:
+        canonicalAccountPurgeRollbackVerified &&
+        delegatedAccountPurgeRollbackVerified &&
         userFoodRollbackVerified &&
         privateFoodRollbackVerified &&
         searchNormalizationHelperRollbackVerified &&
@@ -283,6 +347,8 @@ AS $$ BEGIN NEW.value := NEW.value; RETURN NEW; END $$;
       functionAclChanged,
       hashes: Object.freeze({
         baselineSha256,
+        canonicalAccountPurgeSha256,
+        delegatedAccountPurgeSha256,
         userFoodItemsSha256,
         privateFoodCatalogAclSha256,
         searchNormalizationHelperSha256,
