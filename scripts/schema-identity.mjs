@@ -104,12 +104,20 @@ export function buildFoodCatalogSchemaIdentitySql() {
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE p.prokind IN ('f','p')
       AND (
-        (n.nspname = 'public' AND (p.proname LIKE 'food_%' OR p.proname LIKE '%food_catalog%'))
+        (
+          n.nspname = 'public'
+          AND (
+            p.proname LIKE 'food_%'
+            OR p.proname LIKE '%food_catalog%'
+            OR p.proname = 'purge_account_application_data_atomic'
+          )
+        )
         OR (
           n.nspname = 'private'
           AND (
             p.proname LIKE 'food_catalog_%'
             OR p.proname = 'normalize_nutrition_food_search_text'
+            OR p.proname LIKE '%purge_account_application_data_atomic'
           )
         )
         OR p.oid IN (SELECT oid FROM trigger_function_scope)
