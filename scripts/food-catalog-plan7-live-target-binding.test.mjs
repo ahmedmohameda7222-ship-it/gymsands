@@ -26,6 +26,8 @@ test("final integrated certification rejects non-disposable targetUrl before eve
 
   assert.match(verifier, /assertDisposableRestoreTarget/,
     "Final verification must reuse the canonical disposable-target guard.");
+  assert.match(verifier, /async function recaptureLiveTargetArtifact[\s\S]*runAuthoritativeExport\(\{/,
+    "The live readback helper must continue to execute the authoritative FULL_DR export.");
 
   const verificationBody = verifier.slice(verifier.indexOf("export async function verifyIntegratedRestore"));
   const guardIndex = verificationBody.indexOf("assertDisposableRestoreTarget(options.targetUrl");
@@ -34,7 +36,7 @@ test("final integrated certification rejects non-disposable targetUrl before eve
 
   for (const probe of [
     "queryPortableTargetProfile(options.targetUrl)",
-    "runAuthoritativeExport({",
+    "recaptureLiveTargetArtifact({",
     "captureFoodCatalogSecurityEvidence(options.targetUrl)",
     "captureRestoredServiceAuthority(options.targetUrl",
     "queryOwnerBindingEvidence(options.targetUrl)",
