@@ -184,6 +184,82 @@ export function areDeclaredTransientRelationsNeutralized(rules, relationResults)
     .every((rule) => resultsByRelation.get(rule.relation)?.transientNeutralized === true);
 }
 
+export function evaluateRestoredIngestionExecutionEvidence(observed) {
+  for (const field of ["durableHistoryPreserved","transientLeaseStateNeutralized","restoreBlocksExact","guardPrecedesReplay","freshAcquireRejected"]) {
+    if (observed?.[field] !== true) throw new Error(`Restored ingestion execution isolation failed: ${field}.`);
+  }
+  const expectedBlockedRunCount = Number(observed.expectedBlockedRunCount);
+  if (!Number.isInteger(expectedBlockedRunCount) || expectedBlockedRunCount < 0) throw new Error("Restored ingestion expected block count is invalid.");
+  if (Number(observed.observedBlockedRunCount) !== expectedBlockedRunCount) throw new Error("Restored ingestion block count mismatch.");
+  return Object.freeze({ verified: true, expectedBlockedRunCount, observedBlockedRunCount: expectedBlockedRunCount });
+}
+
+function verifyRestoredIngestionExecutionIsolation(databaseUrl, sourceRows) {
+  const expected = [];
+  for (const sourceRow of sourceRows) {
+    const { map } = parseCanonicalRow(sourceRow);
+    const id = map.get("id")?.text;
+    const executionMode = map.get("execution_mode")?.text;
+    const status = map.get("status")?.text;
+    const leaseEpoch = map.get("lease_epoch")?.text;
+    if (executionMode !== "production" || (status !== "prepared" && status !== "running")) continue;
+    if (typeof id !== "string" || !/^[0-9a-f-]{36}$/iu.test(id) || typeof leaseEpoch !== "string" || !/^[0-9]+$/u.test(leaseEpoch)) {
+      throw new Error("Canonical nonterminal Production ingestion history is malformed.");
+    }
+    expected.push(Object.freeze({ runId: id, status, leaseEpoch: Number(leaseEpoch) }));
+  }
+  expected.sort((a, b) => a.runId.localeCompare(b.runId));
+  const targetRows = JSON.parse(runPsql(databaseUrl, `select coalesce(json_agg(json_build_object(
+    'runId',run.id::text,'status',run.status,'leaseEpoch',run.lease_epoch,
+    'leaseOwnerNull',run.lease_owner is null,'leaseTokenNull',run.lease_token is null,
+    'leaseAcquiredAtNull',run.lease_acquired_at is null,'leaseHeartbeatAtNull',run.lease_heartbeat_at is null,
+    'leaseExpiresAtNull',run.lease_expires_at is null
+  ) order by run.id),'[]'::json)::text from public.food_ingestion_runs run where run.execution_mode='production' and run.status in ('prepared','running');`) || "[]");
+  const blockRows = JSON.parse(runPsql(databaseUrl, `select coalesce(json_agg(json_build_object(
+    'runId',restore_block.run_id::text,'status',restore_block.restored_status,'leaseEpoch',restore_block.restored_lease_epoch
+  ) order by restore_block.run_id),'[]'::json)::text from public.food_catalog_ingestion_restore_blocks restore_block;`) || "[]");
+  const normalizedTarget = targetRows.map((row) => ({ runId: row.runId, status: row.status, leaseEpoch: Number(row.leaseEpoch) })).sort((a,b) => a.runId.localeCompare(b.runId));
+  const normalizedBlocks = blockRows.map((row) => ({ runId: row.runId, status: row.status, leaseEpoch: Number(row.leaseEpoch) })).sort((a,b) => a.runId.localeCompare(b.runId));
+  const durableHistoryPreserved = stableStringify(normalizedTarget) === stableStringify(expected);
+  const transientLeaseStateNeutralized = targetRows.every((row) => row.leaseOwnerNull && row.leaseTokenNull && row.leaseAcquiredAtNull && row.leaseHeartbeatAtNull && row.leaseExpiresAtNull);
+  const restoreBlocksExact = stableStringify(normalizedBlocks) === stableStringify(expected);
+  const functionDefinition = runPsql(databaseUrl, "select pg_get_functiondef('public.food_catalog_ingestion_acquire_lease_v2(jsonb)'::regprocedure);");
+  const guardIndex = functionDefinition.indexOf("food_catalog_ingestion_require_not_restore_blocked_v1");
+  const replayIndex = functionDefinition.indexOf("food_catalog_ingestion_replay_operation_v2");
+  const guardPrecedesReplay = guardIndex >= 0 && replayIndex > guardIndex;
+  let freshAcquireRejected = expected.length === 0;
+  if (expected.length > 0) {
+    const runId = expected[0].runId;
+    const probe = runPsql(databaseUrl, `begin;
+do $plan7_integrated_ingestion_gate$
+begin
+  begin
+    perform public.food_catalog_ingestion_acquire_lease_v2(jsonb_build_object(
+      'operationId','7b000000-0000-4000-8000-000000000001','commandChecksumSha256',repeat('b',64),
+      'runId','${runId}'::uuid,'leaseOwner','plan7-integrated-restore-probe',
+      'leaseToken','7b000000-0000-4000-8000-000000000101','leaseSeconds',120
+    ));
+    perform set_config('plan7.ingestion_restore_blocked','false',true);
+  exception when sqlstate '55000' then
+    perform set_config('plan7.ingestion_restore_blocked','true',true);
+  end;
+end
+$plan7_integrated_ingestion_gate$;
+select current_setting('plan7.ingestion_restore_blocked',true);
+rollback;`);
+    freshAcquireRejected = probe.split(/\r?\n/u).some((line) => line.trim() === "true" || line.trim() === "t");
+  }
+  return evaluateRestoredIngestionExecutionEvidence({
+    durableHistoryPreserved,
+    transientLeaseStateNeutralized,
+    restoreBlocksExact,
+    guardPrecedesReplay,
+    freshAcquireRejected,
+    expectedBlockedRunCount: expected.length,
+    observedBlockedRunCount: blockRows.length,
+  });
+}
+
 export function areProtectedOwnerStateRelationsVerified(relationsByName) {
   return PROTECTED_OWNER_STATE_RELATIONS
     .every((relation) => relationsByName.get(relation)?.exact === true);
@@ -217,7 +293,7 @@ export function buildFinalAssertionEvidence(input) {
     assertion("security_rls_acl_identity", "SEMANTIC", input.securityVerified, "RLS/policy/ACL/function privilege identity matches source authority and critical boundaries pass."),
     assertion("service_execution_binding", "SEMANTIC", input.serviceExecutionBindingVerified, "Durable Service principal/capability history survived while restored source/random/auth execution identities cannot claim normalized pending outbox authority."),
     assertion("migration_schema_fingerprint", "BYTE_HASH", input.migrationSchemaVerified, "Target PostgreSQL capability, migration ledger and schema fingerprint match artifact/Git authority."),
-    assertion("transient_neutralization", "SEMANTIC", input.transientNeutralizationVerified, "Every declared resumable lease/claim field is NULL on the restored target."),
+    assertion("transient_neutralization", "SEMANTIC", input.transientNeutralizationVerified, "Every declared resumable lease/claim field is NULL and restored nonterminal Production ingestion history remains blocked from lease reacquisition."),
   ]);
 }
 
@@ -524,6 +600,7 @@ export async function verifyIntegratedRestore(options) {
   const verifiedRelations = (names) => names.every((name) => relationsByName.get(name)?.exact === true);
   const protectedVerified = source.protectedCount > 0 && target.protectedCount === source.protectedCount;
   const transientVerified = areDeclaredTransientRelationsNeutralized(rules, relationResults);
+  const restoredIngestionExecution = verifyRestoredIngestionExecutionIsolation(options.targetUrl, sourceRowsFor("food_ingestion_runs"));
 
   const assertionEvidence = buildFinalAssertionEvidence({
     artifactHashesVerified: true,
@@ -541,7 +618,7 @@ export async function verifyIntegratedRestore(options) {
     securityVerified: true,
     serviceExecutionBindingVerified: serviceExecutionBinding.verified,
     migrationSchemaVerified: targetProfile.compatible === true,
-    transientNeutralizationVerified: transientVerified,
+    transientNeutralizationVerified: transientVerified && restoredIngestionExecution.verified,
   });
   const evaluation = evaluateRestoreAssertions({ profile: "FULL_DR", artifactValid: true, assertions: assertionEvidence });
   if (!evaluation.trusted || !evaluation.restoreVerified || evaluation.failures.length || evaluation.unknown.length) {
@@ -564,6 +641,7 @@ export async function verifyIntegratedRestore(options) {
     mergeGraph,
     consumerReference,
     serviceExecutionBinding,
+    restoredIngestionExecution,
     securityRlsAclIdentitySha256: targetSecurity.securityRlsAclIdentitySha256,
     search: Object.freeze({
       sameRestoredTargetVerified: true,

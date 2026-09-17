@@ -175,11 +175,24 @@ select pg_temp.plan7_restore_gate_expect_55000(format(
 -- Structural/privilege authority must have come from the migration, not the RED harness.
 select pg_temp.plan7_restore_gate_assert((select initial_block_table is not null from plan7_restore_gate_meta), 'restore-block table exists from migration');
 select pg_temp.plan7_restore_gate_assert(to_regprocedure('private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)') is not null, 'private restore guard exists');
-select pg_temp.plan7_restore_gate_assert(not has_table_privilege('PUBLIC','public.food_catalog_ingestion_restore_blocks','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'), 'PUBLIC has no direct restore-block privileges');
+select pg_temp.plan7_restore_gate_assert((select relrowsecurity from pg_class where oid='public.food_catalog_ingestion_restore_blocks'::regclass), 'restore-block table has RLS enabled');
+select pg_temp.plan7_restore_gate_assert(not exists(
+  select 1
+  from pg_class relation_acl
+  cross join lateral aclexplode(coalesce(relation_acl.relacl, acldefault('r', relation_acl.relowner))) grant_acl
+  where relation_acl.oid='public.food_catalog_ingestion_restore_blocks'::regclass
+    and grant_acl.grantee=0
+), 'PUBLIC has no direct restore-block privileges');
 select pg_temp.plan7_restore_gate_assert(not has_table_privilege('anon','public.food_catalog_ingestion_restore_blocks','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'), 'anon has no direct restore-block privileges');
 select pg_temp.plan7_restore_gate_assert(not has_table_privilege('authenticated','public.food_catalog_ingestion_restore_blocks','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'), 'authenticated has no direct restore-block privileges');
 select pg_temp.plan7_restore_gate_assert(not has_table_privilege('service_role','public.food_catalog_ingestion_restore_blocks','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'), 'service_role has no direct restore-block privileges');
-select pg_temp.plan7_restore_gate_assert(not has_function_privilege('PUBLIC','private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)','EXECUTE'), 'PUBLIC cannot execute private restore guard');
+select pg_temp.plan7_restore_gate_assert(not exists(
+  select 1
+  from pg_proc function_acl
+  cross join lateral aclexplode(coalesce(function_acl.proacl, acldefault('f', function_acl.proowner))) grant_acl
+  where function_acl.oid='private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)'::regprocedure
+    and grant_acl.grantee=0
+), 'PUBLIC cannot execute private restore guard');
 select pg_temp.plan7_restore_gate_assert(not has_function_privilege('anon','private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)','EXECUTE'), 'anon cannot execute private restore guard');
 select pg_temp.plan7_restore_gate_assert(not has_function_privilege('authenticated','private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)','EXECUTE'), 'authenticated cannot execute private restore guard');
 select pg_temp.plan7_restore_gate_assert(not has_function_privilege('service_role','private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)','EXECUTE'), 'service_role cannot execute private restore guard');
@@ -187,12 +200,20 @@ select pg_temp.plan7_restore_gate_assert((
   select count(*)=1 from pg_constraint
   where conrelid='public.food_catalog_ingestion_restore_blocks'::regclass and contype='f'
     and confrelid='public.food_ingestion_runs'::regclass
-), 'restore-block run_id FK prevents orphan blocks');
+    and confdeltype='r'
+), 'restore-block run_id FK prevents orphan blocks with ON DELETE RESTRICT');
 select pg_temp.plan7_restore_gate_assert((
   select count(*)=1 from pg_constraint
   where conrelid='public.food_catalog_ingestion_restore_blocks'::regclass and contype='c'
     and pg_get_constraintdef(oid) like '%restored_status%prepared%running%'
 ), 'restore-block status check is exactly nonterminal prepared/running authority');
+
+select pg_temp.plan7_restore_gate_assert((
+  select position('food_catalog_ingestion_require_not_restore_blocked_v1' in definition) > 0
+     and position('food_catalog_ingestion_require_not_restore_blocked_v1' in definition)
+       < position('food_catalog_ingestion_replay_operation_v2' in definition)
+  from (select pg_get_functiondef('public.food_catalog_ingestion_acquire_lease_v2(jsonb)'::regprocedure) as definition) function_definition
+), 'restore guard executes before acquire operation replay');
 
 -- Terminal history has no restore-block row and cannot be reacquired through normal authority.
 select pg_temp.plan7_restore_gate_assert(not exists(
