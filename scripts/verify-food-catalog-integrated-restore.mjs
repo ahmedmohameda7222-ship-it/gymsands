@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { decodeProtectedArtifactMaterial } from "./restore-food-catalog-portable.mjs";
+import { captureRestoredServiceAuthority } from "./capture-food-catalog-restored-service-authority.mjs";
 import {
   evaluatePortableTargetProfile,
   queryPortableTargetProfile,
@@ -304,12 +305,14 @@ export function computeRestoredTargetIdentitySha256({
   schemaFingerprintSha256,
   securityRlsAclIdentitySha256,
   ownerBindingSha256,
+  serviceAuthorityEvidenceSha256,
 }) {
   for (const [value, label] of [
     [migrationLedgerIdentity, "migration ledger identity"],
     [schemaFingerprintSha256, "schema fingerprint"],
     [securityRlsAclIdentitySha256, "security/RLS/ACL identity"],
     [ownerBindingSha256, "owner binding identity"],
+    [serviceAuthorityEvidenceSha256, "Service authority evidence identity"],
   ]) {
     if (typeof value !== "string" || !SHA256.test(value)) throw new Error(`${label} must be a lowercase SHA-256 digest.`);
   }
@@ -318,6 +321,7 @@ export function computeRestoredTargetIdentitySha256({
     schemaFingerprintSha256,
     securityRlsAclIdentitySha256,
     ownerBindingSha256,
+    serviceAuthorityEvidenceSha256,
   }));
 }
 
@@ -455,7 +459,30 @@ export function requireLinkedSearchEvidence(sourceSearch, targetSearch, manifest
   return true;
 }
 
-export function evaluateRestoredServiceAuthorityEvidence(observed) {
+export function evaluateRestoredServiceAuthorityEvidence(observed, expected) {
+  if (observed?.format !== "plaivra-food-catalog-restored-service-authority-evidence" || observed?.version !== 4) {
+    throw new Error("Restored Service authority evidence binding format/version is invalid.");
+  }
+  if (!expected || typeof expected !== "object") throw new Error("Restored Service authority evidence expected binding is required.");
+  const bindings = [
+    ["headSha", SHA40, "head"],
+    ["artifactSemanticRootSha256", SHA256, "artifact semantic root"],
+    ["snapshotBoundarySha256", SHA256, "snapshot boundary"],
+    ["targetMigrationLedgerIdentity", SHA256, "target migration ledger"],
+    ["targetSchemaFingerprintSha256", SHA256, "target schema fingerprint"],
+  ];
+  const expectedValue = (field) => {
+    if (field === "targetMigrationLedgerIdentity") return expected.migrationLedgerIdentity;
+    if (field === "targetSchemaFingerprintSha256") return expected.schemaFingerprintSha256;
+    return expected[field];
+  };
+  for (const [field, pattern, label] of bindings) {
+    const actual = observed?.[field];
+    const required = expectedValue(field);
+    if (typeof actual !== "string" || !pattern.test(actual) || typeof required !== "string" || !pattern.test(required) || actual !== required) {
+      throw new Error(`Restored Service authority evidence ${label} binding mismatch.`);
+    }
+  }
   const requiredTrue = [
     "sourceServiceIdentityRejected",
     "authenticatedClaimRejected",
@@ -469,7 +496,11 @@ export function evaluateRestoredServiceAuthorityEvidence(observed) {
     if (observed?.[field] !== true) throw new Error(`Restored Service execution binding evidence failed: ${field}.`);
   }
   if (observed.automaticDeliveryObserved !== false) throw new Error("Restored Service execution binding evidence observed automatic delivery.");
-  return Object.freeze({ verified: true, automaticDeliveryObserved: false });
+  return Object.freeze({
+    verified: true,
+    automaticDeliveryObserved: false,
+    serviceAuthorityEvidenceSha256: sha256(stableStringify(observed)),
+  });
 }
 
 async function verifyConsumerReference(databaseUrl, fixturePath) {
@@ -502,6 +533,7 @@ export function parseIntegratedRestoreArgs(argv) {
     else if (value === "--source-security") options.sourceSecurityPath = next();
     else if (value === "--target-security") options.targetSecurityPath = next();
     else if (value === "--target-service-authority") options.targetServiceAuthorityPath = next();
+    else if (value === "--source-service-identity") options.sourceServiceIdentity = next();
     else if (value === "--source-search") options.sourceSearchPath = next();
     else if (value === "--target-search") options.targetSearchPath = next();
     else if (value === "--consumer-reference") options.consumerReferencePath = next();
@@ -510,7 +542,7 @@ export function parseIntegratedRestoreArgs(argv) {
     else if (value === "--output") options.output = next();
     else throw new Error(`Unknown integrated restore verifier argument ${value}.`);
   }
-  const required = ["sourceArtifactDir","targetArtifactDir","targetUrl","restoreEvidencePath","sourceSecurityPath","targetSecurityPath","targetServiceAuthorityPath","sourceSearchPath","targetSearchPath","consumerReferencePath","expectedHead","maxArtifactAgeMs","output"];
+  const required = ["sourceArtifactDir","targetArtifactDir","targetUrl","restoreEvidencePath","sourceSecurityPath","targetSecurityPath","targetServiceAuthorityPath","sourceServiceIdentity","sourceSearchPath","targetSearchPath","consumerReferencePath","expectedHead","maxArtifactAgeMs","output"];
   for (const field of required) if (!options[field]) throw new Error(`Missing required integrated restore verifier option ${field}.`);
   if (!SHA40.test(options.expectedHead)) throw new Error("Integrated restore verifier expected head must be an exact commit SHA.");
   const maxArtifactAgeMs = Number(options.maxArtifactAgeMs);
@@ -588,7 +620,28 @@ export async function verifyIntegratedRestore(options) {
   if (!sourceSecurity.criticalBoundariesVerified || !targetSecurity.criticalBoundariesVerified) throw new Error("Critical Food Catalog RLS/ACL boundary verification failed.");
   if (sourceSecurity.securityRlsAclIdentitySha256 !== targetSecurity.securityRlsAclIdentitySha256) throw new Error("Restored RLS/ACL/policy identity differs from source Git-migrated authority.");
   if (!SHA256.test(targetSecurity.securityRlsAclIdentitySha256 ?? "")) throw new Error("Target security identity digest is malformed.");
-  const serviceExecutionBinding = evaluateRestoredServiceAuthorityEvidence(JSON.parse(await readFile(resolve(options.targetServiceAuthorityPath), "utf8")));
+
+  const recordedServiceAuthority = JSON.parse(await readFile(resolve(options.targetServiceAuthorityPath), "utf8"));
+  const liveServiceAuthority = captureRestoredServiceAuthority(options.targetUrl, options.sourceServiceIdentity);
+  if (stableStringify(recordedServiceAuthority) !== stableStringify(liveServiceAuthority)) {
+    throw new Error("Recorded restored Service authority evidence does not match a fresh proof on the current target.");
+  }
+  const boundServiceAuthority = Object.freeze({
+    ...liveServiceAuthority,
+    version: 4,
+    headSha: options.expectedHead,
+    artifactSemanticRootSha256: source.manifest.semanticRootSha256,
+    snapshotBoundarySha256: source.manifest.snapshotBoundary.sha256,
+    targetMigrationLedgerIdentity: targetProfile.migrationLedgerIdentity,
+    targetSchemaFingerprintSha256: targetProfile.schemaFingerprintSha256,
+  });
+  const serviceExecutionBinding = evaluateRestoredServiceAuthorityEvidence(boundServiceAuthority, {
+    headSha: options.expectedHead,
+    artifactSemanticRootSha256: source.manifest.semanticRootSha256,
+    snapshotBoundarySha256: source.manifest.snapshotBoundary.sha256,
+    migrationLedgerIdentity: targetProfile.migrationLedgerIdentity,
+    schemaFingerprintSha256: targetProfile.schemaFingerprintSha256,
+  });
 
   const ownerBinding = queryOwnerBindingEvidence(options.targetUrl);
   const targetIdentity = computeRestoredTargetIdentitySha256({
@@ -596,6 +649,7 @@ export async function verifyIntegratedRestore(options) {
     schemaFingerprintSha256: targetProfile.schemaFingerprintSha256,
     securityRlsAclIdentitySha256: targetSecurity.securityRlsAclIdentitySha256,
     ownerBindingSha256: ownerBinding.ownerBindingSha256,
+    serviceAuthorityEvidenceSha256: serviceExecutionBinding.serviceAuthorityEvidenceSha256,
   });
   const mergeGraph = verifyMergeGraph(options.targetUrl);
   const consumerReference = await verifyConsumerReference(options.targetUrl, options.consumerReferencePath);
