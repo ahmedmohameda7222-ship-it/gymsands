@@ -1,0 +1,62 @@
+name: Plan7 Restored Ingestion Script Diagnostic
+
+on:
+  push:
+    branches:
+      - tmp-plan7-ingestion-restore-reactivation-green-v2-20260917
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose-script-suite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      START_SHA: 796a48dc23bb3e11efed702c63133cfac396e7f1
+      DIAGNOSTIC_BRANCH: tmp-plan7-ingestion-restore-reactivation-script-diagnostic-20260917
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Preserve controller and reset to exact RED head
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .github/tmp/plan7-ingestion-restore-reactivation-green-v2.py /tmp/plan7-green-v2.py
+          python .github/tmp/plan7-green-v2-controller-hotfix.py
+          git checkout --detach "$START_SHA"
+          test "$(git rev-parse HEAD)" = "$START_SHA"
+      - name: Apply candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python /tmp/plan7-green-v2.py
+          test "$(cat .plan7-green-v2-base)" = "$START_SHA"
+          rm .plan7-green-v2-base
+          git diff --check
+      - name: Install dependencies
+        run: npm ci
+      - name: Capture script-suite failure
+        shell: bash
+        run: |
+          set +e
+          npm run test:scripts > /tmp/plan7-test-scripts.log 2>&1
+          status=$?
+          set -e
+          mkdir -p .github/tmp
+          {
+            echo "exit_status=$status"
+            echo "===== tail -n 500 ====="
+            tail -n 500 /tmp/plan7-test-scripts.log
+          } > .github/tmp/plan7-test-scripts-diagnostic.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f .github/tmp/plan7-test-scripts-diagnostic.txt
+          git commit -m 'chore(plan7): capture script-suite diagnostic'
+          git push --force origin HEAD:"refs/heads/$DIAGNOSTIC_BRANCH"
+          exit "$status"
