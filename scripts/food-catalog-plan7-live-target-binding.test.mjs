@@ -20,3 +20,30 @@ test("final integrated certification recaptures readback, security and search fr
   assert.match(verifier, /Recorded restored search evidence[\s\S]*fresh proof on the current target/i,
     "Recorded target search evidence must match its live recapture.");
 });
+
+test("final integrated certification rejects non-disposable targetUrl before every live target probe", () => {
+  const verifier = readFileSync("scripts/verify-food-catalog-integrated-restore.mjs", "utf8");
+
+  assert.match(verifier, /assertDisposableRestoreTarget/,
+    "Final verification must reuse the canonical disposable-target guard.");
+
+  const verificationBody = verifier.slice(verifier.indexOf("export async function verifyIntegratedRestore"));
+  const guardIndex = verificationBody.indexOf("assertDisposableRestoreTarget(options.targetUrl");
+  assert.notEqual(guardIndex, -1,
+    "Final verification must validate options.targetUrl as disposable.");
+
+  for (const probe of [
+    "queryPortableTargetProfile(options.targetUrl)",
+    "runAuthoritativeExport({",
+    "captureFoodCatalogSecurityEvidence(options.targetUrl)",
+    "captureRestoredServiceAuthority(options.targetUrl",
+    "queryOwnerBindingEvidence(options.targetUrl)",
+    "verifyMergeGraph(options.targetUrl)",
+    "captureSearchRuntimeEvidence(options.targetUrl",
+  ]) {
+    const probeIndex = verificationBody.indexOf(probe);
+    assert.notEqual(probeIndex, -1, `Expected live target probe ${probe} to remain present.`);
+    assert.ok(guardIndex < probeIndex,
+      `Disposable-target validation must run before live target probe ${probe}.`);
+  }
+});
