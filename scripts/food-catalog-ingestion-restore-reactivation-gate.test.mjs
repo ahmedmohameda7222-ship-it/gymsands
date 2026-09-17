@@ -25,9 +25,10 @@ function acquireDefinition(sql) {
   const start = sql.toLowerCase().indexOf(marker);
   assert.notEqual(start, -1, "acquire-lease authority definition must exist");
   const tail = sql.slice(start);
-  const end = tail.indexOf("\n$$;");
-  assert.notEqual(end, -1, "acquire-lease authority definition must terminate with $$;");
-  return tail.slice(0, end + 4);
+  const endMarker = "\n$function$;";
+  const end = tail.indexOf(endMarker);
+  assert.notEqual(end, -1, "acquire-lease authority definition must terminate with $function$;");
+  return tail.slice(0, end + endMarker.length);
 }
 
 function normalizeFunction(sql) {
@@ -61,14 +62,26 @@ test("restore reconstructs blocks only for nonterminal Production ingestion hist
   assert.match(sql, /food_catalog_ingestion_restore_blocks/u);
   assert.match(sql, /restored_status/u);
   assert.match(sql, /restored_lease_epoch/u);
+  assert.match(sql, /ON CONFLICT \(run_id\) DO NOTHING/u);
+  assert.match(sql, /IF NOT EXISTS/u);
   assert.match(sql, /55000/u);
   assert.match(sql, /conflict|mismatch/iu);
+});
+
+test("restore block reconstruction is empty without nonterminal Production history", () => {
+  assert.equal(restore.buildRestoredIngestionRunBlockSql([
+    ingestionRow({ id: "71000000-0000-4000-8000-000000000010", status: "completed", leaseEpoch: 1 }),
+    ingestionRow({ id: "71000000-0000-4000-8000-000000000011", status: "running", leaseEpoch: 2, executionMode: "dry_run" }),
+  ]), "");
 });
 
 test("forward migration supplies the target-local guard before replay", () => {
   assert.equal(existsSync(MIGRATION), true, `${MIGRATION} must exist`);
   const sql = readFileSync(MIGRATION, "utf8");
   assert.match(sql, /create table public\.food_catalog_ingestion_restore_blocks/iu);
+  assert.match(sql, /alter table public\.food_catalog_ingestion_restore_blocks enable row level security/iu);
+  assert.match(sql, /references public\.food_ingestion_runs\(id\) on delete restrict/iu);
+  assert.match(sql, /restored_lease_epoch bigint not null check \(restored_lease_epoch >= 0\)/iu);
   assert.match(sql, /food_catalog_ingestion_require_not_restore_blocked_v1/iu);
   const acquire = acquireDefinition(sql);
   const guard = acquire.indexOf("private.food_catalog_ingestion_require_not_restore_blocked_v1(v_run_id)");

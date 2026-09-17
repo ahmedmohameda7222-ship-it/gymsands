@@ -1,11 +1,13 @@
 create table public.food_catalog_ingestion_restore_blocks (
   run_id uuid primary key references public.food_ingestion_runs(id) on delete restrict,
   restored_status text not null,
-  restored_lease_epoch bigint not null,
+  restored_lease_epoch bigint not null check (restored_lease_epoch >= 0),
   blocked_at timestamptz not null default clock_timestamp(),
   constraint food_catalog_ingestion_restore_blocks_status_check
     check (restored_status in ('prepared', 'running'))
 );
+
+alter table public.food_catalog_ingestion_restore_blocks enable row level security;
 
 revoke all privileges on table public.food_catalog_ingestion_restore_blocks from public;
 revoke all privileges on table public.food_catalog_ingestion_restore_blocks from anon;

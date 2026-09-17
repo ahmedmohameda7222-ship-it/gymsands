@@ -6,6 +6,7 @@ import {
   computeRestoredTargetIdentitySha256,
   requireLinkedSearchEvidence,
   evaluateRestoredServiceAuthorityEvidence,
+  evaluateRestoredIngestionExecutionEvidence,
 } from "./verify-food-catalog-integrated-restore.mjs";
 
 const row = (entries) => JSON.stringify(entries);
@@ -230,6 +231,27 @@ describe("Plan 7 integrated restore evidence", () => {
       serviceExecutionBindingUnavailable: true,
       automaticDeliveryObserved: false,
     }), /Service|execution|binding|source/i);
+  });
+
+  it("requires restored nonterminal ingestion history to stay execution-blocked", () => {
+    const good = {
+      durableHistoryPreserved: true,
+      transientLeaseStateNeutralized: true,
+      restoreBlocksExact: true,
+      guardPrecedesReplay: true,
+      freshAcquireRejected: true,
+      expectedBlockedRunCount: 1,
+      observedBlockedRunCount: 1,
+    };
+    assert.deepEqual(evaluateRestoredIngestionExecutionEvidence(good), {
+      verified: true,
+      expectedBlockedRunCount: 1,
+      observedBlockedRunCount: 1,
+    });
+    for (const field of ["durableHistoryPreserved","transientLeaseStateNeutralized","restoreBlocksExact","guardPrecedesReplay","freshAcquireRejected"]) {
+      assert.throws(() => evaluateRestoredIngestionExecutionEvidence({ ...good, [field]: false }), /ingestion|isolation|failed/i);
+    }
+    assert.throws(() => evaluateRestoredIngestionExecutionEvidence({ ...good, observedBlockedRunCount: 2 }), /count|mismatch/i);
   });
 
   it("builds all mandatory assertions from runtime proof classes without caller trust booleans", () => {

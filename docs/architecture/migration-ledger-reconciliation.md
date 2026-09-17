@@ -3,7 +3,7 @@
 **Project:** `bkwezjxvapaeasfvlhvv`
 **Current reconciliation date:** 2026-09-10
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history is reconciled through the Plan 6 GTIN-lock exactness correction; two repository-only Plan 7 migrations are pending and unapplied
+**Status:** Production migration history is reconciled through the Plan 6 GTIN-lock exactness correction; three repository-only Plan 7 migrations are pending and unapplied
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -30,13 +30,14 @@ The current repository/machine-ledger state records:
 - `20260909083000_food_catalog_governance_gtin_lock_exactness.sql`: `applied_version_alias` → `20260910071241_food_catalog_governance_gtin_lock_exactness`
 - `20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql`: `pending` (repository-only; not applied to Production; no Production version/name)
 - `20260915170012_food_catalog_owner_correction_export.sql`: `pending` (repository-only; not applied to Production; no Production version/name)
-- `pendingCount = 2`
+- `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql`: `pending` (repository-only; not applied to Production; no Production version/name)
+- `pendingCount = 3`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 2`
+- `unresolvedCount = 3`
 - `historyRepair.state = pending`
 - migration-ledger `release_ready = false`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`. Applied migrations must not be replayed. Both pending Plan 7 migrations have no Production version or name because neither has been applied. `historyRepair` remains `pending` with `pendingCount = 2`, `unresolvedCount = 2`, and `schemaAppliedUntrackedCount = 0`; migration-ledger `release_ready = false`.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`. Applied migrations must not be replayed. All three pending Plan 7 migrations have no Production version or name because none has been applied. `historyRepair` remains `pending` with `pendingCount = 3`, `unresolvedCount = 3`, and `schemaAppliedUntrackedCount = 0`; migration-ledger `release_ready = false`.
 
 ## Food Catalog Plan 6 governance control plane — Production exactness reconciled 2026-09-10
 

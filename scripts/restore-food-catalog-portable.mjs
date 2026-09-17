@@ -77,6 +77,25 @@ export function decodeCanonicalSegmentRow(line) {
   return Object.freeze(result);
 }
 
+export function buildRestoredIngestionRunBlockSql(canonicalRows) {
+  if (!Array.isArray(canonicalRows)) throw new Error("Restored ingestion block reconstruction requires canonical rows.");
+  const blocks = [];
+  for (const canonicalRow of canonicalRows) {
+    const row = decodeCanonicalSegmentRow(canonicalRow);
+    const executionMode = row.execution_mode?.text;
+    const status = row.status?.text;
+    if (executionMode !== "production" || (status !== "prepared" && status !== "running")) continue;
+    const runId = row.id?.text;
+    const leaseEpoch = row.lease_epoch?.text;
+    if (typeof runId !== "string" || !UUID.test(runId)) throw new Error("Restored nonterminal Production ingestion run has an invalid run_id.");
+    if (typeof leaseEpoch !== "string" || !/^[0-9]+$/u.test(leaseEpoch)) throw new Error(`Restored ingestion run ${runId} has an invalid lease_epoch.`);
+    blocks.push(Object.freeze({ runId, status, leaseEpoch }));
+  }
+  if (blocks.length === 0) return "";
+  const statements = blocks.map(({ runId, status, leaseEpoch }) => `  INSERT INTO public.food_catalog_ingestion_restore_blocks(run_id, restored_status, restored_lease_epoch)\n  VALUES ('${runId}'::uuid, '${status}', ${leaseEpoch}::bigint)\n  ON CONFLICT (run_id) DO NOTHING;\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.food_catalog_ingestion_restore_blocks restore_block\n    WHERE restore_block.run_id='${runId}'::uuid\n      AND restore_block.restored_status='${status}'\n      AND restore_block.restored_lease_epoch=${leaseEpoch}::bigint\n  ) THEN\n    RAISE EXCEPTION 'Plan7 restored ingestion block conflict for %', '${runId}'::uuid USING ERRCODE = '55000';\n  END IF;`).join("\n");
+  return `DO $plan7_restore_ingestion_block$\nBEGIN\n${statements}\nEND\n$plan7_restore_ingestion_block$;`;
+}
+
 export function materializeRestoreLocalBindings(canonicalRow, rule, unreachableSha256 = () => randomBytes(32).toString("hex")) {
   const bindings = rule?.restoreLocalBindings ?? [];
   if (bindings.length === 0) return canonicalRow;
@@ -351,6 +370,10 @@ export async function restorePortableArtifact({ artifactDir, targetUrl, relation
       }
     } else if (action.kind === "RESTORE_EXACT_WITH_TRANSIENT_NEUTRALIZATION") {
       for (const canonicalRow of rows) runPsql(targetUrl, buildExactRestoreRowSql({ relation: rule.relation, stableKey: rule.stableKey, targetColumns, canonicalRow, forceNullColumns: [...(rule.transientNeutralize ?? [])], comparisonOmitColumns: [...(rule.transientNeutralize ?? [])] }));
+      if (rule.relation === "food_ingestion_runs") {
+        const blockSql = buildRestoredIngestionRunBlockSql(rows);
+        if (blockSql) runPsql(targetUrl, blockSql);
+      }
     } else if (action.kind === "RESTORE_TRANSITIONAL_WITH_CYCLE_NULL") {
       if (rule.relation !== "food_items") throw new Error("Plan 7 transitional cycle suspension is limited to food_items.");
       if (rows.length) {
