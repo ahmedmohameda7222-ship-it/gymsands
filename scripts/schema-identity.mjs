@@ -118,6 +118,7 @@ export function buildFoodCatalogSchemaIdentitySql() {
             p.proname LIKE 'food_catalog_%'
             OR p.proname = 'normalize_nutrition_food_search_text'
             OR p.proname LIKE '%purge_account_application_data_atomic'
+            OR p.oid = to_regprocedure('private.nutrition_v1_final_review_core_purge_account_application_data_atomic(uuid)')
           )
         )
         OR p.oid IN (SELECT oid FROM trigger_function_scope)
