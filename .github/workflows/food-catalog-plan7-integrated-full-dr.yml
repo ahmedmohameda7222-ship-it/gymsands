@@ -74,6 +74,9 @@ jobs:
             scripts/verify-food-catalog-integrated-restore.test.mjs \
             scripts/capture-food-catalog-restored-search-runtime.test.mjs \
             scripts/food-catalog-plan7-restored-service-binding.test.mjs \
+            scripts/food-catalog-plan7-service-evidence-binding.test.mjs \
+            scripts/food-catalog-plan7-pre-pointer-entrypoint-binding.test.mjs \
+            scripts/food-catalog-plan7-schema-trigger-function-identity.test.mjs \
             scripts/certify-food-catalog-restore.test.mjs
 
       - name: Replay exact Git migrations for source
@@ -327,6 +330,7 @@ jobs:
             --source-security "$RUNNER_TEMP/plan7-source-security.json" \
             --target-security "$RUNNER_TEMP/plan7-target-security.json" \
             --target-service-authority "$RUNNER_TEMP/plan7-target-service-authority.json" \
+            --source-service-identity "plan7-source-service-identity" \
             --source-search "$RUNNER_TEMP/plan7-source-search.json" \
             --target-search "$RUNNER_TEMP/plan7-target-search.json" \
             --consumer-reference "test/fixtures/food-catalog/plan7-consumer-reference-v1.json" \
@@ -340,7 +344,7 @@ jobs:
           if (!value.assertionEvaluation?.trusted || !value.assertionEvaluation?.restoreVerified) fail(`Integrated assertion evaluation is not trusted: ${JSON.stringify(value.assertionEvaluation)}`);
           if (value.assertionEvaluation.failures.length || value.assertionEvaluation.unknown.length) fail(`Integrated assertion evaluation contains failures/unknowns: ${JSON.stringify(value.assertionEvaluation)}`);
           if (!value.protectedSegmentsVerified || !value.search?.sameRestoredTargetVerified) fail(`Integrated evidence linkage failed: protectedSegmentsVerified=${value.protectedSegmentsVerified} sameRestoredTargetVerified=${value.search?.sameRestoredTargetVerified}`);
-          if (!value.serviceExecutionBinding?.verified) fail(`Restored Service execution binding proof is missing: ${JSON.stringify(value.serviceExecutionBinding)}`);
+          if (!value.serviceExecutionBinding?.verified || !/^[0-9a-f]{64}$/.test(value.serviceExecutionBinding?.serviceAuthorityEvidenceSha256 ?? '')) fail(`Restored Service execution binding proof is missing or unbound: ${JSON.stringify(value.serviceExecutionBinding)}`);
           fs.writeFileSync(process.argv[3], `${JSON.stringify(value.verificationInput, null, 2)}\n`, 'utf8');
           NODE
 
