@@ -49,6 +49,34 @@ function linkedSearchEvidence() {
   };
 }
 
+function serviceAuthorityBinding() {
+  const expected = {
+    headSha: "a".repeat(40),
+    artifactSemanticRootSha256: "b".repeat(64),
+    snapshotBoundarySha256: "c".repeat(64),
+    migrationLedgerIdentity: "d".repeat(64),
+    schemaFingerprintSha256: "e".repeat(64),
+  };
+  const observed = {
+    format: "plaivra-food-catalog-restored-service-authority-evidence",
+    version: 4,
+    headSha: expected.headSha,
+    artifactSemanticRootSha256: expected.artifactSemanticRootSha256,
+    snapshotBoundarySha256: expected.snapshotBoundarySha256,
+    targetMigrationLedgerIdentity: expected.migrationLedgerIdentity,
+    targetSchemaFingerprintSha256: expected.schemaFingerprintSha256,
+    sourceServiceIdentityRejected: true,
+    authenticatedClaimRejected: true,
+    randomServiceIdentityRejected: true,
+    principalHistoryPreserved: true,
+    capabilityHistoryPreserved: true,
+    outboxPendingUnclaimed: true,
+    serviceExecutionBindingUnavailable: true,
+    automaticDeliveryObserved: false,
+  };
+  return { observed, expected };
+}
+
 describe("Plan 7 integrated restore evidence", () => {
   it("requires exact typed row equality for ordinary portable authority", () => {
     const result = comparePortableRelationRows({
@@ -210,27 +238,15 @@ describe("Plan 7 integrated restore evidence", () => {
   });
 
   it("requires restored Service authority isolation as a mandatory semantic assertion", () => {
-    const evidence = evaluateRestoredServiceAuthorityEvidence({
-      sourceServiceIdentityRejected: true,
-      authenticatedClaimRejected: true,
-      randomServiceIdentityRejected: true,
-      principalHistoryPreserved: true,
-      capabilityHistoryPreserved: true,
-      outboxPendingUnclaimed: true,
-      serviceExecutionBindingUnavailable: true,
-      automaticDeliveryObserved: false,
-    });
-    assert.deepEqual(evidence, { verified: true, automaticDeliveryObserved: false });
+    const { observed, expected } = serviceAuthorityBinding();
+    const evidence = evaluateRestoredServiceAuthorityEvidence(observed, expected);
+    assert.equal(evidence.verified, true);
+    assert.equal(evidence.automaticDeliveryObserved, false);
+    assert.match(evidence.serviceAuthorityEvidenceSha256, /^[0-9a-f]{64}$/);
     assert.throws(() => evaluateRestoredServiceAuthorityEvidence({
+      ...observed,
       sourceServiceIdentityRejected: false,
-      authenticatedClaimRejected: true,
-      randomServiceIdentityRejected: true,
-      principalHistoryPreserved: true,
-      capabilityHistoryPreserved: true,
-      outboxPendingUnclaimed: true,
-      serviceExecutionBindingUnavailable: true,
-      automaticDeliveryObserved: false,
-    }), /Service|execution|binding|source/i);
+    }, expected), /Service|execution|binding|source/i);
   });
 
   it("requires restored nonterminal ingestion history to stay execution-blocked", () => {
@@ -308,11 +324,20 @@ describe("Plan 7 integrated restore evidence", () => {
     assert.equal(verifier.areProtectedOwnerStateRelationsVerified(verified), false);
   });
 
-  it("binds the restored target identity to schema, security and owner-mapping evidence", () => {
-    const a = computeRestoredTargetIdentitySha256({ migrationLedgerIdentity: "a".repeat(64), schemaFingerprintSha256: "b".repeat(64), securityRlsAclIdentitySha256: "c".repeat(64), ownerBindingSha256: "d".repeat(64) });
-    const b = computeRestoredTargetIdentitySha256({ migrationLedgerIdentity: "a".repeat(64), schemaFingerprintSha256: "b".repeat(64), securityRlsAclIdentitySha256: "c".repeat(64), ownerBindingSha256: "e".repeat(64) });
+  it("binds the restored target identity to schema, security, owner-mapping and Service authority evidence", () => {
+    const common = {
+      migrationLedgerIdentity: "a".repeat(64),
+      schemaFingerprintSha256: "b".repeat(64),
+      securityRlsAclIdentitySha256: "c".repeat(64),
+      ownerBindingSha256: "d".repeat(64),
+      serviceAuthorityEvidenceSha256: "e".repeat(64),
+    };
+    const a = computeRestoredTargetIdentitySha256(common);
+    const b = computeRestoredTargetIdentitySha256({ ...common, ownerBindingSha256: "f".repeat(64) });
+    const c = computeRestoredTargetIdentitySha256({ ...common, serviceAuthorityEvidenceSha256: "0".repeat(64) });
     assert.match(a, /^[0-9a-f]{64}$/);
     assert.notEqual(a, b);
+    assert.notEqual(a, c);
   });
 
   it("fails closed unless source search is adversarial and restored search is authoritative current-only", () => {
@@ -340,6 +365,7 @@ it("requires an explicit positive integer max artifact age for canonical FULL_DR
     "--target-url", "postgresql://127.0.0.1:54322/postgres",
     "--restore-evidence", "restore.json", "--source-security", "source-security.json",
     "--target-security", "target-security.json", "--target-service-authority", "service.json",
+    "--source-service-identity", "plan7-source-service-identity",
     "--source-search", "source-search.json", "--target-search", "target-search.json",
     "--consumer-reference", "consumer.json", "--expected-head", "a".repeat(40),
     "--output", "output.json",
