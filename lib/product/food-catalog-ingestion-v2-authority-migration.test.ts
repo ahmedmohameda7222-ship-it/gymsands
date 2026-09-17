@@ -8,6 +8,7 @@ const PLAN6_MIGRATION_FILE = "20260908100000_food_catalog_governance_control_pla
 const PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
 const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
 const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
+const PLAN7_INGESTION_REACTIVATION_MIGRATION = "20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql";
 const MIGRATION_PATH = `supabase/migrations/${MIGRATION_FILE}`;
 const VERIFICATION_PATH = "supabase/verification/food-catalog-ingestion-v2-authority.sql";
 const RECONCILIATION_DOC = "docs/architecture/migration-ledger-reconciliation.md";
@@ -233,11 +234,11 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
   it("records verified Plan 4/5 aliases after Plan 6 exactness reconciliation", () => {
     expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.productionRecordCount).toBe(123);
-    expect(ledger.pendingCount).toBe(2);
-    expect(ledger.unresolvedCount).toBe(2);
+    expect(ledger.pendingCount).toBe(3);
+    expect(ledger.unresolvedCount).toBe(3);
     expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(2);
-    expect(ledger.historyRepair.unresolvedCount).toBe(2);
+    expect(ledger.historyRepair.pendingCount).toBe(3);
+    expect(ledger.historyRepair.unresolvedCount).toBe(3);
     expect(ledger.historyRepair.schemaAppliedUntrackedCount).toBe(0);
     expect(releaseCompatibility.databaseMigrationMarkerVersion).toBe("20260724232734");
 
@@ -255,6 +256,10 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
       }),
       expect.objectContaining({
         localFile: PLAN7_OWNER_EXPORT_MIGRATION,
+        state: "pending",
+      }),
+      expect.objectContaining({
+        localFile: PLAN7_INGESTION_REACTIVATION_MIGRATION,
         state: "pending",
       }),
     ]);
@@ -299,10 +304,11 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(reconciliationDoc).toContain("20260906200129_food_catalog_search_projection_v2");
     expect(reconciliationDoc).toContain("20260907215257_food_catalog_search_serving_semantics_correction");
     expect(reconciliationDoc).toContain("physical production migration records: **123**");
-    expect(reconciliationDoc).toContain("`pendingcount = 2`");
-    expect(reconciliationDoc).toContain("`unresolvedcount = 2`");
+    expect(reconciliationDoc).toContain("`pendingcount = 3`");
+    expect(reconciliationDoc).toContain("`unresolvedcount = 3`");
     expect(reconciliationDoc).toContain(PLAN7_PENDING_MIGRATION);
     expect(reconciliationDoc).toContain(PLAN7_OWNER_EXPORT_MIGRATION);
+    expect(reconciliationDoc).toContain(PLAN7_INGESTION_REACTIVATION_MIGRATION);
     expect(reconciliationDoc).toContain(PLAN6_MIGRATION_FILE);
     expect(reconciliationDoc).toContain(PLAN6_EXACTNESS_CORRECTION);
     expect(reconciliationDoc).toContain("20260910071241_food_catalog_governance_gtin_lock_exactness");
