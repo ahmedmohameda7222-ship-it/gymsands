@@ -130,7 +130,7 @@ function stableKeyTextTuple(values, stableKey, segment) {
 }
 function compareStableKeyTextTuples(left, right) {
   for (let index = 0; index < left.length; index += 1) {
-    const comparison = compareCodeUnits(left[index], right[index]);
+    const comparison = Buffer.compare(Buffer.from(left[index], "utf8"), Buffer.from(right[index], "utf8"));
     if (comparison !== 0) return comparison;
   }
   return 0;
