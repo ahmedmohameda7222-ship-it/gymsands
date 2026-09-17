@@ -1,0 +1,109 @@
+name: Plan7 Restored Ingestion Reactivation RED
+
+on:
+  push:
+    branches:
+      - tmp-plan7-ingestion-restore-reactivation-red-tests-2
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: ubuntu-24.04
+    env:
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      SUPABASE_TELEMETRY_DISABLED: '1'
+      DO_NOT_TRACK: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: RED 1 restore contract
+        run: |
+          set +e
+          node --test scripts/restore-food-catalog-ingestion-reactivation.red.test.mjs > /tmp/red1.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/red1.log
+          test "$status" -ne 0
+          grep -q "restore block builder must exist" /tmp/red1.log
+          echo "RED1_RESTORE_BLOCK_CONTRACT_CONFIRMED"
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+      - name: Replay exact starting migration authority
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/plan7-red-replay.log --prove-future-order
+      - name: RED 2 database authority missing
+        run: |
+          set -euo pipefail
+          evidence="$(psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select json_build_object('tableExists',to_regclass('public.food_catalog_ingestion_restore_blocks') is not null,'guardExists',to_regprocedure('private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)') is not null,'guardBeforeReplay',coalesce(position('food_catalog_ingestion_require_not_restore_blocked_v1' in pg_get_functiondef('public.food_catalog_ingestion_acquire_lease_v2(jsonb)'::regprocedure)) > 0 and position('food_catalog_ingestion_require_not_restore_blocked_v1' in pg_get_functiondef('public.food_catalog_ingestion_acquire_lease_v2(jsonb)'::regprocedure)) < position('food_catalog_ingestion_replay_operation_v2' in pg_get_functiondef('public.food_catalog_ingestion_acquire_lease_v2(jsonb)'::regprocedure)),false))::text")"
+          echo "$evidence"
+          node -e 'const e=JSON.parse(process.argv[1]); if(e.tableExists&&e.guardExists&&e.guardBeforeReplay) process.exit(0); console.error("EXPECTED_DATABASE_AUTHORITY_RED", e); process.exit(1)' "$evidence" >/tmp/red2.out 2>/tmp/red2.err && exit 1 || true
+          cat /tmp/red2.err
+          grep -q "EXPECTED_DATABASE_AUTHORITY_RED" /tmp/red2.err
+          echo "RED2_DATABASE_AUTHORITY_CONFIRMED"
+      - name: RED 3 replay bypass
+        run: |
+          set +e
+          psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 > /tmp/red3.log 2>&1 <<'SQL'
+          begin;
+          create or replace function pg_temp.plan7_expect_restore_block_rejection(p_command jsonb)
+          returns void language plpgsql as $$
+          begin
+            begin
+              perform public.food_catalog_ingestion_acquire_lease_v2(p_command);
+            exception when sqlstate '55000' then
+              if sqlerrm like 'Restored Food Catalog ingestion run is operationally blocked%' then return; end if;
+              raise;
+            end;
+            raise exception 'RED3_EXPECTED_REPLAY_BYPASS: same acquire command replayed despite restore block';
+          end
+          $$;
+
+          select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
+            'operationId','72000000-0000-4000-8000-000000000001','commandChecksumSha256',repeat('1',64),
+            'executionMode','dry_run','attemptNumber',1,'manifestContentChecksumSha256',repeat('a',64),
+            'semanticIdentityChecksumSha256',repeat('b',64),
+            'source',jsonb_build_object('provider','synthetic-reference','dataset','plan7-red','sourceVersion','2026.09','sourceReleaseDate','2026-09-17','licenseName','Fixture License','licenseReference','fixture-license','sourceReference','fixture://plan7-red','sourceChecksumSha256',repeat('c',64),'importerVersion','plan7-red','configChecksumSha256',repeat('d',64)),
+            'expectedMutations',jsonb_build_object('input',0,'accepted',0,'rejected',0,'matched',0,'created',0,'possibleDuplicate',0,'quarantined',0)
+          ));
+          update public.food_ingestion_batches set review_state='approved', reviewed_at=clock_timestamp(), approved_at=clock_timestamp(), approval_reference='plan7-red'
+          where semantic_identity_checksum_sha256=repeat('b',64);
+          select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
+            'operationId','72000000-0000-4000-8000-000000000002','commandChecksumSha256',repeat('2',64),
+            'executionMode','production','attemptNumber',1,'manifestContentChecksumSha256',repeat('a',64),
+            'semanticIdentityChecksumSha256',repeat('b',64),
+            'source',jsonb_build_object('provider','synthetic-reference','dataset','plan7-red','sourceVersion','2026.09','sourceReleaseDate','2026-09-17','licenseName','Fixture License','licenseReference','fixture-license','sourceReference','fixture://plan7-red','sourceChecksumSha256',repeat('c',64),'importerVersion','plan7-red','configChecksumSha256',repeat('d',64)),
+            'expectedMutations',jsonb_build_object('input',0,'accepted',0,'rejected',0,'matched',0,'created',0,'possibleDuplicate',0,'quarantined',0)
+          ));
+          create temporary table plan7_red_run as
+          select id, status, lease_epoch from public.food_ingestion_runs where execution_mode='production' and attempt_number=1 and batch_id=(select id from public.food_ingestion_batches where semantic_identity_checksum_sha256=repeat('b',64));
+          create table public.food_catalog_ingestion_restore_blocks(
+            run_id uuid primary key references public.food_ingestion_runs(id),
+            restored_status text not null check (restored_status in ('prepared','running')),
+            restored_lease_epoch bigint not null,
+            blocked_at timestamptz not null default clock_timestamp()
+          );
+          create temporary table plan7_red_command(command jsonb not null);
+          insert into plan7_red_command values (jsonb_build_object(
+            'operationId','72000000-0000-4000-8000-000000000003','commandChecksumSha256',repeat('3',64),
+            'runId',(select id from plan7_red_run),'leaseOwner','plan7-red-worker','leaseToken','72000000-0000-4000-8000-000000000101','leaseSeconds',120
+          ));
+          select public.food_catalog_ingestion_acquire_lease_v2((select command from plan7_red_command));
+          insert into public.food_catalog_ingestion_restore_blocks(run_id,restored_status,restored_lease_epoch)
+          select id,status,lease_epoch from public.food_ingestion_runs where id=(select id from plan7_red_run);
+          select pg_temp.plan7_expect_restore_block_rejection((select command from plan7_red_command));
+          rollback;
+          SQL
+          status=$?
+          set -e
+          cat /tmp/red3.log
+          test "$status" -ne 0
+          grep -q "RED3_EXPECTED_REPLAY_BYPASS" /tmp/red3.log
+          echo "RED3_REPLAY_BYPASS_CONFIRMED"
