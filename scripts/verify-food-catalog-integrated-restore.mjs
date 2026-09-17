@@ -40,11 +40,13 @@ const PROTECTED_OWNER_STATE_RELATIONS = Object.freeze([
   "food_catalog_governance_capability_assignments",
   "food_catalog_governance_policy_versions",
   "food_catalog_governance_policy_pointer",
+  "food_catalog_correction_report_member_payloads",
   "food_personal_override_revisions",
   "food_personal_overrides",
   "food_personal_override_operations",
   "food_personal_corrections",
   "food_favorites",
+  "user_food_favorites",
 ]);
 
 function sha256(value) {
@@ -344,6 +346,11 @@ export function buildOwnerBindingEvidenceSql() {
   SELECT user_id, 'personal_correction'::text AS source FROM public.food_personal_corrections
   UNION
   SELECT user_id, 'favorite'::text AS source FROM public.food_favorites
+  UNION
+  SELECT user_id, 'transitional_favorite'::text AS source FROM public.user_food_favorites
+  UNION
+  SELECT reporter_user_id AS user_id, 'correction_report_member_payload'::text AS source
+  FROM public.food_catalog_correction_report_member_payloads
 ), owner_id AS (
   SELECT DISTINCT user_id FROM required_owner WHERE user_id IS NOT NULL
 ), evidence AS (
