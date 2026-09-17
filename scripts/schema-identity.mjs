@@ -49,6 +49,21 @@ export function buildFoodCatalogSchemaIdentitySql() {
       ':definition=' || pg_get_constraintdef(con.oid, false) AS part_identity
     FROM pg_constraint con
     JOIN relation_scope r ON r.oid = con.conrelid
+  ), index_parts AS (
+    SELECT
+      'index'::text AS part_kind,
+      r.nspname || '.' || r.relname || ':' || index_class.relname ||
+      ':unique=' || i.indisunique::text ||
+      ':primary=' || i.indisprimary::text ||
+      ':exclusion=' || i.indisexclusion::text ||
+      ':valid=' || i.indisvalid::text ||
+      ':ready=' || i.indisready::text ||
+      ':predicate=' || coalesce(pg_get_expr(i.indpred, i.indrelid, false), '') ||
+      ':expressions=' || coalesce(pg_get_expr(i.indexprs, i.indrelid, false), '') ||
+      ':definition=' || pg_get_indexdef(i.indexrelid, 0, false) AS part_identity
+    FROM pg_index i
+    JOIN relation_scope r ON r.oid = i.indrelid
+    JOIN pg_class index_class ON index_class.oid = i.indexrelid
   ), policy_parts AS (
     SELECT
       'policy'::text AS part_kind,
@@ -122,6 +137,7 @@ export function buildFoodCatalogSchemaIdentitySql() {
     SELECT * FROM column_parts
     UNION ALL SELECT * FROM relation_parts
     UNION ALL SELECT * FROM constraint_parts
+    UNION ALL SELECT * FROM index_parts
     UNION ALL SELECT * FROM policy_parts
     UNION ALL SELECT * FROM trigger_parts
     UNION ALL SELECT * FROM function_parts
