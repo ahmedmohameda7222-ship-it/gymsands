@@ -72,6 +72,11 @@ export function buildFoodCatalogSchemaIdentitySql() {
     FROM pg_trigger t
     JOIN relation_scope r ON r.oid = t.tgrelid
     WHERE NOT t.tgisinternal
+  ), trigger_function_scope AS (
+    SELECT DISTINCT t.tgfoid AS oid
+    FROM pg_trigger t
+    JOIN relation_scope r ON r.oid = t.tgrelid
+    WHERE NOT t.tgisinternal
   ), function_scope AS (
     SELECT
       p.oid,
@@ -92,6 +97,7 @@ export function buildFoodCatalogSchemaIdentitySql() {
             OR p.proname = 'normalize_nutrition_food_search_text'
           )
         )
+        OR p.oid IN (SELECT oid FROM trigger_function_scope)
       )
   ), function_parts AS (
     SELECT
