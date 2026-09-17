@@ -10,6 +10,7 @@ const plan6MigrationName = "20260908100000_food_catalog_governance_control_plane
 const plan6ExactnessCorrectionName = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
 const plan7ReconciliationMigrationName = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
 const plan7OwnerExportMigrationName = "20260915170012_food_catalog_owner_correction_export.sql";
+const plan7IngestionReactivationMigrationName = "20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql";
 
 function read(relativePath: string) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
@@ -69,6 +70,10 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
         localFile: plan7OwnerExportMigrationName,
         state: "pending",
       }),
+      expect.objectContaining({
+        localFile: plan7IngestionReactivationMigrationName,
+        state: "pending",
+      }),
     ]);
     for (const pendingEntry of pendingEntries) {
       expect(pendingEntry).not.toHaveProperty("productionVersion");
@@ -94,11 +99,11 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
       productionVersion: "20260907215257",
       productionName: "food_catalog_search_serving_semantics_correction",
     }));
-    expect(ledger.pendingCount).toBe(2);
-    expect(ledger.unresolvedCount).toBe(2);
+    expect(ledger.pendingCount).toBe(3);
+    expect(ledger.unresolvedCount).toBe(3);
     expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(2);
-    expect(ledger.historyRepair.unresolvedCount).toBe(2);
+    expect(ledger.historyRepair.pendingCount).toBe(3);
+    expect(ledger.historyRepair.unresolvedCount).toBe(3);
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {
