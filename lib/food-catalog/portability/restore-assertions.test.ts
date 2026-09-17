@@ -127,7 +127,10 @@ describe("Plan 7 restore assertion engine", () => {
     ]) expect(runtime).toContain(fragment);
 
     const wrapper = readFileSync("lib/food-catalog/portability/pre-pointer-verification.mjs", "utf8");
-    expect(wrapper).toMatch(/restore-food-catalog-portable\.mjs/);
+    expect(wrapper).not.toMatch(/restore-food-catalog-portable\.mjs/);
+    expect(wrapper).not.toMatch(/process\.argv|PLAN7_RESTORE_DATABASE_URL/);
+    expect(wrapper).toMatch(/buildPrePointerVerificationSql\(input,\s*databaseUrl\)/);
+    expect(wrapper).toMatch(/explicit disposable restore database URL/);
     expect(wrapper).toMatch(/verifyCanonicalPrePointerGeneration/);
   });
 });
