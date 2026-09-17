@@ -10,7 +10,7 @@ function hexEnvelope(segment, values) {
 }
 
 describe("Plan 7 authoritative export stable-key ordering", () => {
-  it("accepts PostgreSQL C-ordered text keys even when JSON escaping would reverse their serialized order", async () => {
+  it("accepts PostgreSQL C-ordered text keys across JSON escaping and non-BMP Unicode boundaries", async () => {
     const root = await mkdtemp(join(tmpdir(), "plan7-export-stable-key-order-"));
     const binDir = join(root, "bin");
     const outputDir = join(root, "artifact");
@@ -20,6 +20,8 @@ describe("Plan 7 authoritative export stable-key ordering", () => {
     const rows = [
       { food_key: { pgType: "text", text: "a\n" } },
       { food_key: { pgType: "text", text: "a!" } },
+      { food_key: { pgType: "text", text: "\uE000" } },
+      { food_key: { pgType: "text", text: "\u{10000}" } },
     ];
     const lines = [
       `__PLAN7_META__${JSON.stringify({
@@ -62,7 +64,7 @@ describe("Plan 7 authoritative export stable-key ordering", () => {
           protected: false,
         }],
       });
-      assert.equal(manifest.segments[0].rowCount, 2);
+      assert.equal(manifest.segments[0].rowCount, 4);
     } finally {
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
