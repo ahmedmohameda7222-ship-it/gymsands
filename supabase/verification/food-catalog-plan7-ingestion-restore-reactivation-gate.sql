@@ -10,7 +10,7 @@ end
 $$;
 
 create or replace function pg_temp.plan7_restore_gate_expect_55000(p_sql text, p_message text)
-returns void language plpgsql as $$
+returns void language plpgsql as $
 begin
   begin
     execute p_sql;
@@ -19,7 +19,39 @@ begin
     when sqlstate '55000' then return;
   end;
 end
-$$;
+$;
+
+create or replace function pg_temp.plan7_restore_gate_expect_23505(p_sql text, p_message text)
+returns void language plpgsql as $
+declare
+  v_rejected boolean := false;
+begin
+  begin
+    execute p_sql;
+  exception
+    when sqlstate '23505' then v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'Plan 7 expected acquire replay identity conflict did not occur: %', p_message;
+  end if;
+end
+$;
+
+create or replace function pg_temp.plan7_restore_gate_expect_failure(p_sql text, p_message text)
+returns void language plpgsql as $
+declare
+  v_rejected boolean := false;
+begin
+  begin
+    execute p_sql;
+  exception
+    when others then v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'Plan 7 expected fail-closed replay authority rejection did not occur: %', p_message;
+  end if;
+end
+$;
 
 -- RED harness: remember whether the migration-built table existed, but create the
 -- target-local shape transactionally on the starting SHA so the replay bypass can
@@ -94,6 +126,24 @@ update plan7_restore_gate_ids set running_run_id=(
   select id from public.food_ingestion_runs where batch_id=plan7_restore_gate_ids.batch_id and execution_mode='production' and attempt_number=1
 );
 
+-- Prepare a second valid Production run. It stays unblocked while replay identity
+-- tests exercise whether persisted operation authority can be redirected by caller runId.
+select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
+  'operationId','7a000000-0000-4000-8000-000000000008','commandChecksumSha256',repeat('8',64),
+  'executionMode','production','attemptNumber',2,
+  'manifestContentChecksumSha256',repeat('7',64),'semanticIdentityChecksumSha256',repeat('8',64),
+  'source',jsonb_build_object(
+    'provider','synthetic-reference','dataset','restore-gate-fixture','sourceVersion','2026.09',
+    'sourceReleaseDate','2026-09-17','licenseName','Fixture License','licenseReference','fixture-license',
+    'sourceReference','fixture://plan7-restore-gate','sourceChecksumSha256',repeat('9',64),
+    'importerVersion','plan7-restore-gate-test','configChecksumSha256',repeat('a',64)
+  ),
+  'expectedMutations',jsonb_build_object('input',0,'accepted',0,'rejected',0,'matched',0,'created',0,'possibleDuplicate',0,'quarantined',0)
+));
+update plan7_restore_gate_ids set prepared_run_id=(
+  select id from public.food_ingestion_runs where batch_id=plan7_restore_gate_ids.batch_id and execution_mode='production' and attempt_number=2
+);
+
 -- Normal local acquisition must remain available.
 select public.food_catalog_ingestion_acquire_lease_v2(jsonb_build_object(
   'operationId','7a000000-0000-4000-8000-000000000005','commandChecksumSha256',repeat('5',64),
@@ -104,6 +154,48 @@ select pg_temp.plan7_restore_gate_assert((
   select status='running' and lease_epoch=1 and lease_owner='worker-local'
   from public.food_ingestion_runs where id=(select running_run_id from plan7_restore_gate_ids)
 ), 'unblocked local Production acquisition regression');
+
+-- Correct acquire replay on an unblocked run must remain idempotent.
+select pg_temp.plan7_restore_gate_assert((
+  select replay_result->>'runId'=(select running_run_id::text from plan7_restore_gate_ids)
+  from (
+    select public.food_catalog_ingestion_acquire_lease_v2(jsonb_build_object(
+      'operationId','7a000000-0000-4000-8000-000000000005','commandChecksumSha256',repeat('5',64),
+      'runId',(select running_run_id from plan7_restore_gate_ids),
+      'leaseOwner','worker-local','leaseToken','7a000000-0000-4000-8000-000000000101','leaseSeconds',120
+    )) as replay_result
+  ) replay
+), 'ordinary unblocked acquire replay regression');
+
+-- RED: an existing unblocked acquire operation must reject caller run substitution
+-- instead of returning the persisted result for another run.
+select pg_temp.plan7_restore_gate_expect_23505(format(
+  'select public.food_catalog_ingestion_acquire_lease_v2(%L::jsonb)',
+  jsonb_build_object(
+    'operationId','7a000000-0000-4000-8000-000000000005','commandChecksumSha256',repeat('5',64),
+    'runId',(select prepared_run_id from plan7_restore_gate_ids),
+    'leaseOwner','worker-local','leaseToken','7a000000-0000-4000-8000-000000000101','leaseSeconds',120
+  )::text
+), 'unblocked replay caller/stored run mismatch');
+
+-- RED: persisted acquire authority whose result_json.runId disagrees with its
+-- stored operation run_id must fail closed. Mutation is transaction-local.
+savepoint plan7_inconsistent_acquire_operation;
+alter table public.food_ingestion_control_operations disable trigger food_ingestion_control_operations_immutable;
+update public.food_ingestion_control_operations
+set result_json=jsonb_set(result_json,'{runId}',to_jsonb((select prepared_run_id::text from plan7_restore_gate_ids)),false)
+where operation_id='7a000000-0000-4000-8000-000000000005'::uuid;
+alter table public.food_ingestion_control_operations enable trigger food_ingestion_control_operations_immutable;
+select pg_temp.plan7_restore_gate_expect_failure(format(
+  'select public.food_catalog_ingestion_acquire_lease_v2(%L::jsonb)',
+  jsonb_build_object(
+    'operationId','7a000000-0000-4000-8000-000000000005','commandChecksumSha256',repeat('5',64),
+    'runId',(select running_run_id from plan7_restore_gate_ids),
+    'leaseOwner','worker-local','leaseToken','7a000000-0000-4000-8000-000000000101','leaseSeconds',120
+  )::text
+), 'persisted acquire run_id/result_json.runId inconsistency');
+rollback to savepoint plan7_inconsistent_acquire_operation;
+release savepoint plan7_inconsistent_acquire_operation;
 
 -- Normal stale takeover must also remain available before a restore block exists.
 update public.food_ingestion_runs
@@ -123,6 +215,26 @@ select pg_temp.plan7_restore_gate_assert((
 
 insert into public.food_catalog_ingestion_restore_blocks(run_id,restored_status,restored_lease_epoch)
 values ((select running_run_id from plan7_restore_gate_ids),'running',2);
+
+-- RED: the restore guard must follow persisted replay authority, not caller runId.
+-- Run B is valid and unblocked; the same operation/checksum belongs to blocked run A.
+select pg_temp.plan7_restore_gate_expect_55000(format(
+  'select public.food_catalog_ingestion_acquire_lease_v2(%L::jsonb)',
+  jsonb_build_object(
+    'operationId','7a000000-0000-4000-8000-000000000006','commandChecksumSha256',repeat('6',64),
+    'runId',(select prepared_run_id from plan7_restore_gate_ids),
+    'leaseOwner','worker-takeover','leaseToken','7a000000-0000-4000-8000-000000000102','leaseSeconds',120
+  )::text
+), 'blocked stored replay with different valid unblocked caller run');
+
+select pg_temp.plan7_restore_gate_expect_55000(format(
+  'select public.food_catalog_ingestion_acquire_lease_v2(%L::jsonb)',
+  jsonb_build_object(
+    'operationId','7a000000-0000-4000-8000-000000000006','commandChecksumSha256',repeat('6',64),
+    'runId','7a000000-0000-4000-8000-000000000099'::uuid,
+    'leaseOwner','worker-takeover','leaseToken','7a000000-0000-4000-8000-000000000102','leaseSeconds',120
+  )::text
+), 'blocked stored replay with nonexistent caller run');
 
 -- Strong RED: this exact command already has a replayable success. On the starting
 -- SHA it is returned before any restore-aware predicate. Correct authority must
@@ -146,21 +258,6 @@ select pg_temp.plan7_restore_gate_expect_55000(format(
   )::text
 ), 'fresh acquire against blocked running restore');
 
-select public.food_catalog_ingestion_prepare_execution_v2(jsonb_build_object(
-  'operationId','7a000000-0000-4000-8000-000000000008','commandChecksumSha256',repeat('8',64),
-  'executionMode','production','attemptNumber',2,
-  'manifestContentChecksumSha256',repeat('7',64),'semanticIdentityChecksumSha256',repeat('8',64),
-  'source',jsonb_build_object(
-    'provider','synthetic-reference','dataset','restore-gate-fixture','sourceVersion','2026.09',
-    'sourceReleaseDate','2026-09-17','licenseName','Fixture License','licenseReference','fixture-license',
-    'sourceReference','fixture://plan7-restore-gate','sourceChecksumSha256',repeat('9',64),
-    'importerVersion','plan7-restore-gate-test','configChecksumSha256',repeat('a',64)
-  ),
-  'expectedMutations',jsonb_build_object('input',0,'accepted',0,'rejected',0,'matched',0,'created',0,'possibleDuplicate',0,'quarantined',0)
-));
-update plan7_restore_gate_ids set prepared_run_id=(
-  select id from public.food_ingestion_runs where batch_id=plan7_restore_gate_ids.batch_id and execution_mode='production' and attempt_number=2
-);
 insert into public.food_catalog_ingestion_restore_blocks(run_id,restored_status,restored_lease_epoch)
 values ((select prepared_run_id from plan7_restore_gate_ids),'prepared',0);
 select pg_temp.plan7_restore_gate_expect_55000(format(
