@@ -143,13 +143,30 @@ async function loadCanonicalNutritionExport(supabase: SupabaseClient, userId: st
   return Object.fromEntries(entries) as Record<CanonicalNutritionExportTable, Awaited<ReturnType<typeof loadAllOwnedRows>>>;
 }
 
-async function loadPlan7PersonalOverrideExport(supabase: SupabaseClient, userId: string) {
-  return Promise.all(
-    PLAN7_PERSONAL_OVERRIDE_EXPORT_SPECS.map(async (spec) => ({
-      spec,
-      result: await loadAllOwnedRows(supabase, userId, spec.table, "*", spec.orderColumns),
-    })),
-  );
+type Plan7PersonalOverrideExport = Record<
+  (typeof PLAN7_PERSONAL_OVERRIDE_EXPORT_SPECS)[number]["exportKey"],
+  Record<string, unknown>[]
+>;
+
+async function loadPlan7PersonalOverrideExport(supabase: SupabaseClient): Promise<Plan7PersonalOverrideExport> {
+  const result = await supabase.rpc("food_catalog_export_owner_personal_overrides_v1");
+  if (result.error) {
+    throw new Error(`Personal override export failed: ${result.error.message}`);
+  }
+  if (!result.data || typeof result.data !== "object" || Array.isArray(result.data)) {
+    throw new Error("Personal override export returned an invalid payload.");
+  }
+
+  const payload = result.data as Record<string, unknown>;
+  const exportData = {} as Plan7PersonalOverrideExport;
+  for (const spec of PLAN7_PERSONAL_OVERRIDE_EXPORT_SPECS) {
+    const rows = payload[spec.exportKey];
+    if (!Array.isArray(rows)) {
+      throw new Error(`Personal override export omitted ${spec.exportKey}.`);
+    }
+    exportData[spec.exportKey] = rows as Record<string, unknown>[];
+  }
+  return exportData;
 }
 
 async function loadOwnerCorrectionReportMemberPayloads(supabase: SupabaseClient) {
@@ -175,7 +192,7 @@ export async function buildCurrentUserDataExport(
     loadAllOwnedRows(supabase, user.id, "workout_session_prescription_metric_targets", prescriptionTargetSelection, ["workout_session_id", "snapshot_item_id", "prescription_set_id", "metric_key", "metric_version", "side", "id"]),
     loadAllOwnedRows(supabase, user.id, "exercise_setup_notes", setupNoteSelection, ["created_at", "id"]),
     loadCanonicalNutritionExport(supabase, user.id),
-    loadPlan7PersonalOverrideExport(supabase, user.id),
+    loadPlan7PersonalOverrideExport(supabase),
     loadOwnerCorrectionReportMemberPayloads(supabase),
   ]);
 
@@ -204,9 +221,8 @@ export async function buildCurrentUserDataExport(
     if (exportResult.error) result.warnings.push(`${table} could not be included in this export.`);
     nutrition[canonicalNutritionExportKeys[table]] = exportResult.data ?? [];
   }
-  for (const { spec, result: exportResult } of personalOverrides) {
-    if (exportResult.error) result.warnings.push(`${spec.table} could not be included in this export.`);
-    nutrition[spec.exportKey] = exportResult.data ?? [];
+  for (const spec of PLAN7_PERSONAL_OVERRIDE_EXPORT_SPECS) {
+    nutrition[spec.exportKey] = personalOverrides[spec.exportKey];
   }
   nutrition.correction_report_member_payloads = correctionReportMemberPayloads;
 
