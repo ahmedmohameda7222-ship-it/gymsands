@@ -105,15 +105,17 @@ test("forward migration binds acquire replay authority under one advisory lock",
   const lock = helper.indexOf("pg_advisory_xact_lock(hashtextextended(v_operation_id::text, 0))");
   const lookup = helper.indexOf("from public.food_ingestion_control_operations");
   const persistedGuard = helper.indexOf("private.food_catalog_ingestion_require_not_restore_blocked_v1(v_row.run_id)");
-  const callerBinding = helper.indexOf("p_caller_run_id");
+  const replayReturn = helper.lastIndexOf("return v_row.result_json");
   assert.notEqual(lock, -1, "specialized helper must take operation advisory lock");
   assert.notEqual(lookup, -1, "specialized helper must read persisted operation authority");
   assert.ok(lock < lookup, "advisory lock must precede persisted operation lookup");
   assert.notEqual(persistedGuard, -1, "persisted operation run_id must enter restore-block guard");
-  assert.match(helper, /result_json\s*->>\s*'runId'/u);
-  assert.match(helper, /v_row\.run_id/u);
+  assert.match(helper, /v_result_run_id\s*:=\s*nullif\(v_row\.result_json->>'runId',\s*''\)::uuid/iu);
+  assert.match(helper, /v_result_run_id\s+is\s+null\s+or\s+v_result_run_id\s+is\s+distinct\s+from\s+v_row\.run_id/iu);
+  assert.match(helper, /p_caller_run_id\s+is\s+distinct\s+from\s+v_row\.run_id/iu);
   assert.match(helper, /23505/u);
-  assert.ok(callerBinding !== -1 && callerBinding < helper.lastIndexOf("return v_row.result_json"), "caller/stored run binding must happen before replay return");
+  assert.ok(persistedGuard < replayReturn, "persisted-run restore guard must happen before replay return");
+  assert.ok(helper.search(/p_caller_run_id\s+is\s+distinct\s+from\s+v_row\.run_id/iu) < replayReturn, "caller/stored run binding must happen before replay return");
 
   for (const role of ["public","anon","authenticated","service_role"]) {
     assert.match(sql, new RegExp(`revoke all on function private\\.food_catalog_ingestion_replay_acquire_operation_v2\\(jsonb, uuid\\) from ${role}`, "iu"));
