@@ -304,6 +304,17 @@ select pg_temp.plan7_restore_gate_assert(not exists(
 select pg_temp.plan7_restore_gate_assert(not has_function_privilege('anon','private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)','EXECUTE'), 'anon cannot execute private restore guard');
 select pg_temp.plan7_restore_gate_assert(not has_function_privilege('authenticated','private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)','EXECUTE'), 'authenticated cannot execute private restore guard');
 select pg_temp.plan7_restore_gate_assert(not has_function_privilege('service_role','private.food_catalog_ingestion_require_not_restore_blocked_v1(uuid)','EXECUTE'), 'service_role cannot execute private restore guard');
+select pg_temp.plan7_restore_gate_assert(to_regprocedure('private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb,uuid)') is not null, 'specialized acquire replay helper exists');
+select pg_temp.plan7_restore_gate_assert(not exists(
+  select 1
+  from pg_proc function_acl
+  cross join lateral aclexplode(coalesce(function_acl.proacl, acldefault('f', function_acl.proowner))) grant_acl
+  where function_acl.oid='private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb,uuid)'::regprocedure
+    and grant_acl.grantee=0
+), 'PUBLIC cannot execute specialized acquire replay helper');
+select pg_temp.plan7_restore_gate_assert(not has_function_privilege('anon','private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb,uuid)','EXECUTE'), 'anon cannot execute specialized acquire replay helper');
+select pg_temp.plan7_restore_gate_assert(not has_function_privilege('authenticated','private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb,uuid)','EXECUTE'), 'authenticated cannot execute specialized acquire replay helper');
+select pg_temp.plan7_restore_gate_assert(not has_function_privilege('service_role','private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb,uuid)','EXECUTE'), 'service_role cannot execute specialized acquire replay helper');
 select pg_temp.plan7_restore_gate_assert((
   select count(*)=1 from pg_constraint
   where conrelid='public.food_catalog_ingestion_restore_blocks'::regclass and contype='f'
@@ -317,16 +328,28 @@ select pg_temp.plan7_restore_gate_assert((
 ), 'restore-block status check is exactly nonterminal prepared/running authority');
 
 select pg_temp.plan7_restore_gate_assert((
-  select position('food_catalog_ingestion_require_not_restore_blocked_v1' in definition) > 0
-     and position('food_catalog_ingestion_require_not_restore_blocked_v1' in definition)
-       < position('food_catalog_ingestion_replay_operation_v2' in definition)
-  from (select pg_get_functiondef('public.food_catalog_ingestion_acquire_lease_v2(jsonb)'::regprocedure) as definition) function_definition
-), 'restore guard executes before acquire operation replay');
+  select
+    position('pg_advisory_xact_lock' in helper_definition) > 0
+    and position('pg_advisory_xact_lock' in helper_definition)
+      < position('from public.food_ingestion_control_operations' in lower(helper_definition))
+    and position('food_catalog_ingestion_require_not_restore_blocked_v1(v_row.run_id)' in helper_definition) > 0
+    and position('p_caller_run_id is distinct from v_row.run_id' in lower(helper_definition)) > 0
+    and position('food_catalog_ingestion_replay_acquire_operation_v2' in acquire_definition) > 0
+    and position('food_catalog_ingestion_replay_operation_v2' in acquire_definition) = 0
+  from (
+    select
+      pg_get_functiondef('private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb,uuid)'::regprocedure) as helper_definition,
+      pg_get_functiondef('public.food_catalog_ingestion_acquire_lease_v2(jsonb)'::regprocedure) as acquire_definition
+  ) function_definitions
+), 'acquire replay identity binding executes under the operation advisory lock before replay return');
 
 -- Terminal history has no restore-block row and cannot be reacquired through normal authority.
 select pg_temp.plan7_restore_gate_assert(not exists(
   select 1 from public.food_catalog_ingestion_restore_blocks where run_id=(select dry_run_id from plan7_restore_gate_ids)
 ), 'terminal completed run needs no restore block');
+
+select json_object_agg(case_name,passed order by case_name)::text
+from plan7_restore_gate_outcomes;
 
 select pg_temp.plan7_restore_gate_assert(
   not exists(select 1 from plan7_restore_gate_outcomes where not passed),
