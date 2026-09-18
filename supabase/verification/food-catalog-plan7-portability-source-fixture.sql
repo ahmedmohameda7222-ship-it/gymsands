@@ -37,6 +37,7 @@
 \set ingestion_run '71000000-0000-4000-8000-000000000a11'
 \set ingestion_dry_run '71000000-0000-4000-8000-000000000a12'
 \set ingestion_reconciliation '71000000-0000-4000-8000-000000000a13'
+\set ingestion_acquire_operation '71000000-0000-4000-8000-000000000a31'
 \set override_revision '71000000-0000-4000-8000-000000000b01'
 \set override_operation '71000000-0000-4000-8000-000000000b11'
 \set personal_correction '71000000-0000-4000-8000-000000000b21'
@@ -236,6 +237,18 @@ insert into public.food_ingestion_runs(
   '2026-09-10T18:20:00Z','2026-09-10T18:20:00Z','plan7-worker','71000000-0000-4000-8000-000000000a21',3,
   '2026-09-10T18:20:00Z','2026-09-10T18:20:30Z','2026-09-10T19:20:00Z'
 );
+insert into public.food_ingestion_control_operations(
+  operation_id,command_name,command_checksum_sha256,run_id,result_json,created_at
+) values(
+  :'ingestion_acquire_operation','food_catalog_ingestion_acquire_lease_v2',repeat('c',64),:'ingestion_run',
+  jsonb_build_object(
+    'runId',:'ingestion_run'::uuid,
+    'leaseToken','71000000-0000-4000-8000-000000000a21'::uuid,
+    'leaseEpoch',3,
+    'leaseExpiresAt','2026-09-10T19:20:00+00:00'
+  ),
+  '2026-09-10T18:20:01Z'
+);
 
 -- Protected FULL_DR authority: live human binding, runtime policy extension, lineage, and personal state.
 insert into public.food_catalog_governance_principals(
@@ -370,6 +383,19 @@ begin
       and lease_acquired_at is not null and lease_heartbeat_at is not null and lease_expires_at is not null
   ) then
     raise exception 'Plan7 source fixture valid live lease was not established.';
+  end if;
+  if not exists(
+    select 1
+    from public.food_ingestion_control_operations operation
+    where operation.operation_id='71000000-0000-4000-8000-000000000a31'::uuid
+      and operation.command_name='food_catalog_ingestion_acquire_lease_v2'
+      and lower(operation.command_checksum_sha256)=repeat('c',64)
+      and operation.run_id='71000000-0000-4000-8000-000000000a11'::uuid
+      and operation.result_json->>'runId'='71000000-0000-4000-8000-000000000a11'
+      and operation.result_json->>'leaseToken'='71000000-0000-4000-8000-000000000a21'
+      and (operation.result_json->>'leaseEpoch')::bigint=3
+  ) then
+    raise exception 'Plan7 source fixture replayable acquire authority was not established.';
   end if;
 end
 $plan7_fixture$;
