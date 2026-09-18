@@ -257,6 +257,7 @@ describe("Plan 7 integrated restore evidence", () => {
       guardPrecedesReplay: true,
       freshAcquireRejected: true,
       replayAcquireRejected: true,
+      replayableAcquireOperationCount: 1,
       expectedBlockedRunCount: 1,
       observedBlockedRunCount: 1,
     };
@@ -264,11 +265,18 @@ describe("Plan 7 integrated restore evidence", () => {
       verified: true,
       expectedBlockedRunCount: 1,
       observedBlockedRunCount: 1,
+      replayableAcquireOperationCount: 1,
+      restoredIngestionHistoryPreserved: true,
+      restoredIngestionLeaseNeutralized: true,
+      restoredIngestionOperationalBlockVerified: true,
+      restoredIngestionAcquireRejected: true,
+      restoredIngestionReplayRejected: true,
     });
     for (const field of ["durableHistoryPreserved","transientLeaseStateNeutralized","restoreBlocksExact","guardPrecedesReplay","freshAcquireRejected","replayAcquireRejected"]) {
       assert.throws(() => evaluateRestoredIngestionExecutionEvidence({ ...good, [field]: false }), /ingestion|isolation|failed/i);
     }
     assert.throws(() => evaluateRestoredIngestionExecutionEvidence({ ...good, observedBlockedRunCount: 2 }), /count|mismatch/i);
+    assert.throws(() => evaluateRestoredIngestionExecutionEvidence({ ...good, replayableAcquireOperationCount: 0 }), /replayable|acquire authority/i);
   });
 
   it("builds all mandatory assertions from runtime proof classes without caller trust booleans", () => {
