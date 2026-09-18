@@ -60,6 +60,24 @@ const canonicalNutritionExportKeys: Record<CanonicalNutritionExportTable, string
   food_favorites: "food_favorites_v1",
 };
 
+export const PLAN7_PERSONAL_OVERRIDE_EXPORT_SPECS = Object.freeze([
+  Object.freeze({
+    table: "food_personal_override_revisions",
+    exportKey: "personal_food_override_revisions",
+    orderColumns: Object.freeze(["food_id", "revision_number", "id"]),
+  }),
+  Object.freeze({
+    table: "food_personal_overrides",
+    exportKey: "personal_food_overrides",
+    orderColumns: Object.freeze(["food_id"]),
+  }),
+  Object.freeze({
+    table: "food_personal_override_operations",
+    exportKey: "personal_food_override_operations",
+    orderColumns: Object.freeze(["operation_id"]),
+  }),
+] as const);
+
 async function loadAllTimelineRows(supabase: SupabaseClient, userId: string) {
   const rows: Record<string, unknown>[] = [];
   for (let from = 0; ; from += exportPageSize) {
@@ -100,7 +118,7 @@ async function loadAllOwnedRows(
   userId: string,
   table: string,
   selection: string,
-  orderColumns: string | string[]
+  orderColumns: string | readonly string[]
 ) {
   const rows: Record<string, unknown>[] = [];
   const ordered = Array.isArray(orderColumns) ? orderColumns : [orderColumns];
@@ -125,12 +143,49 @@ async function loadCanonicalNutritionExport(supabase: SupabaseClient, userId: st
   return Object.fromEntries(entries) as Record<CanonicalNutritionExportTable, Awaited<ReturnType<typeof loadAllOwnedRows>>>;
 }
 
+type Plan7PersonalOverrideExport = Record<
+  (typeof PLAN7_PERSONAL_OVERRIDE_EXPORT_SPECS)[number]["exportKey"],
+  Record<string, unknown>[]
+>;
+
+async function loadPlan7PersonalOverrideExport(supabase: SupabaseClient): Promise<Plan7PersonalOverrideExport> {
+  const result = await supabase.rpc("food_catalog_export_owner_personal_overrides_v1");
+  if (result.error) {
+    throw new Error(`Personal override export failed: ${result.error.message}`);
+  }
+  if (!result.data || typeof result.data !== "object" || Array.isArray(result.data)) {
+    throw new Error("Personal override export returned an invalid payload.");
+  }
+
+  const payload = result.data as Record<string, unknown>;
+  const exportData = {} as Plan7PersonalOverrideExport;
+  for (const spec of PLAN7_PERSONAL_OVERRIDE_EXPORT_SPECS) {
+    const rows = payload[spec.exportKey];
+    if (!Array.isArray(rows)) {
+      throw new Error(`Personal override export omitted ${spec.exportKey}.`);
+    }
+    exportData[spec.exportKey] = rows as Record<string, unknown>[];
+  }
+  return exportData;
+}
+
+async function loadOwnerCorrectionReportMemberPayloads(supabase: SupabaseClient) {
+  const result = await supabase.rpc("food_catalog_export_owner_correction_report_payloads_v1");
+  if (result.error) {
+    throw new Error(`Correction report member payload export failed: ${result.error.message}`);
+  }
+  if (!Array.isArray(result.data)) {
+    throw new Error("Correction report member payload export returned an invalid payload.");
+  }
+  return result.data as Record<string, unknown>[];
+}
+
 export async function buildCurrentUserDataExport(
   supabase: SupabaseClient,
   user: Pick<User, "id" | "email" | "created_at">
 ) {
   const result = await buildLegacyCurrentUserDataExport(supabase, user);
-  const [timelineResult, performanceMetricResult, setDetailResult, setSegmentResult, setSegmentMetricResult, prescriptionSetResult, prescriptionTargetResult, setupNoteResult, canonicalNutrition] = await Promise.all([
+  const [timelineResult, performanceMetricResult, setDetailResult, setSegmentResult, setSegmentMetricResult, prescriptionSetResult, prescriptionTargetResult, setupNoteResult, canonicalNutrition, personalOverrides, correctionReportMemberPayloads] = await Promise.all([
     loadAllTimelineRows(supabase, user.id),
     loadAllPerformanceMetricValues(supabase, user.id),
     loadAllOwnedRows(supabase, user.id, "exercise_log_set_details", setDetailSelection, "exercise_log_id"),
@@ -140,6 +195,8 @@ export async function buildCurrentUserDataExport(
     loadAllOwnedRows(supabase, user.id, "workout_session_prescription_metric_targets", prescriptionTargetSelection, ["workout_session_id", "snapshot_item_id", "prescription_set_id", "metric_key", "metric_version", "side", "id"]),
     loadAllOwnedRows(supabase, user.id, "exercise_setup_notes", setupNoteSelection, ["created_at", "id"]),
     loadCanonicalNutritionExport(supabase, user.id),
+    loadPlan7PersonalOverrideExport(supabase),
+    loadOwnerCorrectionReportMemberPayloads(supabase),
   ]);
 
   if (timelineResult.error) result.warnings.push("Workout session timeline events could not be included in this export.");
@@ -167,6 +224,10 @@ export async function buildCurrentUserDataExport(
     if (exportResult.error) result.warnings.push(`${table} could not be included in this export.`);
     nutrition[canonicalNutritionExportKeys[table]] = exportResult.data ?? [];
   }
+  for (const spec of PLAN7_PERSONAL_OVERRIDE_EXPORT_SPECS) {
+    nutrition[spec.exportKey] = personalOverrides[spec.exportKey];
+  }
+  nutrition.correction_report_member_payloads = correctionReportMemberPayloads;
 
   // Canonical consumer rows retain the exact frozen facts used historically.
   // `frozen_snapshot`, `frozen_recipe_snapshot`, and `frozen_item_snapshot`

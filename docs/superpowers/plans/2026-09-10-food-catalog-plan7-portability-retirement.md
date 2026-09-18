@@ -280,7 +280,7 @@ Frozen Diary/Recipe/Saved Meal/Meal Plan values remain unchanged; Food IDs remai
 
 **Interfaces:**
 - Consumes: external key-provider interface.
-- Produces: AES-256-GCM encrypted protected owner/security segments plus Plan 6 owner privacy export coverage.
+- Produces: AES-256-GCM encrypted protected owner/security segments plus complete owner privacy-export coverage for Plan 6 personal overrides and owner-authored correction-report member payloads.
 
 - [ ] **Step 1: Write encryption negative tests first.**
 
@@ -294,13 +294,15 @@ Same plaintext encrypted twice must keep the same plaintext semantic SHA-256 and
 
 CI uses ephemeral test keys only; no paid KMS is required by architecture.
 
-- [ ] **Step 4: Close privacy export gap for Plan 6 personal overrides.**
+- [ ] **Step 4: Close privacy export gaps for Plan 6 owner state and correction-report member payloads.**
 
-Owner export includes exact `food_personal_overrides`, revisions and operations for that user only.
+Owner export must include exact `food_personal_overrides`, `food_personal_override_revisions`, and `food_personal_override_operations` rows for the requesting user. It must also include every `food_catalog_correction_report_member_payloads` row whose `reporter_user_id` is that requesting user, preserving the member-authored claim text, description, evidence payload, report identity, and ownership needed for an exact owner export. Owner-scoped tests must prove User A can never receive User B personal-override or correction-report payload rows. Durable global correction Case/report metadata remains governed global audit/history and is not reclassified as owner-private payload merely to satisfy export.
 
-- [ ] **Step 5: Preserve governance history without automatic operational reactivation.**
+- [ ] **Step 5: Preserve governance and ingestion history without automatic operational reactivation.**
 
 Service credentials are not portable; human identity binding and service rebind are external gates; `food.outbox.deliver` remains unavailable until replay reconciliation.
+
+For Production ingestion history, restore preserves the exact historical `prepared`/`running` status and durable `lease_epoch` while neutralizing environment-local lease credentials. Reconstruct target-local `food_catalog_ingestion_restore_blocks` state for every restored nonterminal Production run; do not add that relation to the portable artifact or profile completeness. The acquire RPC must consult the private restore-block guard before operation replay, so both fresh acquisition and replay of restored acquire authority fail closed. Blocks do not clear automatically and no service/user unblock endpoint is part of this task; future reconciliation/cutover requires separate explicit authorization. This repository-only migration does not grant general Task 14 authority or Production apply authority.
 
 - [ ] **Step 6: Never publish real Production protected plaintext to GitHub Actions.**
 

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "foodId": "71000000-0000-4000-8000-000000000101",
+  "frozenSnapshot": {
+    "foodName": "Plan7 Portable Chicken",
+    "calories": 165,
+    "proteinG": 31,
+    "servingLabel": "100 g"
+  },
+  "frozenSnapshotSha256": "8fd3c43e8c81bf89bef19612f14b9dfd4a410367604b9bcfac5b2ec84c5ebe79",
+  "note": "Controlled reference-only Product fixture. The snapshot is not global Food Catalog authority and is never restored into Product tables."
+}
