@@ -256,7 +256,8 @@ describe("Plan 7 integrated restore evidence", () => {
       restoreBlocksExact: true,
       guardPrecedesReplay: true,
       freshAcquireRejected: true,
-      replayAcquireRejected: true,
+      exactRunReplayRejected: true,
+      substitutedRunReplayRejected: true,
       replayableAcquireOperationCount: 1,
       expectedBlockedRunCount: 1,
       observedBlockedRunCount: 1,
@@ -270,9 +271,11 @@ describe("Plan 7 integrated restore evidence", () => {
       restoredIngestionLeaseNeutralized: true,
       restoredIngestionOperationalBlockVerified: true,
       restoredIngestionAcquireRejected: true,
+      exactRunReplayRejected: true,
+      substitutedRunReplayRejected: true,
       restoredIngestionReplayRejected: true,
     });
-    for (const field of ["durableHistoryPreserved","transientLeaseStateNeutralized","restoreBlocksExact","guardPrecedesReplay","freshAcquireRejected","replayAcquireRejected"]) {
+    for (const field of ["durableHistoryPreserved","transientLeaseStateNeutralized","restoreBlocksExact","guardPrecedesReplay","freshAcquireRejected","exactRunReplayRejected","substitutedRunReplayRejected"]) {
       assert.throws(() => evaluateRestoredIngestionExecutionEvidence({ ...good, [field]: false }), /ingestion|isolation|failed/i);
     }
     assert.throws(() => evaluateRestoredIngestionExecutionEvidence({ ...good, observedBlockedRunCount: 2 }), /count|mismatch/i);
