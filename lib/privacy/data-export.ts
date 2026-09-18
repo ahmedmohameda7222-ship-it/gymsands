@@ -174,7 +174,10 @@ async function loadOwnerCorrectionReportMemberPayloads(supabase: SupabaseClient)
   if (result.error) {
     throw new Error(`Correction report member payload export failed: ${result.error.message}`);
   }
-  return result.data ?? [];
+  if (!Array.isArray(result.data)) {
+    throw new Error("Correction report member payload export returned an invalid payload.");
+  }
+  return result.data as Record<string, unknown>[];
 }
 
 export async function buildCurrentUserDataExport(
