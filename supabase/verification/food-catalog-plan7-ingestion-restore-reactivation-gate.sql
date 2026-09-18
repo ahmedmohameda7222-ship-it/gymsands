@@ -177,24 +177,31 @@ values ('unblocked_mismatched_replay_rejected', pg_temp.plan7_restore_gate_is_23
 )));
 
 -- RED: persisted acquire authority whose result_json.runId disagrees with its
--- stored operation run_id must fail closed. Mutation is transaction-local.
-savepoint plan7_inconsistent_acquire_operation;
-alter table public.food_ingestion_control_operations disable trigger food_ingestion_control_operations_immutable;
-update public.food_ingestion_control_operations
-set result_json=jsonb_set(result_json,'{runId}',to_jsonb((select prepared_run_id::text from plan7_restore_gate_ids)),false)
-where operation_id='7a000000-0000-4000-8000-000000000005'::uuid;
-alter table public.food_ingestion_control_operations enable trigger food_ingestion_control_operations_immutable;
+-- stored operation run_id must fail closed. This adversarial row exists only inside
+-- the outer rollback-only verification transaction.
+insert into public.food_ingestion_control_operations(
+  operation_id,command_name,command_checksum_sha256,run_id,result_json
+) values (
+  '7a000000-0000-4000-8000-00000000000a'::uuid,
+  'food_catalog_ingestion_acquire_lease_v2',
+  repeat('a',64),
+  (select running_run_id from plan7_restore_gate_ids),
+  jsonb_build_object(
+    'runId',(select prepared_run_id from plan7_restore_gate_ids),
+    'leaseToken','7a000000-0000-4000-8000-00000000010a'::uuid,
+    'leaseEpoch',1,
+    'leaseExpiresAt',clock_timestamp()+interval '2 minutes'
+  )
+);
 insert into plan7_restore_gate_outcomes(case_name,passed)
 values ('inconsistent_persisted_run_result_rejected', pg_temp.plan7_restore_gate_is_failure(format(
   'select public.food_catalog_ingestion_acquire_lease_v2(%L::jsonb)',
   jsonb_build_object(
-    'operationId','7a000000-0000-4000-8000-000000000005','commandChecksumSha256',repeat('5',64),
+    'operationId','7a000000-0000-4000-8000-00000000000a','commandChecksumSha256',repeat('a',64),
     'runId',(select running_run_id from plan7_restore_gate_ids),
-    'leaseOwner','worker-local','leaseToken','7a000000-0000-4000-8000-000000000101','leaseSeconds',120
+    'leaseOwner','worker-local','leaseToken','7a000000-0000-4000-8000-00000000010a','leaseSeconds',120
   )::text
 )));
-rollback to savepoint plan7_inconsistent_acquire_operation;
-release savepoint plan7_inconsistent_acquire_operation;
 
 -- Normal stale takeover must also remain available before a restore block exists.
 update public.food_ingestion_runs
