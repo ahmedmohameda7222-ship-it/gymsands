@@ -104,12 +104,15 @@ select pg_temp.owner_correction_export_assert(
 
 select pg_temp.owner_correction_export_assert(
   (
-    select count(*)=1 and bool_and(p.pronargs=0) and bool_and(p.prosecdef)
+    select count(*)=1
+      and bool_and(p.pronargs=0)
+      and bool_and(p.prosecdef)
+      and bool_and(pg_get_function_result(p.oid)='jsonb')
     from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.proname='food_catalog_export_owner_correction_report_payloads_v1'
   ),
-  'RPC must exist as one zero-argument SECURITY DEFINER function'
+  'RPC must exist as one zero-argument SECURITY DEFINER scalar JSONB function'
 );
 select pg_temp.owner_correction_export_assert(
   has_function_privilege('authenticated','public.food_catalog_export_owner_correction_report_payloads_v1()','EXECUTE'),
@@ -275,25 +278,28 @@ create or replace function pg_temp.owner_correction_export_exact(
 )
 returns void language plpgsql as $$
 declare
-  v_count bigint;
-  v_row record;
+  v_payload jsonb;
+  v_row jsonb;
 begin
-  select count(*) into v_count from public.food_catalog_export_owner_correction_report_payloads_v1();
-  if v_count<>1 then
-    raise exception 'Plan 7 owner correction export expected exactly one owner row, got %',v_count;
+  v_payload:=public.food_catalog_export_owner_correction_report_payloads_v1();
+  if jsonb_typeof(v_payload)<>'array' or jsonb_array_length(v_payload)<>1 then
+    raise exception 'Plan 7 owner correction export expected exactly one owner row';
   end if;
-  select * into strict v_row from public.food_catalog_export_owner_correction_report_payloads_v1();
-  if v_row.report_id is distinct from p_expected_report
-    or v_row.reporter_user_id is distinct from p_expected_owner
-    or v_row.claim_text is distinct from p_expected_claim
-    or v_row.description is distinct from p_expected_description
-    or v_row.evidence is distinct from p_expected_evidence
-    or v_row.created_at is distinct from p_expected_created_at then
+
+  v_row:=v_payload->0;
+  if (v_row->>'report_id')::uuid is distinct from p_expected_report
+    or (v_row->>'reporter_user_id')::uuid is distinct from p_expected_owner
+    or v_row->>'claim_text' is distinct from p_expected_claim
+    or v_row->>'description' is distinct from p_expected_description
+    or v_row->'evidence' is distinct from p_expected_evidence
+    or (v_row->>'created_at')::timestamptz is distinct from p_expected_created_at then
     raise exception 'Plan 7 owner correction export changed an owner payload field';
   end if;
+
   if exists(
-    select 1 from public.food_catalog_export_owner_correction_report_payloads_v1()
-    where report_id=p_forbidden_report
+    select 1
+    from jsonb_array_elements(v_payload) item
+    where (item->>'report_id')::uuid=p_forbidden_report
   ) then
     raise exception 'Plan 7 owner correction export leaked a cross-owner report';
   end if;
@@ -336,7 +342,7 @@ select pg_temp.owner_correction_export_rejected(
   'authenticated personal override caller without owner identity'
 );
 select pg_temp.owner_correction_export_rejected(
-  'select * from public.food_catalog_export_owner_correction_report_payloads_v1()',
+  'select public.food_catalog_export_owner_correction_report_payloads_v1()',
   'authenticated caller without owner identity'
 );
 reset role;
@@ -350,7 +356,7 @@ select pg_temp.owner_correction_export_rejected(
   'anon personal override RPC execution'
 );
 select pg_temp.owner_correction_export_rejected(
-  'select * from public.food_catalog_export_owner_correction_report_payloads_v1()',
+  'select public.food_catalog_export_owner_correction_report_payloads_v1()',
   'anon RPC execution'
 );
 select pg_temp.owner_correction_export_rejected(
@@ -371,7 +377,7 @@ select pg_temp.owner_correction_export_rejected(
   'service_role personal override RPC execution'
 );
 select pg_temp.owner_correction_export_rejected(
-  'select * from public.food_catalog_export_owner_correction_report_payloads_v1()',
+  'select public.food_catalog_export_owner_correction_report_payloads_v1()',
   'service_role RPC execution'
 );
 select pg_temp.owner_correction_export_rejected(
