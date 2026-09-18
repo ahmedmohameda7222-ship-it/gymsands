@@ -295,6 +295,11 @@ Cross-environment restore does **not** automatically reactivate external operati
 - Human authority requires exact auth/account identity binding validation before runtime enablement.
 - Do not enable `food.outbox.deliver` service authority until pending outbox/event replay reconciliation is explicitly complete.
 - The restored target remains operationally isolated until external identity/authorization cutover is separately approved.
+- Restore preserves the original durable status and `lease_epoch` of Production ingestion runs, including `prepared` and `running` history; restore must not fabricate `cancelled`, `failed`, or any other terminal state.
+- Environment-local ingestion lease credentials remain transient and are neutralized on restore. Each restored Production run whose historical status is `prepared` or `running` receives a target-local `food_catalog_ingestion_restore_blocks` row reconstructed from the restored run ID, status, and durable lease epoch.
+- The target-local restore block is operational control state, not portable source-of-truth data: it is not exported in the artifact, is rebuilt on every cross-environment restore, and has no automatic clearing path.
+- Acquire authority must reject a restore-blocked run before operation replay, so both a fresh lease acquisition and a restored replayable acquire operation fail closed until a separately authorized future reconciliation explicitly permits reactivation.
+- This restore gate grants no general Task 14 reconciliation authority and no Production apply, cutover, or unblock authority.
 
 Owner rows fail closed if target identity mapping is absent, ambiguous, or cross-owner.
 
