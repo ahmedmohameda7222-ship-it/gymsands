@@ -195,7 +195,7 @@ export function areDeclaredTransientRelationsNeutralized(rules, relationResults)
 }
 
 export function evaluateRestoredIngestionExecutionEvidence(observed) {
-  for (const field of ["durableHistoryPreserved","transientLeaseStateNeutralized","restoreBlocksExact","guardPrecedesReplay","freshAcquireRejected","replayAcquireRejected"]) {
+  for (const field of ["durableHistoryPreserved","transientLeaseStateNeutralized","restoreBlocksExact","guardPrecedesReplay","freshAcquireRejected","exactRunReplayRejected","substitutedRunReplayRejected"]) {
     if (observed?.[field] !== true) throw new Error(`Restored ingestion execution isolation failed: ${field}.`);
   }
   const expectedBlockedRunCount = Number(observed.expectedBlockedRunCount);
@@ -217,43 +217,56 @@ export function evaluateRestoredIngestionExecutionEvidence(observed) {
     restoredIngestionLeaseNeutralized: true,
     restoredIngestionOperationalBlockVerified: true,
     restoredIngestionAcquireRejected: true,
+    exactRunReplayRejected: true,
+    substitutedRunReplayRejected: true,
     restoredIngestionReplayRejected: true,
   });
 }
 
 function verifyRestoredIngestionExecutionIsolation(databaseUrl, sourceRows, sourceOperationRows) {
   const expected = [];
+  const sourceRuns = [];
   for (const sourceRow of sourceRows) {
     const { map } = parseCanonicalRow(sourceRow);
     const id = map.get("id")?.text;
     const executionMode = map.get("execution_mode")?.text;
     const status = map.get("status")?.text;
     const leaseEpoch = map.get("lease_epoch")?.text;
+    if (typeof id !== "string" || !/^[0-9a-f-]{36}$/iu.test(id)) {
+      throw new Error("Canonical ingestion run identity is malformed.");
+    }
+    sourceRuns.push(Object.freeze({ runId: id, executionMode, status }));
     if (executionMode !== "production" || (status !== "prepared" && status !== "running")) continue;
-    if (typeof id !== "string" || !/^[0-9a-f-]{36}$/iu.test(id) || typeof leaseEpoch !== "string" || !/^[0-9]+$/u.test(leaseEpoch)) {
+    if (typeof leaseEpoch !== "string" || !/^[0-9]+$/u.test(leaseEpoch)) {
       throw new Error("Canonical nonterminal Production ingestion history is malformed.");
     }
     expected.push(Object.freeze({ runId: id, status, leaseEpoch: Number(leaseEpoch) }));
   }
   expected.sort((a, b) => a.runId.localeCompare(b.runId));
+  sourceRuns.sort((a, b) => a.runId.localeCompare(b.runId));
   const expectedRunIds = new Set(expected.map((entry) => entry.runId));
   const replayAuthorities = [];
   for (const operationRow of sourceOperationRows) {
     const { map } = parseCanonicalRow(operationRow);
     const commandName = map.get("command_name")?.text;
-    const runId = map.get("run_id")?.text;
-    if (commandName !== "food_catalog_ingestion_acquire_lease_v2" || !expectedRunIds.has(runId)) continue;
+    if (commandName !== "food_catalog_ingestion_acquire_lease_v2") continue;
     const operationId = map.get("operation_id")?.text;
     const commandChecksumSha256 = map.get("command_checksum_sha256")?.text?.toLowerCase();
+    const runId = map.get("run_id")?.text;
     const resultText = map.get("result_json")?.text;
     let resultJson;
     try { resultJson = JSON.parse(resultText ?? "null"); } catch { throw new Error("Canonical replayable ingestion acquire result is malformed."); }
+    const resultRunId = resultJson?.runId;
     if (typeof operationId !== "string" || !/^[0-9a-f-]{36}$/iu.test(operationId)
       || typeof commandChecksumSha256 !== "string" || !SHA256.test(commandChecksumSha256)
-      || resultJson?.runId !== runId) {
+      || typeof runId !== "string" || !/^[0-9a-f-]{36}$/iu.test(runId)
+      || typeof resultRunId !== "string" || !/^[0-9a-f-]{36}$/iu.test(resultRunId)
+      || resultRunId !== runId) {
       throw new Error("Canonical replayable ingestion acquire authority is malformed.");
     }
-    replayAuthorities.push(Object.freeze({ operationId, commandChecksumSha256, runId }));
+    if (expectedRunIds.has(runId)) {
+      replayAuthorities.push(Object.freeze({ operationId, commandName, commandChecksumSha256, runId, resultRunId }));
+    }
   }
   replayAuthorities.sort((a, b) => a.operationId.localeCompare(b.operationId));
   const targetRows = JSON.parse(runPsql(databaseUrl, `select coalesce(json_agg(json_build_object(
@@ -270,10 +283,23 @@ function verifyRestoredIngestionExecutionIsolation(databaseUrl, sourceRows, sour
   const durableHistoryPreserved = stableStringify(normalizedTarget) === stableStringify(expected);
   const transientLeaseStateNeutralized = targetRows.every((row) => row.leaseOwnerNull && row.leaseTokenNull && row.leaseAcquiredAtNull && row.leaseHeartbeatAtNull && row.leaseExpiresAtNull);
   const restoreBlocksExact = stableStringify(normalizedBlocks) === stableStringify(expected);
-  const functionDefinition = runPsql(databaseUrl, "select pg_get_functiondef('public.food_catalog_ingestion_acquire_lease_v2(jsonb)'::regprocedure);");
-  const guardIndex = functionDefinition.indexOf("food_catalog_ingestion_require_not_restore_blocked_v1");
-  const replayIndex = functionDefinition.indexOf("food_catalog_ingestion_replay_operation_v2");
-  const guardPrecedesReplay = guardIndex >= 0 && replayIndex > guardIndex;
+  const acquireDefinition = runPsql(databaseUrl, "select pg_get_functiondef('public.food_catalog_ingestion_acquire_lease_v2(jsonb)'::regprocedure);");
+  const replayHelperDefinition = runPsql(databaseUrl, "select pg_get_functiondef('private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb,uuid)'::regprocedure);");
+  const lockIndex = replayHelperDefinition.indexOf("pg_advisory_xact_lock");
+  const lookupIndex = replayHelperDefinition.toLowerCase().indexOf("from public.food_ingestion_control_operations");
+  const persistedGuardIndex = replayHelperDefinition.indexOf("food_catalog_ingestion_require_not_restore_blocked_v1(v_row.run_id)");
+  const callerBindingIndex = replayHelperDefinition.toLowerCase().indexOf("p_caller_run_id is distinct from v_row.run_id");
+  const replayReturnIndex = replayHelperDefinition.indexOf("return v_row.result_json");
+  const specializedCallIndex = acquireDefinition.indexOf("food_catalog_ingestion_replay_acquire_operation_v2");
+  const acquireReturnIndex = acquireDefinition.indexOf("if v_replay is not null then return v_replay; end if;");
+  const guardPrecedesReplay = lockIndex >= 0
+    && lookupIndex > lockIndex
+    && persistedGuardIndex > lookupIndex
+    && callerBindingIndex > persistedGuardIndex
+    && replayReturnIndex > callerBindingIndex
+    && specializedCallIndex >= 0
+    && acquireReturnIndex > specializedCallIndex
+    && !acquireDefinition.includes("food_catalog_ingestion_replay_operation_v2");
   let freshAcquireRejected = expected.length === 0;
   if (expected.length > 0) {
     const runId = expected[0].runId;
@@ -296,29 +322,60 @@ select current_setting('plan7.ingestion_restore_blocked',true);
 rollback;`);
     freshAcquireRejected = probe.split(/\r?\n/u).some((line) => line.trim() === "true" || line.trim() === "t");
   }
-  let replayAcquireRejected = expected.length === 0;
+  let exactRunReplayRejected = expected.length === 0;
+  let substitutedRunReplayRejected = expected.length === 0;
   if (replayAuthorities.length > 0) {
-    replayAcquireRejected = true;
+    exactRunReplayRejected = true;
+    substitutedRunReplayRejected = true;
     for (const authority of replayAuthorities) {
-      const probe = runPsql(databaseUrl, `begin;
-do $plan7_integrated_ingestion_replay_gate$
+      const substitution = sourceRuns.find((entry) => entry.runId !== authority.runId && !expectedRunIds.has(entry.runId));
+      if (!substitution) throw new Error("Restored ingestion replay substitution proof requires a distinct source run identity.");
+      const substitutionTargetReady = runPsql(databaseUrl, `select exists(
+        select 1 from public.food_ingestion_runs run where run.id='${substitution.runId}'::uuid
+      ) and not exists(
+        select 1 from public.food_catalog_ingestion_restore_blocks restore_block where restore_block.run_id='${substitution.runId}'::uuid
+      );`).split(/\r?\n/u).some((line) => line.trim() === "true" || line.trim() === "t");
+      if (!substitutionTargetReady) throw new Error("Restored ingestion replay substitution run is missing or restore-blocked.");
+
+      const exactProbe = runPsql(databaseUrl, `begin;
+do $plan7_integrated_ingestion_exact_replay_gate$
 begin
   begin
     perform public.food_catalog_ingestion_acquire_lease_v2(jsonb_build_object(
       'operationId','${authority.operationId}'::uuid,'commandChecksumSha256','${authority.commandChecksumSha256}',
-      'runId','${authority.runId}'::uuid,'leaseOwner','plan7-integrated-restored-replay-probe',
+      'runId','${authority.runId}'::uuid,'leaseOwner','plan7-integrated-restored-exact-replay-probe',
       'leaseToken','7b000000-0000-4000-8000-000000000102'::uuid,'leaseSeconds',120
     ));
-    perform set_config('plan7.ingestion_restore_replay_blocked','false',true);
+    perform set_config('plan7.ingestion_restore_exact_replay_blocked','false',true);
   exception when sqlstate '55000' then
-    perform set_config('plan7.ingestion_restore_replay_blocked','true',true);
+    perform set_config('plan7.ingestion_restore_exact_replay_blocked','true',true);
   end;
 end
-$plan7_integrated_ingestion_replay_gate$;
-select current_setting('plan7.ingestion_restore_replay_blocked',true);
+$plan7_integrated_ingestion_exact_replay_gate$;
+select current_setting('plan7.ingestion_restore_exact_replay_blocked',true);
 rollback;`);
-      replayAcquireRejected = replayAcquireRejected
-        && probe.split(/\r?\n/u).some((line) => line.trim() === "true" || line.trim() === "t");
+      exactRunReplayRejected = exactRunReplayRejected
+        && exactProbe.split(/\r?\n/u).some((line) => line.trim() === "true" || line.trim() === "t");
+
+      const substitutedProbe = runPsql(databaseUrl, `begin;
+do $plan7_integrated_ingestion_substituted_replay_gate$
+begin
+  begin
+    perform public.food_catalog_ingestion_acquire_lease_v2(jsonb_build_object(
+      'operationId','${authority.operationId}'::uuid,'commandChecksumSha256','${authority.commandChecksumSha256}',
+      'runId','${substitution.runId}'::uuid,'leaseOwner','plan7-integrated-restored-substituted-replay-probe',
+      'leaseToken','7b000000-0000-4000-8000-000000000103'::uuid,'leaseSeconds',120
+    ));
+    perform set_config('plan7.ingestion_restore_substituted_replay_blocked','false',true);
+  exception when sqlstate '55000' then
+    perform set_config('plan7.ingestion_restore_substituted_replay_blocked','true',true);
+  end;
+end
+$plan7_integrated_ingestion_substituted_replay_gate$;
+select current_setting('plan7.ingestion_restore_substituted_replay_blocked',true);
+rollback;`);
+      substitutedRunReplayRejected = substitutedRunReplayRejected
+        && substitutedProbe.split(/\r?\n/u).some((line) => line.trim() === "true" || line.trim() === "t");
     }
   }
   return evaluateRestoredIngestionExecutionEvidence({
@@ -327,7 +384,8 @@ rollback;`);
     restoreBlocksExact,
     guardPrecedesReplay,
     freshAcquireRejected,
-    replayAcquireRejected,
+    exactRunReplayRejected,
+    substitutedRunReplayRejected,
     replayableAcquireOperationCount: replayAuthorities.length,
     expectedBlockedRunCount: expected.length,
     observedBlockedRunCount: blockRows.length,
@@ -913,6 +971,8 @@ async function main() {
     restoredIngestionLeaseNeutralized: result.restoredIngestionExecution.restoredIngestionLeaseNeutralized,
     restoredIngestionOperationalBlockVerified: result.restoredIngestionExecution.restoredIngestionOperationalBlockVerified,
     restoredIngestionAcquireRejected: result.restoredIngestionExecution.restoredIngestionAcquireRejected,
+    exactRunReplayRejected: result.restoredIngestionExecution.exactRunReplayRejected,
+    substitutedRunReplayRejected: result.restoredIngestionExecution.substitutedRunReplayRejected,
     restoredIngestionReplayRejected: result.restoredIngestionExecution.restoredIngestionReplayRejected,
     transient_neutralization: result.verificationInput.assertions.evidence.find((entry) => entry.id === "transient_neutralization")?.status,
     restoreVerified: result.assertionEvaluation.restoreVerified,
