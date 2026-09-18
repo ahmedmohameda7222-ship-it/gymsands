@@ -101,6 +101,9 @@ test("forward migration binds acquire replay authority under one advisory lock",
   assert.match(sql, /references public\.food_ingestion_runs\(id\) on delete restrict/iu);
   assert.match(sql, /restored_lease_epoch bigint not null check \(restored_lease_epoch >= 0\)/iu);
 
+  assert.equal((sql.match(/create or replace function private\.food_catalog_ingestion_replay_acquire_operation_v2\(/giu) ?? []).length, 1, "migration must define the specialized acquire replay helper exactly once");
+  assert.equal((sql.match(/create or replace function public\.food_catalog_ingestion_acquire_lease_v2\(p_command jsonb\)/giu) ?? []).length, 1, "migration must define acquire authority exactly once");
+
   const helper = specializedReplayDefinition(sql);
   const lock = helper.indexOf("pg_advisory_xact_lock(hashtextextended(v_operation_id::text, 0))");
   const lookup = helper.indexOf("from public.food_ingestion_control_operations");
@@ -124,9 +127,9 @@ test("forward migration binds acquire replay authority under one advisory lock",
 
   const acquire = acquireDefinition(sql);
   const specializedReplay = acquire.indexOf("private.food_catalog_ingestion_replay_acquire_operation_v2(");
-  const replayReturn = acquire.indexOf("if v_replay is not null then return v_replay; end if;");
+  const acquireReplayReturn = acquire.indexOf("if v_replay is not null then return v_replay; end if;");
   assert.notEqual(specializedReplay, -1, "acquire authority must call specialized replay helper");
-  assert.ok(specializedReplay < replayReturn, "specialized replay binding must precede replay return");
+  assert.ok(specializedReplay < acquireReplayReturn, "specialized replay binding must precede replay return");
   assert.doesNotMatch(acquire, /private\.food_catalog_ingestion_replay_operation_v2\(p_command, 'food_catalog_ingestion_acquire_lease_v2'\)/u);
 });
 
