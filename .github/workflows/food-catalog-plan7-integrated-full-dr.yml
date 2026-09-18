@@ -351,6 +351,8 @@ jobs:
             'restoredIngestionLeaseNeutralized',
             'restoredIngestionOperationalBlockVerified',
             'restoredIngestionAcquireRejected',
+            'exactRunReplayRejected',
+            'substitutedRunReplayRejected',
             'restoredIngestionReplayRejected',
           ]) if (ingestion?.[field] !== true) fail(`Restored ingestion operational-isolation proof is missing ${field}: ${JSON.stringify(ingestion)}`);
           if (!(Number(ingestion?.replayableAcquireOperationCount) > 0)) fail(`Restored ingestion replay proof has no replayable source acquire authority: ${JSON.stringify(ingestion)}`);
