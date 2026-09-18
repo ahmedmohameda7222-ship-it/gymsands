@@ -110,8 +110,9 @@ test("forward migration binds acquire replay authority under one advisory lock",
   assert.notEqual(lookup, -1, "specialized helper must read persisted operation authority");
   assert.ok(lock < lookup, "advisory lock must precede persisted operation lookup");
   assert.notEqual(persistedGuard, -1, "persisted operation run_id must enter restore-block guard");
-  assert.match(helper, /v_result_run_id\s*:=\s*nullif\(v_row\.result_json->>'runId',\s*''\)::uuid/iu);
-  assert.match(helper, /v_result_run_id\s+is\s+null\s+or\s+v_result_run_id\s+is\s+distinct\s+from\s+v_row\.run_id/iu);
+  assert.match(helper, /pg_input_is_valid\(v_row\.result_json->>'runId',\s*'uuid'\)/iu);
+  assert.match(helper, /v_result_run_id\s*:=\s*\(v_row\.result_json->>'runId'\)::uuid/iu);
+  assert.match(helper, /v_result_run_id\s+is\s+distinct\s+from\s+v_row\.run_id/iu);
   assert.match(helper, /p_caller_run_id\s+is\s+distinct\s+from\s+v_row\.run_id/iu);
   assert.match(helper, /23505/u);
   assert.ok(persistedGuard < replayReturn, "persisted-run restore guard must happen before replay return");
