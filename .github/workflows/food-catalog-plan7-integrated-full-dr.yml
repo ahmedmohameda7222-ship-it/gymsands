@@ -345,6 +345,17 @@ jobs:
           if (value.assertionEvaluation.failures.length || value.assertionEvaluation.unknown.length) fail(`Integrated assertion evaluation contains failures/unknowns: ${JSON.stringify(value.assertionEvaluation)}`);
           if (!value.protectedSegmentsVerified || !value.search?.sameRestoredTargetVerified) fail(`Integrated evidence linkage failed: protectedSegmentsVerified=${value.protectedSegmentsVerified} sameRestoredTargetVerified=${value.search?.sameRestoredTargetVerified}`);
           if (!value.serviceExecutionBinding?.verified || !/^[0-9a-f]{64}$/.test(value.serviceExecutionBinding?.serviceAuthorityEvidenceSha256 ?? '')) fail(`Restored Service execution binding proof is missing or unbound: ${JSON.stringify(value.serviceExecutionBinding)}`);
+          const ingestion = value.restoredIngestionExecution;
+          for (const field of [
+            'restoredIngestionHistoryPreserved',
+            'restoredIngestionLeaseNeutralized',
+            'restoredIngestionOperationalBlockVerified',
+            'restoredIngestionAcquireRejected',
+            'restoredIngestionReplayRejected',
+          ]) if (ingestion?.[field] !== true) fail(`Restored ingestion operational-isolation proof is missing ${field}: ${JSON.stringify(ingestion)}`);
+          if (!(Number(ingestion?.replayableAcquireOperationCount) > 0)) fail(`Restored ingestion replay proof has no replayable source acquire authority: ${JSON.stringify(ingestion)}`);
+          const transientNeutralization = value.verificationInput?.assertions?.evidence?.find((entry) => entry.id === 'transient_neutralization');
+          if (transientNeutralization?.status !== 'PASS') fail(`transient_neutralization must bind restored ingestion isolation: ${JSON.stringify(transientNeutralization)}`);
           fs.writeFileSync(process.argv[3], `${JSON.stringify(value.verificationInput, null, 2)}\n`, 'utf8');
           NODE
 
