@@ -53,7 +53,64 @@ declare
 begin
   v_operation_id := nullif(p_command->>'operationId', '')::uuid;
   v_checksum := lower(coalesce(p_command->>'commandChecksumSha256', ''));
-  if v_operation_id is null or v_checksum !~ '^[0-9a-f]{64}
+  if v_operation_id is null or length(v_checksum) <> 64 or v_checksum ~ '[^0-9a-f]' then
+    raise exception 'Food Catalog ingestion command requires operationId and SHA-256 command checksum.'
+      using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(v_operation_id::text, 0));
+
+  select *
+    into v_row
+  from public.food_ingestion_control_operations
+  where operation_id = v_operation_id;
+
+  if not found then
+    perform private.food_catalog_ingestion_require_not_restore_blocked_v1(p_caller_run_id);
+    return null;
+  end if;
+
+  if v_row.command_name <> 'food_catalog_ingestion_acquire_lease_v2'
+     or lower(v_row.command_checksum_sha256) <> v_checksum then
+    raise exception 'Food Catalog ingestion operation replay conflict.'
+      using errcode = '23505';
+  end if;
+
+  if v_row.run_id is null then
+    raise exception 'Food Catalog acquire replay authority is missing persisted run identity.'
+      using errcode = '23514';
+  end if;
+
+  begin
+    v_result_run_id := nullif(v_row.result_json->>'runId', '')::uuid;
+  exception
+    when invalid_text_representation then
+      raise exception 'Food Catalog acquire replay authority has invalid persisted result run identity.'
+        using errcode = '23514';
+  end;
+
+  if v_result_run_id is null or v_result_run_id is distinct from v_row.run_id then
+    raise exception 'Food Catalog acquire replay authority run identity is inconsistent.'
+      using errcode = '23514';
+  end if;
+
+  perform private.food_catalog_ingestion_require_not_restore_blocked_v1(v_row.run_id);
+
+  if p_caller_run_id is distinct from v_row.run_id then
+    raise exception 'Food Catalog ingestion acquire replay run identity conflict.'
+      using errcode = '23505';
+  end if;
+
+  return v_row.result_json;
+end
+$function$;
+
+revoke all on function private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb, uuid) from public;
+revoke all on function private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb, uuid) from anon;
+revoke all on function private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb, uuid) from authenticated;
+revoke all on function private.food_catalog_ingestion_replay_acquire_operation_v2(jsonb, uuid) from service_role;
+
+create or replace function public.food_catalog_ingestion_acquire_lease_v2(p_command jsonb)
 returns jsonb
 language plpgsql
 security definer
