@@ -10,7 +10,7 @@ end
 $$;
 
 create or replace function pg_temp.plan7_restore_gate_expect_55000(p_sql text, p_message text)
-returns void language plpgsql as $
+returns void language plpgsql as $plan7_expect_55000$
 begin
   begin
     execute p_sql;
@@ -19,10 +19,10 @@ begin
     when sqlstate '55000' then return;
   end;
 end
-$;
+$plan7_expect_55000$;
 
 create or replace function pg_temp.plan7_restore_gate_expect_23505(p_sql text, p_message text)
-returns void language plpgsql as $
+returns void language plpgsql as $plan7_expect_23505$
 declare
   v_rejected boolean := false;
 begin
@@ -35,10 +35,10 @@ begin
     raise exception 'Plan 7 expected acquire replay identity conflict did not occur: %', p_message;
   end if;
 end
-$;
+$plan7_expect_23505$;
 
 create or replace function pg_temp.plan7_restore_gate_expect_failure(p_sql text, p_message text)
-returns void language plpgsql as $
+returns void language plpgsql as $plan7_expect_failure$
 declare
   v_rejected boolean := false;
 begin
@@ -51,7 +51,7 @@ begin
     raise exception 'Plan 7 expected fail-closed replay authority rejection did not occur: %', p_message;
   end if;
 end
-$;
+$plan7_expect_failure$;
 
 -- RED harness: remember whether the migration-built table existed, but create the
 -- target-local shape transactionally on the starting SHA so the replay bypass can
