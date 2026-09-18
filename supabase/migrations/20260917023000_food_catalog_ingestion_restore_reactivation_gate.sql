@@ -81,15 +81,14 @@ begin
       using errcode = '23514';
   end if;
 
-  begin
-    v_result_run_id := nullif(v_row.result_json->>'runId', '')::uuid;
-  exception
-    when invalid_text_representation then
-      raise exception 'Food Catalog acquire replay authority has invalid persisted result run identity.'
-        using errcode = '23514';
-  end;
+  if v_row.result_json->>'runId' is null
+     or not pg_input_is_valid(v_row.result_json->>'runId', 'uuid') then
+    raise exception 'Food Catalog acquire replay authority has invalid persisted result run identity.'
+      using errcode = '23514';
+  end if;
 
-  if v_result_run_id is null or v_result_run_id is distinct from v_row.run_id then
+  v_result_run_id := (v_row.result_json->>'runId')::uuid;
+  if v_result_run_id is distinct from v_row.run_id then
     raise exception 'Food Catalog acquire replay authority run identity is inconsistent.'
       using errcode = '23514';
   end if;
