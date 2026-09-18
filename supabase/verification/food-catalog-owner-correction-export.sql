@@ -226,7 +226,7 @@ create or replace function pg_temp.owner_personal_override_export_exact(
   p_expected_owner uuid,p_forbidden_owner uuid,p_expected_food uuid,
   p_expected_revision uuid,p_expected_operation uuid
 )
-returns void language plpgsql as $
+returns void language plpgsql as $$
 declare
   v_payload jsonb;
   v_revisions jsonb;
@@ -266,7 +266,7 @@ begin
     raise exception 'Plan 7 personal override export leaked a cross-owner row';
   end if;
 end
-$;
+$$;
 grant execute on function pg_temp.owner_personal_override_export_exact(uuid,uuid,uuid,uuid,uuid) to authenticated;
 
 create or replace function pg_temp.owner_correction_export_exact(
