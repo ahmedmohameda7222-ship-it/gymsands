@@ -153,6 +153,19 @@ describe("Plan 7 owner privacy export coverage", () => {
     expect(fake.fromCalls).not.toContain("food_catalog_correction_cases");
   });
 
+  it("returns correction member payloads as one scalar JSONB array so PostgREST row caps cannot truncate owner history", () => {
+    const sql = readFileSync(OWNER_EXPORT_MIGRATION, "utf8").toLowerCase();
+    const start = sql.indexOf("create or replace function public.food_catalog_export_owner_correction_report_payloads_v1()");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const body = sql.slice(start);
+
+    expect(body).toContain("returns jsonb");
+    expect(body).toContain("jsonb_agg");
+    expect(body).toContain("coalesce(");
+    expect(body).toContain("'[]'::jsonb");
+    expect(body).not.toContain("returns table");
+  });
+
   it("fails closed when the owner correction member payload RPC fails", async () => {
     const fake = createSupabaseFake([]);
     fake.client.rpc = vi.fn(async (name: string) => {
