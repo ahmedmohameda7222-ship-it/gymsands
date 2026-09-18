@@ -35,6 +35,24 @@ function normalizeFunction(sql) {
   return sql.replace(/\r\n/gu, "\n").replace(/[ \t]+$/gmu, "").trim();
 }
 
+function specializedReplayDefinition(sql) {
+  const marker = "create or replace function private.food_catalog_ingestion_replay_acquire_operation_v2(";
+  const start = sql.toLowerCase().indexOf(marker);
+  assert.notEqual(start, -1, "specialized acquire replay helper must exist");
+  const tail = sql.slice(start);
+  const endMarker = "\n$function$;";
+  const end = tail.indexOf(endMarker);
+  assert.notEqual(end, -1, "specialized acquire replay helper must terminate with $function$;");
+  return tail.slice(0, end + endMarker.length);
+}
+
+function normalizeApprovedAcquirePrefix(sql) {
+  return sql.replace(
+    /\n\s*v_replay\s*:=\s*private\.food_catalog_ingestion_replay_acquire_operation_v2\(\s*p_command,\s*v_run_id\s*\);\s*\n\s*if v_replay is not null then return v_replay; end if;/u,
+    "\n  v_replay := private.food_catalog_ingestion_replay_operation_v2(p_command, 'food_catalog_ingestion_acquire_lease_v2');\n  if v_replay is not null then return v_replay; end if;",
+  );
+}
+
 test("restore reconstructs blocks only for nonterminal Production ingestion history", () => {
   assert.equal(typeof restore.buildRestoredIngestionRunBlockSql, "function", "restore block SQL builder must exist");
   const running = "71000000-0000-4000-8000-000000000001";
@@ -75,28 +93,48 @@ test("restore block reconstruction is empty without nonterminal Production histo
   ]), "");
 });
 
-test("forward migration supplies the target-local guard before replay", () => {
+test("forward migration binds acquire replay authority under one advisory lock", () => {
   assert.equal(existsSync(MIGRATION), true, `${MIGRATION} must exist`);
   const sql = readFileSync(MIGRATION, "utf8");
   assert.match(sql, /create table public\.food_catalog_ingestion_restore_blocks/iu);
   assert.match(sql, /alter table public\.food_catalog_ingestion_restore_blocks enable row level security/iu);
   assert.match(sql, /references public\.food_ingestion_runs\(id\) on delete restrict/iu);
   assert.match(sql, /restored_lease_epoch bigint not null check \(restored_lease_epoch >= 0\)/iu);
-  assert.match(sql, /food_catalog_ingestion_require_not_restore_blocked_v1/iu);
+
+  const helper = specializedReplayDefinition(sql);
+  const lock = helper.indexOf("pg_advisory_xact_lock(hashtextextended(v_operation_id::text, 0))");
+  const lookup = helper.indexOf("from public.food_ingestion_control_operations");
+  const persistedGuard = helper.indexOf("private.food_catalog_ingestion_require_not_restore_blocked_v1(v_row.run_id)");
+  const callerBinding = helper.indexOf("p_caller_run_id");
+  assert.notEqual(lock, -1, "specialized helper must take operation advisory lock");
+  assert.notEqual(lookup, -1, "specialized helper must read persisted operation authority");
+  assert.ok(lock < lookup, "advisory lock must precede persisted operation lookup");
+  assert.notEqual(persistedGuard, -1, "persisted operation run_id must enter restore-block guard");
+  assert.match(helper, /result_json\s*->>\s*'runId'/u);
+  assert.match(helper, /v_row\.run_id/u);
+  assert.match(helper, /23505/u);
+  assert.ok(callerBinding !== -1 && callerBinding < helper.lastIndexOf("return v_row.result_json"), "caller/stored run binding must happen before replay return");
+
+  for (const role of ["public","anon","authenticated","service_role"]) {
+    assert.match(sql, new RegExp(`revoke all on function private\\.food_catalog_ingestion_replay_acquire_operation_v2\\(jsonb, uuid\\) from ${role}`, "iu"));
+  }
+
   const acquire = acquireDefinition(sql);
-  const guard = acquire.indexOf("private.food_catalog_ingestion_require_not_restore_blocked_v1(v_run_id)");
-  const replay = acquire.indexOf("private.food_catalog_ingestion_replay_operation_v2(");
-  assert.notEqual(guard, -1, "acquire authority must call restore guard");
-  assert.notEqual(replay, -1, "acquire authority must preserve replay");
-  assert.ok(guard < replay, "restore guard must execute before operation replay");
+  const specializedReplay = acquire.indexOf("private.food_catalog_ingestion_replay_acquire_operation_v2(");
+  const replayReturn = acquire.indexOf("if v_replay is not null then return v_replay; end if;");
+  assert.notEqual(specializedReplay, -1, "acquire authority must call specialized replay helper");
+  assert.ok(specializedReplay < replayReturn, "specialized replay binding must precede replay return");
+  assert.doesNotMatch(acquire, /private\.food_catalog_ingestion_replay_operation_v2\(p_command, 'food_catalog_ingestion_acquire_lease_v2'\)/u);
 });
 
-test("acquire authority is byte-preserved after removing only the restore guard", () => {
+test("acquire authority preserves authoritative semantics outside the approved replay prefix", () => {
   assert.equal(existsSync(MIGRATION), true, `${MIGRATION} must exist`);
   const oldDefinition = acquireDefinition(readFileSync(AUTHORITATIVE, "utf8"));
   const newDefinition = acquireDefinition(readFileSync(MIGRATION, "utf8"));
-  const stripped = newDefinition.replace(/\n\s*perform private\.food_catalog_ingestion_require_not_restore_blocked_v1\(v_run_id\);/u, "");
-  assert.equal(normalizeFunction(stripped), normalizeFunction(oldDefinition));
+  assert.equal(
+    normalizeFunction(normalizeApprovedAcquirePrefix(newDefinition)),
+    normalizeFunction(oldDefinition),
+  );
 });
 
 test("restore-block relation remains target-local and outside portable registry", () => {
