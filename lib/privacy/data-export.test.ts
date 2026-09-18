@@ -142,10 +142,20 @@ function exportSupabaseMock(metricRowCount = 1, timelineRowCount = 1, prescripti
     return builder;
   });
   const rpc = vi.fn(async (name: string) => {
-    if (name !== "food_catalog_export_owner_correction_report_payloads_v1") {
-      throw new Error(`Unexpected RPC ${name}`);
+    if (name === "food_catalog_export_owner_personal_overrides_v1") {
+      return {
+        data: {
+          personal_food_override_revisions: [],
+          personal_food_overrides: [],
+          personal_food_override_operations: [],
+        },
+        error: null,
+      };
     }
-    return { data: [], error: null };
+    if (name === "food_catalog_export_owner_correction_report_payloads_v1") {
+      return { data: [], error: null };
+    }
+    throw new Error(`Unexpected RPC ${name}`);
   });
   return { client: { from, rpc } as unknown as SupabaseClient, calls };
 }
