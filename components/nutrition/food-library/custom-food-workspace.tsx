@@ -1,15 +1,33 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, X } from "lucide-react";
 
 import { foodLibraryApi } from "@/components/nutrition/food-library/food-library-api";
 import { foodLibraryText, type FoodLibraryTextKey } from "@/components/nutrition/food-library/food-library-copy";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
+import {
+  claimPersonalCorrectionOperation,
+  clearPersonalCorrectionOperation,
+  type PendingPersonalCorrectionOperation,
+} from "@/lib/nutrition-v1/personal-correction-operation";
 import type { FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
 
 type Mode = "create" | "edit" | "correction";
 type Duplicate = { id: string; food_name: string; serving_size: string; source: "catalog" | "my_food" };
+type CorrectionAuthority = {
+  foodId: string;
+  hasOverride: boolean;
+  revisionId: string | null;
+  pointerRevision: number;
+  isDeleted: boolean;
+  nutritionOverride: Partial<Record<
+    "calories" | "protein_g" | "carbs_g" | "fat_g" | "saturated_fat_g" | "fiber_g" | "sugars_g" | "sodium_mg",
+    number | null
+  >> | null;
+  servingLabel: string | null;
+  note: string | null;
+};
 
 type Props = {
   mode: Mode;
@@ -23,6 +41,14 @@ function nullableNumber(value: string) {
   if (!clean) return null;
   const number = Number(clean);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function overrideNumber(
+  authority: CorrectionAuthority,
+  key: "calories" | "protein_g" | "carbs_g" | "fat_g",
+) {
+  const value = authority.nutritionOverride?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : null;
 }
 
 export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Props) {
@@ -42,16 +68,71 @@ export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Pro
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [correctionAuthority, setCorrectionAuthority] = useState<CorrectionAuthority | null>(null);
+  const [correctionAuthorityLoading, setCorrectionAuthorityLoading] = useState(false);
+  const pendingCorrectionOperationRef = useRef<PendingPersonalCorrectionOperation | null>(null);
 
   const title = effectiveMode === "create" ? nt("createFood") : effectiveMode === "edit" ? nt("editFood") : nt("personalCorrection");
   const targetId = correctionTarget?.id ?? food?.id ?? null;
   const targetName = correctionTarget?.food_name ?? food?.name ?? name;
   const requiredCalories = effectiveMode !== "correction";
+
+  useEffect(() => {
+    if (effectiveMode !== "correction" || !targetId) {
+      setCorrectionAuthority(null);
+      setCorrectionAuthorityLoading(false);
+      pendingCorrectionOperationRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    setCorrectionAuthorityLoading(true);
+    setCorrectionAuthority(null);
+    setError(null);
+    pendingCorrectionOperationRef.current = null;
+
+    void (async () => {
+      try {
+        const response = await foodLibraryApi(
+          `/api/nutrition/v1/foods/${encodeURIComponent(targetId)}/personal-override`,
+        );
+        const data = await response.json().catch(() => ({})) as CorrectionAuthority & { error?: string };
+        if (!response.ok) throw new Error(data.error || nt("customFoodSaveFailed"));
+        if (cancelled) return;
+        setCorrectionAuthority(data);
+        if (data.hasOverride && !data.isDeleted) {
+          const nextCalories = overrideNumber(data, "calories");
+          const nextProtein = overrideNumber(data, "protein_g");
+          const nextCarbs = overrideNumber(data, "carbs_g");
+          const nextFat = overrideNumber(data, "fat_g");
+          if (nextCalories !== null) setCalories(nextCalories);
+          if (nextProtein !== null) setProtein(nextProtein);
+          if (nextCarbs !== null) setCarbs(nextCarbs);
+          if (nextFat !== null) setFat(nextFat);
+        }
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : nt("customFoodSaveFailed"));
+      } finally {
+        if (!cancelled) setCorrectionAuthorityLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveMode, nt, targetId]);
+
   const canSave = useMemo(() => {
-    if (pending) return false;
-    if (effectiveMode === "correction") return Boolean(targetId) && [calories, protein, carbs, fat].some((value) => value.trim());
+    if (pending || correctionAuthorityLoading) return false;
+    if (effectiveMode === "correction") {
+      return Boolean(
+        targetId
+        && correctionAuthority
+        && [calories, protein, carbs, fat].some((value) => value.trim()),
+      );
+    }
     return Boolean(name.trim() && servingLabel.trim() && calories.trim() && Number.isFinite(Number(calories)) && Number(calories) >= 0);
-  }, [calories, carbs, effectiveMode, fat, name, pending, protein, servingLabel, targetId]);
+  }, [calories, carbs, correctionAuthority, correctionAuthorityLoading, effectiveMode, fat, name, pending, protein, servingLabel, targetId]);
 
   async function submit(createSeparately = false) {
     if (!canSave && !createSeparately) return;
@@ -59,28 +140,59 @@ export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Pro
     setError(null);
     try {
       const operation = effectiveMode === "create" ? "custom_food_create" : effectiveMode === "edit" ? "custom_food_update" : "personal_correction";
-      const input = effectiveMode === "correction"
-        ? {
-            foodId: targetId,
-            calories: nullableNumber(calories),
-            proteinG: nullableNumber(protein),
-            carbsG: nullableNumber(carbs),
-            fatG: nullableNumber(fat),
-            basisAmount: nullableNumber(basisAmount),
-            basisUnit: basisUnit === "g" || basisUnit === "ml" ? basisUnit : null,
-          }
-        : {
-            id: effectiveMode === "edit" ? food?.id : undefined,
-            name,
-            servingLabel,
-            calories: Number(calories),
-            proteinG: nullableNumber(protein),
-            carbsG: nullableNumber(carbs),
-            fatG: nullableNumber(fat),
-            basisAmount: nullableNumber(basisAmount),
-            basisUnit,
-            createSeparately,
-          };
+      let input: Record<string, unknown>;
+      if (effectiveMode === "correction") {
+        if (!correctionAuthority) throw new Error(nt("customFoodSaveFailed"));
+        const existing = correctionAuthority.hasOverride && !correctionAuthority.isDeleted
+          ? correctionAuthority.nutritionOverride
+          : null;
+        const semanticCommand = {
+          foodId: correctionAuthority.foodId,
+          calories: nullableNumber(calories),
+          proteinG: nullableNumber(protein),
+          carbsG: nullableNumber(carbs),
+          fatG: nullableNumber(fat),
+          saturatedFatG: existing?.saturated_fat_g ?? null,
+          fiberG: existing?.fiber_g ?? null,
+          sugarsG: existing?.sugars_g ?? null,
+          sodiumMg: existing?.sodium_mg ?? null,
+          servingLabel: correctionAuthority.hasOverride && !correctionAuthority.isDeleted
+            ? correctionAuthority.servingLabel
+            : null,
+          note: correctionAuthority.hasOverride && !correctionAuthority.isDeleted
+            ? correctionAuthority.note
+            : null,
+        };
+        const claimed = claimPersonalCorrectionOperation(
+          pendingCorrectionOperationRef.current,
+          semanticCommand,
+          {
+            expectedRevisionId: correctionAuthority.hasOverride ? correctionAuthority.revisionId : null,
+            expectedPointerRevision: correctionAuthority.hasOverride ? correctionAuthority.pointerRevision : 0,
+          },
+        );
+        pendingCorrectionOperationRef.current = claimed;
+        input = {
+          ...semanticCommand,
+          operationId: claimed.operationId,
+          expectedRevisionId: claimed.expectedRevisionId,
+          expectedPointerRevision: claimed.expectedPointerRevision,
+        };
+      } else {
+        input = {
+          id: effectiveMode === "edit" ? food?.id : undefined,
+          name,
+          servingLabel,
+          calories: Number(calories),
+          proteinG: nullableNumber(protein),
+          carbsG: nullableNumber(carbs),
+          fatG: nullableNumber(fat),
+          basisAmount: nullableNumber(basisAmount),
+          basisUnit,
+          createSeparately,
+        };
+      }
+
       const response = await foodLibraryApi("/api/nutrition/v1/foods", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -91,6 +203,11 @@ export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Pro
       if (effectiveMode === "create" && result.duplicate) {
         setDuplicate(result.duplicate);
         return;
+      }
+      if (effectiveMode === "correction") {
+        pendingCorrectionOperationRef.current = clearPersonalCorrectionOperation(
+          pendingCorrectionOperationRef.current,
+        );
       }
       onSaved();
     } catch (cause) {
@@ -146,12 +263,14 @@ export function CustomFoodWorkspace({ mode, food = null, onClose, onSaved }: Pro
             <label className="block text-sm font-medium">{nt("servingBasis")}<input value={servingLabel} onChange={(event) => setServingLabel(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 font-normal" required /></label>
           </> : null}
 
-          <fieldset className="space-y-3 border-t border-border/70 pt-5"><legend className="text-sm font-semibold">{nt("nutritionIsFor")}</legend><div className="grid grid-cols-2 gap-3"><label className="text-sm font-medium">{nt("basisAmount")}<input inputMode="decimal" value={basisAmount} onChange={(event) => setBasisAmount(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 font-normal" /></label><label className="text-sm font-medium">{nt("basisUnit")}<select value={basisUnit} onChange={(event) => setBasisUnit(event.target.value as typeof basisUnit)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 font-normal"><option value="g">g</option><option value="ml">ml</option>{effectiveMode !== "correction" ? <><option value="serving">serving</option><option value="piece">piece</option><option value="custom">custom</option></> : null}</select></label></div>
+          <fieldset className="space-y-3 border-t border-border/70 pt-5"><legend className="text-sm font-semibold">{nt("nutritionIsFor")}</legend>
+            {effectiveMode !== "correction" ? <div className="grid grid-cols-2 gap-3"><label className="text-sm font-medium">{nt("basisAmount")}<input inputMode="decimal" value={basisAmount} onChange={(event) => setBasisAmount(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 font-normal" /></label><label className="text-sm font-medium">{nt("basisUnit")}<select value={basisUnit} onChange={(event) => setBasisUnit(event.target.value as typeof basisUnit)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 font-normal"><option value="g">g</option><option value="ml">ml</option><option value="serving">serving</option><option value="piece">piece</option><option value="custom">custom</option></select></label></div> : null}
             <label className="block text-sm font-medium">{nt("calories")}<input inputMode="decimal" value={calories} onChange={(event) => setCalories(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 font-normal" required={requiredCalories} /></label>
             <div className="grid grid-cols-3 gap-2"><label className="text-xs font-medium">{nt("macroProtein")}<input aria-label={nt("macroProtein")} inputMode="decimal" value={protein} onChange={(event) => setProtein(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-2 text-sm font-normal" /></label><label className="text-xs font-medium">{nt("macroCarbs")}<input aria-label={nt("macroCarbs")} inputMode="decimal" value={carbs} onChange={(event) => setCarbs(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-2 text-sm font-normal" /></label><label className="text-xs font-medium">{nt("macroFat")}<input aria-label={nt("macroFat")} inputMode="decimal" value={fat} onChange={(event) => setFat(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-2 text-sm font-normal" /></label></div>
             <p className="text-xs text-muted-foreground">{nt("notAvailable")} values stay unknown; they are never saved as zero.</p>
           </fieldset>
 
+          {correctionAuthorityLoading ? <p className="text-sm text-muted-foreground" role="status">{nt("saving")}</p> : null}
           {pending ? <p className="text-sm text-muted-foreground" role="status">{nt("saving")}</p> : null}
           {error ? <p role="alert" className="rounded-xl border border-destructive/30 p-3 text-sm text-destructive">{error}</p> : null}
 
