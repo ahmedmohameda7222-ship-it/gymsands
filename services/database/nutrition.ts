@@ -241,7 +241,6 @@ export async function getGlobalFoods(
 ): Promise<CatalogFoodItem[]> {
   return searchCurrentCatalog(query, {
     category: options.category,
-    cuisine: options.kitchen,
     limit: options.limit
   });
 }
@@ -600,10 +599,15 @@ export async function getFoodLibrary(
   return foods.filter((food) => {
     const matchesQuery = !normalizedQuery || normalizeText(food.food_name).includes(normalizedQuery);
     const matchesCategory = !options.category || food.category === options.category;
+    if (food.is_global !== false) {
+      // V2 catalog rows are generation/domain projections. Legacy kitchen and
+      // subcategory IDs are not canonical Food metadata and must not filter them.
+      return matchesQuery && matchesCategory;
+    }
     const matchesKitchen =
-      !options.kitchenId ||
-      food.kitchen_id === options.kitchenId ||
-      (food.cuisine === egyptianFoodKitchenName && options.kitchen === egyptianFoodKitchenName);
+      !options.kitchenId
+      || food.kitchen_id === options.kitchenId
+      || (food.cuisine === egyptianFoodKitchenName && options.kitchen === egyptianFoodKitchenName);
     const matchesLegacyKitchen = !options.kitchen || food.cuisine === options.kitchen || food.kitchen_id === options.kitchen;
     const matchesSubcategory = !options.subcategoryId || food.subcategory_id === options.subcategoryId || food.category === options.category;
     return matchesQuery && matchesCategory && matchesKitchen && matchesLegacyKitchen && matchesSubcategory;
