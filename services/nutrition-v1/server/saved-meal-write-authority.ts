@@ -32,6 +32,7 @@ export async function canonicalizeSavedMealItems(
         source,
         quantity: item.resolved_quantity,
         serving: item.resolved_serving_label,
+        displayName: source === "catalog" ? item.frozen_name : undefined,
       });
       output.push(resolved.savedMealItem);
       continue;
