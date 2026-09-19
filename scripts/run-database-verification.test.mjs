@@ -94,3 +94,19 @@ test("permanent verification chain covers restored ingestion reactivation gate b
   assert.ok(ingestionV2 >= 0 && ingestionV2 < gate);
   assert.ok(gate < productionPreflight);
 });
+
+
+test("permanent verification chain covers owner override read authority before production preflight", () => {
+  const ownerOverrideRead = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/food-catalog-owner-override-read-authority.sql",
+  );
+  const ingestionGate = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/food-catalog-plan7-ingestion-restore-reactivation-gate.sql",
+  );
+  const productionPreflight = DATABASE_VERIFICATION_FILES.indexOf(
+    "supabase/verification/production-release-migration-preflight.sql",
+  );
+  assert.notEqual(ownerOverrideRead, -1);
+  assert.ok(ingestionGate >= 0 && ingestionGate < ownerOverrideRead);
+  assert.ok(ownerOverrideRead < productionPreflight);
+});

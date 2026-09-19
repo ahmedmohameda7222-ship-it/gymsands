@@ -11,6 +11,7 @@ const PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_
 const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
 const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
 const PLAN7_INGESTION_REACTIVATION_MIGRATION = "20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql";
+const PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION = "20260919034630_food_catalog_owner_override_read_authority.sql";
 const migrationFiles = readdirSync("supabase/migrations").filter((name) => name.endsWith(SUFFIX));
 const sql = readFileSync(MIGRATION, "utf8").toLowerCase();
 const applyOnlySql = sql.split("create or replace function public.food_catalog_create_activation_set_v1")[0];
@@ -118,11 +119,11 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
   it("preserves verified Plan 3/4/5 aliases after Plan 6 exactness reconciliation", () => {
     expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.productionRecordCount).toBe(123);
-    expect(ledger.pendingCount).toBe(3);
-    expect(ledger.unresolvedCount).toBe(3);
+    expect(ledger.pendingCount).toBe(4);
+    expect(ledger.unresolvedCount).toBe(4);
     expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(3);
-    expect(ledger.historyRepair.unresolvedCount).toBe(3);
+    expect(ledger.historyRepair.pendingCount).toBe(4);
+    expect(ledger.historyRepair.unresolvedCount).toBe(4);
 
     const entry = ledger.entries.find((item) => item.localFile === "20260902150000_food_catalog_generation_authority.sql");
     expect(entry).toEqual({
@@ -151,6 +152,10 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
       }),
       expect.objectContaining({
         localFile: PLAN7_INGESTION_REACTIVATION_MIGRATION,
+        state: "pending",
+      }),
+      expect.objectContaining({
+        localFile: PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION,
         state: "pending",
       }),
     ]);
