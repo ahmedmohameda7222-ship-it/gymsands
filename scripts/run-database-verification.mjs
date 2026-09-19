@@ -69,6 +69,7 @@ export const DATABASE_VERIFICATION_FILES = Object.freeze([
   "supabase/verification/food-catalog-plan7-null-current-search.sql",
   "supabase/verification/food-catalog-owner-correction-export.sql",
   "supabase/verification/food-catalog-plan7-ingestion-restore-reactivation-gate.sql",
+  "supabase/verification/food-catalog-owner-override-read-authority.sql",
   "supabase/verification/production-release-migration-preflight.sql",
 ]);
 
