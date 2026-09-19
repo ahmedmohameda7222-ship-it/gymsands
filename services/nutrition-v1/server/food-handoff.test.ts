@@ -353,7 +353,7 @@ describe("Nutrition V1 Task 9 current-generation Food handoff", () => {
       selections: { ...view().selections, servingOptionIds: [] },
       servingOptions: [],
     }));
-    const noServing = clientFor();
+    const noServing = clientFor({ rpc: [noOverride()] });
     await expect(resolveFoodHandoff(
       noServing.client,
       userId,
@@ -368,11 +368,11 @@ describe("Nutrition V1 Task 9 current-generation Food handoff", () => {
         selectedServing(secondServingId, "170 g"),
       ],
     }));
-    const ambiguous = clientFor();
+    const ambiguous = clientFor({ rpc: [noOverride()] });
     await expect(resolveFoodHandoff(ambiguous.client, userId, catalogInput())).rejects.toThrow(/serving/i);
 
     generation.resolve.mockResolvedValueOnce(view());
-    const unselected = clientFor();
+    const unselected = clientFor({ rpc: [noOverride()] });
     await expect(resolveFoodHandoff(
       unselected.client,
       userId,
