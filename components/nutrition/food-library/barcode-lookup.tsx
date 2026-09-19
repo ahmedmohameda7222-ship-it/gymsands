@@ -24,7 +24,7 @@ export function BarcodeLookup({ onClose, onSeedSearch }: { onClose: () => void; 
     setError(null);
     setMatch(null);
     try {
-      const response = await foodLibraryApi(`/api/food/open-food-facts?barcode=${encodeURIComponent(value)}`);
+      const response = await foodLibraryApi(`/api/food/open-food-facts?barcode=${encodeURIComponent(value)}&locale=${encodeURIComponent(language)}`);
       const result = await response.json().catch(() => ({})) as { food?: BarcodeFood | null };
       if (!response.ok || !result.food?.name) throw new Error(nt("barcodeLookupFailed"));
       setMatch(result.food);
