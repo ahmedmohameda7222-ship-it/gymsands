@@ -2,9 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isUuid } from "@/lib/utils";
 import {
-  resolveCurrentGenerationFoodForNewUse,
+  resolveCurrentGenerationFoodForNewUseFromSupabase,
 } from "@/services/food-catalog/server/current-generation-service";
-import { createSupabaseFoodCatalogGenerationReadStore } from "@/services/food-catalog/server/supabase-generation-read-store";
 import { listFoodLibrary, normalizeFoodSearchText } from "@/services/nutrition-v1/server/food-library";
 import {
   readCurrentPersonalOverride,
@@ -99,8 +98,7 @@ async function resolveCorrectionFoodId(
   requestedFoodId: string,
 ): Promise<string> {
   if (!isUuid(requestedFoodId)) throw new Error("Food ID must be a valid ID.");
-  const store = createSupabaseFoodCatalogGenerationReadStore(supabase);
-  const view = await resolveCurrentGenerationFoodForNewUse(store, requestedFoodId);
+  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, requestedFoodId);
   return view.resolvedFoodId;
 }
 
