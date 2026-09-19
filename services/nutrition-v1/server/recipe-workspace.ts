@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RecipeNutritionPerServing } from "@/lib/nutrition-v1/recipe-cache";
 import { normalizeOwnedRecipeCoverPath } from "@/lib/nutrition-v1/recipe-cover-path";
 import { clonePublishedRecipeGraphForDraft } from "@/lib/nutrition-v1/recipe-versioning";
-import { getCatalogVerificationStates } from "@/services/nutrition-v1/server/food-catalog";
+import { getCurrentCatalogTrustStates } from "@/services/nutrition-v1/server/current-food-trust";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -262,7 +262,7 @@ async function componentRows(supabase: SupabaseClient, userId: string, draftId: 
 
   const rawIngredients = (ingredientsResult.data ?? []) as Array<Record<string, unknown>>;
   const foodIds = Array.from(new Set(rawIngredients.map((row) => typeof row.food_id === "string" ? row.food_id : null).filter((id): id is string => Boolean(id))));
-  const verifiedFoods = await getCatalogVerificationStates(supabase, foodIds);
+  const verifiedFoods = await getCurrentCatalogTrustStates(supabase, foodIds);
 
   const ingredients: RecipeWorkspaceIngredient[] = rawIngredients.map((row) => ({
     id: String(row.id),
