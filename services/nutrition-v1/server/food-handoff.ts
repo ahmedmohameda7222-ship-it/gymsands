@@ -4,19 +4,28 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealFoodItemSnapshot } from "@/lib/nutrition-v1/contracts";
 import { isUuid } from "@/lib/utils";
-import { resolveCatalogFood } from "@/services/nutrition-v1/server/food-catalog";
 import {
-  resolveEffectiveFoodNutrition,
-  type FoodLibraryCorrection,
-  type FoodLibraryNutrition,
-  type FoodLibrarySource,
+  projectCurrentGenerationCompatibility,
+  resolveCurrentGenerationFoodForNewUse,
+  type CurrentGenerationFoodView,
+} from "@/services/food-catalog/server/current-generation-service";
+import { createSupabaseFoodCatalogGenerationReadStore } from "@/services/food-catalog/server/supabase-generation-read-store";
+import type {
+  FoodLibraryNutrition,
+  FoodLibrarySource,
 } from "@/services/nutrition-v1/server/food-library";
+import {
+  mergePersonalOverrideNutrition,
+  readCurrentPersonalOverride,
+} from "@/services/nutrition-v1/server/personal-overrides";
 
 export type FoodHandoffInput = {
   foodId: string;
   source: FoodLibrarySource;
   quantity: number;
   serving: string;
+  displayName?: string;
+  languageTag?: string | null;
 };
 
 export type ResolvedFoodHandoff = {
@@ -74,23 +83,87 @@ function requiredText(value: unknown, label: string) {
   return text;
 }
 
+function optionalText(value: unknown) {
+  if (value === null || value === undefined) return null;
+  return requiredText(value, "Food language");
+}
+
 function scale(value: number | null, quantity: number) {
   return value === null ? null : Math.round(value * quantity * 1000) / 1000;
 }
 
-function correctionFromRow(row: Record<string, unknown>): FoodLibraryCorrection {
+function nutritionFromView(view: CurrentGenerationFoodView): FoodLibraryNutrition {
+  const nutrition = view.nutritionRevision;
+  if (nutrition === null) {
+    throw new Error("Current-generation Food has no selected nutrition revision.");
+  }
   return {
-    calories: numberOrNull(row.calories),
-    protein_g: numberOrNull(row.protein_g),
-    carbs_g: numberOrNull(row.carbs_g),
-    fat_g: numberOrNull(row.fat_g),
-    saturated_fat_g: numberOrNull(row.saturated_fat_g),
-    fiber_g: numberOrNull(row.fiber_g),
-    sugars_g: numberOrNull(row.sugars_g),
-    sodium_mg: numberOrNull(row.sodium_mg),
-    basis_amount: numberOrNull(row.basis_amount),
-    basis_unit: typeof row.basis_unit === "string" ? row.basis_unit as FoodLibraryCorrection["basis_unit"] : null,
+    calories: nutrition.calories,
+    protein_g: nutrition.protein_g,
+    carbs_g: nutrition.carbs_g,
+    fat_g: nutrition.fat_g,
+    saturated_fat_g: nutrition.saturated_fat_g,
+    fiber_g: nutrition.fiber_g,
+    sugars_g: nutrition.sugars_g,
+    sodium_mg: nutrition.sodium_mg,
+    basis_amount: nutrition.basisAmount,
+    basis_unit: nutrition.basisUnit,
   };
+}
+
+function viewWithNutrition(
+  view: CurrentGenerationFoodView,
+  nutrition: FoodLibraryNutrition,
+): CurrentGenerationFoodView {
+  if (view.nutritionRevision === null) {
+    throw new Error("Current-generation Food has no selected nutrition revision.");
+  }
+  return {
+    ...view,
+    nutritionRevision: {
+      ...view.nutritionRevision,
+      calories: nutrition.calories,
+      protein_g: nutrition.protein_g,
+      carbs_g: nutrition.carbs_g,
+      fat_g: nutrition.fat_g,
+      saturated_fat_g: nutrition.saturated_fat_g,
+      fiber_g: nutrition.fiber_g,
+      sugars_g: nutrition.sugars_g,
+      sodium_mg: nutrition.sodium_mg,
+    },
+  };
+}
+
+function exactSelectedName(
+  view: CurrentGenerationFoodView,
+  displayName: string,
+  languageTag: string | null,
+) {
+  const selectedIds = new Set(view.selections.nameFactIds);
+  const matches = view.names.filter((name) => (
+    selectedIds.has(name.id)
+    && name.text.trim() === displayName
+    && (languageTag === null || name.languageTag === languageTag)
+  ));
+  if (matches.length !== 1) {
+    throw new Error("The selected Food name does not resolve to exactly one current-generation Name fact.");
+  }
+  return matches[0]!;
+}
+
+function exactSelectedServing(
+  view: CurrentGenerationFoodView,
+  servingLabel: string,
+) {
+  const selectedIds = new Set(view.selections.servingOptionIds);
+  const matches = view.servingOptions.filter((serving) => (
+    selectedIds.has(serving.id)
+    && serving.label.trim() === servingLabel
+  ));
+  if (matches.length !== 1) {
+    throw new Error("The selected Food serving does not resolve to exactly one current-generation Serving fact.");
+  }
+  return matches[0]!;
 }
 
 export async function resolveFoodHandoff(
@@ -105,25 +178,47 @@ export async function resolveFoodHandoff(
   const requestedServing = requiredText(input.serving, "Food serving");
 
   let foodId = input.foodId;
-  let row: Record<string, unknown>;
-  let canonicalNutrition: FoodLibraryNutrition;
+  let name: string;
+  let serving: string;
   let effectiveNutrition: FoodLibraryNutrition;
 
   if (input.source === "catalog") {
-    const resolved = await resolveCatalogFood(supabase, input.foodId);
-    foodId = resolved.id;
-    row = { food_name: resolved.name, serving_size: resolved.servingLabel };
-    canonicalNutrition = resolved.nutrition;
-    const correctionResult = await supabase
-      .from("food_personal_corrections")
-      .select("calories,protein_g,carbs_g,fat_g,saturated_fat_g,fiber_g,sugars_g,sodium_mg,basis_amount,basis_unit")
-      .eq("user_id", userId)
-      .eq("food_id", foodId)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (correctionResult.error) throw new Error(`Personal Food correction could not be resolved. ${correctionResult.error.message ?? "Database request failed."}`);
-    const correction = correctionResult.data ? correctionFromRow(record(correctionResult.data)) : null;
-    effectiveNutrition = resolveEffectiveFoodNutrition(canonicalNutrition, correction);
+    const selectedDisplayName = requiredText(input.displayName, "Food display name");
+    const languageTag = optionalText(input.languageTag);
+    const store = createSupabaseFoodCatalogGenerationReadStore(supabase);
+    const view = await resolveCurrentGenerationFoodForNewUse(store, input.foodId);
+    foodId = view.resolvedFoodId;
+
+    const selectedName = exactSelectedName(view, selectedDisplayName, languageTag);
+    const personalOverride = await readCurrentPersonalOverride(supabase, foodId);
+    const canonicalNutrition = nutritionFromView(view);
+    const mergedBasisNutrition = mergePersonalOverrideNutrition(canonicalNutrition, personalOverride);
+    const effectiveView = viewWithNutrition(view, mergedBasisNutrition);
+
+    name = selectedName.text.trim();
+    const personalServing = personalOverride.hasOverride && !personalOverride.isDeleted
+      ? personalOverride.servingLabel
+      : null;
+
+    if (personalServing !== null) {
+      if (requestedServing !== personalServing) {
+        throw new Error("The resolved Food serving no longer matches the selected serving. Re-select the serving before adding it.");
+      }
+      const projected = projectCurrentGenerationCompatibility(effectiveView, {
+        nameFactId: selectedName.id,
+        servingOptionId: null,
+      });
+      serving = personalServing;
+      effectiveNutrition = projected.nutrition;
+    } else {
+      const selectedServing = exactSelectedServing(view, requestedServing);
+      const projected = projectCurrentGenerationCompatibility(effectiveView, {
+        nameFactId: selectedName.id,
+        servingOptionId: selectedServing.id,
+      });
+      serving = projected.servingLabel;
+      effectiveNutrition = projected.nutrition;
+    }
   } else {
     const result = await supabase
       .from("user_food_items")
@@ -134,8 +229,10 @@ export async function resolveFoodHandoff(
       .maybeSingle();
     if (result.error) throw new Error(`Personal Food could not be resolved. ${result.error.message ?? "Database request failed."}`);
     if (!result.data) throw new Error("Personal Food is unavailable.");
-    row = record(result.data);
-    canonicalNutrition = {
+    const row = record(result.data);
+    name = requiredText(row.food_name, "Food name");
+    serving = requiredText(row.serving_size, "Food serving");
+    effectiveNutrition = {
       calories: numberOrNull(row.calories),
       protein_g: numberOrNull(row.protein_g),
       carbs_g: numberOrNull(row.carbs_g),
@@ -147,12 +244,10 @@ export async function resolveFoodHandoff(
       basis_amount: numberOrNull(row.nutrition_basis_amount),
       basis_unit: typeof row.nutrition_basis_unit === "string" ? row.nutrition_basis_unit as FoodLibraryNutrition["basis_unit"] : null,
     };
-    effectiveNutrition = canonicalNutrition;
+    if (requestedServing !== serving) {
+      throw new Error("The resolved Food serving no longer matches the selected serving. Re-select the serving before adding it.");
+    }
   }
-
-  const name = requiredText(row.food_name, "Food name");
-  const serving = requiredText(row.serving_size, "Food serving");
-  if (requestedServing !== serving) throw new Error("The resolved Food serving no longer matches the selected serving. Re-select the serving before adding it.");
 
   const frozenNutrition = {
     calories: scale(effectiveNutrition.calories, quantity),
