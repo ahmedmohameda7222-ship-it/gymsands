@@ -6,10 +6,9 @@ import type { SavedMealFoodItemSnapshot } from "@/lib/nutrition-v1/contracts";
 import { isUuid } from "@/lib/utils";
 import {
   projectCurrentGenerationCompatibility,
-  resolveCurrentGenerationFoodForNewUse,
+  resolveCurrentGenerationFoodForNewUseFromSupabase,
   type CurrentGenerationFoodView,
 } from "@/services/food-catalog/server/current-generation-service";
-import { createSupabaseFoodCatalogGenerationReadStore } from "@/services/food-catalog/server/supabase-generation-read-store";
 import type {
   FoodLibraryNutrition,
   FoodLibrarySource,
@@ -185,8 +184,7 @@ export async function resolveFoodHandoff(
   if (input.source === "catalog") {
     const selectedDisplayName = requiredText(input.displayName, "Food display name");
     const languageTag = optionalText(input.languageTag);
-    const store = createSupabaseFoodCatalogGenerationReadStore(supabase);
-    const view = await resolveCurrentGenerationFoodForNewUse(store, input.foodId);
+    const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, input.foodId);
     foodId = view.resolvedFoodId;
 
     const selectedName = exactSelectedName(view, selectedDisplayName, languageTag);
