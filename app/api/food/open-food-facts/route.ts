@@ -6,6 +6,7 @@ import { jsonError, requireEligibleUser } from "@/lib/integrations/env";
 import { lookupOpenFoodFactsBarcode, type NormalizedFood } from "@/lib/integrations/open-food-facts";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { resolveFoodBarcode } from "@/services/nutrition-v1/server/barcode-lookup";
+import type { FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
 import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
 
 function nullableNumber(value: unknown) {
@@ -70,7 +71,7 @@ function publicProviderFood(food: NormalizedFood) {
   };
 }
 
-function publicCatalogFood(food: Awaited<ReturnType<typeof resolveFoodBarcode>> extends infer _T ? import("@/services/nutrition-v1/server/food-library").FoodLibraryCandidate : never) {
+function publicCatalogFood(food: FoodLibraryCandidate) {
   return {
     source: "catalog" as const,
     foodId: food.id,
