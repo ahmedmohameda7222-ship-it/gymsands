@@ -1002,46 +1002,46 @@ export async function addFoodToMealPlan({
   const isGlobalFood = food.is_global !== false;
   if (!canUseUserData(userId)) throw new Error("User session invalid");
 
-  const payload = isGlobalFood
-    ? (() => null as never)()
-    : {
-        user_id: userId,
-        plan_date: todayIso(),
-        meal_type: safeMealType,
-        food_item_id: null,
-        user_food_item_id: isUuid(food.id) ? food.id : null,
-        food_name: food.food_name,
-        serving_size: food.serving_size,
-        quantity,
-        ...scaleFoodMacros(food, quantity),
-        status: "planned",
-        food_log_id: null,
-        completed_at: null,
-        notes: null
-      };
+  let payload: Record<string, unknown>;
+  if (isGlobalFood) {
+    const handoff = await resolveBrowserCatalogHandoff(userId, food, quantity);
+    payload = {
+      user_id: userId,
+      plan_date: todayIso(),
+      meal_type: safeMealType,
+      food_item_id: handoff.foodId,
+      user_food_item_id: null,
+      food_name: handoff.name,
+      serving_size: handoff.serving,
+      quantity: handoff.quantity,
+      calories: handoff.frozenNutrition.calories,
+      protein_g: handoff.frozenNutrition.protein_g,
+      carbs_g: handoff.frozenNutrition.carbs_g,
+      fat_g: handoff.frozenNutrition.fat_g,
+      status: "planned",
+      food_log_id: null,
+      completed_at: null,
+      notes: null
+    };
+  } else {
+    payload = {
+      user_id: userId,
+      plan_date: todayIso(),
+      meal_type: safeMealType,
+      food_item_id: null,
+      user_food_item_id: isUuid(food.id) ? food.id : null,
+      food_name: food.food_name,
+      serving_size: food.serving_size,
+      quantity,
+      ...scaleFoodMacros(food, quantity),
+      status: "planned",
+      food_log_id: null,
+      completed_at: null,
+      notes: null
+    };
+  }
 
-  const resolvedPayload = isGlobalFood
-    ? await resolveBrowserCatalogHandoff(userId, food, quantity).then((handoff) => ({
-        user_id: userId,
-        plan_date: todayIso(),
-        meal_type: safeMealType,
-        food_item_id: handoff.foodId,
-        user_food_item_id: null,
-        food_name: handoff.name,
-        serving_size: handoff.serving,
-        quantity: handoff.quantity,
-        calories: handoff.frozenNutrition.calories,
-        protein_g: handoff.frozenNutrition.protein_g,
-        carbs_g: handoff.frozenNutrition.carbs_g,
-        fat_g: handoff.frozenNutrition.fat_g,
-        status: "planned",
-        food_log_id: null,
-        completed_at: null,
-        notes: null
-      }))
-    : payload;
-
-  const { data, error } = await supabase!.from("user_meal_plan_items").insert(resolvedPayload).select("*").single();
+  const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) {
     console.warn("Plaivra could not add this food to My Meal Plan.", error.message);
     throw error;
