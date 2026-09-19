@@ -5,7 +5,7 @@ import {
   resolveCurrentGenerationFoodForNewUse,
 } from "@/services/food-catalog/server/current-generation-service";
 import { createSupabaseFoodCatalogGenerationReadStore } from "@/services/food-catalog/server/supabase-generation-read-store";
-import { findCatalogDuplicateByName } from "@/services/nutrition-v1/server/food-catalog";
+import { listFoodLibrary, normalizeFoodSearchText } from "@/services/nutrition-v1/server/food-library";
 import {
   readCurrentPersonalOverride,
   type CurrentPersonalOverride,
@@ -107,20 +107,31 @@ async function resolveCorrectionFoodId(
 export async function findPossibleFoodDuplicate(supabase: SupabaseClient, userId: string, name: string) {
   const clean = text(name);
   if (!clean) return null;
-  const [personal, catalog] = await Promise.all([
-    supabase.from("user_food_items")
-      .select("id,food_name,serving_size")
-      .eq("user_id", userId)
-      .is("deleted_at", null)
-      .ilike("food_name", clean)
-      .limit(1)
-      .maybeSingle(),
-    findCatalogDuplicateByName(supabase, clean),
-  ]);
-  if (personal.error) throw new Error(`Custom Food duplicate read: ${personal.error.message ?? "database error"}`);
-  if (personal.data) return { source: "my_food" as const, ...personal.data };
-  if (catalog) return { source: "catalog" as const, ...catalog };
-  return null;
+  const normalized = normalizeFoodSearchText(clean);
+  if (!normalized) return null;
+
+  const page = await listFoodLibrary(supabase, userId, {
+    query: clean,
+    locale: "en",
+    marketScopeCode: null,
+    limit: 20,
+    scope: "all",
+  });
+  const strong = page.items.filter((candidate) => (
+    (candidate.source === "catalog" || candidate.source === "my_food")
+    && normalizeFoodSearchText(candidate.name) === normalized
+  ));
+  const candidate = strong.find((item) => item.source === "my_food")
+    ?? strong.find((item) => item.source === "catalog")
+    ?? null;
+  if (!candidate) return null;
+
+  return {
+    id: candidate.id,
+    source: candidate.source,
+    food_name: candidate.name,
+    serving_size: candidate.servingLabel ?? "",
+  };
 }
 
 export async function createUserFood(supabase: SupabaseClient, userId: string, input: UserFoodWriteInput) {
