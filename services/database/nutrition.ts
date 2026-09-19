@@ -2,7 +2,6 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid, todayIso } from "@/lib/utils";
-import { egyptianFoods } from "@/data/egyptian-foods";
 import type {
   CatalogFoodItem,
   CustomMeal,
@@ -40,8 +39,6 @@ export const egyptianFoodSubcategories = [
   "Stew",
   "Vegetable"
 ] as const;
-
-const allowedEgyptianSubcategories = new Set<string>(egyptianFoodSubcategories);
 
 function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
@@ -118,16 +115,6 @@ function normalizeFrozenMealPlanItem(row: Record<string, unknown>): MealPlanItem
   };
 }
 
-function normalizeFoodSubcategory(value: string | null | undefined) {
-  const clean = value?.trim();
-  if (!clean) return "Snack";
-  if (allowedEgyptianSubcategories.has(clean)) return clean;
-  if (clean === "Rice") return "Carb";
-  if (clean === "Sauce" || clean === "Salad") return "Dip";
-  if (clean === "Protein" || clean === "Sandwich" || clean === "Meal" || clean === "Side") return "Breakfast";
-  return "Snack";
-}
-
 function normalizeMealType(value: string | null | undefined): MealType {
   return mealTypes.includes(value as MealType) ? (value as MealType) : "Breakfast";
 }
@@ -140,98 +127,122 @@ export function getDefaultFoodCategories() {
   return [...egyptianFoodSubcategories];
 }
 
-function withTimeout<T>(request: PromiseLike<T>, fallback: T, label: string, timeoutMs = 4500) {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<T>((resolve) => {
-    timeoutId = setTimeout(() => {
-      console.warn(`${label} timed out, using fallback.`);
-      resolve(fallback);
-    }, timeoutMs);
-  });
+type CatalogSearchCandidate = {
+  id: string;
+  source: "catalog" | "my_food";
+  name: string;
+  brand: string | null;
+  category: string | null;
+  cuisine: string | null;
+  servingLabel: string | null;
+  verified: boolean;
+  locale: string;
+  nutrition: {
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+    saturated_fat_g: number | null;
+    fiber_g: number | null;
+    sugars_g: number | null;
+    sodium_mg: number | null;
+    basis_amount: number | null;
+    basis_unit: "g" | "ml" | "serving" | "piece" | "custom" | null;
+  };
+};
 
-  return Promise.race([Promise.resolve(request), timeout]).finally(() => {
-    if (timeoutId) clearTimeout(timeoutId);
-  });
+type CatalogSearchPage = {
+  items: CatalogSearchCandidate[];
+  nextCursor: string | null;
+};
+
+function browserLocale() {
+  return typeof navigator === "undefined" || !navigator.language.trim() ? "en" : navigator.language;
 }
 
-function localFoods(query = ""): CatalogFoodItem[] {
-  const normalized = normalizeText(query);
-  return egyptianFoods
-    .filter((food) => normalizeText(food.food_name).includes(normalized))
-    .map((food) =>
-      normalizeCatalogFood({
-        ...food,
-        cuisine: egyptianFoodKitchenName,
-        category: normalizeFoodSubcategory(food.category)
-      } as unknown as Record<string, unknown>)
-    );
+function isCatalogSearchPage(value: unknown): value is CatalogSearchPage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const page = value as Record<string, unknown>;
+  return Array.isArray(page.items) && (page.nextCursor === null || typeof page.nextCursor === "string");
+}
+
+function normalizeCatalogSearchFood(food: CatalogSearchCandidate): CatalogFoodItem {
+  return {
+    id: persistedText(food.id, "Food ID"),
+    food_name: persistedText(food.name, "Food name"),
+    serving_size: food.servingLabel?.trim() ?? "",
+    calories: nullableNutrition(food.nutrition.calories, "Food calories"),
+    protein_g: nullableNutrition(food.nutrition.protein_g, "Food protein"),
+    carbs_g: nullableNutrition(food.nutrition.carbs_g, "Food carbs"),
+    fat_g: nullableNutrition(food.nutrition.fat_g, "Food fat"),
+    category: nullablePersistedText(food.category, "Food category"),
+    cuisine: nullablePersistedText(food.cuisine, "Food cuisine"),
+    kitchen_id: null,
+    subcategory_id: null,
+    fiber_g: nullableNutrition(food.nutrition.fiber_g, "Food fiber"),
+    sugar_g: nullableNutrition(food.nutrition.sugars_g, "Food sugar"),
+    sodium_mg: nullableNutrition(food.nutrition.sodium_mg, "Food sodium"),
+    tags: [],
+    notes: null,
+    source_type: "food_catalog_v2",
+    is_global: true,
+    is_editable_by_user: false
+  };
+}
+
+async function searchCurrentCatalog(
+  query: string,
+  options: { category?: string; cuisine?: string; limit?: number } = {}
+): Promise<CatalogFoodItem[]> {
+  if (!supabase) throw new Error("Database not connected");
+  const target = Math.max(1, Math.min(80, Math.trunc(options.limit ?? 36)));
+  const foods: CatalogFoodItem[] = [];
+  let cursor: string | null = null;
+  let pageCount = 0;
+
+  do {
+    const searchResult = await supabase.rpc("search_food_catalog_v2", {
+      p_query: query.trim(),
+      p_language_tag: browserLocale(),
+      p_script_code: null,
+      p_market_scope_code: null,
+      p_cursor: cursor,
+      p_limit: Math.min(20, target - foods.length),
+      p_category: options.category?.trim() || null,
+      p_cuisine: options.cuisine?.trim() || null,
+      p_scope: "all",
+      p_filters: {}
+    });
+    const data: unknown = searchResult.data;
+    const error = searchResult.error;
+    if (error) throw new Error(`Food Catalog V2 search failed: ${error.message ?? "database error"}`);
+    if (!isCatalogSearchPage(data)) throw new Error("Food Catalog V2 search returned an invalid page.");
+
+    for (const item of data.items) {
+      if (item.source !== "catalog") continue;
+      foods.push(normalizeCatalogSearchFood(item));
+      if (foods.length >= target) break;
+    }
+    cursor = data.nextCursor;
+    pageCount += 1;
+  } while (cursor && foods.length < target && pageCount < 10);
+
+  return foods;
 }
 
 export async function getFoodCategories() {
-  const fallback = getDefaultFoodCategories();
-  if (!supabase) throw new Error("Database not connected");
-
-  const request = supabase!
-    .from("food_items")
-    .select("category")
-    .eq("is_global", true)
-    .not("category", "is", null)
-    .limit(250)
-    .then(({ data, error }) => {
-      if (error) {
-        console.warn("Plaivra could not load food categories, using local fallback.", error.message);
-        return fallback;
-      }
-
-      const values = Array.from(new Set((data ?? []).map((item) => item.category).filter(Boolean))).sort() as string[];
-      return values.length ? values : fallback;
-    });
-
-  return withTimeout(request, fallback, "Food categories");
+  const foods = await searchCurrentCatalog("", { limit: 80 });
+  return Array.from(new Set(foods.map((food) => food.category).filter((value): value is string => Boolean(value?.trim())))).sort();
 }
 
 export async function getGlobalFoods(
   query = "",
   options: { category?: string; kitchen?: string; kitchenId?: string; subcategoryId?: string; limit?: number } = {}
 ): Promise<CatalogFoodItem[]> {
-  const limit = options.limit ?? 36;
-  const category = options.category;
-  const fallback = localFoods(query)
-    .filter((food) => !category || food.category === category)
-    .filter((food) => !options.kitchenId || options.kitchen === egyptianFoodKitchenName || food.kitchen_id === options.kitchenId)
-    .filter((food) => !options.subcategoryId || food.subcategory_id === options.subcategoryId || food.category === category)
-    .slice(0, limit);
-
-  if (!supabase) {
-    return fallback;
-  }
-
-  let request = supabase!
-    .from("food_items")
-    .select("*")
-    .eq("is_global", true)
-    .order("food_name")
-    .limit(limit);
-
-  if (category) request = request.eq("category", category);
-  if (options.kitchenId) request = request.eq("kitchen_id", options.kitchenId);
-  if (options.subcategoryId) request = request.eq("subcategory_id", options.subcategoryId);
-  if (query) request = request.ilike("food_name", `%${query}%`);
-
-  const result = await withTimeout(
-    request.then(({ data, error }) => {
-      if (error) {
-        console.warn("Plaivra could not load Supabase foods, using local fallback.", error.message);
-        return fallback;
-      }
-      return ((data?.length ? data : fallback) ?? []).map((food) => normalizeCatalogFood(food as Record<string, unknown>));
-    }),
-    fallback,
-    "Foods",
-    3500
-  );
-
-  return result;
+  return searchCurrentCatalog(query, {
+    category: options.category,
+    limit: options.limit
+  });
 }
 
 export async function getCalorieTargets(userId: string, options?: { throwOnError?: boolean }) {
@@ -308,6 +319,62 @@ export async function getTodayFoodLogs(
   return ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
 }
 
+type BrowserCatalogHandoff = {
+  foodId: string;
+  name: string;
+  serving: string;
+  quantity: number;
+  frozenNutrition: {
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+  };
+  diaryItem: {
+    foodName: string;
+    servingLabel: string;
+    quantity: number;
+    nutrition: {
+      caloriesKcal: number | null;
+      proteinG: number | null;
+      carbsG: number | null;
+      fatG: number | null;
+    };
+    foodItemId: string | null;
+  };
+};
+
+async function resolveBrowserCatalogHandoff(
+  userId: string,
+  food: Pick<FoodLibraryItem, "id" | "food_name" | "serving_size">,
+  quantity: number,
+): Promise<BrowserCatalogHandoff> {
+  if (!canUseUserData(userId) || !isUuid(food.id)) throw new Error("Catalog Food session or identity is invalid.");
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Quantity must be greater than zero.");
+
+  const session = await supabase!.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) throw new Error("User session invalid.");
+
+  const params = new URLSearchParams({
+    source: "catalog",
+    quantity: String(quantity),
+    serving: food.serving_size,
+    displayName: food.food_name,
+    languageTag: typeof navigator === "undefined" ? "en" : navigator.language,
+  });
+  const response = await fetch(
+    `/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/handoff?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const body = await response.json().catch(() => ({})) as BrowserCatalogHandoff & { error?: string };
+  if (!response.ok) throw new Error(body.error || "Catalog Food could not be revalidated.");
+  if (!isUuid(body.foodId) || !body.name?.trim() || !body.serving?.trim()) {
+    throw new Error("Catalog Food handoff returned an invalid result.");
+  }
+  return body;
+}
+
 export async function addGlobalFoodToToday({
   userId,
   food,
@@ -321,25 +388,24 @@ export async function addGlobalFoodToToday({
   mealType?: string;
   date?: string;
 }) {
-  const macros = scaleFoodMacros(food, quantity);
   const safeMealType = normalizeMealType(mealType);
+  const handoff = await resolveBrowserCatalogHandoff(userId, food, quantity);
   const payload = {
     user_id: userId,
-    food_item_id: isUuid(food.id) ? food.id : null,
+    food_item_id: handoff.diaryItem.foodItemId,
     user_food_item_id: null,
     log_date: date,
     meal_type: safeMealType,
-    food_name: food.food_name,
-    serving_size: food.serving_size,
-    quantity,
-    calories: macros.calories,
-    protein_g: macros.protein_g,
-    carbs_g: macros.carbs_g,
-    fat_g: macros.fat_g,
+    food_name: handoff.diaryItem.foodName,
+    serving_size: handoff.diaryItem.servingLabel,
+    quantity: handoff.diaryItem.quantity,
+    calories: handoff.diaryItem.nutrition.caloriesKcal,
+    protein_g: handoff.diaryItem.nutrition.proteinG,
+    carbs_g: handoff.diaryItem.nutrition.carbsG,
+    fat_g: handoff.diaryItem.nutrition.fatG,
     notes: null
   };
 
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) {
     console.warn("Plaivra could not add this food log.", error.message);
@@ -533,10 +599,15 @@ export async function getFoodLibrary(
   return foods.filter((food) => {
     const matchesQuery = !normalizedQuery || normalizeText(food.food_name).includes(normalizedQuery);
     const matchesCategory = !options.category || food.category === options.category;
+    if (food.is_global !== false) {
+      // V2 catalog rows are generation/domain projections. Legacy kitchen and
+      // subcategory IDs are not canonical Food metadata and must not filter them.
+      return matchesQuery && matchesCategory;
+    }
     const matchesKitchen =
-      !options.kitchenId ||
-      food.kitchen_id === options.kitchenId ||
-      (food.cuisine === egyptianFoodKitchenName && options.kitchen === egyptianFoodKitchenName);
+      !options.kitchenId
+      || food.kitchen_id === options.kitchenId
+      || (food.cuisine === egyptianFoodKitchenName && options.kitchen === egyptianFoodKitchenName);
     const matchesLegacyKitchen = !options.kitchen || food.cuisine === options.kitchen || food.kitchen_id === options.kitchen;
     const matchesSubcategory = !options.subcategoryId || food.subcategory_id === options.subcategoryId || food.category === options.category;
     return matchesQuery && matchesCategory && matchesKitchen && matchesLegacyKitchen && matchesSubcategory;
@@ -907,29 +978,48 @@ export async function addFoodToMealPlan({
   quantity: number;
   mealType?: MealType;
 }) {
-  const macros = scaleFoodMacros(food, quantity);
   const safeMealType = normalizeMealType(mealType);
   const isGlobalFood = food.is_global !== false;
-  const payload = {
-    user_id: userId,
-    plan_date: todayIso(),
-    meal_type: safeMealType,
-    food_item_id: isGlobalFood && isUuid(food.id) ? food.id : null,
-    user_food_item_id: !isGlobalFood && isUuid(food.id) ? food.id : null,
-    food_name: food.food_name,
-    serving_size: food.serving_size,
-    quantity,
-    calories: macros.calories,
-    protein_g: macros.protein_g,
-    carbs_g: macros.carbs_g,
-    fat_g: macros.fat_g,
-    status: "planned",
-    food_log_id: null,
-    completed_at: null,
-    notes: null
-  };
-
   if (!canUseUserData(userId)) throw new Error("User session invalid");
+
+  let payload: Record<string, unknown>;
+  if (isGlobalFood) {
+    const handoff = await resolveBrowserCatalogHandoff(userId, food, quantity);
+    payload = {
+      user_id: userId,
+      plan_date: todayIso(),
+      meal_type: safeMealType,
+      food_item_id: handoff.foodId,
+      user_food_item_id: null,
+      food_name: handoff.name,
+      serving_size: handoff.serving,
+      quantity: handoff.quantity,
+      calories: handoff.frozenNutrition.calories,
+      protein_g: handoff.frozenNutrition.protein_g,
+      carbs_g: handoff.frozenNutrition.carbs_g,
+      fat_g: handoff.frozenNutrition.fat_g,
+      status: "planned",
+      food_log_id: null,
+      completed_at: null,
+      notes: null
+    };
+  } else {
+    payload = {
+      user_id: userId,
+      plan_date: todayIso(),
+      meal_type: safeMealType,
+      food_item_id: null,
+      user_food_item_id: isUuid(food.id) ? food.id : null,
+      food_name: food.food_name,
+      serving_size: food.serving_size,
+      quantity,
+      ...scaleFoodMacros(food, quantity),
+      status: "planned",
+      food_log_id: null,
+      completed_at: null,
+      notes: null
+    };
+  }
 
   const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) {

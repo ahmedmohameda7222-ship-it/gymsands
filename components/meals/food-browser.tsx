@@ -23,19 +23,15 @@ import { addFoodLibraryItemToToday } from "@/services/database/food-library-logg
 import {
   favoriteKeyForFood,
   getFavoriteFoodKeysAsync,
-  setFavoriteFoodAsync,
-  type ServingUnit
+  setFavoriteFoodAsync
 } from "@/services/meals/food-logging-speed";
 import { scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
 import { userSafeError } from "@/lib/error-formatting";
-import { egyptianFoods } from "@/data/egyptian-foods";
 import type { CustomMeal, FoodKitchen, FoodLibraryItem, FoodLog, FoodSubcategory, MealPlanItem, MealType } from "@/types";
 
 const pageSize = 12;
 const mealOptions: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
-const servingUnits: ServingUnit[] = ["serving", "grams", "pieces", "cups", "tablespoons", "portion"];
 const selectClassName = "h-12 w-full rounded-[14px] border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
-const fallbackCategories = [...egyptianFoodSubcategories];
 const emptyFoodLogs: FoodLog[] = [];
 
 type FoodBrowserProps = {
@@ -49,14 +45,6 @@ type Notice = { type: "success" | "error" | "info"; title: string; description?:
 type ActionKind = "log" | "plan" | "favorite";
 type ActionStatus = { status: "pending" | "success" | "error"; label: string; description?: string };
 type ActionStateMap = Record<string, ActionStatus>;
-
-function fallbackSubcategory(value: string | null | undefined) {
-  if (value && fallbackCategories.includes(value as (typeof fallbackCategories)[number])) return value;
-  if (value === "Rice") return "Carb";
-  if (value === "Sauce" || value === "Salad") return "Dip";
-  if (value === "Protein" || value === "Sandwich" || value === "Meal" || value === "Side") return "Breakfast";
-  return "Snack";
-}
 
 function fallbackKitchenData() {
   const now = new Date().toISOString();
@@ -136,7 +124,6 @@ function FoodBrowserInner({
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [units, setUnits] = useState<Record<string, ServingUnit>>({});
   const [, setLogs] = useState<FoodLog[]>(initialLogs);
   const [isLoadingFoods, setIsLoadingFoods] = useState(false);
   const [isLoadingKitchenData, setIsLoadingKitchenData] = useState(true);
@@ -159,11 +146,6 @@ function FoodBrowserInner({
     () => foods.filter((food) => !favoritesOnly || favoriteKeys.includes(favoriteKeyForFood(food))).slice(0, visibleCount),
     [favoriteKeys, favoritesOnly, foods, visibleCount]
   );
-  const fallbackFoodsActive = useMemo(
-    () => foods.length > 0 && foods.every(isApproximateFallbackFood),
-    [foods]
-  );
-
   useEffect(() => setMealType(mealOptions.includes(defaultMealType) ? defaultMealType : "Breakfast"), [defaultMealType]);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 350);
@@ -245,19 +227,11 @@ function FoodBrowserInner({
         if (!active) return;
         const normalized = items.map(normalizeFoodItem);
         setFoods(normalized);
-        if (normalized.length > 0 && normalized.every(isApproximateFallbackFood)) {
-          setLibraryMessage("Showing fallback food data. Some live library foods may be unavailable.");
-        }
       })
       .catch((error) => {
         if (!active) return;
-        const localFallback = egyptianFoods
-          .map((food) => ({ ...food, cuisine: egyptianFoodKitchenName, category: fallbackSubcategory(food.category) }))
-          .filter((food) => (!selectedSubcategory?.name || food.category === selectedSubcategory.name) && (!debouncedQuery || food.food_name.toLowerCase().includes(debouncedQuery.toLowerCase())))
-          .slice(0, 90)
-          .map(normalizeFoodItem);
-        setFoods(localFallback);
-        setLibraryMessage(userSafeError(error, "Showing fallback food data. Some live library foods may be unavailable."));
+        setFoods([]);
+        setLibraryMessage(userSafeError(error, "Live Food Catalog results are unavailable."));
       })
       .finally(() => {
         if (active) setIsLoadingFoods(false);
@@ -319,10 +293,9 @@ function FoodBrowserInner({
     }
     setFoodAction(food.id, "log", { status: "pending", label: "Logging food..." });
     try {
-      const selectedUnit = units[food.id] ?? "serving";
       const log = await addFoodLibraryItemToToday({
         userId: user.id,
-        food: { ...food, serving_size: `${food.serving_size} (${selectedUnit})` },
+        food,
         quantity,
         mealType,
         date: logDate
@@ -352,10 +325,9 @@ function FoodBrowserInner({
     }
     setFoodAction(food.id, "plan", { status: "pending", label: "Adding to meal plan..." });
     try {
-      const selectedUnit = units[food.id] ?? "serving";
       const item = await addFoodToMealPlan({
         userId: user.id,
-        food: { ...food, serving_size: `${food.serving_size} (${selectedUnit})` },
+        food,
         quantity,
         mealType
       });
@@ -436,8 +408,7 @@ function FoodBrowserInner({
   const sourceStatusMessages = Array.from(
     new Set([
       ...sourceMessages,
-      libraryMessage,
-      fallbackFoodsActive && !libraryMessage ? "Showing fallback food data. Some live library foods may be unavailable." : null
+      libraryMessage
     ].filter(Boolean) as string[])
   );
 
@@ -573,7 +544,6 @@ function FoodBrowserInner({
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleFoods.map((food) => {
             const quantity = quantities[food.id] ?? 1;
-            const selectedUnit = units[food.id] ?? "serving";
             const macros = scaleFoodMacros(food, quantity);
             const favoriteKey = favoriteKeyForFood(food);
             const favorite = favoriteKeys.includes(favoriteKey);
@@ -601,31 +571,18 @@ function FoodBrowserInner({
                     <Macro label="carbs" value={nutritionDisplay(macros.carbs_g, "g")} />
                     <Macro label="fat" value={nutritionDisplay(macros.fat_g, "g")} />
                   </div>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_140px]">
-                    <div>
-                      <label htmlFor={`quantity-${food.id}`} className="mb-2 block text-sm font-medium text-foreground">Quantity</label>
-                      <Input
-                        id={`quantity-${food.id}`}
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={quantity}
-                        onChange={(event) => setQuantities((current) => ({ ...current, [food.id]: Math.max(0.1, Number(event.target.value) || 1) }))}
-                        placeholder="1"
-                        className="h-12"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor={`unit-${food.id}`} className="mb-2 block text-sm font-medium text-foreground">Unit</label>
-                      <select
-                        id={`unit-${food.id}`}
-                        value={selectedUnit}
-                        onChange={(event) => setUnits((current) => ({ ...current, [food.id]: event.target.value as ServingUnit }))}
-                        className={selectClassName}
-                      >
-                        {servingUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-                      </select>
-                    </div>
+                  <div className="mt-4">
+                    <label htmlFor={`quantity-${food.id}`} className="mb-2 block text-sm font-medium text-foreground">Quantity · {food.serving_size}</label>
+                    <Input
+                      id={`quantity-${food.id}`}
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={quantity}
+                      onChange={(event) => setQuantities((current) => ({ ...current, [food.id]: Math.max(0.1, Number(event.target.value) || 1) }))}
+                      placeholder="1"
+                      className="h-12"
+                    />
                   </div>
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
                     <Button className="min-h-12" type="button" variant="outline" onClick={() => addToPlan(food)} disabled={isPending(planAction)}>
@@ -810,11 +767,6 @@ function sourceLabelForFood(food: Pick<FoodLibraryItem, "source_type" | "is_glob
   if (source.toLowerCase().includes("manual")) return "manual source";
   if (source.toLowerCase().includes("user")) return "user source";
   return food.is_global ? "library source" : "estimated source";
-}
-
-function isApproximateFallbackFood(food: Pick<FoodLibraryItem, "id" | "source_type" | "cuisine">) {
-  const source = String(food.source_type || "").toLowerCase();
-  return source.includes("approximate_macro_table") || String(food.id).startsWith("egyptian-") || food.cuisine === egyptianFoodKitchenName;
 }
 
 function actionKey(id: string, action: ActionKind) {

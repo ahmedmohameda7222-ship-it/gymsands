@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import {
   deriveFoodTrustProfile,
   type FoodTrustProfile,
@@ -33,6 +35,7 @@ import type {
 } from "./generation-contracts";
 import { FoodCatalogGenerationError, type FoodCatalogGenerationErrorCode } from "./generation-errors";
 import type { FoodCatalogGenerationReadStore } from "./generation-store";
+import { createSupabaseFoodCatalogGenerationReadStore } from "./supabase-generation-read-store";
 
 const VERIFICATION_SCOPES: readonly FoodVerificationScope[] = [
   "identity",
@@ -430,6 +433,16 @@ export async function resolveCurrentGenerationFoodForNewUse(
     reject("CONTROL_PLANE_REJECTED", "Only active current-generation Foods may be selected for new use.");
   }
   return view;
+}
+
+export function resolveCurrentGenerationFoodForNewUseFromSupabase(
+  supabase: SupabaseClient,
+  requestedFoodId: string,
+): Promise<CurrentGenerationFoodView> {
+  return resolveCurrentGenerationFoodForNewUse(
+    createSupabaseFoodCatalogGenerationReadStore(supabase),
+    requestedFoodId,
+  );
 }
 
 export function projectCurrentGenerationCompatibility(

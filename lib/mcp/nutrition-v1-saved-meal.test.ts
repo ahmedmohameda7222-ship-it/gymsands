@@ -32,7 +32,7 @@ const ctx = {
 beforeEach(() => {
   vi.clearAllMocks();
   listFoodLibrary.mockResolvedValue({
-    items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: "170 g" }],
+    items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: "170 g", locale: "en" }],
     nextCursor: null,
   });
   resolveFoodHandoff.mockResolvedValue({
@@ -69,6 +69,8 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
       source: "catalog",
       quantity: 2,
       serving: "170 g",
+      displayName: "Greek yogurt",
+      languageTag: "en",
     });
     expect(createSavedMeal).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({
       operationId: deriveMcpMutationOperationId(ctx, "create_custom_meal", input),

@@ -16,10 +16,11 @@ const db = vi.hoisted(() => {
     if (table !== "food_logs") throw new Error(`Unexpected table in focused nullable-nutrition test: ${table}`);
     return { insert };
   });
-  return { inserted, from, insert, select, single };
+  const getSession = vi.fn(async () => ({ data: { session: { access_token: "test-token" } }, error: null }));
+  return { inserted, from, insert, select, single, getSession };
 });
 
-vi.mock("@/lib/supabase/client", () => ({ supabase: { from: db.from } }));
+vi.mock("@/lib/supabase/client", () => ({ supabase: { from: db.from, auth: { getSession: db.getSession } } }));
 
 import { addGlobalFoodToToday, upsertCustomMeal, upsertUserFood } from "@/services/database/nutrition";
 import { addUserFoodToToday } from "@/services/database/food-library-logging";
@@ -104,6 +105,34 @@ beforeEach(() => {
   db.insert.mockClear();
   db.select.mockClear();
   db.single.mockClear();
+  db.getSession.mockClear();
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+    foodId,
+    source: "catalog",
+    name: "Catalog food",
+    serving: "100 g",
+    quantity: 2,
+    frozenNutrition: {
+      calories: 200,
+      protein_g: null,
+      carbs_g: 40,
+      fat_g: null,
+      fiber_g: null,
+    },
+    diaryItem: {
+      foodName: "Catalog food",
+      servingLabel: "100 g",
+      quantity: 2,
+      nutrition: {
+        caloriesKcal: 200,
+        proteinG: null,
+        carbsG: 40,
+        fatG: null,
+      },
+      foodItemId: foodId,
+      userFoodItemId: null,
+    },
+  }), { status: 200, headers: { "content-type": "application/json" } })));
 });
 
 describe("catalog-derived nullable nutrition scaling", () => {
@@ -192,6 +221,10 @@ describe("Catalog Food and My Food logging identity", () => {
       date: "2026-08-30",
     });
 
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/api/nutrition/v1/foods/${foodId}/handoff?`),
+      expect.objectContaining({ headers: { Authorization: "Bearer test-token" } }),
+    );
     expect(db.inserted).toHaveLength(1);
     expect(db.inserted[0]).toMatchObject({
       food_item_id: foodId,

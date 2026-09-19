@@ -1,6 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { findCatalogDuplicateByName } from "@/services/nutrition-v1/server/food-catalog";
+import { isUuid } from "@/lib/utils";
+import {
+  resolveCurrentGenerationFoodForNewUseFromSupabase,
+} from "@/services/food-catalog/server/current-generation-service";
+import { listFoodLibrary, normalizeFoodSearchText } from "@/services/nutrition-v1/server/food-library";
+import {
+  readCurrentPersonalOverride,
+  type CurrentPersonalOverride,
+} from "@/services/nutrition-v1/server/personal-overrides";
 
 export type UserFoodBasisUnit = "g" | "ml" | "serving" | "piece" | "custom";
 
@@ -21,12 +29,18 @@ export type UserFoodWriteInput = {
 
 export type PersonalCorrectionInput = {
   foodId: string;
+  operationId: string;
+  expectedRevisionId: string | null;
+  expectedPointerRevision: number;
   calories: number | null;
   proteinG: number | null;
   carbsG: number | null;
   fatG: number | null;
-  basisAmount: number | null;
-  basisUnit: "g" | "ml" | null;
+  saturatedFatG?: number | null;
+  fiberG?: number | null;
+  sugarsG?: number | null;
+  sodiumMg?: number | null;
+  servingLabel?: string | null;
   note?: string | null;
 };
 
@@ -79,23 +93,43 @@ function normalizeWrite(input: UserFoodWriteInput) {
   };
 }
 
+async function resolveCorrectionFoodId(
+  supabase: SupabaseClient,
+  requestedFoodId: string,
+): Promise<string> {
+  if (!isUuid(requestedFoodId)) throw new Error("Food ID must be a valid ID.");
+  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, requestedFoodId);
+  return view.resolvedFoodId;
+}
+
 export async function findPossibleFoodDuplicate(supabase: SupabaseClient, userId: string, name: string) {
   const clean = text(name);
   if (!clean) return null;
-  const [personal, catalog] = await Promise.all([
-    supabase.from("user_food_items")
-      .select("id,food_name,serving_size")
-      .eq("user_id", userId)
-      .is("deleted_at", null)
-      .ilike("food_name", clean)
-      .limit(1)
-      .maybeSingle(),
-    findCatalogDuplicateByName(supabase, clean),
-  ]);
-  if (personal.error) throw new Error(`Custom Food duplicate read: ${personal.error.message ?? "database error"}`);
-  if (personal.data) return { source: "my_food" as const, ...personal.data };
-  if (catalog) return { source: "catalog" as const, ...catalog };
-  return null;
+  const normalized = normalizeFoodSearchText(clean);
+  if (!normalized) return null;
+
+  const page = await listFoodLibrary(supabase, userId, {
+    query: clean,
+    locale: "en",
+    marketScopeCode: null,
+    limit: 20,
+    scope: "all",
+  });
+  const strong = page.items.filter((candidate) => (
+    (candidate.source === "catalog" || candidate.source === "my_food")
+    && normalizeFoodSearchText(candidate.name) === normalized
+  ));
+  const candidate = strong.find((item) => item.source === "my_food")
+    ?? strong.find((item) => item.source === "catalog")
+    ?? null;
+  if (!candidate) return null;
+
+  return {
+    id: candidate.id,
+    source: candidate.source,
+    food_name: candidate.name,
+    serving_size: candidate.servingLabel ?? "",
+  };
 }
 
 export async function createUserFood(supabase: SupabaseClient, userId: string, input: UserFoodWriteInput) {
@@ -134,26 +168,65 @@ export async function deleteUserFood(supabase: SupabaseClient, userId: string, f
   return { foodId: checked(result, "Custom Food delete").id, deleted: true };
 }
 
-export async function setFoodPersonalCorrection(supabase: SupabaseClient, userId: string, input: PersonalCorrectionInput) {
-  if (!text(input.foodId)) throw new Error("Food ID is required.");
-  const payload = {
-    user_id: userId,
-    food_id: input.foodId,
+export async function getFoodPersonalCorrectionState(
+  supabase: SupabaseClient,
+  userId: string,
+  foodId: string,
+): Promise<CurrentPersonalOverride> {
+  if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
+  const resolvedFoodId = await resolveCorrectionFoodId(supabase, foodId);
+  return readCurrentPersonalOverride(supabase, resolvedFoodId);
+}
+
+export async function setFoodPersonalCorrection(
+  supabase: SupabaseClient,
+  userId: string,
+  input: PersonalCorrectionInput,
+) {
+  if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
+  if (!isUuid(input.operationId)) throw new Error("Personal correction operation ID must be a valid ID.");
+  if (input.expectedRevisionId !== null && !isUuid(input.expectedRevisionId)) {
+    throw new Error("Personal correction expected revision ID must be valid.");
+  }
+  if (!Number.isSafeInteger(input.expectedPointerRevision) || input.expectedPointerRevision < 0) {
+    throw new Error("Personal correction expected pointer revision is invalid.");
+  }
+  if (
+    (input.expectedRevisionId === null && input.expectedPointerRevision !== 0)
+    || (input.expectedRevisionId !== null && input.expectedPointerRevision < 1)
+  ) {
+    throw new Error("Personal correction CAS authority is inconsistent.");
+  }
+
+  const foodId = await resolveCorrectionFoodId(supabase, input.foodId);
+  const nutritionOverride = {
     calories: nullableNonNegative(input.calories, "Calories"),
     protein_g: nullableNonNegative(input.proteinG, "Protein"),
     carbs_g: nullableNonNegative(input.carbsG, "Carbs"),
     fat_g: nullableNonNegative(input.fatG, "Fat"),
-    basis_amount: nullablePositive(input.basisAmount, "Basis amount"),
-    basis_unit: input.basisUnit === "g" || input.basisUnit === "ml" ? input.basisUnit : null,
-    note: text(input.note) || null,
-    is_active: true,
+    saturated_fat_g: nullableNonNegative(input.saturatedFatG, "Saturated fat"),
+    fiber_g: nullableNonNegative(input.fiberG, "Fiber"),
+    sugars_g: nullableNonNegative(input.sugarsG, "Sugars"),
+    sodium_mg: nullableNonNegative(input.sodiumMg, "Sodium"),
   };
-  if ([payload.calories, payload.protein_g, payload.carbs_g, payload.fat_g, payload.basis_amount, payload.basis_unit].every((value) => value === null)) {
+  const servingLabel = text(input.servingLabel) || null;
+  const note = text(input.note) || null;
+  if (
+    Object.values(nutritionOverride).every((value) => value === null)
+    && servingLabel === null
+    && note === null
+  ) {
     throw new Error("A personal correction must contain at least one value.");
   }
-  const result = await supabase.from("food_personal_corrections")
-    .upsert(payload, { onConflict: "user_id,food_id" })
-    .select("food_id,calories,protein_g,carbs_g,fat_g,basis_amount,basis_unit,note,is_active")
-    .single();
+
+  const result = await supabase.rpc("food_catalog_set_personal_override", {
+    p_operation_id: input.operationId,
+    p_food_id: foodId,
+    p_expected_revision_id: input.expectedRevisionId,
+    p_expected_pointer_revision: input.expectedPointerRevision,
+    p_nutrition_override: nutritionOverride,
+    p_serving_label: servingLabel,
+    p_note: note,
+  });
   return checked(result, "Food personal correction write");
 }

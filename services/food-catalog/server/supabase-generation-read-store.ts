@@ -348,6 +348,61 @@ async function readSelectedFacts<T>(
   return rows(result.data, table).map(mapper);
 }
 
+export type CurrentGenerationQualityFacts = {
+  nutrition: Array<{
+    id: string;
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+  }>;
+  names: Array<{
+    id: string;
+    language_tag: string;
+    normalized_text: string | null;
+    name_text: string;
+  }>;
+};
+
+export async function readSupabaseCurrentGenerationQualityFacts(
+  supabase: SupabaseClient,
+  nutritionIds: readonly string[],
+  nameIds: readonly string[],
+): Promise<CurrentGenerationQualityFacts> {
+  const [nutritionResult, namesResult] = await Promise.all([
+    nutritionIds.length
+      ? supabase
+          .from("food_nutrition_revisions")
+          .select("id,calories,protein_g,carbs_g,fat_g")
+          .in("id", [...nutritionIds])
+      : Promise.resolve({ data: [], error: null }),
+    nameIds.length
+      ? supabase
+          .from("food_names")
+          .select("id,language_tag,normalized_text,name_text")
+          .in("id", [...nameIds])
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  throwDbError("current generation quality nutrition", nutritionResult.error);
+  throwDbError("current generation quality Names", namesResult.error);
+
+  return {
+    nutrition: rows(nutritionResult.data, "current generation quality nutrition").map((row) => ({
+      id: requiredString(row.id, "current generation quality nutrition id"),
+      calories: nullableNumber(row.calories, "current generation quality calories"),
+      protein_g: nullableNumber(row.protein_g, "current generation quality protein_g"),
+      carbs_g: nullableNumber(row.carbs_g, "current generation quality carbs_g"),
+      fat_g: nullableNumber(row.fat_g, "current generation quality fat_g"),
+    })),
+    names: rows(namesResult.data, "current generation quality Names").map((row) => ({
+      id: requiredString(row.id, "current generation quality Name id"),
+      language_tag: requiredString(row.language_tag, "current generation quality Name language_tag"),
+      normalized_text: nullableString(row.normalized_text, "current generation quality Name normalized_text"),
+      name_text: requiredString(row.name_text, "current generation quality Name name_text"),
+    })),
+  };
+}
+
 export function createSupabaseFoodCatalogGenerationReadStore(
   supabase: SupabaseClient,
 ): FoodCatalogGenerationReadStore {

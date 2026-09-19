@@ -30,6 +30,8 @@ async function resolveSource(supabase: Parameters<typeof resolveFoodHandoff>[0],
       source,
       quantity: Number(raw.quantity),
       serving: text(raw.serving, "Serving"),
+      displayName: source === "catalog" ? text(raw.displayName, "Food display name") : undefined,
+      languageTag: typeof raw.languageTag === "string" && raw.languageTag.trim() ? raw.languageTag.trim() : null,
     }) };
   }
   if (raw.type === "recipe") {
