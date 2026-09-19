@@ -12,11 +12,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ food
     const url = new URL(request.url);
     const source = url.searchParams.get("source");
     const serving = url.searchParams.get("serving");
+    const displayName = url.searchParams.get("displayName")?.trim() || undefined;
+    const languageTag = url.searchParams.get("languageTag")?.trim() || null;
     const quantity = Number(url.searchParams.get("quantity"));
     if (source !== "catalog" && source !== "my_food") throw new NutritionRequestError("Food source is invalid.");
     if (!serving?.trim()) throw new NutritionRequestError("Resolved serving is required.");
+    if (source === "catalog" && !displayName) throw new NutritionRequestError("Resolved display name is required.");
     if (!Number.isFinite(quantity) || quantity <= 0) throw new NutritionRequestError("Resolved quantity is invalid.");
-    return nutritionJson(await resolveFoodHandoff(context.supabase, context.user.id, { foodId, source, serving, quantity }));
+    return nutritionJson(await resolveFoodHandoff(context.supabase, context.user.id, {
+      foodId,
+      source,
+      serving,
+      quantity,
+      displayName,
+      languageTag,
+    }));
   } catch (error) {
     return nutritionErrorResponse(error);
   }
