@@ -5,12 +5,7 @@ import type { CurrentGenerationFoodView } from "@/services/food-catalog/server/c
 import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
 
 const generation = vi.hoisted(() => ({
-  createStore: vi.fn(() => ({ kind: "generation-store" })),
   resolve: vi.fn(),
-}));
-
-vi.mock("@/services/food-catalog/server/supabase-generation-read-store", () => ({
-  createSupabaseFoodCatalogGenerationReadStore: generation.createStore,
 }));
 
 vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
@@ -19,7 +14,7 @@ vi.mock("@/services/food-catalog/server/current-generation-service", async () =>
   );
   return {
     ...actual,
-    resolveCurrentGenerationFoodForNewUse: generation.resolve,
+    resolveCurrentGenerationFoodForNewUseFromSupabase: generation.resolve,
   };
 });
 
@@ -211,8 +206,7 @@ describe("Nutrition V1 Task 9 current-generation Food handoff", () => {
 
     await expect(resolveFoodHandoff(db.client, userId, catalogInput())).rejects.toThrow(/no current promoted generation/i);
 
-    expect(generation.createStore).toHaveBeenCalledWith(db.client);
-    expect(generation.resolve).toHaveBeenCalledWith(expect.anything(), foodId);
+    expect(generation.resolve).toHaveBeenCalledWith(db.client, foodId);
     expect(db.from).not.toHaveBeenCalled();
     expect(db.rpc).not.toHaveBeenCalled();
   });
