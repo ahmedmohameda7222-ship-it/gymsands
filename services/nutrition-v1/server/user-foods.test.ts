@@ -1,15 +1,35 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   createUserFood,
   deleteUserFood,
   findPossibleFoodDuplicate,
+  getFoodPersonalCorrectionState,
   setFoodPersonalCorrection,
   updateUserFood,
 } from "@/services/nutrition-v1/server/user-foods";
 
-type Result = { data: any; error: null | { message?: string } };
+const generation = vi.hoisted(() => ({
+  createStore: vi.fn(() => ({ kind: "generation-store" })),
+  resolve: vi.fn(),
+}));
+
+vi.mock("@/services/food-catalog/server/supabase-generation-read-store", () => ({
+  createSupabaseFoodCatalogGenerationReadStore: generation.createStore,
+}));
+
+vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
+  const actual = await vi.importActual<typeof import("@/services/food-catalog/server/current-generation-service")>(
+    "@/services/food-catalog/server/current-generation-service",
+  );
+  return {
+    ...actual,
+    resolveCurrentGenerationFoodForNewUse: generation.resolve,
+  };
+});
+
+type Result = { data: any; error: null | { message?: string; code?: string } };
 
 function query(result: Result) {
   const q: Record<string, any> = {};
@@ -22,20 +42,32 @@ function query(result: Result) {
 
 type Query = ReturnType<typeof query>;
 
-function fakeSupabase(tableQueries: Record<string, Query[]> = {}) {
+function fakeSupabase(
+  tableQueries: Record<string, Query[]> = {},
+  rpcResults: Result[] = [],
+) {
   const queues = Object.fromEntries(Object.entries(tableQueries).map(([table, values]) => [table, [...values]])) as Record<string, Query[]>;
   const seen: Record<string, Query[]> = {};
+  const rpcQueue = [...rpcResults];
   const from = vi.fn((table: string) => {
     const next = queues[table]?.shift();
     if (!next) throw new Error(`Unexpected table query: ${table}`);
     (seen[table] ??= []).push(next);
     return next;
   });
-  return { client: { from } as unknown as SupabaseClient, from, seen };
+  const rpc = vi.fn(async () => {
+    const next = rpcQueue.shift();
+    if (!next) throw new Error("Unexpected RPC call.");
+    return next;
+  });
+  return { client: { from, rpc } as unknown as SupabaseClient, from, rpc, seen };
 }
 
 const userId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const foodId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const survivorId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const operationId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const revisionId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 function writeInput(overrides: Record<string, unknown> = {}) {
   return {
@@ -51,7 +83,49 @@ function writeInput(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function correctionInput(overrides: Record<string, unknown> = {}) {
+  return {
+    foodId,
+    operationId,
+    expectedRevisionId: null,
+    expectedPointerRevision: 0,
+    calories: 150,
+    proteinG: null,
+    carbsG: null,
+    fatG: 3,
+    saturatedFatG: null,
+    fiberG: null,
+    sugarsG: null,
+    sodiumMg: null,
+    servingLabel: null,
+    note: null,
+    ...overrides,
+  };
+}
+
+function currentOverride(overrides: Record<string, unknown> = {}) {
+  return {
+    foodId: survivorId,
+    hasOverride: true,
+    revisionId,
+    pointerRevision: 7,
+    isDeleted: false,
+    nutritionOverride: { protein_g: 12 },
+    servingLabel: "My bowl",
+    note: "mine",
+    ...overrides,
+  };
+}
+
 describe("Nutrition V1 owner Food write authority", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    generation.resolve.mockResolvedValue({
+      resolvedFoodId: survivorId,
+      food: { lifecycle: "active" },
+    });
+  });
+
   it("creates a separate Custom Food without coercing unknown P/C/F to zero", async () => {
     const insert = query({ data: { id: foodId, food_name: "Homemade soup", protein_g: null, carbs_g: 40, fat_g: null }, error: null });
     const db = fakeSupabase({ user_food_items: [insert] });
@@ -88,13 +162,13 @@ describe("Nutrition V1 owner Food write authority", () => {
   });
 
   it("preserves duplicate precedence for the matching owner Food before the shared catalog", async () => {
-    const personal = query({ data: { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", food_name: "Greek yogurt", serving_size: "1 bowl" }, error: null });
+    const personal = query({ data: { id: "ffffffff-ffff-4fff-8fff-ffffffffffff", food_name: "Greek yogurt", serving_size: "1 bowl" }, error: null });
     const catalog = query({ data: { id: foodId, food_name: "Greek yogurt", serving_size: "170 g" }, error: null });
     const db = fakeSupabase({ user_food_items: [personal], food_items: [catalog] });
 
     const duplicate = await findPossibleFoodDuplicate(db.client, userId, "Greek yogurt");
 
-    expect(duplicate).toMatchObject({ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", source: "my_food" });
+    expect(duplicate).toMatchObject({ id: "ffffffff-ffff-4fff-8fff-ffffffffffff", source: "my_food" });
     expect(personal.eq).toHaveBeenCalledWith("user_id", userId);
   });
 
@@ -124,32 +198,167 @@ describe("Nutrition V1 owner Food write authority", () => {
     expect(result).toEqual({ foodId, deleted: true });
   });
 
-  it("writes a nullable personal correction under the derived owner without changing canonical verification", async () => {
-    const upsert = query({ data: { food_id: foodId, calories: 150, protein_g: null, carbs_g: null, fat_g: 3, basis_amount: 100, basis_unit: "g", is_active: true }, error: null });
-    const db = fakeSupabase({ food_personal_corrections: [upsert] });
+  it("reads current Personal Override CAS authority for the final current-generation survivor", async () => {
+    const db = fakeSupabase({}, [{ data: currentOverride(), error: null }]);
 
-    const result = await setFoodPersonalCorrection(db.client, userId, {
-      foodId,
-      calories: 150,
-      proteinG: null,
-      carbsG: null,
-      fatG: 3,
-      basisAmount: 100,
-      basisUnit: "g",
+    const state = await getFoodPersonalCorrectionState(db.client, userId, foodId);
+
+    expect(generation.createStore).toHaveBeenCalledWith(db.client);
+    expect(generation.resolve).toHaveBeenCalledWith(expect.anything(), foodId);
+    expect(db.rpc).toHaveBeenCalledWith("food_catalog_get_current_personal_override_v1", { p_food_id: survivorId });
+    expect(state).toMatchObject({
+      foodId: survivorId,
+      hasOverride: true,
+      revisionId,
+      pointerRevision: 7,
+      isDeleted: false,
     });
+    expect(db.from).not.toHaveBeenCalledWith("food_personal_overrides");
+    expect(db.from).not.toHaveBeenCalledWith("food_personal_override_revisions");
+    expect(db.from).not.toHaveBeenCalledWith("food_personal_corrections");
+  });
 
-    expect(upsert.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      user_id: userId,
-      food_id: foodId,
-      calories: 150,
-      protein_g: null,
-      carbs_g: null,
-      fat_g: 3,
-      basis_amount: 100,
-      basis_unit: "g",
-      is_active: true,
-    }), { onConflict: "user_id,food_id" });
-    expect(JSON.stringify(upsert.upsert.mock.calls)).not.toMatch(/is_verified|verified_at|verified_source_record_id/);
-    expect(result.food_id).toBe(foodId);
+  it("preserves tombstone pointer identity for exact later CAS", async () => {
+    const db = fakeSupabase({}, [{
+      data: currentOverride({
+        isDeleted: true,
+        nutritionOverride: null,
+        servingLabel: null,
+        note: null,
+      }),
+      error: null,
+    }]);
+
+    const state = await getFoodPersonalCorrectionState(db.client, userId, foodId);
+
+    expect(state).toMatchObject({
+      foodId: survivorId,
+      hasOverride: true,
+      revisionId,
+      pointerRevision: 7,
+      isDeleted: true,
+    });
+  });
+
+  it("writes Product correction through Plan 6 Personal Override with caller-preserved operation identity and exact no-pointer CAS", async () => {
+    const db = fakeSupabase({}, [{
+      data: {
+        operationId,
+        foodId: survivorId,
+        revisionId,
+        pointerRevision: 1,
+        isDeleted: false,
+      },
+      error: null,
+    }]);
+
+    const result = await setFoodPersonalCorrection(db.client, userId, correctionInput());
+
+    expect(generation.resolve).toHaveBeenCalledWith(expect.anything(), foodId);
+    expect(db.rpc).toHaveBeenCalledWith("food_catalog_set_personal_override", {
+      p_operation_id: operationId,
+      p_food_id: survivorId,
+      p_expected_revision_id: null,
+      p_expected_pointer_revision: 0,
+      p_nutrition_override: {
+        calories: 150,
+        protein_g: null,
+        carbs_g: null,
+        fat_g: 3,
+        saturated_fat_g: null,
+        fiber_g: null,
+        sugars_g: null,
+        sodium_mg: null,
+      },
+      p_serving_label: null,
+      p_note: null,
+    });
+    expect(db.from).not.toHaveBeenCalledWith("food_personal_corrections");
+    expect(result).toMatchObject({ foodId: survivorId, operationId });
+  });
+
+  it("uses the exact existing/tombstone revision and pointer supplied from current-read authority", async () => {
+    const db = fakeSupabase({}, [{
+      data: {
+        operationId,
+        foodId: survivorId,
+        revisionId: "ffffffff-1111-4111-8111-ffffffffffff",
+        pointerRevision: 8,
+        isDeleted: false,
+      },
+      error: null,
+    }]);
+
+    await setFoodPersonalCorrection(db.client, userId, correctionInput({
+      expectedRevisionId: revisionId,
+      expectedPointerRevision: 7,
+      servingLabel: "My exact bowl",
+      note: "owner note",
+    }));
+
+    expect(db.rpc).toHaveBeenCalledWith("food_catalog_set_personal_override", expect.objectContaining({
+      p_operation_id: operationId,
+      p_food_id: survivorId,
+      p_expected_revision_id: revisionId,
+      p_expected_pointer_revision: 7,
+      p_serving_label: "My exact bowl",
+      p_note: "owner note",
+    }));
+  });
+
+  it("does not silently re-read or retry a Personal Override CAS conflict", async () => {
+    const db = fakeSupabase({}, [{
+      data: null,
+      error: { code: "40001", message: "Personal override CAS conflict." },
+    }]);
+
+    await expect(setFoodPersonalCorrection(
+      db.client,
+      userId,
+      correctionInput({ expectedRevisionId: revisionId, expectedPointerRevision: 7 }),
+    )).rejects.toThrow(/CAS conflict/i);
+
+    expect(db.rpc).toHaveBeenCalledTimes(1);
+    expect(db.rpc).toHaveBeenCalledWith("food_catalog_set_personal_override", expect.any(Object));
+    expect(db.rpc).not.toHaveBeenCalledWith("food_catalog_get_current_personal_override_v1", expect.any(Object));
+  });
+
+  it("passes the same operation ID and same semantic RPC command on an exact retry", async () => {
+    const replay = {
+      operationId,
+      foodId: survivorId,
+      revisionId,
+      pointerRevision: 1,
+      isDeleted: false,
+    };
+    const db = fakeSupabase({}, [
+      { data: replay, error: null },
+      { data: replay, error: null },
+    ]);
+    const input = correctionInput();
+
+    await setFoodPersonalCorrection(db.client, userId, input);
+    await setFoodPersonalCorrection(db.client, userId, input);
+
+    expect(db.rpc).toHaveBeenCalledTimes(2);
+    expect(db.rpc.mock.calls[0]).toEqual(db.rpc.mock.calls[1]);
+  });
+
+  it("surfaces changed semantics under a reused operation ID instead of inventing a retry identity", async () => {
+    const db = fakeSupabase({}, [{
+      data: null,
+      error: { code: "23514", message: "Personal override operation ID was reused with different semantics." },
+    }]);
+
+    await expect(setFoodPersonalCorrection(
+      db.client,
+      userId,
+      correctionInput({ calories: 151 }),
+    )).rejects.toThrow(/different semantics/i);
+
+    expect(db.rpc).toHaveBeenCalledWith("food_catalog_set_personal_override", expect.objectContaining({
+      p_operation_id: operationId,
+      p_nutrition_override: expect.objectContaining({ calories: 151 }),
+    }));
   });
 });
