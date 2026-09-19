@@ -14,6 +14,9 @@ const generation = vi.hoisted(() => ({
   createStore: vi.fn(() => ({ kind: "generation-store" })),
   resolve: vi.fn(),
 }));
+const library = vi.hoisted(() => ({
+  list: vi.fn(),
+}));
 
 vi.mock("@/services/food-catalog/server/supabase-generation-read-store", () => ({
   createSupabaseFoodCatalogGenerationReadStore: generation.createStore,
@@ -27,6 +30,12 @@ vi.mock("@/services/food-catalog/server/current-generation-service", async () =>
     ...actual,
     resolveCurrentGenerationFoodForNewUse: generation.resolve,
   };
+});
+vi.mock("@/services/nutrition-v1/server/food-library", async () => {
+  const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/food-library")>(
+    "@/services/nutrition-v1/server/food-library",
+  );
+  return { ...actual, listFoodLibrary: library.list };
 });
 
 type Result = { data: any; error: null | { message?: string; code?: string } };
@@ -124,6 +133,7 @@ describe("Nutrition V1 owner Food write authority", () => {
       resolvedFoodId: survivorId,
       food: { lifecycle: "active" },
     });
+    library.list.mockResolvedValue({ items: [], nextCursor: null });
   });
 
   it("creates a separate Custom Food without coercing unknown P/C/F to zero", async () => {
@@ -147,29 +157,116 @@ describe("Nutrition V1 owner Food write authority", () => {
     expect(result.food?.id).toBe(foodId);
   });
 
-  it("returns an active shared catalog duplicate without silently inserting or merging", async () => {
-    const personal = query({ data: null, error: null });
-    const catalog = query({ data: { id: foodId, food_name: "Greek yogurt", serving_size: "170 g" }, error: null });
-    const db = fakeSupabase({ user_food_items: [personal], food_items: [catalog] });
+  it("returns an exact current Catalog candidate as an advisory possible match", async () => {
+    library.list.mockResolvedValueOnce({
+      items: [{
+        id: foodId,
+        source: "catalog",
+        name: "Greek yogurt",
+        servingLabel: "170 g",
+      }],
+      nextCursor: null,
+    });
+    const db = fakeSupabase();
 
     const duplicate = await findPossibleFoodDuplicate(db.client, userId, "Greek yogurt");
 
-    expect(duplicate).toMatchObject({ id: foodId, source: "catalog" });
-    expect(personal.eq).toHaveBeenCalledWith("user_id", userId);
-    expect(catalog.eq).toHaveBeenCalledWith("is_global", true);
-    expect(catalog.eq).toHaveBeenCalledWith("lifecycle_status", "active");
-    expect(db.from).toHaveBeenCalledTimes(2);
+    expect(duplicate).toEqual({
+      id: foodId,
+      source: "catalog",
+      food_name: "Greek yogurt",
+      serving_size: "170 g",
+    });
+    expect(library.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({
+      query: "Greek yogurt",
+      locale: "en",
+      limit: 20,
+      scope: "all",
+    }));
+    expect(db.from).not.toHaveBeenCalledWith("food_items");
   });
 
-  it("preserves duplicate precedence for the matching owner Food before the shared catalog", async () => {
-    const personal = query({ data: { id: "ffffffff-ffff-4fff-8fff-ffffffffffff", food_name: "Greek yogurt", serving_size: "1 bowl" }, error: null });
-    const catalog = query({ data: { id: foodId, food_name: "Greek yogurt", serving_size: "170 g" }, error: null });
-    const db = fakeSupabase({ user_food_items: [personal], food_items: [catalog] });
+  it("treats punctuation/spacing normalization as a strong advisory match", async () => {
+    library.list.mockResolvedValueOnce({
+      items: [{
+        id: foodId,
+        source: "catalog",
+        name: "Greek yogurt",
+        servingLabel: "170 g",
+      }],
+      nextCursor: null,
+    });
+    const db = fakeSupabase();
+
+    const duplicate = await findPossibleFoodDuplicate(db.client, userId, "  Greek-yogurt  ");
+
+    expect(duplicate).toMatchObject({ id: foodId, source: "catalog" });
+  });
+
+  it("ignores weak V2 candidates instead of turning them into duplicate authority", async () => {
+    library.list.mockResolvedValueOnce({
+      items: [{
+        id: foodId,
+        source: "catalog",
+        name: "Greek yogurt vanilla",
+        servingLabel: "170 g",
+      }],
+      nextCursor: null,
+    });
+    const db = fakeSupabase();
+
+    expect(await findPossibleFoodDuplicate(db.client, userId, "Greek yogurt")).toBeNull();
+  });
+
+  it("preserves owner My Food precedence when both exact owner and Catalog candidates are advisory matches", async () => {
+    const myFoodId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    library.list.mockResolvedValueOnce({
+      items: [
+        { id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: "170 g" },
+        { id: myFoodId, source: "my_food", name: "Greek yogurt", servingLabel: "1 bowl" },
+      ],
+      nextCursor: null,
+    });
+    const db = fakeSupabase();
 
     const duplicate = await findPossibleFoodDuplicate(db.client, userId, "Greek yogurt");
 
-    expect(duplicate).toMatchObject({ id: "ffffffff-ffff-4fff-8fff-ffffffffffff", source: "my_food" });
-    expect(personal.eq).toHaveBeenCalledWith("user_id", userId);
+    expect(duplicate).toEqual({
+      id: myFoodId,
+      source: "my_food",
+      food_name: "Greek yogurt",
+      serving_size: "1 bowl",
+    });
+  });
+
+  it("lets the user ignore an advisory match and create separately without reusing duplicate authority", async () => {
+    library.list.mockResolvedValueOnce({
+      items: [{ id: foodId, source: "catalog", name: "Homemade soup", servingLabel: "1 bowl" }],
+      nextCursor: null,
+    });
+    const insert = query({ data: { id: foodId, food_name: "Homemade soup" }, error: null });
+    const db = fakeSupabase({ user_food_items: [insert] });
+
+    const result = await createUserFood(db.client, userId, writeInput({ createSeparately: true }));
+
+    expect(result.duplicate).toBeNull();
+    expect(result.food?.id).toBe(foodId);
+    expect(library.list).not.toHaveBeenCalled();
+  });
+
+  it("does not accept provider-only suggestions as canonical duplicate authority", async () => {
+    library.list.mockResolvedValueOnce({
+      items: [{
+        id: "provider:123",
+        source: "provider_suggestion",
+        name: "Greek yogurt",
+        servingLabel: "170 g",
+      }],
+      nextCursor: null,
+    });
+    const db = fakeSupabase();
+
+    expect(await findPossibleFoodDuplicate(db.client, userId, "Greek yogurt")).toBeNull();
   });
 
   it("updates only the active owner-scoped Custom Food", async () => {
