@@ -30,7 +30,7 @@ function initialTables(): Record<string, Row[]> {
     user_ai_permission_settings: [{ user_id: USER_ID, access_mode: "full", scopes: ["plaivra.full_access"] }],
     calorie_targets: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", user_id: USER_ID, daily_calories: 2000, protein_g: 160, carbs_g: 190, fat_g: 65, water_ml: 3000 }],
     nutrition_target_periods: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc", user_id: USER_ID, effective_from: "2026-07-01", effective_to: null, calories: 2000, protein_g: 160, carbs_g: 190, fat_g: 65, water_ml: 3000, source: "runtime_fixture" }],
-    food_items: [{ id: FOOD_ID, is_global: true, food_name: "sample", serving_size: "100 g", calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2 }],
+    food_items: [{ id: FOOD_ID, is_global: true, food_name: "catalog sample", serving_size: "100 g", calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2 }],
     user_food_items: [{ id: MY_FOOD_ID, user_id: USER_ID, food_name: "sample", serving_size: "100 g", calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2, nutrition_basis_amount: 100, nutrition_basis_unit: "g", deleted_at: null }],
     food_logs: [{ id: LOG_ID, user_id: USER_ID, food_name: "sample", serving_size: "100 g", quantity: 1, calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2, meal_type: "Breakfast", log_date: "2026-07-11", updated_at: UPDATED_AT }],
     nutrition_log_groups: [],
