@@ -4,8 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { barcodeValidationMessage, normalizeProductBarcode } from "@/lib/barcodes";
 import type { NormalizedFood } from "@/lib/integrations/open-food-facts";
-import { resolveCurrentGenerationFoodForNewUse } from "@/services/food-catalog/server/current-generation-service";
-import { createSupabaseFoodCatalogGenerationReadStore } from "@/services/food-catalog/server/supabase-generation-read-store";
+import { resolveCurrentGenerationFoodForNewUseFromSupabase, type CurrentGenerationFoodView } from "@/services/food-catalog/server/current-generation-service";
 import {
   listFoodLibrary,
   type FoodLibraryCandidate,
@@ -24,7 +23,7 @@ function rows(value: unknown): Array<Record<string, unknown>> {
 }
 
 function selectedLocalizedDisplayName(
-  view: Awaited<ReturnType<typeof resolveCurrentGenerationFoodForNewUse>>,
+  view: CurrentGenerationFoodView,
   languageTag: string,
 ) {
   const selectedIds = new Set(view.selections.nameFactIds);
@@ -70,8 +69,7 @@ export async function resolveFoodBarcode(
     throw new Error("Canonical barcode lookup returned an invalid Food identity.");
   }
 
-  const store = createSupabaseFoodCatalogGenerationReadStore(supabase);
-  const view = await resolveCurrentGenerationFoodForNewUse(store, mappedFoodId);
+  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, mappedFoodId);
   const selectedName = selectedLocalizedDisplayName(view, languageTag || "en");
   const page = await listFoodLibrary(supabase, userId, {
     query: selectedName.text,
