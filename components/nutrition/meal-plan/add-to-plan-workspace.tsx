@@ -87,7 +87,7 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: { d
     if (!clean) { setError(nt("enterValidBarcode")); return; }
     setBarcodeBusy(true);
     try {
-      const response = await mealPlanApiFetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}`);
+      const response = await mealPlanApiFetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}&locale=${encodeURIComponent(language)}`);
       const body = await response.json().catch(() => ({})) as { food?: BarcodeFood };
       if (!response.ok || !body.food?.name?.trim()) throw new Error(nt("barcodeNotFound"));
       setQuery(body.food.name.trim()); setScope("all"); setBarcodeOpen(false); setBarcode(clean);
