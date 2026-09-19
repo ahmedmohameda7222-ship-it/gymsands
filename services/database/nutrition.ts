@@ -40,8 +40,6 @@ export const egyptianFoodSubcategories = [
   "Vegetable"
 ] as const;
 
-const allowedEgyptianSubcategories = new Set<string>(egyptianFoodSubcategories);
-
 function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -117,16 +115,6 @@ function normalizeFrozenMealPlanItem(row: Record<string, unknown>): MealPlanItem
   };
 }
 
-function normalizeFoodSubcategory(value: string | null | undefined) {
-  const clean = value?.trim();
-  if (!clean) return "Snack";
-  if (allowedEgyptianSubcategories.has(clean)) return clean;
-  if (clean === "Rice") return "Carb";
-  if (clean === "Sauce" || clean === "Salad") return "Dip";
-  if (clean === "Protein" || clean === "Sandwich" || clean === "Meal" || clean === "Side") return "Breakfast";
-  return "Snack";
-}
-
 function normalizeMealType(value: string | null | undefined): MealType {
   return mealTypes.includes(value as MealType) ? (value as MealType) : "Breakfast";
 }
@@ -137,20 +125,6 @@ function canUseUserData(userId: string | null | undefined) {
 
 export function getDefaultFoodCategories() {
   return [...egyptianFoodSubcategories];
-}
-
-function withTimeout<T>(request: PromiseLike<T>, fallback: T, label: string, timeoutMs = 4500) {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<T>((resolve) => {
-    timeoutId = setTimeout(() => {
-      console.warn(`${label} timed out, using fallback.`);
-      resolve(fallback);
-    }, timeoutMs);
-  });
-
-  return Promise.race([Promise.resolve(request), timeout]).finally(() => {
-    if (timeoutId) clearTimeout(timeoutId);
-  });
 }
 
 type CatalogSearchCandidate = {
