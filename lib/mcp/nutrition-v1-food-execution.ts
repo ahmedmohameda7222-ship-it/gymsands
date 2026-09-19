@@ -144,6 +144,8 @@ export async function executeCanonicalFoodMcpTool(
         source: match.exact.source === "global" ? "catalog" : "my_food",
         quantity: getNumber(item, "quantity", 1),
         serving: match.exact.serving_size,
+        displayName: match.exact.source === "global" ? match.exact.food_name : undefined,
+        languageTag: match.exact.source === "global" ? "en" : null,
       });
       rows.push(rowFromHandoff(
         ctx,
