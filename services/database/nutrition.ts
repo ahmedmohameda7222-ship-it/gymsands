@@ -201,7 +201,7 @@ async function searchCurrentCatalog(
   let pageCount = 0;
 
   do {
-    const { data, error } = await supabase.rpc("search_food_catalog_v2", {
+    const searchResult = await supabase.rpc("search_food_catalog_v2", {
       p_query: query.trim(),
       p_language_tag: browserLocale(),
       p_script_code: null,
@@ -213,6 +213,8 @@ async function searchCurrentCatalog(
       p_scope: "all",
       p_filters: {}
     });
+    const data: unknown = searchResult.data;
+    const error = searchResult.error;
     if (error) throw new Error(`Food Catalog V2 search failed: ${error.message ?? "database error"}`);
     if (!isCatalogSearchPage(data)) throw new Error("Food Catalog V2 search returned an invalid page.");
 
