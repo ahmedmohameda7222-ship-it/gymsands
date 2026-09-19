@@ -7,6 +7,7 @@ import { mcpTools } from "@/lib/mcp/tools";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const CONNECTION_ID = "22222222-2222-4222-8222-222222222222";
 const FOOD_ID = "33333333-3333-4333-8333-333333333333";
+const MY_FOOD_ID = "33333333-3333-4333-8333-333333333334";
 const LOG_ID = "44444444-4444-4444-8444-444444444444";
 const MEAL_ID = "55555555-5555-4555-8555-555555555555";
 const VERIFIED_MEAL_ID = "55555555-5555-4555-8555-555555555556";
@@ -30,7 +31,7 @@ function initialTables(): Record<string, Row[]> {
     calorie_targets: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", user_id: USER_ID, daily_calories: 2000, protein_g: 160, carbs_g: 190, fat_g: 65, water_ml: 3000 }],
     nutrition_target_periods: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc", user_id: USER_ID, effective_from: "2026-07-01", effective_to: null, calories: 2000, protein_g: 160, carbs_g: 190, fat_g: 65, water_ml: 3000, source: "runtime_fixture" }],
     food_items: [{ id: FOOD_ID, is_global: true, food_name: "sample", serving_size: "100 g", calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2 }],
-    user_food_items: [],
+    user_food_items: [{ id: MY_FOOD_ID, user_id: USER_ID, food_name: "sample", serving_size: "100 g", calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2, nutrition_basis_amount: 100, nutrition_basis_unit: "g", deleted_at: null }],
     food_logs: [{ id: LOG_ID, user_id: USER_ID, food_name: "sample", serving_size: "100 g", quantity: 1, calories: 100, protein_g: 10, carbs_g: 12, fat_g: 2, meal_type: "Breakfast", log_date: "2026-07-11", updated_at: UPDATED_AT }],
     nutrition_log_groups: [],
     nutrition_log_group_items: [],
@@ -184,18 +185,22 @@ function createInMemorySupabase() {
     if (name === "search_food_catalog_v2") {
       const query = String(args.p_query ?? "").trim().toLowerCase();
       const limit = Math.max(1, Number(args.p_limit ?? 20));
-      const items = tables.food_items
-        .filter((row) => !query || String(row.food_name ?? "").toLowerCase().includes(query))
+      const candidates = [
+        ...tables.user_food_items.map((row) => ({ row, source: "my_food" as const })),
+        ...tables.food_items.map((row) => ({ row, source: "catalog" as const })),
+      ];
+      const items = candidates
+        .filter(({ row }) => !query || String(row.food_name ?? "").toLowerCase().includes(query))
         .slice(0, limit)
-        .map((row) => ({
+        .map(({ row, source }) => ({
           id: row.id,
-          source: "catalog",
+          source,
           name: row.food_name,
           brand: null,
           category: null,
           cuisine: null,
           servingLabel: row.serving_size,
-          verified: true,
+          verified: source === "catalog",
           favorite: false,
           recentAt: null,
           frequency: 0,
@@ -210,8 +215,8 @@ function createInMemorySupabase() {
             fiber_g: null,
             sugars_g: null,
             sodium_mg: null,
-            basis_amount: 100,
-            basis_unit: "g",
+            basis_amount: row.nutrition_basis_amount ?? 100,
+            basis_unit: row.nutrition_basis_unit ?? "g",
           },
           tags: [],
           usingPersonalValues: false,
