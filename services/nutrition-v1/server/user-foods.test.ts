@@ -11,15 +11,10 @@ import {
 } from "@/services/nutrition-v1/server/user-foods";
 
 const generation = vi.hoisted(() => ({
-  createStore: vi.fn(() => ({ kind: "generation-store" })),
   resolve: vi.fn(),
 }));
 const library = vi.hoisted(() => ({
   list: vi.fn(),
-}));
-
-vi.mock("@/services/food-catalog/server/supabase-generation-read-store", () => ({
-  createSupabaseFoodCatalogGenerationReadStore: generation.createStore,
 }));
 
 vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
@@ -28,7 +23,7 @@ vi.mock("@/services/food-catalog/server/current-generation-service", async () =>
   );
   return {
     ...actual,
-    resolveCurrentGenerationFoodForNewUse: generation.resolve,
+    resolveCurrentGenerationFoodForNewUseFromSupabase: generation.resolve,
   };
 });
 vi.mock("@/services/nutrition-v1/server/food-library", async () => {
@@ -300,8 +295,7 @@ describe("Nutrition V1 owner Food write authority", () => {
 
     const state = await getFoodPersonalCorrectionState(db.client, userId, foodId);
 
-    expect(generation.createStore).toHaveBeenCalledWith(db.client);
-    expect(generation.resolve).toHaveBeenCalledWith(expect.anything(), foodId);
+    expect(generation.resolve).toHaveBeenCalledWith(db.client, foodId);
     expect(db.rpc).toHaveBeenCalledWith("food_catalog_get_current_personal_override_v1", { p_food_id: survivorId });
     expect(state).toMatchObject({
       foodId: survivorId,
@@ -351,7 +345,7 @@ describe("Nutrition V1 owner Food write authority", () => {
 
     const result = await setFoodPersonalCorrection(db.client, userId, correctionInput());
 
-    expect(generation.resolve).toHaveBeenCalledWith(expect.anything(), foodId);
+    expect(generation.resolve).toHaveBeenCalledWith(db.client, foodId);
     expect(db.rpc).toHaveBeenCalledWith("food_catalog_set_personal_override", {
       p_operation_id: operationId,
       p_food_id: survivorId,
