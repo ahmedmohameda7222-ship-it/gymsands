@@ -37,7 +37,7 @@ function request() {
     body: JSON.stringify({
       destination: "recipe",
       operationId,
-      source: { type: "food", id: "55555555-5555-4555-8555-555555555555", source: "catalog", quantity: 2, serving: "100 g" },
+      source: { type: "food", id: "55555555-5555-4555-8555-555555555555", source: "catalog", quantity: 2, serving: "100 g", displayName: "Atomic chicken", languageTag: "en" },
       targetRecipeId: null,
     }),
   });
@@ -76,6 +76,14 @@ describe("Food to new Recipe handoff", () => {
     const response = await POST(request());
 
     expect(response.ok).toBe(true);
+    expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(expect.anything(), userId, {
+      foodId: "55555555-5555-4555-8555-555555555555",
+      source: "catalog",
+      quantity: 2,
+      serving: "100 g",
+      displayName: "Atomic chicken",
+      languageTag: "en",
+    });
     expect(mocks.createPreseededRecipeDraft).toHaveBeenCalledTimes(1);
     expect(mocks.createPreseededRecipeDraft).toHaveBeenCalledWith(
       expect.anything(),
