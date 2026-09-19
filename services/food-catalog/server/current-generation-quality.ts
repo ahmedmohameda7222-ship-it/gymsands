@@ -43,23 +43,29 @@ export async function getCurrentGenerationQuality(
     };
   }
 
-  const [foodsResult, namesSelectionResult] = await Promise.all([
-    supabase
-      .from("food_catalog_generation_foods")
-      .select("food_id,nutrition_revision_id,lifecycle")
-      .eq("generation_id", generationId)
-      .eq("lifecycle", "active")
-      .limit(5000),
-    supabase
-      .from("food_catalog_generation_names")
-      .select("food_id,name_fact_id")
-      .eq("generation_id", generationId)
-      .limit(10000),
-  ]);
+  const foodsResult = await supabase
+    .from("food_catalog_generation_foods")
+    .select("food_id,nutrition_revision_id,lifecycle")
+    .eq("generation_id", generationId)
+    .eq("lifecycle", "active")
+    .limit(5000);
   dbError("Current generation Foods", foodsResult.error);
-  dbError("Current generation Name selections", namesSelectionResult.error);
 
   const foods = rows(foodsResult.data);
+  const activeFoodIds = Array.from(new Set(
+    foods.map((food) => typeof food.food_id === "string" ? food.food_id : null)
+      .filter((id): id is string => Boolean(id)),
+  ));
+  const namesSelectionResult = activeFoodIds.length
+    ? await supabase
+        .from("food_catalog_generation_names")
+        .select("food_id,name_fact_id")
+        .eq("generation_id", generationId)
+        .in("food_id", activeFoodIds)
+        .limit(10000)
+    : { data: [], error: null };
+  dbError("Current generation Name selections", namesSelectionResult.error);
+
   const nutritionIds = Array.from(new Set(
     foods.map((food) => typeof food.nutrition_revision_id === "string" ? food.nutrition_revision_id : null)
       .filter((id): id is string => Boolean(id)),
