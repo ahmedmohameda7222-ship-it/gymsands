@@ -4,19 +4,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveFoodBarcode } from "@/services/nutrition-v1/server/barcode-lookup";
 
 const generation = vi.hoisted(() => ({
-  createStore: vi.fn(() => ({ kind: "generation-store" })),
   resolve: vi.fn(),
 }));
 const search = vi.hoisted(() => ({
   list: vi.fn(),
 }));
 
-vi.mock("@/services/food-catalog/server/supabase-generation-read-store", () => ({
-  createSupabaseFoodCatalogGenerationReadStore: generation.createStore,
-}));
-vi.mock("@/services/food-catalog/server/current-generation-service", () => ({
-  resolveCurrentGenerationFoodForNewUse: generation.resolve,
-}));
+vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
+  const actual = await vi.importActual<typeof import("@/services/food-catalog/server/current-generation-service")>(
+    "@/services/food-catalog/server/current-generation-service",
+  );
+  return {
+    ...actual,
+    resolveCurrentGenerationFoodForNewUseFromSupabase: generation.resolve,
+  };
+});
 vi.mock("@/services/nutrition-v1/server/food-library", async () => {
   const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/food-library")>(
     "@/services/nutrition-v1/server/food-library",
@@ -110,7 +112,7 @@ describe("Task 12 canonical-first barcode resolution", () => {
 
     expect(result).toEqual({ kind: "catalog", barcode, food: candidate() });
     expect(db.rpc).toHaveBeenCalledWith("food_catalog_lookup_effective_barcode", { p_gtin: barcode });
-    expect(generation.resolve).toHaveBeenCalledWith(expect.anything(), mappedFoodId);
+    expect(generation.resolve).toHaveBeenCalledWith(db.client, mappedFoodId);
     expect(search.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({
       query: "Canonical yogurt",
       locale: "en",
