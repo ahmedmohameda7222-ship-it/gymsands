@@ -39,6 +39,8 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
     source: selected.source,
     quantity: positive(item.quantity),
     serving: selected.servingLabel,
+    displayName: selected.source === "catalog" ? selected.name : undefined,
+    languageTag: selected.source === "catalog" ? selected.locale : null,
   });
 }
 
