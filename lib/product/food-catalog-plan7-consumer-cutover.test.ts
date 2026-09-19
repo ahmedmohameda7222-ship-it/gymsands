@@ -87,6 +87,9 @@ describe("Plan 7 Tasks 9-12 consumer current-truth retirement contract", () => {
 
     expect(globalReads).toContain('supabase.rpc("search_food_catalog_v2"');
     expect(globalReads).not.toMatch(/\.from\(["']food_items["']\)/);
+    expect(globalReads).not.toContain("cuisine: options.kitchen");
+    expect(nutrition).toContain("if (food.is_global !== false)");
+    expect(nutrition).toContain("Legacy kitchen and");
     expect(globalLog).toContain("resolveBrowserCatalogHandoff");
     expect(planWrite).toContain("resolveBrowserCatalogHandoff");
     expect(browser).not.toContain("@/data/egyptian-foods");
