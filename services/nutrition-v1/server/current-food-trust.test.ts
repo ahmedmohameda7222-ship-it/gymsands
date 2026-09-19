@@ -4,17 +4,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentCatalogTrustStates } from "@/services/nutrition-v1/server/current-food-trust";
 
 const generation = vi.hoisted(() => ({
-  createStore: vi.fn(() => ({ kind: "generation-store" })),
   resolve: vi.fn(),
 }));
 
-vi.mock("@/services/food-catalog/server/supabase-generation-read-store", () => ({
-  createSupabaseFoodCatalogGenerationReadStore: generation.createStore,
-}));
-
-vi.mock("@/services/food-catalog/server/current-generation-service", () => ({
-  resolveCurrentGenerationFoodForNewUse: generation.resolve,
-}));
+vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
+  const actual = await vi.importActual<typeof import("@/services/food-catalog/server/current-generation-service")>(
+    "@/services/food-catalog/server/current-generation-service",
+  );
+  return {
+    ...actual,
+    resolveCurrentGenerationFoodForNewUseFromSupabase: generation.resolve,
+  };
+});
 
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
@@ -25,7 +26,7 @@ describe("Task 10 current-generation Recipe trust", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("deduplicates canonical ingredient IDs and resolves trust once per unique Food", async () => {
-    generation.resolve.mockImplementation(async (_store: unknown, id: string) => ({
+    generation.resolve.mockImplementation(async (_supabase: SupabaseClient, id: string) => ({
       requestedFoodId: id,
       resolvedFoodId: id,
       trust: { verified: id === A },
@@ -35,10 +36,9 @@ describe("Task 10 current-generation Recipe trust", () => {
     const states = await getCurrentCatalogTrustStates(supabase, [A, A, B, A, B]);
 
     expect(states).toEqual(new Map([[A, true], [B, false]]));
-    expect(generation.createStore).toHaveBeenCalledTimes(1);
     expect(generation.resolve).toHaveBeenCalledTimes(2);
-    expect(generation.resolve).toHaveBeenCalledWith(expect.anything(), A);
-    expect(generation.resolve).toHaveBeenCalledWith(expect.anything(), B);
+    expect(generation.resolve).toHaveBeenCalledWith(supabase, A);
+    expect(generation.resolve).toHaveBeenCalledWith(supabase, B);
   });
 
   it("uses the redirected survivor CurrentGenerationFoodView trust without reconstructing verification semantics", async () => {
@@ -48,10 +48,11 @@ describe("Task 10 current-generation Recipe trust", () => {
       trust: { verified: true, verification: { identity: "verified", nutrition: "verified" } },
     });
 
-    const states = await getCurrentCatalogTrustStates({} as SupabaseClient, [OLD]);
+    const supabase = {} as SupabaseClient;
+    const states = await getCurrentCatalogTrustStates(supabase, [OLD]);
 
     expect(states.get(OLD)).toBe(true);
-    expect(generation.resolve).toHaveBeenCalledWith(expect.anything(), OLD);
+    expect(generation.resolve).toHaveBeenCalledWith(supabase, OLD);
   });
 
   it.each([
