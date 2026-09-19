@@ -344,6 +344,62 @@ export async function getTodayFoodLogs(
   return ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
 }
 
+type BrowserCatalogHandoff = {
+  foodId: string;
+  name: string;
+  serving: string;
+  quantity: number;
+  frozenNutrition: {
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+  };
+  diaryItem: {
+    foodName: string;
+    servingLabel: string;
+    quantity: number;
+    nutrition: {
+      caloriesKcal: number | null;
+      proteinG: number | null;
+      carbsG: number | null;
+      fatG: number | null;
+    };
+    foodItemId: string | null;
+  };
+};
+
+async function resolveBrowserCatalogHandoff(
+  userId: string,
+  food: Pick<FoodLibraryItem, "id" | "food_name" | "serving_size">,
+  quantity: number,
+): Promise<BrowserCatalogHandoff> {
+  if (!canUseUserData(userId) || !isUuid(food.id)) throw new Error("Catalog Food session or identity is invalid.");
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Quantity must be greater than zero.");
+
+  const session = await supabase!.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) throw new Error("User session invalid.");
+
+  const params = new URLSearchParams({
+    source: "catalog",
+    quantity: String(quantity),
+    serving: food.serving_size,
+    displayName: food.food_name,
+    languageTag: typeof navigator === "undefined" ? "en" : navigator.language,
+  });
+  const response = await fetch(
+    `/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/handoff?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const body = await response.json().catch(() => ({})) as BrowserCatalogHandoff & { error?: string };
+  if (!response.ok) throw new Error(body.error || "Catalog Food could not be revalidated.");
+  if (!isUuid(body.foodId) || !body.name?.trim() || !body.serving?.trim()) {
+    throw new Error("Catalog Food handoff returned an invalid result.");
+  }
+  return body;
+}
+
 export async function addGlobalFoodToToday({
   userId,
   food,
@@ -357,25 +413,24 @@ export async function addGlobalFoodToToday({
   mealType?: string;
   date?: string;
 }) {
-  const macros = scaleFoodMacros(food, quantity);
   const safeMealType = normalizeMealType(mealType);
+  const handoff = await resolveBrowserCatalogHandoff(userId, food, quantity);
   const payload = {
     user_id: userId,
-    food_item_id: isUuid(food.id) ? food.id : null,
+    food_item_id: handoff.diaryItem.foodItemId,
     user_food_item_id: null,
     log_date: date,
     meal_type: safeMealType,
-    food_name: food.food_name,
-    serving_size: food.serving_size,
-    quantity,
-    calories: macros.calories,
-    protein_g: macros.protein_g,
-    carbs_g: macros.carbs_g,
-    fat_g: macros.fat_g,
+    food_name: handoff.diaryItem.foodName,
+    serving_size: handoff.diaryItem.servingLabel,
+    quantity: handoff.diaryItem.quantity,
+    calories: handoff.diaryItem.nutrition.caloriesKcal,
+    protein_g: handoff.diaryItem.nutrition.proteinG,
+    carbs_g: handoff.diaryItem.nutrition.carbsG,
+    fat_g: handoff.diaryItem.nutrition.fatG,
     notes: null
   };
 
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) {
     console.warn("Plaivra could not add this food log.", error.message);
@@ -943,31 +998,50 @@ export async function addFoodToMealPlan({
   quantity: number;
   mealType?: MealType;
 }) {
-  const macros = scaleFoodMacros(food, quantity);
   const safeMealType = normalizeMealType(mealType);
   const isGlobalFood = food.is_global !== false;
-  const payload = {
-    user_id: userId,
-    plan_date: todayIso(),
-    meal_type: safeMealType,
-    food_item_id: isGlobalFood && isUuid(food.id) ? food.id : null,
-    user_food_item_id: !isGlobalFood && isUuid(food.id) ? food.id : null,
-    food_name: food.food_name,
-    serving_size: food.serving_size,
-    quantity,
-    calories: macros.calories,
-    protein_g: macros.protein_g,
-    carbs_g: macros.carbs_g,
-    fat_g: macros.fat_g,
-    status: "planned",
-    food_log_id: null,
-    completed_at: null,
-    notes: null
-  };
-
   if (!canUseUserData(userId)) throw new Error("User session invalid");
 
-  const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
+  const payload = isGlobalFood
+    ? (() => null as never)()
+    : {
+        user_id: userId,
+        plan_date: todayIso(),
+        meal_type: safeMealType,
+        food_item_id: null,
+        user_food_item_id: isUuid(food.id) ? food.id : null,
+        food_name: food.food_name,
+        serving_size: food.serving_size,
+        quantity,
+        ...scaleFoodMacros(food, quantity),
+        status: "planned",
+        food_log_id: null,
+        completed_at: null,
+        notes: null
+      };
+
+  const resolvedPayload = isGlobalFood
+    ? await resolveBrowserCatalogHandoff(userId, food, quantity).then((handoff) => ({
+        user_id: userId,
+        plan_date: todayIso(),
+        meal_type: safeMealType,
+        food_item_id: handoff.foodId,
+        user_food_item_id: null,
+        food_name: handoff.name,
+        serving_size: handoff.serving,
+        quantity: handoff.quantity,
+        calories: handoff.frozenNutrition.calories,
+        protein_g: handoff.frozenNutrition.protein_g,
+        carbs_g: handoff.frozenNutrition.carbs_g,
+        fat_g: handoff.frozenNutrition.fat_g,
+        status: "planned",
+        food_log_id: null,
+        completed_at: null,
+        notes: null
+      }))
+    : payload;
+
+  const { data, error } = await supabase!.from("user_meal_plan_items").insert(resolvedPayload).select("*").single();
   if (error) {
     console.warn("Plaivra could not add this food to My Meal Plan.", error.message);
     throw error;
