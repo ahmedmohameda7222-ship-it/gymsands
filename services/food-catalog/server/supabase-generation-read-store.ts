@@ -348,6 +348,77 @@ async function readSelectedFacts<T>(
   return rows(result.data, table).map(mapper);
 }
 
+export type CurrentGenerationQualitySelection = {
+  generationId: string | null;
+  foods: Array<{
+    foodId: string;
+    nutritionRevisionId: string | null;
+  }>;
+  nameFactIds: string[];
+};
+
+export async function readSupabaseCurrentGenerationQualitySelection(
+  supabase: SupabaseClient,
+): Promise<CurrentGenerationQualitySelection> {
+  const pointerResult = await supabase
+    .from("food_catalog_current_generation")
+    .select("current_generation_id")
+    .eq("singleton_key", true)
+    .maybeSingle();
+  throwDbError("current generation quality pointer", pointerResult.error);
+  if (pointerResult.data === null) {
+    return { generationId: null, foods: [], nameFactIds: [] };
+  }
+
+  const pointer = asRecord(pointerResult.data, "current generation quality pointer");
+  const generationId = nullableString(
+    pointer.current_generation_id,
+    "current generation quality pointer current_generation_id",
+  );
+  if (generationId === null) {
+    return { generationId: null, foods: [], nameFactIds: [] };
+  }
+
+  const foodsResult = await supabase
+    .from("food_catalog_generation_foods")
+    .select("food_id,nutrition_revision_id,lifecycle")
+    .eq("generation_id", generationId)
+    .eq("lifecycle", "active")
+    .limit(5000);
+  throwDbError("current generation quality Foods", foodsResult.error);
+
+  const foods = rows(foodsResult.data, "current generation quality Foods").map((row) => ({
+    foodId: requiredString(row.food_id, "current generation quality Food food_id"),
+    nutritionRevisionId: nullableString(
+      row.nutrition_revision_id,
+      "current generation quality Food nutrition_revision_id",
+    ),
+  }));
+  const activeFoodIds = Array.from(new Set(foods.map((food) => food.foodId)));
+
+  const namesResult = activeFoodIds.length
+    ? await supabase
+        .from("food_catalog_generation_names")
+        .select("food_id,name_fact_id")
+        .eq("generation_id", generationId)
+        .in("food_id", activeFoodIds)
+        .limit(10000)
+    : { data: [], error: null };
+  throwDbError("current generation quality Name selections", namesResult.error);
+
+  return {
+    generationId,
+    foods,
+    nameFactIds: Array.from(new Set(
+      rows(namesResult.data, "current generation quality Name selections")
+        .map((row) => requiredString(
+          row.name_fact_id,
+          "current generation quality Name selection name_fact_id",
+        )),
+    )),
+  };
+}
+
 export type CurrentGenerationQualityFacts = {
   nutrition: Array<{
     id: string;
