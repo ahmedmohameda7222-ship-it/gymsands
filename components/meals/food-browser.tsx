@@ -28,14 +28,12 @@ import {
 } from "@/services/meals/food-logging-speed";
 import { scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
 import { userSafeError } from "@/lib/error-formatting";
-import { egyptianFoods } from "@/data/egyptian-foods";
 import type { CustomMeal, FoodKitchen, FoodLibraryItem, FoodLog, FoodSubcategory, MealPlanItem, MealType } from "@/types";
 
 const pageSize = 12;
 const mealOptions: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 const servingUnits: ServingUnit[] = ["serving", "grams", "pieces", "cups", "tablespoons", "portion"];
 const selectClassName = "h-12 w-full rounded-[14px] border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
-const fallbackCategories = [...egyptianFoodSubcategories];
 const emptyFoodLogs: FoodLog[] = [];
 
 type FoodBrowserProps = {
@@ -49,14 +47,6 @@ type Notice = { type: "success" | "error" | "info"; title: string; description?:
 type ActionKind = "log" | "plan" | "favorite";
 type ActionStatus = { status: "pending" | "success" | "error"; label: string; description?: string };
 type ActionStateMap = Record<string, ActionStatus>;
-
-function fallbackSubcategory(value: string | null | undefined) {
-  if (value && fallbackCategories.includes(value as (typeof fallbackCategories)[number])) return value;
-  if (value === "Rice") return "Carb";
-  if (value === "Sauce" || value === "Salad") return "Dip";
-  if (value === "Protein" || value === "Sandwich" || value === "Meal" || value === "Side") return "Breakfast";
-  return "Snack";
-}
 
 function fallbackKitchenData() {
   const now = new Date().toISOString();
@@ -159,11 +149,6 @@ function FoodBrowserInner({
     () => foods.filter((food) => !favoritesOnly || favoriteKeys.includes(favoriteKeyForFood(food))).slice(0, visibleCount),
     [favoriteKeys, favoritesOnly, foods, visibleCount]
   );
-  const fallbackFoodsActive = useMemo(
-    () => foods.length > 0 && foods.every(isApproximateFallbackFood),
-    [foods]
-  );
-
   useEffect(() => setMealType(mealOptions.includes(defaultMealType) ? defaultMealType : "Breakfast"), [defaultMealType]);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 350);
@@ -245,19 +230,11 @@ function FoodBrowserInner({
         if (!active) return;
         const normalized = items.map(normalizeFoodItem);
         setFoods(normalized);
-        if (normalized.length > 0 && normalized.every(isApproximateFallbackFood)) {
-          setLibraryMessage("Showing fallback food data. Some live library foods may be unavailable.");
-        }
       })
       .catch((error) => {
         if (!active) return;
-        const localFallback = egyptianFoods
-          .map((food) => ({ ...food, cuisine: egyptianFoodKitchenName, category: fallbackSubcategory(food.category) }))
-          .filter((food) => (!selectedSubcategory?.name || food.category === selectedSubcategory.name) && (!debouncedQuery || food.food_name.toLowerCase().includes(debouncedQuery.toLowerCase())))
-          .slice(0, 90)
-          .map(normalizeFoodItem);
-        setFoods(localFallback);
-        setLibraryMessage(userSafeError(error, "Showing fallback food data. Some live library foods may be unavailable."));
+        setFoods([]);
+        setLibraryMessage(userSafeError(error, "Live Food Catalog results are unavailable."));
       })
       .finally(() => {
         if (active) setIsLoadingFoods(false);
@@ -436,8 +413,7 @@ function FoodBrowserInner({
   const sourceStatusMessages = Array.from(
     new Set([
       ...sourceMessages,
-      libraryMessage,
-      fallbackFoodsActive && !libraryMessage ? "Showing fallback food data. Some live library foods may be unavailable." : null
+      libraryMessage
     ].filter(Boolean) as string[])
   );
 
@@ -810,11 +786,6 @@ function sourceLabelForFood(food: Pick<FoodLibraryItem, "source_type" | "is_glob
   if (source.toLowerCase().includes("manual")) return "manual source";
   if (source.toLowerCase().includes("user")) return "user source";
   return food.is_global ? "library source" : "estimated source";
-}
-
-function isApproximateFallbackFood(food: Pick<FoodLibraryItem, "id" | "source_type" | "cuisine">) {
-  const source = String(food.source_type || "").toLowerCase();
-  return source.includes("approximate_macro_table") || String(food.id).startsWith("egyptian-") || food.cuisine === egyptianFoodKitchenName;
 }
 
 function actionKey(id: string, action: ActionKind) {
