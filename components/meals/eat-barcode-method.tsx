@@ -83,7 +83,7 @@ export function EatBarcodeMethod({
     setIsLookingUp(true);
     setFeedback(null);
     try {
-      const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}`, { headers: headers() });
+      const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}&locale=${encodeURIComponent(locale)}`, { headers: headers() });
       const data = await response.json().catch(() => ({})) as { food?: BarcodeFood };
       if (!response.ok || !data.food) throw new Error(et("productLoadFailed"));
       setFood(data.food);
@@ -157,7 +157,7 @@ export function EatBarcodeMethod({
       const response = await fetch("/api/food/open-food-facts", {
         method: "POST",
         headers: headers(true),
-        body: JSON.stringify({ barcode, quantity: parsedQuantity, mealType, date, saveToLibrary: false, addToLog: true, addToMealPlan: false })
+        body: JSON.stringify({ barcode, quantity: parsedQuantity, mealType, date, locale, saveToLibrary: false, addToLog: true, addToMealPlan: false })
       });
       const data = await response.json().catch(() => ({})) as { log?: FoodLog };
       if (!response.ok || !data.log) throw new Error(et("productLogFailed"));
