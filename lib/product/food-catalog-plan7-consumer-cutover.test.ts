@@ -100,13 +100,17 @@ describe("Plan 7 Tasks 9-12 consumer current-truth retirement contract", () => {
     const prompt = source("services/database/planned-meal-prompt-context.ts");
     const quality = source("app/api/admin/quality/route.ts");
     const qualityReadModel = source("services/food-catalog/server/current-generation-quality.ts");
+    const generationReadAdapter = source("services/food-catalog/server/supabase-generation-read-store.ts");
 
     expect(prompt).not.toMatch(/\.from\(["']food_items["']\)/);
     expect(quality).toContain("getCurrentGenerationQuality");
     expect(quality).not.toMatch(/\.from\(["']food_items["']\)/);
-    expect(qualityReadModel).toContain("food_catalog_current_generation");
-    expect(qualityReadModel).toContain("food_catalog_generation_foods");
+    expect(qualityReadModel).toContain("readSupabaseCurrentGenerationQualitySelection");
+    expect(qualityReadModel).toContain("readSupabaseCurrentGenerationQualityFacts");
     expect(qualityReadModel).not.toMatch(/\.from\(["']food_items["']\)/);
+    expect(generationReadAdapter).toContain("food_catalog_current_generation");
+    expect(generationReadAdapter).toContain("food_catalog_generation_foods");
+    expect(generationReadAdapter).not.toMatch(/\.from\(["']food_items["']\)/);
   });
 
   it("keeps barcode authority canonical-first and provider results suggestion-only", () => {
