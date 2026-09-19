@@ -31,6 +31,7 @@ import type { CustomMeal, FoodKitchen, FoodLibraryItem, FoodLog, FoodSubcategory
 
 const pageSize = 12;
 const mealOptions: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
+const selectClassName = "h-12 w-full rounded-[14px] border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 const emptyFoodLogs: FoodLog[] = [];
 
 type FoodBrowserProps = {
