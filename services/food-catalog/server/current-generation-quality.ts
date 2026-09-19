@@ -2,6 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { readSupabaseCurrentGenerationQualityFacts } from "./supabase-generation-read-store";
+
 export type CurrentGenerationQuality = {
   available: boolean;
   generationId: string | null;
@@ -76,27 +78,14 @@ export async function getCurrentGenerationQuality(
       .filter((id): id is string => Boolean(id)),
   ));
 
-  const [nutritionResult, namesResult] = await Promise.all([
-    nutritionIds.length
-      ? supabase
-          .from("food_nutrition_revisions")
-          .select("id,calories,protein_g,carbs_g,fat_g")
-          .in("id", nutritionIds)
-      : Promise.resolve({ data: [], error: null }),
-    nameIds.length
-      ? supabase
-          .from("food_names")
-          .select("id,language_tag,normalized_text,name_text")
-          .in("id", nameIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-  dbError("Selected current nutrition", nutritionResult.error);
-  dbError("Selected current Names", namesResult.error);
+  const facts = await readSupabaseCurrentGenerationQualityFacts(
+    supabase,
+    nutritionIds,
+    nameIds,
+  );
 
   const nutritionById = new Map(
-    rows(nutritionResult.data)
-      .filter((row) => typeof row.id === "string")
-      .map((row) => [row.id as string, row]),
+    facts.nutrition.map((row) => [row.id, row]),
   );
   const foodsMissingMacros = foods.filter((food) => {
     const revisionId = typeof food.nutrition_revision_id === "string" ? food.nutrition_revision_id : null;
@@ -109,7 +98,7 @@ export async function getCurrentGenerationQuality(
   }).length;
 
   const selectedNameCounts = new Map<string, number>();
-  for (const name of rows(namesResult.data)) {
+  for (const name of facts.names) {
     const language = typeof name.language_tag === "string" ? name.language_tag.trim().toLowerCase() : "";
     const normalized = typeof name.normalized_text === "string" && name.normalized_text.trim()
       ? name.normalized_text.trim()
