@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { readSupabaseCurrentGenerationQualityFacts } from "./supabase-generation-read-store";
 
+const QUALITY_MACRO_KEYS = ["calories", "protein_g", "carbs_g", "fat_g"] as const;
+
 export type CurrentGenerationQuality = {
   available: boolean;
   generationId: string | null;
@@ -92,9 +94,7 @@ export async function getCurrentGenerationQuality(
     if (!revisionId) return true;
     const nutrition = nutritionById.get(revisionId);
     if (!nutrition) return true;
-    return ["calories", "protein_g", "carbs_g", "fat_g"].some(
-      (key) => nutrition[key] === null || nutrition[key] === undefined,
-    );
+    return QUALITY_MACRO_KEYS.some((key) => nutrition[key] === null);
   }).length;
 
   const selectedNameCounts = new Map<string, number>();
