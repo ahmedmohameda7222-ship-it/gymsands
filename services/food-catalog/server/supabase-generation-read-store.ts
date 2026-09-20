@@ -40,7 +40,11 @@ import type {
   StoredGenerationValidationFinding,
   StoredGenerationValidationReport,
 } from "./generation-contracts";
-import type { FoodCatalogGenerationReadStore } from "./generation-store";
+import type {
+  FoodCatalogGenerationReadStore,
+  FoodCatalogGenerationTrustBatchReadStore,
+  StoredGenerationTrustHydration,
+} from "./generation-store";
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const GENERATION_EVENTS = new Set<GenerationEventType>(["created", "validated", "promote", "rollback", "revoke"]);
@@ -334,6 +338,64 @@ function mapValidationFinding(value: unknown): StoredGenerationValidationFinding
   };
 }
 
+const TARGETED_BATCH_CHUNK_SIZE = 100;
+
+function uniqueNonblank(values: readonly string[]) {
+  return Array.from(new Set(values.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim())));
+}
+
+function chunks<T>(values: readonly T[], size = TARGETED_BATCH_CHUNK_SIZE): T[][] {
+  const output: T[][] = [];
+  for (let index = 0; index < values.length; index += size) output.push(values.slice(index, index + size));
+  return output;
+}
+
+async function readRowsInChunks<T>(
+  supabase: SupabaseClient,
+  table: string,
+  columns: string,
+  inColumn: string,
+  ids: readonly string[],
+  context: string,
+  mapper: (value: unknown) => T,
+  equalFilters: ReadonlyArray<readonly [string, string]> = [],
+): Promise<T[]> {
+  const uniqueIds = uniqueNonblank(ids);
+  if (!uniqueIds.length) return [];
+  const output: T[] = [];
+  for (const batch of chunks(uniqueIds)) {
+    let query = supabase.from(table).select(columns);
+    for (const [column, value] of equalFilters) query = query.eq(column, value);
+    const result = await query.in(inColumn, batch);
+    throwDbError(context, result.error);
+    output.push(...rows(result.data, context).map(mapper));
+  }
+  return output;
+}
+
+type BatchActivationMember = {
+  id: string;
+  activationSetId: string;
+  foodId: string;
+  eligibility: ActivationEligibility;
+  sourceLegalAccepted: boolean;
+};
+
+function mapBatchActivationMember(value: unknown): BatchActivationMember {
+  const row = asRecord(value, "batch activation member");
+  const eligibility = requiredString(row.eligibility, "batch activation member eligibility") as ActivationEligibility;
+  if (!ACTIVATION_ELIGIBILITY.has(eligibility)) {
+    throw new Error("Food Catalog Plan 3 read: batch activation member eligibility is invalid.");
+  }
+  return {
+    id: requiredString(row.id, "batch activation member id"),
+    activationSetId: requiredString(row.activation_set_id, "batch activation member activation_set_id"),
+    foodId: requiredString(row.food_id, "batch activation member food_id"),
+    eligibility,
+    sourceLegalAccepted: requiredBoolean(row.source_legal_accepted, "batch activation member source_legal_accepted"),
+  };
+}
+
 async function readSelectedFacts<T>(
   supabase: SupabaseClient,
   table: string,
@@ -476,7 +538,7 @@ export async function readSupabaseCurrentGenerationQualityFacts(
 
 export function createSupabaseFoodCatalogGenerationReadStore(
   supabase: SupabaseClient,
-): FoodCatalogGenerationReadStore {
+): FoodCatalogGenerationReadStore & FoodCatalogGenerationTrustBatchReadStore {
   return {
     async readCurrentPointer() {
       const result = await supabase
@@ -522,6 +584,19 @@ export function createSupabaseFoodCatalogGenerationReadStore(
       return result.data === null ? null : mapGenerationFood(result.data);
     },
 
+    readGenerationFoodsByIds(generationId, foodIds) {
+      return readRowsInChunks(
+        supabase,
+        "food_catalog_generation_foods",
+        "generation_id,food_id,lifecycle,nutrition_revision_id,activation_set_id,activation_set_member_id,activation_grant_event_id",
+        "food_id",
+        foodIds,
+        "targeted generation Foods",
+        mapGenerationFood,
+        [["generation_id", generationId]],
+      );
+    },
+
     async readGenerationRedirect(generationId, sourceFoodId) {
       const result = await supabase
         .from("food_catalog_generation_redirects")
@@ -531,6 +606,301 @@ export function createSupabaseFoodCatalogGenerationReadStore(
         .maybeSingle();
       throwDbError("generation redirect", result.error);
       return result.data === null ? null : mapRedirect(result.data);
+    },
+
+    readGenerationRedirectsBySourceIds(generationId, sourceFoodIds) {
+      return readRowsInChunks(
+        supabase,
+        "food_catalog_generation_redirects",
+        "generation_id,source_food_id,target_food_id",
+        "source_food_id",
+        sourceFoodIds,
+        "targeted generation redirects",
+        mapRedirect,
+        [["generation_id", generationId]],
+      );
+    },
+
+    async readGenerationTrustHydration(generationId, foods) {
+      const foodIds = uniqueNonblank(foods.map((food) => food.foodId));
+      const [
+        servingSelections,
+        nameSelections,
+        taxonomySelections,
+        marketSelections,
+        verificationSelections,
+      ] = await Promise.all([
+        readRowsInChunks(
+          supabase,
+          "food_catalog_generation_servings",
+          "food_id,serving_option_id",
+          "food_id",
+          foodIds,
+          "targeted generation servings",
+          (value) => asRecord(value, "targeted generation serving"),
+          [["generation_id", generationId]],
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_catalog_generation_names",
+          "food_id,name_fact_id",
+          "food_id",
+          foodIds,
+          "targeted generation names",
+          (value) => asRecord(value, "targeted generation name"),
+          [["generation_id", generationId]],
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_catalog_generation_taxonomy",
+          "food_id,taxonomy_assignment_id",
+          "food_id",
+          foodIds,
+          "targeted generation taxonomy",
+          (value) => asRecord(value, "targeted generation taxonomy"),
+          [["generation_id", generationId]],
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_catalog_generation_markets",
+          "food_id,market_assignment_id",
+          "food_id",
+          foodIds,
+          "targeted generation markets",
+          (value) => asRecord(value, "targeted generation market"),
+          [["generation_id", generationId]],
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_catalog_generation_verification",
+          "food_id,assertion_scope,assertion_id",
+          "food_id",
+          foodIds,
+          "targeted generation verification",
+          (value) => asRecord(value, "targeted generation verification"),
+          [["generation_id", generationId]],
+        ),
+      ]);
+
+      const selectionsByFoodId = Object.fromEntries(foodIds.map((foodId) => [foodId, {
+        servingOptionIds: [],
+        nameFactIds: [],
+        taxonomyAssignmentIds: [],
+        marketAssignmentIds: [],
+        verification: [],
+      } satisfies StoredGenerationSelections])) as Record<string, StoredGenerationSelections>;
+
+      for (const row of servingSelections) {
+        const foodId = requiredString(row.food_id, "targeted generation serving food_id");
+        const selection = selectionsByFoodId[foodId];
+        if (selection) selection.servingOptionIds.push(requiredString(row.serving_option_id, "targeted generation serving serving_option_id"));
+      }
+      for (const row of nameSelections) {
+        const foodId = requiredString(row.food_id, "targeted generation name food_id");
+        const selection = selectionsByFoodId[foodId];
+        if (selection) selection.nameFactIds.push(requiredString(row.name_fact_id, "targeted generation name name_fact_id"));
+      }
+      for (const row of taxonomySelections) {
+        const foodId = requiredString(row.food_id, "targeted generation taxonomy food_id");
+        const selection = selectionsByFoodId[foodId];
+        if (selection) selection.taxonomyAssignmentIds.push(requiredString(row.taxonomy_assignment_id, "targeted generation taxonomy taxonomy_assignment_id"));
+      }
+      for (const row of marketSelections) {
+        const foodId = requiredString(row.food_id, "targeted generation market food_id");
+        const selection = selectionsByFoodId[foodId];
+        if (selection) selection.marketAssignmentIds.push(requiredString(row.market_assignment_id, "targeted generation market market_assignment_id"));
+      }
+      for (const row of verificationSelections) {
+        const foodId = requiredString(row.food_id, "targeted generation verification food_id");
+        const selection = selectionsByFoodId[foodId];
+        if (!selection) continue;
+        selection.verification.push(validatePersisted("targeted generation verification", () => validateGenerationVerificationSelection({
+          foodId,
+          scope: requiredString(row.assertion_scope, "targeted generation verification assertion_scope") as FoodVerificationScope,
+          assertionId: requiredString(row.assertion_id, "targeted generation verification assertion_id"),
+        })));
+      }
+
+      const nutritionIds = uniqueNonblank(foods.flatMap((food) => food.nutritionRevisionId ? [food.nutritionRevisionId] : []));
+      const servingIds = uniqueNonblank(Object.values(selectionsByFoodId).flatMap((selection) => selection.servingOptionIds));
+      const nameIds = uniqueNonblank(Object.values(selectionsByFoodId).flatMap((selection) => selection.nameFactIds));
+      const taxonomyIds = uniqueNonblank(Object.values(selectionsByFoodId).flatMap((selection) => selection.taxonomyAssignmentIds));
+      const marketIds = uniqueNonblank(Object.values(selectionsByFoodId).flatMap((selection) => selection.marketAssignmentIds));
+      const verificationIds = uniqueNonblank(Object.values(selectionsByFoodId).flatMap((selection) => selection.verification.map((item) => item.assertionId)));
+
+      const [
+        nutritionRevisions,
+        servingOptions,
+        names,
+        taxonomyAssignments,
+        marketAssignments,
+        verificationAssertions,
+      ] = await Promise.all([
+        readRowsInChunks(
+          supabase,
+          "food_nutrition_revisions",
+          "id,food_id,revision_number,calories,protein_g,carbs_g,fat_g,saturated_fat_g,fiber_g,sugars_g,sodium_mg,basis_amount,basis_unit,nutrient_mapping_version,source_record_id,created_at",
+          "id",
+          nutritionIds,
+          "targeted nutrition revisions",
+          mapNutrition,
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_serving_options",
+          "id,food_id,label,amount,unit_code,gram_weight,source_record_id,source_portion_code,evidence_class,source_primary,created_at",
+          "id",
+          servingIds,
+          "targeted serving options",
+          mapServing,
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_names",
+          "id,food_id,language_tag,name_role,name_text,normalized_text,script_code,origin,source_record_id,policy_version,created_at",
+          "id",
+          nameIds,
+          "targeted names",
+          mapName,
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_taxonomy_assignments",
+          "id,food_id,node_code,source_record_id,assignment_action,policy_version,created_at",
+          "id",
+          taxonomyIds,
+          "targeted taxonomy assignments",
+          mapTaxonomy,
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_market_assignments",
+          "id,food_id,scope_code,relevance_level,source_record_id,assignment_action,policy_version,created_at",
+          "id",
+          marketIds,
+          "targeted market assignments",
+          mapMarket,
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_verification_assertions",
+          "id,food_id,assertion_scope,assertion_state,policy_version,source_record_id,supersedes_assertion_id,reason_code,authority_reference,created_at",
+          "id",
+          verificationIds,
+          "targeted verification assertions",
+          mapVerification,
+        ),
+      ]);
+
+      const activeReferences = foods.flatMap((food) => (
+        food.lifecycle === "active"
+        && food.activationSetMemberId
+        && food.activationGrantEventId
+          ? [{
+              memberId: food.activationSetMemberId,
+              grantEventId: food.activationGrantEventId,
+            }]
+          : []
+      ));
+      const memberIds = uniqueNonblank(activeReferences.map((reference) => reference.memberId));
+      const grantIds = uniqueNonblank(activeReferences.map((reference) => reference.grantEventId));
+      const members = await readRowsInChunks(
+        supabase,
+        "food_catalog_activation_set_members",
+        "id,activation_set_id,food_id,eligibility,source_legal_accepted",
+        "id",
+        memberIds,
+        "targeted activation members",
+        mapBatchActivationMember,
+      );
+      const activationSetIds = uniqueNonblank(members.map((member) => member.activationSetId));
+      const [setRows, grantRows, invalidationRows] = await Promise.all([
+        readRowsInChunks(
+          supabase,
+          "food_catalog_activation_sets",
+          "id,activation_policy_version",
+          "id",
+          activationSetIds,
+          "targeted activation sets",
+          (value) => asRecord(value, "targeted activation set"),
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_catalog_activation_events",
+          "id,activation_set_id,event_type,created_at",
+          "id",
+          grantIds,
+          "targeted activation grants",
+          (value) => asRecord(value, "targeted activation grant"),
+        ),
+        readRowsInChunks(
+          supabase,
+          "food_catalog_activation_events",
+          "id,target_grant_event_id,event_type,created_at",
+          "target_grant_event_id",
+          grantIds,
+          "targeted activation invalidations",
+          (value) => asRecord(value, "targeted activation invalidation"),
+          [["event_type", "invalidate"]],
+        ),
+      ]);
+
+      const setsById = new Map(setRows.map((row) => [
+        requiredString(row.id, "targeted activation set id"),
+        requiredString(row.activation_policy_version, "targeted activation set activation_policy_version"),
+      ]));
+      const grantsById = new Map(grantRows.map((row) => [
+        requiredString(row.id, "targeted activation grant id"),
+        row,
+      ]));
+      const invalidationsByGrant = new Map<string, Record<string, unknown>[]>();
+      for (const row of invalidationRows) {
+        const targetGrantEventId = requiredString(row.target_grant_event_id, "targeted activation invalidation target_grant_event_id");
+        const bucket = invalidationsByGrant.get(targetGrantEventId);
+        if (bucket) bucket.push(row);
+        else invalidationsByGrant.set(targetGrantEventId, [row]);
+      }
+      const membersById = new Map(members.map((member) => [member.id, member]));
+      const activationAuthorities: StoredActivationAuthority[] = [];
+      for (const reference of activeReferences) {
+        const member = membersById.get(reference.memberId);
+        const grant = grantsById.get(reference.grantEventId);
+        if (!member || !grant) continue;
+        const policyVersion = setsById.get(member.activationSetId);
+        if (!policyVersion) continue;
+        if (
+          requiredString(grant.activation_set_id, "targeted activation grant activation_set_id") !== member.activationSetId
+          || requiredString(grant.event_type, "targeted activation grant event_type") !== "grant"
+        ) {
+          continue;
+        }
+        const invalidations = invalidationsByGrant.get(reference.grantEventId) ?? [];
+        if (invalidations.length > 1) continue;
+        activationAuthorities.push({
+          activationSetId: member.activationSetId,
+          activationSetMemberId: member.id,
+          foodId: member.foodId,
+          activationPolicyVersion: policyVersion,
+          eligibility: member.eligibility,
+          sourceLegalAccepted: member.sourceLegalAccepted,
+          grantEventId: reference.grantEventId,
+          grantCreatedAt: requiredString(grant.created_at, "targeted activation grant created_at"),
+          invalidatedAt: invalidations.length === 1
+            ? requiredString(invalidations[0]!.created_at, "targeted activation invalidation created_at")
+            : null,
+        });
+      }
+
+      return {
+        selectionsByFoodId,
+        nutritionRevisions,
+        servingOptions,
+        names,
+        taxonomyAssignments,
+        marketAssignments,
+        verificationAssertions,
+        activationAuthorities,
+      } satisfies StoredGenerationTrustHydration;
     },
 
     async readGenerationSelections(generationId, foodId) {
