@@ -7,7 +7,7 @@ import { resolveCurrentGenerationFoodForNewUseFromSupabase } from "@/services/fo
 const DEFAULT_CONCURRENCY = 6;
 
 export async function getCurrentCatalogTrustStates(
-  supabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   foodIds: readonly string[],
   concurrency = DEFAULT_CONCURRENCY,
 ): Promise<Map<string, boolean>> {
@@ -25,7 +25,7 @@ export async function getCurrentCatalogTrustStates(
       if (index >= uniqueIds.length) return;
       const requestedFoodId = uniqueIds[index]!;
       try {
-        const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, requestedFoodId);
+        const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, requestedFoodId);
         results.set(requestedFoodId, view.trust.verified === true);
       } catch {
         results.set(requestedFoodId, false);
