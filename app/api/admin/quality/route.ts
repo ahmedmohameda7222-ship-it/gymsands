@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { developmentDatabaseDetails, friendlyDatabaseWarning } from "@/lib/admin/migration-safety";
-import { requireAdmin } from "@/lib/integrations/env";
+import { createSupabaseServerClient, requireAdmin } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { getCurrentGenerationQuality } from "@/services/food-catalog/server/current-generation-quality";
 
@@ -12,8 +12,9 @@ export async function GET(request: Request) {
   const context = await requireAdmin(request);
   if (context instanceof NextResponse) return context;
 
+  const catalogSupabase = createSupabaseServerClient(null, true);
   const [foodQualityResult, exercises, batches] = await Promise.all([
-    getCurrentGenerationQuality(context.supabase)
+    getCurrentGenerationQuality(catalogSupabase)
       .then((data) => ({ data, error: null as Error | null }))
       .catch((error) => ({ data: null, error: error instanceof Error ? error : new Error("Food quality read failed.") })),
     context.supabase.from("exercises").select("name,video_url").eq("is_global", true).limit(5000),
