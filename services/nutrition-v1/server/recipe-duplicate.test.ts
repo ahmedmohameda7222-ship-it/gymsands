@@ -33,8 +33,9 @@ describe("Nutrition V1 atomic Recipe duplication", () => {
       error: null,
     }));
     const client = { rpc } as unknown as SupabaseClient;
+    const catalogClient = {} as SupabaseClient;
 
-    const result = await duplicatePublishedRecipeAtomically(client, userId, recipeId, (() => {
+    const result = await duplicatePublishedRecipeAtomically(client, catalogClient, userId, recipeId, (() => {
       const ids = ["33333333-3333-4333-8333-333333333333", "44444444-4444-4444-8444-444444444444"];
       return () => ids.shift()!;
     })());
@@ -57,7 +58,8 @@ describe("Nutrition V1 atomic Recipe duplication", () => {
   it("does not expose a partial duplicate when the atomic database command fails", async () => {
     const rpc = vi.fn(async (_name: string, _payload: Record<string, any>) => ({ data: null, error: { message: "invalid graph" } }));
     const client = { rpc } as unknown as SupabaseClient;
-    await expect(duplicatePublishedRecipeAtomically(client, userId, recipeId)).rejects.toThrow(/invalid graph/i);
+    const catalogClient = {} as SupabaseClient;
+    await expect(duplicatePublishedRecipeAtomically(client, catalogClient, userId, recipeId)).rejects.toThrow(/invalid graph/i);
     expect(rpc).toHaveBeenCalledOnce();
   });
 });
