@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 
 import { barcodeValidationMessage, normalizeProductBarcode } from "@/lib/barcodes";
 import { logExternalApi } from "@/lib/integrations/api-logger";
-import { jsonError, requireEligibleUser } from "@/lib/integrations/env";
+import { createSupabaseServerClient, jsonError, requireEligibleUser } from "@/lib/integrations/env";
 import { lookupOpenFoodFactsBarcode, type NormalizedFood } from "@/lib/integrations/open-food-facts";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { resolveFoodBarcode } from "@/services/nutrition-v1/server/barcode-lookup";
 import type { FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
-import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import { resolveFoodHandoffWithAuthorities } from "@/services/nutrition-v1/server/food-handoff";
 
 function nullableNumber(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
@@ -93,8 +93,10 @@ async function resolveBarcodeRequest(
   rawBarcode: string,
   languageTag: string,
 ) {
+  const catalogSupabase = createSupabaseServerClient(null, true);
   const result = await resolveFoodBarcode(
     context.supabase,
+    catalogSupabase,
     context.user.id,
     rawBarcode,
     languageTag,
@@ -166,7 +168,8 @@ export async function POST(request: Request) {
       if (!resolved.food.servingLabel) {
         throw new Error("Canonical barcode Food has no authoritative serving selection.");
       }
-      const handoff = await resolveFoodHandoff(context.supabase, context.user.id, {
+      const catalogSupabase = createSupabaseServerClient(null, true);
+      const handoff = await resolveFoodHandoffWithAuthorities(context.supabase, catalogSupabase, context.user.id, {
         foodId: resolved.food.id,
         source: "catalog",
         quantity,
