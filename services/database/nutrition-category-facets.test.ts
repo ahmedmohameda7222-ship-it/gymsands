@@ -65,4 +65,24 @@ describe("Plan 7 browser category facet enumeration", () => {
     await expect(getFoodCategories()).resolves.toEqual(["common", "late-category"]);
     expect(db.rpc).toHaveBeenCalledTimes(5);
   });
+
+  it("loads category facets through the authenticated categories endpoint instead of direct V2 search", async () => {
+    db.rpc.mockImplementation(async () => {
+      throw new Error("Category facet enumeration must not call search_food_catalog_v2.");
+    });
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      categories: [" fruit ", "dairy", "fruit", "", "   "],
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getFoodCategories()).resolves.toEqual(["dairy", "fruit"]);
+
+    expect(db.getSession).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/nutrition/v1/foods/categories",
+      { headers: { Authorization: "Bearer test-token" } },
+    );
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
 });
