@@ -38,7 +38,7 @@ const userId = "11111111-1111-4111-8111-111111111111";
 const foodId = "22222222-2222-4222-8222-222222222222";
 const userFoodId = "55555555-5555-4555-8555-555555555555";
 
-function catalogFood(overrides: Partial<Pick<CatalogFoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">> = {}): CatalogFoodItem {
+function catalogFood(overrides: Partial<Pick<CatalogFoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">> & { locale?: string } = {}): CatalogFoodItem & { locale: string } {
   return {
     id: foodId,
     food_name: "Catalog food",
@@ -54,6 +54,7 @@ function catalogFood(overrides: Partial<Pick<CatalogFoodItem, "calories" | "prot
     source_type: "catalog",
     is_global: true,
     is_editable_by_user: false,
+    locale: overrides.locale ?? "en",
     ...overrides,
   };
 }
@@ -212,6 +213,19 @@ describe("Saved Meal draft preview nullable nutrition", () => {
 });
 
 describe("Catalog Food and My Food logging identity", () => {
+  it.each(["de-DE", "ar-EG"])("preserves selected V2 locale %s through browser handoff", async (locale) => {
+    await addGlobalFoodToToday({
+      userId,
+      food: catalogFood({ locale }),
+      quantity: 1,
+      mealType: "Lunch",
+      date: "2026-08-30",
+    });
+
+    const handoffUrl = String(vi.mocked(fetch).mock.calls[0]?.[0] ?? "");
+    expect(new URL(handoffUrl, "http://localhost").searchParams.get("languageTag")).toBe(locale);
+  });
+
   it("Catalog Food persists canonical identity and null nutrition without fabricated zero", async () => {
     await addGlobalFoodToToday({
       userId,
@@ -225,6 +239,8 @@ describe("Catalog Food and My Food logging identity", () => {
       expect.stringContaining(`/api/nutrition/v1/foods/${foodId}/handoff?`),
       expect.objectContaining({ headers: { Authorization: "Bearer test-token" } }),
     );
+    const handoffUrl = String(vi.mocked(fetch).mock.calls[0]?.[0] ?? "");
+    expect(new URL(handoffUrl, "http://localhost").searchParams.get("languageTag")).toBe("en");
     expect(db.inserted).toHaveLength(1);
     expect(db.inserted[0]).toMatchObject({
       food_item_id: foodId,
