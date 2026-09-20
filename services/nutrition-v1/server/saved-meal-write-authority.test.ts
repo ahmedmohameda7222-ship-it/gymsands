@@ -15,6 +15,14 @@ vi.mock("@/services/nutrition-v1/server/recipe-handoff", () => ({
 
 import { canonicalizeSavedMealItems } from "@/services/nutrition-v1/server/saved-meal-write-authority";
 
+const canonicalizeWithWriteLocale = canonicalizeSavedMealItems as unknown as (
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
+  userId: string,
+  items: SavedMealItemInput[],
+  writeLanguageTag: string | null,
+) => ReturnType<typeof canonicalizeSavedMealItems>;
+
 const userId = "11111111-1111-4111-8111-111111111111";
 const foodId = "22222222-2222-4222-8222-222222222222";
 const ownerSupabase = (owned: boolean) => {
@@ -58,7 +66,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     const owner = ownerSupabase(false);
     const item = { ...frozenFood, languageTag } as SavedMealItemInput & { languageTag: string };
 
-    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [item], "ar");
+    await canonicalizeWithWriteLocale(owner, catalogSupabase, userId, [item], "ar");
 
     expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
       foodId,
@@ -71,7 +79,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
   it.each(["en", "de"])("uses current write locale %s for a legacy frozen Catalog snapshot without transient locale", async (writeLanguageTag) => {
     const owner = ownerSupabase(false);
 
-    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], writeLanguageTag);
+    await canonicalizeWithWriteLocale(owner, catalogSupabase, userId, [frozenFood], writeLanguageTag);
 
     expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
       foodId,
@@ -85,14 +93,14 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     const owner = ownerSupabase(false);
     handoff.resolve.mockRejectedValueOnce(new Error("The selected Food name does not resolve to exactly one current-generation Name fact."));
 
-    await expect(canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], null)).rejects.toThrow(/name.*exactly one/i);
+    await expect(canonicalizeWithWriteLocale(owner, catalogSupabase, userId, [frozenFood], null)).rejects.toThrow(/name.*exactly one/i);
   });
 
   it("strips transient locale metadata from the returned canonical frozen snapshot", async () => {
     const owner = ownerSupabase(false);
     handoff.resolve.mockResolvedValueOnce(resolvedFood({ languageTag: "en" }));
 
-    const result = await canonicalizeSavedMealItems(
+    const result = await canonicalizeWithWriteLocale(
       owner,
       catalogSupabase,
       userId,
@@ -107,7 +115,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
   it("keeps My Food canonicalization generation- and locale-independent", async () => {
     const owner = ownerSupabase(true);
 
-    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
+    await canonicalizeWithWriteLocale(owner, catalogSupabase, userId, [frozenFood], "de");
 
     const input = handoff.resolve.mock.calls[0]?.[3];
     expect(input).toMatchObject({
