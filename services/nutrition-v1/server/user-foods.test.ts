@@ -72,6 +72,7 @@ const foodId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const survivorId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const operationId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const revisionId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const catalogClient = { authority: "catalog" } as unknown as SupabaseClient;
 
 function writeInput(overrides: Record<string, unknown> = {}) {
   return {
