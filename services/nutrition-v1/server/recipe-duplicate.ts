@@ -24,7 +24,8 @@ function optionalNumber(value: unknown) {
 }
 
 export async function duplicatePublishedRecipeAtomically(
-  supabase: SupabaseClient,
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   userId: string,
   recipeId: string,
   nextId: () => string = () => crypto.randomUUID(),
@@ -32,7 +33,7 @@ export async function duplicatePublishedRecipeAtomically(
   if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
   if (!isUuid(recipeId)) throw new Error("Recipe must be a valid ID.");
 
-  const source = await getPublishedRecipeDetail(supabase, userId, recipeId);
+  const source = await getPublishedRecipeDetail(ownerSupabase, catalogSupabase, userId, recipeId);
   const version = source.latestVersion as Record<string, unknown> | null;
   if (!version || typeof version.id !== "string" || !isUuid(version.id)) throw new Error("Only a published Recipe can be duplicated.");
   const name = typeof version.name === "string" && version.name.trim() ? `${version.name.trim()} copy` : "Recipe copy";
@@ -77,7 +78,7 @@ export async function duplicatePublishedRecipeAtomically(
     note: typeof item.note === "string" ? item.note : null,
   }));
 
-  const result = await supabase.rpc("duplicate_nutrition_recipe", {
+  const result = await ownerSupabase.rpc("duplicate_nutrition_recipe", {
     p_source_recipe_id: recipeId,
     p_source_version_id: version.id,
     p_name: name,
