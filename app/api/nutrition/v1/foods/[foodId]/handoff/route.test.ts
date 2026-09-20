@@ -5,7 +5,7 @@ const foodId = "22222222-2222-4222-8222-222222222222";
 
 const mocks = vi.hoisted(() => ({
   requireNutritionUser: vi.fn(),
-  resolveFoodHandoff: vi.fn(),
+  resolveFoodHandoffWithAuthorities: vi.fn(),
   createSupabaseServerClient: vi.fn(),
 }));
 
@@ -16,7 +16,7 @@ vi.mock("@/lib/nutrition-v1/http", async () => {
   return { ...actual, requireNutritionUser: mocks.requireNutritionUser };
 });
 vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({
-  resolveFoodHandoff: mocks.resolveFoodHandoff,
+  resolveFoodHandoff: mocks.resolveFoodHandoffWithAuthorities,
 }));
 vi.mock("@/lib/integrations/env", async () => {
   const actual = await vi.importActual<typeof import("@/lib/integrations/env")>("@/lib/integrations/env");
@@ -43,7 +43,7 @@ describe("Task 9 Food handoff GET boundary", () => {
       accessToken: "test",
     });
     mocks.createSupabaseServerClient.mockReturnValue(catalogSupabase);
-    mocks.resolveFoodHandoff.mockResolvedValue({
+    mocks.resolveFoodHandoffWithAuthorities.mockResolvedValue({
       foodId,
       source: "catalog",
       name: "Greek yogurt",
@@ -61,7 +61,7 @@ describe("Task 9 Food handoff GET boundary", () => {
 
     expect(response.ok).toBe(true);
     expect(mocks.createSupabaseServerClient).toHaveBeenCalledWith(null, true);
-    expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(
+    expect(mocks.resolveFoodHandoffWithAuthorities).toHaveBeenCalledWith(
       expect.objectContaining({ authority: "owner" }),
       expect.objectContaining({ authority: "catalog" }),
       userId,
@@ -83,11 +83,11 @@ describe("Task 9 Food handoff GET boundary", () => {
     );
 
     expect(response.status).toBe(400);
-    expect(mocks.resolveFoodHandoff).not.toHaveBeenCalled();
+    expect(mocks.resolveFoodHandoffWithAuthorities).not.toHaveBeenCalled();
   });
 
   it("keeps My Food handoff independent from catalog name context", async () => {
-    mocks.resolveFoodHandoff.mockResolvedValueOnce({
+    mocks.resolveFoodHandoffWithAuthorities.mockResolvedValueOnce({
       foodId,
       source: "my_food",
       name: "My oats",
@@ -102,9 +102,10 @@ describe("Task 9 Food handoff GET boundary", () => {
     );
 
     expect(response.ok).toBe(true);
-    expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(
+    expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(mocks.resolveFoodHandoffWithAuthorities).toHaveBeenCalledWith(
       expect.objectContaining({ authority: "owner" }),
-      expect.objectContaining({ authority: "catalog" }),
+      expect.objectContaining({ authority: "owner" }),
       userId,
       {
         foodId,
