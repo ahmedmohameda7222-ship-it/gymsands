@@ -165,8 +165,9 @@ function exactSelectedServing(
   return matches[0]!;
 }
 
-export async function resolveFoodHandoff(
-  supabase: SupabaseClient,
+export async function resolveFoodHandoffWithAuthorities(
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   userId: string,
   input: FoodHandoffInput,
 ): Promise<ResolvedFoodHandoff> {
@@ -184,11 +185,11 @@ export async function resolveFoodHandoff(
   if (input.source === "catalog") {
     const selectedDisplayName = requiredText(input.displayName, "Food display name");
     const languageTag = optionalText(input.languageTag);
-    const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, input.foodId);
+    const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, input.foodId);
     foodId = view.resolvedFoodId;
 
     const selectedName = exactSelectedName(view, selectedDisplayName, languageTag);
-    const personalOverride = await readCurrentPersonalOverride(supabase, foodId);
+    const personalOverride = await readCurrentPersonalOverride(ownerSupabase, foodId);
     const canonicalNutrition = nutritionFromView(view);
     const mergedBasisNutrition = mergePersonalOverrideNutrition(canonicalNutrition, personalOverride);
     const effectiveView = viewWithNutrition(view, mergedBasisNutrition);
@@ -218,7 +219,7 @@ export async function resolveFoodHandoff(
       effectiveNutrition = projected.nutrition;
     }
   } else {
-    const result = await supabase
+    const result = await ownerSupabase
       .from("user_food_items")
       .select("id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,nutrition_basis_amount,nutrition_basis_unit,deleted_at")
       .eq("id", foodId)
@@ -301,4 +302,19 @@ export async function resolveFoodHandoff(
       frozen_nutrition: frozenNutrition,
     },
   };
+}
+
+
+/**
+ * Legacy single-client compatibility for the MCP authority bridge that remains
+ * an explicit PR B / Task 14 prerequisite. Product/server routes in PR A must
+ * use resolveFoodHandoffWithAuthorities so owner and catalog trust domains do
+ * not collapse.
+ */
+export async function resolveFoodHandoff(
+  supabase: SupabaseClient,
+  userId: string,
+  input: FoodHandoffInput,
+): Promise<ResolvedFoodHandoff> {
+  return resolveFoodHandoffWithAuthorities(supabase, supabase, userId, input);
 }
