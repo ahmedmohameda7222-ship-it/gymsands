@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
+import { createSupabaseServerClient } from "@/lib/integrations/env";
 import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
-import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import { resolveFoodHandoffWithAuthorities } from "@/services/nutrition-v1/server/food-handoff";
 
 export async function GET(request: Request, { params }: { params: Promise<{ foodId: string }> }) {
   const context = await requireNutritionUser(request);
@@ -19,7 +20,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ food
     if (!serving?.trim()) throw new NutritionRequestError("Resolved serving is required.");
     if (source === "catalog" && !displayName) throw new NutritionRequestError("Resolved display name is required.");
     if (!Number.isFinite(quantity) || quantity <= 0) throw new NutritionRequestError("Resolved quantity is invalid.");
-    return nutritionJson(await resolveFoodHandoff(context.supabase, context.user.id, {
+    const catalogSupabase = source === "catalog" ? createSupabaseServerClient(null, true) : context.supabase;
+    return nutritionJson(await resolveFoodHandoffWithAuthorities(context.supabase, catalogSupabase, context.user.id, {
       foodId,
       source,
       serving,
