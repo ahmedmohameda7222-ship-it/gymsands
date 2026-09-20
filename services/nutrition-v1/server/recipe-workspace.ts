@@ -192,8 +192,8 @@ export async function listRecipeHome(
   const ids = roots.map((row) => row.id);
 
   const [draftsResult, versionsResult, usageResult] = await Promise.all([
-    ownerSupabase.from("nutrition_recipe_drafts").select("*").eq("user_id", userId).in("recipe_id", ids).limit(limit),
-    ownerSupabase.from("nutrition_recipe_versions").select("*").eq("user_id", userId).in("recipe_id", ids).order("version_number", { ascending: false }).limit(limit * 12),
+    supabase.from("nutrition_recipe_drafts").select("*").eq("user_id", userId).in("recipe_id", ids).limit(limit),
+    supabase.from("nutrition_recipe_versions").select("*").eq("user_id", userId).in("recipe_id", ids).order("version_number", { ascending: false }).limit(limit * 12),
     supabase.from("nutrition_log_groups").select("source_id,created_at").eq("user_id", userId).eq("source_type", "recipe").in("source_id", ids).order("created_at", { ascending: false }).limit(Math.min(80, limit * 4)),
   ]);
   dbError(draftsResult.error);
@@ -342,7 +342,7 @@ export async function ensureRecipeWorkingDraft(ownerSupabase: SupabaseClient, ca
   if (!version) throw new Error("Published Recipe version not found.");
   const publishedComponents = await componentRows(ownerSupabase, catalogSupabase, userId, null, version.id);
   const draftGraph = clonePublishedRecipeGraphForDraft(publishedComponents, () => crypto.randomUUID());
-  const result = await supabase.rpc("create_nutrition_recipe_working_draft", {
+  const result = await ownerSupabase.rpc("create_nutrition_recipe_working_draft", {
     p_recipe_id: recipeId,
     p_base_recipe_version_id: version.id,
     p_ingredients: draftGraph.ingredients,
