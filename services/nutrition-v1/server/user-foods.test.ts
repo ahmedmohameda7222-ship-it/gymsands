@@ -405,6 +405,7 @@ describe("Nutrition V1 owner Food write authority", () => {
 
     await expect(setFoodPersonalCorrection(
       db.client,
+      catalogClient,
       userId,
       correctionInput({ expectedRevisionId: revisionId, expectedPointerRevision: 7 }),
     )).rejects.toThrow(/CAS conflict/i);
@@ -443,6 +444,7 @@ describe("Nutrition V1 owner Food write authority", () => {
 
     await expect(setFoodPersonalCorrection(
       db.client,
+      catalogClient,
       userId,
       correctionInput({ calories: 151 }),
     )).rejects.toThrow(/different semantics/i);
