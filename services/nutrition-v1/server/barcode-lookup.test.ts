@@ -88,6 +88,28 @@ function candidate() {
   };
 }
 
+function preferredName(id: string, languageTag: string, text = `Canonical yogurt ${languageTag}`) {
+  return {
+    id,
+    foodId: survivorId,
+    role: "preferred_display",
+    languageTag,
+    text,
+  };
+}
+
+function viewWithPreferredNames(entries: Array<{ id: string; languageTag: string; text?: string }>) {
+  const names = entries.map((entry) => preferredName(entry.id, entry.languageTag, entry.text));
+  return currentView({
+    selections: { nameFactIds: names.map((name) => name.id) },
+    names,
+  });
+}
+
+function catalogCandidate(locale: string, name: string) {
+  return { ...candidate(), locale, name };
+}
+
 describe("Task 12 canonical-first barcode resolution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -187,4 +209,103 @@ describe("Task 12 canonical-first barcode resolution", () => {
     await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider)).rejects.toThrow(/presentation/i);
     expect(provider).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      request: "en-GB",
+      names: [
+        { id: "70000000-0000-4000-8000-000000000001", languageTag: "en" },
+        { id: "70000000-0000-4000-8000-000000000002", languageTag: "de" },
+        { id: "70000000-0000-4000-8000-000000000003", languageTag: "ar" },
+      ],
+      expectedLocale: "en",
+    },
+    {
+      request: "de-DE",
+      names: [
+        { id: "70000000-0000-4000-8000-000000000004", languageTag: "de" },
+        { id: "70000000-0000-4000-8000-000000000005", languageTag: "en" },
+      ],
+      expectedLocale: "de",
+    },
+    {
+      request: "ar-EG",
+      names: [
+        { id: "70000000-0000-4000-8000-000000000006", languageTag: "ar" },
+        { id: "70000000-0000-4000-8000-000000000007", languageTag: "en" },
+      ],
+      expectedLocale: "ar",
+    },
+    {
+      request: "en-US",
+      names: [
+        { id: "70000000-0000-4000-8000-000000000008", languageTag: "en-US" },
+        { id: "70000000-0000-4000-8000-000000000009", languageTag: "en" },
+      ],
+      expectedLocale: "en-US",
+    },
+    {
+      request: "en-AU",
+      names: [
+        { id: "70000000-0000-4000-8000-000000000010", languageTag: "en-US" },
+      ],
+      expectedLocale: "en-US",
+    },
+    {
+      request: "fr-FR",
+      names: [
+        { id: "70000000-0000-4000-8000-000000000011", languageTag: "de" },
+      ],
+      expectedLocale: "de",
+    },
+  ])("selects barcode preferred Name locale for $request as $expectedLocale and uses it for V2 presentation", async ({ request, names, expectedLocale }) => {
+    const db = supabaseWithBarcode([{ barcode_id: "55555555-5555-4555-8555-555555555555", food_id: mappedFoodId, gtin: barcode }]);
+    const view = viewWithPreferredNames(names);
+    generation.resolve.mockResolvedValueOnce(view);
+    const selected = view.names.find((name) => name.languageTag === expectedLocale)!;
+    search.list.mockResolvedValueOnce({ items: [catalogCandidate(expectedLocale, selected.text)], nextCursor: null });
+
+    const result = await resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, request, vi.fn());
+
+    expect(result.kind).toBe("catalog");
+    expect(search.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({
+      query: selected.text,
+      locale: expectedLocale,
+    }));
+  });
+
+  it("rejects ambiguous base-language family fallback instead of choosing between regional Names", async () => {
+    const db = supabaseWithBarcode([{ barcode_id: "55555555-5555-4555-8555-555555555555", food_id: mappedFoodId, gtin: barcode }]);
+    generation.resolve.mockResolvedValueOnce(viewWithPreferredNames([
+      { id: "70000000-0000-4000-8000-000000000012", languageTag: "en-US" },
+      { id: "70000000-0000-4000-8000-000000000013", languageTag: "en-GB" },
+    ]));
+
+    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en-AU", vi.fn())).rejects.toThrow(/display name|ambiguous/i);
+    expect(search.list).not.toHaveBeenCalled();
+  });
+
+  it("rejects multiple unrelated preferred Names when no locale-compatible Name exists", async () => {
+    const db = supabaseWithBarcode([{ barcode_id: "55555555-5555-4555-8555-555555555555", food_id: mappedFoodId, gtin: barcode }]);
+    generation.resolve.mockResolvedValueOnce(viewWithPreferredNames([
+      { id: "70000000-0000-4000-8000-000000000014", languageTag: "de" },
+      { id: "70000000-0000-4000-8000-000000000015", languageTag: "ar" },
+    ]));
+
+    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "fr-FR", vi.fn())).rejects.toThrow(/display name/i);
+    expect(search.list).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when V2 presentation does not bind the selected Name locale", async () => {
+    const db = supabaseWithBarcode([{ barcode_id: "55555555-5555-4555-8555-555555555555", food_id: mappedFoodId, gtin: barcode }]);
+    const view = viewWithPreferredNames([
+      { id: "70000000-0000-4000-8000-000000000016", languageTag: "en", text: "Canonical yogurt" },
+    ]);
+    generation.resolve.mockResolvedValueOnce(view);
+    search.list.mockResolvedValueOnce({ items: [catalogCandidate("de", "Canonical yogurt")], nextCursor: null });
+
+    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en-GB", vi.fn())).rejects.toThrow(/presentation/i);
+    expect(search.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({ locale: "en" }));
+  });
+
 });

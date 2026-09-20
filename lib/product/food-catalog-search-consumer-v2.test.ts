@@ -66,4 +66,10 @@ describe("Plan 5 Food Library V2 consumer surface", () => {
     expect(mcpSavedMeal).toContain("if (!selected.servingLabel)");
     expect(service).toContain('source: FoodLibrarySource');
   });
+
+  it("carries Saved Meal candidate locale as transient selection identity and sends current write locale separately", () => {
+    expect(savedMealUtility).toContain('languageTag: food.source === "catalog" ? food.locale : undefined');
+    expect(savedMealUtility).toContain("writeLanguageTag: language");
+  });
+
 });
