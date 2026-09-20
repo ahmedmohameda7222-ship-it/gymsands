@@ -31,6 +31,7 @@ const mappedFoodId = "22222222-2222-4222-8222-222222222222";
 const survivorId = "33333333-3333-4333-8333-333333333333";
 const nameId = "44444444-4444-4444-8444-444444444444";
 const barcode = "4006381333931";
+const catalogSupabase = { authority: "catalog" } as unknown as SupabaseClient;
 
 function supabaseWithBarcode(data: unknown) {
   const rpc = vi.fn(async (name: string) => {
@@ -98,7 +99,7 @@ describe("Task 12 canonical-first barcode resolution", () => {
     const db = supabaseWithBarcode([]);
     const provider = vi.fn();
 
-    await expect(resolveFoodBarcode(db.client, userId, "123", "en", provider)).rejects.toThrow(/barcode/i);
+    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, "123", "en", provider)).rejects.toThrow(/barcode/i);
 
     expect(db.rpc).not.toHaveBeenCalled();
     expect(provider).not.toHaveBeenCalled();
@@ -108,11 +109,11 @@ describe("Task 12 canonical-first barcode resolution", () => {
     const db = supabaseWithBarcode([{ barcode_id: "55555555-5555-4555-8555-555555555555", food_id: mappedFoodId, gtin: barcode }]);
     const provider = vi.fn();
 
-    const result = await resolveFoodBarcode(db.client, userId, barcode, "en", provider);
+    const result = await resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider);
 
     expect(result).toEqual({ kind: "catalog", barcode, food: candidate() });
     expect(db.rpc).toHaveBeenCalledWith("food_catalog_lookup_effective_barcode", { p_gtin: barcode });
-    expect(generation.resolve).toHaveBeenCalledWith(db.client, mappedFoodId);
+    expect(generation.resolve).toHaveBeenCalledWith(catalogSupabase, mappedFoodId);
     expect(search.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({
       query: "Canonical yogurt",
       locale: "en",
@@ -126,7 +127,7 @@ describe("Task 12 canonical-first barcode resolution", () => {
     const db = supabaseWithBarcode([{ barcode_id: "55555555-5555-4555-8555-555555555555", food_id: mappedFoodId, gtin: barcode }]);
     const provider = vi.fn();
 
-    const result = await resolveFoodBarcode(db.client, userId, barcode, "en", provider);
+    const result = await resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider);
 
     expect(result.kind).toBe("catalog");
     if (result.kind === "catalog") expect(result.food.id).toBe(survivorId);
@@ -138,7 +139,7 @@ describe("Task 12 canonical-first barcode resolution", () => {
     const providerFood = { source: "open_food_facts", barcode, name: "Provider yogurt" };
     const provider = vi.fn(async () => providerFood);
 
-    const result = await resolveFoodBarcode(db.client, userId, barcode, "en", provider);
+    const result = await resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider);
 
     expect(result).toEqual({ kind: "provider_suggestion", barcode, food: providerFood });
     expect(provider).toHaveBeenCalledWith(barcode);
@@ -151,7 +152,7 @@ describe("Task 12 canonical-first barcode resolution", () => {
     generation.resolve.mockRejectedValueOnce(new Error("Only active current-generation Foods may be selected for new use."));
     const provider = vi.fn();
 
-    await expect(resolveFoodBarcode(db.client, userId, barcode, "en", provider)).rejects.toThrow(/active current-generation/i);
+    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider)).rejects.toThrow(/active current-generation/i);
 
     expect(provider).not.toHaveBeenCalled();
   });
@@ -163,7 +164,7 @@ describe("Task 12 canonical-first barcode resolution", () => {
     ]);
     const provider = vi.fn();
 
-    await expect(resolveFoodBarcode(db.client, userId, barcode, "en", provider)).rejects.toThrow(/exactly one/i);
+    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider)).rejects.toThrow(/exactly one/i);
     expect(provider).not.toHaveBeenCalled();
   });
 
@@ -178,12 +179,12 @@ describe("Task 12 canonical-first barcode resolution", () => {
     }));
     const provider = vi.fn();
 
-    await expect(resolveFoodBarcode(db.client, userId, barcode, "en", provider)).rejects.toThrow(/display name/i);
+    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider)).rejects.toThrow(/display name/i);
     expect(provider).not.toHaveBeenCalled();
 
     generation.resolve.mockResolvedValueOnce(currentView());
     search.list.mockResolvedValueOnce({ items: [{ ...candidate(), id: mappedFoodId }], nextCursor: null });
-    await expect(resolveFoodBarcode(db.client, userId, barcode, "en", provider)).rejects.toThrow(/presentation/i);
+    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider)).rejects.toThrow(/presentation/i);
     expect(provider).not.toHaveBeenCalled();
   });
 });
