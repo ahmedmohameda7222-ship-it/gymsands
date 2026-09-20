@@ -94,11 +94,11 @@ function normalizeWrite(input: UserFoodWriteInput) {
 }
 
 async function resolveCorrectionFoodId(
-  supabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   requestedFoodId: string,
 ): Promise<string> {
   if (!isUuid(requestedFoodId)) throw new Error("Food ID must be a valid ID.");
-  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, requestedFoodId);
+  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, requestedFoodId);
   return view.resolvedFoodId;
 }
 
@@ -169,17 +169,19 @@ export async function deleteUserFood(supabase: SupabaseClient, userId: string, f
 }
 
 export async function getFoodPersonalCorrectionState(
-  supabase: SupabaseClient,
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   userId: string,
   foodId: string,
 ): Promise<CurrentPersonalOverride> {
   if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
-  const resolvedFoodId = await resolveCorrectionFoodId(supabase, foodId);
-  return readCurrentPersonalOverride(supabase, resolvedFoodId);
+  const resolvedFoodId = await resolveCorrectionFoodId(catalogSupabase, foodId);
+  return readCurrentPersonalOverride(ownerSupabase, resolvedFoodId);
 }
 
 export async function setFoodPersonalCorrection(
-  supabase: SupabaseClient,
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   userId: string,
   input: PersonalCorrectionInput,
 ) {
@@ -198,7 +200,7 @@ export async function setFoodPersonalCorrection(
     throw new Error("Personal correction CAS authority is inconsistent.");
   }
 
-  const foodId = await resolveCorrectionFoodId(supabase, input.foodId);
+  const foodId = await resolveCorrectionFoodId(catalogSupabase, input.foodId);
   const nutritionOverride = {
     calories: nullableNonNegative(input.calories, "Calories"),
     protein_g: nullableNonNegative(input.proteinG, "Protein"),
@@ -219,7 +221,7 @@ export async function setFoodPersonalCorrection(
     throw new Error("A personal correction must contain at least one value.");
   }
 
-  const result = await supabase.rpc("food_catalog_set_personal_override", {
+  const result = await ownerSupabase.rpc("food_catalog_set_personal_override", {
     p_operation_id: input.operationId,
     p_food_id: foodId,
     p_expected_revision_id: input.expectedRevisionId,
