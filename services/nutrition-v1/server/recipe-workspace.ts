@@ -192,8 +192,8 @@ export async function listRecipeHome(
   const ids = roots.map((row) => row.id);
 
   const [draftsResult, versionsResult, usageResult] = await Promise.all([
-    supabase.from("nutrition_recipe_drafts").select("*").eq("user_id", userId).in("recipe_id", ids).limit(limit),
-    supabase.from("nutrition_recipe_versions").select("*").eq("user_id", userId).in("recipe_id", ids).order("version_number", { ascending: false }).limit(limit * 12),
+    ownerSupabase.from("nutrition_recipe_drafts").select("*").eq("user_id", userId).in("recipe_id", ids).limit(limit),
+    ownerSupabase.from("nutrition_recipe_versions").select("*").eq("user_id", userId).in("recipe_id", ids).order("version_number", { ascending: false }).limit(limit * 12),
     supabase.from("nutrition_log_groups").select("source_id,created_at").eq("user_id", userId).eq("source_type", "recipe").in("source_id", ids).order("created_at", { ascending: false }).limit(Math.min(80, limit * 4)),
   ]);
   dbError(draftsResult.error);
@@ -243,7 +243,7 @@ export async function listRecentlyDeletedRecipes(supabase: SupabaseClient, userI
   return (result.data ?? []) as Array<{ id: string; name: string; cover_path: string | null; deleted_at: string; purge_after: string }>;
 }
 
-async function componentRows(supabase: SupabaseClient, userId: string, draftId: string | null, versionId: string | null) {
+async function componentRows(ownerSupabase: SupabaseClient, catalogSupabase: SupabaseClient, userId: string, draftId: string | null, versionId: string | null) {
   const relation = draftId
     ? { column: "recipe_draft_id", id: draftId }
     : versionId
@@ -252,9 +252,9 @@ async function componentRows(supabase: SupabaseClient, userId: string, draftId: 
   if (!relation) return { ingredients: [] as RecipeWorkspaceIngredient[], instructions: [] as RecipeWorkspaceInstruction[], equipment: [] as RecipeWorkspaceEquipment[] };
 
   const [ingredientsResult, actionsResult, equipmentResult] = await Promise.all([
-    supabase.from("nutrition_recipe_ingredients").select("*").eq("user_id", userId).eq(relation.column, relation.id).order("position", { ascending: true }),
-    supabase.from("nutrition_recipe_actions").select("*").eq("user_id", userId).eq(relation.column, relation.id).order("position", { ascending: true }),
-    supabase.from("nutrition_recipe_equipment").select("*").eq("user_id", userId).eq(relation.column, relation.id).order("position", { ascending: true }),
+    ownerSupabase.from("nutrition_recipe_ingredients").select("*").eq("user_id", userId).eq(relation.column, relation.id).order("position", { ascending: true }),
+    ownerSupabase.from("nutrition_recipe_actions").select("*").eq("user_id", userId).eq(relation.column, relation.id).order("position", { ascending: true }),
+    ownerSupabase.from("nutrition_recipe_equipment").select("*").eq("user_id", userId).eq(relation.column, relation.id).order("position", { ascending: true }),
   ]);
   dbError(ingredientsResult.error);
   dbError(actionsResult.error);
@@ -262,7 +262,7 @@ async function componentRows(supabase: SupabaseClient, userId: string, draftId: 
 
   const rawIngredients = (ingredientsResult.data ?? []) as Array<Record<string, unknown>>;
   const foodIds = Array.from(new Set(rawIngredients.map((row) => typeof row.food_id === "string" ? row.food_id : null).filter((id): id is string => Boolean(id))));
-  const verifiedFoods = await getCurrentCatalogTrustStates(supabase, foodIds);
+  const verifiedFoods = await getCurrentCatalogTrustStates(catalogSupabase, foodIds);
 
   const ingredients: RecipeWorkspaceIngredient[] = rawIngredients.map((row) => ({
     id: String(row.id),
@@ -303,19 +303,20 @@ async function componentRows(supabase: SupabaseClient, userId: string, draftId: 
 }
 
 export async function getRecipeWorkspace(
-  supabase: SupabaseClient,
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   userId: string,
   recipeId: string,
   includeDeleted = false,
 ): Promise<RecipeWorkspace> {
-  let rootQuery = supabase.from("nutrition_recipes").select("*").eq("id", recipeId).eq("user_id", userId);
+  let rootQuery = ownerSupabase.from("nutrition_recipes").select("*").eq("id", recipeId).eq("user_id", userId);
   if (!includeDeleted) rootQuery = rootQuery.is("deleted_at", null);
   const rootResult = await rootQuery.maybeSingle();
   const root = requiredData(rootResult.data as RecipeRootRow | null, rootResult.error, "Recipe not found.");
 
   const [draftResult, versionResult] = await Promise.all([
-    supabase.from("nutrition_recipe_drafts").select("*").eq("recipe_id", recipeId).eq("user_id", userId).maybeSingle(),
-    supabase.from("nutrition_recipe_versions").select("*").eq("recipe_id", recipeId).eq("user_id", userId).order("version_number", { ascending: false }).limit(1).maybeSingle(),
+    ownerSupabase.from("nutrition_recipe_drafts").select("*").eq("recipe_id", recipeId).eq("user_id", userId).maybeSingle(),
+    ownerSupabase.from("nutrition_recipe_versions").select("*").eq("recipe_id", recipeId).eq("user_id", userId).order("version_number", { ascending: false }).limit(1).maybeSingle(),
   ]);
   dbError(draftResult.error);
   dbError(versionResult.error);
@@ -334,12 +335,12 @@ export async function getRecipeWorkspace(
   };
 }
 
-export async function ensureRecipeWorkingDraft(supabase: SupabaseClient, userId: string, recipeId: string) {
-  const current = await getRecipeWorkspace(supabase, userId, recipeId);
+export async function ensureRecipeWorkingDraft(ownerSupabase: SupabaseClient, catalogSupabase: SupabaseClient, userId: string, recipeId: string) {
+  const current = await getRecipeWorkspace(ownerSupabase, catalogSupabase, userId, recipeId);
   if (current.draft) return current;
   const version = current.latestVersion;
   if (!version) throw new Error("Published Recipe version not found.");
-  const publishedComponents = await componentRows(supabase, userId, null, version.id);
+  const publishedComponents = await componentRows(ownerSupabase, catalogSupabase, userId, null, version.id);
   const draftGraph = clonePublishedRecipeGraphForDraft(publishedComponents, () => crypto.randomUUID());
   const result = await supabase.rpc("create_nutrition_recipe_working_draft", {
     p_recipe_id: recipeId,
@@ -353,11 +354,12 @@ export async function ensureRecipeWorkingDraft(supabase: SupabaseClient, userId:
   if (data?.recipeId !== recipeId || typeof data?.draftId !== "string") {
     throw new Error("Atomic Recipe Working Draft creation returned an invalid result.");
   }
-  return getRecipeWorkspace(supabase, userId, recipeId);
+  return getRecipeWorkspace(ownerSupabase, catalogSupabase, userId, recipeId);
 }
 
 export async function updateRecipePresentation(
-  supabase: SupabaseClient,
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   userId: string,
   recipeId: string,
   patch: { favorite?: boolean; coverPath?: string | null },
@@ -367,8 +369,8 @@ export async function updateRecipePresentation(
   if (patch.coverPath === null || typeof patch.coverPath === "string") {
     update.cover_path = normalizeOwnedRecipeCoverPath(userId, patch.coverPath);
   }
-  if (!Object.keys(update).length) return getRecipeWorkspace(supabase, userId, recipeId);
-  const result = await supabase.from("nutrition_recipes").update(update).eq("id", recipeId).eq("user_id", userId).is("deleted_at", null).select("id").single();
+  if (!Object.keys(update).length) return getRecipeWorkspace(ownerSupabase, catalogSupabase, userId, recipeId);
+  const result = await ownerSupabase.from("nutrition_recipes").update(update).eq("id", recipeId).eq("user_id", userId).is("deleted_at", null).select("id").single();
   requiredData(result.data, result.error, "Recipe presentation could not be updated.");
-  return getRecipeWorkspace(supabase, userId, recipeId);
+  return getRecipeWorkspace(ownerSupabase, catalogSupabase, userId, recipeId);
 }
