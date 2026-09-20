@@ -39,7 +39,8 @@ function selectedLocalizedDisplayName(
 }
 
 export async function resolveFoodBarcode(
-  supabase: SupabaseClient,
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   userId: string,
   rawBarcode: string,
   languageTag: string,
@@ -48,7 +49,7 @@ export async function resolveFoodBarcode(
   const barcode = normalizeProductBarcode(rawBarcode);
   if (!barcode) throw new Error(barcodeValidationMessage(rawBarcode));
 
-  const mapped = await supabase.rpc("food_catalog_lookup_effective_barcode", {
+  const mapped = await ownerSupabase.rpc("food_catalog_lookup_effective_barcode", {
     p_gtin: barcode,
   });
   if (mapped.error) {
@@ -69,9 +70,9 @@ export async function resolveFoodBarcode(
     throw new Error("Canonical barcode lookup returned an invalid Food identity.");
   }
 
-  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, mappedFoodId);
+  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, mappedFoodId);
   const selectedName = selectedLocalizedDisplayName(view, languageTag || "en");
-  const page = await listFoodLibrary(supabase, userId, {
+  const page = await listFoodLibrary(ownerSupabase, userId, {
     query: selectedName.text,
     locale: languageTag || selectedName.languageTag || "en",
     marketScopeCode: null,
