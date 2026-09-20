@@ -185,6 +185,7 @@ function normalizeCatalogSearchFood(food: CatalogSearchCandidate): CatalogFoodIt
     tags: [],
     notes: null,
     source_type: "food_catalog_v2",
+    locale: persistedText(food.locale, "Food locale"),
     is_global: true,
     is_editable_by_user: false
   };
@@ -361,7 +362,7 @@ async function resolveBrowserCatalogHandoff(
     quantity: String(quantity),
     serving: food.serving_size,
     displayName: food.food_name,
-    languageTag: typeof navigator === "undefined" ? "en" : navigator.language,
+    languageTag: "locale" in food && typeof food.locale === "string" && food.locale.trim() ? food.locale.trim() : browserLocale(),
   });
   const response = await fetch(
     `/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/handoff?${params.toString()}`,
