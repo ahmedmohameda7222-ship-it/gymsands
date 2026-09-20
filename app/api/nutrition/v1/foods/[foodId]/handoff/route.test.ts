@@ -16,7 +16,7 @@ vi.mock("@/lib/nutrition-v1/http", async () => {
   return { ...actual, requireNutritionUser: mocks.requireNutritionUser };
 });
 vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({
-  resolveFoodHandoff: mocks.resolveFoodHandoffWithAuthorities,
+  resolveFoodHandoffWithAuthorities: mocks.resolveFoodHandoffWithAuthorities,
 }));
 vi.mock("@/lib/integrations/env", async () => {
   const actual = await vi.importActual<typeof import("@/lib/integrations/env")>("@/lib/integrations/env");
