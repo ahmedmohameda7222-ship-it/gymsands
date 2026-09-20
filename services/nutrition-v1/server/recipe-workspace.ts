@@ -322,7 +322,7 @@ export async function getRecipeWorkspace(
   dbError(versionResult.error);
   const draft = (draftResult.data as RecipeDraftRow | null) ?? null;
   const latestVersion = (versionResult.data as RecipeVersionRow | null) ?? null;
-  const components = await componentRows(supabase, userId, draft?.id ?? null, draft ? null : latestVersion?.id ?? null);
+  const components = await componentRows(ownerSupabase, catalogSupabase, userId, draft?.id ?? null, draft ? null : latestVersion?.id ?? null);
   const metadata = draft?.draft_metadata ?? latestVersion?.metadata ?? {};
   return {
     root,
