@@ -77,7 +77,7 @@ function doc(index: number, category: unknown, overrides: Partial<Row> = {}): Ro
   };
 }
 
-function currentFixtures(documents: Row[], generation: Row = { id: G2, projection_version: "P2" }) {
+function currentFixtures(documents: Row[], generation: Row = { id: G2, projection_version: "P2" }): Record<string, TableFixture> {
   return {
     food_catalog_current_generation: { rows: [{ singleton_key: true, current_generation_id: G2 }] },
     food_catalog_generations: { rows: [generation] },
