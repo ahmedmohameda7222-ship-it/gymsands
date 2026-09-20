@@ -126,6 +126,48 @@ describe("Plan 7 Tasks 9-12 consumer current-truth retirement contract", () => {
     expect(route).not.toMatch(/\.from\(["']food_items["']\)/);
   });
 
+
+  it("keeps Plan 7 Product generation reads in the server-only catalog trust domain", () => {
+    const handoffRoute = source("app/api/nutrition/v1/foods/[foodId]/handoff/route.ts");
+    const handoff = source("services/nutrition-v1/server/food-handoff.ts");
+    const recipeRoute = source("app/api/nutrition/v1/recipes/[recipeId]/route.ts");
+    const recipePublished = source("services/nutrition-v1/server/recipe-published.ts");
+    const recipeWorkspace = source("services/nutrition-v1/server/recipe-workspace.ts");
+    const qualityRoute = source("app/api/admin/quality/route.ts");
+    const barcodeRoute = source("app/api/food/open-food-facts/route.ts");
+    const browserNutrition = source("services/database/nutrition.ts");
+    const generationAcl = source("supabase/migrations/20260902150000_food_catalog_generation_authority.sql");
+
+    expect(handoffRoute).toContain("createSupabaseServerClient(null, true)");
+    expect(handoffRoute).toContain("resolveFoodHandoffWithAuthorities(context.supabase, catalogSupabase");
+    expect(handoff).toContain("resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase");
+    expect(handoff).toContain("readCurrentPersonalOverride(ownerSupabase");
+    expect(handoff).toContain('ownerSupabase\n      .from("user_food_items")');
+
+    expect(recipeRoute).toContain("createSupabaseServerClient(null, true)");
+    expect(recipePublished).toContain("getCurrentCatalogTrustStates(catalogSupabase");
+    expect(recipePublished).toContain('ownerSupabase.from("nutrition_recipes")');
+    expect(recipeWorkspace).toContain("getCurrentCatalogTrustStates(catalogSupabase");
+
+    expect(qualityRoute.indexOf("requireAdmin(request)")).toBeLessThan(qualityRoute.indexOf("createSupabaseServerClient(null, true)"));
+    expect(qualityRoute).toContain("getCurrentGenerationQuality(catalogSupabase)");
+    expect(barcodeRoute).toContain("resolveFoodBarcode(\n    context.supabase,\n    catalogSupabase");
+
+    expect(browserNutrition).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
+    expect(browserNutrition).not.toContain("createSupabaseServerClient");
+    expect(generationAcl).toContain("grant select on public.food_catalog_current_generation to service_role");
+    expect(generationAcl).not.toMatch(/grant select on public\.food_catalog_current_generation to authenticated/i);
+  });
+
+  it("preserves the exact selected V2 locale through normalization and handoff identity", () => {
+    const nutrition = source("services/database/nutrition.ts");
+    const types = source("types/database.ts");
+    expect(types).toContain("locale?: string");
+    expect(nutrition).toContain('locale: persistedText(food.locale, "Food locale")');
+    expect(nutrition).toContain('typeof food.locale === "string" && food.locale.trim() ? food.locale.trim() : browserLocale()');
+    expect(nutrition).not.toContain('languageTag: typeof navigator === "undefined" ? "en" : navigator.language');
+  });
+
   it("does not globally ban low-level legacy ownership needed for later Plan 7 retirement work", () => {
     const legacy = source("services/food-catalog/server/legacy-compatibility.ts");
     const oldSavedMealHydration = section(
