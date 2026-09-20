@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealItemInput } from "@/services/nutrition-v1/server/saved-meals";
-import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import { resolveFoodHandoffWithAuthorities } from "@/services/nutrition-v1/server/food-handoff";
 import { resolveRecipeHandoff } from "@/services/nutrition-v1/server/recipe-handoff";
 
 async function detectFoodSource(supabase: SupabaseClient, userId: string, foodId: string) {
@@ -19,15 +19,16 @@ async function detectFoodSource(supabase: SupabaseClient, userId: string, foodId
 }
 
 export async function canonicalizeSavedMealItems(
-  supabase: SupabaseClient,
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
   userId: string,
   items: SavedMealItemInput[],
 ): Promise<SavedMealItemInput[]> {
   const output: SavedMealItemInput[] = [];
   for (const item of items) {
     if (item.kind === "food") {
-      const source = await detectFoodSource(supabase, userId, item.food_id);
-      const resolved = await resolveFoodHandoff(supabase, userId, {
+      const source = await detectFoodSource(ownerSupabase, userId, item.food_id);
+      const resolved = await resolveFoodHandoffWithAuthorities(ownerSupabase, catalogSupabase, userId, {
         foodId: item.food_id,
         source,
         quantity: item.resolved_quantity,
@@ -39,7 +40,7 @@ export async function canonicalizeSavedMealItems(
     }
     if (item.kind === "recipe") {
       const resolved = await resolveRecipeHandoff(
-        supabase,
+        ownerSupabase,
         userId,
         item.recipe.recipe_id,
         item.recipe.recipe_version_id,
