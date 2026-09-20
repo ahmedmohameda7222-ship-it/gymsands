@@ -293,9 +293,9 @@ describe("Nutrition V1 owner Food write authority", () => {
   it("reads current Personal Override CAS authority for the final current-generation survivor", async () => {
     const db = fakeSupabase({}, [{ data: currentOverride(), error: null }]);
 
-    const state = await getFoodPersonalCorrectionState(db.client, userId, foodId);
+    const state = await getFoodPersonalCorrectionState(db.client, catalogClient, userId, foodId);
 
-    expect(generation.resolve).toHaveBeenCalledWith(db.client, foodId);
+    expect(generation.resolve).toHaveBeenCalledWith(catalogClient, foodId);
     expect(db.rpc).toHaveBeenCalledWith("food_catalog_get_current_personal_override_v1", { p_food_id: survivorId });
     expect(state).toMatchObject({
       foodId: survivorId,
@@ -320,7 +320,7 @@ describe("Nutrition V1 owner Food write authority", () => {
       error: null,
     }]);
 
-    const state = await getFoodPersonalCorrectionState(db.client, userId, foodId);
+    const state = await getFoodPersonalCorrectionState(db.client, catalogClient, userId, foodId);
 
     expect(state).toMatchObject({
       foodId: survivorId,
@@ -343,9 +343,9 @@ describe("Nutrition V1 owner Food write authority", () => {
       error: null,
     }]);
 
-    const result = await setFoodPersonalCorrection(db.client, userId, correctionInput());
+    const result = await setFoodPersonalCorrection(db.client, catalogClient, userId, correctionInput());
 
-    expect(generation.resolve).toHaveBeenCalledWith(db.client, foodId);
+    expect(generation.resolve).toHaveBeenCalledWith(catalogClient, foodId);
     expect(db.rpc).toHaveBeenCalledWith("food_catalog_set_personal_override", {
       p_operation_id: operationId,
       p_food_id: survivorId,
@@ -380,7 +380,7 @@ describe("Nutrition V1 owner Food write authority", () => {
       error: null,
     }]);
 
-    await setFoodPersonalCorrection(db.client, userId, correctionInput({
+    await setFoodPersonalCorrection(db.client, catalogClient, userId, correctionInput({
       expectedRevisionId: revisionId,
       expectedPointerRevision: 7,
       servingLabel: "My exact bowl",
@@ -428,8 +428,8 @@ describe("Nutrition V1 owner Food write authority", () => {
     ]);
     const input = correctionInput();
 
-    await setFoodPersonalCorrection(db.client, userId, input);
-    await setFoodPersonalCorrection(db.client, userId, input);
+    await setFoodPersonalCorrection(db.client, catalogClient, userId, input);
+    await setFoodPersonalCorrection(db.client, catalogClient, userId, input);
 
     expect(db.rpc).toHaveBeenCalledTimes(2);
     expect(db.rpc.mock.calls[0]).toEqual(db.rpc.mock.calls[1]);
