@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { CurrentGenerationFoodView } from "@/services/food-catalog/server/current-generation-service";
-import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import { resolveFoodHandoff, resolveFoodHandoffWithAuthorities } from "@/services/nutrition-v1/server/food-handoff";
 
 const generation = vi.hoisted(() => ({
   resolve: vi.fn(),
@@ -198,6 +198,20 @@ function catalogInput(overrides: Record<string, unknown> = {}) {
 describe("Nutrition V1 Task 9 current-generation Food handoff", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("uses catalog authority only for generation reads and owner authority only for Personal Override", async () => {
+    generation.resolve.mockResolvedValueOnce(view());
+    const owner = clientFor({ rpc: [noOverride()] });
+    const catalog = clientFor();
+
+    const handoff = await resolveFoodHandoffWithAuthorities(owner.client, catalog.client, userId, catalogInput());
+
+    expect(handoff.foodId).toBe(foodId);
+    expect(generation.resolve).toHaveBeenCalledWith(catalog.client, foodId);
+    expect(owner.rpc).toHaveBeenCalledWith("food_catalog_get_current_personal_override_v1", { p_food_id: foodId });
+    expect(catalog.rpc).not.toHaveBeenCalled();
+    expect(catalog.from).not.toHaveBeenCalled();
   });
 
   it("rejects when there is no current generation and never falls back to flat food_items", async () => {
