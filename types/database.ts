@@ -42,6 +42,8 @@ export type CatalogFoodItem = Omit<
   NullableCoreNutrition & {
     is_global: true;
     is_editable_by_user: false;
+    /** Exact locale identity returned by Food Catalog V2 for a selected catalog Name fact. */
+    locale?: string;
   };
 
 /** Active Food Library values are either nullable catalog Food or strict numeric My Food. */
