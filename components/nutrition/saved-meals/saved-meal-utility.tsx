@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 import type { FoodLibraryCandidate, FoodLibraryPage } from "@/services/nutrition-v1/server/food-library";
 import type { RecipeHomeRecord } from "@/services/nutrition-v1/server/recipe-workspace";
-import type { SavedMealItemInput } from "@/services/nutrition-v1/server/saved-meals";
+import type { SavedMealItemInput, SavedMealItemWriteIntent } from "@/services/nutrition-v1/server/saved-meals";
 
 type SavedMealListRow = {
   id: string;
@@ -33,7 +33,7 @@ type SavedMealDetail = {
   bundle: SavedMealBundle | null;
 };
 
-type UtilityEditorItem = SavedMealEditorItem & { payload: SavedMealItemInput };
+type UtilityEditorItem = SavedMealEditorItem & { payload: SavedMealItemWriteIntent };
 type Mode = "browse" | "detail" | "create" | "edit" | "deleted" | "add-food" | "add-recipe";
 
 type PendingSavedMealCreateOperation = {
@@ -79,8 +79,8 @@ function authHeaders(token?: string | null, json = false) {
   return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(json ? { "Content-Type": "application/json" } : {}) };
 }
 
-function savedMealCreateFingerprint(name: string, note: string, items: SavedMealItemInput[]) {
-  return JSON.stringify({ name: name.trim(), note: note.trim() || null, items });
+function savedMealCreateFingerprint(name: string, note: string, items: SavedMealItemWriteIntent[], writeLanguageTag: string) {
+  return JSON.stringify({ name: name.trim(), note: note.trim() || null, items, writeLanguageTag });
 }
 
 function readSavedMealCreateOperation(ownerId: string): PendingSavedMealCreateOperation | null {
@@ -142,7 +142,7 @@ function editorItems(bundle: SavedMealBundle | null): UtilityEditorItem[] {
   });
 }
 
-function foodPayload(food: FoodLibraryCandidate): SavedMealItemInput {
+function foodPayload(food: FoodLibraryCandidate): SavedMealItemWriteIntent {
   if (!food.servingLabel) throw new Error("Food serving authority is required before creating a Saved Meal item.");
   return {
     kind: "food",
@@ -150,6 +150,7 @@ function foodPayload(food: FoodLibraryCandidate): SavedMealItemInput {
     frozen_name: food.name,
     resolved_quantity: 1,
     resolved_serving_label: food.servingLabel,
+    languageTag: food.source === "catalog" ? food.locale : undefined,
     frozen_nutrition: {
       calories: null,
       protein_g: null,
@@ -160,7 +161,7 @@ function foodPayload(food: FoodLibraryCandidate): SavedMealItemInput {
   };
 }
 
-function recipePayload(recipe: RecipeHomeRecord): SavedMealItemInput | null {
+function recipePayload(recipe: RecipeHomeRecord): SavedMealItemWriteIntent | null {
   if (recipe.status !== "published" || !recipe.recipeVersionId) return null;
   return {
     kind: "recipe",
@@ -288,11 +289,11 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
       let createOperation: PendingSavedMealCreateOperation | null = null;
       if (!editingId) {
         if (!ownerId) throw new Error("Please sign in before creating a Saved Meal.");
-        createOperation = pendingSavedMealCreateOperation(ownerId, savedMealCreateFingerprint(name, note, itemPayloads));
+        createOperation = pendingSavedMealCreateOperation(ownerId, savedMealCreateFingerprint(name, note, itemPayloads, language));
       }
       const requestBody = editingId
-        ? { name, note, items: itemPayloads }
-        : { operationId: createOperation!.operationId, name, note, items: itemPayloads };
+        ? { name, note, items: itemPayloads, writeLanguageTag: language }
+        : { operationId: createOperation!.operationId, name, note, items: itemPayloads, writeLanguageTag: language };
       const body = await request<{ savedMeal: SavedMealListRow }>(editingId ? `/api/nutrition/v1/saved-meals/${encodeURIComponent(editingId)}` : "/api/nutrition/v1/saved-meals", {
         method: editingId ? "PATCH" : "POST",
         body: JSON.stringify(requestBody),

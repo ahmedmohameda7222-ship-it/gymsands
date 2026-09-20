@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { SavedMealItemInput } from "@/services/nutrition-v1/server/saved-meals";
+import type { SavedMealItemInput, SavedMealItemWriteIntent } from "@/services/nutrition-v1/server/saved-meals";
 import { resolveFoodHandoffWithAuthorities } from "@/services/nutrition-v1/server/food-handoff";
 import { resolveRecipeHandoff } from "@/services/nutrition-v1/server/recipe-handoff";
 
@@ -22,20 +22,42 @@ export async function canonicalizeSavedMealItems(
   ownerSupabase: SupabaseClient,
   catalogSupabase: SupabaseClient,
   userId: string,
-  items: SavedMealItemInput[],
+  items: SavedMealItemWriteIntent[],
+  writeLanguageTag: string | null = null,
 ): Promise<SavedMealItemInput[]> {
   const output: SavedMealItemInput[] = [];
+  const normalizedWriteLanguageTag = typeof writeLanguageTag === "string" && writeLanguageTag.trim()
+    ? writeLanguageTag.trim()
+    : null;
+
   for (const item of items) {
     if (item.kind === "food") {
       const source = await detectFoodSource(ownerSupabase, userId, item.food_id);
+      const itemLanguageTag = typeof item.languageTag === "string" && item.languageTag.trim()
+        ? item.languageTag.trim()
+        : null;
+      const catalogSelectionIdentity = source === "catalog"
+        ? {
+            displayName: item.frozen_name,
+            languageTag: itemLanguageTag ?? normalizedWriteLanguageTag,
+          }
+        : {};
       const resolved = await resolveFoodHandoffWithAuthorities(ownerSupabase, catalogSupabase, userId, {
         foodId: item.food_id,
         source,
         quantity: item.resolved_quantity,
         serving: item.resolved_serving_label,
-        displayName: source === "catalog" ? item.frozen_name : undefined,
+        ...catalogSelectionIdentity,
       });
-      output.push(resolved.savedMealItem);
+      const frozen = resolved.savedMealItem;
+      output.push({
+        kind: "food",
+        food_id: frozen.food_id,
+        frozen_name: frozen.frozen_name,
+        resolved_quantity: frozen.resolved_quantity,
+        resolved_serving_label: frozen.resolved_serving_label,
+        frozen_nutrition: frozen.frozen_nutrition,
+      });
       continue;
     }
     if (item.kind === "recipe") {

@@ -28,12 +28,28 @@ function selectedLocalizedDisplayName(
 ) {
   const selectedIds = new Set(view.selections.nameFactIds);
   const preferred = view.names.filter((name) => selectedIds.has(name.id) && name.role === "preferred_display");
-  const localized = preferred.filter((name) => name.languageTag.toLowerCase() === languageTag.toLowerCase());
+  const requestedTag = languageTag.trim().toLowerCase();
+  const requestedBase = requestedTag.split("-")[0] ?? requestedTag;
+  const normalizedTag = (value: string) => value.trim().toLowerCase();
+  const uniqueOrAmbiguous = (matches: typeof preferred) => {
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length > 1) {
+      throw new Error("Canonical barcode Food has an ambiguous selected display name.");
+    }
+    return null;
+  };
 
-  if (localized.length === 1) return localized[0]!;
-  if (localized.length > 1) {
-    throw new Error("Canonical barcode Food has an ambiguous selected display name.");
+  const exact = uniqueOrAmbiguous(preferred.filter((name) => normalizedTag(name.languageTag) === requestedTag));
+  if (exact) return exact;
+
+  if (requestedTag.includes("-")) {
+    const explicitBase = uniqueOrAmbiguous(preferred.filter((name) => normalizedTag(name.languageTag) === requestedBase));
+    if (explicitBase) return explicitBase;
   }
+
+  const baseFamily = uniqueOrAmbiguous(preferred.filter((name) => normalizedTag(name.languageTag).split("-")[0] === requestedBase));
+  if (baseFamily) return baseFamily;
+
   if (preferred.length === 1) return preferred[0]!;
   throw new Error("Canonical barcode Food has no unique selected display name.");
 }
@@ -74,12 +90,16 @@ export async function resolveFoodBarcode(
   const selectedName = selectedLocalizedDisplayName(view, languageTag || "en");
   const page = await listFoodLibrary(ownerSupabase, userId, {
     query: selectedName.text,
-    locale: languageTag || selectedName.languageTag || "en",
+    locale: selectedName.languageTag,
     marketScopeCode: null,
     limit: 20,
     scope: "all",
   });
-  const exact = page.items.filter((item) => item.source === "catalog" && item.id === view.resolvedFoodId);
+  const exact = page.items.filter((item) => (
+    item.source === "catalog"
+    && item.id === view.resolvedFoodId
+    && item.locale === selectedName.languageTag
+  ));
   if (exact.length !== 1) {
     throw new Error("Canonical barcode Food presentation did not resolve exactly.");
   }
