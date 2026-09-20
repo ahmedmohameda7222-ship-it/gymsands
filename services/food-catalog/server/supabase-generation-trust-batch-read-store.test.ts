@@ -133,7 +133,7 @@ describe("Plan 7 targeted Supabase Recipe trust batching", () => {
           amount: 1,
           unit_code: "bowl",
           gram_weight: 100,
-          source_record_id: null,
+          source_record_id: `serving-source-${index + 1}`,
           source_portion_code: null,
           evidence_class: "exact_source",
           source_primary: true,
