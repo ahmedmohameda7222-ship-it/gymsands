@@ -49,8 +49,9 @@ describe("Plan 7 Tasks 9-12 consumer current-truth retirement contract", () => {
     }
 
     const trust = source("services/nutrition-v1/server/current-food-trust.ts");
-    expect(trust).toContain("resolveCurrentGenerationFoodForNewUse");
-    expect(trust).toContain("view.trust.verified");
+    expect(trust).toContain("resolveCurrentGenerationTrustForNewUseBatchFromSupabase");
+    expect(trust).toContain("batch.get(foodId)?.trust?.verified === true");
+    expect(trust).not.toContain("resolveCurrentGenerationFoodForNewUseFromSupabase");
     expect(trust).not.toMatch(/\.from\(["']food_items["']\)/);
   });
 
