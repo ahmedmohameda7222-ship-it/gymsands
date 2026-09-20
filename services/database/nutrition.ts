@@ -232,8 +232,33 @@ async function searchCurrentCatalog(
 }
 
 export async function getFoodCategories() {
-  const foods = await searchCurrentCatalog("", { limit: 80 });
-  return Array.from(new Set(foods.map((food) => food.category).filter((value): value is string => Boolean(value?.trim())))).sort();
+  if (!supabase) throw new Error("Database not connected");
+
+  const session = await supabase.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) throw new Error("User session invalid.");
+
+  const response = await fetch(
+    "/api/nutrition/v1/foods/categories",
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = body && typeof body === "object" && !Array.isArray(body)
+      && typeof (body as Record<string, unknown>).error === "string"
+      ? (body as Record<string, unknown>).error as string
+      : "Food categories could not be loaded.";
+    throw new Error(error);
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Food category facets returned an invalid response.");
+  }
+  const categories = (body as Record<string, unknown>).categories;
+  if (!Array.isArray(categories) || categories.some((value) => typeof value !== "string")) {
+    throw new Error("Food category facets returned an invalid response.");
+  }
+
+  return Array.from(new Set(categories.map((value) => value.trim()).filter(Boolean))).sort();
 }
 
 export async function getGlobalFoods(

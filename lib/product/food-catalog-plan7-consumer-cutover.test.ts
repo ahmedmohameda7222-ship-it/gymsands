@@ -67,7 +67,7 @@ describe("Plan 7 Tasks 9-12 consumer current-truth retirement contract", () => {
     }
   });
 
-  it("keeps current browser/category global reads on V2 and Egyptian data out of catalog results", () => {
+  it("keeps normal browser Food search on V2 while category facets use authenticated current-projection authority", () => {
     const nutrition = source("services/database/nutrition.ts");
     const globalReads = section(
       "services/database/nutrition.ts",
@@ -85,8 +85,30 @@ describe("Plan 7 Tasks 9-12 consumer current-truth retirement contract", () => {
       "export async function markMealPlanItemDone",
     );
     const browser = source("components/meals/food-browser.tsx");
+    const categoryRoute = source("app/api/nutrition/v1/foods/categories/route.ts");
+    const categoryFacets = source("services/food-catalog/server/current-search-category-facets.ts");
+    const categoryBrowserRead = section(
+      "services/database/nutrition.ts",
+      "export async function getFoodCategories()",
+      "export async function getGlobalFoods",
+    );
 
     expect(globalReads).toContain('supabase.rpc("search_food_catalog_v2"');
+    expect(categoryBrowserRead).toContain("/api/nutrition/v1/foods/categories");
+    expect(categoryBrowserRead).toContain("supabase.auth.getSession");
+    expect(categoryBrowserRead).not.toContain("searchCurrentCatalog");
+    expect(categoryBrowserRead).not.toContain("search_food_catalog_v2");
+    expect(categoryRoute.indexOf("requireNutritionUser(request)")).toBeLessThan(
+      categoryRoute.indexOf("createSupabaseServerClient(null, true)"),
+    );
+    expect(categoryRoute).toContain("listCurrentFoodCatalogCategoryFacets(catalogSupabase)");
+    expect(categoryFacets).toContain('"food_catalog_current_generation"');
+    expect(categoryFacets).toContain('"food_catalog_generations"');
+    expect(categoryFacets).toContain('"food_catalog_search_documents"');
+    expect(categoryFacets).toContain('.eq("projection_version", projectionVersion)');
+    expect(categoryFacets).toContain(".range(start, start + PAGE_SIZE - 1)");
+    expect(categoryFacets).not.toMatch(/\.from\(["']food_items["']\)/);
+    expect(categoryFacets).not.toContain("getDefaultFoodCategories");
     expect(globalReads).not.toMatch(/\.from\(["']food_items["']\)/);
     expect(globalReads).not.toContain("cuisine: options.kitchen");
     expect(nutrition).toContain("if (food.is_global !== false)");

@@ -86,6 +86,17 @@ function currentFixtures(documents: Row[], generation: Row = { id: G2, projectio
 }
 
 describe("Plan 7 current Food Catalog search category facets", () => {
+  it("includes a unique category that appears only after the first 80 SearchDocuments", async () => {
+    const rows = [
+      ...Array.from({ length: 80 }, (_, index) => doc(index + 1, "common")),
+      doc(81, "late-category"),
+    ];
+    const db = makeSupabase(currentFixtures(rows));
+
+    await expect(listCurrentFoodCatalogCategoryFacets(db.client)).resolves.toEqual(["common", "late-category"]);
+    expect(db.queries.food_catalog_search_documents[0]!.range).toHaveBeenCalledWith(0, 999);
+  });
+
   it("continues beyond the first 1000 SearchDocuments without a hidden fixed-page cap", async () => {
     const rows = [
       ...Array.from({ length: 1000 }, (_, index) => doc(index + 1, "common")),

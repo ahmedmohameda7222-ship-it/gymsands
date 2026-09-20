@@ -9,7 +9,7 @@ vi.mock("@/lib/supabase/client", () => ({
   supabase: { rpc: db.rpc, auth: { getSession: db.getSession } },
 }));
 
-import { getFoodCategories } from "@/services/database/nutrition";
+import { getFoodCategories, getGlobalFoods } from "@/services/database/nutrition";
 
 function candidate(index: number, category: string) {
   return {
@@ -40,30 +40,7 @@ function candidate(index: number, category: string) {
 describe("Plan 7 browser category facet enumeration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it("does not lose a category that exists only after the first 80 current Catalog search rows", async () => {
-    const pages = [
-      Array.from({ length: 20 }, (_, index) => candidate(index + 1, "common")),
-      Array.from({ length: 20 }, (_, index) => candidate(index + 21, "common")),
-      Array.from({ length: 20 }, (_, index) => candidate(index + 41, "common")),
-      Array.from({ length: 20 }, (_, index) => candidate(index + 61, "common")),
-      [candidate(81, "late-category")],
-    ];
-    db.rpc.mockImplementation(async (_name: string, args: Record<string, unknown>) => {
-      const cursor = typeof args.p_cursor === "string" ? Number(args.p_cursor) : 0;
-      const items = pages[cursor] ?? [];
-      return {
-        data: {
-          items,
-          nextCursor: cursor + 1 < pages.length ? String(cursor + 1) : null,
-        },
-        error: null,
-      };
-    });
-
-    await expect(getFoodCategories()).resolves.toEqual(["common", "late-category"]);
-    expect(db.rpc).toHaveBeenCalledTimes(5);
+    vi.unstubAllGlobals();
   });
 
   it("loads category facets through the authenticated categories endpoint instead of direct V2 search", async () => {
@@ -85,4 +62,31 @@ describe("Plan 7 browser category facet enumeration", () => {
     expect(db.rpc).not.toHaveBeenCalled();
   });
 
+  it("rejects malformed category endpoint payloads instead of inventing fallback categories", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      categories: ["fruit", 42],
+    }), { status: 200, headers: { "content-type": "application/json" } })));
+
+    await expect(getFoodCategories()).rejects.toThrow(/invalid response/i);
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it("keeps ordinary global Food query/category search on search_food_catalog_v2", async () => {
+    db.rpc.mockResolvedValue({
+      data: { items: [candidate(1, "fruit")], nextCursor: null },
+      error: null,
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const foods = await getGlobalFoods("apple", { category: "fruit", limit: 1 });
+
+    expect(foods).toHaveLength(1);
+    expect(db.rpc).toHaveBeenCalledWith("search_food_catalog_v2", expect.objectContaining({
+      p_query: "apple",
+      p_category: "fruit",
+      p_limit: 1,
+    }));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
