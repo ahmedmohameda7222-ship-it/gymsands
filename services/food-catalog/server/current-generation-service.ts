@@ -502,12 +502,16 @@ export type CurrentGenerationTrustForNewUseResult = {
   trust: FoodTrustProfile | null;
 };
 
-function emptyTrustResults(requestedFoodIds: readonly string[]) {
-  return new Map(requestedFoodIds.map((requestedFoodId) => [requestedFoodId, {
-    requestedFoodId,
-    resolvedFoodId: null,
-    trust: null,
-  } satisfies CurrentGenerationTrustForNewUseResult]));
+function emptyTrustResults(
+  requestedFoodIds: readonly string[],
+): Map<string, CurrentGenerationTrustForNewUseResult> {
+  return new Map<string, CurrentGenerationTrustForNewUseResult>(
+    requestedFoodIds.map((requestedFoodId) => [requestedFoodId, {
+      requestedFoodId,
+      resolvedFoodId: null,
+      trust: null,
+    }]),
+  );
 }
 
 function uniqueFoodIds(foodIds: readonly string[]) {
