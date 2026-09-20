@@ -6,6 +6,7 @@ const foodId = "22222222-2222-4222-8222-222222222222";
 const mocks = vi.hoisted(() => ({
   requireNutritionUser: vi.fn(),
   resolveFoodHandoff: vi.fn(),
+  createSupabaseServerClient: vi.fn(),
 }));
 
 vi.mock("@/lib/nutrition-v1/http", async () => {
@@ -17,6 +18,10 @@ vi.mock("@/lib/nutrition-v1/http", async () => {
 vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({
   resolveFoodHandoff: mocks.resolveFoodHandoff,
 }));
+vi.mock("@/lib/integrations/env", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/integrations/env")>("@/lib/integrations/env");
+  return { ...actual, createSupabaseServerClient: mocks.createSupabaseServerClient };
+});
 
 import { GET } from "@/app/api/nutrition/v1/foods/[foodId]/handoff/route";
 
@@ -30,11 +35,14 @@ function request(query: string) {
 describe("Task 9 Food handoff GET boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const ownerSupabase = { authority: "owner" };
+    const catalogSupabase = { authority: "catalog" };
     mocks.requireNutritionUser.mockResolvedValue({
-      supabase: {},
+      supabase: ownerSupabase,
       user: { id: userId },
       accessToken: "test",
     });
+    mocks.createSupabaseServerClient.mockReturnValue(catalogSupabase);
     mocks.resolveFoodHandoff.mockResolvedValue({
       foodId,
       source: "catalog",
@@ -52,8 +60,10 @@ describe("Task 9 Food handoff GET boundary", () => {
     );
 
     expect(response.ok).toBe(true);
+    expect(mocks.createSupabaseServerClient).toHaveBeenCalledWith(null, true);
     expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.objectContaining({ authority: "owner" }),
+      expect.objectContaining({ authority: "catalog" }),
       userId,
       {
         foodId,
@@ -93,7 +103,8 @@ describe("Task 9 Food handoff GET boundary", () => {
 
     expect(response.ok).toBe(true);
     expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.objectContaining({ authority: "owner" }),
+      expect.objectContaining({ authority: "catalog" }),
       userId,
       {
         foodId,
