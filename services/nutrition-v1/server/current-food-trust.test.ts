@@ -5,6 +5,7 @@ import { getCurrentCatalogTrustStates } from "@/services/nutrition-v1/server/cur
 
 const generation = vi.hoisted(() => ({
   resolve: vi.fn(),
+  batch: vi.fn(),
 }));
 
 vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
@@ -14,6 +15,7 @@ vi.mock("@/services/food-catalog/server/current-generation-service", async () =>
   return {
     ...actual,
     resolveCurrentGenerationFoodForNewUseFromSupabase: generation.resolve,
+    resolveCurrentGenerationTrustForNewUseBatchFromSupabase: generation.batch,
   };
 });
 
@@ -24,6 +26,29 @@ const SURVIVOR = "44444444-4444-4444-8444-444444444444";
 
 describe("Task 10 current-generation Recipe trust", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("uses one batch trust resolution for 20 unique Recipe Foods instead of one full resolver per Food", async () => {
+    const ids = Array.from({ length: 20 }, (_, index) => `a0000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
+    generation.resolve.mockImplementation(async (_supabase: SupabaseClient, id: string) => ({
+      requestedFoodId: id,
+      resolvedFoodId: id,
+      trust: { verified: true },
+    }));
+    generation.batch.mockResolvedValue(new Map(ids.map((id) => [id, {
+      requestedFoodId: id,
+      resolvedFoodId: id,
+      trust: { verified: true },
+    }])));
+
+    const supabase = {} as SupabaseClient;
+    const states = await getCurrentCatalogTrustStates(supabase, [...ids, ids[0]!, ids[1]!]);
+
+    expect(states.size).toBe(20);
+    expect(Array.from(states.values()).every(Boolean)).toBe(true);
+    expect(generation.batch).toHaveBeenCalledTimes(1);
+    expect(generation.batch).toHaveBeenCalledWith(supabase, ids);
+    expect(generation.resolve).not.toHaveBeenCalled();
+  });
 
   it("deduplicates canonical ingredient IDs and resolves trust once per unique Food", async () => {
     generation.resolve.mockImplementation(async (_supabase: SupabaseClient, id: string) => ({
