@@ -656,6 +656,24 @@ describe("Nutrition V1 Task 9 current-generation Food handoff", () => {
     )).rejects.toThrow(/serving/i);
   });
 
+  it("rejects a selected serving ID whose Serving fact belongs to a different Food", async () => {
+    const crossFoodServingId = "bbbbbbbb-4444-4444-8444-bbbbbbbbbbbb";
+    const differentFoodId = "cccccccc-4444-4444-8444-cccccccccccc";
+    generation.resolve.mockResolvedValueOnce(view({
+      selections: { ...view().selections, servingOptionIds: [crossFoodServingId] },
+      servingOptions: [
+        selectedServing(crossFoodServingId, "170 g", 170, differentFoodId),
+      ],
+    }));
+    const db = clientFor({ rpc: [noOverride()] });
+
+    await expect(resolveFoodHandoff(
+      db.client,
+      userId,
+      catalogInput({ serving: "170 g", servingOptionId: crossFoodServingId }),
+    )).rejects.toThrow(/serving/i);
+  });
+
   it("requires owner Personal Override serving to carry no generation serving ID", async () => {
     generation.resolve.mockResolvedValueOnce(view());
     const db = clientFor({
