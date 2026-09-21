@@ -4,11 +4,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SavedMealItemInput } from "@/services/nutrition-v1/server/saved-meals";
 
 const handoff = vi.hoisted(() => ({ resolve: vi.fn() }));
+const generation = vi.hoisted(() => ({ resolve: vi.fn() }));
 const recipe = vi.hoisted(() => ({ resolve: vi.fn() }));
 
 vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({
   resolveFoodHandoffWithAuthorities: handoff.resolve,
 }));
+vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
+  const actual = await vi.importActual<typeof import("@/services/food-catalog/server/current-generation-service")>(
+    "@/services/food-catalog/server/current-generation-service",
+  );
+  return { ...actual, resolveCurrentGenerationFoodForNewUseFromSupabase: generation.resolve };
+});
 vi.mock("@/services/nutrition-v1/server/recipe-handoff", () => ({
   resolveRecipeHandoff: recipe.resolve,
 }));
@@ -48,6 +55,36 @@ function resolvedFood(extra: Record<string, unknown> = {}) {
   };
 }
 
+function currentView(names: Array<{ id: string; languageTag: string; text: string }>) {
+  return {
+    requestedFoodId: foodId,
+    resolvedFoodId: foodId,
+    selections: {
+      servingOptionIds: [],
+      nameFactIds: names.map((name) => name.id),
+      taxonomyAssignmentIds: [],
+      marketAssignmentIds: [],
+      verification: [],
+    },
+    names: names.map((name) => ({
+      id: name.id,
+      foodId,
+      languageTag: name.languageTag,
+      role: "preferred_display",
+      text: name.text,
+    })),
+    servingOptions: [],
+  };
+}
+
+function name(idSuffix: string, languageTag: string, text: string) {
+  return {
+    id: `60000000-0000-4000-8000-${idSuffix.padStart(12, "0")}`,
+    languageTag,
+    text,
+  };
+}
+
 describe("Saved Meal Catalog Name locale write identity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -68,24 +105,97 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     }));
   });
 
-  it.each(["en", "de"])("uses current write locale %s for a legacy frozen Catalog snapshot without transient locale", async (writeLanguageTag) => {
+  it("recovers a unique frozen English Name identity even after the UI switches to German", async () => {
     const owner = ownerSupabase(false);
+    generation.resolve.mockResolvedValueOnce(currentView([name("1", "en", "Shared name")]));
 
-    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], writeLanguageTag);
+    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
 
+    expect(generation.resolve).toHaveBeenCalledWith(catalogSupabase, foodId);
     expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
       foodId,
       source: "catalog",
       displayName: "Shared name",
-      languageTag: writeLanguageTag,
+      languageTag: "en",
     }));
   });
 
-  it("fails closed when duplicate exact text remains ambiguous without item or write locale", async () => {
+  it("recovers a unique frozen German Name identity even after the UI switches to English", async () => {
     const owner = ownerSupabase(false);
-    handoff.resolve.mockRejectedValueOnce(new Error("The selected Food name does not resolve to exactly one current-generation Name fact."));
+    generation.resolve.mockResolvedValueOnce(currentView([name("2", "de", "Shared name")]));
 
-    await expect(canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], null)).rejects.toThrow(/name.*exactly one/i);
+    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en");
+
+    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+      displayName: "Shared name",
+      languageTag: "de",
+    }));
+  });
+
+  it("uses current UI locale only to disambiguate multiple selected Name facts with the same exact frozen text", async () => {
+    const owner = ownerSupabase(false);
+    generation.resolve.mockResolvedValueOnce(currentView([
+      name("3", "en", "Shared name"),
+      name("4", "de", "Shared name"),
+    ]));
+
+    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
+
+    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+      displayName: "Shared name",
+      languageTag: "de",
+    }));
+  });
+
+  it("fails closed when same-text same-base regional Names remain ambiguous for the UI locale", async () => {
+    const owner = ownerSupabase(false);
+    generation.resolve.mockResolvedValueOnce(currentView([
+      name("5", "en-US", "Shared name"),
+      name("6", "en-GB", "Shared name"),
+    ]));
+
+    await expect(canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en-AU"))
+      .rejects.toThrow(/re-select|ambiguous|name/i);
+    expect(handoff.resolve).not.toHaveBeenCalled();
+  });
+
+  it("uses the unique exact frozen text regardless of an unrelated UI locale", async () => {
+    const owner = ownerSupabase(false);
+    generation.resolve.mockResolvedValueOnce(currentView([
+      name("7", "ar", "Shared name"),
+      name("8", "de", "Andere"),
+    ]));
+
+    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "fr-FR");
+
+    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+      displayName: "Shared name",
+      languageTag: "ar",
+    }));
+  });
+
+  it("fails closed and requires re-selection when no current selected Name matches the frozen text", async () => {
+    const owner = ownerSupabase(false);
+    generation.resolve.mockResolvedValueOnce(currentView([
+      name("9", "en", "Renamed food"),
+    ]));
+
+    await expect(canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en"))
+      .rejects.toThrow(/re-select|name/i);
+    expect(handoff.resolve).not.toHaveBeenCalled();
+  });
+
+  it("keeps a transient newly-selected candidate locale as strongest identity without frozen-name recovery", async () => {
+    const owner = ownerSupabase(false);
+    const item = { ...frozenFood, languageTag: "de" } as SavedMealItemInput & { languageTag: string };
+
+    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [item], "en");
+
+    expect(generation.resolve).not.toHaveBeenCalled();
+    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+      displayName: "Shared name",
+      languageTag: "de",
+    }));
   });
 
   it("strips transient locale metadata from the returned canonical frozen snapshot", async () => {
