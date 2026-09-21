@@ -11,6 +11,8 @@ const ACTION_ONE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const ACTION_TWO_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const MOCK_AUTH_USER_ID = "00000000-0000-4000-8000-000000000001";
 const MEAL_PLAN_QA_WEEK_START = "2026-08-24";
+const FOOD_LIBRARY_CATALOG_ID = "11111111-1111-4111-8111-111111111111";
+const FOOD_LIBRARY_SERVING_OPTION_ID = "99999999-9999-4999-8999-999999999999";
 
 export const NUTRITION_V1_QA_VIEWPORTS = Object.freeze([
   { name: "390x844", width: 390, height: 844 },
@@ -163,7 +165,7 @@ function foodFixtures(item) {
   if (item.name.includes("new-user") || item.name.includes("no-results")) return [];
   const long = item.name.includes("long-branded-name");
   return [
-    { id: "11111111-1111-4111-8111-111111111111", source: "catalog", name: long ? "Extra Long International Greek Style Strained Yogurt with Vanilla Bean and Mixed Forest Berries" : "Greek yogurt", brand: long ? "Molkerei Internationale Handelsgesellschaft" : "Plaivra Foods", category: "Dairy", cuisine: null, servingLabel: "170 g", verified: true, favorite: true, recentAt: "2026-08-26T06:00:00.000Z", frequency: 8, locale: item.language, aliases: [{ locale: "en", value: "yogurt" }], nutrition: { calories: 130, protein_g: 18, carbs_g: 8, fat_g: 2, saturated_fat_g: 1, fiber_g: 0, sugars_g: 6, sodium_mg: 70, basis_amount: 170, basis_unit: "g" }, tags: [], nutritionLabels: ["high-protein", "low-carb"], usingPersonalValues: item.name.includes("personal-correction") },
+    { id: FOOD_LIBRARY_CATALOG_ID, source: "catalog", name: long ? "Extra Long International Greek Style Strained Yogurt with Vanilla Bean and Mixed Forest Berries" : "Greek yogurt", brand: long ? "Molkerei Internationale Handelsgesellschaft" : "Plaivra Foods", category: "Dairy", cuisine: null, servingLabel: "170 g", verified: true, favorite: true, recentAt: "2026-08-26T06:00:00.000Z", frequency: 8, locale: item.language, aliases: [{ locale: "en", value: "yogurt" }], nutrition: { calories: 130, protein_g: 18, carbs_g: 8, fat_g: 2, saturated_fat_g: 1, fiber_g: 0, sugars_g: 6, sodium_mg: 70, basis_amount: 170, basis_unit: "g" }, tags: [], nutritionLabels: ["high-protein", "low-carb"], usingPersonalValues: item.name.includes("personal-correction") },
     { id: "22222222-2222-4222-8222-222222222222", source: "my_food", name: item.language === "ar" ? "وعاء شوفان Homemade" : "Homemade oat bowl", brand: null, category: "Breakfast", cuisine: null, servingLabel: "1 bowl", verified: false, favorite: false, recentAt: "2026-08-25T07:00:00.000Z", frequency: 3, locale: item.language, aliases: [{ locale: "en", value: "oats" }], nutrition: { calories: 410, protein_g: 19, carbs_g: 58, fat_g: 12, saturated_fat_g: 2, fiber_g: 9, sugars_g: 11, sodium_mg: 180, basis_amount: 1, basis_unit: "g" }, tags: [], usingPersonalValues: false },
   ];
 }
@@ -274,11 +276,24 @@ async function createContext(browser, item) {
       await fulfillJson(route, item.name === "diary-failed-sync" ? { error: "Rendered QA sync rejection" } : { ok: true }, item.name === "diary-failed-sync" ? 503 : 200, `nutrition-${item.name}`);
       return;
     }
+    if (pathname === `/api/nutrition/v1/foods/${FOOD_LIBRARY_CATALOG_ID}/selection` && method === "GET") {
+      await fulfillJson(route, {
+        foodId: FOOD_LIBRARY_CATALOG_ID,
+        name: "Greek yogurt",
+        languageTag: url.searchParams.get("languageTag") || item.language,
+        servingChoices: [{
+          servingOptionId: FOOD_LIBRARY_SERVING_OPTION_ID,
+          label: "170 g",
+          source: "generation",
+        }],
+      }, 200, `nutrition-${item.name}`);
+      return;
+    }
     if (pathname.endsWith("/foods") && method === "POST") {
       let body = {};
       try { body = route.request().postDataJSON(); } catch { body = {}; }
       if (item.name === "food-library-mobile-duplicate-suggestion" && body.operation === "custom_food_create") {
-        await fulfillJson(route, { food: null, duplicate: { id: "11111111-1111-4111-8111-111111111111", source: "catalog", food_name: "Greek yogurt", serving_size: "170 g" } }, 200, `nutrition-${item.name}`);
+        await fulfillJson(route, { food: null, duplicate: { id: FOOD_LIBRARY_CATALOG_ID, source: "catalog", food_name: "Greek yogurt", serving_size: "170 g" } }, 200, `nutrition-${item.name}`);
         return;
       }
       await fulfillJson(route, { food: { id: "22222222-2222-4222-8222-222222222229" }, duplicate: null, deleted: body.operation === "custom_food_delete", ok: true }, 200, `nutrition-${item.name}`);

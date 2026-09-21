@@ -30,23 +30,54 @@ const userId = "11111111-1111-4111-8111-111111111111";
 const mappedFoodId = "22222222-2222-4222-8222-222222222222";
 const survivorId = "33333333-3333-4333-8333-333333333333";
 const nameId = "44444444-4444-4444-8444-444444444444";
+const servingId = "88888888-8888-4888-8888-888888888888";
 const barcode = "4006381333931";
 const catalogSupabase = { authority: "catalog" } as unknown as SupabaseClient;
 
 function supabaseWithBarcode(data: unknown) {
-  const rpc = vi.fn(async (name: string) => {
-    if (name !== "food_catalog_lookup_effective_barcode") throw new Error(`Unexpected RPC ${name}`);
-    return { data, error: null };
+  const rpc = vi.fn(async (name: string, args?: Record<string, unknown>) => {
+    if (name === "food_catalog_lookup_effective_barcode") return { data, error: null };
+    if (name === "food_catalog_get_current_personal_override_v1") {
+      return {
+        data: {
+          foodId: String(args?.p_food_id ?? survivorId),
+          hasOverride: false,
+          revisionId: null,
+          pointerRevision: 0,
+          isDeleted: false,
+          nutritionOverride: null,
+          servingLabel: null,
+          note: null,
+        },
+        error: null,
+      };
+    }
+    throw new Error(`Unexpected RPC ${name}`);
   });
   return { client: { rpc } as unknown as SupabaseClient, rpc };
 }
 
 function currentView(overrides: Record<string, unknown> = {}) {
+  const overrideSelections = overrides.selections && typeof overrides.selections === "object"
+    ? overrides.selections as Record<string, unknown>
+    : {};
   return {
     requestedFoodId: mappedFoodId,
     resolvedFoodId: survivorId,
     food: { lifecycle: "active" },
-    selections: { nameFactIds: [nameId] },
+    selections: {
+      servingOptionIds: [servingId],
+      nameFactIds: [nameId],
+      taxonomyAssignmentIds: [],
+      marketAssignmentIds: [],
+      verification: [],
+      ...overrideSelections,
+    },
+    servingOptions: [{
+      id: servingId,
+      foodId: survivorId,
+      label: "170 g",
+    }],
     names: [{
       id: nameId,
       foodId: survivorId,
@@ -55,6 +86,14 @@ function currentView(overrides: Record<string, unknown> = {}) {
       text: "Canonical yogurt",
     }],
     ...overrides,
+    selections: {
+      servingOptionIds: [servingId],
+      nameFactIds: [nameId],
+      taxonomyAssignmentIds: [],
+      marketAssignmentIds: [],
+      verification: [],
+      ...overrideSelections,
+    },
   };
 }
 
@@ -133,7 +172,17 @@ describe("Task 12 canonical-first barcode resolution", () => {
 
     const result = await resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider);
 
-    expect(result).toEqual({ kind: "catalog", barcode, food: candidate() });
+    expect(result).toEqual({
+      kind: "catalog",
+      barcode,
+      food: candidate(),
+      selection: {
+        foodId: survivorId,
+        name: "Canonical yogurt",
+        languageTag: "en",
+        servingChoices: [{ servingOptionId: servingId, label: "170 g", source: "generation" }],
+      },
+    });
     expect(db.rpc).toHaveBeenCalledWith("food_catalog_lookup_effective_barcode", { p_gtin: barcode });
     expect(generation.resolve).toHaveBeenCalledWith(catalogSupabase, mappedFoodId);
     expect(search.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({

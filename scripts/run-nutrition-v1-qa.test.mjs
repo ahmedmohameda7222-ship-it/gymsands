@@ -129,6 +129,16 @@ test("Food Library QA scenarios explicitly drive and assert Create, duplicate, e
   }
 });
 
+test("Food Library rendered QA resolves an explicit generation serving before serving-dependent interactions", async () => {
+  const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
+  assert.match(source, /FOOD_LIBRARY_SERVING_OPTION_ID/);
+  assert.match(source, /\/selection/);
+  assert.match(source, /servingChoices:\s*\[\{/);
+  assert.match(source, /servingOptionId:\s*FOOD_LIBRARY_SERVING_OPTION_ID/);
+  assert.match(source, /label:\s*"170 g"/);
+  assert.match(source, /source:\s*"generation"/);
+});
+
 test("barcode fallback interaction targets the Barcode textbox rather than the dialog accessible name", async () => {
   const source = await readFile(new URL("./run-nutrition-v1-qa.mjs", import.meta.url), "utf8");
   assert.match(source, /getByRole\("textbox",\s*\{\s*name:\s*\/barcode\/i\s*\}\)/);
