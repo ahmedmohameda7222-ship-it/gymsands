@@ -79,7 +79,7 @@ function view(servings: Array<{ id: string; label: string; foodId?: string }> = 
       sourceRecordId: null,
       policyVersion: "name-v1",
     }],
-  } as CurrentGenerationFoodView;
+  } as unknown as CurrentGenerationFoodView;
 }
 
 function noOverride() {
@@ -95,7 +95,10 @@ function noOverride() {
   };
 }
 
-async function run(servings: Array<{ id: string; label: string; foodId?: string }>, override = noOverride()) {
+async function run(
+  servings: Array<{ id: string; label: string; foodId?: string }>,
+  override: Awaited<ReturnType<typeof personal.read>> | ReturnType<typeof noOverride> = noOverride(),
+) {
   if (!resolveSelection) throw new Error("Catalog new-use serving selection boundary is not implemented.");
   generation.resolve.mockResolvedValueOnce(view(servings));
   personal.read.mockResolvedValueOnce(override);
