@@ -14,6 +14,7 @@ export type SavedMealItemInput = SavedMealFoodItemSnapshot | SavedMealRecipeItem
 
 export type SavedMealFoodWriteIntent = SavedMealFoodItemSnapshot & {
   languageTag?: string | null;
+  servingOptionId?: string | null;
 };
 
 export type SavedMealItemWriteIntent = SavedMealFoodWriteIntent | SavedMealRecipeItemSnapshot;

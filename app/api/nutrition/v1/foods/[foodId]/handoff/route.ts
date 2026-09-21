@@ -15,6 +15,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ food
     const serving = url.searchParams.get("serving");
     const displayName = url.searchParams.get("displayName")?.trim() || undefined;
     const languageTag = url.searchParams.get("languageTag")?.trim() || null;
+    const servingOptionId = url.searchParams.get("servingOptionId")?.trim() || null;
     const quantity = Number(url.searchParams.get("quantity"));
     if (source !== "catalog" && source !== "my_food") throw new NutritionRequestError("Food source is invalid.");
     if (!serving?.trim()) throw new NutritionRequestError("Resolved serving is required.");
@@ -25,6 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ food
       foodId,
       source,
       serving,
+      servingOptionId,
       quantity,
       displayName,
       languageTag,

@@ -23,6 +23,7 @@ export type FoodHandoffInput = {
   source: FoodLibrarySource;
   quantity: number;
   serving: string;
+  servingOptionId?: string | null;
   displayName?: string;
   languageTag?: string | null;
 };
@@ -150,19 +151,93 @@ function exactSelectedName(
   return matches[0]!;
 }
 
+export type CatalogServingChoice = {
+  servingOptionId: string | null;
+  label: string;
+  source: "generation" | "owner_override";
+};
+
+export type CatalogNewUseSelection = {
+  foodId: string;
+  name: string;
+  languageTag: string;
+  servingChoices: CatalogServingChoice[];
+};
+
+function selectedGenerationServingChoices(view: CurrentGenerationFoodView): CatalogServingChoice[] {
+  const selectionIds = view.selections.servingOptionIds;
+  if (new Set(selectionIds).size !== selectionIds.length) {
+    throw new Error("Current-generation Food contains duplicate selected Serving identities.");
+  }
+  return selectionIds.map((id) => {
+    const matches = view.servingOptions.filter((serving) => serving.id === id);
+    if (matches.length !== 1 || matches[0]!.foodId !== view.resolvedFoodId) {
+      throw new Error("Current-generation selected Serving authority is malformed.");
+    }
+    return {
+      servingOptionId: id,
+      label: requiredText(matches[0]!.label, "Food serving"),
+      source: "generation" as const,
+    };
+  });
+}
+
 function exactSelectedServing(
   view: CurrentGenerationFoodView,
   servingLabel: string,
+  servingOptionId: string | null,
 ) {
   const selectedIds = new Set(view.selections.servingOptionIds);
+  if (servingOptionId !== null && !selectedIds.has(servingOptionId)) {
+    throw new Error("The selected Food serving identity is not selected by the current generation.");
+  }
   const matches = view.servingOptions.filter((serving) => (
     selectedIds.has(serving.id)
+    && serving.foodId === view.resolvedFoodId
     && serving.label.trim() === servingLabel
+    && (servingOptionId === null || serving.id === servingOptionId)
   ));
   if (matches.length !== 1) {
     throw new Error("The selected Food serving does not resolve to exactly one current-generation Serving fact.");
   }
   return matches[0]!;
+}
+
+export async function resolveCatalogNewUseSelectionFromView(
+  ownerSupabase: SupabaseClient,
+  view: CurrentGenerationFoodView,
+  selectedName: CurrentGenerationFoodView["names"][number],
+): Promise<CatalogNewUseSelection> {
+  if (selectedName.foodId !== view.resolvedFoodId || !view.selections.nameFactIds.includes(selectedName.id)) {
+    throw new Error("The selected Food name is not selected by the current generation.");
+  }
+  const personalOverride = await readCurrentPersonalOverride(ownerSupabase, view.resolvedFoodId);
+  const personalServing = personalOverride.hasOverride && !personalOverride.isDeleted
+    ? personalOverride.servingLabel
+    : null;
+  return {
+    foodId: view.resolvedFoodId,
+    name: requiredText(selectedName.text, "Food display name"),
+    languageTag: requiredText(selectedName.languageTag, "Food language"),
+    servingChoices: personalServing !== null
+      ? [{ servingOptionId: null, label: personalServing, source: "owner_override" }]
+      : selectedGenerationServingChoices(view),
+  };
+}
+
+export async function resolveCatalogNewUseSelectionWithAuthorities(
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
+  userId: string,
+  input: { foodId: string; displayName: string; languageTag?: string | null },
+): Promise<CatalogNewUseSelection> {
+  if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
+  if (!isUuid(input.foodId)) throw new Error("Food must be a valid ID.");
+  const displayName = requiredText(input.displayName, "Food display name");
+  const languageTag = optionalText(input.languageTag);
+  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, input.foodId);
+  const selectedName = exactSelectedName(view, displayName, languageTag);
+  return resolveCatalogNewUseSelectionFromView(ownerSupabase, view, selectedName);
 }
 
 export async function resolveFoodHandoffWithAuthorities(
@@ -176,6 +251,12 @@ export async function resolveFoodHandoffWithAuthorities(
   if (input.source !== "catalog" && input.source !== "my_food") throw new Error("Food source is invalid.");
   const quantity = positive(input.quantity, "Food quantity");
   const requestedServing = requiredText(input.serving, "Food serving");
+  const requestedServingOptionId = input.servingOptionId === undefined || input.servingOptionId === null
+    ? null
+    : requiredText(input.servingOptionId, "Food serving identity");
+  if (requestedServingOptionId !== null && !isUuid(requestedServingOptionId)) {
+    throw new Error("Food serving identity must be a valid ID.");
+  }
 
   let foodId = input.foodId;
   let name: string;
@@ -200,6 +281,9 @@ export async function resolveFoodHandoffWithAuthorities(
       : null;
 
     if (personalServing !== null) {
+      if (requestedServingOptionId !== null) {
+        throw new Error("An owner Personal Override serving must not carry a generation Serving identity.");
+      }
       if (requestedServing !== personalServing) {
         throw new Error("The resolved Food serving no longer matches the selected serving. Re-select the serving before adding it.");
       }
@@ -210,7 +294,7 @@ export async function resolveFoodHandoffWithAuthorities(
       serving = personalServing;
       effectiveNutrition = projected.nutrition;
     } else {
-      const selectedServing = exactSelectedServing(view, requestedServing);
+      const selectedServing = exactSelectedServing(view, requestedServing, requestedServingOptionId);
       const projected = projectCurrentGenerationCompatibility(effectiveView, {
         nameFactId: selectedName.id,
         servingOptionId: selectedServing.id,
@@ -219,6 +303,9 @@ export async function resolveFoodHandoffWithAuthorities(
       effectiveNutrition = projected.nutrition;
     }
   } else {
+    if (requestedServingOptionId !== null) {
+      throw new Error("My Food serving must not carry a Catalog Serving identity.");
+    }
     const result = await ownerSupabase
       .from("user_food_items")
       .select("id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,nutrition_basis_amount,nutrition_basis_unit,deleted_at")

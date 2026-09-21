@@ -31,6 +31,7 @@ async function resolveSource(ownerSupabase: Parameters<typeof resolveFoodHandoff
       source,
       quantity: Number(raw.quantity),
       serving: text(raw.serving, "Serving"),
+      servingOptionId: typeof raw.servingOptionId === "string" && raw.servingOptionId.trim() ? raw.servingOptionId.trim() : null,
       displayName: source === "catalog" ? text(raw.displayName, "Food display name") : undefined,
       languageTag: typeof raw.languageTag === "string" && raw.languageTag.trim() ? raw.languageTag.trim() : null,
     }) };

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { ChevronLeft, Minus, Plus, ShieldCheck, Star } from "lucide-react";
 
+import { foodLibraryApi } from "@/components/nutrition/food-library/food-library-api";
 import { foodLibraryText, type FoodLibraryTextKey } from "@/components/nutrition/food-library/food-library-copy";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 import type { FoodLibraryCandidate, FoodLibraryNutrition } from "@/services/nutrition-v1/server/food-library";
@@ -28,6 +29,19 @@ function scaledNutrition(nutrition: FoodLibraryNutrition, quantity: number): Foo
   };
 }
 
+type CatalogServingChoice = {
+  servingOptionId: string | null;
+  label: string;
+  source: "generation" | "owner_override";
+};
+
+type CatalogSelection = {
+  foodId: string;
+  name: string;
+  languageTag: string;
+  servingChoices: CatalogServingChoice[];
+};
+
 type Props = {
   food: FoodLibraryCandidate;
   initialAdd?: boolean;
@@ -41,10 +55,54 @@ type Props = {
 export function FoodDetail({ food, initialAdd = false, onClose, onFavorite, onCorrect, onEdit, onDelete }: Props) {
   const { nt: baseNt, language, dir } = useNutritionV1Translation();
   const nt = useCallback((key: FoodLibraryTextKey, values?: Record<string, string | number>) => foodLibraryText(language, baseNt, key, values), [baseNt, language]);
-  const hasAuthoritativeServing = Boolean(food.servingLabel?.trim());
-  const [servingLabel, setServingLabel] = useState(food.servingLabel ?? "");
+  const [servingChoices, setServingChoices] = useState<CatalogServingChoice[]>(
+    food.source === "my_food" && food.servingLabel
+      ? [{ servingOptionId: null, label: food.servingLabel, source: "owner_override" }]
+      : [],
+  );
+  const [servingChoiceKey, setServingChoiceKey] = useState(
+    food.source === "my_food" && food.servingLabel ? "__my_food__" : "",
+  );
+  const [servingResolved, setServingResolved] = useState(food.source === "my_food");
+  const [servingError, setServingError] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [addOpen, setAddOpen] = useState(initialAdd && hasAuthoritativeServing);
+  const selectedServingChoice = food.source === "my_food"
+    ? servingChoices[0] ?? null
+    : servingChoices.find((choice) => (choice.servingOptionId ?? "__owner_override__") === servingChoiceKey)
+      ?? (servingChoices.length === 1 ? servingChoices[0]! : null);
+  const servingLabel = selectedServingChoice?.label ?? "";
+  const servingOptionId = food.source === "catalog" ? selectedServingChoice?.servingOptionId ?? null : null;
+  const hasAuthoritativeServing = Boolean(servingLabel);
+  const [addOpen, setAddOpen] = useState(false);
+  useEffect(() => {
+    if (food.source !== "catalog") return;
+    let cancelled = false;
+    setServingResolved(false);
+    setServingError("");
+    const params = new URLSearchParams({ displayName: food.name, languageTag: food.locale });
+    void foodLibraryApi(`/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/selection?${params.toString()}`)
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({})) as Partial<CatalogSelection> & { error?: string };
+        if (!response.ok || !Array.isArray(body.servingChoices)) {
+          throw new Error(body.error || "Serving authority could not be loaded.");
+        }
+        if (cancelled) return;
+        const choices = body.servingChoices as CatalogServingChoice[];
+        setServingChoices(choices);
+        setServingChoiceKey(choices.length === 1 ? choices[0]!.servingOptionId ?? "__owner_override__" : "");
+        setServingResolved(true);
+        setAddOpen(initialAdd && choices.length === 1);
+      })
+      .catch((cause) => {
+        if (cancelled) return;
+        setServingChoices([]);
+        setServingChoiceKey("");
+        setServingResolved(true);
+        setServingError(cause instanceof Error ? cause.message : "Serving authority could not be loaded.");
+      });
+    return () => { cancelled = true; };
+  }, [food.id, food.locale, food.name, food.source, initialAdd]);
+
   const nutrition = useMemo(() => scaledNutrition(food.nutrition, hasAuthoritativeServing ? quantity : 1), [food.nutrition, hasAuthoritativeServing, quantity]);
   const foodParam = encodeURIComponent(food.id);
   const sourceParam = encodeURIComponent(food.source);
@@ -53,7 +111,8 @@ export function FoodDetail({ food, initialAdd = false, onClose, onFavorite, onCo
   const displayNameParam = encodeURIComponent(food.name);
   const languageTagParam = encodeURIComponent(food.locale);
   const unavailable = nt("notAvailable");
-  const handoffContext = `source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}&displayName=${displayNameParam}&languageTag=${languageTagParam}`;
+  const servingIdentityParam = servingOptionId ? `&servingOptionId=${encodeURIComponent(servingOptionId)}` : "";
+  const handoffContext = `source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}${servingIdentityParam}&displayName=${displayNameParam}&languageTag=${languageTagParam}`;
   const destinationSuffix = `addFoodId=${foodParam}&${handoffContext}`;
   const nutritionBasis = food.nutrition.basis_amount !== null && food.nutrition.basis_unit
     ? `${food.nutrition.basis_amount} ${food.nutrition.basis_unit}`
@@ -66,13 +125,15 @@ export function FoodDetail({ food, initialAdd = false, onClose, onFavorite, onCo
           <button type="button" onClick={onClose} className="inline-flex min-h-11 items-center gap-1 rounded-xl pe-2 text-sm font-medium hover:bg-muted" aria-label={nt("closeFoodDetails")}><ChevronLeft className="h-5 w-5 rtl:rotate-180" /><span>{nt("foodLibrary")}</span></button>
           <div className="flex items-center gap-1">
             {food.source === "catalog" ? <button type="button" onClick={() => onFavorite?.(food)} className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted" aria-label={food.favorite ? nt("removeFavorite") : nt("favoriteFood")}><Star className={`h-5 w-5 ${food.favorite ? "fill-current" : ""}`} /></button> : null}
-            <button type="button" disabled={!hasAuthoritativeServing} onClick={() => setAddOpen((open) => !open)} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40" aria-label={nt("addTo")} aria-expanded={addOpen}><Plus className="h-5 w-5" /></button>
+            <button type="button" disabled={!hasAuthoritativeServing || !servingResolved} onClick={() => setAddOpen((open) => !open)} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40" aria-label={nt("addTo")} aria-expanded={addOpen}><Plus className="h-5 w-5" /></button>
           </div>
         </header>
 
         <div className="mt-5"><div className="flex items-center gap-2"><h2 className="text-xl font-semibold"><bdi dir="auto">{food.name}</bdi></h2>{food.verified ? <ShieldCheck className="h-4 w-4" aria-label={nt("plaivraVerified")} /> : null}</div><p className="mt-1 text-sm text-muted-foreground"><bdi dir="auto">{food.category ?? nt("food")}</bdi>{food.cuisine ? <> · <bdi dir="auto">{food.cuisine}</bdi></> : null}</p></div>
 
-        {hasAuthoritativeServing ? <section className="mt-6 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">{nt("serving")}</h3><select value={servingLabel} onChange={(event) => setServingLabel(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value={food.servingLabel ?? ""}>{food.servingLabel}</option></select></section> : null}
+        {food.source === "catalog" && servingResolved && servingChoices.length === 0 ? <p className="mt-6 rounded-xl border border-destructive/30 p-3 text-sm text-destructive">No authoritative serving is available yet.</p> : null}
+        {servingError ? <p className="mt-2 text-sm text-destructive">{servingError}</p> : null}
+        {servingChoices.length > 0 ? <section className="mt-6 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">{nt("serving")}</h3><select value={servingChoiceKey} onChange={(event) => { setServingChoiceKey(event.target.value); setAddOpen(false); }} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm">{servingChoices.length > 1 ? <option value="">Choose a serving</option> : null}{servingChoices.map((choice) => <option key={choice.servingOptionId ?? `owner:${choice.label}`} value={choice.servingOptionId ?? "__owner_override__"}>{choice.label}</option>)}</select></section> : null}
         {hasAuthoritativeServing ? <section className="mt-5"><h3 className="text-sm font-semibold">{nt("quantity")}</h3><div className="mt-2 inline-flex min-h-11 items-center rounded-xl border border-border"><button type="button" onClick={() => setQuantity((value) => Math.max(0.25, Math.round((value - 0.25) * 100) / 100))} className="h-11 w-11" aria-label={nt("decreaseQuantity")}><Minus className="mx-auto h-4 w-4" /></button><span className="min-w-14 text-center text-sm font-semibold" aria-live="polite">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.round((value + 0.25) * 100) / 100)} className="h-11 w-11" aria-label={nt("increaseQuantity")}><Plus className="mx-auto h-4 w-4" /></button></div></section> : null}
 
         <section className="mt-6" aria-live="polite"><div className="text-2xl font-semibold tabular-nums">{display(nutrition.calories, "kcal", unavailable)}</div>{nutritionBasis ? <p className="mt-1 text-xs text-muted-foreground"><bdi dir="ltr">{nutritionBasis}</bdi></p> : null}<dl className="mt-3 grid grid-cols-3 gap-3 text-sm"><div><dt className="text-xs text-muted-foreground">{nt("macroProtein")}</dt><dd className="font-medium">{display(nutrition.protein_g, "g", unavailable)}</dd></div><div><dt className="text-xs text-muted-foreground">{nt("macroCarbs")}</dt><dd className="font-medium">{display(nutrition.carbs_g, "g", unavailable)}</dd></div><div><dt className="text-xs text-muted-foreground">{nt("macroFat")}</dt><dd className="font-medium">{display(nutrition.fat_g, "g", unavailable)}</dd></div></dl></section>

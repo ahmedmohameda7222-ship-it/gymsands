@@ -44,6 +44,8 @@ export type CatalogFoodItem = Omit<
     is_editable_by_user: false;
     /** Exact locale identity returned by Food Catalog V2 for a selected catalog Name fact. */
     locale?: string;
+    /** Transient exact current-generation Serving identity selected for a new-use action. Never persisted. */
+    serving_option_id?: string | null;
   };
 
 /** Active Food Library values are either nullable catalog Food or strict numeric My Food. */

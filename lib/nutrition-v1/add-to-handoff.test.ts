@@ -4,13 +4,14 @@ import { parseAddToHandoff } from "@/lib/nutrition-v1/add-to-handoff";
 
 describe("Nutrition V1 Add To handoff parsing", () => {
   it("preserves Food identity, selected display name/language, serving and quantity for each contextual destination", () => {
-    const base = "source=catalog&quantity=1.5&serving=170%20g&displayName=Greek%20yogurt&languageTag=en";
+    const base = "source=catalog&quantity=1.5&serving=170%20g&servingOptionId=33333333-3333-4333-8333-333333333333&displayName=Greek%20yogurt&languageTag=en";
     const expected = {
       type: "food",
       id: "f1",
       source: "catalog",
       quantity: 1.5,
       serving: "170 g",
+      servingOptionId: "33333333-3333-4333-8333-333333333333",
       displayName: "Greek yogurt",
       languageTag: "en",
     };
@@ -31,6 +32,7 @@ describe("Nutrition V1 Add To handoff parsing", () => {
       source: "my_food",
       quantity: 1,
       serving: "1 bowl",
+      servingOptionId: null,
       displayName: null,
       languageTag: null,
     });

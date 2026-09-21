@@ -34,6 +34,8 @@ type SavedMealDetail = {
 };
 
 type UtilityEditorItem = SavedMealEditorItem & { payload: SavedMealItemWriteIntent };
+type CatalogServingChoice = { servingOptionId: string | null; label: string; source: "generation" | "owner_override" };
+type CatalogSelection = { foodId: string; name: string; languageTag: string; servingChoices: CatalogServingChoice[] };
 type Mode = "browse" | "detail" | "create" | "edit" | "deleted" | "add-food" | "add-recipe";
 
 type PendingSavedMealCreateOperation = {
@@ -142,15 +144,17 @@ function editorItems(bundle: SavedMealBundle | null): UtilityEditorItem[] {
   });
 }
 
-function foodPayload(food: FoodLibraryCandidate): SavedMealItemWriteIntent {
-  if (!food.servingLabel) throw new Error("Food serving authority is required before creating a Saved Meal item.");
+function foodPayload(food: FoodLibraryCandidate, choice?: CatalogServingChoice): SavedMealItemWriteIntent {
+  const servingLabel = food.source === "catalog" ? choice?.label ?? "" : food.servingLabel ?? "";
+  if (!servingLabel) throw new Error("Food serving authority is required before creating a Saved Meal item.");
   return {
     kind: "food",
     food_id: food.id,
     frozen_name: food.name,
     resolved_quantity: 1,
-    resolved_serving_label: food.servingLabel,
+    resolved_serving_label: servingLabel,
     languageTag: food.source === "catalog" ? food.locale : undefined,
+    servingOptionId: food.source === "catalog" ? choice?.servingOptionId ?? null : undefined,
     frozen_nutrition: {
       calories: null,
       protein_g: null,
@@ -197,6 +201,8 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
   const [items, setItems] = useState<UtilityEditorItem[]>([]);
   const [query, setQuery] = useState("");
   const [foods, setFoods] = useState<FoodLibraryCandidate[]>([]);
+  const [foodServingSelections, setFoodServingSelections] = useState<Record<string, CatalogSelection>>({});
+  const [foodServingChoiceKeys, setFoodServingChoiceKeys] = useState<Record<string, string>>({});
   const [recipes, setRecipes] = useState<RecipeHomeRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -362,14 +368,42 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
     }
   }
 
-  function addFood(food: FoodLibraryCandidate) {
-    if (!food.servingLabel) { setError(text.servingUnavailable); return; }
-    setItems((current) => [...current, {
-      id: crypto.randomUUID(), kind: "food", name: food.name, servingLabel: `1 × ${food.servingLabel}`, payload: foodPayload(food),
-    }]);
-    setMode(detail ? "edit" : "create");
-    setQuery("");
-    setFoods([]);
+  async function addFood(food: FoodLibraryCandidate) {
+    try {
+      if (food.source === "my_food") {
+        if (!food.servingLabel) { setError(text.servingUnavailable); return; }
+        setItems((current) => [...current, {
+          id: crypto.randomUUID(), kind: "food", name: food.name, servingLabel: `1 × ${food.servingLabel}`, payload: foodPayload(food),
+        }]);
+      } else {
+        let selection = foodServingSelections[food.id];
+        if (!selection) {
+          const params = new URLSearchParams({ displayName: food.name, languageTag: food.locale });
+          selection = await request<CatalogSelection>(`/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/selection?${params.toString()}`);
+          setFoodServingSelections((current) => ({ ...current, [food.id]: selection! }));
+          if (selection.servingChoices.length === 1) {
+            setFoodServingChoiceKeys((current) => ({
+              ...current,
+              [food.id]: selection!.servingChoices[0]!.servingOptionId ?? "__owner_override__",
+            }));
+          }
+        }
+        if (selection.servingChoices.length === 0) { setError(text.servingUnavailable); return; }
+        const selectedKey = foodServingChoiceKeys[food.id]
+          || (selection.servingChoices.length === 1 ? selection.servingChoices[0]!.servingOptionId ?? "__owner_override__" : "");
+        const choice = selection.servingChoices.find((item) => (item.servingOptionId ?? "__owner_override__") === selectedKey);
+        if (!choice) { setError("Choose an authoritative serving before adding this Food."); return; }
+        setItems((current) => [...current, {
+          id: crypto.randomUUID(), kind: "food", name: food.name, servingLabel: `1 × ${choice.label}`, payload: foodPayload(food, choice),
+        }]);
+      }
+      setMode(detail ? "edit" : "create");
+      setQuery("");
+      setFoods([]);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : text.servingUnavailable);
+    }
   }
 
   function addRecipe(recipe: RecipeHomeRecord) {
@@ -444,7 +478,18 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
         {selectionMode ? <section className="mt-4 space-y-3">
           <h3 className="font-semibold">{mode === "add-food" ? text.chooseFood : text.chooseRecipe}</h3>
           <div className="flex gap-2"><label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-border px-3"><Search className="h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={mode === "add-food" ? text.searchFood : text.searchRecipe} className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label><Button type="button" variant="outline" onClick={() => void searchCandidates(mode === "add-food" ? "food" : "recipe")}>{text.search}</Button></div>
-          <div className="divide-y divide-border border-y border-border">{mode === "add-food" ? foods.map((food) => <button key={`${food.source}:${food.id}`} type="button" disabled={!food.servingLabel} onClick={() => addFood(food)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start disabled:cursor-not-allowed disabled:opacity-50"><span><span className="block text-sm font-medium"><bdi dir="auto">{food.name}</bdi></span>{food.servingLabel ? <span className="block text-xs text-muted-foreground"><bdi dir="auto">{food.servingLabel}</bdi></span> : null}</span><Plus className="h-4 w-4" /></button>) : recipes.map((recipe) => <button key={recipe.recipeId} type="button" onClick={() => addRecipe(recipe)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start"><span><span className="block text-sm font-medium"><bdi dir="auto">{recipe.name}</bdi></span><span className="block text-xs text-muted-foreground">1 serving</span></span><Plus className="h-4 w-4" /></button>)}</div>
+          <div className="divide-y divide-border border-y border-border">{mode === "add-food" ? foods.map((food) => {
+            const selection = food.source === "catalog" ? foodServingSelections[food.id] : undefined;
+            const selectedKey = foodServingChoiceKeys[food.id] ?? "";
+            return <div key={`${food.source}:${food.id}`} className="py-2">
+              <button type="button" disabled={food.source === "my_food" && !food.servingLabel} onClick={() => void addFood(food)} className="flex min-h-14 w-full items-center justify-between gap-3 text-start disabled:cursor-not-allowed disabled:opacity-50">
+                <span><span className="block text-sm font-medium"><bdi dir="auto">{food.name}</bdi></span>{food.source === "my_food" && food.servingLabel ? <span className="block text-xs text-muted-foreground"><bdi dir="auto">{food.servingLabel}</bdi></span> : selection?.servingChoices.length === 1 ? <span className="block text-xs text-muted-foreground"><bdi dir="auto">{selection.servingChoices[0]!.label}</bdi></span> : null}</span>
+                <Plus className="h-4 w-4" />
+              </button>
+              {selection?.servingChoices.length === 0 ? <p className="pb-2 text-xs text-destructive">No authoritative serving is available yet.</p> : null}
+              {selection && selection.servingChoices.length > 1 ? <label className="mb-2 block text-xs font-medium">Authoritative serving<select value={selectedKey} onChange={(event) => setFoodServingChoiceKeys((current) => ({ ...current, [food.id]: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value="">Choose a serving</option>{selection.servingChoices.map((choice) => <option key={choice.servingOptionId ?? `owner:${choice.label}`} value={choice.servingOptionId ?? "__owner_override__"}>{choice.label}</option>)}</select></label> : null}
+            </div>;
+          }) : recipes.map((recipe) => <button key={recipe.recipeId} type="button" onClick={() => addRecipe(recipe)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start"><span><span className="block text-sm font-medium"><bdi dir="auto">{recipe.name}</bdi></span><span className="block text-xs text-muted-foreground">1 serving</span></span><Plus className="h-4 w-4" /></button>)}</div>
           {!loading && ((mode === "add-food" && !foods.length) || (mode === "add-recipe" && !recipes.length)) ? <p className="text-sm text-muted-foreground">{text.noMatches}</p> : null}
         </section> : null}
 

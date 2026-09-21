@@ -9,9 +9,13 @@ import {
   listFoodLibrary,
   type FoodLibraryCandidate,
 } from "@/services/nutrition-v1/server/food-library";
+import {
+  resolveCatalogNewUseSelectionFromView,
+  type CatalogNewUseSelection,
+} from "@/services/nutrition-v1/server/food-handoff";
 
 export type BarcodeLookupResult =
-  | { kind: "catalog"; barcode: string; food: FoodLibraryCandidate }
+  | { kind: "catalog"; barcode: string; food: FoodLibraryCandidate; selection: CatalogNewUseSelection }
   | { kind: "provider_suggestion"; barcode: string; food: NormalizedFood };
 
 function rows(value: unknown): Array<Record<string, unknown>> {
@@ -104,9 +108,11 @@ export async function resolveFoodBarcode(
     throw new Error("Canonical barcode Food presentation did not resolve exactly.");
   }
 
+  const selection = await resolveCatalogNewUseSelectionFromView(ownerSupabase, view, selectedName);
   return {
     kind: "catalog",
     barcode,
     food: exact[0]!,
+    selection,
   };
 }

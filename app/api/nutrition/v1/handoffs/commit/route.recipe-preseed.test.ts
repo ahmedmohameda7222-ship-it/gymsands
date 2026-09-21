@@ -94,6 +94,7 @@ describe("Food to new Recipe handoff", () => {
       source: "catalog",
       quantity: 2,
       serving: "100 g",
+      servingOptionId: null,
       displayName: "Atomic chicken",
       languageTag: "en",
     });

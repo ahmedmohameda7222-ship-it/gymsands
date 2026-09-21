@@ -7,7 +7,7 @@ import { lookupOpenFoodFactsBarcode, type NormalizedFood } from "@/lib/integrati
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { resolveFoodBarcode } from "@/services/nutrition-v1/server/barcode-lookup";
 import type { FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
-import { resolveFoodHandoffWithAuthorities } from "@/services/nutrition-v1/server/food-handoff";
+import { resolveFoodHandoffWithAuthorities, type CatalogServingChoice } from "@/services/nutrition-v1/server/food-handoff";
 
 function nullableNumber(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
@@ -71,14 +71,15 @@ function publicProviderFood(food: NormalizedFood) {
   };
 }
 
-function publicCatalogFood(food: FoodLibraryCandidate) {
+function publicCatalogFood(food: FoodLibraryCandidate, servingChoices: CatalogServingChoice[]) {
   return {
     source: "catalog" as const,
     foodId: food.id,
     name: food.name,
     brand: food.brand,
     barcode: null,
-    servingSize: food.servingLabel,
+    servingSize: servingChoices.length === 1 ? servingChoices[0]!.label : null,
+    servingChoices,
     calories: food.nutrition.calories,
     protein: food.nutrition.protein_g,
     carbs: food.nutrition.carbs_g,
@@ -132,7 +133,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       kind: resolved.kind,
       food: resolved.kind === "catalog"
-        ? publicCatalogFood(resolved.food)
+        ? publicCatalogFood(resolved.food, resolved.selection.servingChoices)
         : publicProviderFood(resolved.food)
     });
   } catch (error) {
@@ -165,15 +166,38 @@ export async function POST(request: Request) {
     let mealPlanItem = null;
 
     if (resolved.kind === "catalog") {
-      if (!resolved.food.servingLabel) {
-        throw new Error("Canonical barcode Food has no authoritative serving selection.");
+      const choices = resolved.selection.servingChoices;
+      if (choices.length === 0) {
+        throw new Error("No authoritative serving is available yet.");
       }
+      const requestedServing = typeof body.serving === "string" ? body.serving.trim() : "";
+      const requestedServingOptionId = typeof body.servingOptionId === "string" && body.servingOptionId.trim()
+        ? body.servingOptionId.trim()
+        : null;
+      let selectedServing: CatalogServingChoice;
+      if (!requestedServing && requestedServingOptionId === null) {
+        if (choices.length !== 1) {
+          throw new Error("Choose an authoritative serving before logging this barcode Food.");
+        }
+        selectedServing = choices[0]!;
+      } else {
+        const matches = choices.filter((choice) => (
+          choice.label === requestedServing
+          && choice.servingOptionId === requestedServingOptionId
+        ));
+        if (matches.length !== 1) {
+          throw new Error("The requested barcode serving is not an exact effective serving choice.");
+        }
+        selectedServing = matches[0]!;
+      }
+
       const catalogSupabase = createSupabaseServerClient(null, true);
       const handoff = await resolveFoodHandoffWithAuthorities(context.supabase, catalogSupabase, context.user.id, {
         foodId: resolved.food.id,
         source: "catalog",
         quantity,
-        serving: resolved.food.servingLabel,
+        serving: selectedServing.label,
+        servingOptionId: selectedServing.servingOptionId,
         displayName: resolved.food.name,
         languageTag: resolved.food.locale,
       });
@@ -231,7 +255,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         kind: resolved.kind,
-        food: publicCatalogFood(resolved.food),
+        food: publicCatalogFood(resolved.food, resolved.selection.servingChoices),
         libraryFood,
         log,
         mealPlanItem

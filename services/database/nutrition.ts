@@ -345,6 +345,101 @@ export async function getTodayFoodLogs(
   return ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
 }
 
+export type BrowserCatalogServingChoice = {
+  servingOptionId: string | null;
+  label: string;
+  source: "generation" | "owner_override";
+};
+
+export type BrowserCatalogNewUseSelection = {
+  foodId: string;
+  name: string;
+  languageTag: string;
+  servingChoices: BrowserCatalogServingChoice[];
+};
+
+function parseCatalogNewUseSelection(value: unknown): BrowserCatalogNewUseSelection {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Catalog serving selection returned an invalid result.");
+  }
+  const row = value as Record<string, unknown>;
+  if (!isUuid(row.foodId) || typeof row.name !== "string" || !row.name.trim() || typeof row.languageTag !== "string" || !row.languageTag.trim() || !Array.isArray(row.servingChoices)) {
+    throw new Error("Catalog serving selection returned an invalid result.");
+  }
+  const servingChoices = row.servingChoices.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Catalog serving selection returned an invalid choice.");
+    }
+    const choice = value as Record<string, unknown>;
+    const servingOptionId = choice.servingOptionId === null
+      ? null
+      : typeof choice.servingOptionId === "string" && isUuid(choice.servingOptionId)
+        ? choice.servingOptionId
+        : undefined;
+    if (
+      servingOptionId === undefined
+      || typeof choice.label !== "string"
+      || !choice.label.trim()
+      || (choice.source !== "generation" && choice.source !== "owner_override")
+    ) {
+      throw new Error("Catalog serving selection returned an invalid choice.");
+    }
+    if (choice.source === "owner_override" && servingOptionId !== null) {
+      throw new Error("Owner serving selection returned an invalid Catalog identity.");
+    }
+    if (choice.source === "generation" && servingOptionId === null) {
+      throw new Error("Generation serving selection is missing its exact identity.");
+    }
+    return {
+      servingOptionId,
+      label: choice.label.trim(),
+      source: choice.source,
+    } as BrowserCatalogServingChoice;
+  });
+  return {
+    foodId: row.foodId,
+    name: row.name.trim(),
+    languageTag: row.languageTag.trim(),
+    servingChoices,
+  };
+}
+
+export async function getCatalogNewUseSelection(
+  food: Pick<CatalogFoodItem, "id" | "food_name" | "locale">,
+): Promise<BrowserCatalogNewUseSelection> {
+  if (!supabase || !isUuid(food.id)) throw new Error("Catalog Food identity is invalid.");
+  const session = await supabase.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) throw new Error("User session invalid.");
+
+  const params = new URLSearchParams({
+    displayName: persistedText(food.food_name, "Food name"),
+    languageTag: typeof food.locale === "string" && food.locale.trim() ? food.locale.trim() : browserLocale(),
+  });
+  const response = await fetch(
+    `/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/selection?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = body && typeof body === "object" && !Array.isArray(body)
+      && typeof (body as Record<string, unknown>).error === "string"
+      ? String((body as Record<string, unknown>).error)
+      : "Catalog serving selection could not be loaded.";
+    throw new Error(message);
+  }
+  const selection = parseCatalogNewUseSelection(body);
+  if (selection.foodId !== food.id) throw new Error("Catalog serving selection returned the wrong Food identity.");
+  return selection;
+}
+
+export function withCatalogServingChoice(
+  food: CatalogFoodItem,
+  choice: BrowserCatalogServingChoice,
+): CatalogFoodItem {
+  return { ...food, serving_size: choice.label, serving_option_id: choice.servingOptionId };
+}
+
 type BrowserCatalogHandoff = {
   foodId: string;
   name: string;
@@ -372,7 +467,7 @@ type BrowserCatalogHandoff = {
 
 async function resolveBrowserCatalogHandoff(
   userId: string,
-  food: Pick<FoodLibraryItem, "id" | "food_name" | "serving_size">,
+  food: Pick<FoodLibraryItem, "id" | "food_name" | "serving_size"> & { locale?: string; serving_option_id?: string | null },
   quantity: number,
 ): Promise<BrowserCatalogHandoff> {
   if (!canUseUserData(userId) || !isUuid(food.id)) throw new Error("Catalog Food session or identity is invalid.");
@@ -382,13 +477,30 @@ async function resolveBrowserCatalogHandoff(
   const token = session.data.session?.access_token;
   if (!token) throw new Error("User session invalid.");
 
+  let serving = food.serving_size.trim();
+  let servingOptionId = food.serving_option_id ?? null;
+  if (!servingOptionId) {
+    const selection = await getCatalogNewUseSelection(food as CatalogFoodItem);
+    if (selection.servingChoices.length === 0) {
+      throw new Error("No authoritative serving is available yet.");
+    }
+    if (selection.servingChoices.length > 1) {
+      throw new Error("Choose an authoritative serving before adding this Food.");
+    }
+    const choice = selection.servingChoices[0]!;
+    serving = choice.label;
+    servingOptionId = choice.servingOptionId;
+  }
+  if (!serving) throw new Error("No authoritative serving is available yet.");
+
   const params = new URLSearchParams({
     source: "catalog",
     quantity: String(quantity),
-    serving: food.serving_size,
+    serving,
     displayName: food.food_name,
     languageTag: "locale" in food && typeof food.locale === "string" && food.locale.trim() ? food.locale.trim() : browserLocale(),
   });
+  if (servingOptionId) params.set("servingOptionId", servingOptionId);
   const response = await fetch(
     `/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/handoff?${params.toString()}`,
     { headers: { Authorization: `Bearer ${token}` } },
