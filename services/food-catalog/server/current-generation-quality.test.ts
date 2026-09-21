@@ -7,7 +7,11 @@ type Result = { data: any; error: null | { message?: string } };
 
 function query(result: Result) {
   const q: Record<string, any> = {};
-  for (const method of ["select", "eq", "limit", "in"]) q[method] = vi.fn(() => q);
+  for (const method of ["select", "eq", "limit", "in", "order"]) q[method] = vi.fn(() => q);
+  q.range = vi.fn(async (start: number, end: number) => ({
+    data: Array.isArray(result.data) ? result.data.slice(start, end + 1) : result.data,
+    error: result.error,
+  }));
   q.maybeSingle = vi.fn(async () => result);
   q.then = (resolve: (value: Result) => unknown, reject?: (reason: unknown) => unknown) =>
     Promise.resolve(result).then(resolve, reject);

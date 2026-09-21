@@ -410,6 +410,17 @@ async function readSelectedFacts<T>(
   return rows(result.data, table).map(mapper);
 }
 
+const QUALITY_PAGE_SIZE = 1000;
+const QUALITY_FACT_CHUNK_SIZE = 100;
+
+function chunks<T>(values: readonly T[], size: number): T[][] {
+  const output: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    output.push(values.slice(index, index + size));
+  }
+  return output;
+}
+
 export type CurrentGenerationQualitySelection = {
   generationId: string | null;
   foods: Array<{
@@ -441,38 +452,56 @@ export async function readSupabaseCurrentGenerationQualitySelection(
     return { generationId: null, foods: [], nameFactIds: [] };
   }
 
-  const foodsResult = await supabase
-    .from("food_catalog_generation_foods")
-    .select("food_id,nutrition_revision_id,lifecycle")
-    .eq("generation_id", generationId)
-    .eq("lifecycle", "active")
-    .limit(5000);
-  throwDbError("current generation quality Foods", foodsResult.error);
+  const foodRows: Record<string, unknown>[] = [];
+  for (let start = 0; ; start += QUALITY_PAGE_SIZE) {
+    const result = await supabase
+      .from("food_catalog_generation_foods")
+      .select("food_id,nutrition_revision_id,lifecycle")
+      .eq("generation_id", generationId)
+      .eq("lifecycle", "active")
+      .order("food_id", { ascending: true })
+      .range(start, start + QUALITY_PAGE_SIZE - 1);
+    throwDbError("current generation quality Foods", result.error);
+    const page = rows(result.data, "current generation quality Foods");
+    foodRows.push(...page);
+    if (page.length < QUALITY_PAGE_SIZE) break;
+  }
 
-  const foods = rows(foodsResult.data, "current generation quality Foods").map((row) => ({
+  const foods = foodRows.map((row) => ({
     foodId: requiredString(row.food_id, "current generation quality Food food_id"),
     nutritionRevisionId: nullableString(
       row.nutrition_revision_id,
       "current generation quality Food nutrition_revision_id",
     ),
   }));
-  const activeFoodIds = Array.from(new Set(foods.map((food) => food.foodId)));
+  const activeFoodIds = new Set(foods.map((food) => food.foodId));
 
-  const namesResult = activeFoodIds.length
-    ? await supabase
+  const nameRows: Record<string, unknown>[] = [];
+  if (activeFoodIds.size > 0) {
+    for (let start = 0; ; start += QUALITY_PAGE_SIZE) {
+      const result = await supabase
         .from("food_catalog_generation_names")
         .select("food_id,name_fact_id")
         .eq("generation_id", generationId)
-        .in("food_id", activeFoodIds)
-        .limit(10000)
-    : { data: [], error: null };
-  throwDbError("current generation quality Name selections", namesResult.error);
+        .order("food_id", { ascending: true })
+        .order("name_fact_id", { ascending: true })
+        .range(start, start + QUALITY_PAGE_SIZE - 1);
+      throwDbError("current generation quality Name selections", result.error);
+      const page = rows(result.data, "current generation quality Name selections");
+      nameRows.push(...page);
+      if (page.length < QUALITY_PAGE_SIZE) break;
+    }
+  }
 
   return {
     generationId,
     foods,
     nameFactIds: Array.from(new Set(
-      rows(namesResult.data, "current generation quality Name selections")
+      nameRows
+        .filter((row) => activeFoodIds.has(requiredString(
+          row.food_id,
+          "current generation quality Name selection food_id",
+        )))
         .map((row) => requiredString(
           row.name_fact_id,
           "current generation quality Name selection name_fact_id",
@@ -497,37 +526,56 @@ export type CurrentGenerationQualityFacts = {
   }>;
 };
 
+async function readCurrentGenerationQualityFactRows(
+  supabase: SupabaseClient,
+  table: "food_nutrition_revisions" | "food_names",
+  columns: string,
+  ids: readonly string[],
+  label: string,
+) {
+  const output: Record<string, unknown>[] = [];
+  for (const idChunk of chunks(Array.from(new Set(ids)), QUALITY_FACT_CHUNK_SIZE)) {
+    const result = await supabase
+      .from(table)
+      .select(columns)
+      .in("id", idChunk);
+    throwDbError(label, result.error);
+    output.push(...rows(result.data, label));
+  }
+  return output;
+}
+
 export async function readSupabaseCurrentGenerationQualityFacts(
   supabase: SupabaseClient,
   nutritionIds: readonly string[],
   nameIds: readonly string[],
 ): Promise<CurrentGenerationQualityFacts> {
-  const [nutritionResult, namesResult] = await Promise.all([
-    nutritionIds.length
-      ? supabase
-          .from("food_nutrition_revisions")
-          .select("id,calories,protein_g,carbs_g,fat_g")
-          .in("id", [...nutritionIds])
-      : Promise.resolve({ data: [], error: null }),
-    nameIds.length
-      ? supabase
-          .from("food_names")
-          .select("id,language_tag,normalized_text,name_text")
-          .in("id", [...nameIds])
-      : Promise.resolve({ data: [], error: null }),
+  const [nutritionRows, nameRows] = await Promise.all([
+    readCurrentGenerationQualityFactRows(
+      supabase,
+      "food_nutrition_revisions",
+      "id,calories,protein_g,carbs_g,fat_g",
+      nutritionIds,
+      "current generation quality nutrition",
+    ),
+    readCurrentGenerationQualityFactRows(
+      supabase,
+      "food_names",
+      "id,language_tag,normalized_text,name_text",
+      nameIds,
+      "current generation quality Names",
+    ),
   ]);
-  throwDbError("current generation quality nutrition", nutritionResult.error);
-  throwDbError("current generation quality Names", namesResult.error);
 
   return {
-    nutrition: rows(nutritionResult.data, "current generation quality nutrition").map((row) => ({
+    nutrition: nutritionRows.map((row) => ({
       id: requiredString(row.id, "current generation quality nutrition id"),
       calories: nullableNumber(row.calories, "current generation quality calories"),
       protein_g: nullableNumber(row.protein_g, "current generation quality protein_g"),
       carbs_g: nullableNumber(row.carbs_g, "current generation quality carbs_g"),
       fat_g: nullableNumber(row.fat_g, "current generation quality fat_g"),
     })),
-    names: rows(namesResult.data, "current generation quality Names").map((row) => ({
+    names: nameRows.map((row) => ({
       id: requiredString(row.id, "current generation quality Name id"),
       language_tag: requiredString(row.language_tag, "current generation quality Name language_tag"),
       normalized_text: nullableString(row.normalized_text, "current generation quality Name normalized_text"),
