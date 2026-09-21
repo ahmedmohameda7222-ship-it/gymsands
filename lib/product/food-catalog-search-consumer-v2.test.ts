@@ -59,12 +59,18 @@ describe("Plan 5 Food Library V2 consumer surface", () => {
     expect(detail).toContain("hasAuthoritativeServing");
   });
 
-  it("fails closed for mutation consumers when a global Food has no authoritative serving while preserving My Foods", () => {
-    expect(diaryLogger).toContain("if (!food.servingLabel)");
-    expect(mealPlan).toContain("if (!food.servingLabel)");
-    expect(savedMealUtility).toContain("if (!food.servingLabel)");
+  it("keeps nullable Catalog discovery separate from exact new-use serving authority while preserving My Food serving checks", () => {
+    expect(diaryLogger).toContain("/selection?");
+    expect(diaryLogger).toContain("servingOptionId");
+    expect(mealPlan).toContain("/selection?");
+    expect(mealPlan).toContain("/handoff?");
+    expect(mealPlan).toContain("servingOptionId");
+    expect(savedMealUtility).toContain("/selection?");
+    expect(savedMealUtility).toContain("servingOptionId");
     expect(mcpSavedMeal).toContain("if (!selected.servingLabel)");
     expect(service).toContain('source: FoodLibrarySource');
+    expect(diaryLogger).not.toContain('disabled={!food.servingLabel}');
+    expect(mealPlan).not.toContain('disabled={result.kind === "food" && !result.value.servingLabel}');
   });
 
   it("carries Saved Meal candidate locale as transient selection identity and sends current write locale separately", () => {
