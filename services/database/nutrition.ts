@@ -363,7 +363,10 @@ function parseCatalogNewUseSelection(value: unknown): BrowserCatalogNewUseSelect
     throw new Error("Catalog serving selection returned an invalid result.");
   }
   const row = value as Record<string, unknown>;
-  if (!isUuid(row.foodId) || typeof row.name !== "string" || !row.name.trim() || typeof row.languageTag !== "string" || !row.languageTag.trim() || !Array.isArray(row.servingChoices)) {
+  const foodId = typeof row.foodId === "string" ? row.foodId : "";
+  const name = typeof row.name === "string" ? row.name.trim() : "";
+  const languageTag = typeof row.languageTag === "string" ? row.languageTag.trim() : "";
+  if (!isUuid(foodId) || !name || !languageTag || !Array.isArray(row.servingChoices)) {
     throw new Error("Catalog serving selection returned an invalid result.");
   }
   const servingChoices = row.servingChoices.map((value) => {
@@ -396,12 +399,7 @@ function parseCatalogNewUseSelection(value: unknown): BrowserCatalogNewUseSelect
       source: choice.source,
     } as BrowserCatalogServingChoice;
   });
-  return {
-    foodId: row.foodId,
-    name: row.name.trim(),
-    languageTag: row.languageTag.trim(),
-    servingChoices,
-  };
+  return { foodId, name, languageTag, servingChoices };
 }
 
 export async function getCatalogNewUseSelection(

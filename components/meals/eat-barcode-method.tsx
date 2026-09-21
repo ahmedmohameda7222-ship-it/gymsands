@@ -158,6 +158,17 @@ export function EatBarcodeMethod({
       setFeedback({ type: "error", message: et("reviewProductQuantity") });
       return;
     }
+    const servingChoices = food.servingChoices ?? [];
+    const selectedServing = servingChoices.find((choice) => (choice.servingOptionId ?? "__owner_override__") === servingChoiceKey)
+      ?? (servingChoices.length === 1 ? servingChoices[0]! : null);
+    if (food.source === "catalog" && servingChoices.length === 0) {
+      setFeedback({ type: "error", message: "No authoritative serving is available yet." });
+      return;
+    }
+    if (food.source === "catalog" && !selectedServing) {
+      setFeedback({ type: "error", message: "Choose an authoritative serving before logging this Food." });
+      return;
+    }
     setIsSaving(true);
     setFeedback({ type: "info", message: et("logging") });
     try {

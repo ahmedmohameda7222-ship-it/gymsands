@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Minus, Plus, ShieldCheck, Star } from "lucide-react";
 
 import { foodLibraryApi } from "@/components/nutrition/food-library/food-library-api";
