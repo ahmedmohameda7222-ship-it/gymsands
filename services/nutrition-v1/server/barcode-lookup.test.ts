@@ -65,14 +65,6 @@ function currentView(overrides: Record<string, unknown> = {}) {
     requestedFoodId: mappedFoodId,
     resolvedFoodId: survivorId,
     food: { lifecycle: "active" },
-    selections: {
-      servingOptionIds: [servingId],
-      nameFactIds: [nameId],
-      taxonomyAssignmentIds: [],
-      marketAssignmentIds: [],
-      verification: [],
-      ...overrideSelections,
-    },
     servingOptions: [{
       id: servingId,
       foodId: survivorId,
