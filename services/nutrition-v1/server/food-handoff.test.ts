@@ -599,4 +599,86 @@ describe("Nutrition V1 Task 9 current-generation Food handoff", () => {
       frozen_nutrition: handoff.frozenNutrition,
     });
   });
+
+  it("binds generation serving selection to the exact selected serving ID and label", async () => {
+    const secondServingId = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
+    generation.resolve.mockResolvedValueOnce(view({
+      selections: { ...view().selections, servingOptionIds: [servingId, secondServingId] },
+      servingOptions: [
+        selectedServing(servingId, "170 g"),
+        selectedServing(secondServingId, "1 cup"),
+      ],
+    }));
+    const exact = clientFor({ rpc: [noOverride()] });
+
+    await expect(resolveFoodHandoff(
+      exact.client,
+      userId,
+      catalogInput({ serving: "1 cup", servingOptionId: secondServingId }),
+    )).resolves.toMatchObject({ serving: "1 cup" });
+
+    generation.resolve.mockResolvedValueOnce(view({
+      selections: { ...view().selections, servingOptionIds: [servingId, secondServingId] },
+      servingOptions: [
+        selectedServing(servingId, "170 g"),
+        selectedServing(secondServingId, "1 cup"),
+      ],
+    }));
+    const mismatch = clientFor({ rpc: [noOverride()] });
+    await expect(resolveFoodHandoff(
+      mismatch.client,
+      userId,
+      catalogInput({ serving: "170 g", servingOptionId: secondServingId }),
+    )).rejects.toThrow(/serving/i);
+  });
+
+  it("rejects an unselected or cross-Food serving ID even when the supplied label is otherwise valid", async () => {
+    const unselectedId = "bbbbbbbb-3333-4333-8333-bbbbbbbbbbbb";
+    generation.resolve.mockResolvedValueOnce(view());
+    const unselected = clientFor({ rpc: [noOverride()] });
+    await expect(resolveFoodHandoff(
+      unselected.client,
+      userId,
+      catalogInput({ servingOptionId: unselectedId }),
+    )).rejects.toThrow(/serving/i);
+
+    generation.resolve.mockResolvedValueOnce(view({
+      servingOptions: [
+        selectedServing(servingId, "170 g"),
+        selectedServing(unselectedId, "170 g", 170, survivorId),
+      ],
+    }));
+    const crossFood = clientFor({ rpc: [noOverride()] });
+    await expect(resolveFoodHandoff(
+      crossFood.client,
+      userId,
+      catalogInput({ servingOptionId: unselectedId }),
+    )).rejects.toThrow(/serving/i);
+  });
+
+  it("requires owner Personal Override serving to carry no generation serving ID", async () => {
+    generation.resolve.mockResolvedValueOnce(view());
+    const db = clientFor({
+      rpc: [{
+        data: {
+          foodId,
+          hasOverride: true,
+          revisionId,
+          pointerRevision: 2,
+          isDeleted: false,
+          nutritionOverride: null,
+          servingLabel: "My exact bowl",
+          note: null,
+        },
+        error: null,
+      }],
+    });
+
+    await expect(resolveFoodHandoff(
+      db.client,
+      userId,
+      catalogInput({ serving: "My exact bowl", servingOptionId: servingId }),
+    )).rejects.toThrow(/serving/i);
+  });
+
 });
