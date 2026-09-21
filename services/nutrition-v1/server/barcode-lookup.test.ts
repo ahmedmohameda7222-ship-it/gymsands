@@ -77,15 +77,6 @@ function currentView(overrides: Record<string, unknown> = {}) {
       languageTag: "en",
       text: "Canonical yogurt",
     }],
-    ...overrides,
-    selections: {
-      servingOptionIds: [servingId],
-      nameFactIds: [nameId],
-      taxonomyAssignmentIds: [],
-      marketAssignmentIds: [],
-      verification: [],
-      ...overrideSelections,
-    },
     nutritionRevision: {
       id: "90000000-0000-4000-8000-000000000001",
       foodId: survivorId,
@@ -105,6 +96,15 @@ function currentView(overrides: Record<string, unknown> = {}) {
       createdAt: "2026-09-21T00:00:00.000Z",
     },
     trust: { verified: true },
+    ...overrides,
+    selections: {
+      servingOptionIds: [servingId],
+      nameFactIds: [nameId],
+      taxonomyAssignmentIds: [],
+      marketAssignmentIds: [],
+      verification: [],
+      ...overrideSelections,
+    },
   };
 }
 
