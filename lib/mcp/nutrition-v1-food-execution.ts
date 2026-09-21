@@ -12,12 +12,16 @@ import {
 import { fail, ok, type McpToolResult } from "@/lib/mcp/tool-helpers";
 import { sumFoodLogs } from "@/services/nutrition/calculations";
 import { listFoodLibrary, normalizeFoodSearchText, type FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
-import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import {
+  resolveCatalogNewUseSelectionWithAuthorities,
+  resolveFoodHandoff,
+} from "@/services/nutrition-v1/server/food-handoff";
 
 type FoodCandidate = {
   id: string;
   source: "global" | "user";
   food_name: string;
+  locale: string | null;
   serving_size: string;
   calories: number | null;
   protein_g: number | null;
@@ -45,6 +49,7 @@ function normalizeFood(row: FoodLibraryCandidate): FoodCandidate {
     id: row.id,
     source: row.source === "catalog" ? "global" : "user",
     food_name: row.name,
+    locale: row.source === "catalog" ? row.locale : null,
     serving_size: row.servingLabel ?? "",
     calories: row.nutrition.calories,
     protein_g: row.nutrition.protein_g,
@@ -130,19 +135,83 @@ export async function executeCanonicalFoodMcpTool(
         continue;
       }
 
-      const handoff = await resolveFoodHandoff(ctx.supabase, ctx.userId, {
-        foodId: match.exact.id,
-        source: match.exact.source === "global" ? "catalog" : "my_food",
-        quantity: getNumber(item, "quantity", 1),
-        serving: match.exact.serving_size,
-        displayName: match.exact.source === "global" ? match.exact.food_name : undefined,
-        languageTag: match.exact.source === "global" ? "en" : null,
-      });
+      const quantity = getNumber(item, "quantity", 1);
+      const servingHint = getOptionalString(item, "serving_hint")?.trim() || null;
+      let handoff: Awaited<ReturnType<typeof resolveFoodHandoff>>;
+
+      if (match.exact.source === "global") {
+        const languageTag = match.exact.locale;
+        if (!languageTag) {
+          return fail("invalid_food_identity", "The selected Catalog Food is missing its exact Name locale. Search again before logging.");
+        }
+
+        // PR A keeps the existing MCP single-client bridge intact. Task 14 / PR B
+        // must still supply authenticated owner authority before deployment; this
+        // call intentionally does not broaden service-role owner access.
+        const selection = await resolveCatalogNewUseSelectionWithAuthorities(
+          ctx.supabase,
+          ctx.supabase,
+          ctx.userId,
+          {
+            foodId: match.exact.id,
+            displayName: match.exact.food_name,
+            languageTag,
+          },
+        );
+        const choices = selection.servingChoices;
+        if (choices.length === 0) {
+          return fail(
+            "authoritative_serving_unavailable",
+            "No authoritative serving is available yet. Ask the user to choose another Food or try again after serving authority is available.",
+          );
+        }
+
+        let selectedServing = null as (typeof choices)[number] | null;
+        if (servingHint) {
+          const matches = choices.filter((choice) => choice.label === servingHint);
+          if (matches.length !== 1) {
+            return fail(
+              "invalid_serving_hint",
+              "The serving_hint does not exactly match one effective authoritative serving choice.",
+              { requested: item, serving_choices: choices },
+            );
+          }
+          selectedServing = matches[0]!;
+        } else if (choices.length === 1) {
+          selectedServing = choices[0]!;
+        } else {
+          return fail(
+            "ambiguous_serving",
+            "This Food has multiple authoritative serving choices. Ask the user to choose one and retry with serving_hint.",
+            { requested: item, serving_choices: choices },
+          );
+        }
+
+        handoff = await resolveFoodHandoff(ctx.supabase, ctx.userId, {
+          foodId: match.exact.id,
+          source: "catalog",
+          quantity,
+          serving: selectedServing.label,
+          servingOptionId: selectedServing.servingOptionId,
+          displayName: match.exact.food_name,
+          languageTag,
+        });
+      } else {
+        handoff = await resolveFoodHandoff(ctx.supabase, ctx.userId, {
+          foodId: match.exact.id,
+          source: "my_food",
+          quantity,
+          serving: match.exact.serving_size,
+          displayName: undefined,
+          languageTag: null,
+        });
+      }
+
       rows.push(rowFromHandoff(
         ctx,
         date,
         mealType,
-        getOptionalString(input, "notes") ?? getOptionalString(item, "serving_hint") ?? null,
+        getOptionalString(input, "notes") ?? null,
         handoff,
       ));
     }
