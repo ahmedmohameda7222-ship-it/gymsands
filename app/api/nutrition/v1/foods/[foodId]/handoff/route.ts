@@ -26,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ food
       foodId,
       source,
       serving,
-      servingOptionId,
+      ...(servingOptionId ? { servingOptionId } : {}),
       quantity,
       displayName,
       languageTag,
