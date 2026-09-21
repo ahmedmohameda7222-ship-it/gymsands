@@ -158,6 +158,10 @@ export function EatBarcodeMethod({
       setFeedback({ type: "error", message: et("reviewProductQuantity") });
       return;
     }
+    if (food.source === "provider_suggestion") {
+      setFeedback({ type: "error", message: "This barcode match is suggestion-only. Search for an existing Food or create a Food before logging." });
+      return;
+    }
     const servingChoices = food.servingChoices ?? [];
     const selectedServing = servingChoices.find((choice) => (choice.servingOptionId ?? "__owner_override__") === servingChoiceKey)
       ?? (servingChoices.length === 1 ? servingChoices[0]! : null);
@@ -211,9 +215,10 @@ export function EatBarcodeMethod({
         <p className="mt-1 text-sm text-muted-foreground">{food.brand ?? ""}</p>
         <p className="mt-2 text-sm">{food.calories === null || food.calories === undefined ? "—" : formatEatEnergy(food.calories, energyUnit, locale)} · P {food.protein ?? "—"} g · C {food.carbs ?? "—"} g · F {food.fat ?? "—"} g</p>
         <p className="mt-1 text-xs text-muted-foreground">{food.servingSize ?? (food.source === "catalog" ? "Serving selection required" : et("storedServingOnly"))}</p>
+        {food.source === "provider_suggestion" ? <p className="mt-2 text-sm text-muted-foreground">Provider result is suggestion-only. Search for an existing Food or create a Food before logging.</p> : null}
         {food.source === "catalog" && (food.servingChoices?.length ?? 0) === 0 ? <p className="mt-2 text-sm text-destructive">No authoritative serving is available yet.</p> : null}
         {food.source === "catalog" && (food.servingChoices?.length ?? 0) > 1 ? <label className="mt-3 grid gap-1 text-sm font-medium">Serving<select value={servingChoiceKey} onChange={(event) => setServingChoiceKey(event.target.value)} className="h-11 rounded-xl border border-border bg-background px-3"><option value="">Choose a serving</option>{food.servingChoices!.map((choice) => <option key={choice.servingOptionId ?? `owner:${choice.label}`} value={choice.servingOptionId ?? "__owner_override__"}>{choice.label}</option>)}</select></label> : null}
-        <div className="mt-3 grid gap-2 sm:grid-cols-[140px_1fr]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantity(event.target.value)} aria-label={et("quantity")} /><Button type="button" className="min-h-12" onClick={save} disabled={isSaving || (food.source === "catalog" && ((food.servingChoices?.length ?? 0) === 0 || ((food.servingChoices?.length ?? 0) > 1 && !servingChoiceKey)))}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-[140px_1fr]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantity(event.target.value)} aria-label={et("quantity")} /><Button type="button" className="min-h-12" onClick={save} disabled={isSaving || food.source === "provider_suggestion" || (food.source === "catalog" && ((food.servingChoices?.length ?? 0) === 0 || ((food.servingChoices?.length ?? 0) > 1 && !servingChoiceKey)))}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></div>
       </div> : null}
       <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} onClose={() => setFeedback(null)} />
     </div>
