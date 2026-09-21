@@ -24,38 +24,6 @@ function normalizeMealType(value: unknown) {
   return ["Breakfast", "Lunch", "Snack", "Dinner"].includes(meal) ? meal : "Breakfast";
 }
 
-function providerFoodPayload(food: NormalizedFood, userId: string) {
-  return {
-    user_id: userId,
-    food_name: food.name,
-    serving_size: food.serving_size || "1 serving",
-    calories: nullableNumber(food.calories),
-    protein_g: nullableNumber(food.protein),
-    carbs_g: nullableNumber(food.carbs),
-    fat_g: nullableNumber(food.fat),
-    category: "Packaged",
-    cuisine: "Packaged foods",
-    fiber_g: nullableNumber(food.fiber),
-    sugar_g: nullableNumber(food.sugar),
-    sodium_mg: nullableNumber(food.sodium),
-    tags: ["barcode", "provider-suggestion", "open-food-facts"],
-    notes: `Barcode: ${food.barcode ?? food.source_id ?? ""}${food.brand ? ` | Brand: ${food.brand}` : ""}`
-  };
-}
-
-function scale(value: number | null, quantity: number) {
-  return value === null ? null : Math.round(value * quantity * 10) / 10;
-}
-
-function providerScaledMacros(food: NormalizedFood, quantity: number) {
-  return {
-    calories: scale(nullableNumber(food.calories), quantity),
-    protein_g: scale(nullableNumber(food.protein), quantity),
-    carbs_g: scale(nullableNumber(food.carbs), quantity),
-    fat_g: scale(nullableNumber(food.fat), quantity)
-  };
-}
-
 function publicProviderFood(food: NormalizedFood) {
   return {
     source: "provider_suggestion" as const,
@@ -151,7 +119,6 @@ export async function POST(request: Request) {
   const rawBarcode = String(body.barcode ?? "").trim();
   const barcode = normalizeProductBarcode(rawBarcode);
   if (!barcode) return jsonError(barcodeValidationMessage(rawBarcode));
-  const saveToLibrary = body.saveToLibrary === true;
   const addToLog = Boolean(body.addToLog);
   const addToMealPlan = Boolean(body.addToMealPlan);
   const mealType = normalizeMealType(body.mealType);
@@ -262,87 +229,11 @@ export async function POST(request: Request) {
       });
     }
 
-    const food = resolved.food;
-    const payload = providerFoodPayload(food, context.user.id);
-
-    if (saveToLibrary) {
-      const existing = await context.supabase
-        .from("user_food_items")
-        .select("*")
-        .eq("user_id", context.user.id)
-        .eq("food_name", payload.food_name)
-        .eq("serving_size", payload.serving_size)
-        .maybeSingle();
-      if (existing.error) throw existing.error;
-
-      const saved = existing.data
-        ? await context.supabase.from("user_food_items").update(payload).eq("id", existing.data.id).select("*").single()
-        : await context.supabase.from("user_food_items").insert(payload).select("*").single();
-      if (saved.error) throw saved.error;
-      libraryFood = saved.data;
-    }
-
-    const macros = providerScaledMacros(food, quantity);
-    if (addToLog) {
-      const inserted = await context.supabase
-        .from("food_logs")
-        .insert({
-          user_id: context.user.id,
-          user_food_item_id: libraryFood?.id ?? null,
-          food_item_id: null,
-          log_date: date,
-          meal_type: mealType,
-          food_name: food.name,
-          serving_size: food.serving_size || "1 serving",
-          quantity,
-          ...macros,
-          notes: `Barcode provider suggestion: ${barcode}`
-        })
-        .select("*")
-        .single();
-      if (inserted.error) throw inserted.error;
-      log = inserted.data;
-    }
-
-    if (addToMealPlan) {
-      const inserted = await context.supabase
-        .from("user_meal_plan_items")
-        .insert({
-          user_id: context.user.id,
-          user_food_item_id: libraryFood?.id ?? null,
-          food_item_id: null,
-          plan_date: date,
-          meal_type: mealType,
-          food_name: food.name,
-          serving_size: food.serving_size || "1 serving",
-          quantity,
-          ...macros,
-          status: "planned",
-          food_log_id: null,
-          completed_at: null,
-          notes: `Barcode provider suggestion: ${barcode}`
-        })
-        .select("*")
-        .single();
-      if (inserted.error) throw inserted.error;
-      mealPlanItem = inserted.data;
-    }
-
-    await logExternalApi({
-      userId: context.user.id,
-      provider: "open_food_facts",
-      endpoint: "product_save",
-      status: "success",
-      request: { barcode, saveToLibrary, addToLog, addToMealPlan },
-      responseStatus: 200
-    });
-    return NextResponse.json({
-      kind: resolved.kind,
-      food: publicProviderFood(food),
-      libraryFood,
-      log,
-      mealPlanItem
-    });
+    return jsonError(
+      "Provider barcode results are suggestion-only. Search for an existing Food or create a My Food before logging.",
+      409,
+      { kind: "provider_suggestion", food: publicProviderFood(resolved.food) },
+    );
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Barcode food save failed.", 400);
   }
