@@ -7,6 +7,7 @@ import type { McpContext } from "@/lib/mcp/auth";
 const mocks = vi.hoisted(() => ({
   listFoodLibrary: vi.fn(),
   resolveFoodHandoff: vi.fn(),
+  resolveCatalogNewUseSelectionWithAuthorities: vi.fn(),
 }));
 
 vi.mock("@/services/nutrition-v1/server/food-library", async () => {
@@ -17,6 +18,7 @@ vi.mock("@/services/nutrition-v1/server/food-library", async () => {
 });
 vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({
   resolveFoodHandoff: mocks.resolveFoodHandoff,
+  resolveCatalogNewUseSelectionWithAuthorities: mocks.resolveCatalogNewUseSelectionWithAuthorities,
 }));
 
 import { executeMcpTool } from "@/lib/mcp/tool-executor";
@@ -353,6 +355,225 @@ describe("Nutrition V1 MCP current-generation Food authority", () => {
     expect(result.structuredContent.code).toBe("ambiguous_food");
     expect(db.foodLogs).toHaveLength(0);
     expect(mocks.resolveFoodHandoff).not.toHaveBeenCalled();
+  });
+
+
+  it.each([
+    ["de", "Deutsch yogurt"],
+    ["ar", "زبادي"],
+  ])("carries the exact selected Catalog candidate locale %s into serving selection and handoff", async (locale, name) => {
+    const db = createSupabase();
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(ACTIVE_ID, name, "catalog", { locale, servingLabel: null })],
+      nextCursor: null,
+    });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValueOnce({
+      foodId: ACTIVE_ID,
+      name,
+      languageTag: locale,
+      servingChoices: [{ servingOptionId: "88888888-8888-4888-8888-888888888888", label: "170 g", source: "generation" }],
+    });
+    mocks.resolveFoodHandoff.mockResolvedValueOnce(handoff(ACTIVE_ID, name, "catalog", 1, {
+      serving: "170 g",
+      diaryItem: {
+        foodName: name,
+        servingLabel: "170 g",
+        quantity: 1,
+        nutrition: { caloriesKcal: 100, proteinG: 10, carbsG: 12, fatG: 2 },
+        foodItemId: ACTIVE_ID,
+        userFoodItemId: null,
+      },
+    }));
+
+    const result = await addFood(db.client, name);
+
+    expect(result.isError).not.toBe(true);
+    expect(mocks.resolveCatalogNewUseSelectionWithAuthorities).toHaveBeenCalledWith(
+      db.client,
+      db.client,
+      USER_ID,
+      { foodId: ACTIVE_ID, displayName: name, languageTag: locale },
+    );
+    expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(db.client, USER_ID, expect.objectContaining({
+      foodId: ACTIVE_ID,
+      source: "catalog",
+      serving: "170 g",
+      servingOptionId: "88888888-8888-4888-8888-888888888888",
+      displayName: name,
+      languageTag: locale,
+    }));
+  });
+
+  it("does not attach Catalog locale identity to My Food handoff", async () => {
+    const db = createSupabase();
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(MY_FOOD_ID, "My oats", "my_food", { locale: "ar" })],
+      nextCursor: null,
+    });
+    mocks.resolveFoodHandoff.mockResolvedValueOnce(handoff(MY_FOOD_ID, "My oats", "my_food"));
+
+    const result = await addFood(db.client, "My oats");
+
+    expect(result.isError).not.toBe(true);
+    expect(mocks.resolveCatalogNewUseSelectionWithAuthorities).not.toHaveBeenCalled();
+    expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(db.client, USER_ID, expect.not.objectContaining({
+      languageTag: expect.any(String),
+    }));
+  });
+
+  it("fails Catalog new use when zero authoritative serving choices exist", async () => {
+    const db = createSupabase();
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(ACTIVE_ID, "No serving yogurt", "catalog", { servingLabel: null })],
+      nextCursor: null,
+    });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValueOnce({
+      foodId: ACTIVE_ID,
+      name: "No serving yogurt",
+      languageTag: "en",
+      servingChoices: [],
+    });
+
+    const result = await addFood(db.client, "No serving yogurt");
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.code).toBe("authoritative_serving_unavailable");
+    expect(mocks.resolveFoodHandoff).not.toHaveBeenCalled();
+    expect(db.foodLogs).toHaveLength(0);
+  });
+
+  it("auto-selects the sole effective Catalog serving when no serving_hint is supplied", async () => {
+    const db = createSupabase();
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(ACTIVE_ID, "Single serving yogurt", "catalog", { servingLabel: null })],
+      nextCursor: null,
+    });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValueOnce({
+      foodId: ACTIVE_ID,
+      name: "Single serving yogurt",
+      languageTag: "en",
+      servingChoices: [{ servingOptionId: "88888888-8888-4888-8888-888888888888", label: "170 g", source: "generation" }],
+    });
+    mocks.resolveFoodHandoff.mockResolvedValueOnce(handoff(ACTIVE_ID, "Single serving yogurt", "catalog"));
+
+    const result = await addFood(db.client, "Single serving yogurt");
+
+    expect(result.isError).not.toBe(true);
+    expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(db.client, USER_ID, expect.objectContaining({
+      serving: "170 g",
+      servingOptionId: "88888888-8888-4888-8888-888888888888",
+    }));
+  });
+
+  it("returns explicit serving ambiguity instead of choosing among multiple effective Catalog servings", async () => {
+    const db = createSupabase();
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(ACTIVE_ID, "Multi serving yogurt", "catalog", { servingLabel: null })],
+      nextCursor: null,
+    });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValueOnce({
+      foodId: ACTIVE_ID,
+      name: "Multi serving yogurt",
+      languageTag: "en",
+      servingChoices: [
+        { servingOptionId: "88888888-8888-4888-8888-888888888888", label: "170 g", source: "generation" },
+        { servingOptionId: "99999999-9999-4999-8999-999999999999", label: "1 cup", source: "generation" },
+      ],
+    });
+
+    const result = await addFood(db.client, "Multi serving yogurt");
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.code).toBe("ambiguous_serving");
+    expect(result.structuredContent).toMatchObject({
+      serving_choices: [
+        { servingOptionId: "88888888-8888-4888-8888-888888888888", label: "170 g", source: "generation" },
+        { servingOptionId: "99999999-9999-4999-8999-999999999999", label: "1 cup", source: "generation" },
+      ],
+    });
+    expect(mocks.resolveFoodHandoff).not.toHaveBeenCalled();
+  });
+
+  it("matches serving_hint exactly to one effective Catalog serving and carries its exact identity", async () => {
+    const db = createSupabase();
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(ACTIVE_ID, "Hinted yogurt", "catalog", { servingLabel: null })],
+      nextCursor: null,
+    });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValueOnce({
+      foodId: ACTIVE_ID,
+      name: "Hinted yogurt",
+      languageTag: "en",
+      servingChoices: [
+        { servingOptionId: "88888888-8888-4888-8888-888888888888", label: "170 g", source: "generation" },
+        { servingOptionId: "99999999-9999-4999-8999-999999999999", label: "1 cup", source: "generation" },
+      ],
+    });
+    mocks.resolveFoodHandoff.mockResolvedValueOnce(handoff(ACTIVE_ID, "Hinted yogurt", "catalog"));
+
+    const result = await executeMcpTool(context(db.client), "add_food_log", {
+      date: "2026-08-29",
+      meal_type: "Breakfast",
+      items: [{ food_name: "Hinted yogurt", quantity: 1, serving_hint: "1 cup" }],
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(db.client, USER_ID, expect.objectContaining({
+      serving: "1 cup",
+      servingOptionId: "99999999-9999-4999-8999-999999999999",
+    }));
+    expect(db.foodLogs[0]?.notes).toBeNull();
+  });
+
+  it("rejects a serving_hint that is not an exact effective serving choice", async () => {
+    const db = createSupabase();
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(ACTIVE_ID, "Hinted yogurt", "catalog", { servingLabel: null })],
+      nextCursor: null,
+    });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValueOnce({
+      foodId: ACTIVE_ID,
+      name: "Hinted yogurt",
+      languageTag: "en",
+      servingChoices: [{ servingOptionId: "88888888-8888-4888-8888-888888888888", label: "170 g", source: "generation" }],
+    });
+
+    const result = await executeMcpTool(context(db.client), "add_food_log", {
+      date: "2026-08-29",
+      meal_type: "Breakfast",
+      items: [{ food_name: "Hinted yogurt", quantity: 1, serving_hint: "100 g" }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.code).toBe("invalid_serving_hint");
+    expect(mocks.resolveFoodHandoff).not.toHaveBeenCalled();
+  });
+
+  it("accepts an owner override serving choice with no generation servingOptionId", async () => {
+    const db = createSupabase();
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(ACTIVE_ID, "Owner yogurt", "catalog", { servingLabel: null })],
+      nextCursor: null,
+    });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValueOnce({
+      foodId: ACTIVE_ID,
+      name: "Owner yogurt",
+      languageTag: "en",
+      servingChoices: [{ servingOptionId: null, label: "my bowl", source: "owner_override" }],
+    });
+    mocks.resolveFoodHandoff.mockResolvedValueOnce(handoff(ACTIVE_ID, "Owner yogurt", "catalog"));
+
+    const result = await executeMcpTool(context(db.client), "add_food_log", {
+      date: "2026-08-29",
+      meal_type: "Breakfast",
+      items: [{ food_name: "Owner yogurt", quantity: 1, serving_hint: "my bowl" }],
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(db.client, USER_ID, expect.objectContaining({
+      serving: "my bowl",
+      servingOptionId: null,
+    }));
   });
 
   it("keeps public MCP current-truth implementation free of direct food_items access", () => {
