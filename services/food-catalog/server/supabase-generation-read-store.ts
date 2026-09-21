@@ -411,15 +411,7 @@ async function readSelectedFacts<T>(
 }
 
 const QUALITY_PAGE_SIZE = 1000;
-const QUALITY_FACT_CHUNK_SIZE = 100;
-
-function chunks<T>(values: readonly T[], size: number): T[][] {
-  const output: T[][] = [];
-  for (let index = 0; index < values.length; index += size) {
-    output.push(values.slice(index, index + size));
-  }
-  return output;
-}
+const QUALITY_FACT_CHUNK_SIZE = TARGETED_BATCH_CHUNK_SIZE;
 
 export type CurrentGenerationQualitySelection = {
   generationId: string | null;
