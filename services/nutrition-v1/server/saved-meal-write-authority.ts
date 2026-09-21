@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealItemInput, SavedMealItemWriteIntent } from "@/services/nutrition-v1/server/saved-meals";
+import { resolveCurrentGenerationFoodForNewUseFromSupabase, type CurrentGenerationFoodView } from "@/services/food-catalog/server/current-generation-service";
 import { resolveFoodHandoffWithAuthorities } from "@/services/nutrition-v1/server/food-handoff";
 import { resolveRecipeHandoff } from "@/services/nutrition-v1/server/recipe-handoff";
 
@@ -16,6 +17,66 @@ async function detectFoodSource(supabase: SupabaseClient, userId: string, foodId
     .maybeSingle();
   if (own.error) throw new Error(`Personal Food identity could not be validated. ${own.error.message ?? "Database request failed."}`);
   return own.data ? "my_food" as const : "catalog" as const;
+}
+
+function normalizedLanguageTag(value: string) {
+  return value.trim().replace(/_/g, "-").toLowerCase();
+}
+
+function uniqueNameMatch(
+  matches: CurrentGenerationFoodView["names"],
+  message = "The frozen Saved Meal Food name is ambiguous in the current generation. Re-select the Food.",
+) {
+  if (matches.length === 1) return matches[0]!;
+  if (matches.length > 1) throw new Error(message);
+  return null;
+}
+
+function disambiguateFrozenNameLocale(
+  matches: CurrentGenerationFoodView["names"],
+  writeLanguageTag: string | null,
+) {
+  if (matches.length === 1) return matches[0]!;
+  if (matches.length === 0) {
+    throw new Error("The frozen Saved Meal Food name is no longer selected in the current generation. Re-select the Food.");
+  }
+  if (!writeLanguageTag) {
+    throw new Error("The frozen Saved Meal Food name is ambiguous in the current generation. Re-select the Food.");
+  }
+
+  const requested = normalizedLanguageTag(writeLanguageTag);
+  const requestedBase = requested.split("-")[0] ?? requested;
+
+  const exact = uniqueNameMatch(matches.filter((name) => normalizedLanguageTag(name.languageTag) === requested));
+  if (exact) return exact;
+
+  if (requested.includes("-")) {
+    const explicitBase = uniqueNameMatch(matches.filter((name) => normalizedLanguageTag(name.languageTag) === requestedBase));
+    if (explicitBase) return explicitBase;
+  }
+
+  const family = uniqueNameMatch(matches.filter((name) => (
+    (normalizedLanguageTag(name.languageTag).split("-")[0] ?? normalizedLanguageTag(name.languageTag)) === requestedBase
+  )));
+  if (family) return family;
+
+  throw new Error("The frozen Saved Meal Food name is ambiguous in the current generation. Re-select the Food.");
+}
+
+async function recoverFrozenCatalogNameLanguageTag(
+  catalogSupabase: SupabaseClient,
+  foodId: string,
+  frozenName: string,
+  writeLanguageTag: string | null,
+) {
+  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, foodId);
+  const selectedIds = new Set(view.selections.nameFactIds);
+  const exactTextMatches = view.names.filter((name) => (
+    selectedIds.has(name.id)
+    && name.foodId === view.resolvedFoodId
+    && name.text.trim() === frozenName.trim()
+  ));
+  return disambiguateFrozenNameLocale(exactTextMatches, writeLanguageTag).languageTag;
 }
 
 export async function canonicalizeSavedMealItems(
@@ -36,10 +97,19 @@ export async function canonicalizeSavedMealItems(
       const itemLanguageTag = typeof item.languageTag === "string" && item.languageTag.trim()
         ? item.languageTag.trim()
         : null;
+      const recoveredLanguageTag = source === "catalog" && itemLanguageTag === null
+        ? await recoverFrozenCatalogNameLanguageTag(
+            catalogSupabase,
+            item.food_id,
+            item.frozen_name,
+            normalizedWriteLanguageTag,
+          )
+        : itemLanguageTag;
       const catalogSelectionIdentity = source === "catalog"
         ? {
             displayName: item.frozen_name,
-            languageTag: itemLanguageTag ?? normalizedWriteLanguageTag,
+            languageTag: recoveredLanguageTag,
+            servingOptionId: item.servingOptionId ?? null,
           }
         : {};
       const resolved = await resolveFoodHandoffWithAuthorities(ownerSupabase, catalogSupabase, userId, {
