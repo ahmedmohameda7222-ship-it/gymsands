@@ -19,6 +19,7 @@ vi.mock("@/lib/i18n/nutrition-v1", () => ({
 vi.mock("@/components/nutrition/meal-plan/meal-plan-api", () => api);
 
 import { AddToPlanWorkspace } from "@/components/nutrition/meal-plan/add-to-plan-workspace";
+import type { MealPlanOccurrenceMutation } from "@/services/nutrition-v1/server/meal-plan";
 
 const FOOD_ID = "11111111-1111-4111-8111-111111111111";
 const SERVING_A = "22222222-2222-4222-8222-222222222222";
@@ -115,7 +116,7 @@ function setSelectValue(select: HTMLSelectElement, value: string) {
 describe("Meal Plan Catalog serving authority", () => {
   let host: HTMLDivElement;
   let root: Root;
-  let onCommit: ReturnType<typeof vi.fn>;
+  let onCommit: ReturnType<typeof vi.fn<(items: MealPlanOccurrenceMutation[]) => Promise<void>>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -123,7 +124,7 @@ describe("Meal Plan Catalog serving authority", () => {
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
-    onCommit = vi.fn(async () => undefined);
+    onCommit = vi.fn(async (_items: MealPlanOccurrenceMutation[]) => undefined);
 
     api.mealPlanApi.mockImplementation(async (path: string) => {
       if (path.startsWith("/api/nutrition/v1/foods?")) return { items: [catalogFood()], nextCursor: null };
