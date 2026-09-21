@@ -150,6 +150,16 @@ describe("Nutrition V1 MCP current-generation Food authority", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.listFoodLibrary.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValue({
+      foodId: ACTIVE_ID,
+      name: "Selected food",
+      languageTag: "en",
+      servingChoices: [{
+        servingOptionId: "88888888-8888-4888-8888-888888888888",
+        label: "100 g",
+        source: "generation",
+      }],
+    });
   });
 
   it("searches global Food through Catalog V2 with explicit locale/market/limit context", async () => {
@@ -485,7 +495,7 @@ describe("Nutrition V1 MCP current-generation Food authority", () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent.code).toBe("ambiguous_serving");
-    expect(result.structuredContent).toMatchObject({
+    expect(result.structuredContent.details).toMatchObject({
       serving_choices: [
         { servingOptionId: "88888888-8888-4888-8888-888888888888", label: "170 g", source: "generation" },
         { servingOptionId: "99999999-9999-4999-8999-999999999999", label: "1 cup", source: "generation" },
