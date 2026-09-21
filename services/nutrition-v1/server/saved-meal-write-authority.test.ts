@@ -185,6 +185,27 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     expect(handoff.resolve).not.toHaveBeenCalled();
   });
 
+  it("forwards a newly selected Catalog servingOptionId into exact handoff authority", async () => {
+    const owner = ownerSupabase(false);
+    const servingOptionId = "70000000-0000-4000-8000-000000000001";
+    const item = {
+      ...frozenFood,
+      languageTag: "en",
+      servingOptionId,
+    } as SavedMealItemInput & { languageTag: string; servingOptionId: string };
+
+    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [item], "de");
+
+    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+      foodId,
+      source: "catalog",
+      serving: "100 g",
+      servingOptionId,
+      displayName: "Shared name",
+      languageTag: "en",
+    }));
+  });
+
   it("keeps a transient newly-selected candidate locale as strongest identity without frozen-name recovery", async () => {
     const owner = ownerSupabase(false);
     const item = { ...frozenFood, languageTag: "de" } as SavedMealItemInput & { languageTag: string };
