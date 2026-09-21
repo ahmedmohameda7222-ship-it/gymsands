@@ -5,10 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { barcodeValidationMessage, normalizeProductBarcode } from "@/lib/barcodes";
 import type { NormalizedFood } from "@/lib/integrations/open-food-facts";
 import { resolveCurrentGenerationFoodForNewUseFromSupabase, type CurrentGenerationFoodView } from "@/services/food-catalog/server/current-generation-service";
-import {
-  listFoodLibrary,
-  type FoodLibraryCandidate,
-} from "@/services/nutrition-v1/server/food-library";
+import type { FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
 import {
   resolveCatalogNewUseSelectionFromView,
   type CatalogNewUseSelection,
@@ -24,6 +21,43 @@ function rows(value: unknown): Array<Record<string, unknown>> {
   }
   if (value && typeof value === "object" && !Array.isArray(value)) return [value as Record<string, unknown>];
   return [];
+}
+
+function directCatalogPresentation(
+  view: CurrentGenerationFoodView,
+  selectedName: CurrentGenerationFoodView["names"][number],
+): FoodLibraryCandidate {
+  const nutrition = view.nutritionRevision;
+  const selectedNameIds = new Set(view.selections.nameFactIds);
+  return {
+    id: view.resolvedFoodId,
+    source: "catalog",
+    name: selectedName.text.trim(),
+    brand: null,
+    category: null,
+    cuisine: null,
+    servingLabel: null,
+    verified: view.trust?.verified === true,
+    favorite: false,
+    recentAt: null,
+    frequency: 0,
+    locale: selectedName.languageTag,
+    aliases: view.names
+      .filter((name) => selectedNameIds.has(name.id) && name.id !== selectedName.id)
+      .map((name) => ({ locale: name.languageTag, value: name.text })),
+    nutrition: {
+      calories: nutrition?.calories ?? null,
+      protein_g: nutrition?.protein_g ?? null,
+      carbs_g: nutrition?.carbs_g ?? null,
+      fat_g: nutrition?.fat_g ?? null,
+      saturated_fat_g: nutrition?.saturated_fat_g ?? null,
+      fiber_g: nutrition?.fiber_g ?? null,
+      sugars_g: nutrition?.sugars_g ?? null,
+      sodium_mg: nutrition?.sodium_mg ?? null,
+      basis_amount: nutrition?.basisAmount ?? null,
+      basis_unit: nutrition?.basisUnit ?? null,
+    },
+  };
 }
 
 function selectedLocalizedDisplayName(
@@ -92,27 +126,11 @@ export async function resolveFoodBarcode(
 
   const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, mappedFoodId);
   const selectedName = selectedLocalizedDisplayName(view, languageTag || "en");
-  const page = await listFoodLibrary(ownerSupabase, userId, {
-    query: selectedName.text,
-    locale: selectedName.languageTag,
-    marketScopeCode: null,
-    limit: 20,
-    scope: "all",
-  });
-  const exact = page.items.filter((item) => (
-    item.source === "catalog"
-    && item.id === view.resolvedFoodId
-    && item.locale === selectedName.languageTag
-  ));
-  if (exact.length !== 1) {
-    throw new Error("Canonical barcode Food presentation did not resolve exactly.");
-  }
-
   const selection = await resolveCatalogNewUseSelectionFromView(ownerSupabase, view, selectedName);
   return {
     kind: "catalog",
     barcode,
-    food: exact[0]!,
+    food: directCatalogPresentation(view, selectedName),
     selection,
   };
 }

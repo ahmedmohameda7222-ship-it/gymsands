@@ -86,6 +86,25 @@ function currentView(overrides: Record<string, unknown> = {}) {
       verification: [],
       ...overrideSelections,
     },
+    nutritionRevision: {
+      id: "90000000-0000-4000-8000-000000000001",
+      foodId: survivorId,
+      revisionNumber: 1,
+      calories: 100,
+      protein_g: 10,
+      carbs_g: null,
+      fat_g: 2,
+      saturated_fat_g: null,
+      fiber_g: null,
+      sugars_g: null,
+      sodium_mg: null,
+      basisAmount: 100,
+      basisUnit: "g",
+      nutrientMappingVersion: "map-v1",
+      sourceRecordId: null,
+      createdAt: "2026-09-21T00:00:00.000Z",
+    },
+    trust: { verified: true },
   };
 }
 
@@ -97,7 +116,7 @@ function candidate() {
     brand: null,
     category: null,
     cuisine: null,
-    servingLabel: "170 g",
+    servingLabel: null,
     verified: true,
     favorite: false,
     recentAt: null,
@@ -177,12 +196,7 @@ describe("Task 12 canonical-first barcode resolution", () => {
     });
     expect(db.rpc).toHaveBeenCalledWith("food_catalog_lookup_effective_barcode", { p_gtin: barcode });
     expect(generation.resolve).toHaveBeenCalledWith(catalogSupabase, mappedFoodId);
-    expect(search.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({
-      query: "Canonical yogurt",
-      locale: "en",
-      limit: 20,
-      scope: "all",
-    }));
+    expect(search.list).not.toHaveBeenCalled();
     expect(provider).not.toHaveBeenCalled();
   });
 
@@ -245,10 +259,7 @@ describe("Task 12 canonical-first barcode resolution", () => {
     await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider)).rejects.toThrow(/display name/i);
     expect(provider).not.toHaveBeenCalled();
 
-    generation.resolve.mockResolvedValueOnce(currentView());
-    search.list.mockResolvedValueOnce({ items: [{ ...candidate(), id: mappedFoodId }], nextCursor: null });
-    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", provider)).rejects.toThrow(/presentation/i);
-    expect(provider).not.toHaveBeenCalled();
+    expect(search.list).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -309,10 +320,9 @@ describe("Task 12 canonical-first barcode resolution", () => {
     const result = await resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, request, vi.fn());
 
     expect(result.kind).toBe("catalog");
-    expect(search.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({
-      query: selected.text,
-      locale: expectedLocale,
-    }));
+    if (result.kind !== "catalog") throw new Error("Expected canonical Catalog barcode result.");
+    expect(result.food).toMatchObject({ id: survivorId, name: selected.text, locale: expectedLocale, servingLabel: null });
+    expect(search.list).not.toHaveBeenCalled();
   });
 
   it("rejects ambiguous base-language family fallback instead of choosing between regional Names", async () => {
@@ -336,19 +346,6 @@ describe("Task 12 canonical-first barcode resolution", () => {
     await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "fr-FR", vi.fn())).rejects.toThrow(/display name/i);
     expect(search.list).not.toHaveBeenCalled();
   });
-
-  it("fails closed when V2 presentation does not bind the selected Name locale", async () => {
-    const db = supabaseWithBarcode([{ barcode_id: "55555555-5555-4555-8555-555555555555", food_id: mappedFoodId, gtin: barcode }]);
-    const view = viewWithPreferredNames([
-      { id: "70000000-0000-4000-8000-000000000016", languageTag: "en", text: "Canonical yogurt" },
-    ]);
-    generation.resolve.mockResolvedValueOnce(view);
-    search.list.mockResolvedValueOnce({ items: [catalogCandidate("de", "Canonical yogurt")], nextCursor: null });
-
-    await expect(resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en-GB", vi.fn())).rejects.toThrow(/presentation/i);
-    expect(search.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({ locale: "en" }));
-  });
-
 
   it("resolves canonical barcode presentation from the exact current-generation view even when ranked discovery would omit the Food", async () => {
     const db = supabaseWithBarcode([{ barcode_id: "55555555-5555-4555-8555-555555555555", food_id: mappedFoodId, gtin: barcode }]);

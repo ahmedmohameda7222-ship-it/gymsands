@@ -155,6 +155,7 @@ export type CatalogServingChoice = {
   servingOptionId: string | null;
   label: string;
   source: "generation" | "owner_override";
+  nutrition?: FoodLibraryNutrition;
 };
 
 export type CatalogNewUseSelection = {
@@ -215,13 +216,40 @@ export async function resolveCatalogNewUseSelectionFromView(
   const personalServing = personalOverride.hasOverride && !personalOverride.isDeleted
     ? personalOverride.servingLabel
     : null;
+
+  let effectiveView: CurrentGenerationFoodView | null = null;
+  if (view.nutritionRevision) {
+    const canonicalNutrition = nutritionFromView(view);
+    const effectiveNutrition = mergePersonalOverrideNutrition(canonicalNutrition, personalOverride);
+    effectiveView = viewWithNutrition(view, effectiveNutrition);
+  }
+  const withProjectedNutrition = (
+    choice: Omit<CatalogServingChoice, "nutrition">,
+  ): CatalogServingChoice => {
+    if (!effectiveView) return choice;
+    try {
+      const projection = projectCurrentGenerationCompatibility(effectiveView, {
+        nameFactId: selectedName.id,
+        servingOptionId: choice.servingOptionId,
+      });
+      return { ...choice, nutrition: projection.nutrition };
+    } catch {
+      // An authoritative serving can remain selectable even when no safe
+      // nutrition conversion exists. The handoff boundary remains the final
+      // fail-closed conversion authority for writes.
+      return choice;
+    }
+  };
+
+  const servingChoices = personalServing !== null
+    ? [withProjectedNutrition({ servingOptionId: null, label: personalServing, source: "owner_override" })]
+    : selectedGenerationServingChoices(view).map(withProjectedNutrition);
+
   return {
     foodId: view.resolvedFoodId,
     name: requiredText(selectedName.text, "Food display name"),
     languageTag: requiredText(selectedName.languageTag, "Food language"),
-    servingChoices: personalServing !== null
-      ? [{ servingOptionId: null, label: personalServing, source: "owner_override" }]
-      : selectedGenerationServingChoices(view),
+    servingChoices,
   };
 }
 

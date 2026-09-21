@@ -137,6 +137,7 @@ export async function executeCanonicalFoodMcpTool(
 
       const quantity = getNumber(item, "quantity", 1);
       const servingHint = getOptionalString(item, "serving_hint")?.trim() || null;
+      const servingOptionId = getOptionalString(item, "serving_option_id")?.trim() || null;
       let handoff: Awaited<ReturnType<typeof resolveFoodHandoff>>;
 
       if (match.exact.source === "global") {
@@ -167,13 +168,40 @@ export async function executeCanonicalFoodMcpTool(
         }
 
         let selectedServing = null as (typeof choices)[number] | null;
-        if (servingHint) {
-          const matches = choices.filter((choice) => choice.label === servingHint);
+        if (servingOptionId) {
+          if (!servingHint) {
+            return fail(
+              "invalid_serving_identity",
+              "serving_option_id must be paired with the exact serving_hint label.",
+              { requested: item, serving_choices: choices },
+            );
+          }
+          const matches = choices.filter((choice) => (
+            choice.servingOptionId === servingOptionId
+            && choice.label === servingHint
+          ));
           if (matches.length !== 1) {
             return fail(
-              "invalid_serving_hint",
-              "The serving_hint does not exactly match one effective authoritative serving choice.",
+              "invalid_serving_identity",
+              "The serving_option_id and serving_hint do not match one exact effective authoritative serving choice.",
               { requested: item, serving_choices: choices },
+            );
+          }
+          selectedServing = matches[0]!;
+        } else if (servingHint) {
+          const matches = choices.filter((choice) => choice.label === servingHint);
+          if (matches.length === 0) {
+            return fail(
+              "invalid_serving_hint",
+              "The serving_hint does not match an effective authoritative serving choice.",
+              { requested: item, serving_choices: choices },
+            );
+          }
+          if (matches.length > 1) {
+            return fail(
+              "ambiguous_serving",
+              "Multiple authoritative servings share this label. Ask the user to choose one and retry with serving_option_id plus the same serving_hint.",
+              { requested: item, serving_choices: matches },
             );
           }
           selectedServing = matches[0]!;
@@ -182,7 +210,7 @@ export async function executeCanonicalFoodMcpTool(
         } else {
           return fail(
             "ambiguous_serving",
-            "This Food has multiple authoritative serving choices. Ask the user to choose one and retry with serving_hint.",
+            "This Food has multiple authoritative serving choices. Ask the user to choose one and retry with serving_hint and serving_option_id when provided.",
             { requested: item, serving_choices: choices },
           );
         }
@@ -197,6 +225,9 @@ export async function executeCanonicalFoodMcpTool(
           languageTag,
         });
       } else {
+        if (servingOptionId) {
+          return fail("invalid_serving_identity", "serving_option_id is only valid for Catalog Food serving choices.");
+        }
         handoff = await resolveFoodHandoff(ctx.supabase, ctx.userId, {
           foodId: match.exact.id,
           source: "my_food",

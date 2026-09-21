@@ -583,7 +583,6 @@ function FoodBrowserInner({
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleFoods.map((food) => {
             const quantity = quantities[food.id] ?? 1;
-            const macros = scaleFoodMacros(food, quantity);
             const favoriteKey = favoriteKeyForFood(food);
             const favorite = favoriteKeys.includes(favoriteKey);
             const planAction = foodAction(food.id, "plan");
@@ -593,6 +592,10 @@ function FoodBrowserInner({
             const selectedServing = servingState?.choices.find((choice) => (
               (choice.servingOptionId ?? "__owner_override__") === servingState.selectedId
             ));
+            const previewFood = food.is_global === false || !selectedServing
+              ? food
+              : withCatalogServingChoice(food, selectedServing);
+            const macros = scaleFoodMacros(previewFood, quantity);
             const displayServing = food.is_global === false
               ? food.serving_size
               : selectedServing?.label ?? (servingState?.choices.length === 1 ? servingState.choices[0]!.label : "");

@@ -349,6 +349,7 @@ export type BrowserCatalogServingChoice = {
   servingOptionId: string | null;
   label: string;
   source: "generation" | "owner_override";
+  nutrition?: CatalogSearchCandidate["nutrition"];
 };
 
 export type BrowserCatalogNewUseSelection = {
@@ -357,6 +358,36 @@ export type BrowserCatalogNewUseSelection = {
   languageTag: string;
   servingChoices: BrowserCatalogServingChoice[];
 };
+
+function parseCatalogServingNutrition(value: unknown): CatalogSearchCandidate["nutrition"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Catalog serving selection returned invalid nutrition.");
+  }
+  const nutrition = value as Record<string, unknown>;
+  const basisUnit = nutrition.basis_unit;
+  if (
+    basisUnit !== null
+    && basisUnit !== "g"
+    && basisUnit !== "ml"
+    && basisUnit !== "serving"
+    && basisUnit !== "piece"
+    && basisUnit !== "custom"
+  ) {
+    throw new Error("Catalog serving selection returned invalid nutrition.");
+  }
+  return {
+    calories: nullableNutrition(nutrition.calories, "serving calories"),
+    protein_g: nullableNutrition(nutrition.protein_g, "serving protein"),
+    carbs_g: nullableNutrition(nutrition.carbs_g, "serving carbs"),
+    fat_g: nullableNutrition(nutrition.fat_g, "serving fat"),
+    saturated_fat_g: nullableNutrition(nutrition.saturated_fat_g, "serving saturated fat"),
+    fiber_g: nullableNutrition(nutrition.fiber_g, "serving fiber"),
+    sugars_g: nullableNutrition(nutrition.sugars_g, "serving sugars"),
+    sodium_mg: nullableNutrition(nutrition.sodium_mg, "serving sodium"),
+    basis_amount: nullableNutrition(nutrition.basis_amount, "serving basis amount"),
+    basis_unit: basisUnit,
+  };
+}
 
 function parseCatalogNewUseSelection(value: unknown): BrowserCatalogNewUseSelection {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -393,10 +424,14 @@ function parseCatalogNewUseSelection(value: unknown): BrowserCatalogNewUseSelect
     if (choice.source === "generation" && servingOptionId === null) {
       throw new Error("Generation serving selection is missing its exact identity.");
     }
+    const projectedNutrition = choice.nutrition === undefined
+      ? undefined
+      : parseCatalogServingNutrition(choice.nutrition);
     return {
       servingOptionId,
       label: choice.label.trim(),
       source: choice.source,
+      ...(projectedNutrition ? { nutrition: projectedNutrition } : {}),
     } as BrowserCatalogServingChoice;
   });
   return { foodId, name, languageTag, servingChoices };
@@ -435,7 +470,20 @@ export function withCatalogServingChoice(
   food: CatalogFoodItem,
   choice: BrowserCatalogServingChoice,
 ): CatalogFoodItem {
-  return { ...food, serving_size: choice.label, serving_option_id: choice.servingOptionId };
+  return {
+    ...food,
+    serving_size: choice.label,
+    serving_option_id: choice.servingOptionId,
+    ...(choice.nutrition ? {
+      calories: choice.nutrition.calories,
+      protein_g: choice.nutrition.protein_g,
+      carbs_g: choice.nutrition.carbs_g,
+      fat_g: choice.nutrition.fat_g,
+      fiber_g: choice.nutrition.fiber_g,
+      sugar_g: choice.nutrition.sugars_g,
+      sodium_mg: choice.nutrition.sodium_mg,
+    } : {}),
+  };
 }
 
 type BrowserCatalogHandoff = {

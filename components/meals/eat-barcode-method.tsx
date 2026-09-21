@@ -12,7 +12,17 @@ import { useEatTranslation } from "@/lib/i18n/eat";
 import type { UserAppSettings } from "@/services/database/user-settings";
 import type { FoodLog, MealType } from "@/types";
 
-type BarcodeServingChoice = { servingOptionId: string | null; label: string; source: "generation" | "owner_override" };
+type BarcodeServingChoice = {
+  servingOptionId: string | null;
+  label: string;
+  source: "generation" | "owner_override";
+  nutrition?: {
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+  };
+};
 type BarcodeFood = {
   name: string;
   brand?: string | null;
@@ -56,6 +66,14 @@ export function EatBarcodeMethod({
   const streamRef = useRef<MediaStream | null>(null);
   const controlsRef = useRef<ScannerControls | null>(null);
   const timerRef = useRef<number | null>(null);
+  const servingChoices = food?.servingChoices ?? [];
+  const selectedServing = servingChoices.find((choice) => (
+    (choice.servingOptionId ?? "__owner_override__") === servingChoiceKey
+  )) ?? (servingChoices.length === 1 ? servingChoices[0]! : null);
+  const previewCalories = selectedServing?.nutrition?.calories ?? food?.calories ?? null;
+  const previewProtein = selectedServing?.nutrition?.protein_g ?? food?.protein ?? null;
+  const previewCarbs = selectedServing?.nutrition?.carbs_g ?? food?.carbs ?? null;
+  const previewFat = selectedServing?.nutrition?.fat_g ?? food?.fat ?? null;
 
   const stopScanner = useCallback(() => {
     if (timerRef.current) window.clearInterval(timerRef.current);
@@ -162,9 +180,6 @@ export function EatBarcodeMethod({
       setFeedback({ type: "error", message: "This barcode match is suggestion-only. Search for an existing Food or create a Food before logging." });
       return;
     }
-    const servingChoices = food.servingChoices ?? [];
-    const selectedServing = servingChoices.find((choice) => (choice.servingOptionId ?? "__owner_override__") === servingChoiceKey)
-      ?? (servingChoices.length === 1 ? servingChoices[0]! : null);
     if (food.source === "catalog" && servingChoices.length === 0) {
       setFeedback({ type: "error", message: "No authoritative serving is available yet." });
       return;
@@ -213,8 +228,8 @@ export function EatBarcodeMethod({
       {food ? <div className="rounded-[14px] border border-border/70 p-3">
         <p className="font-semibold">{food.name}</p>
         <p className="mt-1 text-sm text-muted-foreground">{food.brand ?? ""}</p>
-        <p className="mt-2 text-sm">{food.calories === null || food.calories === undefined ? "—" : formatEatEnergy(food.calories, energyUnit, locale)} · P {food.protein ?? "—"} g · C {food.carbs ?? "—"} g · F {food.fat ?? "—"} g</p>
-        <p className="mt-1 text-xs text-muted-foreground">{food.servingSize ?? (food.source === "catalog" ? "Serving selection required" : et("storedServingOnly"))}</p>
+        <p className="mt-2 text-sm">{previewCalories === null ? "—" : formatEatEnergy(previewCalories, energyUnit, locale)} · P {previewProtein ?? "—"} g · C {previewCarbs ?? "—"} g · F {previewFat ?? "—"} g</p>
+        <p className="mt-1 text-xs text-muted-foreground">{selectedServing?.label ?? food.servingSize ?? (food.source === "catalog" ? "Serving selection required" : et("storedServingOnly"))}</p>
         {food.source === "provider_suggestion" ? <p className="mt-2 text-sm text-muted-foreground">Provider result is suggestion-only. Search for an existing Food or create a Food before logging.</p> : null}
         {food.source === "catalog" && (food.servingChoices?.length ?? 0) === 0 ? <p className="mt-2 text-sm text-destructive">No authoritative serving is available yet.</p> : null}
         {food.source === "catalog" && (food.servingChoices?.length ?? 0) > 1 ? <label className="mt-3 grid gap-1 text-sm font-medium">Serving<select value={servingChoiceKey} onChange={(event) => setServingChoiceKey(event.target.value)} className="h-11 rounded-xl border border-border bg-background px-3"><option value="">Choose a serving</option>{food.servingChoices!.map((choice) => <option key={choice.servingOptionId ?? `owner:${choice.label}`} value={choice.servingOptionId ?? "__owner_override__"}>{choice.label}</option>)}</select></label> : null}

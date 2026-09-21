@@ -33,6 +33,7 @@ type CatalogServingChoice = {
   servingOptionId: string | null;
   label: string;
   source: "generation" | "owner_override";
+  nutrition?: FoodLibraryNutrition;
 };
 
 type CatalogSelection = {
@@ -103,7 +104,8 @@ export function FoodDetail({ food, initialAdd = false, onClose, onFavorite, onCo
     return () => { cancelled = true; };
   }, [food.id, food.locale, food.name, food.source, initialAdd]);
 
-  const nutrition = useMemo(() => scaledNutrition(food.nutrition, hasAuthoritativeServing ? quantity : 1), [food.nutrition, hasAuthoritativeServing, quantity]);
+  const selectedNutrition = selectedServingChoice?.nutrition ?? food.nutrition;
+  const nutrition = useMemo(() => scaledNutrition(selectedNutrition, hasAuthoritativeServing ? quantity : 1), [selectedNutrition, hasAuthoritativeServing, quantity]);
   const foodParam = encodeURIComponent(food.id);
   const sourceParam = encodeURIComponent(food.source);
   const quantityParam = encodeURIComponent(String(quantity));
@@ -114,8 +116,8 @@ export function FoodDetail({ food, initialAdd = false, onClose, onFavorite, onCo
   const servingIdentityParam = servingOptionId ? `&servingOptionId=${encodeURIComponent(servingOptionId)}` : "";
   const handoffContext = `source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}${servingIdentityParam}&displayName=${displayNameParam}&languageTag=${languageTagParam}`;
   const destinationSuffix = `addFoodId=${foodParam}&${handoffContext}`;
-  const nutritionBasis = food.nutrition.basis_amount !== null && food.nutrition.basis_unit
-    ? `${food.nutrition.basis_amount} ${food.nutrition.basis_unit}`
+  const nutritionBasis = selectedNutrition.basis_amount !== null && selectedNutrition.basis_unit
+    ? `${selectedNutrition.basis_amount} ${selectedNutrition.basis_unit}`
     : null;
 
   return (
