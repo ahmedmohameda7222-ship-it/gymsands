@@ -209,6 +209,7 @@ describe("Nutrition V1 MCP current-generation Food authority", () => {
       source: "catalog",
       quantity: 2,
       serving: "100 g",
+      servingOptionId: "88888888-8888-4888-8888-888888888888",
       displayName: "Active yogurt",
       languageTag: "en",
     });
