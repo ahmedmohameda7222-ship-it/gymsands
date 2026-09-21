@@ -54,7 +54,7 @@ vi.mock("@/lib/supabase/client", () => ({
   supabase: { from: db.from, rpc: db.rpc, auth: { getSession: db.getSession } },
 }));
 
-import { addGlobalFoodToToday, getGlobalFoods } from "@/services/database/nutrition";
+import { addGlobalFoodToToday, getGlobalFoods, withCatalogServingChoice } from "@/services/database/nutrition";
 
 describe("Plan 7 browser Catalog serving selection", () => {
   beforeEach(() => {
@@ -135,4 +135,36 @@ describe("Plan 7 browser Catalog serving selection", () => {
     await expect(addGlobalFoodToToday({ userId, food: food!, quantity: 1 })).rejects.toThrow(/no authoritative serving/i);
     expect(db.inserted).toHaveLength(0);
   });
+
+  it("projects the exact selected serving nutrition into the browser Food preview", async () => {
+    const [food] = await getGlobalFoods("yogurt", { limit: 1 });
+    const projected = withCatalogServingChoice(food!, {
+      servingOptionId: servingId,
+      label: "1 cup",
+      source: "generation",
+      nutrition: {
+        calories: 240,
+        protein_g: 24,
+        carbs_g: 12,
+        fat_g: 4.8,
+        saturated_fat_g: null,
+        fiber_g: 2,
+        sugars_g: null,
+        sodium_mg: null,
+        basis_amount: 1,
+        basis_unit: "serving",
+      },
+    } as unknown as Parameters<typeof withCatalogServingChoice>[1]);
+
+    expect(projected).toMatchObject({
+      serving_size: "1 cup",
+      serving_option_id: servingId,
+      calories: 240,
+      protein_g: 24,
+      carbs_g: 12,
+      fat_g: 4.8,
+      fiber_g: 2,
+    });
+  });
+
 });

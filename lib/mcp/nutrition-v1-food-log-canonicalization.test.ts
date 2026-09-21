@@ -598,4 +598,69 @@ describe("Nutrition V1 MCP current-generation Food authority", () => {
       expect(value, file).not.toContain("searchCatalogFoodsByName");
     }
   });
+
+  it("uses serving_option_id to disambiguate two authoritative servings with the same label", async () => {
+    const db = createSupabase();
+    const firstId = "88888888-8888-4888-8888-888888888888";
+    const secondId = "99999999-9999-4999-8999-999999999999";
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(ACTIVE_ID, "Twin cup yogurt", "catalog", { servingLabel: null })],
+      nextCursor: null,
+    });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValueOnce({
+      foodId: ACTIVE_ID,
+      name: "Twin cup yogurt",
+      languageTag: "en",
+      servingChoices: [
+        { servingOptionId: firstId, label: "1 cup", source: "generation" },
+        { servingOptionId: secondId, label: "1 cup", source: "generation" },
+      ],
+    });
+    mocks.resolveFoodHandoff.mockResolvedValueOnce(handoff(ACTIVE_ID, "Twin cup yogurt", "catalog"));
+
+    const result = await executeMcpTool(context(db.client), "add_food_log", {
+      date: "2026-08-29",
+      meal_type: "Breakfast",
+      items: [{
+        food_name: "Twin cup yogurt",
+        quantity: 1,
+        serving_hint: "1 cup",
+        serving_option_id: secondId,
+      }],
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(mocks.resolveFoodHandoff).toHaveBeenCalledWith(db.client, USER_ID, expect.objectContaining({
+      serving: "1 cup",
+      servingOptionId: secondId,
+    }));
+  });
+
+  it("returns serving ambiguity for duplicate labels when serving_option_id is omitted", async () => {
+    const db = createSupabase();
+    mocks.listFoodLibrary.mockResolvedValueOnce({
+      items: [candidate(ACTIVE_ID, "Twin cup yogurt", "catalog", { servingLabel: null })],
+      nextCursor: null,
+    });
+    mocks.resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValueOnce({
+      foodId: ACTIVE_ID,
+      name: "Twin cup yogurt",
+      languageTag: "en",
+      servingChoices: [
+        { servingOptionId: "88888888-8888-4888-8888-888888888888", label: "1 cup", source: "generation" },
+        { servingOptionId: "99999999-9999-4999-8999-999999999999", label: "1 cup", source: "generation" },
+      ],
+    });
+
+    const result = await executeMcpTool(context(db.client), "add_food_log", {
+      date: "2026-08-29",
+      meal_type: "Breakfast",
+      items: [{ food_name: "Twin cup yogurt", quantity: 1, serving_hint: "1 cup" }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.code).toBe("ambiguous_serving");
+    expect(mocks.resolveFoodHandoff).not.toHaveBeenCalled();
+  });
+
 });

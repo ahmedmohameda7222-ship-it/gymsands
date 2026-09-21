@@ -349,4 +349,58 @@ describe("Task 12 canonical-first barcode resolution", () => {
     expect(search.list).toHaveBeenCalledWith(db.client, userId, expect.objectContaining({ locale: "en" }));
   });
 
+
+  it("resolves canonical barcode presentation from the exact current-generation view even when ranked discovery would omit the Food", async () => {
+    const db = supabaseWithBarcode([{ barcode_id: "55555555-5555-4555-8555-555555555555", food_id: mappedFoodId, gtin: barcode }]);
+    generation.resolve.mockResolvedValueOnce(currentView({
+      nutritionRevision: {
+        id: "90000000-0000-4000-8000-000000000001",
+        foodId: survivorId,
+        revisionNumber: 1,
+        calories: 123,
+        protein_g: 11,
+        carbs_g: 7,
+        fat_g: 4,
+        saturated_fat_g: null,
+        fiber_g: 2,
+        sugars_g: null,
+        sodium_mg: null,
+        basisAmount: 100,
+        basisUnit: "g",
+        nutrientMappingVersion: "map-v1",
+        sourceRecordId: null,
+        createdAt: "2026-09-21T00:00:00.000Z",
+      },
+      trust: { verified: true },
+    }));
+    search.list.mockResolvedValueOnce({
+      items: Array.from({ length: 20 }, (_, index) => ({
+        ...candidate(),
+        id: `91000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      })),
+      nextCursor: "ranked-page-2",
+    });
+
+    const result = await resolveFoodBarcode(db.client, catalogSupabase, userId, barcode, "en", vi.fn());
+
+    expect(result.kind).toBe("catalog");
+    if (result.kind !== "catalog") throw new Error("Expected canonical Catalog barcode result.");
+    expect(result.food).toMatchObject({
+      id: survivorId,
+      name: "Canonical yogurt",
+      locale: "en",
+      servingLabel: null,
+      verified: true,
+      nutrition: {
+        calories: 123,
+        protein_g: 11,
+        carbs_g: 7,
+        fat_g: 4,
+        basis_amount: 100,
+        basis_unit: "g",
+      },
+    });
+    expect(search.list).not.toHaveBeenCalled();
+  });
+
 });

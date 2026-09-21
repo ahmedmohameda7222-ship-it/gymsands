@@ -202,4 +202,32 @@ describe("Plan 7 Tasks 9-12 consumer current-truth retirement contract", () => {
     expect(legacy).toMatch(/\.from\(["']food_items["']\)/);
     expect(oldSavedMealHydration).toMatch(/\.from\(["']food_items["']\)/);
   });
+
+  it("keeps selected-serving previews on the same projected nutrition authority as committed handoff", () => {
+    const handoff = source("services/nutrition-v1/server/food-handoff.ts");
+    const browserNutrition = source("services/database/nutrition.ts");
+    const browser = source("components/meals/food-browser.tsx");
+    const detail = source("components/nutrition/food-library/food-detail.tsx");
+    const barcode = source("components/meals/eat-barcode-method.tsx");
+
+    expect(handoff).toContain("nutrition:");
+    expect(browserNutrition).toContain("choice.nutrition");
+    expect(browser).toContain("withCatalogServingChoice(food, selectedServing)");
+    expect(detail).toContain("selectedServingChoice?.nutrition");
+    expect(barcode).toContain("selectedServing?.nutrition");
+  });
+
+  it("keeps canonical barcode presentation independent of bounded ranked discovery", () => {
+    const barcode = source("services/nutrition-v1/server/barcode-lookup.ts");
+    expect(barcode).not.toContain("listFoodLibrary");
+    expect(barcode).not.toContain("limit: 20");
+  });
+
+  it("exposes exact serving identity in the MCP mutation contract", () => {
+    const tools = source("lib/mcp/tools.ts");
+    const execution = source("lib/mcp/nutrition-v1-food-execution.ts");
+    expect(tools).toContain("serving_option_id");
+    expect(execution).toContain('getOptionalString(item, "serving_option_id")');
+  });
+
 });

@@ -101,6 +101,20 @@ describe("MCP runtime input validation", () => {
     expect(validateMcpToolInput(tool("create_custom_food"), { food_name: "x".repeat(301), serving_size: "1", calories: 1, protein_g: 1, carbs_g: 1, fat_g: 1 }).success).toBe(false);
   });
 
+  it("accepts exact serving_option_id in add_food_log item input", () => {
+    const result = validateMcpToolInput(tool("add_food_log"), {
+      meal_type: "Breakfast",
+      idempotency_key: "request-key-0001",
+      items: [{
+        food_name: "Twin cup yogurt",
+        quantity: 1,
+        serving_hint: "1 cup",
+        serving_option_id: validId,
+      }],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects caller identity overrides and undeclared fields", () => {
     const override = validateMcpToolInput(tool("add_water_log"), { amount_ml: 250, user_id: validId });
     expect(override.success).toBe(false);
