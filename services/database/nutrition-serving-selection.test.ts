@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const foodId = "22222222-2222-4222-8222-222222222222";
 const servingId = "33333333-3333-4333-8333-333333333333";
@@ -62,12 +62,27 @@ describe("Plan 7 browser Catalog serving selection", () => {
     db.inserted.length = 0;
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("keeps SearchDocument serving NULL Food discoverable instead of manufacturing nutrition basis as serving", async () => {
     const foods = await getGlobalFoods("yogurt", { limit: 1 });
     expect(foods).toHaveLength(1);
     expect(foods[0]?.food_name).toBe("Catalog yogurt");
     expect(foods[0]?.serving_size).toBe("");
     expect(foods[0]?.calories).toBe(100);
+  });
+
+  it("uses the base language for regional browser Catalog search while preserving the returned exact Name locale", async () => {
+    vi.stubGlobal("navigator", { language: "en-US" });
+
+    const foods = await getGlobalFoods("", { limit: 1 });
+
+    expect(db.rpc).toHaveBeenCalledWith("search_food_catalog_v2", expect.objectContaining({
+      p_language_tag: "en",
+    }));
+    expect(foods[0]?.locale).toBe("en");
   });
 
   it("auto-selects the one authoritative generation serving before Diary handoff and carries servingOptionId", async () => {
