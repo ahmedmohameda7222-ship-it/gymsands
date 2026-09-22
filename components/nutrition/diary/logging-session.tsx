@@ -20,6 +20,7 @@ type CatalogServingChoice = {
   servingOptionId: string | null;
   label: string;
   source: "generation" | "owner_override";
+  nutrition?: FoodLibraryCandidate["nutrition"];
 };
 
 type CatalogServingState = {
@@ -394,6 +395,7 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
   const barcodeSelectedChoice = barcodeChoices.find((choice) => servingChoiceKey(choice) === barcodeServingKey)
     ?? (barcodeChoices.length === 1 ? barcodeChoices[0]! : null);
   const barcodeCanAdd = barcodeFood?.source === "catalog" && barcodeChoices.length > 0 && Boolean(barcodeSelectedChoice);
+  const barcodePreviewCalories = barcodeSelectedChoice?.nutrition?.calories ?? barcodeFood?.calories ?? null;
 
   return (
     <div dir={dir} className="fixed inset-0 z-50 bg-black/45 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={dialogLabel}>
@@ -409,10 +411,13 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
               const catalogUnavailable = servingState?.choices.length === 0;
               const catalogAmbiguous = Boolean(servingState && servingState.choices.length > 1 && !selectedChoice);
               const displayServing = food.source === "catalog" ? selectedChoice?.label ?? food.servingLabel : food.servingLabel;
+              const previewNutrition = food.source === "catalog" && selectedChoice?.nutrition
+                ? selectedChoice.nutrition
+                : food.nutrition;
               return <div key={`${food.source}:${food.id}`} className="flex min-h-[72px] items-center gap-3 py-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold"><bdi dir="auto">{food.name}</bdi></p>
-                  <p className="text-xs text-muted-foreground">{displayServing ? <><bdi dir="auto">{displayServing}</bdi> · </> : null}{food.nutrition.calories ?? "—"} kcal · {et("protein")} {food.nutrition.protein_g ?? "—"} g</p>
+                  <p className="text-xs text-muted-foreground">{displayServing ? <><bdi dir="auto">{displayServing}</bdi> · </> : null}{previewNutrition.calories ?? "—"} kcal · {et("protein")} {previewNutrition.protein_g ?? "—"} g</p>
                   {food.source === "catalog" && servingState?.choices.length && servingState.choices.length > 1 ? <select
                     aria-label={`Authoritative serving for ${food.name}`}
                     value={servingState.selectedKey}
@@ -438,7 +443,7 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
             })}</div>}</section> : null}
           {mode === "barcode" ? <section className="space-y-3"><h3 className="font-semibold">{et("barcode")}</h3><p className="text-sm text-muted-foreground">{text.scanOrEnter}</p><div className="flex gap-2"><input inputMode="numeric" value={barcode} onChange={(event) => { setBarcode(event.target.value.replace(/\D/g, "")); setBarcodeFood(null); setBarcodeServingKey(""); }} placeholder={et("barcodePlaceholder")} className="min-h-12 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><button type="button" onClick={() => void lookupBarcode()} className="min-h-12 rounded-xl border border-border px-4 text-sm font-medium">{et("lookup")}</button></div>{barcodeFood ? <div className="space-y-3 border-y border-border py-3">
               <div className="flex items-center gap-3">
-                <div className="min-w-0 flex-1"><p className="font-semibold"><bdi dir="auto">{barcodeFood.name}</bdi></p><p className="text-sm text-muted-foreground"><bdi dir="auto">{barcodeSelectedChoice?.label ?? barcodeFood.servingSize ?? et("serving")}</bdi> · {barcodeFood.calories ?? "—"} kcal</p></div>
+                <div className="min-w-0 flex-1"><p className="font-semibold"><bdi dir="auto">{barcodeFood.name}</bdi></p><p className="text-sm text-muted-foreground"><bdi dir="auto">{barcodeSelectedChoice?.label ?? barcodeFood.servingSize ?? et("serving")}</bdi> · {barcodePreviewCalories ?? "—"} kcal</p></div>
                 <button type="button" disabled={!barcodeCanAdd} onClick={() => void addBarcodeFood()} className="min-h-11 rounded-xl bg-foreground px-4 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-40">{text.addToPlate}</button>
               </div>
               {barcodeFood.source === "catalog" && barcodeChoices.length > 1 ? <select
