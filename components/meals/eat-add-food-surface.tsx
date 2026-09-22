@@ -191,10 +191,7 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
     return () => { active = false; window.clearTimeout(timer); };
   }, [category, query, user?.id]);
 
-  async function catalogFoodForNewUse(food: FoodItem) {
-    if (!food.is_global) return food;
-    const catalogFood = food as CatalogFoodItem;
-
+  async function catalogFoodForNewUse(catalogFood: CatalogFoodItem): Promise<CatalogFoodItem | null> {
     let choices = catalogServingChoices[catalogFood.id];
     if (choices === undefined) {
       const selection = await getCatalogNewUseSelection(catalogFood);
@@ -238,7 +235,7 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
     try {
       let saved: FoodLog;
       if (food.is_global) {
-        const resolvedFood = await catalogFoodForNewUse(food);
+        const resolvedFood = await catalogFoodForNewUse(food as CatalogFoodItem);
         if (!resolvedFood) return;
         setFeedback({ type: "info", message: et("logging") });
         saved = await addGlobalFoodToToday({ userId: user.id, food: resolvedFood, quantity, mealType, date });
