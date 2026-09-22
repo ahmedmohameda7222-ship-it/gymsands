@@ -160,6 +160,11 @@ function browserLocale() {
   return typeof navigator === "undefined" || !navigator.language.trim() ? "en" : navigator.language;
 }
 
+function browserCatalogSearchLanguageTag() {
+  const locale = browserLocale().trim().replace(/_/g, "-");
+  return locale.split("-")[0]?.trim() || "en";
+}
+
 function isCatalogSearchPage(value: unknown): value is CatalogSearchPage {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const page = value as Record<string, unknown>;
@@ -204,7 +209,7 @@ async function searchCurrentCatalog(
   do {
     const searchResult = await supabase.rpc("search_food_catalog_v2", {
       p_query: query.trim(),
-      p_language_tag: browserLocale(),
+      p_language_tag: browserCatalogSearchLanguageTag(),
       p_script_code: null,
       p_market_scope_code: null,
       p_cursor: cursor,
