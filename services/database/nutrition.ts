@@ -196,14 +196,16 @@ function normalizeCatalogSearchFood(food: CatalogSearchCandidate): CatalogFoodIt
   };
 }
 
-async function searchCurrentCatalog(
+async function searchCurrentCatalogCandidates(
   query: string,
-  options: { category?: string; cuisine?: string; limit?: number } = {}
-): Promise<CatalogFoodItem[]> {
+  options: { category?: string; cuisine?: string; limit?: number } = {},
+  accepts: (candidate: CatalogSearchCandidate) => boolean = () => true,
+): Promise<CatalogSearchCandidate[]> {
   if (!supabase) throw new Error("Database not connected");
   const target = Math.max(1, Math.min(80, Math.trunc(options.limit ?? 36)));
-  const foods: CatalogFoodItem[] = [];
+  const candidates: CatalogSearchCandidate[] = [];
   let cursor: string | null = null;
+  const seenCursors = new Set<string>();
 
   do {
     const searchResult = await supabase.rpc("search_food_catalog_v2", {
@@ -212,7 +214,7 @@ async function searchCurrentCatalog(
       p_script_code: null,
       p_market_scope_code: null,
       p_cursor: cursor,
-      p_limit: Math.min(20, target - foods.length),
+      p_limit: Math.min(20, target - candidates.length),
       p_category: options.category?.trim() || null,
       p_cuisine: options.cuisine?.trim() || null,
       p_scope: "all",
@@ -224,14 +226,34 @@ async function searchCurrentCatalog(
     if (!isCatalogSearchPage(data)) throw new Error("Food Catalog V2 search returned an invalid page.");
 
     for (const item of data.items) {
-      if (item.source !== "catalog") continue;
-      foods.push(normalizeCatalogSearchFood(item));
-      if (foods.length >= target) break;
+      if (!accepts(item)) continue;
+      candidates.push(item);
+      if (candidates.length >= target) break;
     }
-    cursor = data.nextCursor;
-  } while (cursor && foods.length < target);
 
-  return foods;
+    const nextCursor = data.nextCursor;
+    if (nextCursor !== null) {
+      if (seenCursors.has(nextCursor) || nextCursor === cursor) {
+        throw new Error("Food Catalog V2 search returned a repeated cursor.");
+      }
+      seenCursors.add(nextCursor);
+    }
+    cursor = nextCursor;
+  } while (cursor && candidates.length < target);
+
+  return candidates;
+}
+
+async function searchCurrentCatalog(
+  query: string,
+  options: { category?: string; cuisine?: string; limit?: number } = {}
+): Promise<CatalogFoodItem[]> {
+  const candidates = await searchCurrentCatalogCandidates(
+    query,
+    options,
+    (candidate) => candidate.source === "catalog",
+  );
+  return candidates.map(normalizeCatalogSearchFood);
 }
 
 export async function getFoodCategories() {
@@ -779,28 +801,39 @@ export async function getFoodLibrary(
   query = "",
   options: { category?: string; kitchen?: string; kitchenId?: string; subcategoryId?: string; limit?: number } = {}
 ): Promise<FoodLibraryItem[]> {
-  const [globalFoods, userFoods] = await Promise.all([
-    getGlobalFoods(query, { category: options.category, kitchen: options.kitchen, kitchenId: options.kitchenId, subcategoryId: options.subcategoryId, limit: options.limit ?? 60 }),
-    getUserFoods(userId)
-  ]);
-  const normalizedQuery = normalizeText(query);
-  const foods: FoodLibraryItem[] = [...globalFoods, ...userFoods];
-  return foods.filter((food) => {
-    const matchesQuery = !normalizedQuery || normalizeText(food.food_name).includes(normalizedQuery);
-    const matchesCategory = !options.category || food.category === options.category;
-    if (food.is_global !== false) {
-      // V2 catalog rows are generation/domain projections. Legacy kitchen and
-      // subcategory IDs are not canonical Food metadata and must not filter them.
-      return matchesQuery && matchesCategory;
-    }
+  const userFoods = await getUserFoods(userId);
+  const userFoodsById = new Map(userFoods.map((food) => [food.id, food]));
+  const matchesLegacyOwnerFilters = (food: UserFoodItem) => {
     const matchesKitchen =
       !options.kitchenId
       || food.kitchen_id === options.kitchenId
       || (food.cuisine === egyptianFoodKitchenName && options.kitchen === egyptianFoodKitchenName);
     const matchesLegacyKitchen = !options.kitchen || food.cuisine === options.kitchen || food.kitchen_id === options.kitchen;
     const matchesSubcategory = !options.subcategoryId || food.subcategory_id === options.subcategoryId || food.category === options.category;
-    return matchesQuery && matchesCategory && matchesKitchen && matchesLegacyKitchen && matchesSubcategory;
-  }).slice(0, options.limit ?? 80);
+    return matchesKitchen && matchesLegacyKitchen && matchesSubcategory;
+  };
+
+  const rankedCandidates = await searchCurrentCatalogCandidates(
+    query,
+    { category: options.category, limit: options.limit ?? 60 },
+    (candidate) => {
+      if (candidate.source === "catalog") return true;
+      const ownerFood = userFoodsById.get(candidate.id);
+      return ownerFood !== undefined && matchesLegacyOwnerFilters(ownerFood);
+    },
+  );
+
+  const foods: FoodLibraryItem[] = rankedCandidates.flatMap((candidate) => {
+    if (candidate.source === "catalog") {
+      // Catalog V2 already applied query/alias/category authority and ranking.
+      // Do not re-filter selected display text locally or alias-only matches disappear.
+      return [normalizeCatalogSearchFood(candidate)];
+    }
+    const ownerFood = userFoodsById.get(candidate.id);
+    return ownerFood ? [ownerFood] : [];
+  });
+
+  return foods.slice(0, options.limit ?? 80);
 }
 
 export async function upsertUserFood(input: UserFoodInput) {
