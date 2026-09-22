@@ -60,7 +60,12 @@ function catalogFood() {
   };
 }
 
-function selection(choices: Array<{ servingOptionId: string | null; label: string; source: "generation" | "owner_override" }>) {
+function selection(choices: Array<{
+  servingOptionId: string | null;
+  label: string;
+  source: "generation" | "owner_override";
+  nutrition?: ReturnType<typeof catalogFood>["nutrition"];
+}>) {
   return { foodId: FOOD_ID, name: "Canonical yogurt", languageTag: "de", servingChoices: choices };
 }
 
@@ -197,8 +202,18 @@ describe("Diary LoggingSession authoritative Catalog serving selection", () => {
       }
       if (url.includes("/selection?")) {
         return new Response(JSON.stringify(selection([
-          { servingOptionId: SERVING_A, label: "170 g", source: "generation" },
-          { servingOptionId: SERVING_B, label: "1 cup", source: "generation" },
+          {
+            servingOptionId: SERVING_A,
+            label: "170 g",
+            source: "generation",
+            nutrition: { ...catalogFood().nutrition, calories: 170, protein_g: 17, carbs_g: 20.4, fat_g: 3.4, basis_amount: 1, basis_unit: "serving" },
+          },
+          {
+            servingOptionId: SERVING_B,
+            label: "1 cup",
+            source: "generation",
+            nutrition: { ...catalogFood().nutrition, calories: 240, protein_g: 24, carbs_g: 28.8, fat_g: 4.8, basis_amount: 1, basis_unit: "serving" },
+          },
         ])), { status: 200 });
       }
       if (url.includes("/handoff?")) return new Response(JSON.stringify(handoff("1 cup")), { status: 200 });
@@ -215,6 +230,10 @@ describe("Diary LoggingSession authoritative Catalog serving selection", () => {
     expect(host.querySelector('aside[aria-label="Plate"]')).toBeNull();
 
     await act(async () => { setSelectValue(select as HTMLSelectElement, SERVING_B); });
+    await flush();
+    expect(host.textContent).toContain("1 cup · 240 kcal · protein 24 g");
+    expect(host.textContent).not.toContain("1 cup · 100 kcal · protein 10 g");
+
     await act(async () => { button(host, "add").click(); });
     await flush();
 
@@ -238,8 +257,18 @@ describe("Diary LoggingSession authoritative Catalog serving selection", () => {
           locale: "de",
           servingSize: null,
           servingChoices: [
-            { servingOptionId: SERVING_A, label: "170 g", source: "generation" },
-            { servingOptionId: SERVING_B, label: "1 cup", source: "generation" },
+            {
+              servingOptionId: SERVING_A,
+              label: "170 g",
+              source: "generation",
+              nutrition: { ...catalogFood().nutrition, calories: 170, protein_g: 17, carbs_g: 20.4, fat_g: 3.4, basis_amount: 1, basis_unit: "serving" },
+            },
+            {
+              servingOptionId: SERVING_B,
+              label: "1 cup",
+              source: "generation",
+              nutrition: { ...catalogFood().nutrition, calories: 240, protein_g: 24, carbs_g: 28.8, fat_g: 4.8, basis_amount: 1, basis_unit: "serving" },
+            },
           ],
           calories: 100, protein: 10, carbs: 12, fat: 2,
         } }), { status: 200 });
@@ -264,6 +293,9 @@ describe("Diary LoggingSession authoritative Catalog serving selection", () => {
     expect(add.disabled).toBe(true);
 
     await act(async () => { setSelectValue(select as HTMLSelectElement, SERVING_B); });
+    await flush();
+    expect(host.textContent).toContain("1 cup · 240 kcal");
+    expect(host.textContent).not.toContain("1 cup · 100 kcal");
     expect(button(host, "Add to Plate").disabled).toBe(false);
     await act(async () => { button(host, "Add to Plate").click(); });
     await flush();
