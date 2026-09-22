@@ -312,6 +312,16 @@ describe("Food Catalog Plan 3 exact current-generation service", () => {
     await expect(getCurrentGenerationFood(nonActiveStore, OLD_FOOD_ID)).rejects.toSatisfy(expectGenerationError("INVALID_REDIRECT"));
   });
 
+  it("does not load report-wide validation findings during direct current-Food resolution", async () => {
+    const store = makeStore();
+
+    const view = await getCurrentGenerationFood(store, FOOD_ID);
+
+    expect(view.trust.verified).toBe(true);
+    expect(store.readValidationReport).toHaveBeenCalledWith(REPORT_ID);
+    expect(store.readValidationFindings).not.toHaveBeenCalled();
+  });
+
   it("derives trust only from selected assertions and the pointer-bound validation report", async () => {
     const store = makeStore({
       readVerificationAssertions: vi.fn(async (_foodId: string, selected: StoredGenerationSelections["verification"]) => {
