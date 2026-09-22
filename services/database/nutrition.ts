@@ -204,7 +204,6 @@ async function searchCurrentCatalog(
   const target = Math.max(1, Math.min(80, Math.trunc(options.limit ?? 36)));
   const foods: CatalogFoodItem[] = [];
   let cursor: string | null = null;
-  let pageCount = 0;
 
   do {
     const searchResult = await supabase.rpc("search_food_catalog_v2", {
@@ -230,8 +229,7 @@ async function searchCurrentCatalog(
       if (foods.length >= target) break;
     }
     cursor = data.nextCursor;
-    pageCount += 1;
-  } while (cursor && foods.length < target && pageCount < 10);
+  } while (cursor && foods.length < target);
 
   return foods;
 }
@@ -466,9 +464,11 @@ export async function getCatalogNewUseSelection(
       : "Catalog serving selection could not be loaded.";
     throw new Error(message);
   }
-  const selection = parseCatalogNewUseSelection(body);
-  if (selection.foodId !== food.id) throw new Error("Catalog serving selection returned the wrong Food identity.");
-  return selection;
+  // The server may resolve a stale search-result Food ID through the current
+  // generation's flattened redirect authority and return the survivor ID.
+  // The browser cannot re-prove that relation; the authenticated server
+  // selection/handoff boundaries remain authoritative for current identity.
+  return parseCatalogNewUseSelection(body);
 }
 
 export function withCatalogServingChoice(
