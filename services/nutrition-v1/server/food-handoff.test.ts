@@ -118,7 +118,6 @@ function view(overrides: Partial<CurrentGenerationFoodView> = {}): CurrentGenera
     },
     currentEvent: {} as CurrentGenerationFoodView["currentEvent"],
     validationReport: {} as CurrentGenerationFoodView["validationReport"],
-    validationFindings: [],
     requestedFoodId: overrides.requestedFoodId ?? foodId,
     resolvedFoodId,
     food: {
