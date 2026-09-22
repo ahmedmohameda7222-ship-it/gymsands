@@ -71,7 +71,7 @@ describe("Plan 7 Tasks 9-12 consumer current-truth retirement contract", () => {
     const nutrition = source("services/database/nutrition.ts");
     const globalReads = section(
       "services/database/nutrition.ts",
-      "async function searchCurrentCatalog(",
+      "async function searchCurrentCatalogCandidates(",
       "export async function getCalorieTargets",
     );
     const globalLog = section(
