@@ -14,7 +14,16 @@ import { findCopyDuplicates, supportedServingOptions, type RepeatFoodOption, typ
 import { formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
 import { isUuid } from "@/lib/utils";
-import { addCustomFoodLog, addGlobalFoodToToday, getCustomMeals, getFoodCategories, getFoodLibrary } from "@/services/database/nutrition";
+import {
+  addCustomFoodLog,
+  addGlobalFoodToToday,
+  getCatalogNewUseSelection,
+  getCustomMeals,
+  getFoodCategories,
+  getFoodLibrary,
+  withCatalogServingChoice,
+  type BrowserCatalogServingChoice,
+} from "@/services/database/nutrition";
 import { copyEatFoodLogs, getEatFoodLogs, logRepeatFood } from "@/services/database/eat";
 import { logSavedMealToEat } from "@/services/database/eat-food-logging";
 import { scaleFoodMacros } from "@/services/nutrition/calculations";
@@ -162,8 +171,14 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [state, setState] = useState<"loading" | "loaded" | "failed">("loading");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [catalogServingChoices, setCatalogServingChoices] = useState<Record<string, BrowserCatalogServingChoice[]>>({});
+  const [catalogServingChoiceKeys, setCatalogServingChoiceKeys] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
+
+  function servingChoiceKey(choice: BrowserCatalogServingChoice) {
+    return choice.servingOptionId ?? `owner:${choice.label}`;
+  }
 
   useEffect(() => { void getFoodCategories().then(setCategories).catch(() => setCategories([])); }, []);
   useEffect(() => {
@@ -176,26 +191,71 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
     return () => { active = false; window.clearTimeout(timer); };
   }, [category, query, user?.id]);
 
+  async function catalogFoodForNewUse(food: FoodItem) {
+    if (!food.is_global) return food;
+
+    let choices = catalogServingChoices[food.id];
+    if (choices === undefined) {
+      const selection = await getCatalogNewUseSelection(food);
+      choices = selection.servingChoices;
+      setCatalogServingChoices((current) => ({ ...current, [food.id]: choices! }));
+
+      if (choices.length === 1) {
+        const choice = choices[0]!;
+        setCatalogServingChoiceKeys((current) => ({ ...current, [food.id]: servingChoiceKey(choice) }));
+        return withCatalogServingChoice(food, choice);
+      }
+      if (choices.length === 0) {
+        setFeedback({ type: "error", message: "No authoritative serving is available yet." });
+        return null;
+      }
+      setFeedback({ type: "info", message: "Choose an authoritative serving before logging this Food." });
+      return null;
+    }
+
+    if (choices.length === 0) {
+      setFeedback({ type: "error", message: "No authoritative serving is available yet." });
+      return null;
+    }
+
+    const selectedKey = catalogServingChoiceKeys[food.id] ?? "";
+    const selectedChoice = choices.find((choice) => servingChoiceKey(choice) === selectedKey)
+      ?? (choices.length === 1 ? choices[0]! : null);
+    if (!selectedChoice) {
+      setFeedback({ type: "info", message: "Choose an authoritative serving before logging this Food." });
+      return null;
+    }
+    return withCatalogServingChoice(food, selectedChoice);
+  }
+
   async function log(food: FoodItem) {
     if (!user?.id || pending) return;
     const quantity = quantities[food.id] ?? 1;
     if (!Number.isFinite(quantity) || quantity <= 0) { setFeedback({ type: "error", message: et("quantityPositive") }); return; }
-    setPending(food.id); setFeedback({ type: "info", message: et("logging") });
+    setPending(food.id);
+    setFeedback(null);
     try {
-      const saved = food.is_global
-        ? await addGlobalFoodToToday({ userId: user.id, food, quantity, mealType, date })
-        : await addCustomFoodLog({
-            user_id: user.id,
-            food_item_id: null,
-            user_food_item_id: isUuid(food.id) ? food.id : null,
-            log_date: date,
-            meal_type: mealType,
-            food_name: food.food_name,
-            serving_size: food.serving_size,
-            quantity,
-            ...scaleFoodMacros(food, quantity),
-            notes: null
-          });
+      let saved: FoodLog;
+      if (food.is_global) {
+        const resolvedFood = await catalogFoodForNewUse(food);
+        if (!resolvedFood) return;
+        setFeedback({ type: "info", message: et("logging") });
+        saved = await addGlobalFoodToToday({ userId: user.id, food: resolvedFood, quantity, mealType, date });
+      } else {
+        setFeedback({ type: "info", message: et("logging") });
+        saved = await addCustomFoodLog({
+          user_id: user.id,
+          food_item_id: null,
+          user_food_item_id: isUuid(food.id) ? food.id : null,
+          log_date: date,
+          meal_type: mealType,
+          food_name: food.food_name,
+          serving_size: food.serving_size,
+          quantity,
+          ...scaleFoodMacros(food, quantity),
+          notes: null
+        });
+      }
       onLogged(saved); setFeedback({ type: "info", message: et("logged") });
     }
     catch { setFeedback({ type: "error", message: et("saveFailed") }); }
@@ -205,7 +265,51 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
   return <div className="space-y-4">
     <div className="grid gap-2 sm:grid-cols-[1fr_180px]"><Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={et("foodSearchPlaceholder")} aria-label={et("searchFoods")} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="h-12 rounded-[14px] border border-input bg-card px-3 text-sm" aria-label={et("allCategories")}><option value="">{et("allCategories")}</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
     {state === "loading" ? <p className="text-sm text-muted-foreground">{et("loading")}</p> : state === "failed" ? <p className="text-sm text-destructive">{et("searchFailed")}</p> : !foods.length ? <p className="text-sm text-muted-foreground">{et("noFoods")}</p> : null}
-    <div className="grid gap-3">{foods.map((food) => { const quantity = quantities[food.id] ?? 1; const macros = scaleFoodMacros(food, quantity); const serving = supportedServingOptions(food)[0]; return <Card key={food.id}><CardContent className="space-y-3 p-3"><div><p className="font-semibold">{food.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{serving.label} · {et("storedServingOnly")}</p><p className="mt-2 text-sm">{nullableEnergy(macros.calories, energyUnit, locale)} · P {nullableMacro(macros.protein_g)} · C {nullableMacro(macros.carbs_g)} · F {nullableMacro(macros.fat_g)}</p></div><div className="grid gap-2 sm:grid-cols-[120px_1fr]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantities((current) => ({ ...current, [food.id]: Number(event.target.value) }))} aria-label={`${et("quantity")} · ${food.food_name}`} /><Button type="button" className="min-h-12" onClick={() => void log(food)} disabled={Boolean(pending)}>{pending === food.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></div></CardContent></Card>; })}</div>
+    <div className="grid gap-3">{foods.map((food) => {
+      const quantity = quantities[food.id] ?? 1;
+      const choices = food.is_global ? catalogServingChoices[food.id] : undefined;
+      const selectedKey = catalogServingChoiceKeys[food.id] ?? "";
+      const selectedChoice = choices?.find((choice) => servingChoiceKey(choice) === selectedKey)
+        ?? (choices?.length === 1 ? choices[0]! : null);
+      const previewFood = food.is_global && selectedChoice ? withCatalogServingChoice(food, selectedChoice) : food;
+      const macros = scaleFoodMacros(previewFood, quantity);
+      const storedServing = !food.is_global ? supportedServingOptions(food)[0] : null;
+      const servingText = food.is_global
+        ? selectedChoice?.label
+          ?? (choices === undefined
+            ? "Serving selection required"
+            : choices.length === 0
+              ? "No authoritative serving is available yet."
+              : "Choose an authoritative serving")
+        : storedServing.label;
+      const servingBlocked = food.is_global
+        && choices !== undefined
+        && (choices.length === 0 || (choices.length > 1 && !selectedChoice));
+
+      return <Card key={food.id}><CardContent className="space-y-3 p-3">
+        <div>
+          <p className="font-semibold">{food.food_name}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{servingText}{!food.is_global ? ` · ${et("storedServingOnly")}` : ""}</p>
+          <p className="mt-2 text-sm">{nullableEnergy(macros.calories, energyUnit, locale)} · P {nullableMacro(macros.protein_g)} · C {nullableMacro(macros.carbs_g)} · F {nullableMacro(macros.fat_g)}</p>
+        </div>
+        {food.is_global && choices && choices.length > 1 ? <label className="grid gap-1 text-sm font-medium">
+          <span>{et("serving")}</span>
+          <select
+            value={selectedKey}
+            onChange={(event) => setCatalogServingChoiceKeys((current) => ({ ...current, [food.id]: event.target.value }))}
+            className="h-11 rounded-xl border border-border bg-background px-3"
+            aria-label={`Authoritative serving for ${food.food_name}`}
+          >
+            <option value="">Choose a serving</option>
+            {choices.map((choice) => <option key={servingChoiceKey(choice)} value={servingChoiceKey(choice)}>{choice.label}</option>)}
+          </select>
+        </label> : null}
+        <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
+          <Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantities((current) => ({ ...current, [food.id]: Number(event.target.value) }))} aria-label={`${et("quantity")} · ${food.food_name}`} />
+          <Button type="button" className="min-h-12" onClick={() => void log(food)} disabled={Boolean(pending) || servingBlocked}>{pending === food.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button>
+        </div>
+      </CardContent></Card>;
+    })}</div>
     <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} />
   </div>;
 }
