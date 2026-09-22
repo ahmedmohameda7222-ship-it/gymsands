@@ -64,7 +64,7 @@ export function FoodRow({
       </button>
       <div className="flex shrink-0 items-center gap-1">
         {food.source === "catalog" ? <button type="button" onClick={onFavorite} className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted" aria-label={food.favorite ? nt("removeFavorite") : nt("favoriteFood")}><Star className={`h-4 w-4 ${food.favorite ? "fill-current" : ""}`} /></button> : null}
-        <button type="button" onClick={onAdd} disabled={!food.servingLabel} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40" aria-label={nt("addFoodNamed", { name: food.name })}><Plus className="h-4 w-4" /></button>
+        <button type="button" onClick={onAdd} disabled={food.source === "my_food" && !food.servingLabel} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40" aria-label={nt("addFoodNamed", { name: food.name })}><Plus className="h-4 w-4" /></button>
       </div>
     </div>
   );
