@@ -28,7 +28,7 @@ import { copyEatFoodLogs, getEatFoodLogs, logRepeatFood } from "@/services/datab
 import { logSavedMealToEat } from "@/services/database/eat-food-logging";
 import { scaleFoodMacros } from "@/services/nutrition/calculations";
 import type { UserAppSettings } from "@/services/database/user-settings";
-import type { CustomMeal, FoodItem, FoodLog, MealType } from "@/types";
+import type { CatalogFoodItem, CustomMeal, FoodItem, FoodLog, MealType } from "@/types";
 
 type AddFoodViewName = "home" | "repeat" | "search" | "saved-meals" | "barcode" | "custom" | "photo" | "copy-day";
 
@@ -193,17 +193,18 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
 
   async function catalogFoodForNewUse(food: FoodItem) {
     if (!food.is_global) return food;
+    const catalogFood = food as CatalogFoodItem;
 
-    let choices = catalogServingChoices[food.id];
+    let choices = catalogServingChoices[catalogFood.id];
     if (choices === undefined) {
       const selection = await getCatalogNewUseSelection(food);
       choices = selection.servingChoices;
-      setCatalogServingChoices((current) => ({ ...current, [food.id]: choices! }));
+      setCatalogServingChoices((current) => ({ ...current, [catalogFood.id]: choices! }));
 
       if (choices.length === 1) {
         const choice = choices[0]!;
-        setCatalogServingChoiceKeys((current) => ({ ...current, [food.id]: servingChoiceKey(choice) }));
-        return withCatalogServingChoice(food, choice);
+        setCatalogServingChoiceKeys((current) => ({ ...current, [catalogFood.id]: servingChoiceKey(choice) }));
+        return withCatalogServingChoice(catalogFood, choice);
       }
       if (choices.length === 0) {
         setFeedback({ type: "error", message: "No authoritative serving is available yet." });
@@ -218,14 +219,14 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
       return null;
     }
 
-    const selectedKey = catalogServingChoiceKeys[food.id] ?? "";
+    const selectedKey = catalogServingChoiceKeys[catalogFood.id] ?? "";
     const selectedChoice = choices.find((choice) => servingChoiceKey(choice) === selectedKey)
       ?? (choices.length === 1 ? choices[0]! : null);
     if (!selectedChoice) {
       setFeedback({ type: "info", message: "Choose an authoritative serving before logging this Food." });
       return null;
     }
-    return withCatalogServingChoice(food, selectedChoice);
+    return withCatalogServingChoice(catalogFood, selectedChoice);
   }
 
   async function log(food: FoodItem) {
@@ -273,7 +274,7 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
         ?? (choices?.length === 1 ? choices[0]! : null);
       const previewFood = food.is_global && selectedChoice ? withCatalogServingChoice(food, selectedChoice) : food;
       const macros = scaleFoodMacros(previewFood, quantity);
-      const storedServing = !food.is_global ? supportedServingOptions(food)[0] : null;
+      const storedServingLabel = !food.is_global ? supportedServingOptions(food)[0].label : null;
       const servingText = food.is_global
         ? selectedChoice?.label
           ?? (choices === undefined
@@ -281,7 +282,7 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
             : choices.length === 0
               ? "No authoritative serving is available yet."
               : "Choose an authoritative serving")
-        : storedServing.label;
+        : storedServingLabel ?? food.serving_size;
       const servingBlocked = food.is_global
         && choices !== undefined
         && (choices.length === 0 || (choices.length > 1 && !selectedChoice));
