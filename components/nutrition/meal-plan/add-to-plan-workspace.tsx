@@ -17,6 +17,43 @@ type SearchResult =
   | { kind: "recipe"; id: string; name: string; detail: string; value: RecipeHomeRecord }
   | { kind: "saved_meal"; id: string; name: string; detail: string; value: DiarySavedMealChoice };
 type BarcodeFood = { name: string; brand?: string | null };
+type CatalogServingChoice = {
+  servingOptionId: string | null;
+  label: string;
+  source: "generation" | "owner_override";
+};
+type CatalogServingSelection = {
+  foodId: string;
+  name: string;
+  languageTag: string;
+  servingChoices: CatalogServingChoice[];
+};
+type CatalogServingState = {
+  choices: CatalogServingChoice[];
+  selectedKey: string;
+};
+type CatalogFoodHandoff = {
+  foodId: string;
+  name: string;
+  serving: string;
+  quantity: number;
+  frozenNutrition: {
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+    fiber_g: number | null;
+  };
+  frozenSourceSnapshot: Record<string, unknown>;
+};
+
+function servingChoiceKey(choice: CatalogServingChoice) {
+  return choice.servingOptionId ?? "__owner_override__";
+}
+
+function catalogServingStateKey(food: Pick<FoodLibraryCandidate, "id" | "name" | "locale">) {
+  return [food.id, food.name, food.locale].join("|");
+}
 
 function diaryNutrition(nutrition: { calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null } | null | undefined) {
   return { caloriesKcal: nutrition?.calories ?? null, proteinG: nutrition?.protein_g ?? null, carbsG: nutrition?.carbs_g ?? null, fatG: nutrition?.fat_g ?? null };
@@ -29,6 +66,42 @@ function foodMutation(food: FoodLibraryCandidate, date: string, mealSlotKey: str
   return {
     planDate: date, mealSlotKey, sourceType: "food", sourceId: food.id, resolvedQuantity: 1, resolvedServingLabel: servingLabel, frozenName: food.name,
     frozenSnapshot: { food_id: food.id, frozen_name: food.name, resolved_quantity: 1, resolved_serving_label: servingLabel, frozen_nutrition: frozenNutrition, verified: food.verified, items: [{ foodName: food.name, servingLabel, quantity: 1, nutrition: diaryNutrition(frozenNutrition) }], shoppingIngredients: [{ foodId: food.id, name: food.name, quantity: 1, unit: servingLabel, qualifier: null }] },
+  };
+}
+
+function catalogFoodMutation(
+  handoff: CatalogFoodHandoff,
+  verified: boolean,
+  date: string,
+  mealSlotKey: string,
+): MealPlanOccurrenceMutation {
+  return {
+    planDate: date,
+    mealSlotKey,
+    sourceType: "food",
+    sourceId: handoff.foodId,
+    resolvedQuantity: handoff.quantity,
+    resolvedServingLabel: handoff.serving,
+    frozenName: handoff.name,
+    frozenSnapshot: {
+      ...handoff.frozenSourceSnapshot,
+      verified,
+      items: [{
+        foodName: handoff.name,
+        servingLabel: handoff.serving,
+        quantity: handoff.quantity,
+        nutrition: diaryNutrition(handoff.frozenNutrition),
+        foodItemId: handoff.foodId,
+        userFoodItemId: null,
+      }],
+      shoppingIngredients: [{
+        foodId: handoff.foodId,
+        name: handoff.name,
+        quantity: handoff.quantity,
+        unit: handoff.serving,
+        qualifier: null,
+      }],
+    },
   };
 }
 
@@ -45,6 +118,7 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: { d
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>("all");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [catalogServingStates, setCatalogServingStates] = useState<Record<string, CatalogServingState>>({});
   const [selectedItems, setSelectedItems] = useState<MealPlanOccurrenceMutation[]>([]);
   const [placeholderName, setPlaceholderName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -99,9 +173,58 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: { d
 
   async function selectResult(result: SearchResult) {
     if (result.kind === "food") {
-      if (!result.value.servingLabel) { setError(`${result.value.name}: ${nt("notAvailable")}`); return; }
-      setSelectedItems((current) => [...current, foodMutation(result.value, date, mealSlotKey)]);
-      setError("");
+      if (result.value.source === "my_food") {
+        if (!result.value.servingLabel) { setError(`${result.value.name}: ${nt("notAvailable")}`); return; }
+        setSelectedItems((current) => [...current, foodMutation(result.value, date, mealSlotKey)]);
+        setError("");
+        return;
+      }
+
+      try {
+        const stateKey = catalogServingStateKey(result.value);
+        let servingState = catalogServingStates[stateKey];
+        if (!servingState) {
+          const selectionParams = new URLSearchParams({
+            displayName: result.value.name,
+            languageTag: result.value.locale,
+          });
+          const selection = await mealPlanApi<CatalogServingSelection>(
+            `/api/nutrition/v1/foods/${encodeURIComponent(result.value.id)}/selection?${selectionParams.toString()}`,
+          );
+          servingState = {
+            choices: selection.servingChoices,
+            selectedKey: selection.servingChoices.length === 1 ? servingChoiceKey(selection.servingChoices[0]!) : "",
+          };
+          setCatalogServingStates((current) => ({ ...current, [stateKey]: servingState! }));
+        }
+
+        if (!servingState.choices.length) {
+          setError("No authoritative serving is available yet.");
+          return;
+        }
+        const selectedChoice = servingState.choices.find((choice) => servingChoiceKey(choice) === servingState.selectedKey)
+          ?? (servingState.choices.length === 1 ? servingState.choices[0]! : null);
+        if (!selectedChoice) {
+          setError("Choose an authoritative serving");
+          return;
+        }
+
+        const handoffParams = new URLSearchParams({
+          source: "catalog",
+          quantity: "1",
+          serving: selectedChoice.label,
+          displayName: result.value.name,
+          languageTag: result.value.locale,
+        });
+        if (selectedChoice.servingOptionId) handoffParams.set("servingOptionId", selectedChoice.servingOptionId);
+        const handoff = await mealPlanApi<CatalogFoodHandoff>(
+          `/api/nutrition/v1/foods/${encodeURIComponent(result.value.id)}/handoff?${handoffParams.toString()}`,
+        );
+        setSelectedItems((current) => [...current, catalogFoodMutation(handoff, result.value.verified, date, mealSlotKey)]);
+        setError("");
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : nt("notAvailable"));
+      }
       return;
     }
     if (result.kind === "saved_meal") {
@@ -141,7 +264,28 @@ export function AddToPlanWorkspace({ date, mealSlotKey, onClose, onCommit }: { d
         {barcodeOpen ? <div className="mt-3 rounded-xl border border-border p-3"><p className="text-sm font-medium">{nt("barcodeLookup")}</p><p className="mt-1 text-xs text-muted-foreground">{nt("barcodeLookupDescription")}</p><div className="mt-2 flex gap-2"><input inputMode="numeric" value={barcode} onChange={(event) => setBarcode(event.target.value.replace(/\D/g, ""))} placeholder={nt("enterBarcode")} className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><button type="button" disabled={barcodeBusy} onClick={() => void lookupBarcode()} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{barcodeBusy ? nt("lookingUp") : nt("lookup")}</button></div></div> : null}
         {notice ? <p role="status" className="mt-3 rounded-xl bg-muted p-3 text-sm">{notice}</p> : null}
         {error ? <p role="alert" className="mt-3 text-sm text-destructive">{error}</p> : null}
-        <div className="mt-3 divide-y divide-border" aria-live="polite">{loading ? <p className="py-4 text-sm text-muted-foreground">{nt("searching")}</p> : results.map((result) => <button key={`${result.kind}:${result.id}`} type="button" disabled={result.kind === "food" && !result.value.servingLabel} onClick={() => void selectResult(result)} className="flex min-h-14 w-full items-center justify-between gap-3 py-2 text-start disabled:cursor-not-allowed disabled:opacity-50"><span className="min-w-0"><span className="block truncate text-sm font-medium"><bdi dir="auto">{result.name}</bdi></span><span className="block text-xs text-muted-foreground"><bdi dir="auto">{result.detail}</bdi></span></span><Plus className="h-4 w-4 shrink-0" /></button>)}</div>
+        <div className="mt-3 divide-y divide-border" aria-live="polite">{loading ? <p className="py-4 text-sm text-muted-foreground">{nt("searching")}</p> : results.map((result) => {
+          const stateKey = result.kind === "food" && result.value.source === "catalog" ? catalogServingStateKey(result.value) : null;
+          const servingState = stateKey ? catalogServingStates[stateKey] : undefined;
+          return <div key={`${result.kind}:${result.id}`} className="py-2">
+            <button type="button" disabled={result.kind === "food" && result.value.source === "my_food" && !result.value.servingLabel} onClick={() => void selectResult(result)} className="flex min-h-14 w-full items-center justify-between gap-3 text-start disabled:cursor-not-allowed disabled:opacity-50"><span className="min-w-0"><span className="block truncate text-sm font-medium"><bdi dir="auto">{result.name}</bdi></span><span className="block text-xs text-muted-foreground"><bdi dir="auto">{result.detail}</bdi></span></span><Plus className="h-4 w-4 shrink-0" /></button>
+            {result.kind === "food" && result.value.source === "catalog" && servingState?.choices.length && servingState.choices.length > 1 ? <select
+              aria-label={`Authoritative serving for ${result.value.name}`}
+              value={servingState.selectedKey}
+              onChange={(event) => {
+                setCatalogServingStates((current) => ({
+                  ...current,
+                  [stateKey!]: { ...servingState, selectedKey: event.target.value },
+                }));
+                setError("");
+              }}
+              className="mt-2 min-h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+            >
+              <option value="">Choose an authoritative serving</option>
+              {servingState.choices.map((choice) => <option key={servingChoiceKey(choice)} value={servingChoiceKey(choice)}>{choice.label}</option>)}
+            </select> : null}
+          </div>;
+        })}</div>
         <div className="mt-4 border-t border-border pt-4"><label className="text-sm font-medium" htmlFor="meal-plan-placeholder">{nt("placeholderLabel")}</label><div className="mt-2 flex gap-2"><input id="meal-plan-placeholder" value={placeholderName} onChange={(event) => setPlaceholderName(event.target.value)} placeholder={nt("placeholderExample")} className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><button type="button" onClick={addPlaceholder} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{nt("addPlaceholder")}</button></div></div>
         {selectedItems.length ? <div className="mt-4 border-t border-border pt-4"><p className="text-sm font-semibold">{nt("selectedCount", { count: selectedItems.length })}</p><ul className="mt-2 space-y-1 text-sm text-muted-foreground">{selectedNames.map((name, index) => <li key={`${name}-${index}`}><bdi dir="auto">{name}</bdi></li>)}</ul></div> : null}
         <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t border-border bg-background pt-4"><button type="button" onClick={onClose} className="min-h-11 rounded-xl px-4 text-sm font-medium">{nt("cancel")}</button><button type="button" disabled={!selectedItems.length || saving} onClick={() => void commit()} className="min-h-11 rounded-xl bg-foreground px-4 text-sm font-semibold text-background disabled:opacity-50">{saving ? nt("saving") : `${nt("add")} ${selectedItems.length || ""}`.trim()}</button></div>
