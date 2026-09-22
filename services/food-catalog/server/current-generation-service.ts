@@ -30,7 +30,6 @@ import type {
   StoredGenerationFood,
   StoredGenerationRedirect,
   StoredGenerationSelections,
-  StoredGenerationValidationFinding,
   StoredGenerationValidationReport,
 } from "./generation-contracts";
 import { FoodCatalogGenerationError, type FoodCatalogGenerationErrorCode } from "./generation-errors";
@@ -67,7 +66,6 @@ export type CurrentGenerationFoodView = {
   generation: StoredCatalogGeneration;
   currentEvent: StoredGenerationEvent;
   validationReport: StoredGenerationValidationReport;
-  validationFindings: StoredGenerationValidationFinding[];
   requestedFoodId: string;
   resolvedFoodId: string;
   food: StoredGenerationFood;
@@ -435,7 +433,6 @@ export async function getCurrentGenerationFood(
     taxonomyAssignments,
     marketAssignments,
     verificationAssertions,
-    validationFindings,
   ] = await Promise.all([
     food.nutritionRevisionId === null
       ? Promise.resolve(null)
@@ -445,7 +442,6 @@ export async function getCurrentGenerationFood(
     store.readTaxonomyAssignments(resolvedFoodId, selections.taxonomyAssignmentIds),
     store.readMarketAssignments(resolvedFoodId, selections.marketAssignmentIds),
     store.readVerificationAssertions(resolvedFoodId, selections.verification),
-    store.readValidationFindings(validationReport.id),
   ]);
 
   let activationAuthority: StoredActivationAuthority | null = null;
@@ -479,7 +475,6 @@ export async function getCurrentGenerationFood(
     generation,
     currentEvent,
     validationReport,
-    validationFindings,
     requestedFoodId,
     resolvedFoodId,
     food,
