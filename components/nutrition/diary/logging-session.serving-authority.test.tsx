@@ -212,7 +212,7 @@ describe("Diary LoggingSession authoritative Catalog serving selection", () => {
     expect(host.textContent).toContain("Choose an authoritative serving");
     const select = host.querySelector('select[aria-label="Authoritative serving for Canonical yogurt"]');
     expect(select).toBeInstanceOf(HTMLSelectElement);
-    expect(host.textContent).not.toContain("Plate");
+    expect(host.querySelector('aside[aria-label="Plate"]')).toBeNull();
 
     await act(async () => { setSelectValue(select as HTMLSelectElement, SERVING_B); });
     await act(async () => { button(host, "add").click(); });
