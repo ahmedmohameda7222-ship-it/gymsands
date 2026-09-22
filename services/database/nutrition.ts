@@ -823,15 +823,17 @@ export async function getFoodLibrary(
     },
   );
 
-  const foods: FoodLibraryItem[] = rankedCandidates.flatMap((candidate) => {
+  const foods: FoodLibraryItem[] = [];
+  for (const candidate of rankedCandidates) {
     if (candidate.source === "catalog") {
       // Catalog V2 already applied query/alias/category authority and ranking.
       // Do not re-filter selected display text locally or alias-only matches disappear.
-      return [normalizeCatalogSearchFood(candidate)];
+      foods.push(normalizeCatalogSearchFood(candidate));
+      continue;
     }
     const ownerFood = userFoodsById.get(candidate.id);
-    return ownerFood ? [ownerFood] : [];
-  });
+    if (ownerFood) foods.push(ownerFood);
+  }
 
   return foods.slice(0, options.limit ?? 80);
 }
