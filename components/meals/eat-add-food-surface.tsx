@@ -197,7 +197,7 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
 
     let choices = catalogServingChoices[catalogFood.id];
     if (choices === undefined) {
-      const selection = await getCatalogNewUseSelection(food);
+      const selection = await getCatalogNewUseSelection(catalogFood);
       choices = selection.servingChoices;
       setCatalogServingChoices((current) => ({ ...current, [catalogFood.id]: choices! }));
 
@@ -272,7 +272,7 @@ function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; 
       const selectedKey = catalogServingChoiceKeys[food.id] ?? "";
       const selectedChoice = choices?.find((choice) => servingChoiceKey(choice) === selectedKey)
         ?? (choices?.length === 1 ? choices[0]! : null);
-      const previewFood = food.is_global && selectedChoice ? withCatalogServingChoice(food, selectedChoice) : food;
+      const previewFood = food.is_global && selectedChoice ? withCatalogServingChoice(food as CatalogFoodItem, selectedChoice) : food;
       const macros = scaleFoodMacros(previewFood, quantity);
       const storedServingLabel = !food.is_global ? supportedServingOptions(food)[0].label : null;
       const servingText = food.is_global
