@@ -61,6 +61,28 @@ function catalogFoodId(index: number) {
   return id("2", index);
 }
 
+function myFoodId(index: number) {
+  return id("3", index);
+}
+
+function myFoodRow(foodId: string): MyFoodRow {
+  return {
+    id: foodId,
+    user_id: userId,
+    food_name: "Shared name",
+    serving_size: "100 g",
+    calories: 100,
+    protein_g: 10,
+    carbs_g: 5,
+    fat_g: 2,
+    nutrition_basis_amount: 100,
+    nutrition_basis_unit: "g",
+    deleted_at: null,
+  };
+}
+
+const MY_FOOD_SELECT = "id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,nutrition_basis_amount,nutrition_basis_unit,deleted_at";
+
 function makeOwnerClient(rows: readonly MyFoodRow[]) {
   const queries: Array<Record<string, any>> = [];
   const from = vi.fn((table: string) => {
@@ -308,5 +330,94 @@ describe("Saved Meal reusable owner authority hydration", () => {
     expect(owner.from).toHaveBeenCalledTimes(1);
     expect(personal.read).toHaveBeenCalledTimes(expectedSurvivors.length);
     expect(overrideReads).toEqual(expectedSurvivors);
+  });
+
+  it("hydrates unique My Foods once and reuses owner rows for duplicate Saved Meal items", async () => {
+    const uniqueFoodIds = Array.from({ length: 20 }, (_, index) => myFoodId(index));
+    const owner = makeOwnerClient(uniqueFoodIds.map(myFoodRow));
+    generation.resolveBatch.mockResolvedValue(new Map());
+
+    const items = [
+      ...uniqueFoodIds,
+      uniqueFoodIds[0]!,
+      uniqueFoodIds[7]!,
+    ].map(frozenFood);
+
+    const result = await canonicalizeSavedMealItems(
+      owner.client,
+      catalogSupabase,
+      userId,
+      items,
+      "en",
+    );
+
+    expect(result).toHaveLength(items.length);
+    expect(result.map((item) => item.kind === "food" ? item.food_id : null))
+      .toEqual(items.map((item) => item.food_id));
+    expect(result[0]).toEqual({
+      kind: "food",
+      food_id: uniqueFoodIds[0],
+      frozen_name: "Shared name",
+      resolved_quantity: 1,
+      resolved_serving_label: "100 g",
+      frozen_nutrition: {
+        calories: 100,
+        protein_g: 10,
+        carbs_g: 5,
+        fat_g: 2,
+        fiber_g: null,
+      },
+    });
+
+    expect(owner.from).toHaveBeenCalledTimes(1);
+    expect(owner.from).toHaveBeenCalledWith("user_food_items");
+    expect(owner.queries).toHaveLength(1);
+    expect(owner.queries[0]!.select).toHaveBeenCalledWith(MY_FOOD_SELECT);
+    expect(owner.queries[0]!.eq).toHaveBeenCalledWith("user_id", userId);
+    expect(owner.queries[0]!.in).toHaveBeenCalledWith("id", uniqueFoodIds);
+    expect(owner.queries[0]!.is).toHaveBeenCalledWith("deleted_at", null);
+    expect(generation.resolveBatch).toHaveBeenCalledTimes(1);
+    expect(generation.resolveBatch).toHaveBeenCalledWith(catalogSupabase, []);
+    expect(generation.resolve).not.toHaveBeenCalled();
+    expect(personal.read).not.toHaveBeenCalled();
+  });
+
+  it("keeps mixed Catalog and My Food authority domains separate while reusing both hydrated states", async () => {
+    const catalogIds = [catalogFoodId(30), catalogFoodId(31), catalogFoodId(32)];
+    const myIds = [myFoodId(30), myFoodId(31), myFoodId(32)];
+    const owner = makeOwnerClient(myIds.map(myFoodRow));
+    const views = new Map<string, CurrentGenerationFoodView>(
+      catalogIds.map((foodId, index) => [foodId, currentView(foodId, foodId, 40 + index)]),
+    );
+    generation.resolveBatch.mockResolvedValue(views);
+
+    const itemIds = [
+      catalogIds[0]!,
+      myIds[0]!,
+      catalogIds[1]!,
+      myIds[1]!,
+      catalogIds[2]!,
+      myIds[2]!,
+      catalogIds[0]!,
+      myIds[0]!,
+    ];
+    const result = await canonicalizeSavedMealItems(
+      owner.client,
+      catalogSupabase,
+      userId,
+      itemIds.map(frozenFood),
+      "en",
+    );
+
+    expect(result.map((item) => item.kind === "food" ? item.food_id : null)).toEqual(itemIds);
+    expect(owner.from).toHaveBeenCalledTimes(1);
+    expect(owner.queries[0]!.select).toHaveBeenCalledWith(MY_FOOD_SELECT);
+    expect(owner.queries[0]!.eq).toHaveBeenCalledWith("user_id", userId);
+    expect(owner.queries[0]!.in).toHaveBeenCalledWith("id", itemIds.filter((id, index) => itemIds.indexOf(id) === index));
+    expect(generation.resolveBatch).toHaveBeenCalledTimes(1);
+    expect(generation.resolveBatch).toHaveBeenCalledWith(catalogSupabase, catalogIds);
+    expect(generation.resolve).not.toHaveBeenCalled();
+    expect(personal.read).toHaveBeenCalledTimes(catalogIds.length);
+    expect(personal.read.mock.calls.map((call) => String(call[1])).sort()).toEqual([...catalogIds].sort());
   });
 });
