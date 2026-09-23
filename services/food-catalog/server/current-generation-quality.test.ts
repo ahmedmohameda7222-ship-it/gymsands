@@ -100,8 +100,8 @@ describe("Plan 7 current-generation admin Food quality", () => {
       })],
       food_names: [query({
         data: [
-          { id: nameA, language_tag: "en", normalized_text: "greek yogurt", name_text: "Greek yogurt" },
-          { id: nameB, language_tag: "en", normalized_text: "greek yogurt", name_text: "Greek yoghurt" },
+          { id: nameA, food_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", language_tag: "en", normalized_text: "greek yogurt", name_text: "Greek yogurt" },
+          { id: nameB, food_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", language_tag: "en", normalized_text: "greek yogurt", name_text: "Greek yoghurt" },
         ],
         error: null,
       })],
