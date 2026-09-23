@@ -261,7 +261,7 @@ function makeGenerationStore(options: StoreOptions = {}): FoodCatalogGenerationR
           activationSetMemberId: ACTIVATION_MEMBER_ID,
           foodId: redirected ? SURVIVOR_FOOD_ID : REQUESTED_FOOD_ID,
           activationPolicyVersion: "activation-v1",
-          eligibility: "eligible",
+          eligibility: "eligible" as const,
           sourceLegalAccepted: true,
           grantEventId: ACTIVATION_GRANT_ID,
           grantCreatedAt: "2026-09-21T08:30:00.000Z",
@@ -272,7 +272,7 @@ function makeGenerationStore(options: StoreOptions = {}): FoodCatalogGenerationR
       ? {
           id: EVENT_ID,
           operationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-          eventType: "promote",
+          eventType: "promote" as const,
           fromGenerationId: GENERATION_G1,
           toGenerationId: GENERATION_G2,
           revokedGenerationId: null,
@@ -280,7 +280,7 @@ function makeGenerationStore(options: StoreOptions = {}): FoodCatalogGenerationR
           validationReportId: REPORT_ID,
           actor: {
             principalId: "catalog-service",
-            principalType: "service",
+            principalType: "service" as const,
             authorityReference: "promotion",
             reasonCode: "promote",
             policyVersion: "control-v1",
@@ -335,7 +335,7 @@ function noOverride(foodId = REQUESTED_FOOD_ID): OwnerOverridePayload {
 }
 
 function catalogClient(ownerPayload: OwnerOverridePayload = noOverride()) {
-  const rpc = vi.fn(async () => ({ data: ownerPayload, error: null }));
+  const rpc = vi.fn(async (): Promise<{ data: OwnerOverridePayload | null; error: null | { message: string } }> => ({ data: ownerPayload, error: null }));
   const from = vi.fn((table: string) => {
     throw new Error("Catalog handoff must not query flat table " + table + ".");
   });
