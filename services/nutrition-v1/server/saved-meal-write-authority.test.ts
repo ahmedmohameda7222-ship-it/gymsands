@@ -142,9 +142,9 @@ function serving(idSuffix: string, label: string) {
   };
 }
 
-function noOverride() {
+function noOverride(overrideFoodId = foodId) {
   return {
-    foodId,
+    foodId: overrideFoodId,
     hasOverride: false,
     revisionId: null,
     pointerRevision: 0,
@@ -208,7 +208,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
       }
       return views;
     });
-    personal.read.mockResolvedValue(noOverride());
+    personal.read.mockImplementation(async (_owner: SupabaseClient, overrideFoodId: string) => noOverride(overrideFoodId));
   });
 
   it.each(["en", "de"])("uses exact transient candidate locale %s before the current write locale", async (languageTag) => {
