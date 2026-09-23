@@ -512,9 +512,10 @@ export type CurrentGenerationQualityFacts = {
   }>;
   names: Array<{
     id: string;
-    language_tag: string;
-    normalized_text: string | null;
-    name_text: string;
+    foodId: string;
+    languageTag: string;
+    normalizedText: string | null;
+    nameText: string;
   }>;
 };
 
@@ -553,7 +554,7 @@ export async function readSupabaseCurrentGenerationQualityFacts(
     readCurrentGenerationQualityFactRows(
       supabase,
       "food_names",
-      "id,language_tag,normalized_text,name_text",
+      "id,food_id,language_tag,normalized_text,name_text",
       nameIds,
       "current generation quality Names",
     ),
@@ -569,9 +570,10 @@ export async function readSupabaseCurrentGenerationQualityFacts(
     })),
     names: nameRows.map((row) => ({
       id: requiredString(row.id, "current generation quality Name id"),
-      language_tag: requiredString(row.language_tag, "current generation quality Name language_tag"),
-      normalized_text: nullableString(row.normalized_text, "current generation quality Name normalized_text"),
-      name_text: requiredString(row.name_text, "current generation quality Name name_text"),
+      foodId: requiredString(row.food_id, "current generation quality Name food_id"),
+      languageTag: requiredString(row.language_tag, "current generation quality Name language_tag"),
+      normalizedText: nullableString(row.normalized_text, "current generation quality Name normalized_text"),
+      nameText: requiredString(row.name_text, "current generation quality Name name_text"),
     })),
   };
 }
