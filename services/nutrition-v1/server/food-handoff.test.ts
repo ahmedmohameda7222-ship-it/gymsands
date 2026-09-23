@@ -43,7 +43,7 @@ type CatalogHandoffInput = Extract<FoodHandoffInput, { source: "catalog" }>;
 type ResolveWithDependencies = (
   supabase: SupabaseClient,
   userId: string,
-  input: CatalogHandoffInput,
+  input: FoodHandoffInput,
   dependencies: { generationStore: FoodCatalogGenerationReadStore },
 ) => Promise<ResolvedFoodHandoff>;
 
