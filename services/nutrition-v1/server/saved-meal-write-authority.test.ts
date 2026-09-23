@@ -183,6 +183,9 @@ describe("Saved Meal Catalog Name locale write identity", () => {
       _view: unknown,
       input: unknown,
     ) => handoff.resolve(owner, catalogSupabase, currentUserId, input));
+    generation.resolve.mockImplementation(async (_catalog: SupabaseClient, id: string) => (
+      currentView([name("90", "en", "Shared name")], [serving("90", "100 g")], id)
+    ));
     generation.resolveBatch.mockImplementation(async (catalog: SupabaseClient, ids: readonly string[]) => {
       const views = new Map<string, unknown>();
       for (const id of ids) {
