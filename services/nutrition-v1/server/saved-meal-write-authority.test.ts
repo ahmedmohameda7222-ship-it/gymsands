@@ -43,11 +43,23 @@ import { canonicalizeSavedMealItems } from "@/services/nutrition-v1/server/saved
 const userId = "11111111-1111-4111-8111-111111111111";
 const foodId = "22222222-2222-4222-8222-222222222222";
 const ownerSupabase = (owned: boolean) => {
-  const query: Record<string, unknown> = {};
+  let requestedIds: string[] = [];
+  const query: Record<string, any> = {};
   query.select = vi.fn(() => query);
   query.eq = vi.fn(() => query);
+  query.in = vi.fn((_column: string, ids: string[]) => {
+    requestedIds = [...ids];
+    return query;
+  });
   query.is = vi.fn(() => query);
   query.maybeSingle = vi.fn(async () => ({ data: owned ? { id: foodId } : null, error: null }));
+  query.then = (
+    resolve: (value: { data: Array<{ id: string }>; error: null }) => unknown,
+    reject?: (reason: unknown) => unknown,
+  ) => Promise.resolve({
+    data: owned ? requestedIds.map((id) => ({ id })) : [],
+    error: null,
+  }).then(resolve, reject);
   return { from: vi.fn(() => query) } as unknown as SupabaseClient;
 };
 const catalogSupabase = { authority: "catalog" } as unknown as SupabaseClient;
@@ -165,6 +177,20 @@ describe("Saved Meal Catalog Name locale write identity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     handoff.resolve.mockResolvedValue(resolvedFood());
+    handoff.resolveFromView.mockImplementation(async (
+      owner: SupabaseClient,
+      currentUserId: string,
+      _view: unknown,
+      input: unknown,
+    ) => handoff.resolve(owner, catalogSupabase, currentUserId, input));
+    generation.resolveBatch.mockImplementation(async (catalog: SupabaseClient, ids: readonly string[]) => {
+      const views = new Map<string, unknown>();
+      for (const id of ids) {
+        const view = await generation.resolve(catalog, id);
+        if (view) views.set(id, view);
+      }
+      return views;
+    });
     personal.read.mockResolvedValue(noOverride());
   });
 
@@ -344,7 +370,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [item], "en");
 
-    expect(generation.resolve).not.toHaveBeenCalled();
+    expect(generation.resolveBatch).toHaveBeenCalledWith(catalogSupabase, [foodId]);
     expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
       displayName: "Shared name",
       languageTag: "de",

@@ -3,23 +3,46 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealItemInput, SavedMealItemWriteIntent } from "@/services/nutrition-v1/server/saved-meals";
-import { resolveCurrentGenerationFoodForNewUseFromSupabase, type CurrentGenerationFoodView } from "@/services/food-catalog/server/current-generation-service";
+import {
+  resolveCurrentGenerationFoodsForNewUseBatchFromSupabase,
+  type CurrentGenerationFoodView,
+} from "@/services/food-catalog/server/current-generation-service";
 import {
   resolveCatalogNewUseSelectionFromView,
+  resolveFoodHandoffFromResolvedCatalogAuthority,
   resolveFoodHandoffWithAuthorities,
 } from "@/services/nutrition-v1/server/food-handoff";
 import { resolveRecipeHandoff } from "@/services/nutrition-v1/server/recipe-handoff";
 
-async function detectFoodSource(supabase: SupabaseClient, userId: string, foodId: string) {
+async function classifyFoodSources(
+  supabase: SupabaseClient,
+  userId: string,
+  foodIds: readonly string[],
+) {
+  const uniqueFoodIds = Array.from(new Set(foodIds));
+  const sources = new Map<string, "catalog" | "my_food">();
+  if (!uniqueFoodIds.length) return sources;
+
   const own = await supabase
     .from("user_food_items")
     .select("id")
-    .eq("id", foodId)
     .eq("user_id", userId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (own.error) throw new Error(`Personal Food identity could not be validated. ${own.error.message ?? "Database request failed."}`);
-  return own.data ? "my_food" as const : "catalog" as const;
+    .in("id", uniqueFoodIds)
+    .is("deleted_at", null);
+  if (own.error) {
+    throw new Error(`Personal Food identity could not be validated. ${own.error.message ?? "Database request failed."}`);
+  }
+
+  const requested = new Set(uniqueFoodIds);
+  const owned = new Set(
+    (own.data ?? []).flatMap((row) => (
+      row && typeof row.id === "string" && requested.has(row.id) ? [row.id] : []
+    )),
+  );
+  for (const foodId of uniqueFoodIds) {
+    sources.set(foodId, owned.has(foodId) ? "my_food" : "catalog");
+  }
+  return sources;
 }
 
 function normalizedLanguageTag(value: string) {
@@ -68,13 +91,11 @@ function disambiguateFrozenNameLocale(
 
 async function recoverFrozenCatalogSelectionIdentity(
   ownerSupabase: SupabaseClient,
-  catalogSupabase: SupabaseClient,
-  foodId: string,
+  view: CurrentGenerationFoodView,
   frozenName: string,
   frozenServingLabel: string,
   writeLanguageTag: string | null,
 ) {
-  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, foodId);
   const selectedIds = new Set(view.selections.nameFactIds);
   const exactTextMatches = view.names.filter((name) => (
     selectedIds.has(name.id)
@@ -109,37 +130,72 @@ export async function canonicalizeSavedMealItems(
     ? writeLanguageTag.trim()
     : null;
 
+  const uniqueFoodIds = Array.from(new Set(
+    items.flatMap((item) => item.kind === "food" ? [item.food_id] : []),
+  ));
+  const sources = await classifyFoodSources(ownerSupabase, userId, uniqueFoodIds);
+  const catalogFoodIds = uniqueFoodIds.filter((foodId) => sources.get(foodId) === "catalog");
+  const catalogViews = await resolveCurrentGenerationFoodsForNewUseBatchFromSupabase(
+    catalogSupabase,
+    catalogFoodIds,
+  );
+
   for (const item of items) {
     if (item.kind === "food") {
-      const source = await detectFoodSource(ownerSupabase, userId, item.food_id);
+      const source = sources.get(item.food_id);
+      if (!source) throw new Error("Saved Meal Food source could not be resolved.");
+
       const itemLanguageTag = typeof item.languageTag === "string" && item.languageTag.trim()
         ? item.languageTag.trim()
         : null;
-      const recoveredCatalogIdentity = source === "catalog" && itemLanguageTag === null
-        ? await recoverFrozenCatalogSelectionIdentity(
-            ownerSupabase,
-            catalogSupabase,
-            item.food_id,
-            item.frozen_name,
-            item.resolved_serving_label,
-            normalizedWriteLanguageTag,
-          )
-        : null;
-      const catalogSelectionIdentity = source === "catalog"
-        ? {
+
+      if (source === "catalog") {
+        const view = catalogViews.get(item.food_id);
+        if (!view) {
+          throw new Error("Saved Meal Catalog Food could not be resolved in the current generation.");
+        }
+        const recoveredCatalogIdentity = itemLanguageTag === null
+          ? await recoverFrozenCatalogSelectionIdentity(
+              ownerSupabase,
+              view,
+              item.frozen_name,
+              item.resolved_serving_label,
+              normalizedWriteLanguageTag,
+            )
+          : null;
+        const resolved = await resolveFoodHandoffFromResolvedCatalogAuthority(
+          ownerSupabase,
+          userId,
+          view,
+          {
+            foodId: item.food_id,
+            source: "catalog",
+            quantity: item.resolved_quantity,
+            serving: item.resolved_serving_label,
             displayName: item.frozen_name,
             languageTag: recoveredCatalogIdentity?.languageTag ?? itemLanguageTag,
             servingOptionId: recoveredCatalogIdentity
               ? recoveredCatalogIdentity.servingOptionId
               : item.servingOptionId ?? null,
-          }
-        : {};
+          },
+        );
+        const frozen = resolved.savedMealItem;
+        output.push({
+          kind: "food",
+          food_id: frozen.food_id,
+          frozen_name: frozen.frozen_name,
+          resolved_quantity: frozen.resolved_quantity,
+          resolved_serving_label: frozen.resolved_serving_label,
+          frozen_nutrition: frozen.frozen_nutrition,
+        });
+        continue;
+      }
+
       const resolved = await resolveFoodHandoffWithAuthorities(ownerSupabase, catalogSupabase, userId, {
         foodId: item.food_id,
-        source,
+        source: "my_food",
         quantity: item.resolved_quantity,
         serving: item.resolved_serving_label,
-        ...catalogSelectionIdentity,
       });
       const frozen = resolved.savedMealItem;
       output.push({
