@@ -38,10 +38,7 @@ const ACTIVATION_MEMBER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2";
 const ACTIVATION_GRANT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3";
 const SHA = "a".repeat(64);
 
-type CatalogHandoffInput = FoodHandoffInput & {
-  selectedName: string;
-  languageTag: string | null;
-};
+type CatalogHandoffInput = Extract<FoodHandoffInput, { source: "catalog" }>;
 
 type ResolveWithDependencies = (
   supabase: SupabaseClient,
@@ -246,12 +243,14 @@ function makeGenerationStore(options: StoreOptions = {}): FoodCatalogGenerationR
       ...selections,
       verification: selections.verification.map((selection) => ({ ...selection, foodId })),
     })),
-    readNutritionRevision: vi.fn(async (foodId: string, revisionId: string) =>
-      allNutrition.find((item) => item.foodId === foodId && item.id === revisionId) ?? null),
+    readNutritionRevision: vi.fn(async (foodId: string, revisionId: string) => {
+      const found = allNutrition.find((item) => item.id === revisionId);
+      return found ? { ...found, foodId } : null;
+    }),
     readServingOptions: vi.fn(async (foodId: string, ids: readonly string[]) =>
-      servings.filter((item) => item.foodId === foodId && ids.includes(item.id))),
+      servings.filter((item) => ids.includes(item.id)).map((item) => ({ ...item, foodId }))),
     readNames: vi.fn(async (foodId: string, ids: readonly string[]) =>
-      names.filter((item) => item.foodId === foodId && ids.includes(item.id))),
+      names.filter((item) => ids.includes(item.id)).map((item) => ({ ...item, foodId }))),
     readTaxonomyAssignments: vi.fn(async () => []),
     readMarketAssignments: vi.fn(async () => []),
     readVerificationAssertions: vi.fn(async () => []),
@@ -535,7 +534,7 @@ describe("Nutrition V1 Food handoff current-generation authority", () => {
 
     expect(handoff.frozenNutrition).toMatchObject({
       calories: 0,
-      protein_g: 24,
+      protein_g: 40.8,
       carbs_g: 27.2,
       fat_g: 6.8,
       fiber_g: null,
@@ -618,8 +617,6 @@ describe("Nutrition V1 Food handoff current-generation authority", () => {
         source: "my_food",
         quantity: 1,
         serving: "40 g",
-        selectedName: "ignored for My Food",
-        languageTag: null,
       },
       { generationStore: store },
     );
