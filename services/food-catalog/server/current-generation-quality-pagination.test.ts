@@ -147,6 +147,7 @@ describe("Plan 7 generation-wide admin quality pagination", () => {
     }));
     const names = nameSelections.map((selection, index) => ({
       id: selection.name_fact_id,
+      food_id: selection.food_id,
       language_tag: "en",
       normalized_text: index === 0 || index === 10000 ? "duplicate edge" : `unique-${index}`,
       name_text: index === 0 || index === 10000 ? "Duplicate edge" : `Unique ${index}`,
@@ -178,6 +179,11 @@ describe("Plan 7 generation-wide admin quality pagination", () => {
       expect(query.eq).toHaveBeenCalledWith("generation_id", GENERATION_ID);
       expect(query.order.mock.calls.map((call) => call[0])).toEqual(["food_id", "name_fact_id"]);
       expect(query.limit).not.toHaveBeenCalled();
+    }
+    expect(db.queries.food_names.length).toBeGreaterThan(1);
+    for (const query of db.queries.food_names) {
+      const ids = query.in.mock.calls[0]?.[1] as unknown[];
+      expect(ids.length).toBeLessThanOrEqual(100);
     }
   });
 
