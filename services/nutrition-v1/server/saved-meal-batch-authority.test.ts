@@ -337,11 +337,12 @@ describe("Saved Meal reusable owner authority hydration", () => {
     const owner = makeOwnerClient(uniqueFoodIds.map(myFoodRow));
     generation.resolveBatch.mockResolvedValue(new Map());
 
-    const items = [
+    const itemIds = [
       ...uniqueFoodIds,
       uniqueFoodIds[0]!,
       uniqueFoodIds[7]!,
-    ].map(frozenFood);
+    ];
+    const items = itemIds.map(frozenFood);
 
     const result = await canonicalizeSavedMealItems(
       owner.client,
@@ -353,7 +354,7 @@ describe("Saved Meal reusable owner authority hydration", () => {
 
     expect(result).toHaveLength(items.length);
     expect(result.map((item) => item.kind === "food" ? item.food_id : null))
-      .toEqual(items.map((item) => item.food_id));
+      .toEqual(itemIds);
     expect(result[0]).toEqual({
       kind: "food",
       food_id: uniqueFoodIds[0],
