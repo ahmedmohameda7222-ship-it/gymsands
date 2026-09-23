@@ -340,7 +340,7 @@ function FoodBrowserInner({
       });
       pushLoggedFood(log);
       const message = `Added to today as ${displayMealType(mealType)}.`;
-      setFoodAction(food.id, "log", { status: "success", label: message, description: `${nutritionDisplay(macros.calories, " kcal")} logged.` });
+      setFoodAction(food.id, "log", { status: "success", label: message, description: `${nutritionDisplay(log.calories, " kcal")} logged.` });
       setNotice({ type: "success", title: "Food logged", description: message });
     } catch (error) {
       setFoodAction(food.id, "log", { status: "error", label: "Could not add food.", description: userSafeError(error) });
