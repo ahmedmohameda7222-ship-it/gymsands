@@ -124,32 +124,112 @@ describe("Nutrition V1 owner Food write authority", () => {
     expect(result).toEqual({ foodId, deleted: true });
   });
 
-  it("writes a nullable personal correction under the derived owner without changing canonical verification", async () => {
-    const upsert = query({ data: { food_id: foodId, calories: 150, protein_g: null, carbs_g: null, fat_g: 3, basis_amount: 100, basis_unit: "g", is_active: true }, error: null });
-    const db = fakeSupabase({ food_personal_corrections: [upsert] });
+  it("writes a first Plan 6 Personal Override through the RPC with exact null/0 CAS and preserves numeric zero", async () => {
+    const operationId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const rpc = vi.fn(async () => ({
+      data: { operationId, foodId, revisionId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", pointerRevision: 1, isDeleted: false },
+      error: null,
+    }));
+    const from = vi.fn(() => { throw new Error("Legacy personal correction table must not be used."); });
+    const client = { rpc, from } as unknown as SupabaseClient;
 
-    const result = await setFoodPersonalCorrection(db.client, userId, {
+    const result = await setFoodPersonalCorrection(client, userId, {
+      operationId,
+      foodId,
+      calories: 0,
+      proteinG: null,
+      carbsG: null,
+      fatG: 3,
+      servingLabel: null,
+      note: "mine",
+      expectedRevisionId: null,
+      expectedPointerRevision: 0,
+    } as never);
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("food_catalog_set_personal_override", {
+      p_operation_id: operationId,
+      p_food_id: foodId,
+      p_expected_revision_id: null,
+      p_expected_pointer_revision: 0,
+      p_nutrition_override: { calories: 0, fat_g: 3 },
+      p_serving_label: null,
+      p_note: "mine",
+    });
+    expect(from).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ foodId, pointerRevision: 1 });
+  });
+
+  it("forwards an exact existing current revision/pointer CAS without latest-row inference", async () => {
+    const operationId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const revisionId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    const rpc = vi.fn(async () => ({
+      data: { operationId, foodId, revisionId: "11111111-2222-4333-8444-555555555555", pointerRevision: 8, isDeleted: false },
+      error: null,
+    }));
+    const client = { rpc, from: vi.fn(() => { throw new Error("Legacy personal correction table must not be used."); }) } as unknown as SupabaseClient;
+
+    await setFoodPersonalCorrection(client, userId, {
+      operationId,
       foodId,
       calories: 150,
       proteinG: null,
       carbsG: null,
-      fatG: 3,
+      fatG: null,
+      servingLabel: "My bowl",
+      note: null,
+      expectedRevisionId: revisionId,
+      expectedPointerRevision: 7,
+    } as never);
+
+    expect(rpc).toHaveBeenCalledWith("food_catalog_set_personal_override", expect.objectContaining({
+      p_expected_revision_id: revisionId,
+      p_expected_pointer_revision: 7,
+      p_serving_label: "My bowl",
+    }));
+  });
+
+  it("surfaces a 40001 Personal Override CAS conflict instead of auto-retrying against newly-read state", async () => {
+    const rpc = vi.fn(async () => ({
+      data: null,
+      error: { code: "40001", message: "Personal override CAS conflict." },
+    }));
+    const client = { rpc, from: vi.fn(() => { throw new Error("Legacy personal correction table must not be used."); }) } as unknown as SupabaseClient;
+
+    await expect(setFoodPersonalCorrection(client, userId, {
+      operationId: "12121212-1212-4121-8121-121212121212",
+      foodId,
+      calories: 150,
+      proteinG: null,
+      carbsG: null,
+      fatG: null,
+      servingLabel: null,
+      note: null,
+      expectedRevisionId: null,
+      expectedPointerRevision: 0,
+    } as never)).rejects.toThrow(/conflict/i);
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects legacy basis fields instead of silently reinterpreting them as Plan 6 override authority", async () => {
+    const rpc = vi.fn();
+    const client = { rpc, from: vi.fn(() => { throw new Error("Legacy personal correction table must not be used."); }) } as unknown as SupabaseClient;
+
+    await expect(setFoodPersonalCorrection(client, userId, {
+      operationId: "13131313-1313-4131-8131-131313131313",
+      foodId,
+      calories: 150,
+      proteinG: null,
+      carbsG: null,
+      fatG: null,
+      servingLabel: null,
+      expectedRevisionId: null,
+      expectedPointerRevision: 0,
       basisAmount: 100,
       basisUnit: "g",
-    });
+    } as never)).rejects.toThrow(/basis/i);
 
-    expect(upsert.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      user_id: userId,
-      food_id: foodId,
-      calories: 150,
-      protein_g: null,
-      carbs_g: null,
-      fat_g: 3,
-      basis_amount: 100,
-      basis_unit: "g",
-      is_active: true,
-    }), { onConflict: "user_id,food_id" });
-    expect(JSON.stringify(upsert.upsert.mock.calls)).not.toMatch(/is_verified|verified_at|verified_source_record_id/);
-    expect(result.food_id).toBe(foodId);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
