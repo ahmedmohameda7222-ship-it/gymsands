@@ -3,8 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealItemInput } from "@/services/nutrition-v1/server/saved-meals";
 
-const handoff = vi.hoisted(() => ({ resolve: vi.fn() }));
-const generation = vi.hoisted(() => ({ resolve: vi.fn() }));
+const handoff = vi.hoisted(() => ({ resolve: vi.fn(), resolveFromView: vi.fn() }));
+const generation = vi.hoisted(() => ({ resolve: vi.fn(), resolveBatch: vi.fn() }));
 const personal = vi.hoisted(() => ({ read: vi.fn() }));
 const recipe = vi.hoisted(() => ({ resolve: vi.fn() }));
 
@@ -12,13 +12,21 @@ vi.mock("@/services/nutrition-v1/server/food-handoff", async () => {
   const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/food-handoff")>(
     "@/services/nutrition-v1/server/food-handoff",
   );
-  return { ...actual, resolveFoodHandoffWithAuthorities: handoff.resolve };
+  return {
+    ...actual,
+    resolveFoodHandoffWithAuthorities: handoff.resolve,
+    resolveFoodHandoffFromResolvedCatalogAuthority: handoff.resolveFromView,
+  };
 });
 vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
   const actual = await vi.importActual<typeof import("@/services/food-catalog/server/current-generation-service")>(
     "@/services/food-catalog/server/current-generation-service",
   );
-  return { ...actual, resolveCurrentGenerationFoodForNewUseFromSupabase: generation.resolve };
+  return {
+    ...actual,
+    resolveCurrentGenerationFoodForNewUseFromSupabase: generation.resolve,
+    resolveCurrentGenerationFoodsForNewUseBatchFromSupabase: generation.resolveBatch,
+  };
 });
 vi.mock("@/services/nutrition-v1/server/personal-overrides", async () => {
   const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/personal-overrides")>(
@@ -68,10 +76,11 @@ function resolvedFood(extra: Record<string, unknown> = {}) {
 function currentView(
   names: Array<{ id: string; languageTag: string; text: string }>,
   servings: Array<{ id: string; label: string }> = [],
+  viewFoodId = foodId,
 ) {
   return {
-    requestedFoodId: foodId,
-    resolvedFoodId: foodId,
+    requestedFoodId: viewFoodId,
+    resolvedFoodId: viewFoodId,
     selections: {
       servingOptionIds: servings.map((serving) => serving.id),
       nameFactIds: names.map((name) => name.id),
@@ -81,14 +90,14 @@ function currentView(
     },
     names: names.map((name) => ({
       id: name.id,
-      foodId,
+      foodId: viewFoodId,
       languageTag: name.languageTag,
       role: "preferred_display",
       text: name.text,
     })),
     servingOptions: servings.map((serving) => ({
       id: serving.id,
-      foodId,
+      foodId: viewFoodId,
       label: serving.label,
     })),
   };
@@ -120,6 +129,36 @@ function noOverride() {
     servingLabel: null,
     note: null,
   };
+}
+
+function trackingOwnerSupabase(ownedIds: readonly string[] = []) {
+  let requestedIds: string[] = [];
+  const query: Record<string, any> = {};
+  query.select = vi.fn(() => query);
+  query.eq = vi.fn(() => query);
+  query.is = vi.fn(() => query);
+  query.in = vi.fn((_column: string, ids: string[]) => {
+    requestedIds = [...ids];
+    return query;
+  });
+  query.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
+  query.then = (
+    resolve: (value: { data: Array<{ id: string }>; error: null }) => unknown,
+    reject?: (reason: unknown) => unknown,
+  ) => Promise.resolve({
+    data: requestedIds.filter((id) => ownedIds.includes(id)).map((id) => ({ id })),
+    error: null,
+  }).then(resolve, reject);
+  const from = vi.fn(() => query);
+  return {
+    client: { from } as unknown as SupabaseClient,
+    from,
+    query,
+  };
+}
+
+function catalogFoodId(index: number) {
+  return `22000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
 }
 
 describe("Saved Meal Catalog Name locale write identity", () => {
@@ -310,6 +349,56 @@ describe("Saved Meal Catalog Name locale write identity", () => {
       displayName: "Shared name",
       languageTag: "de",
     }));
+  });
+
+  it("batches and deduplicates Catalog authority for a representative multi-Food Saved Meal", async () => {
+    const owner = trackingOwnerSupabase();
+    const uniqueFoodIds = Array.from({ length: 20 }, (_, index) => catalogFoodId(index));
+    const items = [...uniqueFoodIds, uniqueFoodIds[0]!, uniqueFoodIds[7]!].map((id) => ({
+      ...frozenFood,
+      food_id: id,
+    }));
+    const views = new Map(uniqueFoodIds.map((id) => [
+      id,
+      currentView([name("30", "en", "Shared name")], [serving("30", "100 g")], id),
+    ]));
+
+    generation.resolve.mockImplementation(async (_catalog: SupabaseClient, id: string) => views.get(id));
+    generation.resolveBatch.mockResolvedValue(views);
+    handoff.resolve.mockImplementation(async (
+      _owner: SupabaseClient,
+      _catalog: SupabaseClient,
+      _userId: string,
+      input: { foodId: string },
+    ) => resolvedFood({ food_id: input.foodId }));
+    handoff.resolveFromView.mockImplementation(async (
+      _owner: SupabaseClient,
+      _userId: string,
+      view: { resolvedFoodId: string },
+    ) => resolvedFood({ food_id: view.resolvedFoodId }));
+
+    const result = await canonicalizeSavedMealItems(
+      owner.client,
+      catalogSupabase,
+      userId,
+      items,
+      "en",
+    );
+
+    expect(result).toHaveLength(items.length);
+    expect(owner.from).toHaveBeenCalledTimes(1);
+    expect(owner.from).toHaveBeenCalledWith("user_food_items");
+    expect(owner.query.in).toHaveBeenCalledWith("id", uniqueFoodIds);
+    expect(generation.resolveBatch).toHaveBeenCalledTimes(1);
+    expect(generation.resolveBatch).toHaveBeenCalledWith(catalogSupabase, uniqueFoodIds);
+    expect(generation.resolve).not.toHaveBeenCalled();
+    expect(handoff.resolve).not.toHaveBeenCalled();
+    expect(handoff.resolveFromView).toHaveBeenCalledTimes(items.length);
+
+    const hydratedIds = new Set(
+      handoff.resolveFromView.mock.calls.map((call) => call[2]?.resolvedFoodId),
+    );
+    expect(hydratedIds).toEqual(new Set(uniqueFoodIds));
   });
 
   it("strips transient locale metadata from the returned canonical frozen snapshot", async () => {
