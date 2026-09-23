@@ -4,11 +4,15 @@ import { parseAddToHandoff } from "@/lib/nutrition-v1/add-to-handoff";
 
 describe("Nutrition V1 Add To handoff parsing", () => {
   it("preserves Food identity, serving and quantity for each contextual destination", () => {
-    const base = "source=catalog&quantity=1.5&serving=170%20g";
-    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${base}`), "diary")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g" });
-    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${base}`), "meal_plan")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g" });
-    expect(parseAddToHandoff(new URLSearchParams(`savedMealFoodId=f1&${base}`), "saved_meal")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g" });
-    expect(parseAddToHandoff(new URLSearchParams(`ingredientFoodId=f1&${base}`), "recipe")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g" });
+    const base = "source=catalog&quantity=1.5&serving=170%20g&selectedName=Generation%20yogurt&languageTag=en";
+    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${base}`), "diary")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g", selectedName: "Generation yogurt", languageTag: "en" });
+    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${base}`), "meal_plan")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g", selectedName: "Generation yogurt", languageTag: "en" });
+    expect(parseAddToHandoff(new URLSearchParams(`savedMealFoodId=f1&${base}`), "saved_meal")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g", selectedName: "Generation yogurt", languageTag: "en" });
+    expect(parseAddToHandoff(new URLSearchParams(`ingredientFoodId=f1&${base}`), "recipe")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g", selectedName: "Generation yogurt", languageTag: "en" });
+  });
+
+  it("rejects catalog handoffs without an exact selected presentation name", () => {
+    expect(parseAddToHandoff(new URLSearchParams("addFoodId=f1&source=catalog&quantity=1&serving=170%20g"), "diary")).toBeNull();
   });
 
   it("preserves exact Recipe version identity and resolved serving quantity for Diary, Meal Plan and Saved Meal", () => {
