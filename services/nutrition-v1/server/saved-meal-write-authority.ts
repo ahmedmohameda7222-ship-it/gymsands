@@ -4,7 +4,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealItemInput, SavedMealItemWriteIntent } from "@/services/nutrition-v1/server/saved-meals";
 import { resolveCurrentGenerationFoodForNewUseFromSupabase, type CurrentGenerationFoodView } from "@/services/food-catalog/server/current-generation-service";
-import { resolveFoodHandoffWithAuthorities } from "@/services/nutrition-v1/server/food-handoff";
+import {
+  resolveCatalogNewUseSelectionFromView,
+  resolveFoodHandoffWithAuthorities,
+} from "@/services/nutrition-v1/server/food-handoff";
 import { resolveRecipeHandoff } from "@/services/nutrition-v1/server/recipe-handoff";
 
 async function detectFoodSource(supabase: SupabaseClient, userId: string, foodId: string) {
@@ -63,10 +66,12 @@ function disambiguateFrozenNameLocale(
   throw new Error("The frozen Saved Meal Food name is ambiguous in the current generation. Re-select the Food.");
 }
 
-async function recoverFrozenCatalogNameLanguageTag(
+async function recoverFrozenCatalogSelectionIdentity(
+  ownerSupabase: SupabaseClient,
   catalogSupabase: SupabaseClient,
   foodId: string,
   frozenName: string,
+  frozenServingLabel: string,
   writeLanguageTag: string | null,
 ) {
   const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, foodId);
@@ -76,7 +81,20 @@ async function recoverFrozenCatalogNameLanguageTag(
     && name.foodId === view.resolvedFoodId
     && name.text.trim() === frozenName.trim()
   ));
-  return disambiguateFrozenNameLocale(exactTextMatches, writeLanguageTag).languageTag;
+  const selectedName = disambiguateFrozenNameLocale(exactTextMatches, writeLanguageTag);
+  const selection = await resolveCatalogNewUseSelectionFromView(ownerSupabase, view, selectedName);
+  const servingMatches = selection.servingChoices.filter((choice) => (
+    choice.label.trim() === frozenServingLabel.trim()
+  ));
+
+  if (servingMatches.length !== 1) {
+    throw new Error("The frozen Saved Meal Food serving is ambiguous or no longer selected. Re-select the serving.");
+  }
+
+  return {
+    languageTag: selectedName.languageTag,
+    servingOptionId: servingMatches[0]!.servingOptionId,
+  };
 }
 
 export async function canonicalizeSavedMealItems(
@@ -97,19 +115,23 @@ export async function canonicalizeSavedMealItems(
       const itemLanguageTag = typeof item.languageTag === "string" && item.languageTag.trim()
         ? item.languageTag.trim()
         : null;
-      const recoveredLanguageTag = source === "catalog" && itemLanguageTag === null
-        ? await recoverFrozenCatalogNameLanguageTag(
+      const recoveredCatalogIdentity = source === "catalog" && itemLanguageTag === null
+        ? await recoverFrozenCatalogSelectionIdentity(
+            ownerSupabase,
             catalogSupabase,
             item.food_id,
             item.frozen_name,
+            item.resolved_serving_label,
             normalizedWriteLanguageTag,
           )
-        : itemLanguageTag;
+        : null;
       const catalogSelectionIdentity = source === "catalog"
         ? {
             displayName: item.frozen_name,
-            languageTag: recoveredLanguageTag,
-            servingOptionId: item.servingOptionId ?? null,
+            languageTag: recoveredCatalogIdentity?.languageTag ?? itemLanguageTag,
+            servingOptionId: recoveredCatalogIdentity
+              ? recoveredCatalogIdentity.servingOptionId
+              : item.servingOptionId ?? null,
           }
         : {};
       const resolved = await resolveFoodHandoffWithAuthorities(ownerSupabase, catalogSupabase, userId, {
