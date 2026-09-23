@@ -5,16 +5,26 @@ import type { SavedMealItemInput } from "@/services/nutrition-v1/server/saved-me
 
 const handoff = vi.hoisted(() => ({ resolve: vi.fn() }));
 const generation = vi.hoisted(() => ({ resolve: vi.fn() }));
+const personal = vi.hoisted(() => ({ read: vi.fn() }));
 const recipe = vi.hoisted(() => ({ resolve: vi.fn() }));
 
-vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({
-  resolveFoodHandoffWithAuthorities: handoff.resolve,
-}));
+vi.mock("@/services/nutrition-v1/server/food-handoff", async () => {
+  const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/food-handoff")>(
+    "@/services/nutrition-v1/server/food-handoff",
+  );
+  return { ...actual, resolveFoodHandoffWithAuthorities: handoff.resolve };
+});
 vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
   const actual = await vi.importActual<typeof import("@/services/food-catalog/server/current-generation-service")>(
     "@/services/food-catalog/server/current-generation-service",
   );
   return { ...actual, resolveCurrentGenerationFoodForNewUseFromSupabase: generation.resolve };
+});
+vi.mock("@/services/nutrition-v1/server/personal-overrides", async () => {
+  const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/personal-overrides")>(
+    "@/services/nutrition-v1/server/personal-overrides",
+  );
+  return { ...actual, readCurrentPersonalOverride: personal.read };
 });
 vi.mock("@/services/nutrition-v1/server/recipe-handoff", () => ({
   resolveRecipeHandoff: recipe.resolve,
@@ -55,12 +65,15 @@ function resolvedFood(extra: Record<string, unknown> = {}) {
   };
 }
 
-function currentView(names: Array<{ id: string; languageTag: string; text: string }>) {
+function currentView(
+  names: Array<{ id: string; languageTag: string; text: string }>,
+  servings: Array<{ id: string; label: string }> = [],
+) {
   return {
     requestedFoodId: foodId,
     resolvedFoodId: foodId,
     selections: {
-      servingOptionIds: [],
+      servingOptionIds: servings.map((serving) => serving.id),
       nameFactIds: names.map((name) => name.id),
       taxonomyAssignmentIds: [],
       marketAssignmentIds: [],
@@ -73,7 +86,11 @@ function currentView(names: Array<{ id: string; languageTag: string; text: strin
       role: "preferred_display",
       text: name.text,
     })),
-    servingOptions: [],
+    servingOptions: servings.map((serving) => ({
+      id: serving.id,
+      foodId,
+      label: serving.label,
+    })),
   };
 }
 
@@ -85,10 +102,31 @@ function name(idSuffix: string, languageTag: string, text: string) {
   };
 }
 
+function serving(idSuffix: string, label: string) {
+  return {
+    id: `70000000-0000-4000-8000-${idSuffix.padStart(12, "0")}`,
+    label,
+  };
+}
+
+function noOverride() {
+  return {
+    foodId,
+    hasOverride: false,
+    revisionId: null,
+    pointerRevision: 0,
+    isDeleted: false,
+    nutritionOverride: null,
+    servingLabel: null,
+    note: null,
+  };
+}
+
 describe("Saved Meal Catalog Name locale write identity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     handoff.resolve.mockResolvedValue(resolvedFood());
+    personal.read.mockResolvedValue(noOverride());
   });
 
   it.each(["en", "de"])("uses exact transient candidate locale %s before the current write locale", async (languageTag) => {
@@ -183,6 +221,61 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     await expect(canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en"))
       .rejects.toThrow(/re-select|name/i);
     expect(handoff.resolve).not.toHaveBeenCalled();
+  });
+
+  it("recovers the unique effective current serving identity for a persisted frozen Catalog item", async () => {
+    const owner = ownerSupabase(false);
+    const exactServing = serving("1", "100 g");
+    generation.resolve.mockResolvedValueOnce(currentView(
+      [name("10", "en", "Shared name")],
+      [exactServing, serving("2", "1 cup")],
+    ));
+
+    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
+
+    expect(personal.read).toHaveBeenCalledWith(owner, foodId);
+    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+      foodId,
+      source: "catalog",
+      serving: "100 g",
+      servingOptionId: exactServing.id,
+      displayName: "Shared name",
+      languageTag: "en",
+    }));
+  });
+
+  it("requires Saved Meal serving re-selection when a frozen label matches multiple effective selected servings", async () => {
+    const owner = ownerSupabase(false);
+    generation.resolve.mockResolvedValueOnce(currentView(
+      [name("11", "en", "Shared name")],
+      [serving("3", "100 g"), serving("4", "100 g")],
+    ));
+
+    await expect(canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en"))
+      .rejects.toThrow(/serving.*re-select|re-select.*serving|ambiguous/i);
+    expect(handoff.resolve).not.toHaveBeenCalled();
+  });
+
+  it("keeps an effective owner serving override identity null when recovering a persisted frozen Catalog item", async () => {
+    const owner = ownerSupabase(false);
+    generation.resolve.mockResolvedValueOnce(currentView(
+      [name("12", "en", "Shared name")],
+      [serving("5", "100 g")],
+    ));
+    personal.read.mockResolvedValueOnce({
+      ...noOverride(),
+      hasOverride: true,
+      revisionId: "80000000-0000-4000-8000-000000000001",
+      pointerRevision: 1,
+      servingLabel: "100 g",
+    });
+
+    await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en");
+
+    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+      serving: "100 g",
+      servingOptionId: null,
+    }));
   });
 
   it("forwards a newly selected Catalog servingOptionId into exact handoff authority", async () => {
