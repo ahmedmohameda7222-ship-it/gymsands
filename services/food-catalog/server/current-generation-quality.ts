@@ -57,17 +57,15 @@ export async function getCurrentGenerationQuality(
     return QUALITY_MACRO_KEYS.some((key) => nutrition[key] === null);
   }).length;
 
-  const selectedNameCounts = new Map<string, number>();
+  const selectedNameFoods = new Map<string, Set<string>>();
   for (const name of facts.names) {
-    const language = typeof name.language_tag === "string" ? name.language_tag.trim().toLowerCase() : "";
-    const normalized = typeof name.normalized_text === "string" && name.normalized_text.trim()
-      ? name.normalized_text.trim()
-      : typeof name.name_text === "string"
-        ? name.name_text.trim().toLocaleLowerCase()
-        : "";
+    const language = name.languageTag.trim().toLowerCase();
+    const normalized = name.normalizedText?.trim() ?? "";
     if (!normalized) continue;
     const key = `${language}|${normalized}`;
-    selectedNameCounts.set(key, (selectedNameCounts.get(key) ?? 0) + 1);
+    const foodIds = selectedNameFoods.get(key) ?? new Set<string>();
+    foodIds.add(name.foodId);
+    selectedNameFoods.set(key, foodIds);
   }
 
   return {
@@ -75,6 +73,6 @@ export async function getCurrentGenerationQuality(
     generationId,
     activeFoodCount: foods.length,
     foodsMissingMacros,
-    duplicateSelectedNames: Array.from(selectedNameCounts.values()).filter((count) => count > 1).length,
+    duplicateSelectedNames: Array.from(selectedNameFoods.values()).filter((foodIds) => foodIds.size > 1).length,
   };
 }
