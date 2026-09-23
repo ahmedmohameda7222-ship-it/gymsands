@@ -438,12 +438,12 @@ export async function resolveFoodHandoffWithAuthorities(
   }
 
   const result = await ownerSupabase
-    .from("user_food_items")
-    .select("id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,nutrition_basis_amount,nutrition_basis_unit,deleted_at")
-    .eq("id", input.foodId)
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .maybeSingle();
+      .from("user_food_items")
+      .select("id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,nutrition_basis_amount,nutrition_basis_unit,deleted_at")
+      .eq("id", input.foodId)
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .maybeSingle();
   if (result.error) throw new Error(`Personal Food could not be resolved. ${result.error.message ?? "Database request failed."}`);
   if (!result.data) throw new Error("Personal Food is unavailable.");
 
