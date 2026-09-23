@@ -163,7 +163,7 @@ describe("Plan 7 Tasks 9-12 consumer current-truth retirement contract", () => {
     expect(handoffRoute).toContain("resolveFoodHandoffWithAuthorities(context.supabase, catalogSupabase");
     expect(handoff).toContain("resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase");
     expect(handoff).toContain("readCurrentPersonalOverride(ownerSupabase");
-    expect(handoff).toContain('ownerSupabase\n      .from("user_food_items")');
+    expect(handoff).toMatch(/ownerSupabase\s*\.from\(["']user_food_items["']\)/);
 
     expect(recipeRoute).toContain("createSupabaseServerClient(null, true)");
     expect(recipePublished).toContain("getCurrentCatalogTrustStates(catalogSupabase");
