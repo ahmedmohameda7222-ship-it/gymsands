@@ -16,6 +16,7 @@ import type {
 import {
   mergePersonalOverrideNutrition,
   readCurrentPersonalOverride,
+  type CurrentPersonalOverride,
 } from "@/services/nutrition-v1/server/personal-overrides";
 
 export type FoodHandoffInput = {
@@ -204,15 +205,17 @@ function exactSelectedServing(
   return matches[0]!;
 }
 
-export async function resolveCatalogNewUseSelectionFromView(
-  ownerSupabase: SupabaseClient,
+export function resolveCatalogNewUseSelectionFromResolvedAuthority(
   view: CurrentGenerationFoodView,
   selectedName: CurrentGenerationFoodView["names"][number],
-): Promise<CatalogNewUseSelection> {
+  personalOverride: CurrentPersonalOverride,
+): CatalogNewUseSelection {
   if (selectedName.foodId !== view.resolvedFoodId || !view.selections.nameFactIds.includes(selectedName.id)) {
     throw new Error("The selected Food name is not selected by the current generation.");
   }
-  const personalOverride = await readCurrentPersonalOverride(ownerSupabase, view.resolvedFoodId);
+  if (personalOverride.foodId !== view.resolvedFoodId) {
+    throw new Error("Resolved Personal Override authority does not match the current-generation Food.");
+  }
   const personalServing = personalOverride.hasOverride && !personalOverride.isDeleted
     ? personalOverride.servingLabel
     : null;
@@ -251,6 +254,15 @@ export async function resolveCatalogNewUseSelectionFromView(
     languageTag: requiredText(selectedName.languageTag, "Food language"),
     servingChoices,
   };
+}
+
+export async function resolveCatalogNewUseSelectionFromView(
+  ownerSupabase: SupabaseClient,
+  view: CurrentGenerationFoodView,
+  selectedName: CurrentGenerationFoodView["names"][number],
+): Promise<CatalogNewUseSelection> {
+  const personalOverride = await readCurrentPersonalOverride(ownerSupabase, view.resolvedFoodId);
+  return resolveCatalogNewUseSelectionFromResolvedAuthority(view, selectedName, personalOverride);
 }
 
 export async function resolveCatalogNewUseSelectionWithAuthorities(
@@ -342,12 +354,19 @@ function buildResolvedFoodHandoff(
   };
 }
 
-export async function resolveFoodHandoffFromResolvedCatalogAuthority(
-  ownerSupabase: SupabaseClient,
+type PreparedCatalogHandoff = {
+  foodId: string;
+  quantity: number;
+  requestedServing: string;
+  servingOptionId: string | null;
+  selectedName: CurrentGenerationFoodView["names"][number];
+};
+
+function prepareResolvedCatalogHandoff(
   userId: string,
   view: CurrentGenerationFoodView,
   input: FoodHandoffInput & { source: "catalog" },
-): Promise<ResolvedFoodHandoff> {
+): PreparedCatalogHandoff {
   if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
   if (!isUuid(input.foodId)) throw new Error("Food must be a valid ID.");
   if (view.requestedFoodId !== input.foodId) {
@@ -361,19 +380,30 @@ export async function resolveFoodHandoffFromResolvedCatalogAuthority(
     throw new Error("Resolved current-generation Food authority is not active or internally consistent.");
   }
 
-  const quantity = positive(input.quantity, "Food quantity");
-  const requestedServing = requiredText(input.serving, "Food serving");
-  const servingOptionId = requestedServingOptionId(input);
   const selectedDisplayName = requiredText(input.displayName, "Food display name");
   const languageTag = optionalText(input.languageTag);
-  const selectedName = exactSelectedName(view, selectedDisplayName, languageTag);
-  const foodId = view.resolvedFoodId;
-  const personalOverride = await readCurrentPersonalOverride(ownerSupabase, foodId);
+  return {
+    foodId: view.resolvedFoodId,
+    quantity: positive(input.quantity, "Food quantity"),
+    requestedServing: requiredText(input.serving, "Food serving"),
+    servingOptionId: requestedServingOptionId(input),
+    selectedName: exactSelectedName(view, selectedDisplayName, languageTag),
+  };
+}
+
+function finishResolvedCatalogHandoff(
+  view: CurrentGenerationFoodView,
+  personalOverride: CurrentPersonalOverride,
+  prepared: PreparedCatalogHandoff,
+): ResolvedFoodHandoff {
+  if (personalOverride.foodId !== prepared.foodId) {
+    throw new Error("Resolved Personal Override authority does not match the current-generation Food.");
+  }
+
   const canonicalNutrition = nutritionFromView(view);
   const mergedBasisNutrition = mergePersonalOverrideNutrition(canonicalNutrition, personalOverride);
   const effectiveView = viewWithNutrition(view, mergedBasisNutrition);
-
-  const name = selectedName.text.trim();
+  const name = prepared.selectedName.text.trim();
   const personalServing = personalOverride.hasOverride && !personalOverride.isDeleted
     ? personalOverride.servingLabel
     : null;
@@ -381,22 +411,26 @@ export async function resolveFoodHandoffFromResolvedCatalogAuthority(
   let serving: string;
   let effectiveNutrition: FoodLibraryNutrition;
   if (personalServing !== null) {
-    if (servingOptionId !== null) {
+    if (prepared.servingOptionId !== null) {
       throw new Error("An owner Personal Override serving must not carry a generation Serving identity.");
     }
-    if (requestedServing !== personalServing) {
+    if (prepared.requestedServing !== personalServing) {
       throw new Error("The resolved Food serving no longer matches the selected serving. Re-select the serving before adding it.");
     }
     const projected = projectCurrentGenerationCompatibility(effectiveView, {
-      nameFactId: selectedName.id,
+      nameFactId: prepared.selectedName.id,
       servingOptionId: null,
     });
     serving = personalServing;
     effectiveNutrition = projected.nutrition;
   } else {
-    const selectedServing = exactSelectedServing(view, requestedServing, servingOptionId);
+    const selectedServing = exactSelectedServing(
+      view,
+      prepared.requestedServing,
+      prepared.servingOptionId,
+    );
     const projected = projectCurrentGenerationCompatibility(effectiveView, {
-      nameFactId: selectedName.id,
+      nameFactId: prepared.selectedName.id,
       servingOptionId: selectedServing.id,
     });
     serving = projected.servingLabel;
@@ -404,32 +438,60 @@ export async function resolveFoodHandoffFromResolvedCatalogAuthority(
   }
 
   return buildResolvedFoodHandoff(
-    foodId,
+    prepared.foodId,
     "catalog",
     name,
     serving,
-    quantity,
+    prepared.quantity,
     effectiveNutrition,
   );
 }
 
-export async function resolveFoodHandoffWithAuthorities(
-  ownerSupabase: SupabaseClient,
-  catalogSupabase: SupabaseClient,
+export function resolveFoodHandoffFromResolvedCatalogOwnerAuthority(
   userId: string,
-  input: FoodHandoffInput,
+  view: CurrentGenerationFoodView,
+  personalOverride: CurrentPersonalOverride,
+  input: FoodHandoffInput & { source: "catalog" },
+): ResolvedFoodHandoff {
+  const prepared = prepareResolvedCatalogHandoff(userId, view, input);
+  return finishResolvedCatalogHandoff(view, personalOverride, prepared);
+}
+
+export async function resolveFoodHandoffFromResolvedCatalogAuthority(
+  ownerSupabase: SupabaseClient,
+  userId: string,
+  view: CurrentGenerationFoodView,
+  input: FoodHandoffInput & { source: "catalog" },
 ): Promise<ResolvedFoodHandoff> {
+  const prepared = prepareResolvedCatalogHandoff(userId, view, input);
+  const personalOverride = await readCurrentPersonalOverride(ownerSupabase, prepared.foodId);
+  return finishResolvedCatalogHandoff(view, personalOverride, prepared);
+}
+
+export const MY_FOOD_HANDOFF_AUTHORITY_SELECT =
+  "id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,nutrition_basis_amount,nutrition_basis_unit,deleted_at";
+
+export type MyFoodHandoffAuthority = {
+  id: string;
+  user_id: string;
+  food_name: string;
+  serving_size: string;
+  calories: unknown;
+  protein_g: unknown;
+  carbs_g: unknown;
+  fat_g: unknown;
+  nutrition_basis_amount: unknown;
+  nutrition_basis_unit: unknown;
+  deleted_at: unknown;
+};
+
+export function resolveMyFoodHandoffFromResolvedAuthority(
+  userId: string,
+  authority: unknown,
+  input: FoodHandoffInput & { source: "my_food" },
+): ResolvedFoodHandoff {
   if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
   if (!isUuid(input.foodId)) throw new Error("Food must be a valid ID.");
-  if (input.source !== "catalog" && input.source !== "my_food") throw new Error("Food source is invalid.");
-
-  if (input.source === "catalog") {
-    const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, input.foodId);
-    return resolveFoodHandoffFromResolvedCatalogAuthority(ownerSupabase, userId, view, {
-      ...input,
-      source: "catalog",
-    });
-  }
 
   const quantity = positive(input.quantity, "Food quantity");
   const requestedServing = requiredText(input.serving, "Food serving");
@@ -437,17 +499,15 @@ export async function resolveFoodHandoffWithAuthorities(
     throw new Error("My Food serving must not carry a Catalog Serving identity.");
   }
 
-  const result = await ownerSupabase
-      .from("user_food_items")
-      .select("id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,nutrition_basis_amount,nutrition_basis_unit,deleted_at")
-      .eq("id", input.foodId)
-      .eq("user_id", userId)
-      .is("deleted_at", null)
-      .maybeSingle();
-  if (result.error) throw new Error(`Personal Food could not be resolved. ${result.error.message ?? "Database request failed."}`);
-  if (!result.data) throw new Error("Personal Food is unavailable.");
+  const row = record(authority);
+  if (
+    row.id !== input.foodId
+    || row.user_id !== userId
+    || row.deleted_at !== null
+  ) {
+    throw new Error("Personal Food is unavailable.");
+  }
 
-  const row = record(result.data);
   const name = requiredText(row.food_name, "Food name");
   const serving = requiredText(row.serving_size, "Food serving");
   if (requestedServing !== serving) {
@@ -476,6 +536,40 @@ export async function resolveFoodHandoffWithAuthorities(
     quantity,
     effectiveNutrition,
   );
+}
+
+export async function resolveFoodHandoffWithAuthorities(
+  ownerSupabase: SupabaseClient,
+  catalogSupabase: SupabaseClient,
+  userId: string,
+  input: FoodHandoffInput,
+): Promise<ResolvedFoodHandoff> {
+  if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
+  if (!isUuid(input.foodId)) throw new Error("Food must be a valid ID.");
+  if (input.source !== "catalog" && input.source !== "my_food") throw new Error("Food source is invalid.");
+
+  if (input.source === "catalog") {
+    const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, input.foodId);
+    return resolveFoodHandoffFromResolvedCatalogAuthority(ownerSupabase, userId, view, {
+      ...input,
+      source: "catalog",
+    });
+  }
+
+  const result = await ownerSupabase
+    .from("user_food_items")
+    .select(MY_FOOD_HANDOFF_AUTHORITY_SELECT)
+    .eq("id", input.foodId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (result.error) throw new Error(`Personal Food could not be resolved. ${result.error.message ?? "Database request failed."}`);
+  if (!result.data) throw new Error("Personal Food is unavailable.");
+
+  return resolveMyFoodHandoffFromResolvedAuthority(userId, result.data, {
+    ...input,
+    source: "my_food",
+  });
 }
 
 

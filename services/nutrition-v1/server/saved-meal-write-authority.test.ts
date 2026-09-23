@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealItemInput } from "@/services/nutrition-v1/server/saved-meals";
 
-const handoff = vi.hoisted(() => ({ resolve: vi.fn(), resolveFromView: vi.fn() }));
+const handoff = vi.hoisted(() => ({ resolveCatalog: vi.fn(), resolveMyFood: vi.fn() }));
 const generation = vi.hoisted(() => ({ resolve: vi.fn(), resolveBatch: vi.fn() }));
 const personal = vi.hoisted(() => ({ read: vi.fn() }));
 const recipe = vi.hoisted(() => ({ resolve: vi.fn() }));
@@ -14,8 +14,8 @@ vi.mock("@/services/nutrition-v1/server/food-handoff", async () => {
   );
   return {
     ...actual,
-    resolveFoodHandoffWithAuthorities: handoff.resolve,
-    resolveFoodHandoffFromResolvedCatalogAuthority: handoff.resolveFromView,
+    resolveFoodHandoffFromResolvedCatalogOwnerAuthority: handoff.resolveCatalog,
+    resolveMyFoodHandoffFromResolvedAuthority: handoff.resolveMyFood,
   };
 });
 vi.mock("@/services/food-catalog/server/current-generation-service", async () => {
@@ -57,7 +57,19 @@ const ownerSupabase = (owned: boolean) => {
     resolve: (value: { data: Array<{ id: string }>; error: null }) => unknown,
     reject?: (reason: unknown) => unknown,
   ) => Promise.resolve({
-    data: owned ? requestedIds.map((id) => ({ id })) : [],
+    data: owned ? requestedIds.map((id) => ({
+      id,
+      user_id: userId,
+      food_name: "Shared name",
+      serving_size: "100 g",
+      calories: 100,
+      protein_g: 10,
+      carbs_g: 5,
+      fat_g: 2,
+      nutrition_basis_amount: 100,
+      nutrition_basis_unit: "g",
+      deleted_at: null,
+    })) : [],
     error: null,
   }).then(resolve, reject);
   return { from: vi.fn(() => query) } as unknown as SupabaseClient;
@@ -176,13 +188,15 @@ function catalogFoodId(index: number) {
 describe("Saved Meal Catalog Name locale write identity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    handoff.resolve.mockResolvedValue(resolvedFood());
-    handoff.resolveFromView.mockImplementation(async (
-      owner: SupabaseClient,
-      currentUserId: string,
-      _view: unknown,
-      input: unknown,
-    ) => handoff.resolve(owner, catalogSupabase, currentUserId, input));
+    handoff.resolveCatalog.mockImplementation((
+      _currentUserId: string,
+      view: { resolvedFoodId: string },
+    ) => resolvedFood({ food_id: view.resolvedFoodId }));
+    handoff.resolveMyFood.mockImplementation((
+      _currentUserId: string,
+      _authority: unknown,
+      input: { foodId: string },
+    ) => resolvedFood({ food_id: input.foodId }));
     generation.resolve.mockImplementation(async (_catalog: SupabaseClient, id: string) => (
       currentView([name("90", "en", "Shared name")], [serving("90", "100 g")], id)
     ));
@@ -203,7 +217,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [item], "ar");
 
-    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+    expect(handoff.resolveCatalog).toHaveBeenCalledWith(userId, expect.anything(), expect.anything(), expect.objectContaining({
       foodId,
       source: "catalog",
       displayName: "Shared name",
@@ -218,7 +232,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
 
     expect(generation.resolve).toHaveBeenCalledWith(catalogSupabase, foodId);
-    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+    expect(handoff.resolveCatalog).toHaveBeenCalledWith(userId, expect.anything(), expect.anything(), expect.objectContaining({
       foodId,
       source: "catalog",
       displayName: "Shared name",
@@ -232,7 +246,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en");
 
-    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+    expect(handoff.resolveCatalog).toHaveBeenCalledWith(userId, expect.anything(), expect.anything(), expect.objectContaining({
       displayName: "Shared name",
       languageTag: "de",
     }));
@@ -247,7 +261,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
 
-    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+    expect(handoff.resolveCatalog).toHaveBeenCalledWith(userId, expect.anything(), expect.anything(), expect.objectContaining({
       displayName: "Shared name",
       languageTag: "de",
     }));
@@ -262,7 +276,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await expect(canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en-AU"))
       .rejects.toThrow(/re-select|ambiguous|name/i);
-    expect(handoff.resolve).not.toHaveBeenCalled();
+    expect(handoff.resolveCatalog).not.toHaveBeenCalled();
   });
 
   it("uses the unique exact frozen text regardless of an unrelated UI locale", async () => {
@@ -274,7 +288,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "fr-FR");
 
-    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+    expect(handoff.resolveCatalog).toHaveBeenCalledWith(userId, expect.anything(), expect.anything(), expect.objectContaining({
       displayName: "Shared name",
       languageTag: "ar",
     }));
@@ -288,7 +302,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await expect(canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en"))
       .rejects.toThrow(/re-select|name/i);
-    expect(handoff.resolve).not.toHaveBeenCalled();
+    expect(handoff.resolveCatalog).not.toHaveBeenCalled();
   });
 
   it("recovers the unique effective current serving identity for a persisted frozen Catalog item", async () => {
@@ -302,7 +316,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
 
     expect(personal.read).toHaveBeenCalledWith(owner, foodId);
-    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+    expect(handoff.resolveCatalog).toHaveBeenCalledWith(userId, expect.anything(), expect.anything(), expect.objectContaining({
       foodId,
       source: "catalog",
       serving: "100 g",
@@ -321,7 +335,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await expect(canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en"))
       .rejects.toThrow(/serving.*re-select|re-select.*serving|ambiguous/i);
-    expect(handoff.resolve).not.toHaveBeenCalled();
+    expect(handoff.resolveCatalog).not.toHaveBeenCalled();
   });
 
   it("keeps an effective owner serving override identity null when recovering a persisted frozen Catalog item", async () => {
@@ -340,7 +354,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en");
 
-    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+    expect(handoff.resolveCatalog).toHaveBeenCalledWith(userId, expect.anything(), expect.anything(), expect.objectContaining({
       serving: "100 g",
       servingOptionId: null,
     }));
@@ -357,7 +371,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [item], "de");
 
-    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+    expect(handoff.resolveCatalog).toHaveBeenCalledWith(userId, expect.anything(), expect.anything(), expect.objectContaining({
       foodId,
       source: "catalog",
       serving: "100 g",
@@ -374,7 +388,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [item], "en");
 
     expect(generation.resolveBatch).toHaveBeenCalledWith(catalogSupabase, [foodId]);
-    expect(handoff.resolve).toHaveBeenCalledWith(owner, catalogSupabase, userId, expect.objectContaining({
+    expect(handoff.resolveCatalog).toHaveBeenCalledWith(userId, expect.anything(), expect.anything(), expect.objectContaining({
       displayName: "Shared name",
       languageTag: "de",
     }));
@@ -394,18 +408,6 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     generation.resolve.mockImplementation(async (_catalog: SupabaseClient, id: string) => views.get(id));
     generation.resolveBatch.mockResolvedValue(views);
-    handoff.resolve.mockImplementation(async (
-      _owner: SupabaseClient,
-      _catalog: SupabaseClient,
-      _userId: string,
-      input: { foodId: string },
-    ) => resolvedFood({ food_id: input.foodId }));
-    handoff.resolveFromView.mockImplementation(async (
-      _owner: SupabaseClient,
-      _userId: string,
-      view: { resolvedFoodId: string },
-    ) => resolvedFood({ food_id: view.resolvedFoodId }));
-
     const result = await canonicalizeSavedMealItems(
       owner.client,
       catalogSupabase,
@@ -421,18 +423,17 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     expect(generation.resolveBatch).toHaveBeenCalledTimes(1);
     expect(generation.resolveBatch).toHaveBeenCalledWith(catalogSupabase, uniqueFoodIds);
     expect(generation.resolve).not.toHaveBeenCalled();
-    expect(handoff.resolve).not.toHaveBeenCalled();
-    expect(handoff.resolveFromView).toHaveBeenCalledTimes(items.length);
+    expect(handoff.resolveCatalog).toHaveBeenCalledTimes(items.length);
 
     const hydratedIds = new Set(
-      handoff.resolveFromView.mock.calls.map((call) => call[2]?.resolvedFoodId),
+      handoff.resolveCatalog.mock.calls.map((call) => call[1]?.resolvedFoodId),
     );
     expect(hydratedIds).toEqual(new Set(uniqueFoodIds));
   });
 
   it("strips transient locale metadata from the returned canonical frozen snapshot", async () => {
     const owner = ownerSupabase(false);
-    handoff.resolve.mockResolvedValueOnce(resolvedFood({ languageTag: "en" }));
+    handoff.resolveCatalog.mockReturnValueOnce(resolvedFood({ languageTag: "en" }));
 
     const result = await canonicalizeSavedMealItems(
       owner,
@@ -451,7 +452,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
 
-    const input = handoff.resolve.mock.calls[0]?.[3];
+    const input = handoff.resolveMyFood.mock.calls[0]?.[2];
     expect(input).toMatchObject({
       foodId,
       source: "my_food",

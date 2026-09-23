@@ -8,24 +8,30 @@ import {
   type CurrentGenerationFoodView,
 } from "@/services/food-catalog/server/current-generation-service";
 import {
-  resolveCatalogNewUseSelectionFromView,
-  resolveFoodHandoffFromResolvedCatalogAuthority,
-  resolveFoodHandoffWithAuthorities,
+  MY_FOOD_HANDOFF_AUTHORITY_SELECT,
+  resolveCatalogNewUseSelectionFromResolvedAuthority,
+  resolveFoodHandoffFromResolvedCatalogOwnerAuthority,
+  resolveMyFoodHandoffFromResolvedAuthority,
+  type MyFoodHandoffAuthority,
 } from "@/services/nutrition-v1/server/food-handoff";
+import {
+  readCurrentPersonalOverride,
+  type CurrentPersonalOverride,
+} from "@/services/nutrition-v1/server/personal-overrides";
 import { resolveRecipeHandoff } from "@/services/nutrition-v1/server/recipe-handoff";
 
-async function classifyFoodSources(
+async function hydrateMyFoodAuthorities(
   supabase: SupabaseClient,
   userId: string,
   foodIds: readonly string[],
-) {
+): Promise<Map<string, MyFoodHandoffAuthority>> {
   const uniqueFoodIds = Array.from(new Set(foodIds));
-  const sources = new Map<string, "catalog" | "my_food">();
-  if (!uniqueFoodIds.length) return sources;
+  const authorities = new Map<string, MyFoodHandoffAuthority>();
+  if (!uniqueFoodIds.length) return authorities;
 
   const own = await supabase
     .from("user_food_items")
-    .select("id")
+    .select(MY_FOOD_HANDOFF_AUTHORITY_SELECT)
     .eq("user_id", userId)
     .in("id", uniqueFoodIds)
     .is("deleted_at", null);
@@ -34,15 +40,49 @@ async function classifyFoodSources(
   }
 
   const requested = new Set(uniqueFoodIds);
-  const owned = new Set(
-    (own.data ?? []).flatMap((row) => (
-      row && typeof row.id === "string" && requested.has(row.id) ? [row.id] : []
-    )),
-  );
-  for (const foodId of uniqueFoodIds) {
-    sources.set(foodId, owned.has(foodId) ? "my_food" : "catalog");
+  for (const value of own.data ?? []) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Personal Food identity could not be validated.");
+    }
+    const row = value as unknown as MyFoodHandoffAuthority;
+    if (
+      typeof row.id !== "string"
+      || !requested.has(row.id)
+      || row.user_id !== userId
+      || row.deleted_at !== null
+      || authorities.has(row.id)
+    ) {
+      throw new Error("Personal Food identity could not be validated.");
+    }
+    authorities.set(row.id, row);
   }
-  return sources;
+  return authorities;
+}
+
+const PERSONAL_OVERRIDE_READ_CONCURRENCY = 6;
+
+async function hydrateCatalogPersonalOverrides(
+  ownerSupabase: SupabaseClient,
+  catalogViews: ReadonlyMap<string, CurrentGenerationFoodView>,
+): Promise<Map<string, CurrentPersonalOverride>> {
+  const resolvedFoodIds = Array.from(new Set(
+    Array.from(catalogViews.values()).map((view) => view.resolvedFoodId),
+  ));
+  const overrides = new Map<string, CurrentPersonalOverride>();
+
+  for (let index = 0; index < resolvedFoodIds.length; index += PERSONAL_OVERRIDE_READ_CONCURRENCY) {
+    const chunk = resolvedFoodIds.slice(index, index + PERSONAL_OVERRIDE_READ_CONCURRENCY);
+    const resolved = await Promise.all(
+      chunk.map(async (foodId) => [
+        foodId,
+        await readCurrentPersonalOverride(ownerSupabase, foodId),
+      ] as const),
+    );
+    for (const [foodId, personalOverride] of resolved) {
+      overrides.set(foodId, personalOverride);
+    }
+  }
+  return overrides;
 }
 
 function normalizedLanguageTag(value: string) {
@@ -89,9 +129,9 @@ function disambiguateFrozenNameLocale(
   throw new Error("The frozen Saved Meal Food name is ambiguous in the current generation. Re-select the Food.");
 }
 
-async function recoverFrozenCatalogSelectionIdentity(
-  ownerSupabase: SupabaseClient,
+function recoverFrozenCatalogSelectionIdentity(
   view: CurrentGenerationFoodView,
+  personalOverride: CurrentPersonalOverride,
   frozenName: string,
   frozenServingLabel: string,
   writeLanguageTag: string | null,
@@ -103,7 +143,7 @@ async function recoverFrozenCatalogSelectionIdentity(
     && name.text.trim() === frozenName.trim()
   ));
   const selectedName = disambiguateFrozenNameLocale(exactTextMatches, writeLanguageTag);
-  const selection = await resolveCatalogNewUseSelectionFromView(ownerSupabase, view, selectedName);
+  const selection = resolveCatalogNewUseSelectionFromResolvedAuthority(view, selectedName, personalOverride);
   const servingMatches = selection.servingChoices.filter((choice) => (
     choice.label.trim() === frozenServingLabel.trim()
   ));
@@ -133,17 +173,21 @@ export async function canonicalizeSavedMealItems(
   const uniqueFoodIds = Array.from(new Set(
     items.flatMap((item) => item.kind === "food" ? [item.food_id] : []),
   ));
-  const sources = await classifyFoodSources(ownerSupabase, userId, uniqueFoodIds);
-  const catalogFoodIds = uniqueFoodIds.filter((foodId) => sources.get(foodId) === "catalog");
+  const myFoodAuthorities = await hydrateMyFoodAuthorities(ownerSupabase, userId, uniqueFoodIds);
+  const catalogFoodIds = uniqueFoodIds.filter((foodId) => !myFoodAuthorities.has(foodId));
   const catalogViews = await resolveCurrentGenerationFoodsForNewUseBatchFromSupabase(
     catalogSupabase,
     catalogFoodIds,
   );
+  const catalogPersonalOverrides = await hydrateCatalogPersonalOverrides(
+    ownerSupabase,
+    catalogViews,
+  );
 
   for (const item of items) {
     if (item.kind === "food") {
-      const source = sources.get(item.food_id);
-      if (!source) throw new Error("Saved Meal Food source could not be resolved.");
+      const myFoodAuthority = myFoodAuthorities.get(item.food_id) ?? null;
+      const source = myFoodAuthority === null ? "catalog" : "my_food";
 
       const itemLanguageTag = typeof item.languageTag === "string" && item.languageTag.trim()
         ? item.languageTag.trim()
@@ -154,19 +198,23 @@ export async function canonicalizeSavedMealItems(
         if (!view) {
           throw new Error("Saved Meal Catalog Food could not be resolved in the current generation.");
         }
+        const personalOverride = catalogPersonalOverrides.get(view.resolvedFoodId);
+        if (!personalOverride) {
+          throw new Error("Saved Meal Catalog owner authority could not be resolved.");
+        }
         const recoveredCatalogIdentity = itemLanguageTag === null
-          ? await recoverFrozenCatalogSelectionIdentity(
-              ownerSupabase,
+          ? recoverFrozenCatalogSelectionIdentity(
               view,
+              personalOverride,
               item.frozen_name,
               item.resolved_serving_label,
               normalizedWriteLanguageTag,
             )
           : null;
-        const resolved = await resolveFoodHandoffFromResolvedCatalogAuthority(
-          ownerSupabase,
+        const resolved = resolveFoodHandoffFromResolvedCatalogOwnerAuthority(
           userId,
           view,
+          personalOverride,
           {
             foodId: item.food_id,
             source: "catalog",
@@ -191,7 +239,10 @@ export async function canonicalizeSavedMealItems(
         continue;
       }
 
-      const resolved = await resolveFoodHandoffWithAuthorities(ownerSupabase, catalogSupabase, userId, {
+      if (myFoodAuthority === null) {
+        throw new Error("Saved Meal Personal Food authority could not be resolved.");
+      }
+      const resolved = resolveMyFoodHandoffFromResolvedAuthority(userId, myFoodAuthority, {
         foodId: item.food_id,
         source: "my_food",
         quantity: item.resolved_quantity,
