@@ -25,12 +25,26 @@ async function resolveSource(supabase: Parameters<typeof resolveFoodHandoff>[0],
   if (raw.type === "food") {
     const source = raw.source;
     if (source !== "catalog" && source !== "my_food") throw new NutritionRequestError("Food source is invalid.");
-    return { kind: "food" as const, value: await resolveFoodHandoff(supabase, userId, {
+    const common = {
       foodId: text(raw.id, "Food"),
-      source,
       quantity: Number(raw.quantity),
       serving: text(raw.serving, "Serving"),
-    }) };
+    };
+    return {
+      kind: "food" as const,
+      value: await resolveFoodHandoff(
+        supabase,
+        userId,
+        source === "catalog"
+          ? {
+              ...common,
+              source,
+              selectedName: text(raw.selectedName, "Selected Food name"),
+              languageTag: typeof raw.languageTag === "string" && raw.languageTag.trim() ? raw.languageTag.trim() : null,
+            }
+          : { ...common, source },
+      ),
+    };
   }
   if (raw.type === "recipe") {
     const quantity = Number(raw.quantity ?? 1);

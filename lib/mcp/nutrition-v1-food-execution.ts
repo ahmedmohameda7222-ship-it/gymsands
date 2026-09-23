@@ -12,7 +12,7 @@ import {
 import { fail, ok, type McpToolResult } from "@/lib/mcp/tool-helpers";
 import { sumFoodLogs } from "@/services/nutrition/calculations";
 import { searchCatalogFoodsByName } from "@/services/nutrition-v1/server/food-catalog";
-import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import { resolveTransitionalMcpFoodHandoff } from "@/services/nutrition-v1/server/transitional-mcp-food-handoff";
 
 type FoodCandidate = {
   id: string;
@@ -139,7 +139,7 @@ export async function executeCanonicalFoodMcpTool(
         continue;
       }
 
-      const handoff = await resolveFoodHandoff(ctx.supabase, ctx.userId, {
+      const handoff = await resolveTransitionalMcpFoodHandoff(ctx.supabase, ctx.userId, {
         foodId: match.exact.id,
         source: match.exact.source === "global" ? "catalog" : "my_food",
         quantity: getNumber(item, "quantity", 1),

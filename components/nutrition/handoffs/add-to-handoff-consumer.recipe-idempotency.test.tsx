@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   back: vi.fn(),
   refresh: vi.fn(),
   searchParams: {
-    toString: () => "destination=recipe&ingredientFoodId=55555555-5555-4555-8555-555555555555&source=catalog&quantity=2&serving=100%20g",
+    toString: () => "destination=recipe&ingredientFoodId=55555555-5555-4555-8555-555555555555&source=catalog&quantity=2&serving=100%20g&selectedName=Atomic%20chicken&languageTag=en",
   },
 }));
 

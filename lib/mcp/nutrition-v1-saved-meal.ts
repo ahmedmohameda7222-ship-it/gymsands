@@ -2,7 +2,8 @@ import type { McpContext } from "@/lib/mcp/auth";
 import { deriveMcpMutationOperationId } from "@/lib/mcp/idempotency";
 import { asObject, getArray, getOptionalString, getString, type JsonObject } from "@/lib/mcp/schemas";
 import { fail, ok, type McpToolResult } from "@/lib/mcp/tool-helpers";
-import { resolveFoodHandoff, type ResolvedFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import type { ResolvedFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import { resolveTransitionalMcpFoodHandoff } from "@/services/nutrition-v1/server/transitional-mcp-food-handoff";
 import { listFoodLibrary, normalizeFoodSearchText } from "@/services/nutrition-v1/server/food-library";
 import { createSavedMeal } from "@/services/nutrition-v1/server/saved-meals";
 
@@ -34,7 +35,7 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
   if (!selected.servingLabel) {
     throw new Error(`Canonical Food “${foodName}” has no authoritative serving selection. Choose a Food with explicit serving authority before creating a Saved Meal.`);
   }
-  return resolveFoodHandoff(ctx.supabase, ctx.userId, {
+  return resolveTransitionalMcpFoodHandoff(ctx.supabase, ctx.userId, {
     foodId: selected.id,
     source: selected.source,
     quantity: positive(item.quantity),

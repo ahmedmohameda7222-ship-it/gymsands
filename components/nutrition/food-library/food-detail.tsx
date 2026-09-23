@@ -50,8 +50,11 @@ export function FoodDetail({ food, initialAdd = false, onClose, onFavorite, onCo
   const sourceParam = encodeURIComponent(food.source);
   const quantityParam = encodeURIComponent(String(quantity));
   const servingParam = encodeURIComponent(servingLabel);
+  const selectionParams = food.source === "catalog"
+    ? `&selectedName=${encodeURIComponent(food.name)}&languageTag=${encodeURIComponent(food.locale)}`
+    : "";
   const unavailable = nt("notAvailable");
-  const destinationSuffix = `addFoodId=${foodParam}&source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}`;
+  const destinationSuffix = `addFoodId=${foodParam}&source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}${selectionParams}`;
   const nutritionBasis = food.nutrition.basis_amount !== null && food.nutrition.basis_unit
     ? `${food.nutrition.basis_amount} ${food.nutrition.basis_unit}`
     : null;
@@ -77,8 +80,8 @@ export function FoodDetail({ food, initialAdd = false, onClose, onFavorite, onCo
         {addOpen && hasAuthoritativeServing ? <section className="mt-6 rounded-xl border border-border p-3"><h3 className="text-sm font-semibold">{nt("addTo")}</h3><div className="mt-2 grid grid-cols-2 gap-2">
           <Link href={`/calories?${destinationSuffix}`} className="flex min-h-11 items-center justify-center rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">{nt("diary")}</Link>
           <Link href={`/my-meal-plan?${destinationSuffix}`} className="flex min-h-11 items-center justify-center rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">{nt("mealPlan")}</Link>
-          <Link href={`/calories?savedMealFoodId=${foodParam}&source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}`} className="flex min-h-11 items-center justify-center rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">{nt("savedMeal")}</Link>
-          <Link href={`/my-recipes?ingredientFoodId=${foodParam}&source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}`} className="flex min-h-11 items-center justify-center rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">{nt("recipe")}</Link>
+          <Link href={`/calories?savedMealFoodId=${foodParam}&source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}${selectionParams}`} className="flex min-h-11 items-center justify-center rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">{nt("savedMeal")}</Link>
+          <Link href={`/my-recipes?ingredientFoodId=${foodParam}&source=${sourceParam}&quantity=${quantityParam}&serving=${servingParam}${selectionParams}`} className="flex min-h-11 items-center justify-center rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted">{nt("recipe")}</Link>
         </div></section> : null}
 
         <section className="mt-7 border-t border-border/70 pt-5"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{nt("nutritionFacts")}</h3>{food.usingPersonalValues ? <span className="text-xs font-medium text-muted-foreground">{nt("usingYourValues")}</span> : null}</div><details className="mt-2"><summary className="cursor-pointer py-3 text-sm font-medium">{nt("moreNutrition")}</summary><dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-xs text-muted-foreground">{nt("fiber")}</dt><dd>{display(nutrition.fiber_g, "g", unavailable)}</dd></div><div><dt className="text-xs text-muted-foreground">{nt("sugars")}</dt><dd>{display(nutrition.sugars_g, "g", unavailable)}</dd></div><div><dt className="text-xs text-muted-foreground">{nt("saturatedFat")}</dt><dd>{display(nutrition.saturated_fat_g, "g", unavailable)}</dd></div><div><dt className="text-xs text-muted-foreground">{nt("sodium")}</dt><dd>{display(nutrition.sodium_mg, "mg", unavailable)}</dd></div></dl></details></section>
