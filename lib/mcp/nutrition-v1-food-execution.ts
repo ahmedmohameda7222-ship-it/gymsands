@@ -139,12 +139,18 @@ export async function executeCanonicalFoodMcpTool(
         continue;
       }
 
-      const handoff = await resolveFoodHandoff(ctx.supabase, ctx.userId, {
+      const common = {
         foodId: match.exact.id,
-        source: match.exact.source === "global" ? "catalog" : "my_food",
         quantity: getNumber(item, "quantity", 1),
         serving: match.exact.serving_size,
-      });
+      };
+      const handoff = await resolveFoodHandoff(
+        ctx.supabase,
+        ctx.userId,
+        match.exact.source === "global"
+          ? { ...common, source: "catalog", selectedName: match.exact.food_name, languageTag: null }
+          : { ...common, source: "my_food" },
+      );
       rows.push(rowFromHandoff(
         ctx,
         date,

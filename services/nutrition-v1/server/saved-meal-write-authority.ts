@@ -27,12 +27,18 @@ export async function canonicalizeSavedMealItems(
   for (const item of items) {
     if (item.kind === "food") {
       const source = await detectFoodSource(supabase, userId, item.food_id);
-      const resolved = await resolveFoodHandoff(supabase, userId, {
+      const common = {
         foodId: item.food_id,
-        source,
         quantity: item.resolved_quantity,
         serving: item.resolved_serving_label,
-      });
+      };
+      const resolved = await resolveFoodHandoff(
+        supabase,
+        userId,
+        source === "catalog"
+          ? { ...common, source, selectedName: item.frozen_name, languageTag: null }
+          : { ...common, source },
+      );
       output.push(resolved.savedMealItem);
       continue;
     }

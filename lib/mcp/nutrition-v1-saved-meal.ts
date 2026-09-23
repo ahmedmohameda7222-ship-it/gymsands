@@ -34,12 +34,18 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
   if (!selected.servingLabel) {
     throw new Error(`Canonical Food “${foodName}” has no authoritative serving selection. Choose a Food with explicit serving authority before creating a Saved Meal.`);
   }
-  return resolveFoodHandoff(ctx.supabase, ctx.userId, {
+  const common = {
     foodId: selected.id,
-    source: selected.source,
     quantity: positive(item.quantity),
     serving: selected.servingLabel,
-  });
+  };
+  return resolveFoodHandoff(
+    ctx.supabase,
+    ctx.userId,
+    selected.source === "catalog"
+      ? { ...common, source: selected.source, selectedName: selected.name, languageTag: selected.locale }
+      : { ...common, source: selected.source },
+  );
 }
 
 function publicSavedMealItem(item: ResolvedFoodHandoff) {
