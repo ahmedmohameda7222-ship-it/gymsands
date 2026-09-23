@@ -145,7 +145,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
   it("recovers a unique frozen English Name identity even after the UI switches to German", async () => {
     const owner = ownerSupabase(false);
-    generation.resolve.mockResolvedValueOnce(currentView([name("1", "en", "Shared name")]));
+    generation.resolve.mockResolvedValueOnce(currentView([name("1", "en", "Shared name")], [serving("20", "100 g")]));
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
 
@@ -160,7 +160,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
 
   it("recovers a unique frozen German Name identity even after the UI switches to English", async () => {
     const owner = ownerSupabase(false);
-    generation.resolve.mockResolvedValueOnce(currentView([name("2", "de", "Shared name")]));
+    generation.resolve.mockResolvedValueOnce(currentView([name("2", "de", "Shared name")], [serving("21", "100 g")]));
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "en");
 
@@ -175,7 +175,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     generation.resolve.mockResolvedValueOnce(currentView([
       name("3", "en", "Shared name"),
       name("4", "de", "Shared name"),
-    ]));
+    ], [serving("22", "100 g")]));
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "de");
 
@@ -202,7 +202,7 @@ describe("Saved Meal Catalog Name locale write identity", () => {
     generation.resolve.mockResolvedValueOnce(currentView([
       name("7", "ar", "Shared name"),
       name("8", "de", "Andere"),
-    ]));
+    ], [serving("23", "100 g")]));
 
     await canonicalizeSavedMealItems(owner, catalogSupabase, userId, [frozenFood], "fr-FR");
 
