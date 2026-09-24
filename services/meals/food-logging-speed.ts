@@ -260,12 +260,23 @@ export async function setFavoriteFoodAsync(
 
   if (authority === "catalog") {
     if (!isUuid(key)) throw new Error("Catalog favorite Food must be a valid ID.");
-    const result = favorite
-      ? await supabase!.from("food_favorites").insert({ user_id: userId, food_id: key })
-      : await supabase!.from("food_favorites").delete().eq("user_id", userId).eq("food_id", key);
-
-    if (result.error && !(favorite && result.error.code === "23505")) {
-      throw new Error(`Plaivra could not update canonical Catalog favorite. ${result.error.message}`);
+    if (favorite) {
+      const result = await supabase!.from("food_favorites").insert({ user_id: userId, food_id: key });
+      if (result.error && result.error.code !== "23505") {
+        throw new Error(`Plaivra could not update canonical Catalog favorite. ${result.error.message}`);
+      }
+    } else {
+      // A source-known Catalog unfavorite is an explicit owner action. Clear the
+      // canonical row and any exact legacy key representing the same Food so a
+      // retained pre-cutover row cannot immediately re-favorite the UI.
+      const [catalogResult, legacyResult] = await Promise.all([
+        supabase!.from("food_favorites").delete().eq("user_id", userId).eq("food_id", key),
+        supabase!.from("user_food_favorites").delete().eq("user_id", userId).eq("food_key", key),
+      ]);
+      if (catalogResult.error || legacyResult.error) {
+        const message = catalogResult.error?.message ?? legacyResult.error?.message ?? "database error";
+        throw new Error(`Plaivra could not remove Catalog favorite. ${message}`);
+      }
     }
     return getFavoriteFoodKeysAsync(userId);
   }
