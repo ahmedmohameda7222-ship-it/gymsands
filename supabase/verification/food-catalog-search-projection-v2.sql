@@ -360,6 +360,83 @@ begin
 end
 $benchmark$;
 
+-- Plan 7 / Plan 6 Personal Override overlay: exact pointed revision, NULL fallback,
+-- numeric zero, note/serving-only, tombstone, cross-owner isolation, and fail-closed corruption.
+insert into public.food_personal_override_revisions(
+  id,user_id,food_id,revision_number,supersedes_revision_id,nutrition_override,serving_label,note,is_deleted,created_at
+) values
+('a5d00000-0000-4000-8000-000000000001','a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000025',1,null,
+ '{"calories":0,"protein_g":null,"carbs_g":7}'::jsonb,null,'active nutrition override',false,'2026-09-24T05:15:00Z'),
+('a5d00000-0000-4000-8000-000000000002','a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000025',2,'a5d00000-0000-4000-8000-000000000001',
+ '{"calories":999}'::jsonb,null,'newer unpointed',false,'2026-09-24T05:16:00Z'),
+('a5d00000-0000-4000-8000-000000000003','a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000024',1,null,
+ null,'Owner serving only','note only',false,'2026-09-24T05:15:00Z'),
+('a5d00000-0000-4000-8000-000000000004','a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000023',1,null,
+ '{"calories":1}'::jsonb,null,null,true,'2026-09-24T05:15:00Z'),
+('a5d00000-0000-4000-8000-000000000005','a5c00000-0000-4000-8000-000000000002','a5000000-0000-4000-8000-000000000022',1,null,
+ '{"calories":0}'::jsonb,null,'other owner',false,'2026-09-24T05:15:00Z');
+
+insert into public.food_personal_overrides(user_id,food_id,current_revision_id,pointer_revision,updated_at) values
+('a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000025','a5d00000-0000-4000-8000-000000000001',1,'2026-09-24T05:15:00Z'),
+('a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000024','a5d00000-0000-4000-8000-000000000003',1,'2026-09-24T05:15:00Z'),
+('a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000023','a5d00000-0000-4000-8000-000000000004',1,'2026-09-24T05:15:00Z'),
+('a5c00000-0000-4000-8000-000000000002','a5000000-0000-4000-8000-000000000022','a5d00000-0000-4000-8000-000000000005',1,'2026-09-24T05:15:00Z');
+
+select public.search_food_catalog_v2('Bench Food 25','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_override_active \gset
+select pg_temp.plan5_assert(
+  (:'plan7_override_active'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=0
+  and (:'plan7_override_active'::jsonb->'items'->0->'nutrition'->>'protein_g')::numeric=10
+  and (:'plan7_override_active'::jsonb->'items'->0->'nutrition'->>'carbs_g')::numeric=7
+  and (:'plan7_override_active'::jsonb->'items'->0->'nutrition'->>'fat_g')::numeric=5
+  and (:'plan7_override_active'::jsonb->'items'->0->>'usingPersonalValues')::boolean=true,
+  'Plan 6 active nutrition override did not preserve zero / JSON-null / missing-key semantics.'
+);
+select pg_temp.plan5_assert(
+  (:'plan7_override_active'::jsonb->'items'->0->'nutrition'->>'calories')::numeric<>999,
+  'Search used a newer unpointed Personal Override revision.'
+);
+
+select public.search_food_catalog_v2('Bench Food 24','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_override_serving_note \gset
+select pg_temp.plan5_assert(
+  (:'plan7_override_serving_note'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=124
+  and (:'plan7_override_serving_note'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
+  'Serving/note-only Personal Override changed search nutrition or usingPersonalValues.'
+);
+
+select public.search_food_catalog_v2('Bench Food 23','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_override_tombstone \gset
+select pg_temp.plan5_assert(
+  (:'plan7_override_tombstone'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=123
+  and (:'plan7_override_tombstone'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
+  'Tombstoned Personal Override changed search nutrition.'
+);
+
+select public.search_food_catalog_v2('Bench Food 22','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_override_other_owner \gset
+select pg_temp.plan5_assert(
+  (:'plan7_override_other_owner'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=122
+  and (:'plan7_override_other_owner'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
+  'Another owner Personal Override affected the authenticated owner search.'
+);
+
+select public.search_food_catalog_v2('Bench Food 21','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_override_none \gset
+select pg_temp.plan5_assert(
+  (:'plan7_override_none'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=121
+  and (:'plan7_override_none'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
+  'No-pointer search did not preserve canonical SearchDocument nutrition.'
+);
+
+update public.food_personal_overrides
+set current_revision_id='a5d00000-0000-4000-8000-000000000005',pointer_revision=1
+where user_id='a5c00000-0000-4000-8000-000000000001'
+  and food_id='a5000000-0000-4000-8000-000000000023';
+select pg_temp.plan5_rejected(
+  $select public.search_food_catalog_v2('Bench Food 23','en','Latn',null,null,20,null,null,'all','{}'::jsonb)$,
+  'Corrupt cross-owner Personal Override pointer did not fail closed.'
+);
+update public.food_personal_overrides
+set current_revision_id='a5d00000-0000-4000-8000-000000000004',pointer_revision=1
+where user_id='a5c00000-0000-4000-8000-000000000001'
+  and food_id='a5000000-0000-4000-8000-000000000023';
+
 -- Search must remain generation-bound; changing current pointer to NULL removes global documents.
 update public.food_catalog_current_generation
 set current_generation_id=null,current_event_id=null,current_validation_report_id=null,
