@@ -314,8 +314,8 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(reconciliationDoc).toContain("20260906200129_food_catalog_search_projection_v2");
     expect(reconciliationDoc).toContain("20260907215257_food_catalog_search_serving_semantics_correction");
     expect(reconciliationDoc).toContain("physical production migration records: **123**");
-    expect(reconciliationDoc).toContain("`pendingcount = 4`");
-    expect(reconciliationDoc).toContain("`unresolvedcount = 4`");
+    expect(reconciliationDoc).toContain("`pendingcount = 5`");
+    expect(reconciliationDoc).toContain("`unresolvedcount = 5`");
     expect(reconciliationDoc).toContain(PLAN7_PENDING_MIGRATION);
     expect(reconciliationDoc).toContain(PLAN7_OWNER_EXPORT_MIGRATION);
     expect(reconciliationDoc).toContain(PLAN7_INGESTION_REACTIVATION_MIGRATION);
