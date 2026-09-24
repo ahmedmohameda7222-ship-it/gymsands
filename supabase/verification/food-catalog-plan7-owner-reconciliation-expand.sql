@@ -68,15 +68,23 @@ select pg_temp.plan7_expand_assert(
 );
 
 select pg_temp.plan7_expand_assert(
-  not has_function_privilege('public','private.food_catalog_get_current_personal_override_for_owner_v1(uuid,uuid)','EXECUTE')
-  and not has_function_privilege('anon','private.food_catalog_get_current_personal_override_for_owner_v1(uuid,uuid)','EXECUTE')
+  not has_function_privilege('anon','private.food_catalog_get_current_personal_override_for_owner_v1(uuid,uuid)','EXECUTE')
   and not has_function_privilege('authenticated','private.food_catalog_get_current_personal_override_for_owner_v1(uuid,uuid)','EXECUTE')
   and not has_function_privilege('service_role','private.food_catalog_get_current_personal_override_for_owner_v1(uuid,uuid)','EXECUTE')
-  and not has_function_privilege('public','private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)','EXECUTE')
   and not has_function_privilege('anon','private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)','EXECUTE')
   and not has_function_privilege('authenticated','private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)','EXECUTE')
-  and not has_function_privilege('service_role','private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)','EXECUTE'),
-  'private owner/search core became directly executable by application roles'
+  and not has_function_privilege('service_role','private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)','EXECUTE')
+  and not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    cross join lateral aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl
+    where n.nspname='private'
+      and p.proname in ('food_catalog_get_current_personal_override_for_owner_v1','food_catalog_search_v2_for_owner_v1')
+      and acl.grantee=0
+      and acl.privilege_type='EXECUTE'
+  ),
+  'private owner/search core became directly executable by application roles or PUBLIC'
 );
 
 select pg_temp.plan7_expand_assert(
@@ -121,8 +129,10 @@ select pg_temp.plan7_expand_assert(
 );
 
 select pg_temp.plan7_expand_assert(
-  position('jsonb_typeof(override_revision.nutrition_override -> ''calories''::text) = ''number''::text' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
-  or position('jsonb_typeof((override_revision.nutrition_override -> ''calories''::text)) = ''number''::text' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0,
+  position('jsonb_typeof' in lower(pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure)))>0
+  and position('override_revision.nutrition_override' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
+  and position('calories' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
+  and position('= ''number''' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0,
   'search core no longer distinguishes numeric zero from missing/JSON-null override values'
 );
 
