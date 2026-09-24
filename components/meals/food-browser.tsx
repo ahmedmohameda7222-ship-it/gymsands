@@ -418,7 +418,9 @@ function FoodBrowserInner({
     }
   }
 
-  async function toggleFavoriteForKey(key: string, label: string) {
+  async function toggleFavoriteForFood(food: FoodLibraryItem) {
+    const key = favoriteKeyForFood(food);
+    const label = food.food_name;
     if (isPending(foodAction(key, "favorite"))) return;
     const nextFavorite = !favoriteKeys.includes(key);
     const previousKeys = favoriteKeys;
@@ -429,7 +431,10 @@ function FoodBrowserInner({
     setFavoriteKeys(optimisticKeys);
     setFoodAction(key, "favorite", { status: "pending", label: nextFavorite ? "Saving favorite..." : "Removing favorite..." });
     try {
-      const savedKeys = await setFavoriteFoodAsync(user?.id, key, nextFavorite, label);
+      const savedKeys = await setFavoriteFoodAsync(user?.id, key, nextFavorite, {
+        label,
+        authority: food.is_global === false ? "legacy" : "catalog",
+      });
       setFavoriteKeys(savedKeys);
       setFoodAction(key, "favorite", {
         status: "success",
@@ -672,7 +677,7 @@ function FoodBrowserInner({
                       className="min-h-12 sm:col-span-2"
                       type="button"
                       variant={favorite ? "default" : "outline"}
-                      onClick={() => toggleFavoriteForKey(favoriteKey, food.food_name)}
+                      onClick={() => toggleFavoriteForFood(food)}
                       disabled={isPending(favoriteAction)}
                     >
                       {isPending(favoriteAction) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Heart className="h-4 w-4" />}
