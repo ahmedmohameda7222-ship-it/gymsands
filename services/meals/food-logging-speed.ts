@@ -9,6 +9,7 @@ import {
 import type { FoodItem, FoodLog, MealType } from "@/types";
 
 export type FoodFavoriteKey = string;
+export type FoodFavoriteAuthority = "catalog" | "legacy";
 export type ServingUnit = "grams" | "pieces" | "cups" | "tablespoons" | "serving" | "portion";
 
 export type QuickAddInput = {
@@ -221,25 +222,58 @@ export async function getFavoriteFoodKeysAsync(userId: string | null | undefined
     }
   }
 
-  const { data, error } = await supabase!
-    .from("user_food_favorites")
-    .select("food_key")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.warn("Plaivra could not load synced food favorites.", error.message);
-    return local;
+  const [legacyResult, catalogResult] = await Promise.all([
+    supabase!
+      .from("user_food_favorites")
+      .select("food_key")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    supabase!
+      .from("food_favorites")
+      .select("food_id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+  ]);
+  if (legacyResult.error) {
+    console.warn("Plaivra could not load synced legacy food favorites.", legacyResult.error.message);
   }
-  return (data ?? []).map((item) => String(item.food_key));
+  if (catalogResult.error) {
+    console.warn("Plaivra could not load canonical Catalog food favorites.", catalogResult.error.message);
+  }
+  if (legacyResult.error && catalogResult.error) return local;
+
+  return Array.from(new Set([
+    ...(legacyResult.data ?? []).map((item) => String(item.food_key)),
+    ...(catalogResult.data ?? []).map((item) => String(item.food_id)),
+    ...local,
+  ]));
 }
 
-export async function setFavoriteFoodAsync(userId: string | null | undefined, key: FoodFavoriteKey, favorite: boolean, label?: string) {
+export async function setFavoriteFoodAsync(
+  userId: string | null | undefined,
+  key: FoodFavoriteKey,
+  favorite: boolean,
+  options: { label?: string; authority?: FoodFavoriteAuthority } = {},
+) {
+  const authority = options.authority ?? "legacy";
   if (!canUseUserData(userId)) return setFavoriteFood(userId, key, favorite);
+
+  if (authority === "catalog") {
+    if (!isUuid(key)) throw new Error("Catalog favorite Food must be a valid ID.");
+    const result = favorite
+      ? await supabase!.from("food_favorites").insert({ user_id: userId, food_id: key })
+      : await supabase!.from("food_favorites").delete().eq("user_id", userId).eq("food_id", key);
+
+    if (result.error && !(favorite && result.error.code === "23505")) {
+      throw new Error(`Plaivra could not update canonical Catalog favorite. ${result.error.message}`);
+    }
+    return getFavoriteFoodKeysAsync(userId);
+  }
 
   const result = favorite
     ? await supabase!
         .from("user_food_favorites")
-        .upsert({ user_id: userId, food_key: key, label: label ?? null }, { onConflict: "user_id,food_key" })
+        .upsert({ user_id: userId, food_key: key, label: options.label ?? null }, { onConflict: "user_id,food_key" })
     : await supabase!.from("user_food_favorites").delete().eq("user_id", userId).eq("food_key", key);
 
   if (result.error) {
