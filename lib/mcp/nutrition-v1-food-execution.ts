@@ -11,10 +11,10 @@ import {
 } from "@/lib/mcp/schemas";
 import { fail, ok, type McpToolResult } from "@/lib/mcp/tool-helpers";
 import { sumFoodLogs } from "@/services/nutrition/calculations";
-import { listFoodLibrary, normalizeFoodSearchText, type FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
+import { listFoodLibraryForMcp, normalizeFoodSearchText, type FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
 import {
-  resolveCatalogNewUseSelectionWithAuthorities,
-  resolveFoodHandoff,
+  resolveCatalogNewUseSelectionForMcp,
+  resolveFoodHandoffForMcp,
 } from "@/services/nutrition-v1/server/food-handoff";
 
 type FoodCandidate = {
@@ -66,7 +66,7 @@ async function findFood(
   const cleanQuery = normalizeFoodSearchText(query);
   if (!cleanQuery) throw new Error("food_name is required.");
 
-  const page = await listFoodLibrary(ctx.supabase, ctx.userId, {
+  const page = await listFoodLibraryForMcp(ctx.supabase, ctx.connectionId, {
     query: cleanQuery,
     locale: "en",
     marketScopeCode: null,
@@ -84,7 +84,7 @@ function rowFromHandoff(
   date: string,
   mealType: string,
   notes: string | null,
-  handoff: Awaited<ReturnType<typeof resolveFoodHandoff>>,
+  handoff: Awaited<ReturnType<typeof resolveFoodHandoffForMcp>>,
 ) {
   return {
     user_id: ctx.userId,
@@ -138,7 +138,7 @@ export async function executeCanonicalFoodMcpTool(
       const quantity = getNumber(item, "quantity", 1);
       const servingHint = getOptionalString(item, "serving_hint")?.trim() || null;
       const servingOptionId = getOptionalString(item, "serving_option_id")?.trim() || null;
-      let handoff: Awaited<ReturnType<typeof resolveFoodHandoff>>;
+      let handoff: Awaited<ReturnType<typeof resolveFoodHandoffForMcp>>;
 
       if (match.exact.source === "global") {
         const languageTag = match.exact.locale;
@@ -146,12 +146,11 @@ export async function executeCanonicalFoodMcpTool(
           return fail("invalid_food_identity", "The selected Catalog Food is missing its exact Name locale. Search again before logging.");
         }
 
-        // PR A keeps the existing MCP single-client bridge intact. Task 14 / PR B
-        // must still supply authenticated owner authority before deployment; this
-        // call intentionally does not broaden service-role owner access.
-        const selection = await resolveCatalogNewUseSelectionWithAuthorities(
+        // Owner Personal Override authority is derived again in the database
+        // from the verified MCP connection; global generation reads remain service authority.
+        const selection = await resolveCatalogNewUseSelectionForMcp(
           ctx.supabase,
-          ctx.supabase,
+          ctx.connectionId,
           ctx.userId,
           {
             foodId: match.exact.id,
@@ -215,7 +214,7 @@ export async function executeCanonicalFoodMcpTool(
           );
         }
 
-        handoff = await resolveFoodHandoff(ctx.supabase, ctx.userId, {
+        handoff = await resolveFoodHandoffForMcp(ctx.supabase, ctx.connectionId, ctx.userId, {
           foodId: match.exact.id,
           source: "catalog",
           quantity,
@@ -228,7 +227,7 @@ export async function executeCanonicalFoodMcpTool(
         if (servingOptionId) {
           return fail("invalid_serving_identity", "serving_option_id is only valid for Catalog Food serving choices.");
         }
-        handoff = await resolveFoodHandoff(ctx.supabase, ctx.userId, {
+        handoff = await resolveFoodHandoffForMcp(ctx.supabase, ctx.connectionId, ctx.userId, {
           foodId: match.exact.id,
           source: "my_food",
           quantity,
