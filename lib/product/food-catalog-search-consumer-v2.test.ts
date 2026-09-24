@@ -67,7 +67,7 @@ describe("Plan 5 Food Library V2 consumer surface", () => {
     expect(mealPlan).toContain("servingOptionId");
     expect(savedMealUtility).toContain("/selection?");
     expect(savedMealUtility).toContain("servingOptionId");
-    expect(mcpSavedMeal).toContain("resolveCatalogNewUseSelectionWithAuthorities");
+    expect(mcpSavedMeal).toContain("resolveCatalogNewUseSelectionForMcp");
     expect(mcpSavedMeal).toContain("servingOptionId");
     expect(mcpSavedMeal).not.toContain("if (!selected.servingLabel)");
     expect(service).toContain('source: FoodLibrarySource');
