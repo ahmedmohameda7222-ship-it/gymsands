@@ -66,6 +66,17 @@ describe("Plan 7 Tasks 13-14 owner reconciliation and expand authority", () => {
     expect(savedMeal).toContain("ctx.connectionId");
   });
 
+  it("routes source-known Catalog favorites to canonical food_favorites without inferring UUID source", () => {
+    const speed = source("services/meals/food-logging-speed.ts");
+    const browser = source("components/meals/food-browser.tsx");
+
+    expect(speed).toContain('export type FoodFavoriteAuthority = "catalog" | "legacy"');
+    expect(speed).toContain('.from("food_favorites")');
+    expect(speed).toContain('authority === "catalog"');
+    expect(browser).toContain('authority: food.is_global === false ? "legacy" : "catalog"');
+    expect(speed).toContain('.from("user_food_favorites")');
+  });
+
   it("keeps Task 14 expand-only and records the fifth pending repository migration", () => {
     const sql = source(`supabase/migrations/${migrationFiles[0]}`).toLowerCase();
     expect(sql).not.toMatch(/\bdrop\s+(table|column|function)\b/);
