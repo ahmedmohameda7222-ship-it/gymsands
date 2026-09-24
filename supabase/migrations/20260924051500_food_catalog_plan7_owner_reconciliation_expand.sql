@@ -5,6 +5,37 @@ begin;
 -- Search cutover remains gated by a fresh Production food_personal_corrections count.
 -- This migration is expand-only: it changes function authority without retiring stored owner data.
 
+create or replace function private.food_catalog_require_active_owner_account_v1(p_user_id uuid)
+returns void
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+begin
+  if p_user_id is null then
+    raise exception 'Food Catalog owner is required.' using errcode='42501';
+  end if;
+
+  perform private.food_catalog_lock_account_purge(p_user_id);
+  perform 1
+  from auth.users auth_user
+  join public.account_access_states access_state
+    on access_state.user_id = auth_user.id
+  where auth_user.id = p_user_id
+    and access_state.state = 'active'
+    and access_state.disabled_at is null
+  for share of access_state;
+
+  if not found then
+    raise exception 'Food Catalog owner action requires an active, non-disabled account.' using errcode='42501';
+  end if;
+end
+$function$;
+
+revoke all on function private.food_catalog_require_active_owner_account_v1(uuid)
+from public, anon, authenticated, service_role;
+
 create or replace function private.food_catalog_get_current_personal_override_for_owner_v1(
   p_user_id uuid,
   p_food_id uuid
@@ -34,7 +65,7 @@ begin
     raise exception 'Personal Override Food ID is required.' using errcode='22023';
   end if;
 
-  perform private.food_catalog_governance_require_active_member_account(p_user_id);
+  perform private.food_catalog_require_active_owner_account_v1(p_user_id);
 
   select
     pointer.current_revision_id,
@@ -126,7 +157,7 @@ begin
     raise exception 'MCP connection is inactive, revoked, or unknown.' using errcode='42501';
   end if;
 
-  perform private.food_catalog_governance_require_active_member_account(v_user_id);
+  perform private.food_catalog_require_active_owner_account_v1(v_user_id);
   return v_user_id;
 end
 $function$;
