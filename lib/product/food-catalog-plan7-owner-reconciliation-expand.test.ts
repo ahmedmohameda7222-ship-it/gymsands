@@ -14,6 +14,9 @@ describe("Plan 7 Tasks 13-14 owner reconciliation and expand authority", () => {
     expect(source("supabase/verification/food-catalog-plan7-owner-reconciliation-expand.sql")).toContain(
       "food_catalog_plan7_owner_reconciliation_expand",
     );
+    expect(source("scripts/run-database-verification.mjs")).toContain(
+      "supabase/verification/food-catalog-plan7-owner-reconciliation-expand.sql",
+    );
   });
 
   it("keeps the public browser search signature while delegating to an explicit-owner private core", () => {
