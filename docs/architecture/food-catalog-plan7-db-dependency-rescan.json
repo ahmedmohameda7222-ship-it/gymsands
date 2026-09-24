@@ -1,0 +1,107 @@
+{
+  "reportVersion": 1,
+  "task": "Food Catalog Plan 7 Task 14D",
+  "startingAuthority": "306384cf12e99381c80f026780bee3cc2e60e1ce",
+  "scanDisposition": "evidence_only_no_retirement",
+  "generatedAtRepositoryPhase": "Tasks 13-14 implementation",
+  "categories": {
+    "food_items": [
+      "supabase/migrations/202606290000_clean_initial_schema.sql",
+      "supabase/migrations/20260825120300_nutrition_v1_food_search_and_curation.sql",
+      "supabase/migrations/20260827103000_nutrition_v1_long_term_architecture_corrections.sql",
+      "supabase/migrations/20260828032000_nutrition_v1_final_architecture_corrections.sql",
+      "supabase/migrations/20260828180000_nutrition_v1_recipe_preseed_idempotency.sql",
+      "supabase/migrations/20260830011407_food_catalog_population_readiness.sql",
+      "supabase/migrations/20260901153000_food_catalog_intelligence_core.sql",
+      "supabase/migrations/20260902150000_food_catalog_generation_authority.sql",
+      "supabase/migrations/20260904100000_food_catalog_ingestion_v2_authority.sql",
+      "supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql",
+      "scripts/restore-food-catalog-portable.mjs",
+      "scripts/verify-food-catalog-integrated-restore.mjs"
+    ],
+    "food_personal_corrections": [
+      "supabase/migrations/20260825120300_nutrition_v1_food_search_and_curation.sql",
+      "supabase/migrations/20260825120400_nutrition_v1_privacy_purge_authority.sql",
+      "supabase/migrations/20260827103000_nutrition_v1_long_term_architecture_corrections.sql",
+      "supabase/migrations/20260828032000_nutrition_v1_final_architecture_corrections.sql",
+      "supabase/migrations/20260906183000_food_catalog_search_projection_v2.sql",
+      "lib/privacy/data-export.ts",
+      "lib/food-catalog/portability/relation-registry.ts",
+      "lib/food-catalog/portability/restore-assertions.ts",
+      "scripts/verify-food-catalog-integrated-restore.mjs",
+      "supabase/migrations/20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql"
+    ],
+    "food_aliases": [
+      "supabase/migrations/20260825120300_nutrition_v1_food_search_and_curation.sql",
+      "supabase/migrations/20260827103000_nutrition_v1_long_term_architecture_corrections.sql",
+      "supabase/migrations/20260828032000_nutrition_v1_final_architecture_corrections.sql",
+      "lib/food-catalog/portability/relation-registry.ts",
+      "lib/food-catalog/portability/restore-dependencies.ts"
+    ],
+    "food_market_relevance": [
+      "supabase/migrations/20260830011407_food_catalog_population_readiness.sql",
+      "lib/food-catalog/portability/relation-registry.ts",
+      "lib/food-catalog/portability/restore-dependencies.ts"
+    ],
+    "search_authority": [
+      "supabase/migrations/20260906183000_food_catalog_search_projection_v2.sql",
+      "supabase/migrations/20260907165500_food_catalog_search_serving_semantics_correction.sql",
+      "supabase/migrations/20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql",
+      "services/nutrition-v1/server/food-library.ts",
+      "services/database/nutrition.ts",
+      "lib/food-catalog/portability/search-restore-verifier.ts",
+      "scripts/verify-food-catalog-restored-search.mjs"
+    ],
+    "plan5_rebuild_helper": [
+      "supabase/migrations/20260906183000_food_catalog_search_projection_v2.sql",
+      "supabase/migrations/20260907165500_food_catalog_search_serving_semantics_correction.sql",
+      "lib/food-catalog/portability/search-restore-verifier.ts",
+      "scripts/capture-food-catalog-restored-search-runtime.mjs",
+      "scripts/verify-food-catalog-restored-search.mjs"
+    ],
+    "merge_lifecycle": [
+      "supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql",
+      "services/food-catalog/server/governance-command-executor.ts",
+      "lib/food-catalog/governance/operational-logging.test.ts"
+    ],
+    "activation_generation": [
+      "supabase/migrations/20260902150000_food_catalog_generation_authority.sql",
+      "supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql",
+      "services/food-catalog/server/supabase-generation-read-store.ts",
+      "services/food-catalog/server/supabase-generation-validation-read-store.ts",
+      "lib/food-catalog/portability/pre-pointer-generation-runtime.mjs",
+      "lib/food-catalog/portability/restore-dependencies.ts",
+      "scripts/verify-food-catalog-grant-promotion-concurrency.mjs"
+    ],
+    "ingestion_persistence": [
+      "supabase/migrations/20260904100000_food_catalog_ingestion_v2_authority.sql",
+      "supabase/migrations/20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql",
+      "lib/food-catalog/portability/restore-dependencies.ts",
+      "lib/food-catalog/portability/relation-registry.ts",
+      "scripts/verify-food-catalog-integrated-restore.mjs"
+    ],
+    "recipe_preseed": [
+      "supabase/migrations/20260828180000_nutrition_v1_recipe_preseed_idempotency.sql",
+      "supabase/verification/nutrition-v1-recipe-preseed-idempotency.sql"
+    ],
+    "grants_rls_policies_triggers": [
+      "supabase/migrations/20260901153000_food_catalog_intelligence_core.sql",
+      "supabase/migrations/20260902150000_food_catalog_generation_authority.sql",
+      "supabase/migrations/20260904100000_food_catalog_ingestion_v2_authority.sql",
+      "supabase/migrations/20260906183000_food_catalog_search_projection_v2.sql",
+      "supabase/migrations/20260907165500_food_catalog_search_serving_semantics_correction.sql",
+      "supabase/migrations/20260908100000_food_catalog_governance_control_plane.sql",
+      "supabase/migrations/20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql",
+      "supabase/migrations/20260915170012_food_catalog_owner_correction_export.sql",
+      "supabase/migrations/20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql",
+      "supabase/migrations/20260919034630_food_catalog_owner_override_read_authority.sql",
+      "supabase/migrations/20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql"
+    ]
+  },
+  "findings": [
+    "Legacy food_personal_corrections remains required by privacy/export and portability surfaces even though the new current search core no longer reads it.",
+    "food_aliases and food_market_relevance remain repository dependencies and are not retirement-safe from this scan.",
+    "Plan 5 rebuild/search helpers and generation/activation/ingestion/recipe-preseed authorities remain referenced.",
+    "No dependency in this report is authorized for retirement; Tasks 15-17 must use fresh evidence."
+  ]
+}
