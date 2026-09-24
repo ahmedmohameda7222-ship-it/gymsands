@@ -15,7 +15,7 @@ Legacy `user_food_favorites.food_key` remains heterogeneous. The deterministic c
 
 No fuzzy matching, name-based Catalog guessing, nutrition-based My Food guessing, blanket conversion, row deletion, or new favorite model is introduced.
 
-The current Product path in `services/meals/food-logging-speed.ts` is intentionally retained because it still represents My Food and text/log-derived favorite semantics. Canonical Catalog Food favorite authority remains `food_favorites`. This retained `user_food_favorites` dependency is evidence for Task 16, not retirement authority.
+The current Product path in `services/meals/food-logging-speed.ts` remains dual-authority by source. The Food Browser passes explicit source authority: source-known Catalog Food favorites write `food_favorites`, while My Food/text/log-derived favorite semantics remain on `user_food_favorites`. Favorite reads combine both authorities so retained legacy rows remain visible. Source is never inferred from UUID shape alone. An explicit Catalog unfavorite clears the canonical row and an exact same-key retained legacy favorite only as part of that user-requested unfavorite action; no background reconciliation deletes rows. The retained `user_food_favorites` dependency is evidence for Task 16, not retirement authority.
 
 Read-only evidence command:
 
