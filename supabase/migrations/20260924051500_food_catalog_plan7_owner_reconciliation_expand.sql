@@ -343,7 +343,7 @@ begin
         override_revision.id is not null
         and override_revision.is_deleted = false
         and canonical_nutrition.id is not null
-        and (
+        and coalesce((
           jsonb_typeof(override_revision.nutrition_override->'calories') = 'number'
           or jsonb_typeof(override_revision.nutrition_override->'protein_g') = 'number'
           or jsonb_typeof(override_revision.nutrition_override->'carbs_g') = 'number'
@@ -352,7 +352,7 @@ begin
           or jsonb_typeof(override_revision.nutrition_override->'fiber_g') = 'number'
           or jsonb_typeof(override_revision.nutrition_override->'sugars_g') = 'number'
           or jsonb_typeof(override_revision.nutrition_override->'sodium_mg') = 'number'
-        )
+        ), false)
       ) as using_personal_values,
       case
         when override_revision.id is not null
