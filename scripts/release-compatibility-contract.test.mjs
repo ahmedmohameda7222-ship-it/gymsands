@@ -13,6 +13,7 @@ const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_r
 const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
 const PLAN7_RESTORE_REACTIVATION_MIGRATION = "20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql";
 const PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION = "20260919034630_food_catalog_owner_override_read_authority.sql";
+const PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION = "20260924063000_food_catalog_owner_reconciliation_expand_authority.sql";
 const ledger = JSON.parse(
   readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"),
 );
@@ -33,7 +34,7 @@ test("declared database marker remains distinct from the applied physical head w
   assert.equal(resolved.expectedDatabaseMigrationVersion, "20260724232734");
   assert.equal(resolved.latestAppliedMigrationVersion, "20260910071241");
   assert.ok(resolved.latestAppliedMigrationVersion.localeCompare(resolved.expectedDatabaseMigrationVersion) > 0);
-  assert.deepEqual(pendingEntries.map((entry) => entry.localFile), [PLAN7_PENDING_MIGRATION, PLAN7_OWNER_EXPORT_MIGRATION, PLAN7_RESTORE_REACTIVATION_MIGRATION, PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION]);
+  assert.deepEqual(pendingEntries.map((entry) => entry.localFile), [PLAN7_PENDING_MIGRATION, PLAN7_OWNER_EXPORT_MIGRATION, PLAN7_RESTORE_REACTIVATION_MIGRATION, PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION, PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION]);
   for (const pendingEntry of pendingEntries) {
     assert.equal(pendingEntry.productionVersion, undefined);
     assert.equal(pendingEntry.productionName, undefined);
@@ -48,10 +49,10 @@ test("declared database marker remains distinct from the applied physical head w
   assert.equal(plan6Correction.productionVersion, "20260910071241");
   assert.equal(plan6Correction.productionName, "food_catalog_governance_gtin_lock_exactness");
   assert.equal(resolved.migrationLedgerReconciliationState, "pending");
-  assert.equal(ledger.pendingCount, 4);
-  assert.equal(resolved.pendingMigrationCount, 4);
+  assert.equal(ledger.pendingCount, 5);
+  assert.equal(resolved.pendingMigrationCount, 5);
   assert.equal(resolved.schemaAppliedUntrackedCount, 0);
-  assert.equal(resolved.unresolvedMigrationCount, 4);
+  assert.equal(resolved.unresolvedMigrationCount, 5);
 });
 
 test("Next build metadata preserves the declared marker and exposes the pending Plan 7 migration", async () => {
