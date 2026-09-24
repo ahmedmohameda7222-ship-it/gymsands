@@ -8,7 +8,7 @@ begin;
 create or replace function private.food_catalog_require_active_owner_account_v1(p_user_id uuid)
 returns void
 language plpgsql
-stable
+volatile
 security definer
 set search_path = ''
 as $function$
