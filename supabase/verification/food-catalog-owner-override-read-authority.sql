@@ -87,23 +87,30 @@ select pg_temp.owner_override_read_assert(
 );
 select pg_temp.owner_override_read_assert(
   (
-    select position('v_user uuid := auth.uid()' in pg_get_functiondef(p.oid))>0
-      and position('private.food_catalog_governance_require_active_member_account(v_user)' in pg_get_functiondef(p.oid))>0
-      and position('public.food_personal_overrides o' in pg_get_functiondef(p.oid))>0
-      and position('public.food_personal_override_revisions r' in pg_get_functiondef(p.oid))>0
-      and position('r.id = o.current_revision_id' in pg_get_functiondef(p.oid))>0
-      and position('o.user_id = v_user' in pg_get_functiondef(p.oid))>0
-      and position('o.food_id = p_food_id' in pg_get_functiondef(p.oid))>0
-      and position('food_catalog_export_owner_personal_overrides_v1' in pg_get_functiondef(p.oid))=0
-      and position('ORDER BY' in upper(pg_get_functiondef(p.oid)))=0
-      and position('MAX(' in upper(pg_get_functiondef(p.oid)))=0
+    select position('auth.uid()' in pg_get_functiondef(p.oid))>0
+      and position('private.food_catalog_get_current_personal_override_for_owner_v1' in pg_get_functiondef(p.oid))>0
     from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public'
       and p.proname='food_catalog_get_current_personal_override_v1'
       and p.pronargs=1
+  )
+  and (
+    select position('public.food_personal_overrides pointer' in pg_get_functiondef(p.oid))>0
+      and position('public.food_personal_override_revisions revision' in pg_get_functiondef(p.oid))>0
+      and position('revision.id = pointer.current_revision_id' in pg_get_functiondef(p.oid))>0
+      and position('pointer.user_id = p_user_id' in pg_get_functiondef(p.oid))>0
+      and position('pointer.food_id = p_food_id' in pg_get_functiondef(p.oid))>0
+      and position('food_catalog_export_owner_personal_overrides_v1' in pg_get_functiondef(p.oid))=0
+      and position('ORDER BY' in upper(pg_get_functiondef(p.oid)))=0
+      and position('MAX(' in upper(pg_get_functiondef(p.oid)))=0
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='private'
+      and p.proname='food_catalog_get_current_personal_override_for_owner_v1'
+      and p.pronargs=2
   ),
-  'RPC escaped exact pointer/current-owner read contract'
+  'RPC/shared owner core escaped exact pointer/current-owner read contract'
 );
 
 \set owner_a '72000000-0000-4000-8000-000000000001'
