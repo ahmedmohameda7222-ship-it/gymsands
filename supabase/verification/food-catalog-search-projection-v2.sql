@@ -429,7 +429,7 @@ set current_revision_id='a5d00000-0000-4000-8000-000000000005',pointer_revision=
 where user_id='a5c00000-0000-4000-8000-000000000001'
   and food_id='a5000000-0000-4000-8000-000000000023';
 select pg_temp.plan5_rejected(
-  $select public.search_food_catalog_v2('Bench Food 23','en','Latn',null,null,20,null,null,'all','{}'::jsonb)$,
+  $select$select public.search_food_catalog_v2('Bench Food 23','en','Latn',null,null,20,null,null,'all','{}'::jsonb)$select$,
   'Corrupt cross-owner Personal Override pointer did not fail closed.'
 );
 update public.food_personal_overrides
