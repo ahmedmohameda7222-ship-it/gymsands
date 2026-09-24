@@ -7,7 +7,7 @@ const FOOD_ID = "40000000-0000-4000-8000-000000000001";
 
 describe("Plan 7 MCP connection-derived Food owner authority", () => {
   it("derives owner-aware search from connection_id rather than a supplied user id", async () => {
-    const rpc = vi.fn(async () => ({ data: { items: [], nextCursor: null }, error: null }));
+    const rpc = vi.fn(async (_name: string, _args?: Record<string, unknown>) => ({ data: { items: [], nextCursor: null }, error: null }));
     const supabase = { rpc } as never;
 
     await listFoodLibraryForMcp(supabase, CONNECTION_ID, { query: "banana", locale: "en", limit: 5 });
@@ -23,7 +23,7 @@ describe("Plan 7 MCP connection-derived Food owner authority", () => {
   });
 
   it("reads Personal Override authority through the service-role MCP bridge", async () => {
-    const rpc = vi.fn(async () => ({
+    const rpc = vi.fn(async (_name: string, _args?: Record<string, unknown>) => ({
       data: {
         foodId: FOOD_ID,
         hasOverride: false,
