@@ -60,7 +60,8 @@ describe("Nutrition V1 Food Library completion contract", () => {
     expect(detail).toContain("scaledNutrition");
     expect(detail).toContain("setAddOpen");
     expect(detail).toContain("onFavorite");
-    expect(detail).toContain('<select value={servingLabel}');
+    expect(detail).toContain('<select value={servingChoiceKey}');
+    expect(detail).toContain("servingOptionId");
     expect(detail).toContain('aria-label={nt("addTo")}');
     expect(detail).toContain('nt("correctForMe")');
     expect(detail).toContain('nt("editFood")');

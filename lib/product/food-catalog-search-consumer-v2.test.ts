@@ -59,11 +59,46 @@ describe("Plan 5 Food Library V2 consumer surface", () => {
     expect(detail).toContain("hasAuthoritativeServing");
   });
 
-  it("fails closed for mutation consumers when a global Food has no authoritative serving while preserving My Foods", () => {
-    expect(diaryLogger).toContain("if (!food.servingLabel)");
-    expect(mealPlan).toContain("if (!food.servingLabel)");
-    expect(savedMealUtility).toContain("if (!food.servingLabel)");
-    expect(mcpSavedMeal).toContain("if (!selected.servingLabel)");
+  it("keeps nullable Catalog discovery separate from exact new-use serving authority while preserving My Food serving checks", () => {
+    expect(diaryLogger).toContain("/selection?");
+    expect(diaryLogger).toContain("servingOptionId");
+    expect(mealPlan).toContain("/selection?");
+    expect(mealPlan).toContain("/handoff?");
+    expect(mealPlan).toContain("servingOptionId");
+    expect(savedMealUtility).toContain("/selection?");
+    expect(savedMealUtility).toContain("servingOptionId");
+    expect(mcpSavedMeal).toContain("resolveCatalogNewUseSelectionWithAuthorities");
+    expect(mcpSavedMeal).toContain("servingOptionId");
+    expect(mcpSavedMeal).not.toContain("if (!selected.servingLabel)");
     expect(service).toContain('source: FoodLibrarySource');
+    expect(diaryLogger).not.toContain('disabled={!food.servingLabel}');
+    expect(mealPlan).not.toContain('disabled={result.kind === "food" && !result.value.servingLabel}');
   });
+
+  it("carries Saved Meal candidate locale as transient selection identity and sends current write locale separately", () => {
+    expect(savedMealUtility).toContain('languageTag: food.source === "catalog" ? food.locale : undefined');
+    expect(savedMealUtility).toContain("writeLanguageTag: language");
+  });
+
+
+  it("requires Product new-use flows to resolve serving authority instead of using SearchDocument serving or nutrition basis", () => {
+    const nutrition = readFileSync(resolve(process.cwd(), "services/database/nutrition.ts"), "utf8");
+    const foodHandoff = readFileSync(resolve(process.cwd(), "services/nutrition-v1/server/food-handoff.ts"), "utf8");
+    const selectionRoute = readFileSync(resolve(process.cwd(), "app/api/nutrition/v1/foods/[foodId]/selection/route.ts"), "utf8");
+    const browser = readFileSync(resolve(process.cwd(), "components/meals/food-browser.tsx"), "utf8");
+    const savedMeal = readFileSync(resolve(process.cwd(), "components/nutrition/saved-meals/saved-meal-utility.tsx"), "utf8");
+    const barcode = readFileSync(resolve(process.cwd(), "app/api/food/open-food-facts/route.ts"), "utf8");
+
+    expect(nutrition).toContain("/selection?");
+    expect(nutrition).toContain("servingOptionId");
+    expect(foodHandoff).toContain("resolveCatalogNewUseSelectionWithAuthorities");
+    expect(foodHandoff).toContain("servingOptionId");
+    expect(selectionRoute.indexOf("requireNutritionUser(request)")).toBeLessThan(selectionRoute.indexOf("createSupabaseServerClient(null, true)"));
+    expect(browser).toContain("No authoritative serving is available yet.");
+    expect(browser).toContain("<select");
+    expect(savedMeal).toContain("servingOptionId");
+    expect(barcode).toContain("servingChoices");
+    expect(nutrition).not.toMatch(/serving_size:\s*["'](?:100 g|100 ml|1 serving)["']/);
+  });
+
 });

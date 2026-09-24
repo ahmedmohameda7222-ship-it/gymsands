@@ -16,7 +16,6 @@ function structuredAllergens(tags: string[]) {
 
 export async function getPlannedMealPromptContext(item: MealPlanItem): Promise<PlannedMealPromptContext> {
   if (!supabase || !isUuid(item.user_id)) return buildPlannedMealPromptContext(item);
-  let metadata: FoodMetadata | null = null;
 
   if (item.user_food_item_id && isUuid(item.user_food_item_id)) {
     const result = await supabase
@@ -25,25 +24,22 @@ export async function getPlannedMealPromptContext(item: MealPlanItem): Promise<P
       .eq("id", item.user_food_item_id)
       .eq("user_id", item.user_id)
       .maybeSingle();
-    if (!result.error) metadata = result.data as FoodMetadata | null;
-  } else if (item.food_item_id && isUuid(item.food_item_id)) {
-    const result = await supabase
-      .from("food_items")
-      .select("food_name,tags,notes")
-      .eq("id", item.food_item_id)
-      .eq("is_global", true)
-      .maybeSingle();
-    if (!result.error) metadata = result.data as FoodMetadata | null;
+    if (!result.error && result.data) {
+      const metadata = result.data as FoodMetadata;
+      const tags = metadata.tags ?? [];
+      return buildPlannedMealPromptContext(item, {
+        ingredients: ingredientsFromFoodMetadata({
+          foodName: metadata.food_name?.trim() || item.food_name,
+          tags,
+          notes: metadata.notes
+        }),
+        structuredAllergens: structuredAllergens(tags)
+      });
+    }
   }
 
-  if (!metadata) return buildPlannedMealPromptContext(item);
-  const tags = metadata.tags ?? [];
-  return buildPlannedMealPromptContext(item, {
-    ingredients: ingredientsFromFoodMetadata({
-      foodName: metadata.food_name?.trim() || item.food_name,
-      tags,
-      notes: metadata.notes
-    }),
-    structuredAllergens: structuredAllergens(tags)
-  });
+  // Catalog-backed Meal Plan rows are historical frozen snapshots. Do not enrich
+  // them from legacy flat food_items metadata: current catalog facts must come
+  // from current-generation/domain authority, and unavailable metadata stays unknown.
+  return buildPlannedMealPromptContext(item);
 }

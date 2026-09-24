@@ -3,12 +3,39 @@ import { describe, expect, it } from "vitest";
 import { parseAddToHandoff } from "@/lib/nutrition-v1/add-to-handoff";
 
 describe("Nutrition V1 Add To handoff parsing", () => {
-  it("preserves Food identity, serving and quantity for each contextual destination", () => {
-    const base = "source=catalog&quantity=1.5&serving=170%20g";
-    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${base}`), "diary")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g" });
-    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${base}`), "meal_plan")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g" });
-    expect(parseAddToHandoff(new URLSearchParams(`savedMealFoodId=f1&${base}`), "saved_meal")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g" });
-    expect(parseAddToHandoff(new URLSearchParams(`ingredientFoodId=f1&${base}`), "recipe")).toEqual({ type: "food", id: "f1", source: "catalog", quantity: 1.5, serving: "170 g" });
+  it("preserves Food identity, selected display name/language, serving and quantity for each contextual destination", () => {
+    const base = "source=catalog&quantity=1.5&serving=170%20g&servingOptionId=33333333-3333-4333-8333-333333333333&displayName=Greek%20yogurt&languageTag=en";
+    const expected = {
+      type: "food",
+      id: "f1",
+      source: "catalog",
+      quantity: 1.5,
+      serving: "170 g",
+      servingOptionId: "33333333-3333-4333-8333-333333333333",
+      displayName: "Greek yogurt",
+      languageTag: "en",
+    };
+    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${base}`), "diary")).toEqual(expected);
+    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${base}`), "meal_plan")).toEqual(expected);
+    expect(parseAddToHandoff(new URLSearchParams(`savedMealFoodId=f1&${base}`), "saved_meal")).toEqual(expected);
+    expect(parseAddToHandoff(new URLSearchParams(`ingredientFoodId=f1&${base}`), "recipe")).toEqual(expected);
+  });
+
+  it("requires selected display-name context for catalog handoffs but keeps My Foods independent", () => {
+    const missingName = "source=catalog&quantity=1&serving=170%20g";
+    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${missingName}`), "diary")).toBeNull();
+
+    const mine = "source=my_food&quantity=1&serving=1%20bowl";
+    expect(parseAddToHandoff(new URLSearchParams(`addFoodId=f1&${mine}`), "diary")).toEqual({
+      type: "food",
+      id: "f1",
+      source: "my_food",
+      quantity: 1,
+      serving: "1 bowl",
+      servingOptionId: null,
+      displayName: null,
+      languageTag: null,
+    });
   });
 
   it("preserves exact Recipe version identity and resolved serving quantity for Diary, Meal Plan and Saved Meal", () => {

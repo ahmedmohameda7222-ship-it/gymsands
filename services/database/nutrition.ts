@@ -2,7 +2,6 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid, todayIso } from "@/lib/utils";
-import { egyptianFoods } from "@/data/egyptian-foods";
 import type {
   CatalogFoodItem,
   CustomMeal,
@@ -40,8 +39,6 @@ export const egyptianFoodSubcategories = [
   "Stew",
   "Vegetable"
 ] as const;
-
-const allowedEgyptianSubcategories = new Set<string>(egyptianFoodSubcategories);
 
 function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
@@ -118,16 +115,6 @@ function normalizeFrozenMealPlanItem(row: Record<string, unknown>): MealPlanItem
   };
 }
 
-function normalizeFoodSubcategory(value: string | null | undefined) {
-  const clean = value?.trim();
-  if (!clean) return "Snack";
-  if (allowedEgyptianSubcategories.has(clean)) return clean;
-  if (clean === "Rice") return "Carb";
-  if (clean === "Sauce" || clean === "Salad") return "Dip";
-  if (clean === "Protein" || clean === "Sandwich" || clean === "Meal" || clean === "Side") return "Breakfast";
-  return "Snack";
-}
-
 function normalizeMealType(value: string | null | undefined): MealType {
   return mealTypes.includes(value as MealType) ? (value as MealType) : "Breakfast";
 }
@@ -140,98 +127,173 @@ export function getDefaultFoodCategories() {
   return [...egyptianFoodSubcategories];
 }
 
-function withTimeout<T>(request: PromiseLike<T>, fallback: T, label: string, timeoutMs = 4500) {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<T>((resolve) => {
-    timeoutId = setTimeout(() => {
-      console.warn(`${label} timed out, using fallback.`);
-      resolve(fallback);
-    }, timeoutMs);
-  });
+type CatalogSearchCandidate = {
+  id: string;
+  source: "catalog" | "my_food";
+  name: string;
+  brand: string | null;
+  category: string | null;
+  cuisine: string | null;
+  servingLabel: string | null;
+  verified: boolean;
+  locale: string;
+  nutrition: {
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+    saturated_fat_g: number | null;
+    fiber_g: number | null;
+    sugars_g: number | null;
+    sodium_mg: number | null;
+    basis_amount: number | null;
+    basis_unit: "g" | "ml" | "serving" | "piece" | "custom" | null;
+  };
+};
 
-  return Promise.race([Promise.resolve(request), timeout]).finally(() => {
-    if (timeoutId) clearTimeout(timeoutId);
-  });
+type CatalogSearchPage = {
+  items: CatalogSearchCandidate[];
+  nextCursor: string | null;
+};
+
+function browserLocale() {
+  return typeof navigator === "undefined" || !navigator.language.trim() ? "en" : navigator.language;
 }
 
-function localFoods(query = ""): CatalogFoodItem[] {
-  const normalized = normalizeText(query);
-  return egyptianFoods
-    .filter((food) => normalizeText(food.food_name).includes(normalized))
-    .map((food) =>
-      normalizeCatalogFood({
-        ...food,
-        cuisine: egyptianFoodKitchenName,
-        category: normalizeFoodSubcategory(food.category)
-      } as unknown as Record<string, unknown>)
-    );
+function browserCatalogSearchLanguageTag() {
+  const locale = browserLocale().trim().replace(/_/g, "-");
+  return locale.split("-")[0]?.trim() || "en";
+}
+
+function isCatalogSearchPage(value: unknown): value is CatalogSearchPage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const page = value as Record<string, unknown>;
+  return Array.isArray(page.items) && (page.nextCursor === null || typeof page.nextCursor === "string");
+}
+
+function normalizeCatalogSearchFood(food: CatalogSearchCandidate): CatalogFoodItem {
+  return {
+    id: persistedText(food.id, "Food ID"),
+    food_name: persistedText(food.name, "Food name"),
+    serving_size: food.servingLabel?.trim() ?? "",
+    calories: nullableNutrition(food.nutrition.calories, "Food calories"),
+    protein_g: nullableNutrition(food.nutrition.protein_g, "Food protein"),
+    carbs_g: nullableNutrition(food.nutrition.carbs_g, "Food carbs"),
+    fat_g: nullableNutrition(food.nutrition.fat_g, "Food fat"),
+    category: nullablePersistedText(food.category, "Food category"),
+    cuisine: nullablePersistedText(food.cuisine, "Food cuisine"),
+    kitchen_id: null,
+    subcategory_id: null,
+    fiber_g: nullableNutrition(food.nutrition.fiber_g, "Food fiber"),
+    sugar_g: nullableNutrition(food.nutrition.sugars_g, "Food sugar"),
+    sodium_mg: nullableNutrition(food.nutrition.sodium_mg, "Food sodium"),
+    tags: [],
+    notes: null,
+    source_type: "food_catalog_v2",
+    locale: persistedText(food.locale, "Food locale"),
+    is_global: true,
+    is_editable_by_user: false
+  };
+}
+
+async function searchCurrentCatalogCandidates(
+  query: string,
+  options: { category?: string; cuisine?: string; limit?: number } = {},
+  accepts: (candidate: CatalogSearchCandidate) => boolean = () => true,
+): Promise<CatalogSearchCandidate[]> {
+  if (!supabase) throw new Error("Database not connected");
+  const target = Math.max(1, Math.min(80, Math.trunc(options.limit ?? 36)));
+  const candidates: CatalogSearchCandidate[] = [];
+  let cursor: string | null = null;
+  const seenCursors = new Set<string>();
+
+  do {
+    const searchResult = await supabase.rpc("search_food_catalog_v2", {
+      p_query: query.trim(),
+      p_language_tag: browserCatalogSearchLanguageTag(),
+      p_script_code: null,
+      p_market_scope_code: null,
+      p_cursor: cursor,
+      p_limit: Math.min(20, target - candidates.length),
+      p_category: options.category?.trim() || null,
+      p_cuisine: options.cuisine?.trim() || null,
+      p_scope: "all",
+      p_filters: {}
+    });
+    const data: unknown = searchResult.data;
+    const error = searchResult.error;
+    if (error) throw new Error(`Food Catalog V2 search failed: ${error.message ?? "database error"}`);
+    if (!isCatalogSearchPage(data)) throw new Error("Food Catalog V2 search returned an invalid page.");
+
+    for (const item of data.items) {
+      if (!accepts(item)) continue;
+      candidates.push(item);
+      if (candidates.length >= target) break;
+    }
+
+    const nextCursor = data.nextCursor;
+    if (nextCursor !== null) {
+      if (seenCursors.has(nextCursor) || nextCursor === cursor) {
+        throw new Error("Food Catalog V2 search returned a repeated cursor.");
+      }
+      seenCursors.add(nextCursor);
+    }
+    cursor = nextCursor;
+  } while (cursor && candidates.length < target);
+
+  return candidates;
+}
+
+async function searchCurrentCatalog(
+  query: string,
+  options: { category?: string; cuisine?: string; limit?: number } = {}
+): Promise<CatalogFoodItem[]> {
+  const candidates = await searchCurrentCatalogCandidates(
+    query,
+    options,
+    (candidate) => candidate.source === "catalog",
+  );
+  return candidates.map(normalizeCatalogSearchFood);
 }
 
 export async function getFoodCategories() {
-  const fallback = getDefaultFoodCategories();
   if (!supabase) throw new Error("Database not connected");
 
-  const request = supabase!
-    .from("food_items")
-    .select("category")
-    .eq("is_global", true)
-    .not("category", "is", null)
-    .limit(250)
-    .then(({ data, error }) => {
-      if (error) {
-        console.warn("Plaivra could not load food categories, using local fallback.", error.message);
-        return fallback;
-      }
+  const session = await supabase.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) throw new Error("User session invalid.");
 
-      const values = Array.from(new Set((data ?? []).map((item) => item.category).filter(Boolean))).sort() as string[];
-      return values.length ? values : fallback;
-    });
+  const response = await fetch(
+    "/api/nutrition/v1/foods/categories",
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = body && typeof body === "object" && !Array.isArray(body)
+      && typeof (body as Record<string, unknown>).error === "string"
+      ? (body as Record<string, unknown>).error as string
+      : "Food categories could not be loaded.";
+    throw new Error(error);
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Food category facets returned an invalid response.");
+  }
+  const categories = (body as Record<string, unknown>).categories;
+  if (!Array.isArray(categories) || categories.some((value) => typeof value !== "string")) {
+    throw new Error("Food category facets returned an invalid response.");
+  }
 
-  return withTimeout(request, fallback, "Food categories");
+  return Array.from(new Set(categories.map((value) => value.trim()).filter(Boolean))).sort();
 }
 
 export async function getGlobalFoods(
   query = "",
   options: { category?: string; kitchen?: string; kitchenId?: string; subcategoryId?: string; limit?: number } = {}
 ): Promise<CatalogFoodItem[]> {
-  const limit = options.limit ?? 36;
-  const category = options.category;
-  const fallback = localFoods(query)
-    .filter((food) => !category || food.category === category)
-    .filter((food) => !options.kitchenId || options.kitchen === egyptianFoodKitchenName || food.kitchen_id === options.kitchenId)
-    .filter((food) => !options.subcategoryId || food.subcategory_id === options.subcategoryId || food.category === category)
-    .slice(0, limit);
-
-  if (!supabase) {
-    return fallback;
-  }
-
-  let request = supabase!
-    .from("food_items")
-    .select("*")
-    .eq("is_global", true)
-    .order("food_name")
-    .limit(limit);
-
-  if (category) request = request.eq("category", category);
-  if (options.kitchenId) request = request.eq("kitchen_id", options.kitchenId);
-  if (options.subcategoryId) request = request.eq("subcategory_id", options.subcategoryId);
-  if (query) request = request.ilike("food_name", `%${query}%`);
-
-  const result = await withTimeout(
-    request.then(({ data, error }) => {
-      if (error) {
-        console.warn("Plaivra could not load Supabase foods, using local fallback.", error.message);
-        return fallback;
-      }
-      return ((data?.length ? data : fallback) ?? []).map((food) => normalizeCatalogFood(food as Record<string, unknown>));
-    }),
-    fallback,
-    "Foods",
-    3500
-  );
-
-  return result;
+  return searchCurrentCatalog(query, {
+    category: options.category,
+    limit: options.limit
+  });
 }
 
 export async function getCalorieTargets(userId: string, options?: { throwOnError?: boolean }) {
@@ -308,6 +370,222 @@ export async function getTodayFoodLogs(
   return ((data ?? []) as Record<string, unknown>[]).map(normalizeFrozenFoodLog);
 }
 
+export type BrowserCatalogServingChoice = {
+  servingOptionId: string | null;
+  label: string;
+  source: "generation" | "owner_override";
+  nutrition?: CatalogSearchCandidate["nutrition"];
+};
+
+export type BrowserCatalogNewUseSelection = {
+  foodId: string;
+  name: string;
+  languageTag: string;
+  servingChoices: BrowserCatalogServingChoice[];
+};
+
+function parseCatalogServingNutrition(value: unknown): CatalogSearchCandidate["nutrition"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Catalog serving selection returned invalid nutrition.");
+  }
+  const nutrition = value as Record<string, unknown>;
+  const basisUnit = nutrition.basis_unit;
+  if (
+    basisUnit !== null
+    && basisUnit !== "g"
+    && basisUnit !== "ml"
+    && basisUnit !== "serving"
+    && basisUnit !== "piece"
+    && basisUnit !== "custom"
+  ) {
+    throw new Error("Catalog serving selection returned invalid nutrition.");
+  }
+  return {
+    calories: nullableNutrition(nutrition.calories, "serving calories"),
+    protein_g: nullableNutrition(nutrition.protein_g, "serving protein"),
+    carbs_g: nullableNutrition(nutrition.carbs_g, "serving carbs"),
+    fat_g: nullableNutrition(nutrition.fat_g, "serving fat"),
+    saturated_fat_g: nullableNutrition(nutrition.saturated_fat_g, "serving saturated fat"),
+    fiber_g: nullableNutrition(nutrition.fiber_g, "serving fiber"),
+    sugars_g: nullableNutrition(nutrition.sugars_g, "serving sugars"),
+    sodium_mg: nullableNutrition(nutrition.sodium_mg, "serving sodium"),
+    basis_amount: nullableNutrition(nutrition.basis_amount, "serving basis amount"),
+    basis_unit: basisUnit,
+  };
+}
+
+function parseCatalogNewUseSelection(value: unknown): BrowserCatalogNewUseSelection {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Catalog serving selection returned an invalid result.");
+  }
+  const row = value as Record<string, unknown>;
+  const foodId = typeof row.foodId === "string" ? row.foodId : "";
+  const name = typeof row.name === "string" ? row.name.trim() : "";
+  const languageTag = typeof row.languageTag === "string" ? row.languageTag.trim() : "";
+  if (!isUuid(foodId) || !name || !languageTag || !Array.isArray(row.servingChoices)) {
+    throw new Error("Catalog serving selection returned an invalid result.");
+  }
+  const servingChoices = row.servingChoices.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Catalog serving selection returned an invalid choice.");
+    }
+    const choice = value as Record<string, unknown>;
+    const servingOptionId = choice.servingOptionId === null
+      ? null
+      : typeof choice.servingOptionId === "string" && isUuid(choice.servingOptionId)
+        ? choice.servingOptionId
+        : undefined;
+    if (
+      servingOptionId === undefined
+      || typeof choice.label !== "string"
+      || !choice.label.trim()
+      || (choice.source !== "generation" && choice.source !== "owner_override")
+    ) {
+      throw new Error("Catalog serving selection returned an invalid choice.");
+    }
+    if (choice.source === "owner_override" && servingOptionId !== null) {
+      throw new Error("Owner serving selection returned an invalid Catalog identity.");
+    }
+    if (choice.source === "generation" && servingOptionId === null) {
+      throw new Error("Generation serving selection is missing its exact identity.");
+    }
+    const projectedNutrition = choice.nutrition === undefined
+      ? undefined
+      : parseCatalogServingNutrition(choice.nutrition);
+    return {
+      servingOptionId,
+      label: choice.label.trim(),
+      source: choice.source,
+      ...(projectedNutrition ? { nutrition: projectedNutrition } : {}),
+    } as BrowserCatalogServingChoice;
+  });
+  return { foodId, name, languageTag, servingChoices };
+}
+
+export async function getCatalogNewUseSelection(
+  food: Pick<CatalogFoodItem, "id" | "food_name" | "locale">,
+): Promise<BrowserCatalogNewUseSelection> {
+  if (!supabase || !isUuid(food.id)) throw new Error("Catalog Food identity is invalid.");
+  const session = await supabase.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) throw new Error("User session invalid.");
+
+  const params = new URLSearchParams({
+    displayName: persistedText(food.food_name, "Food name"),
+    languageTag: typeof food.locale === "string" && food.locale.trim() ? food.locale.trim() : browserLocale(),
+  });
+  const response = await fetch(
+    `/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/selection?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = body && typeof body === "object" && !Array.isArray(body)
+      && typeof (body as Record<string, unknown>).error === "string"
+      ? String((body as Record<string, unknown>).error)
+      : "Catalog serving selection could not be loaded.";
+    throw new Error(message);
+  }
+  // The server may resolve a stale search-result Food ID through the current
+  // generation's flattened redirect authority and return the survivor ID.
+  // The browser cannot re-prove that relation; the authenticated server
+  // selection/handoff boundaries remain authoritative for current identity.
+  return parseCatalogNewUseSelection(body);
+}
+
+export function withCatalogServingChoice(
+  food: CatalogFoodItem,
+  choice: BrowserCatalogServingChoice,
+): CatalogFoodItem {
+  return {
+    ...food,
+    serving_size: choice.label,
+    serving_option_id: choice.servingOptionId,
+    ...(choice.nutrition ? {
+      calories: choice.nutrition.calories,
+      protein_g: choice.nutrition.protein_g,
+      carbs_g: choice.nutrition.carbs_g,
+      fat_g: choice.nutrition.fat_g,
+      fiber_g: choice.nutrition.fiber_g,
+      sugar_g: choice.nutrition.sugars_g,
+      sodium_mg: choice.nutrition.sodium_mg,
+    } : {}),
+  };
+}
+
+type BrowserCatalogHandoff = {
+  foodId: string;
+  name: string;
+  serving: string;
+  quantity: number;
+  frozenNutrition: {
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+  };
+  diaryItem: {
+    foodName: string;
+    servingLabel: string;
+    quantity: number;
+    nutrition: {
+      caloriesKcal: number | null;
+      proteinG: number | null;
+      carbsG: number | null;
+      fatG: number | null;
+    };
+    foodItemId: string | null;
+  };
+};
+
+async function resolveBrowserCatalogHandoff(
+  userId: string,
+  food: Pick<FoodLibraryItem, "id" | "food_name" | "serving_size"> & { locale?: string; serving_option_id?: string | null },
+  quantity: number,
+): Promise<BrowserCatalogHandoff> {
+  if (!canUseUserData(userId) || !isUuid(food.id)) throw new Error("Catalog Food session or identity is invalid.");
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Quantity must be greater than zero.");
+
+  const session = await supabase!.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) throw new Error("User session invalid.");
+
+  let serving = food.serving_size.trim();
+  let servingOptionId = food.serving_option_id ?? null;
+  if (!servingOptionId) {
+    const selection = await getCatalogNewUseSelection(food as CatalogFoodItem);
+    if (selection.servingChoices.length === 0) {
+      throw new Error("No authoritative serving is available yet.");
+    }
+    if (selection.servingChoices.length > 1) {
+      throw new Error("Choose an authoritative serving before adding this Food.");
+    }
+    const choice = selection.servingChoices[0]!;
+    serving = choice.label;
+    servingOptionId = choice.servingOptionId;
+  }
+  if (!serving) throw new Error("No authoritative serving is available yet.");
+
+  const params = new URLSearchParams({
+    source: "catalog",
+    quantity: String(quantity),
+    serving,
+    displayName: food.food_name,
+    languageTag: "locale" in food && typeof food.locale === "string" && food.locale.trim() ? food.locale.trim() : browserLocale(),
+  });
+  if (servingOptionId) params.set("servingOptionId", servingOptionId);
+  const response = await fetch(
+    `/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/handoff?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const body = await response.json().catch(() => ({})) as BrowserCatalogHandoff & { error?: string };
+  if (!response.ok) throw new Error(body.error || "Catalog Food could not be revalidated.");
+  if (!isUuid(body.foodId) || !body.name?.trim() || !body.serving?.trim()) {
+    throw new Error("Catalog Food handoff returned an invalid result.");
+  }
+  return body;
+}
+
 export async function addGlobalFoodToToday({
   userId,
   food,
@@ -321,25 +599,24 @@ export async function addGlobalFoodToToday({
   mealType?: string;
   date?: string;
 }) {
-  const macros = scaleFoodMacros(food, quantity);
   const safeMealType = normalizeMealType(mealType);
+  const handoff = await resolveBrowserCatalogHandoff(userId, food, quantity);
   const payload = {
     user_id: userId,
-    food_item_id: isUuid(food.id) ? food.id : null,
+    food_item_id: handoff.diaryItem.foodItemId,
     user_food_item_id: null,
     log_date: date,
     meal_type: safeMealType,
-    food_name: food.food_name,
-    serving_size: food.serving_size,
-    quantity,
-    calories: macros.calories,
-    protein_g: macros.protein_g,
-    carbs_g: macros.carbs_g,
-    fat_g: macros.fat_g,
+    food_name: handoff.diaryItem.foodName,
+    serving_size: handoff.diaryItem.servingLabel,
+    quantity: handoff.diaryItem.quantity,
+    calories: handoff.diaryItem.nutrition.caloriesKcal,
+    protein_g: handoff.diaryItem.nutrition.proteinG,
+    carbs_g: handoff.diaryItem.nutrition.carbsG,
+    fat_g: handoff.diaryItem.nutrition.fatG,
     notes: null
   };
 
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) {
     console.warn("Plaivra could not add this food log.", error.message);
@@ -524,23 +801,41 @@ export async function getFoodLibrary(
   query = "",
   options: { category?: string; kitchen?: string; kitchenId?: string; subcategoryId?: string; limit?: number } = {}
 ): Promise<FoodLibraryItem[]> {
-  const [globalFoods, userFoods] = await Promise.all([
-    getGlobalFoods(query, { category: options.category, kitchen: options.kitchen, kitchenId: options.kitchenId, subcategoryId: options.subcategoryId, limit: options.limit ?? 60 }),
-    getUserFoods(userId)
-  ]);
-  const normalizedQuery = normalizeText(query);
-  const foods: FoodLibraryItem[] = [...globalFoods, ...userFoods];
-  return foods.filter((food) => {
-    const matchesQuery = !normalizedQuery || normalizeText(food.food_name).includes(normalizedQuery);
-    const matchesCategory = !options.category || food.category === options.category;
+  const userFoods = await getUserFoods(userId);
+  const userFoodsById = new Map(userFoods.map((food) => [food.id, food]));
+  const matchesLegacyOwnerFilters = (food: UserFoodItem) => {
     const matchesKitchen =
-      !options.kitchenId ||
-      food.kitchen_id === options.kitchenId ||
-      (food.cuisine === egyptianFoodKitchenName && options.kitchen === egyptianFoodKitchenName);
+      !options.kitchenId
+      || food.kitchen_id === options.kitchenId
+      || (food.cuisine === egyptianFoodKitchenName && options.kitchen === egyptianFoodKitchenName);
     const matchesLegacyKitchen = !options.kitchen || food.cuisine === options.kitchen || food.kitchen_id === options.kitchen;
     const matchesSubcategory = !options.subcategoryId || food.subcategory_id === options.subcategoryId || food.category === options.category;
-    return matchesQuery && matchesCategory && matchesKitchen && matchesLegacyKitchen && matchesSubcategory;
-  }).slice(0, options.limit ?? 80);
+    return matchesKitchen && matchesLegacyKitchen && matchesSubcategory;
+  };
+
+  const rankedCandidates = await searchCurrentCatalogCandidates(
+    query,
+    { category: options.category, limit: options.limit ?? 60 },
+    (candidate) => {
+      if (candidate.source === "catalog") return true;
+      const ownerFood = userFoodsById.get(candidate.id);
+      return ownerFood !== undefined && matchesLegacyOwnerFilters(ownerFood);
+    },
+  );
+
+  const foods: FoodLibraryItem[] = [];
+  for (const candidate of rankedCandidates) {
+    if (candidate.source === "catalog") {
+      // Catalog V2 already applied query/alias/category authority and ranking.
+      // Do not re-filter selected display text locally or alias-only matches disappear.
+      foods.push(normalizeCatalogSearchFood(candidate));
+      continue;
+    }
+    const ownerFood = userFoodsById.get(candidate.id);
+    if (ownerFood) foods.push(ownerFood);
+  }
+
+  return foods.slice(0, options.limit ?? 80);
 }
 
 export async function upsertUserFood(input: UserFoodInput) {
@@ -907,29 +1202,48 @@ export async function addFoodToMealPlan({
   quantity: number;
   mealType?: MealType;
 }) {
-  const macros = scaleFoodMacros(food, quantity);
   const safeMealType = normalizeMealType(mealType);
   const isGlobalFood = food.is_global !== false;
-  const payload = {
-    user_id: userId,
-    plan_date: todayIso(),
-    meal_type: safeMealType,
-    food_item_id: isGlobalFood && isUuid(food.id) ? food.id : null,
-    user_food_item_id: !isGlobalFood && isUuid(food.id) ? food.id : null,
-    food_name: food.food_name,
-    serving_size: food.serving_size,
-    quantity,
-    calories: macros.calories,
-    protein_g: macros.protein_g,
-    carbs_g: macros.carbs_g,
-    fat_g: macros.fat_g,
-    status: "planned",
-    food_log_id: null,
-    completed_at: null,
-    notes: null
-  };
-
   if (!canUseUserData(userId)) throw new Error("User session invalid");
+
+  let payload: Record<string, unknown>;
+  if (isGlobalFood) {
+    const handoff = await resolveBrowserCatalogHandoff(userId, food, quantity);
+    payload = {
+      user_id: userId,
+      plan_date: todayIso(),
+      meal_type: safeMealType,
+      food_item_id: handoff.foodId,
+      user_food_item_id: null,
+      food_name: handoff.name,
+      serving_size: handoff.serving,
+      quantity: handoff.quantity,
+      calories: handoff.frozenNutrition.calories,
+      protein_g: handoff.frozenNutrition.protein_g,
+      carbs_g: handoff.frozenNutrition.carbs_g,
+      fat_g: handoff.frozenNutrition.fat_g,
+      status: "planned",
+      food_log_id: null,
+      completed_at: null,
+      notes: null
+    };
+  } else {
+    payload = {
+      user_id: userId,
+      plan_date: todayIso(),
+      meal_type: safeMealType,
+      food_item_id: null,
+      user_food_item_id: isUuid(food.id) ? food.id : null,
+      food_name: food.food_name,
+      serving_size: food.serving_size,
+      quantity,
+      ...scaleFoodMacros(food, quantity),
+      status: "planned",
+      food_log_id: null,
+      completed_at: null,
+      notes: null
+    };
+  }
 
   const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) {

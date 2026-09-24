@@ -16,10 +16,11 @@ const db = vi.hoisted(() => {
     if (table !== "food_logs") throw new Error(`Unexpected table in focused nullable-nutrition test: ${table}`);
     return { insert };
   });
-  return { inserted, from, insert, select, single };
+  const getSession = vi.fn(async () => ({ data: { session: { access_token: "test-token" } }, error: null }));
+  return { inserted, from, insert, select, single, getSession };
 });
 
-vi.mock("@/lib/supabase/client", () => ({ supabase: { from: db.from } }));
+vi.mock("@/lib/supabase/client", () => ({ supabase: { from: db.from, auth: { getSession: db.getSession } } }));
 
 import { addGlobalFoodToToday, upsertCustomMeal, upsertUserFood } from "@/services/database/nutrition";
 import { addUserFoodToToday } from "@/services/database/food-library-logging";
@@ -36,8 +37,9 @@ import {
 const userId = "11111111-1111-4111-8111-111111111111";
 const foodId = "22222222-2222-4222-8222-222222222222";
 const userFoodId = "55555555-5555-4555-8555-555555555555";
+const servingOptionId = "66666666-6666-4666-8666-666666666666";
 
-function catalogFood(overrides: Partial<Pick<CatalogFoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">> = {}): CatalogFoodItem {
+function catalogFood(overrides: Partial<Pick<CatalogFoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">> & { locale?: string } = {}): CatalogFoodItem & { locale: string } {
   return {
     id: foodId,
     food_name: "Catalog food",
@@ -53,6 +55,7 @@ function catalogFood(overrides: Partial<Pick<CatalogFoodItem, "calories" | "prot
     source_type: "catalog",
     is_global: true,
     is_editable_by_user: false,
+    locale: overrides.locale ?? "en",
     ...overrides,
   };
 }
@@ -104,6 +107,53 @@ beforeEach(() => {
   db.insert.mockClear();
   db.select.mockClear();
   db.single.mockClear();
+  db.getSession.mockClear();
+  vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+    const url = new URL(String(input), "http://localhost");
+    if (url.pathname.endsWith("/selection")) {
+      return new Response(JSON.stringify({
+        foodId,
+        name: "Catalog food",
+        languageTag: url.searchParams.get("languageTag") ?? "en",
+        servingChoices: [{
+          servingOptionId,
+          label: "100 g",
+          source: "generation",
+        }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname.endsWith("/handoff")) {
+      const quantity = Number(url.searchParams.get("quantity") ?? 2);
+      return new Response(JSON.stringify({
+        foodId,
+        source: "catalog",
+        name: "Catalog food",
+        serving: "100 g",
+        quantity,
+        frozenNutrition: {
+          calories: 100 * quantity,
+          protein_g: null,
+          carbs_g: 20 * quantity,
+          fat_g: null,
+          fiber_g: null,
+        },
+        diaryItem: {
+          foodName: "Catalog food",
+          servingLabel: "100 g",
+          quantity,
+          nutrition: {
+            caloriesKcal: 100 * quantity,
+            proteinG: null,
+            carbsG: 20 * quantity,
+            fatG: null,
+          },
+          foodItemId: foodId,
+          userFoodItemId: null,
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`Unexpected fetch in focused nullable-nutrition test: ${url.pathname}`);
+  }));
 });
 
 describe("catalog-derived nullable nutrition scaling", () => {
@@ -183,6 +233,21 @@ describe("Saved Meal draft preview nullable nutrition", () => {
 });
 
 describe("Catalog Food and My Food logging identity", () => {
+  it.each(["de-DE", "ar-EG"])("preserves selected V2 locale %s through browser handoff", async (locale) => {
+    await addGlobalFoodToToday({
+      userId,
+      food: catalogFood({ locale }),
+      quantity: 1,
+      mealType: "Lunch",
+      date: "2026-08-30",
+    });
+
+    const handoffCall = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/handoff?"));
+    const handoffUrl = String(handoffCall?.[0] ?? "");
+    expect(new URL(handoffUrl, "http://localhost").searchParams.get("languageTag")).toBe(locale);
+    expect(new URL(handoffUrl, "http://localhost").searchParams.get("servingOptionId")).toBe(servingOptionId);
+  });
+
   it("Catalog Food persists canonical identity and null nutrition without fabricated zero", async () => {
     await addGlobalFoodToToday({
       userId,
@@ -192,6 +257,14 @@ describe("Catalog Food and My Food logging identity", () => {
       date: "2026-08-30",
     });
 
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/api/nutrition/v1/foods/${foodId}/handoff?`),
+      expect.objectContaining({ headers: { Authorization: "Bearer test-token" } }),
+    );
+    const handoffCall = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/handoff?"));
+    const handoffUrl = String(handoffCall?.[0] ?? "");
+    expect(new URL(handoffUrl, "http://localhost").searchParams.get("languageTag")).toBe("en");
+    expect(new URL(handoffUrl, "http://localhost").searchParams.get("servingOptionId")).toBe(servingOptionId);
     expect(db.inserted).toHaveLength(1);
     expect(db.inserted[0]).toMatchObject({
       food_item_id: foodId,

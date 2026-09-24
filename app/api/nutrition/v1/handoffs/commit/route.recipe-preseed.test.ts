@@ -7,7 +7,8 @@ const draftId = "44444444-4444-4444-8444-444444444444";
 
 const mocks = vi.hoisted(() => ({
   requireNutritionUser: vi.fn(),
-  resolveFoodHandoff: vi.fn(),
+  resolveFoodHandoffWithAuthorities: vi.fn(),
+  createSupabaseServerClient: vi.fn(),
   createRecipeDraft: vi.fn(),
   autosaveRecipeDraft: vi.fn(),
   createPreseededRecipeDraft: vi.fn(),
@@ -17,7 +18,11 @@ vi.mock("@/lib/nutrition-v1/http", async () => {
   const actual = await vi.importActual<typeof import("@/lib/nutrition-v1/http")>("@/lib/nutrition-v1/http");
   return { ...actual, requireNutritionUser: mocks.requireNutritionUser };
 });
-vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({ resolveFoodHandoff: mocks.resolveFoodHandoff }));
+vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({ resolveFoodHandoffWithAuthorities: mocks.resolveFoodHandoffWithAuthorities }));
+vi.mock("@/lib/integrations/env", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/integrations/env")>("@/lib/integrations/env");
+  return { ...actual, createSupabaseServerClient: mocks.createSupabaseServerClient };
+});
 vi.mock("@/services/nutrition-v1/server/recipes", async () => {
   const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/recipes")>("@/services/nutrition-v1/server/recipes");
   return {
@@ -37,7 +42,7 @@ function request() {
     body: JSON.stringify({
       destination: "recipe",
       operationId,
-      source: { type: "food", id: "55555555-5555-4555-8555-555555555555", source: "catalog", quantity: 2, serving: "100 g" },
+      source: { type: "food", id: "55555555-5555-4555-8555-555555555555", source: "catalog", quantity: 2, serving: "100 g", displayName: "Atomic chicken", languageTag: "en" },
       targetRecipeId: null,
     }),
   });
@@ -46,8 +51,11 @@ function request() {
 describe("Food to new Recipe handoff", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireNutritionUser.mockResolvedValue({ supabase: {}, user: { id: userId }, accessToken: "test" });
-    mocks.resolveFoodHandoff.mockResolvedValue({
+    const ownerSupabase = { authority: "owner" };
+    const catalogSupabase = { authority: "catalog" };
+    mocks.requireNutritionUser.mockResolvedValue({ supabase: ownerSupabase, user: { id: userId }, accessToken: "test" });
+    mocks.createSupabaseServerClient.mockReturnValue(catalogSupabase);
+    mocks.resolveFoodHandoffWithAuthorities.mockResolvedValue({
       foodId: "55555555-5555-4555-8555-555555555555",
       name: "Atomic chicken",
       source: "catalog",
@@ -76,6 +84,20 @@ describe("Food to new Recipe handoff", () => {
     const response = await POST(request());
 
     expect(response.ok).toBe(true);
+    expect(mocks.createSupabaseServerClient).toHaveBeenCalledWith(null, true);
+    expect(mocks.resolveFoodHandoffWithAuthorities).toHaveBeenCalledWith(
+      expect.objectContaining({ authority: "owner" }),
+      expect.objectContaining({ authority: "catalog" }),
+      userId,
+      {
+      foodId: "55555555-5555-4555-8555-555555555555",
+      source: "catalog",
+      quantity: 2,
+      serving: "100 g",
+      servingOptionId: null,
+      displayName: "Atomic chicken",
+      languageTag: "en",
+    });
     expect(mocks.createPreseededRecipeDraft).toHaveBeenCalledTimes(1);
     expect(mocks.createPreseededRecipeDraft).toHaveBeenCalledWith(
       expect.anything(),

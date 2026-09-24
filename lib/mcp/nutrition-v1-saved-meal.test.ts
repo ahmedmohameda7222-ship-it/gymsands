@@ -4,8 +4,9 @@ import { deriveMcpMutationOperationId } from "@/lib/mcp/idempotency";
 import { sanitizeMcpToolResult, validateMcpToolOutput } from "@/lib/mcp/safety";
 import { mcpTools } from "@/lib/mcp/tools";
 
-const { listFoodLibrary, resolveFoodHandoff, createSavedMeal } = vi.hoisted(() => ({
+const { listFoodLibrary, resolveCatalogNewUseSelectionWithAuthorities, resolveFoodHandoff, createSavedMeal } = vi.hoisted(() => ({
   listFoodLibrary: vi.fn(),
+  resolveCatalogNewUseSelectionWithAuthorities: vi.fn(),
   resolveFoodHandoff: vi.fn(),
   createSavedMeal: vi.fn(),
 }));
@@ -14,13 +15,18 @@ vi.mock("@/services/nutrition-v1/server/food-library", async () => {
   const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/food-library")>("@/services/nutrition-v1/server/food-library");
   return { ...actual, listFoodLibrary };
 });
-vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({ resolveFoodHandoff }));
+vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({
+  resolveCatalogNewUseSelectionWithAuthorities,
+  resolveFoodHandoff,
+}));
 vi.mock("@/services/nutrition-v1/server/saved-meals", () => ({ createSavedMeal }));
 
 import { createCanonicalSavedMealFromMcp } from "@/lib/mcp/nutrition-v1-saved-meal";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const foodId = "22222222-2222-4222-8222-222222222222";
+const servingA = "77777777-7777-4777-8777-777777777777";
+const servingB = "88888888-8888-4888-8888-888888888888";
 const savedMealId = "33333333-3333-4333-8333-333333333333";
 const idempotencyKey = "saved-meal-request-0001";
 const ctx = {
@@ -32,8 +38,14 @@ const ctx = {
 beforeEach(() => {
   vi.clearAllMocks();
   listFoodLibrary.mockResolvedValue({
-    items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: "170 g" }],
+    items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: "170 g", locale: "en" }],
     nextCursor: null,
+  });
+  resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValue({
+    foodId,
+    name: "Greek yogurt",
+    languageTag: "en",
+    servingChoices: [{ servingOptionId: servingA, label: "170 g", source: "generation" }],
   });
   resolveFoodHandoff.mockResolvedValue({
     foodId,
@@ -69,6 +81,9 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
       source: "catalog",
       quantity: 2,
       serving: "170 g",
+      servingOptionId: servingA,
+      displayName: "Greek yogurt",
+      languageTag: "en",
     });
     expect(createSavedMeal).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({
       operationId: deriveMcpMutationOperationId(ctx, "create_custom_meal", input),
@@ -77,6 +92,77 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
     }));
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toMatchObject({ ok: true, saved_meal_id: savedMealId, authority: "nutrition_saved_meals" });
+  });
+
+  it("resolves Catalog Saved Meal serving from current-generation authority when discovery serving is NULL", async () => {
+    listFoodLibrary.mockResolvedValue({
+      items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: null, locale: "de" }],
+      nextCursor: null,
+    });
+    resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValue({
+      foodId,
+      name: "Greek yogurt",
+      languageTag: "de",
+      servingChoices: [{ servingOptionId: servingA, label: "170 g", source: "generation" }],
+    });
+
+    const result = await createCanonicalSavedMealFromMcp(ctx, {
+      idempotency_key: idempotencyKey,
+      meal_name: "Breakfast",
+      items: [{ food_name: "Greek yogurt", quantity: 1 }],
+    });
+
+    expect(resolveCatalogNewUseSelectionWithAuthorities).toHaveBeenCalledWith(
+      ctx.supabase,
+      ctx.supabase,
+      userId,
+      { foodId, displayName: "Greek yogurt", languageTag: "de" },
+    );
+    expect(resolveFoodHandoff).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({
+      foodId,
+      source: "catalog",
+      serving: "170 g",
+      servingOptionId: servingA,
+      displayName: "Greek yogurt",
+      languageTag: "de",
+    }));
+    expect(result.isError).not.toBe(true);
+  });
+
+  it("accepts exact serving_option_id plus label when duplicate authoritative labels exist", async () => {
+    listFoodLibrary.mockResolvedValue({
+      items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: null, locale: "en" }],
+      nextCursor: null,
+    });
+    resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValue({
+      foodId,
+      name: "Greek yogurt",
+      languageTag: "en",
+      servingChoices: [
+        { servingOptionId: servingA, label: "1 cup", source: "generation" },
+        { servingOptionId: servingB, label: "1 cup", source: "generation" },
+      ],
+    });
+
+    const result = await createCanonicalSavedMealFromMcp(ctx, {
+      idempotency_key: idempotencyKey,
+      meal_name: "Breakfast",
+      items: [{ food_name: "Greek yogurt", serving_hint: "1 cup", serving_option_id: servingB, quantity: 1 }],
+    });
+
+    expect(resolveFoodHandoff).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({
+      serving: "1 cup",
+      servingOptionId: servingB,
+    }));
+    expect(result.isError).not.toBe(true);
+  });
+
+  it("exposes serving_option_id in the public create_custom_meal item schema", () => {
+    const tool = mcpTools.find((candidate) => candidate.name === "create_custom_meal");
+    expect(tool).toBeTruthy();
+    const properties = tool!.inputSchema.properties as Record<string, any>;
+    const items = properties.items as { items: { properties: Record<string, unknown> } };
+    expect(items.items.properties.serving_option_id).toMatchObject({ type: "string", format: "uuid" });
   });
 
   it("derives the same Saved Meal operation UUID from the same MCP idempotency identity even after connection rotation", async () => {

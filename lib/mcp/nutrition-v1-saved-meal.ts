@@ -2,7 +2,11 @@ import type { McpContext } from "@/lib/mcp/auth";
 import { deriveMcpMutationOperationId } from "@/lib/mcp/idempotency";
 import { asObject, getArray, getOptionalString, getString, type JsonObject } from "@/lib/mcp/schemas";
 import { fail, ok, type McpToolResult } from "@/lib/mcp/tool-helpers";
-import { resolveFoodHandoff, type ResolvedFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import {
+  resolveCatalogNewUseSelectionWithAuthorities,
+  resolveFoodHandoff,
+  type ResolvedFoodHandoff,
+} from "@/services/nutrition-v1/server/food-handoff";
 import { listFoodLibrary, normalizeFoodSearchText } from "@/services/nutrition-v1/server/food-library";
 import { createSavedMeal } from "@/services/nutrition-v1/server/saved-meals";
 
@@ -15,30 +19,103 @@ function positive(value: unknown) {
 async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
   const foodName = getString(item, "food_name").trim();
   const requestedServing = getOptionalString(item, "serving_hint")?.trim() || null;
+  const requestedServingOptionId = getOptionalString(item, "serving_option_id")?.trim() || null;
   const normalizedName = normalizeFoodSearchText(foodName);
   const page = await listFoodLibrary(ctx.supabase, ctx.userId, {
     query: foodName,
     locale: "en",
     limit: 20,
   });
-  let exact = page.items.filter((candidate) => normalizeFoodSearchText(candidate.name) === normalizedName);
-  if (requestedServing) exact = exact.filter((candidate) => candidate.servingLabel?.trim() === requestedServing);
+  const exact = page.items.filter((candidate) => normalizeFoodSearchText(candidate.name) === normalizedName);
   if (exact.length !== 1) {
     throw new Error(
       exact.length === 0
-        ? `No unique canonical Food matches “${foodName}”${requestedServing ? ` with serving “${requestedServing}”` : ""}. Search Foods first and use an exact canonical Food name/serving.`
-        : `Food “${foodName}” is ambiguous. Search Foods first and use a unique canonical Food name/serving.`,
+        ? `No unique canonical Food matches “${foodName}”. Search Foods first and use an exact canonical Food name.`
+        : `Food “${foodName}” is ambiguous. Search Foods first and use a unique canonical Food name.`,
     );
   }
   const selected = exact[0]!;
-  if (!selected.servingLabel) {
-    throw new Error(`Canonical Food “${foodName}” has no authoritative serving selection. Choose a Food with explicit serving authority before creating a Saved Meal.`);
+  const quantity = positive(item.quantity);
+
+  if (selected.source === "catalog") {
+    if (!selected.locale?.trim()) {
+      throw new Error(`Canonical Food “${foodName}” is missing its exact selected Name locale. Search Foods again before creating a Saved Meal.`);
+    }
+
+    // PR A intentionally preserves the existing MCP single-client bridge.
+    // Task 14 / PR B must still provide authenticated owner authority before
+    // deployment; do not widen service-role owner access here.
+    const selection = await resolveCatalogNewUseSelectionWithAuthorities(
+      ctx.supabase,
+      ctx.supabase,
+      ctx.userId,
+      {
+        foodId: selected.id,
+        displayName: selected.name,
+        languageTag: selected.locale,
+      },
+    );
+    const choices = selection.servingChoices;
+    if (choices.length === 0) {
+      throw new Error(`Canonical Food “${foodName}” has no authoritative serving available yet.`);
+    }
+
+    let servingChoice: (typeof choices)[number] | null = null;
+    if (requestedServingOptionId) {
+      if (!requestedServing) {
+        throw new Error("serving_option_id must be paired with the exact serving_hint label.");
+      }
+      const matches = choices.filter((choice) => (
+        choice.servingOptionId === requestedServingOptionId
+        && choice.label === requestedServing
+      ));
+      if (matches.length !== 1) {
+        throw new Error("The serving_option_id and serving_hint do not match one exact effective authoritative serving choice.");
+      }
+      servingChoice = matches[0]!;
+    } else if (requestedServing) {
+      const matches = choices.filter((choice) => choice.label === requestedServing);
+      if (matches.length === 0) {
+        throw new Error("The serving_hint does not match an effective authoritative serving choice.");
+      }
+      if (matches.length > 1) {
+        throw new Error("Multiple authoritative servings share this label. Retry with serving_option_id plus the same serving_hint.");
+      }
+      servingChoice = matches[0]!;
+    } else if (choices.length === 1) {
+      servingChoice = choices[0]!;
+    } else {
+      throw new Error("This Food has multiple authoritative serving choices. Choose one and retry with serving_hint and serving_option_id.");
+    }
+
+    return resolveFoodHandoff(ctx.supabase, ctx.userId, {
+      foodId: selected.id,
+      source: "catalog",
+      quantity,
+      serving: servingChoice.label,
+      servingOptionId: servingChoice.servingOptionId,
+      displayName: selected.name,
+      languageTag: selected.locale,
+    });
+  }
+
+  if (requestedServingOptionId) {
+    throw new Error("serving_option_id is only valid for Catalog Food serving choices.");
+  }
+  const personalServing = selected.servingLabel?.trim();
+  if (!personalServing) {
+    throw new Error(`Personal Food “${foodName}” has no serving.`);
+  }
+  if (requestedServing && requestedServing !== personalServing) {
+    throw new Error("The serving_hint does not match the selected Personal Food serving.");
   }
   return resolveFoodHandoff(ctx.supabase, ctx.userId, {
     foodId: selected.id,
-    source: selected.source,
-    quantity: positive(item.quantity),
-    serving: selected.servingLabel,
+    source: "my_food",
+    quantity,
+    serving: personalServing,
+    displayName: undefined,
+    languageTag: null,
   });
 }
 

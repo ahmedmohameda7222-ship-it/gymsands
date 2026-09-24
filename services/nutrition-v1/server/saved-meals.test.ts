@@ -168,4 +168,26 @@ describe("Nutrition V1 Saved Meal authority", () => {
     expect(db.rpc).toHaveBeenCalledWith("purge_nutrition_saved_meal_now", { p_saved_meal_id: savedMealId });
     expect(db.from).not.toHaveBeenCalled();
   });
+
+  it("strips transient locale metadata before create and update persistence RPCs", async () => {
+    const transient = { ...food, languageTag: "en" } as SavedMealFoodItemSnapshot & { languageTag: string };
+    const created = { id: savedMealId, user_id: userId, name: "Localized", note: null, is_favorite: false };
+    const createDb = fakeSupabase({}, [{ data: created, error: null }]);
+
+    await createSavedMeal(createDb.client, userId, { operationId, name: "Localized", items: [transient] });
+
+    expect(createDb.rpc).toHaveBeenCalledWith("create_nutrition_saved_meal_idempotent", expect.objectContaining({
+      p_items: [food],
+    }));
+
+    const updated = { id: savedMealId, user_id: userId, name: "Localized", note: null, is_favorite: false };
+    const updateDb = fakeSupabase({}, [{ data: updated, error: null }]);
+
+    await updateSavedMeal(updateDb.client, userId, savedMealId, { name: "Localized", items: [transient] });
+
+    expect(updateDb.rpc).toHaveBeenCalledWith("update_nutrition_saved_meal", expect.objectContaining({
+      p_items: [food],
+    }));
+  });
+
 });

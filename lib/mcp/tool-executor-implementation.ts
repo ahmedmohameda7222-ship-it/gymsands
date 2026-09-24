@@ -12,7 +12,7 @@ import {
   type JsonObject
 } from "@/lib/mcp/schemas";
 import { fail, num, ok, sumMacros, type MacroTotals, type McpToolResult } from "@/lib/mcp/tool-helpers";
-import { searchCatalogFoodsByName } from "@/services/nutrition-v1/server/food-catalog";
+import { listFoodLibrary, normalizeFoodSearchText, type FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
 
 type FoodCandidate = {
   id: string;
@@ -25,16 +25,16 @@ type FoodCandidate = {
   fat_g: number;
 };
 
-function normalizeFood(row: Record<string, unknown>, source: "global" | "user"): FoodCandidate {
+function normalizeFood(row: FoodLibraryCandidate): FoodCandidate {
   return {
-    id: String(row.id),
-    source,
-    food_name: String(row.food_name ?? ""),
-    serving_size: String(row.serving_size ?? ""),
-    calories: num(row.calories),
-    protein_g: num(row.protein_g),
-    carbs_g: num(row.carbs_g),
-    fat_g: num(row.fat_g)
+    id: row.id,
+    source: row.source === "catalog" ? "global" : "user",
+    food_name: row.name,
+    serving_size: row.servingLabel ?? "",
+    calories: row.nutrition.calories ?? 0,
+    protein_g: row.nutrition.protein_g ?? 0,
+    carbs_g: row.nutrition.carbs_g ?? 0,
+    fat_g: row.nutrition.fat_g ?? 0
   };
 }
 
@@ -53,27 +53,18 @@ function scaleFood(food: FoodCandidate, quantity: number) {
 }
 
 async function findFood(ctx: McpContext, query: string, limit = 5): Promise<{ exact?: FoodCandidate; candidates: FoodCandidate[] }> {
-  const cleanQuery = query.trim();
+  const cleanQuery = normalizeFoodSearchText(query);
   if (!cleanQuery) throw new Error("food_name is required.");
 
-  const [globalFoods, userFoods] = await Promise.all([
-    searchCatalogFoodsByName(ctx.supabase, cleanQuery, limit),
-    ctx.supabase
-      .from("user_food_items")
-      .select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g")
-      .eq("user_id", ctx.userId)
-      .ilike("food_name", `%${cleanQuery}%`)
-      .limit(limit)
-  ]);
-
-  if (userFoods.error) throw new Error(userFoods.error.message);
-
-  const candidates = [
-    ...((userFoods.data ?? []) as Array<Record<string, unknown>>).map((food) => normalizeFood(food, "user")),
-    ...globalFoods.map((food) => normalizeFood(food, "global"))
-  ].slice(0, limit);
-
-  const exact = candidates.find((food) => food.food_name.toLowerCase() === cleanQuery.toLowerCase()) ?? (candidates.length === 1 ? candidates[0] : undefined);
+  const page = await listFoodLibrary(ctx.supabase, ctx.userId, {
+    query: cleanQuery,
+    locale: "en",
+    marketScopeCode: null,
+    limit,
+    scope: "all",
+  });
+  const candidates = page.items.slice(0, limit).map(normalizeFood);
+  const exact = candidates.find((food) => normalizeFoodSearchText(food.food_name) === cleanQuery) ?? (candidates.length === 1 ? candidates[0] : undefined);
   return { exact, candidates };
 }
 

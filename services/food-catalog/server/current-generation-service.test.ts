@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { FoodCatalogGenerationReadStore } from "./generation-store";
+import type {
+  FoodCatalogGenerationReadStore,
+  FoodCatalogGenerationTrustBatchReadStore,
+} from "./generation-store";
 import type {
   StoredCatalogGeneration,
   StoredGenerationFood,
@@ -17,6 +20,7 @@ import {
   getCurrentGenerationFood,
   projectCurrentGenerationCompatibility,
   resolveCurrentGenerationFoodForNewUse,
+  resolveCurrentGenerationFoodsForNewUseBatch,
 } from "./current-generation-service";
 
 const GENERATION_ID = "91000000-0000-4000-8000-000000000001";
@@ -312,6 +316,16 @@ describe("Food Catalog Plan 3 exact current-generation service", () => {
     await expect(getCurrentGenerationFood(nonActiveStore, OLD_FOOD_ID)).rejects.toSatisfy(expectGenerationError("INVALID_REDIRECT"));
   });
 
+  it("does not load report-wide validation findings during direct current-Food resolution", async () => {
+    const store = makeStore();
+
+    const view = await getCurrentGenerationFood(store, FOOD_ID);
+
+    expect(view.trust.verified).toBe(true);
+    expect(store.readValidationReport).toHaveBeenCalledWith(REPORT_ID);
+    expect(store.readValidationFindings).not.toHaveBeenCalled();
+  });
+
   it("derives trust only from selected assertions and the pointer-bound validation report", async () => {
     const store = makeStore({
       readVerificationAssertions: vi.fn(async (_foodId: string, selected: StoredGenerationSelections["verification"]) => {
@@ -380,6 +394,59 @@ describe("Food Catalog Plan 3 exact current-generation service", () => {
       nameFactId: NAME_ID,
       servingOptionId: OTHER_SERVING_ID,
     })).toThrow(/selected/i);
+  });
+
+  it("batch-resolves deduplicated direct and redirected Foods with one survivor hydration", async () => {
+    const authority = {
+      activationSetId: ACTIVATION_SET_ID,
+      activationSetMemberId: ACTIVATION_MEMBER_ID,
+      foodId: FOOD_ID,
+      activationPolicyVersion: "activation-v1",
+      eligibility: "eligible" as const,
+      sourceLegalAccepted: true,
+      grantEventId: ACTIVATION_GRANT_ID,
+      grantCreatedAt: "2026-09-02T09:30:00.000Z",
+      invalidatedAt: null,
+    };
+    const base = makeStore();
+    const store = Object.assign(base, {
+      readGenerationFoodsByIds: vi.fn(async (_generationId: string, foodIds: readonly string[]) => (
+        foodIds.includes(FOOD_ID) ? [activeFood] : []
+      )),
+      readGenerationRedirectsBySourceIds: vi.fn(async (_generationId: string, sourceFoodIds: readonly string[]) => (
+        sourceFoodIds.includes(OLD_FOOD_ID)
+          ? [{ generationId: GENERATION_ID, sourceFoodId: OLD_FOOD_ID, targetFoodId: FOOD_ID }]
+          : []
+      )),
+      readGenerationTrustHydration: vi.fn(async () => ({
+        selectionsByFoodId: { [FOOD_ID]: selections },
+        nutritionRevisions: [nutrition],
+        servingOptions: [serving],
+        names: [name],
+        taxonomyAssignments: [],
+        marketAssignments: [],
+        verificationAssertions: assertions(),
+        activationAuthorities: [authority],
+      })),
+    }) as FoodCatalogGenerationReadStore & FoodCatalogGenerationTrustBatchReadStore;
+
+    const views = await resolveCurrentGenerationFoodsForNewUseBatch(
+      store,
+      [FOOD_ID, OLD_FOOD_ID, FOOD_ID],
+    );
+
+    expect([...views.keys()]).toEqual([FOOD_ID, OLD_FOOD_ID]);
+    expect(views.get(FOOD_ID)?.resolvedFoodId).toBe(FOOD_ID);
+    expect(views.get(OLD_FOOD_ID)?.resolvedFoodId).toBe(FOOD_ID);
+    expect(views.get(OLD_FOOD_ID)?.redirect).toEqual({
+      generationId: GENERATION_ID,
+      sourceFoodId: OLD_FOOD_ID,
+      targetFoodId: FOOD_ID,
+    });
+    expect(store.readGenerationTrustHydration).toHaveBeenCalledTimes(1);
+    expect(store.readGenerationTrustHydration).toHaveBeenCalledWith(GENERATION_ID, [activeFood]);
+    expect(store.readGenerationFood).not.toHaveBeenCalled();
+    expect(store.readGenerationRedirect).not.toHaveBeenCalled();
   });
 
   it("allows deprecated/withdrawn diagnostic current views but rejects them for new use", async () => {

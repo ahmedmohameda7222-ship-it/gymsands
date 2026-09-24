@@ -18,6 +18,9 @@ type RecipeFoodSource = {
   source: string;
   quantity: number;
   serving: string;
+  servingOptionId: string | null;
+  displayName: string | null;
+  languageTag: string | null;
 };
 
 async function jsonRequest<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
@@ -28,14 +31,14 @@ async function jsonRequest<T>(input: RequestInfo | URL, init?: RequestInit): Pro
 }
 
 function newRecipeOperationStorageKey(ownerId: string, source: RecipeFoodSource) {
-  return ["plaivra", "nutrition", "handoff", ownerId, "recipe", "new", source.source, source.id, String(source.quantity), source.serving]
+  return ["plaivra", "nutrition", "handoff", ownerId, "recipe", "new", source.source, source.id, String(source.quantity), source.serving, source.servingOptionId ?? "", source.displayName ?? "", source.languageTag ?? ""]
     .map((part) => encodeURIComponent(part))
     .join(":");
 }
 
 function commandSourceIdentity(source: AddToHandoffSource, resolvedRecipeQuantity: number | null) {
   if (source.type === "food") {
-    return ["food", source.source, source.id, String(source.quantity), source.serving];
+    return ["food", source.source, source.id, String(source.quantity), source.serving, source.servingOptionId ?? "", source.displayName ?? "", source.languageTag ?? ""];
   }
   return ["recipe", source.id, source.versionId, String(resolvedRecipeQuantity ?? source.quantity)];
 }
@@ -109,7 +112,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
     void (async () => {
       try {
         const preview = current.type === "food"
-          ? await jsonRequest<{ name: string }>(`/api/nutrition/v1/foods/${encodeURIComponent(current.id)}/handoff?source=${encodeURIComponent(current.source)}&quantity=${encodeURIComponent(String(current.quantity))}&serving=${encodeURIComponent(current.serving)}`)
+          ? await jsonRequest<{ name: string }>(`/api/nutrition/v1/foods/${encodeURIComponent(current.id)}/handoff?source=${encodeURIComponent(current.source)}&quantity=${encodeURIComponent(String(current.quantity))}&serving=${encodeURIComponent(current.serving)}${current.servingOptionId ? `&servingOptionId=${encodeURIComponent(current.servingOptionId)}` : ""}${current.displayName ? `&displayName=${encodeURIComponent(current.displayName)}` : ""}${current.languageTag ? `&languageTag=${encodeURIComponent(current.languageTag)}` : ""}`)
           : await jsonRequest<{ name: string }>(`/api/nutrition/v1/recipes/${encodeURIComponent(current.id)}/handoff?recipeVersionId=${encodeURIComponent(current.versionId)}&quantity=${encodeURIComponent(String(current.quantity))}`);
         if (!cancelled) setSourceName(preview.name);
         if (destination === "recipe") {
@@ -139,7 +142,16 @@ export function AddToHandoffConsumer({ destination }: Props) {
       const payload: Record<string, unknown> = {
         destination,
         source: currentSource.type === "food"
-          ? { type: "food", id: currentSource.id, source: currentSource.source, quantity: currentSource.quantity, serving: currentSource.serving }
+          ? {
+              type: "food",
+              id: currentSource.id,
+              source: currentSource.source,
+              quantity: currentSource.quantity,
+              serving: currentSource.serving,
+              servingOptionId: currentSource.servingOptionId,
+              displayName: currentSource.displayName,
+              languageTag: currentSource.languageTag,
+            }
           : { type: "recipe", id: currentSource.id, versionId: currentSource.versionId, quantity: resolvedRecipeQuantity },
       };
 

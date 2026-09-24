@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import {
   deriveFoodTrustProfile,
   type FoodTrustProfile,
@@ -28,11 +30,15 @@ import type {
   StoredGenerationFood,
   StoredGenerationRedirect,
   StoredGenerationSelections,
-  StoredGenerationValidationFinding,
   StoredGenerationValidationReport,
 } from "./generation-contracts";
 import { FoodCatalogGenerationError, type FoodCatalogGenerationErrorCode } from "./generation-errors";
-import type { FoodCatalogGenerationReadStore } from "./generation-store";
+import type {
+  FoodCatalogGenerationReadStore,
+  FoodCatalogGenerationTrustBatchReadStore,
+  StoredGenerationTrustHydration,
+} from "./generation-store";
+import { createSupabaseFoodCatalogGenerationReadStore } from "./supabase-generation-read-store";
 
 const VERIFICATION_SCOPES: readonly FoodVerificationScope[] = [
   "identity",
@@ -60,7 +66,6 @@ export type CurrentGenerationFoodView = {
   generation: StoredCatalogGeneration;
   currentEvent: StoredGenerationEvent;
   validationReport: StoredGenerationValidationReport;
-  validationFindings: StoredGenerationValidationFinding[];
   requestedFoodId: string;
   resolvedFoodId: string;
   food: StoredGenerationFood;
@@ -301,10 +306,20 @@ function deriveCompleteness(
   };
 }
 
-export async function getCurrentGenerationFood(
-  store: FoodCatalogGenerationReadStore,
-  requestedFoodId: string,
-): Promise<CurrentGenerationFoodView> {
+type CurrentGenerationSharedAuthority = {
+  pointer: StoredCurrentGenerationPointer & {
+    currentGenerationId: string;
+    currentEventId: string;
+    currentValidationReportId: string;
+  };
+  generation: StoredCatalogGeneration;
+  currentEvent: StoredGenerationEvent;
+  validationReport: StoredGenerationValidationReport;
+};
+
+async function readCurrentGenerationSharedAuthority(
+  store: Pick<FoodCatalogGenerationReadStore, "readCurrentPointer" | "readGeneration" | "readGenerationEvent" | "readValidationReport">,
+): Promise<CurrentGenerationSharedAuthority> {
   const pointer = await store.readCurrentPointer();
   assertCurrentPointer(pointer);
 
@@ -320,42 +335,48 @@ export async function getCurrentGenerationFood(
     store.readGenerationEvent(pointer.currentEventId),
     store.readValidationReport(pointer.currentValidationReportId),
   ]);
-  const currentEvent = assertGenerationCurrentEvent(rawEvent, pointer.currentEventId, generation);
-  const validationReport = assertPointerValidationReport(
-    rawReport,
-    pointer.currentValidationReportId,
+  return {
+    pointer,
     generation,
-  );
+    currentEvent: assertGenerationCurrentEvent(rawEvent, pointer.currentEventId, generation),
+    validationReport: assertPointerValidationReport(
+      rawReport,
+      pointer.currentValidationReportId,
+      generation,
+    ),
+  };
+}
 
-  const { food, resolvedFoodId, redirect } = await resolveGenerationFood(
-    store,
-    generation.id,
-    requestedFoodId,
-  );
+function deriveCurrentGenerationTrust({
+  generation,
+  validationReport,
+  food,
+  resolvedFoodId,
+  selections,
+  nutritionRevision,
+  servingOptions,
+  names,
+  taxonomyAssignments,
+  marketAssignments,
+  verificationAssertions,
+  activationAuthority,
+}: {
+  generation: StoredCatalogGeneration;
+  validationReport: StoredGenerationValidationReport;
+  food: StoredGenerationFood;
+  resolvedFoodId: string;
+  selections: StoredGenerationSelections;
+  nutritionRevision: StoredFoodNutritionRevision | null;
+  servingOptions: readonly StoredFoodServingOption[];
+  names: readonly StoredFoodNameFact[];
+  taxonomyAssignments: readonly StoredFoodTaxonomyAssignment[];
+  marketAssignments: readonly StoredFoodMarketAssignment[];
+  verificationAssertions: readonly StoredFoodVerificationAssertion[];
+  activationAuthority: StoredActivationAuthority | null;
+}): FoodTrustProfile {
   if (food.generationId !== generation.id || food.foodId !== resolvedFoodId) {
     reject("CROSS_FOOD_SELECTION", "Generation Food does not bind the requested generation/Food identity.");
   }
-
-  const selections = await store.readGenerationSelections(generation.id, resolvedFoodId);
-  const [
-    nutritionRevision,
-    servingOptions,
-    names,
-    taxonomyAssignments,
-    marketAssignments,
-    verificationAssertions,
-    validationFindings,
-  ] = await Promise.all([
-    food.nutritionRevisionId === null
-      ? Promise.resolve(null)
-      : store.readNutritionRevision(resolvedFoodId, food.nutritionRevisionId),
-    store.readServingOptions(resolvedFoodId, selections.servingOptionIds),
-    store.readNames(resolvedFoodId, selections.nameFactIds),
-    store.readTaxonomyAssignments(resolvedFoodId, selections.taxonomyAssignmentIds),
-    store.readMarketAssignments(resolvedFoodId, selections.marketAssignmentIds),
-    store.readVerificationAssertions(resolvedFoodId, selections.verification),
-    store.readValidationFindings(validationReport.id),
-  ]);
 
   if (food.nutritionRevisionId !== null) {
     if (nutritionRevision === null || nutritionRevision.id !== food.nutritionRevisionId) {
@@ -375,6 +396,53 @@ export async function getCurrentGenerationFood(
     selections.verification,
     verificationAssertions,
   );
+  const activationAccepted = activationAcceptedAtSeal(generation, food, activationAuthority);
+
+  return deriveFoodTrustProfile({
+    generationId: generation.id,
+    foodId: resolvedFoodId,
+    lifecycle: food.lifecycle,
+    verification,
+    activationAccepted,
+    blockingConditionCount: validationReport.blockerCount,
+    completeness: deriveCompleteness(nutritionRevision, servingOptions, names),
+    trustPolicyVersion: generation.trustPolicyVersion,
+  });
+}
+
+export async function getCurrentGenerationFood(
+  store: FoodCatalogGenerationReadStore,
+  requestedFoodId: string,
+): Promise<CurrentGenerationFoodView> {
+  const { pointer, generation, currentEvent, validationReport } = await readCurrentGenerationSharedAuthority(store);
+
+  const { food, resolvedFoodId, redirect } = await resolveGenerationFood(
+    store,
+    generation.id,
+    requestedFoodId,
+  );
+  if (food.generationId !== generation.id || food.foodId !== resolvedFoodId) {
+    reject("CROSS_FOOD_SELECTION", "Generation Food does not bind the requested generation/Food identity.");
+  }
+
+  const selections = await store.readGenerationSelections(generation.id, resolvedFoodId);
+  const [
+    nutritionRevision,
+    servingOptions,
+    names,
+    taxonomyAssignments,
+    marketAssignments,
+    verificationAssertions,
+  ] = await Promise.all([
+    food.nutritionRevisionId === null
+      ? Promise.resolve(null)
+      : store.readNutritionRevision(resolvedFoodId, food.nutritionRevisionId),
+    store.readServingOptions(resolvedFoodId, selections.servingOptionIds),
+    store.readNames(resolvedFoodId, selections.nameFactIds),
+    store.readTaxonomyAssignments(resolvedFoodId, selections.taxonomyAssignmentIds),
+    store.readMarketAssignments(resolvedFoodId, selections.marketAssignmentIds),
+    store.readVerificationAssertions(resolvedFoodId, selections.verification),
+  ]);
 
   let activationAuthority: StoredActivationAuthority | null = null;
   if (food.lifecycle === "active") {
@@ -386,17 +454,20 @@ export async function getCurrentGenerationFood(
       food.activationGrantEventId,
     );
   }
-  const activationAccepted = activationAcceptedAtSeal(generation, food, activationAuthority);
 
-  const trust = deriveFoodTrustProfile({
-    generationId: generation.id,
-    foodId: resolvedFoodId,
-    lifecycle: food.lifecycle,
-    verification,
-    activationAccepted,
-    blockingConditionCount: validationReport.blockerCount,
-    completeness: deriveCompleteness(nutritionRevision, servingOptions, names),
-    trustPolicyVersion: generation.trustPolicyVersion,
+  const trust = deriveCurrentGenerationTrust({
+    generation,
+    validationReport,
+    food,
+    resolvedFoodId,
+    selections,
+    nutritionRevision,
+    servingOptions,
+    names,
+    taxonomyAssignments,
+    marketAssignments,
+    verificationAssertions,
+    activationAuthority,
   });
 
   return {
@@ -404,7 +475,6 @@ export async function getCurrentGenerationFood(
     generation,
     currentEvent,
     validationReport,
-    validationFindings,
     requestedFoodId,
     resolvedFoodId,
     food,
@@ -421,6 +491,476 @@ export async function getCurrentGenerationFood(
   };
 }
 
+export type CurrentGenerationTrustForNewUseResult = {
+  requestedFoodId: string;
+  resolvedFoodId: string | null;
+  trust: FoodTrustProfile | null;
+};
+
+function emptyTrustResults(
+  requestedFoodIds: readonly string[],
+): Map<string, CurrentGenerationTrustForNewUseResult> {
+  return new Map<string, CurrentGenerationTrustForNewUseResult>(
+    requestedFoodIds.map((requestedFoodId) => [requestedFoodId, {
+      requestedFoodId,
+      resolvedFoodId: null,
+      trust: null,
+    }]),
+  );
+}
+
+function uniqueFoodIds(foodIds: readonly string[]) {
+  return Array.from(new Set(
+    foodIds
+      .filter((foodId) => typeof foodId === "string" && foodId.trim())
+      .map((foodId) => foodId.trim()),
+  ));
+}
+
+function factsSelectedByIds<T extends StoredFoodFact>(facts: readonly T[], ids: readonly string[]) {
+  if (!ids.length) return [] as T[];
+  const selected = new Set(ids);
+  return facts.filter((fact) => selected.has(fact.id));
+}
+
+function groupedBy<T>(values: readonly T[], key: (value: T) => string) {
+  const groups = new Map<string, T[]>();
+  for (const value of values) {
+    const id = key(value);
+    const bucket = groups.get(id);
+    if (bucket) bucket.push(value);
+    else groups.set(id, [value]);
+  }
+  return groups;
+}
+
+const EMPTY_SELECTIONS: StoredGenerationSelections = {
+  servingOptionIds: [],
+  nameFactIds: [],
+  taxonomyAssignmentIds: [],
+  marketAssignmentIds: [],
+  verification: [],
+};
+
+export async function resolveCurrentGenerationTrustForNewUseBatch(
+  store: FoodCatalogGenerationTrustBatchReadStore,
+  requestedFoodIds: readonly string[],
+): Promise<Map<string, CurrentGenerationTrustForNewUseResult>> {
+  const requested = uniqueFoodIds(requestedFoodIds);
+  const results = emptyTrustResults(requested);
+  if (!requested.length) return results;
+
+  let shared: CurrentGenerationSharedAuthority;
+  try {
+    shared = await readCurrentGenerationSharedAuthority(store);
+  } catch {
+    return results;
+  }
+
+  const { generation, validationReport } = shared;
+  let directFoods: StoredGenerationFood[];
+  try {
+    directFoods = await store.readGenerationFoodsByIds(generation.id, requested);
+  } catch {
+    return results;
+  }
+
+  const directById = groupedBy(directFoods, (food) => food.foodId);
+  const resolvedByRequested = new Map<string, {
+    food: StoredGenerationFood;
+    resolvedFoodId: string;
+    redirect: StoredGenerationRedirect | null;
+  }>();
+  const missingRequested: string[] = [];
+
+  for (const requestedFoodId of requested) {
+    const matches = directById.get(requestedFoodId) ?? [];
+    if (matches.length === 0) {
+      missingRequested.push(requestedFoodId);
+      continue;
+    }
+    if (matches.length !== 1) continue;
+    const food = matches[0]!;
+    if (
+      food.generationId !== generation.id
+      || food.foodId !== requestedFoodId
+      || food.lifecycle !== "active"
+    ) {
+      results.set(requestedFoodId, {
+        requestedFoodId,
+        resolvedFoodId: food.foodId === requestedFoodId ? requestedFoodId : null,
+        trust: null,
+      });
+      continue;
+    }
+    resolvedByRequested.set(requestedFoodId, {
+      food,
+      resolvedFoodId: requestedFoodId,
+      redirect: null,
+    });
+  }
+
+  if (missingRequested.length) {
+    let redirects: StoredGenerationRedirect[] = [];
+    try {
+      redirects = await store.readGenerationRedirectsBySourceIds(generation.id, missingRequested);
+    } catch {
+      redirects = [];
+    }
+    const redirectBySource = groupedBy(redirects, (redirect) => redirect.sourceFoodId);
+    const validRedirects = new Map<string, StoredGenerationRedirect>();
+    for (const requestedFoodId of missingRequested) {
+      const matches = redirectBySource.get(requestedFoodId) ?? [];
+      if (matches.length !== 1) continue;
+      const redirect = matches[0]!;
+      if (
+        redirect.generationId !== generation.id
+        || redirect.sourceFoodId !== requestedFoodId
+        || redirect.targetFoodId === requestedFoodId
+      ) {
+        continue;
+      }
+      validRedirects.set(requestedFoodId, redirect);
+    }
+
+    const targetIds = Array.from(new Set(Array.from(validRedirects.values()).map((redirect) => redirect.targetFoodId)));
+    if (targetIds.length) {
+      let targetRedirects: StoredGenerationRedirect[] = [];
+      let targetFoods: StoredGenerationFood[] = [];
+      try {
+        [targetRedirects, targetFoods] = await Promise.all([
+          store.readGenerationRedirectsBySourceIds(generation.id, targetIds),
+          store.readGenerationFoodsByIds(generation.id, targetIds),
+        ]);
+      } catch {
+        targetRedirects = targetIds.map((sourceFoodId) => ({
+          generationId: generation.id,
+          sourceFoodId,
+          targetFoodId: sourceFoodId,
+        }));
+        targetFoods = [];
+      }
+
+      const targetRedirectBySource = groupedBy(targetRedirects, (redirect) => redirect.sourceFoodId);
+      const targetFoodById = groupedBy(targetFoods, (food) => food.foodId);
+      for (const [requestedFoodId, redirect] of validRedirects) {
+        if ((targetRedirectBySource.get(redirect.targetFoodId) ?? []).length !== 0) continue;
+        const targets = targetFoodById.get(redirect.targetFoodId) ?? [];
+        if (targets.length !== 1) continue;
+        const target = targets[0]!;
+        if (
+          target.generationId !== generation.id
+          || target.foodId !== redirect.targetFoodId
+          || target.lifecycle !== "active"
+        ) {
+          continue;
+        }
+        resolvedByRequested.set(requestedFoodId, {
+          food: target,
+          resolvedFoodId: redirect.targetFoodId,
+          redirect,
+        });
+      }
+    }
+  }
+
+  const survivors = Array.from(new Map(
+    Array.from(resolvedByRequested.values()).map((entry) => [entry.resolvedFoodId, entry.food]),
+  ).values());
+  if (!survivors.length) return results;
+
+  let hydration: StoredGenerationTrustHydration;
+  try {
+    hydration = await store.readGenerationTrustHydration(generation.id, survivors);
+  } catch {
+    for (const [requestedFoodId, resolved] of resolvedByRequested) {
+      results.set(requestedFoodId, {
+        requestedFoodId,
+        resolvedFoodId: resolved.resolvedFoodId,
+        trust: null,
+      });
+    }
+    return results;
+  }
+
+  const trustByResolvedFoodId = new Map<string, FoodTrustProfile | null>();
+  for (const food of survivors) {
+    const resolvedFoodId = food.foodId;
+    try {
+      const selections = hydration.selectionsByFoodId[resolvedFoodId] ?? EMPTY_SELECTIONS;
+      const nutritionRevision = food.nutritionRevisionId === null
+        ? null
+        : (hydration.nutritionRevisions.filter((revision) => revision.id === food.nutritionRevisionId)[0] ?? null);
+      const servingOptions = factsSelectedByIds(hydration.servingOptions, selections.servingOptionIds);
+      const names = factsSelectedByIds(hydration.names, selections.nameFactIds);
+      const taxonomyAssignments = factsSelectedByIds(hydration.taxonomyAssignments, selections.taxonomyAssignmentIds);
+      const marketAssignments = factsSelectedByIds(hydration.marketAssignments, selections.marketAssignmentIds);
+      const verificationAssertions = factsSelectedByIds(
+        hydration.verificationAssertions,
+        selections.verification.map((selection) => selection.assertionId),
+      );
+
+      let activationAuthority: StoredActivationAuthority | null = null;
+      if (food.activationSetMemberId !== null && food.activationGrantEventId !== null) {
+        const matches = hydration.activationAuthorities.filter((authority) => (
+          authority.activationSetMemberId === food.activationSetMemberId
+          && authority.grantEventId === food.activationGrantEventId
+        ));
+        if (matches.length === 1) activationAuthority = matches[0]!;
+      }
+
+      trustByResolvedFoodId.set(resolvedFoodId, deriveCurrentGenerationTrust({
+        generation,
+        validationReport,
+        food,
+        resolvedFoodId,
+        selections,
+        nutritionRevision,
+        servingOptions,
+        names,
+        taxonomyAssignments,
+        marketAssignments,
+        verificationAssertions,
+        activationAuthority,
+      }));
+    } catch {
+      trustByResolvedFoodId.set(resolvedFoodId, null);
+    }
+  }
+
+  for (const [requestedFoodId, resolved] of resolvedByRequested) {
+    results.set(requestedFoodId, {
+      requestedFoodId,
+      resolvedFoodId: resolved.resolvedFoodId,
+      trust: trustByResolvedFoodId.get(resolved.resolvedFoodId) ?? null,
+    });
+  }
+  return results;
+}
+
+export function resolveCurrentGenerationTrustForNewUseBatchFromSupabase(
+  supabase: SupabaseClient,
+  requestedFoodIds: readonly string[],
+): Promise<Map<string, CurrentGenerationTrustForNewUseResult>> {
+  return resolveCurrentGenerationTrustForNewUseBatch(
+    createSupabaseFoodCatalogGenerationReadStore(supabase),
+    requestedFoodIds,
+  );
+}
+
+export async function resolveCurrentGenerationFoodsForNewUseBatch(
+  store: FoodCatalogGenerationReadStore & FoodCatalogGenerationTrustBatchReadStore,
+  requestedFoodIds: readonly string[],
+): Promise<Map<string, CurrentGenerationFoodView>> {
+  const requested = uniqueFoodIds(requestedFoodIds);
+  const views = new Map<string, CurrentGenerationFoodView>();
+  if (!requested.length) return views;
+
+  const { pointer, generation, currentEvent, validationReport } = await readCurrentGenerationSharedAuthority(store);
+  const directFoods = await store.readGenerationFoodsByIds(generation.id, requested);
+  const directById = groupedBy(directFoods, (food) => food.foodId);
+  const resolvedByRequested = new Map<string, {
+    food: StoredGenerationFood;
+    resolvedFoodId: string;
+    redirect: StoredGenerationRedirect | null;
+  }>();
+  const missingRequested: string[] = [];
+
+  for (const requestedFoodId of requested) {
+    const matches = directById.get(requestedFoodId) ?? [];
+    if (matches.length === 0) {
+      missingRequested.push(requestedFoodId);
+      continue;
+    }
+    if (matches.length !== 1) {
+      reject("CONTROL_PLANE_REJECTED", "Current generation returned duplicate Food authority.");
+    }
+    const food = matches[0]!;
+    if (food.generationId !== generation.id || food.foodId !== requestedFoodId) {
+      reject("CROSS_FOOD_SELECTION", "Generation Food crossed current generation/Food identity.");
+    }
+    if (food.lifecycle !== "active") {
+      reject("CONTROL_PLANE_REJECTED", "Only active current-generation Foods may be selected for new use.");
+    }
+    resolvedByRequested.set(requestedFoodId, {
+      food,
+      resolvedFoodId: requestedFoodId,
+      redirect: null,
+    });
+  }
+
+  if (missingRequested.length) {
+    const redirects = await store.readGenerationRedirectsBySourceIds(generation.id, missingRequested);
+    const redirectBySource = groupedBy(redirects, (redirect) => redirect.sourceFoodId);
+    const redirectsByRequested = new Map<string, StoredGenerationRedirect>();
+
+    for (const requestedFoodId of missingRequested) {
+      const matches = redirectBySource.get(requestedFoodId) ?? [];
+      if (matches.length === 0) {
+        reject("GENERATION_NOT_FOUND", "Food is not present in the current generation and has no direct redirect.");
+      }
+      if (matches.length !== 1) {
+        reject("INVALID_REDIRECT", "Current generation returned duplicate redirects for one Food.");
+      }
+      const redirect = matches[0]!;
+      if (
+        redirect.generationId !== generation.id
+        || redirect.sourceFoodId !== requestedFoodId
+        || redirect.targetFoodId === requestedFoodId
+      ) {
+        reject("INVALID_REDIRECT", "Current generation redirect is malformed.");
+      }
+      redirectsByRequested.set(requestedFoodId, redirect);
+    }
+
+    const targetIds = Array.from(new Set(
+      Array.from(redirectsByRequested.values()).map((redirect) => redirect.targetFoodId),
+    ));
+    const [targetRedirects, targetFoods] = await Promise.all([
+      store.readGenerationRedirectsBySourceIds(generation.id, targetIds),
+      store.readGenerationFoodsByIds(generation.id, targetIds),
+    ]);
+    const targetRedirectBySource = groupedBy(targetRedirects, (redirect) => redirect.sourceFoodId);
+    const targetFoodById = groupedBy(targetFoods, (food) => food.foodId);
+
+    for (const [requestedFoodId, redirect] of redirectsByRequested) {
+      if ((targetRedirectBySource.get(redirect.targetFoodId) ?? []).length !== 0) {
+        reject("INVALID_REDIRECT", "Current generation redirects must be direct and flattened.");
+      }
+      const targets = targetFoodById.get(redirect.targetFoodId) ?? [];
+      if (targets.length !== 1) {
+        reject("INVALID_REDIRECT", "Current generation redirect target must resolve exactly once.");
+      }
+      const target = targets[0]!;
+      if (
+        target.generationId !== generation.id
+        || target.foodId !== redirect.targetFoodId
+        || target.lifecycle !== "active"
+      ) {
+        reject("INVALID_REDIRECT", "Current generation redirect target must be an active generation Food.");
+      }
+      resolvedByRequested.set(requestedFoodId, {
+        food: target,
+        resolvedFoodId: redirect.targetFoodId,
+        redirect,
+      });
+    }
+  }
+
+  const survivors = Array.from(new Map(
+    Array.from(resolvedByRequested.values()).map((resolved) => [resolved.resolvedFoodId, resolved.food]),
+  ).values());
+  const hydration = await store.readGenerationTrustHydration(generation.id, survivors);
+
+  const hydratedByFoodId = new Map<string, {
+    selections: StoredGenerationSelections;
+    nutritionRevision: StoredFoodNutritionRevision | null;
+    servingOptions: StoredFoodServingOption[];
+    names: StoredFoodNameFact[];
+    taxonomyAssignments: StoredFoodTaxonomyAssignment[];
+    marketAssignments: StoredFoodMarketAssignment[];
+    verificationAssertions: StoredFoodVerificationAssertion[];
+    activationAuthority: StoredActivationAuthority | null;
+    trust: FoodTrustProfile;
+  }>();
+
+  for (const food of survivors) {
+    const resolvedFoodId = food.foodId;
+    const selections = hydration.selectionsByFoodId[resolvedFoodId] ?? EMPTY_SELECTIONS;
+
+    let nutritionRevision: StoredFoodNutritionRevision | null = null;
+    if (food.nutritionRevisionId !== null) {
+      const matches = hydration.nutritionRevisions.filter((revision) => revision.id === food.nutritionRevisionId);
+      if (matches.length !== 1) {
+        reject("CONTROL_PLANE_REJECTED", "Selected nutrition revision did not resolve exactly.");
+      }
+      nutritionRevision = matches[0]!;
+    }
+
+    const servingOptions = factsSelectedByIds(hydration.servingOptions, selections.servingOptionIds);
+    const names = factsSelectedByIds(hydration.names, selections.nameFactIds);
+    const taxonomyAssignments = factsSelectedByIds(hydration.taxonomyAssignments, selections.taxonomyAssignmentIds);
+    const marketAssignments = factsSelectedByIds(hydration.marketAssignments, selections.marketAssignmentIds);
+    const verificationAssertions = factsSelectedByIds(
+      hydration.verificationAssertions,
+      selections.verification.map((selection) => selection.assertionId),
+    );
+
+    let activationAuthority: StoredActivationAuthority | null = null;
+    if (food.activationSetMemberId !== null && food.activationGrantEventId !== null) {
+      const matches = hydration.activationAuthorities.filter((authority) => (
+        authority.activationSetMemberId === food.activationSetMemberId
+        && authority.grantEventId === food.activationGrantEventId
+      ));
+      if (matches.length > 1) {
+        reject("CONTROL_PLANE_REJECTED", "Selected activation authority did not resolve exactly.");
+      }
+      activationAuthority = matches[0] ?? null;
+    }
+
+    const trust = deriveCurrentGenerationTrust({
+      generation,
+      validationReport,
+      food,
+      resolvedFoodId,
+      selections,
+      nutritionRevision,
+      servingOptions,
+      names,
+      taxonomyAssignments,
+      marketAssignments,
+      verificationAssertions,
+      activationAuthority,
+    });
+
+    hydratedByFoodId.set(resolvedFoodId, {
+      selections,
+      nutritionRevision,
+      servingOptions,
+      names,
+      taxonomyAssignments,
+      marketAssignments,
+      verificationAssertions,
+      activationAuthority,
+      trust,
+    });
+  }
+
+  for (const requestedFoodId of requested) {
+    const resolved = resolvedByRequested.get(requestedFoodId);
+    if (!resolved) {
+      reject("CONTROL_PLANE_REJECTED", "Current generation batch resolution is incomplete.");
+    }
+    const hydrated = hydratedByFoodId.get(resolved.resolvedFoodId);
+    if (!hydrated) {
+      reject("CONTROL_PLANE_REJECTED", "Current generation batch hydration is incomplete.");
+    }
+    views.set(requestedFoodId, {
+      pointer,
+      generation,
+      currentEvent,
+      validationReport,
+      requestedFoodId,
+      resolvedFoodId: resolved.resolvedFoodId,
+      food: resolved.food,
+      redirect: resolved.redirect,
+      ...hydrated,
+    });
+  }
+
+  return views;
+}
+
+export function resolveCurrentGenerationFoodsForNewUseBatchFromSupabase(
+  supabase: SupabaseClient,
+  requestedFoodIds: readonly string[],
+): Promise<Map<string, CurrentGenerationFoodView>> {
+  return resolveCurrentGenerationFoodsForNewUseBatch(
+    createSupabaseFoodCatalogGenerationReadStore(supabase),
+    requestedFoodIds,
+  );
+}
+
 export async function resolveCurrentGenerationFoodForNewUse(
   store: FoodCatalogGenerationReadStore,
   requestedFoodId: string,
@@ -430,6 +970,16 @@ export async function resolveCurrentGenerationFoodForNewUse(
     reject("CONTROL_PLANE_REJECTED", "Only active current-generation Foods may be selected for new use.");
   }
   return view;
+}
+
+export function resolveCurrentGenerationFoodForNewUseFromSupabase(
+  supabase: SupabaseClient,
+  requestedFoodId: string,
+): Promise<CurrentGenerationFoodView> {
+  return resolveCurrentGenerationFoodForNewUse(
+    createSupabaseFoodCatalogGenerationReadStore(supabase),
+    requestedFoodId,
+  );
 }
 
 export function projectCurrentGenerationCompatibility(

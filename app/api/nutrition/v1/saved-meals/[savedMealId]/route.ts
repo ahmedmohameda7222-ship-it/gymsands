@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
+import { createSupabaseServerClient } from "@/lib/integrations/env";
 import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
 import { canonicalizeSavedMealItems } from "@/services/nutrition-v1/server/saved-meal-write-authority";
 import {
   resolveSavedMealBundleSnapshot,
   softDeleteSavedMeal,
   updateSavedMeal,
-  type SavedMealItemInput,
+  type SavedMealItemWriteIntent,
 } from "@/services/nutrition-v1/server/saved-meals";
 
 function bodyObject(value: unknown) {
@@ -44,7 +45,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sa
     const body = bodyObject(await request.json().catch(() => ({})));
     if (typeof body.name !== "string") throw new NutritionRequestError("Saved Meal name is required.");
     if (!Array.isArray(body.items)) throw new NutritionRequestError("Saved Meal items are required.");
-    const items = await canonicalizeSavedMealItems(context.supabase, context.user.id, body.items as SavedMealItemInput[]);
+    const items = await canonicalizeSavedMealItems(
+      context.supabase,
+      createSupabaseServerClient(null, true),
+      context.user.id,
+      body.items as SavedMealItemWriteIntent[],
+      typeof body.writeLanguageTag === "string" ? body.writeLanguageTag : null,
+    );
     const savedMeal = await updateSavedMeal(context.supabase, context.user.id, savedMealId, {
       name: body.name,
       note: typeof body.note === "string" ? body.note : null,

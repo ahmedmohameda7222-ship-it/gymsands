@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { RecipeNutritionPerServing } from "@/lib/nutrition-v1/recipe-cache";
-import { getCatalogVerificationStates } from "@/services/nutrition-v1/server/food-catalog";
+import { getCurrentCatalogTrustStates } from "@/services/nutrition-v1/server/current-food-trust";
 
 function fail(error: unknown) {
   if (!error) return;
@@ -27,27 +27,27 @@ function nutrition(value: unknown): RecipeNutritionPerServing | null {
   return known ? out : null;
 }
 
-export async function getPublishedRecipeDetail(supabase: SupabaseClient, userId: string, recipeId: string) {
-  const rootResult = await supabase.from("nutrition_recipes").select("*").eq("id", recipeId).eq("user_id", userId).is("deleted_at", null).maybeSingle();
+export async function getPublishedRecipeDetail(ownerSupabase: SupabaseClient, catalogSupabase: SupabaseClient, userId: string, recipeId: string) {
+  const rootResult = await ownerSupabase.from("nutrition_recipes").select("*").eq("id", recipeId).eq("user_id", userId).is("deleted_at", null).maybeSingle();
   fail(rootResult.error);
   if (!rootResult.data) throw new Error("Recipe not found.");
 
-  const versionResult = await supabase.from("nutrition_recipe_versions").select("*").eq("recipe_id", recipeId).eq("user_id", userId).order("version_number", { ascending: false }).limit(1).maybeSingle();
+  const versionResult = await ownerSupabase.from("nutrition_recipe_versions").select("*").eq("recipe_id", recipeId).eq("user_id", userId).order("version_number", { ascending: false }).limit(1).maybeSingle();
   fail(versionResult.error);
   if (!versionResult.data) return { root: rootResult.data, latestVersion: null, ingredients: [], instructions: [], equipment: [], nutritionPerServing: null, cuisine: null };
   const versionId = String(versionResult.data.id);
 
   const [ingredientsResult, instructionsResult, equipmentResult, draftResult] = await Promise.all([
-    supabase.from("nutrition_recipe_ingredients").select("*").eq("user_id", userId).eq("recipe_version_id", versionId).order("position", { ascending: true }),
-    supabase.from("nutrition_recipe_actions").select("*").eq("user_id", userId).eq("recipe_version_id", versionId).order("position", { ascending: true }),
-    supabase.from("nutrition_recipe_equipment").select("*").eq("user_id", userId).eq("recipe_version_id", versionId).order("position", { ascending: true }),
-    supabase.from("nutrition_recipe_drafts").select("id,updated_at").eq("user_id", userId).eq("recipe_id", recipeId).maybeSingle(),
+    ownerSupabase.from("nutrition_recipe_ingredients").select("*").eq("user_id", userId).eq("recipe_version_id", versionId).order("position", { ascending: true }),
+    ownerSupabase.from("nutrition_recipe_actions").select("*").eq("user_id", userId).eq("recipe_version_id", versionId).order("position", { ascending: true }),
+    ownerSupabase.from("nutrition_recipe_equipment").select("*").eq("user_id", userId).eq("recipe_version_id", versionId).order("position", { ascending: true }),
+    ownerSupabase.from("nutrition_recipe_drafts").select("id,updated_at").eq("user_id", userId).eq("recipe_id", recipeId).maybeSingle(),
   ]);
   fail(ingredientsResult.error); fail(instructionsResult.error); fail(equipmentResult.error); fail(draftResult.error);
 
   const ingredientRows = (ingredientsResult.data ?? []) as Array<Record<string, unknown>>;
   const foodIds = Array.from(new Set(ingredientRows.map((row) => typeof row.food_id === "string" ? row.food_id : null).filter((id): id is string => Boolean(id))));
-  const verified = await getCatalogVerificationStates(supabase, foodIds);
+  const verified = await getCurrentCatalogTrustStates(catalogSupabase, foodIds);
 
   const metadata = record(versionResult.data.metadata);
   return {

@@ -68,6 +68,35 @@ export interface FoodCatalogGenerationReadStore {
   readValidationFindings(reportId: string): Promise<StoredGenerationValidationFinding[]>;
 }
 
+export interface StoredGenerationTrustHydration {
+  selectionsByFoodId: Record<string, StoredGenerationSelections>;
+  nutritionRevisions: StoredFoodNutritionRevision[];
+  servingOptions: StoredFoodServingOption[];
+  names: StoredFoodNameFact[];
+  taxonomyAssignments: StoredFoodTaxonomyAssignment[];
+  marketAssignments: StoredFoodMarketAssignment[];
+  verificationAssertions: StoredFoodVerificationAssertion[];
+  activationAuthorities: StoredActivationAuthority[];
+}
+
+export interface FoodCatalogGenerationTrustBatchReadStore extends Pick<
+  FoodCatalogGenerationReadStore,
+  "readCurrentPointer" | "readGeneration" | "readGenerationEvent" | "readValidationReport"
+> {
+  readGenerationFoodsByIds(
+    generationId: string,
+    foodIds: readonly string[],
+  ): Promise<StoredGenerationFood[]>;
+  readGenerationRedirectsBySourceIds(
+    generationId: string,
+    sourceFoodIds: readonly string[],
+  ): Promise<StoredGenerationRedirect[]>;
+  readGenerationTrustHydration(
+    generationId: string,
+    foods: readonly StoredGenerationFood[],
+  ): Promise<StoredGenerationTrustHydration>;
+}
+
 export interface FoodCatalogGenerationValidationReadStore extends FoodCatalogGenerationReadStore {
   readGenerationFoods(generationId: string): Promise<StoredGenerationFood[]>;
   readGenerationRedirects(generationId: string): Promise<StoredGenerationRedirect[]>;

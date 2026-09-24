@@ -12,6 +12,17 @@ import { useEatTranslation } from "@/lib/i18n/eat";
 import type { UserAppSettings } from "@/services/database/user-settings";
 import type { FoodLog, MealType } from "@/types";
 
+type BarcodeServingChoice = {
+  servingOptionId: string | null;
+  label: string;
+  source: "generation" | "owner_override";
+  nutrition?: {
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+  };
+};
 type BarcodeFood = {
   name: string;
   brand?: string | null;
@@ -20,6 +31,8 @@ type BarcodeFood = {
   protein?: number | null;
   carbs?: number | null;
   fat?: number | null;
+  source?: "catalog" | "provider_suggestion";
+  servingChoices?: BarcodeServingChoice[];
 };
 
 type BarcodeDetectorResult = { rawValue?: string };
@@ -44,6 +57,7 @@ export function EatBarcodeMethod({
   const [barcode, setBarcode] = useState("");
   const [food, setFood] = useState<BarcodeFood | null>(null);
   const [quantity, setQuantity] = useState("1");
+  const [servingChoiceKey, setServingChoiceKey] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -52,6 +66,14 @@ export function EatBarcodeMethod({
   const streamRef = useRef<MediaStream | null>(null);
   const controlsRef = useRef<ScannerControls | null>(null);
   const timerRef = useRef<number | null>(null);
+  const servingChoices = food?.servingChoices ?? [];
+  const selectedServing = servingChoices.find((choice) => (
+    (choice.servingOptionId ?? "__owner_override__") === servingChoiceKey
+  )) ?? (servingChoices.length === 1 ? servingChoices[0]! : null);
+  const previewCalories = selectedServing?.nutrition?.calories ?? food?.calories ?? null;
+  const previewProtein = selectedServing?.nutrition?.protein_g ?? food?.protein ?? null;
+  const previewCarbs = selectedServing?.nutrition?.carbs_g ?? food?.carbs ?? null;
+  const previewFat = selectedServing?.nutrition?.fat_g ?? food?.fat ?? null;
 
   const stopScanner = useCallback(() => {
     if (timerRef.current) window.clearInterval(timerRef.current);
@@ -83,13 +105,16 @@ export function EatBarcodeMethod({
     setIsLookingUp(true);
     setFeedback(null);
     try {
-      const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}`, { headers: headers() });
+      const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}&locale=${encodeURIComponent(locale)}`, { headers: headers() });
       const data = await response.json().catch(() => ({})) as { food?: BarcodeFood };
       if (!response.ok || !data.food) throw new Error(et("productLoadFailed"));
       setFood(data.food);
+      const choices = data.food.servingChoices ?? [];
+      setServingChoiceKey(choices.length === 1 ? choices[0]!.servingOptionId ?? "__owner_override__" : "");
       setFeedback({ type: "info", message: `${data.food.name} · ${formatDate(date)} · ${mealLabel(mealType)}` });
     } catch {
       setFood(null);
+      setServingChoiceKey("");
       setFeedback({ type: "error", message: et("barcodeLookupFailed") });
     } finally {
       setIsLookingUp(false);
@@ -151,13 +176,35 @@ export function EatBarcodeMethod({
       setFeedback({ type: "error", message: et("reviewProductQuantity") });
       return;
     }
+    if (food.source === "provider_suggestion") {
+      setFeedback({ type: "error", message: "This barcode match is suggestion-only. Search for an existing Food or create a Food before logging." });
+      return;
+    }
+    if (food.source === "catalog" && servingChoices.length === 0) {
+      setFeedback({ type: "error", message: "No authoritative serving is available yet." });
+      return;
+    }
+    if (food.source === "catalog" && !selectedServing) {
+      setFeedback({ type: "error", message: "Choose an authoritative serving before logging this Food." });
+      return;
+    }
     setIsSaving(true);
     setFeedback({ type: "info", message: et("logging") });
     try {
       const response = await fetch("/api/food/open-food-facts", {
         method: "POST",
         headers: headers(true),
-        body: JSON.stringify({ barcode, quantity: parsedQuantity, mealType, date, saveToLibrary: false, addToLog: true, addToMealPlan: false })
+        body: JSON.stringify({
+          barcode,
+          quantity: parsedQuantity,
+          mealType,
+          date,
+          locale,
+          saveToLibrary: false,
+          addToLog: true,
+          addToMealPlan: false,
+          ...(selectedServing ? { serving: selectedServing.label, servingOptionId: selectedServing.servingOptionId } : {}),
+        })
       });
       const data = await response.json().catch(() => ({})) as { log?: FoodLog };
       if (!response.ok || !data.log) throw new Error(et("productLogFailed"));
@@ -181,9 +228,12 @@ export function EatBarcodeMethod({
       {food ? <div className="rounded-[14px] border border-border/70 p-3">
         <p className="font-semibold">{food.name}</p>
         <p className="mt-1 text-sm text-muted-foreground">{food.brand ?? ""}</p>
-        <p className="mt-2 text-sm">{food.calories === null || food.calories === undefined ? "—" : formatEatEnergy(food.calories, energyUnit, locale)} · P {food.protein ?? "—"} g · C {food.carbs ?? "—"} g · F {food.fat ?? "—"} g</p>
-        <p className="mt-1 text-xs text-muted-foreground">{food.servingSize ?? et("storedServingOnly")}</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-[140px_1fr]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantity(event.target.value)} aria-label={et("quantity")} /><Button type="button" className="min-h-12" onClick={save} disabled={isSaving}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></div>
+        <p className="mt-2 text-sm">{previewCalories === null ? "—" : formatEatEnergy(previewCalories, energyUnit, locale)} · P {previewProtein ?? "—"} g · C {previewCarbs ?? "—"} g · F {previewFat ?? "—"} g</p>
+        <p className="mt-1 text-xs text-muted-foreground">{selectedServing?.label ?? food.servingSize ?? (food.source === "catalog" ? "Serving selection required" : et("storedServingOnly"))}</p>
+        {food.source === "provider_suggestion" ? <p className="mt-2 text-sm text-muted-foreground">Provider result is suggestion-only. Search for an existing Food or create a Food before logging.</p> : null}
+        {food.source === "catalog" && (food.servingChoices?.length ?? 0) === 0 ? <p className="mt-2 text-sm text-destructive">No authoritative serving is available yet.</p> : null}
+        {food.source === "catalog" && (food.servingChoices?.length ?? 0) > 1 ? <label className="mt-3 grid gap-1 text-sm font-medium">Serving<select value={servingChoiceKey} onChange={(event) => setServingChoiceKey(event.target.value)} className="h-11 rounded-xl border border-border bg-background px-3"><option value="">Choose a serving</option>{food.servingChoices!.map((choice) => <option key={choice.servingOptionId ?? `owner:${choice.label}`} value={choice.servingOptionId ?? "__owner_override__"}>{choice.label}</option>)}</select></label> : null}
+        <div className="mt-3 grid gap-2 sm:grid-cols-[140px_1fr]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantity(event.target.value)} aria-label={et("quantity")} /><Button type="button" className="min-h-12" onClick={save} disabled={isSaving || food.source === "provider_suggestion" || (food.source === "catalog" && ((food.servingChoices?.length ?? 0) === 0 || ((food.servingChoices?.length ?? 0) > 1 && !servingChoiceKey)))}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></div>
       </div> : null}
       <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} onClose={() => setFeedback(null)} />
     </div>

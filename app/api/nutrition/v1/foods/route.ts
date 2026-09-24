@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
+import { createSupabaseServerClient } from "@/lib/integrations/env";
 import { nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
 import {
   listFoodLibrary,
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
       return nutritionJson(await deleteUserFood(context.supabase, context.user.id, input.foodId));
     }
     if (body.operation === "personal_correction") {
-      return nutritionJson(await setFoodPersonalCorrection(context.supabase, context.user.id, (body.input ?? {}) as PersonalCorrectionInput));
+      return nutritionJson(await setFoodPersonalCorrection(context.supabase, createSupabaseServerClient(null, true), context.user.id, (body.input ?? {}) as PersonalCorrectionInput));
     }
     if (typeof body.foodId !== "string" || typeof body.favorite !== "boolean") {
       return nutritionJson({ error: "foodId and favorite are required." }, { status: 400 });

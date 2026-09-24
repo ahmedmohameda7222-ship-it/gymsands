@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
+import { createSupabaseServerClient } from "@/lib/integrations/env";
 import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
-import { resolveFoodHandoff } from "@/services/nutrition-v1/server/food-handoff";
+import { resolveFoodHandoffWithAuthorities } from "@/services/nutrition-v1/server/food-handoff";
 import { getMealPlanWeek, mutateMealPlanWeek } from "@/services/nutrition-v1/server/meal-plan";
 import { resolveRecipeHandoff } from "@/services/nutrition-v1/server/recipe-handoff";
 import { autosaveRecipeDraft, createPreseededRecipeDraft } from "@/services/nutrition-v1/server/recipes";
@@ -21,22 +22,25 @@ function text(value: unknown, label: string) {
   return result;
 }
 
-async function resolveSource(supabase: Parameters<typeof resolveFoodHandoff>[0], userId: string, raw: Record<string, unknown>) {
+async function resolveSource(ownerSupabase: Parameters<typeof resolveFoodHandoffWithAuthorities>[0], catalogSupabase: Parameters<typeof resolveFoodHandoffWithAuthorities>[1], userId: string, raw: Record<string, unknown>) {
   if (raw.type === "food") {
     const source = raw.source;
     if (source !== "catalog" && source !== "my_food") throw new NutritionRequestError("Food source is invalid.");
-    return { kind: "food" as const, value: await resolveFoodHandoff(supabase, userId, {
+    return { kind: "food" as const, value: await resolveFoodHandoffWithAuthorities(ownerSupabase, catalogSupabase, userId, {
       foodId: text(raw.id, "Food"),
       source,
       quantity: Number(raw.quantity),
       serving: text(raw.serving, "Serving"),
+      servingOptionId: typeof raw.servingOptionId === "string" && raw.servingOptionId.trim() ? raw.servingOptionId.trim() : null,
+      displayName: source === "catalog" ? text(raw.displayName, "Food display name") : undefined,
+      languageTag: typeof raw.languageTag === "string" && raw.languageTag.trim() ? raw.languageTag.trim() : null,
     }) };
   }
   if (raw.type === "recipe") {
     const quantity = Number(raw.quantity ?? 1);
     if (!Number.isFinite(quantity) || quantity <= 0) throw new NutritionRequestError("Recipe serving quantity must be greater than zero.");
     return { kind: "recipe" as const, value: await resolveRecipeHandoff(
-      supabase,
+      ownerSupabase,
       userId,
       text(raw.id, "Recipe"),
       text(raw.versionId, "Recipe version"),
@@ -50,9 +54,10 @@ export async function POST(request: Request) {
   const context = await requireNutritionUser(request);
   if (context instanceof NextResponse) return context;
   try {
+    const catalogSupabase = createSupabaseServerClient(null, true);
     const body = object(await request.json().catch(() => ({})), "Handoff command");
     const destination = text(body.destination, "Destination");
-    const source = await resolveSource(context.supabase, context.user.id, object(body.source, "Handoff source"));
+    const source = await resolveSource(context.supabase, catalogSupabase, context.user.id, object(body.source, "Handoff source"));
 
     if (destination === "diary") {
       const operationId = text(body.operationId, "Operation ID");
@@ -138,7 +143,7 @@ export async function POST(request: Request) {
         return nutritionJson({ destination, recipeId: created.recipeId, draftId: created.draftId });
       }
 
-      const workspace = await getRecipeWorkspace(context.supabase, context.user.id, targetRecipeId);
+      const workspace = await getRecipeWorkspace(context.supabase, catalogSupabase, context.user.id, targetRecipeId);
       if (!workspace.draft) throw new NutritionRequestError("Choose a Recipe with a Working Draft or start a new Recipe.");
       const recipeId = targetRecipeId;
       const draft = workspace.draft as unknown as Record<string, unknown>;

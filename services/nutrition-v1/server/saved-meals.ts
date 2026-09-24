@@ -12,6 +12,13 @@ import { isUuid } from "@/lib/utils";
 
 export type SavedMealItemInput = SavedMealFoodItemSnapshot | SavedMealRecipeItemSnapshot;
 
+export type SavedMealFoodWriteIntent = SavedMealFoodItemSnapshot & {
+  languageTag?: string | null;
+  servingOptionId?: string | null;
+};
+
+export type SavedMealItemWriteIntent = SavedMealFoodWriteIntent | SavedMealRecipeItemSnapshot;
+
 export type SavedMealWriteInput = {
   name: string;
   note?: string | null;

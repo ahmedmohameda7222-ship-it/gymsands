@@ -17,6 +17,7 @@ const RAW_GENERATION_ADAPTER = /supabase-generation-(?:read|validation-read|comm
 const APPROVED_PLAN3_TABLE_READERS = new Set([
   "services/food-catalog/server/supabase-generation-read-store.ts",
   "services/food-catalog/server/supabase-generation-validation-read-store.ts",
+  "services/food-catalog/server/current-search-category-facets.ts",
 ]);
 const FORBIDDEN_CURRENT_SELECTION = [
   /\.order\(\s*["'](?:created_at|sealed_at|revision_number|generation_ordinal)["'][\s\S]{0,120}ascending\s*:\s*false/,
