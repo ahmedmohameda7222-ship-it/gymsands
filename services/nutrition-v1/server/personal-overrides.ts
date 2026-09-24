@@ -69,19 +69,8 @@ function parseNutritionOverride(value: unknown): PersonalOverrideNutrition | nul
   return output;
 }
 
-export async function readCurrentPersonalOverride(
-  supabase: SupabaseClient,
-  foodId: string,
-): Promise<CurrentPersonalOverride> {
-  if (!isUuid(foodId)) throw new Error("Personal Override Food must be a valid ID.");
-  const result = await supabase.rpc("food_catalog_get_current_personal_override_v1", {
-    p_food_id: foodId,
-  });
-  if (result.error) {
-    throw new Error(`Personal Override could not be resolved. ${result.error.message ?? "Database request failed."}`);
-  }
-
-  const raw = record(result.data, "Personal Override read");
+function parseCurrentPersonalOverride(value: unknown, foodId: string): CurrentPersonalOverride {
+  const raw = record(value, "Personal Override read");
   if (raw.foodId !== foodId) throw new Error("Personal Override read returned the wrong Food identity.");
   if (typeof raw.hasOverride !== "boolean" || typeof raw.isDeleted !== "boolean") {
     throw new Error("Personal Override read returned invalid state flags.");
@@ -115,6 +104,37 @@ export async function readCurrentPersonalOverride(
     servingLabel: nullableText(raw.servingLabel ?? null, "Personal Override serving label"),
     note: nullableText(raw.note ?? null, "Personal Override note"),
   };
+}
+
+export async function readCurrentPersonalOverride(
+  supabase: SupabaseClient,
+  foodId: string,
+): Promise<CurrentPersonalOverride> {
+  if (!isUuid(foodId)) throw new Error("Personal Override Food must be a valid ID.");
+  const result = await supabase.rpc("food_catalog_get_current_personal_override_v1", {
+    p_food_id: foodId,
+  });
+  if (result.error) {
+    throw new Error(`Personal Override could not be resolved. ${result.error.message ?? "Database request failed."}`);
+  }
+  return parseCurrentPersonalOverride(result.data, foodId);
+}
+
+export async function readCurrentPersonalOverrideForMcp(
+  supabase: SupabaseClient,
+  connectionId: string,
+  foodId: string,
+): Promise<CurrentPersonalOverride> {
+  if (!isUuid(connectionId)) throw new Error("MCP connection must be a valid ID.");
+  if (!isUuid(foodId)) throw new Error("Personal Override Food must be a valid ID.");
+  const result = await supabase.rpc("food_catalog_get_current_personal_override_for_mcp_v1", {
+    p_connection_id: connectionId,
+    p_food_id: foodId,
+  });
+  if (result.error) {
+    throw new Error(`MCP Personal Override could not be resolved. ${result.error.message ?? "Database request failed."}`);
+  }
+  return parseCurrentPersonalOverride(result.data, foodId);
 }
 
 export function mergePersonalOverrideNutrition(
