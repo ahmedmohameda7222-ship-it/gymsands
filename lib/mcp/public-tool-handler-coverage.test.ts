@@ -182,7 +182,7 @@ function createInMemorySupabase() {
   }
 
   async function rpc(name: string, args: Record<string, unknown>) {
-    if (name === "search_food_catalog_v2") {
+    if (name === "search_food_catalog_v2" || name === "search_food_catalog_v2_for_mcp_v1") {
       const query = String(args.p_query ?? "").trim().toLowerCase();
       const limit = Math.max(1, Number(args.p_limit ?? 20));
       const candidates = [
