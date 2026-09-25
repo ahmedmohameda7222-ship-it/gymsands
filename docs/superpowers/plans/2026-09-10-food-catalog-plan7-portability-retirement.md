@@ -691,7 +691,7 @@ Every implementation PR reports exact-head status for applicable gates:
 - `CORE_PORTABLE` and deterministic-fixture `FULL_DR` profile evidence;
 - search rebuild checksum + golden queries;
 - RLS/ACL/security and governance-isolation tests;
-- privacy/account-deletion coverage when owner state changes;
+- privacy/account-deletion coverage for Plan 6 personal overrides and reporter-owned correction-report member payloads when owner state changes;
 - production build/runtime QA where Product consumer code changes;
 - exact deployment SHA/live compatibility evidence before destructive retirement;
 - exact changed-file scope and migration-immutability evidence.
@@ -718,7 +718,7 @@ This plan covers:
 - canonical-first barcode and advisory duplicate-hint policy;
 - non-canonical Egyptian suggestion boundary;
 - heterogeneous legacy favorite reconciliation;
-- Plan 6 personal-override cutover and zero/nonzero legacy-correction rule;
+- Plan 6 personal-override cutover, reporter-owned correction-report payload export, and zero/nonzero legacy-correction rule;
 - `food_market_relevance` downgrade to RETIRE AFTER PRECONDITION;
 - no long-lived reserved migration identities;
 - expand → separately authorized DB apply → separately authorized deploy → live observe → exact preflight → Planner destructive approval → forward retirement → fresh read-back/re-proof.
