@@ -130,6 +130,8 @@ vi.mock("@/lib/supabase/client", () => ({
 
 import {
   getFavoriteFoodKeysAsync,
+  getFavoriteFoodSnapshotAsync,
+  isFoodFavoriteInSnapshot,
   setFavoriteFoodAsync,
 } from "@/services/meals/food-logging-speed";
 
@@ -152,6 +154,34 @@ describe("Plan 7 source-aware favorite authority", () => {
 
     expect(db.state.catalog.has(FOOD)).toBe(false);
     expect(db.state.legacy.has(FOOD)).toBe(true);
+  });
+
+  it("represents Catalog and My Food favorite state independently for the same UUID", async () => {
+    db.state.catalog.add(FOOD);
+    db.state.legacy.add(FOOD);
+    db.state.myFoods.push({ id: FOOD, user_id: OWNER, deleted_at: null });
+
+    const before = await getFavoriteFoodSnapshotAsync(OWNER);
+    expect(isFoodFavoriteInSnapshot(before, FOOD, "catalog")).toBe(true);
+    expect(isFoodFavoriteInSnapshot(before, FOOD, "legacy")).toBe(true);
+
+    await setFavoriteFoodAsync(OWNER, FOOD, false, { authority: "catalog" });
+
+    const after = await getFavoriteFoodSnapshotAsync(OWNER);
+    expect(isFoodFavoriteInSnapshot(after, FOOD, "catalog")).toBe(false);
+    expect(isFoodFavoriteInSnapshot(after, FOOD, "legacy")).toBe(true);
+  });
+
+  it("does not infer Catalog authority from a retained UUID when collision lookup is unresolved", async () => {
+    db.state.legacy.add(FOOD);
+    db.state.failMyFoodRead = true;
+
+    const snapshot = await getFavoriteFoodSnapshotAsync(OWNER);
+
+    expect(snapshot.legacyKeys).toContain(FOOD);
+    expect(snapshot.collisionLookupComplete).toBe(false);
+    expect(isFoodFavoriteInSnapshot(snapshot, FOOD, "catalog")).toBe(false);
+    expect(isFoodFavoriteInSnapshot(snapshot, FOOD, "legacy")).toBe(true);
   });
 
   it("treats even a soft-deleted same-owner My Food collision as unsafe to clean", async () => {
