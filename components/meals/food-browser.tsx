@@ -608,7 +608,11 @@ function FoodBrowserInner({
           {visibleFoods.map((food) => {
             const quantity = quantities[food.id] ?? 1;
             const favoriteKey = favoriteKeyForFood(food);
-            const favorite = favoriteKeys.includes(favoriteKey);
+            const favorite = isFoodFavoriteInSnapshot(
+              favoriteSnapshot,
+              favoriteKey,
+              food.is_global === false ? "legacy" : "catalog",
+            );
             const planAction = foodAction(food.id, "plan");
             const logAction = foodAction(food.id, "log");
             const favoriteAction = foodAction(favoriteKey, "favorite");
