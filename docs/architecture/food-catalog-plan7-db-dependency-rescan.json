@@ -99,7 +99,8 @@
     ]
   },
   "findings": [
-    "Legacy food_personal_corrections remains required by privacy/export and portability surfaces even though the new current search core no longer reads it.",
+    "Legacy food_personal_corrections is an intentional transitional Search V2 dependency during expand when no exact Plan 6 Personal Override pointer exists, in addition to its privacy/export and portability obligations.",
+    "Plan 6 pointer existence suppresses legacy Search authority for the same owner/Food; Tasks 15-17 require fresh live evidence before the legacy Search dependency can be removed.",
     "food_aliases and food_market_relevance remain repository dependencies and are not retirement-safe from this scan.",
     "Plan 5 rebuild/search helpers and generation/activation/ingestion/recipe-preseed authorities remain referenced.",
     "No dependency in this report is authorized for retirement; Tasks 15-17 must use fresh evidence."

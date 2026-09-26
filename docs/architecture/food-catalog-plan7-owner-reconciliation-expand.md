@@ -15,7 +15,7 @@ Legacy `user_food_favorites.food_key` remains heterogeneous. The deterministic c
 
 No fuzzy matching, name-based Catalog guessing, nutrition-based My Food guessing, blanket conversion, row deletion, or new favorite model is introduced.
 
-The current Product path in `services/meals/food-logging-speed.ts` remains dual-authority by source. The Food Browser passes explicit source authority: source-known Catalog Food favorites write `food_favorites`, while My Food/text/log-derived favorite semantics remain on `user_food_favorites`. Favorite reads combine both authorities so retained legacy rows remain visible. Source is never inferred from UUID shape alone. An explicit Catalog unfavorite clears the canonical row and an exact same-key retained legacy favorite only as part of that user-requested unfavorite action; no background reconciliation deletes rows. The retained `user_food_favorites` dependency is evidence for Task 16, not retirement authority.
+The current Product path in `services/meals/food-logging-speed.ts` remains dual-authority by source. The Food Browser passes explicit source authority: source-known Catalog Food favorites write `food_favorites`, while My Food/text/log-derived favorite semantics remain on `user_food_favorites`. A source-aware read snapshot keeps canonical Catalog IDs, retained legacy keys, and same-owner My Food collision facts distinct while `getFavoriteFoodKeysAsync(...)` continues to expose the combined compatibility list required by Eat/repeat ranking. Source is never inferred from UUID shape alone. For a Catalog Food, an exact retained legacy UUID is compatibility favorite authority only when a same-owner My Food collision check succeeds and proves no such My Food row exists; soft-deleted My Food rows still make cleanup unsafe. Catalog unfavorite always clears the canonical Catalog row, but exact legacy same-key cleanup occurs only when that state is proven unambiguous. Ambiguous or unresolved legacy state is preserved, so Catalog and My Food favorite state remain independently controllable. No background reconciliation deletes or converts owner rows. The retained `user_food_favorites` dependency is evidence for Task 16, not retirement authority.
 
 Read-only evidence command:
 
@@ -48,13 +48,15 @@ The migration is expand-only. It creates a private search core with an explicit 
 
 Plan 6 Personal Override resolution is shared through a private explicit-owner point-read core. The browser RPC still derives `auth.uid()`; the MCP RPC derives the owner from `connection_id`. Private cores have no direct application-role EXECUTE grant. Service role retains no direct SELECT on Personal Override tables.
 
-Search nutrition now uses the exact pointed, non-deleted Plan 6 revision and the exact current-generation selected `food_nutrition_revisions` basis. Only the eight supported nutrient keys participate. Missing keys and JSON null fall back to the canonical SearchDocument value; numeric zero remains zero. Note-only, serving-only, and tombstoned overrides do not set `usingPersonalValues`. The current search core no longer reads `food_personal_corrections`.
+Search nutrition uses explicit expand-phase source precedence. An exact valid Plan 6 Personal Override pointer owns that owner/Food for Search V2; its pointed revision is resolved exactly, and active numeric supported nutrients use the exact current-generation selected `food_nutrition_revisions` basis. Missing keys and JSON null fall back to the canonical SearchDocument value; numeric zero remains zero. The existence of the Plan 6 pointer suppresses legacy authority even when the pointed revision is note-only, serving-only, null/missing-nutrient-only, or tombstoned, so those cases remain canonical with `usingPersonalValues = false`. Only when no Plan 6 pointer exists may an exact same-owner active `food_personal_corrections` row act as transitional Search V2 compatibility authority. That legacy path preserves its historical nullable nutrient and `basis_amount` / `basis_unit` normalization semantics. Neither source uses timestamp comparison or latest-row inference. Browser and MCP Search share this same private explicit-owner core.
 
-## Mandatory Production preflight — record only, do not execute here
+## Production boundary and later retirement preflight — record only, do not execute here
 
 Correct Plaivra Production project: `bkwezjxvapaeasfvlhvv`.
 
-Before any Task 14 search cutover apply, obtain a **fresh** read-only Production result:
+No Production query, migration apply, or mutation is authorized by this Tasks 13–14 correction pass. The Task 14 migration is now a true expand migration: a nonzero `food_personal_corrections` population is **not by itself an expand/apply blocker**, because exact active legacy rows remain Search V2 compatibility authority whenever that owner/Food has no Plan 6 pointer.
+
+The zero/nonzero gate belongs to the later Task 16/17 contract/retirement preflight. At that future explicitly authorized live preflight, obtain a fresh read-only count:
 
 ```sql
 begin read only;
@@ -63,12 +65,12 @@ from public.food_personal_corrections;
 rollback;
 ```
 
-Apply gate:
+Retirement gate:
 
-- If `food_personal_corrections = 0`, a verified no-op owner-data migration remains acceptable and the reviewed migration package may proceed through the separate manual apply process.
-- If `food_personal_corrections > 0`, **STOP**. Do not apply the search cutover. Design, review, and apply an explicit owner-preserving semantic migration first. Do not discard corrections.
+- If `food_personal_corrections = 0`, a verified no-op owner-data retirement migration may be acceptable after the required live cutover evidence.
+- If `food_personal_corrections > 0`, **STOP retirement** and require an explicit reviewed owner-preserving semantic migration. Do not discard corrections.
 
-Favorite preflight must also run the read-only owner reconciliation report above. Task 13 repository merge does not require `blocked = 0`. Later retirement of `user_food_favorites` requires `blocked = 0` **and** an approved owner-preserving disposition for every remaining row.
+The favorite reconciliation report is likewise evidence for later retirement. Task 13 repository merge does not require `blocked = 0`. Later retirement of `user_food_favorites` requires `blocked = 0` **and** an approved owner-preserving disposition for every remaining row.
 
 Ordered repository-pending migrations after this change:
 
