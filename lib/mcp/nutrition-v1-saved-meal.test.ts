@@ -4,20 +4,20 @@ import { deriveMcpMutationOperationId } from "@/lib/mcp/idempotency";
 import { sanitizeMcpToolResult, validateMcpToolOutput } from "@/lib/mcp/safety";
 import { mcpTools } from "@/lib/mcp/tools";
 
-const { listFoodLibrary, resolveCatalogNewUseSelectionWithAuthorities, resolveFoodHandoff, createSavedMeal } = vi.hoisted(() => ({
-  listFoodLibrary: vi.fn(),
-  resolveCatalogNewUseSelectionWithAuthorities: vi.fn(),
-  resolveFoodHandoff: vi.fn(),
+const { listFoodLibraryForMcp, resolveCatalogNewUseSelectionForMcp, resolveFoodHandoffForMcp, createSavedMeal } = vi.hoisted(() => ({
+  listFoodLibraryForMcp: vi.fn(),
+  resolveCatalogNewUseSelectionForMcp: vi.fn(),
+  resolveFoodHandoffForMcp: vi.fn(),
   createSavedMeal: vi.fn(),
 }));
 
 vi.mock("@/services/nutrition-v1/server/food-library", async () => {
   const actual = await vi.importActual<typeof import("@/services/nutrition-v1/server/food-library")>("@/services/nutrition-v1/server/food-library");
-  return { ...actual, listFoodLibrary };
+  return { ...actual, listFoodLibraryForMcp };
 });
 vi.mock("@/services/nutrition-v1/server/food-handoff", () => ({
-  resolveCatalogNewUseSelectionWithAuthorities,
-  resolveFoodHandoff,
+  resolveCatalogNewUseSelectionForMcp,
+  resolveFoodHandoffForMcp,
 }));
 vi.mock("@/services/nutrition-v1/server/saved-meals", () => ({ createSavedMeal }));
 
@@ -37,17 +37,17 @@ const ctx = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  listFoodLibrary.mockResolvedValue({
+  listFoodLibraryForMcp.mockResolvedValue({
     items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: "170 g", locale: "en" }],
     nextCursor: null,
   });
-  resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValue({
+  resolveCatalogNewUseSelectionForMcp.mockResolvedValue({
     foodId,
     name: "Greek yogurt",
     languageTag: "en",
     servingChoices: [{ servingOptionId: servingA, label: "170 g", source: "generation" }],
   });
-  resolveFoodHandoff.mockResolvedValue({
+  resolveFoodHandoffForMcp.mockResolvedValue({
     foodId,
     source: "catalog",
     name: "Greek yogurt",
@@ -75,8 +75,8 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
     };
     const result = await createCanonicalSavedMealFromMcp(ctx, input);
 
-    expect(listFoodLibrary).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({ query: "Greek yogurt" }));
-    expect(resolveFoodHandoff).toHaveBeenCalledWith(ctx.supabase, userId, {
+    expect(listFoodLibraryForMcp).toHaveBeenCalledWith(ctx.supabase, ctx.connectionId, expect.objectContaining({ query: "Greek yogurt" }));
+    expect(resolveFoodHandoffForMcp).toHaveBeenCalledWith(ctx.supabase, ctx.connectionId, userId, {
       foodId,
       source: "catalog",
       quantity: 2,
@@ -95,11 +95,11 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
   });
 
   it("resolves Catalog Saved Meal serving from current-generation authority when discovery serving is NULL", async () => {
-    listFoodLibrary.mockResolvedValue({
+    listFoodLibraryForMcp.mockResolvedValue({
       items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: null, locale: "de" }],
       nextCursor: null,
     });
-    resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValue({
+    resolveCatalogNewUseSelectionForMcp.mockResolvedValue({
       foodId,
       name: "Greek yogurt",
       languageTag: "de",
@@ -112,13 +112,13 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
       items: [{ food_name: "Greek yogurt", quantity: 1 }],
     });
 
-    expect(resolveCatalogNewUseSelectionWithAuthorities).toHaveBeenCalledWith(
+    expect(resolveCatalogNewUseSelectionForMcp).toHaveBeenCalledWith(
       ctx.supabase,
-      ctx.supabase,
+      ctx.connectionId,
       userId,
       { foodId, displayName: "Greek yogurt", languageTag: "de" },
     );
-    expect(resolveFoodHandoff).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({
+    expect(resolveFoodHandoffForMcp).toHaveBeenCalledWith(ctx.supabase, ctx.connectionId, userId, expect.objectContaining({
       foodId,
       source: "catalog",
       serving: "170 g",
@@ -130,11 +130,11 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
   });
 
   it("accepts exact serving_option_id plus label when duplicate authoritative labels exist", async () => {
-    listFoodLibrary.mockResolvedValue({
+    listFoodLibraryForMcp.mockResolvedValue({
       items: [{ id: foodId, source: "catalog", name: "Greek yogurt", servingLabel: null, locale: "en" }],
       nextCursor: null,
     });
-    resolveCatalogNewUseSelectionWithAuthorities.mockResolvedValue({
+    resolveCatalogNewUseSelectionForMcp.mockResolvedValue({
       foodId,
       name: "Greek yogurt",
       languageTag: "en",
@@ -150,7 +150,7 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
       items: [{ food_name: "Greek yogurt", serving_hint: "1 cup", serving_option_id: servingB, quantity: 1 }],
     });
 
-    expect(resolveFoodHandoff).toHaveBeenCalledWith(ctx.supabase, userId, expect.objectContaining({
+    expect(resolveFoodHandoffForMcp).toHaveBeenCalledWith(ctx.supabase, ctx.connectionId, userId, expect.objectContaining({
       serving: "1 cup",
       servingOptionId: servingB,
     }));
@@ -208,7 +208,7 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
   });
 
   it("fails closed for ambiguous Food identity instead of manufacturing nutrition truth", async () => {
-    listFoodLibrary.mockResolvedValue({
+    listFoodLibraryForMcp.mockResolvedValue({
       items: [
         { id: foodId, source: "catalog", name: "Yogurt", servingLabel: "100 g" },
         { id: "55555555-5555-4555-8555-555555555555", source: "catalog", name: "Yogurt", servingLabel: "100 g" },
@@ -225,6 +225,6 @@ describe("Nutrition V1 MCP Saved Meal convergence", () => {
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({ ok: false, code: "canonical_food_required" });
     expect(createSavedMeal).not.toHaveBeenCalled();
-    expect(resolveFoodHandoff).not.toHaveBeenCalled();
+    expect(resolveFoodHandoffForMcp).not.toHaveBeenCalled();
   });
 });

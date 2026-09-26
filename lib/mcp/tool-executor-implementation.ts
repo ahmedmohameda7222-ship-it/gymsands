@@ -12,7 +12,7 @@ import {
   type JsonObject
 } from "@/lib/mcp/schemas";
 import { fail, num, ok, sumMacros, type MacroTotals, type McpToolResult } from "@/lib/mcp/tool-helpers";
-import { listFoodLibrary, normalizeFoodSearchText, type FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
+import { listFoodLibraryForMcp, normalizeFoodSearchText, type FoodLibraryCandidate } from "@/services/nutrition-v1/server/food-library";
 
 type FoodCandidate = {
   id: string;
@@ -56,7 +56,7 @@ async function findFood(ctx: McpContext, query: string, limit = 5): Promise<{ ex
   const cleanQuery = normalizeFoodSearchText(query);
   if (!cleanQuery) throw new Error("food_name is required.");
 
-  const page = await listFoodLibrary(ctx.supabase, ctx.userId, {
+  const page = await listFoodLibraryForMcp(ctx.supabase, ctx.connectionId, {
     query: cleanQuery,
     locale: "en",
     marketScopeCode: null,

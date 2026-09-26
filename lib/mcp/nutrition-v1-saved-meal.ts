@@ -3,11 +3,11 @@ import { deriveMcpMutationOperationId } from "@/lib/mcp/idempotency";
 import { asObject, getArray, getOptionalString, getString, type JsonObject } from "@/lib/mcp/schemas";
 import { fail, ok, type McpToolResult } from "@/lib/mcp/tool-helpers";
 import {
-  resolveCatalogNewUseSelectionWithAuthorities,
-  resolveFoodHandoff,
+  resolveCatalogNewUseSelectionForMcp,
+  resolveFoodHandoffForMcp,
   type ResolvedFoodHandoff,
 } from "@/services/nutrition-v1/server/food-handoff";
-import { listFoodLibrary, normalizeFoodSearchText } from "@/services/nutrition-v1/server/food-library";
+import { listFoodLibraryForMcp, normalizeFoodSearchText } from "@/services/nutrition-v1/server/food-library";
 import { createSavedMeal } from "@/services/nutrition-v1/server/saved-meals";
 
 function positive(value: unknown) {
@@ -21,7 +21,7 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
   const requestedServing = getOptionalString(item, "serving_hint")?.trim() || null;
   const requestedServingOptionId = getOptionalString(item, "serving_option_id")?.trim() || null;
   const normalizedName = normalizeFoodSearchText(foodName);
-  const page = await listFoodLibrary(ctx.supabase, ctx.userId, {
+  const page = await listFoodLibraryForMcp(ctx.supabase, ctx.connectionId, {
     query: foodName,
     locale: "en",
     limit: 20,
@@ -42,12 +42,11 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
       throw new Error(`Canonical Food “${foodName}” is missing its exact selected Name locale. Search Foods again before creating a Saved Meal.`);
     }
 
-    // PR A intentionally preserves the existing MCP single-client bridge.
-    // Task 14 / PR B must still provide authenticated owner authority before
-    // deployment; do not widen service-role owner access here.
-    const selection = await resolveCatalogNewUseSelectionWithAuthorities(
+    // Owner Personal Override authority is derived again in the database
+    // from the verified MCP connection; global generation reads remain service authority.
+    const selection = await resolveCatalogNewUseSelectionForMcp(
       ctx.supabase,
-      ctx.supabase,
+      ctx.connectionId,
       ctx.userId,
       {
         foodId: selected.id,
@@ -88,7 +87,7 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
       throw new Error("This Food has multiple authoritative serving choices. Choose one and retry with serving_hint and serving_option_id.");
     }
 
-    return resolveFoodHandoff(ctx.supabase, ctx.userId, {
+    return resolveFoodHandoffForMcp(ctx.supabase, ctx.connectionId, ctx.userId, {
       foodId: selected.id,
       source: "catalog",
       quantity,
@@ -109,7 +108,7 @@ async function resolveCanonicalFood(ctx: McpContext, item: JsonObject) {
   if (requestedServing && requestedServing !== personalServing) {
     throw new Error("The serving_hint does not match the selected Personal Food serving.");
   }
-  return resolveFoodHandoff(ctx.supabase, ctx.userId, {
+  return resolveFoodHandoffForMcp(ctx.supabase, ctx.connectionId, ctx.userId, {
     foodId: selected.id,
     source: "my_food",
     quantity,

@@ -9,6 +9,15 @@ import {
 import type { FoodItem, FoodLog, MealType } from "@/types";
 
 export type FoodFavoriteKey = string;
+export type FoodFavoriteAuthority = "catalog" | "legacy";
+export type FoodFavoriteSnapshot = {
+  catalogFoodIds: string[];
+  legacyKeys: string[];
+  sameOwnerMyFoodIds: string[];
+  legacyCatalogCompatibilityIds: string[];
+  combinedKeys: string[];
+  collisionLookupComplete: boolean;
+};
 export type ServingUnit = "grams" | "pieces" | "cups" | "tablespoons" | "serving" | "portion";
 
 export type QuickAddInput = {
@@ -203,9 +212,64 @@ export function setFavoriteFood(userId: string | null | undefined, key: FoodFavo
 
 let migratedFavoriteUsers = new Set<string>();
 
-export async function getFavoriteFoodKeysAsync(userId: string | null | undefined) {
+function favoriteSnapshotFromLocal(keys: readonly FoodFavoriteKey[]): FoodFavoriteSnapshot {
+  const legacyKeys = Array.from(new Set(keys));
+  return {
+    catalogFoodIds: [],
+    legacyKeys,
+    sameOwnerMyFoodIds: [],
+    legacyCatalogCompatibilityIds: [],
+    combinedKeys: legacyKeys,
+    collisionLookupComplete: false,
+  };
+}
+
+function favoriteSnapshotCombined(
+  catalogFoodIds: readonly string[],
+  legacyKeys: readonly string[],
+) {
+  return Array.from(new Set([...catalogFoodIds, ...legacyKeys]));
+}
+
+async function resolveLegacyFavoriteCollisionFacts(
+  userId: string,
+  legacyKeys: readonly string[],
+) {
+  const uuidKeys = Array.from(new Set(legacyKeys.filter((key) => isUuid(key))));
+  const sameOwnerMyFoodIds: string[] = [];
+  const legacyCatalogCompatibilityIds: string[] = [];
+  let collisionLookupComplete = true;
+
+  await Promise.all(uuidKeys.map(async (key) => {
+    const result = await supabase!
+      .from("user_food_items")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("id", key);
+    if (result.error) {
+      collisionLookupComplete = false;
+      console.warn("Plaivra could not resolve favorite source collision safely.", result.error.message);
+      return;
+    }
+    if ((result.data ?? []).length > 0) {
+      sameOwnerMyFoodIds.push(key);
+      return;
+    }
+    legacyCatalogCompatibilityIds.push(key);
+  }));
+
+  return {
+    sameOwnerMyFoodIds,
+    legacyCatalogCompatibilityIds,
+    collisionLookupComplete,
+  };
+}
+
+export async function getFavoriteFoodSnapshotAsync(
+  userId: string | null | undefined,
+): Promise<FoodFavoriteSnapshot> {
   const local = getFavoriteFoodKeys(userId);
-  if (!canUseUserData(userId)) return local;
+  if (!canUseUserData(userId)) return favoriteSnapshotFromLocal(local);
 
   if (!migratedFavoriteUsers.has(userId)) {
     migratedFavoriteUsers = new Set([...migratedFavoriteUsers, userId]);
@@ -221,32 +285,181 @@ export async function getFavoriteFoodKeysAsync(userId: string | null | undefined
     }
   }
 
-  const { data, error } = await supabase!
+  const [legacyResult, catalogResult] = await Promise.all([
+    supabase!
+      .from("user_food_favorites")
+      .select("food_key")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    supabase!
+      .from("food_favorites")
+      .select("food_id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+  ]);
+  if (legacyResult.error) {
+    console.warn("Plaivra could not load synced legacy food favorites.", legacyResult.error.message);
+  }
+  if (catalogResult.error) {
+    console.warn("Plaivra could not load canonical Catalog food favorites.", catalogResult.error.message);
+  }
+
+  const legacyKeys = Array.from(new Set([
+    ...(legacyResult.data ?? []).map((item) => String(item.food_key)),
+    ...local,
+  ]));
+  const catalogFoodIds = Array.from(new Set(
+    (catalogResult.data ?? []).map((item) => String(item.food_id)),
+  ));
+  const collisionFacts = await resolveLegacyFavoriteCollisionFacts(userId, legacyKeys);
+
+  return {
+    catalogFoodIds,
+    legacyKeys,
+    ...collisionFacts,
+    combinedKeys: favoriteSnapshotCombined(catalogFoodIds, legacyKeys),
+  };
+}
+
+export async function getFavoriteFoodKeysAsync(userId: string | null | undefined) {
+  return (await getFavoriteFoodSnapshotAsync(userId)).combinedKeys;
+}
+
+export function isFoodFavoriteInSnapshot(
+  snapshot: FoodFavoriteSnapshot,
+  key: FoodFavoriteKey,
+  authority: FoodFavoriteAuthority,
+) {
+  if (authority === "catalog") {
+    return snapshot.catalogFoodIds.includes(key)
+      || snapshot.legacyCatalogCompatibilityIds.includes(key);
+  }
+  return snapshot.legacyKeys.includes(key);
+}
+
+export function withFoodFavoriteInSnapshot(
+  snapshot: FoodFavoriteSnapshot,
+  key: FoodFavoriteKey,
+  authority: FoodFavoriteAuthority,
+  favorite: boolean,
+): FoodFavoriteSnapshot {
+  const update = (values: readonly string[]) => {
+    const next = new Set(values);
+    if (favorite) next.add(key);
+    else next.delete(key);
+    return Array.from(next);
+  };
+
+  if (authority === "catalog") {
+    const catalogFoodIds = update(snapshot.catalogFoodIds);
+    const legacyCatalogCompatibilityIds = favorite
+      ? snapshot.legacyCatalogCompatibilityIds
+      : snapshot.legacyCatalogCompatibilityIds.filter((value) => value !== key);
+    return {
+      ...snapshot,
+      catalogFoodIds,
+      legacyCatalogCompatibilityIds,
+      combinedKeys: favoriteSnapshotCombined(catalogFoodIds, snapshot.legacyKeys),
+    };
+  }
+
+  const legacyKeys = update(snapshot.legacyKeys);
+  return {
+    ...snapshot,
+    legacyKeys,
+    legacyCatalogCompatibilityIds: favorite
+      ? snapshot.legacyCatalogCompatibilityIds
+      : snapshot.legacyCatalogCompatibilityIds.filter((value) => value !== key),
+    combinedKeys: favoriteSnapshotCombined(snapshot.catalogFoodIds, legacyKeys),
+  };
+}
+
+async function canSafelyClearRetainedCatalogLegacyFavorite(
+  userId: string,
+  key: FoodFavoriteKey,
+) {
+  const legacyResult = await supabase!
     .from("user_food_favorites")
     .select("food_key")
     .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.warn("Plaivra could not load synced food favorites.", error.message);
-    return local;
+    .eq("food_key", key);
+  if (legacyResult.error) {
+    console.warn("Plaivra could not verify retained favorite compatibility state.", legacyResult.error.message);
+    return false;
   }
-  return (data ?? []).map((item) => String(item.food_key));
+  if ((legacyResult.data ?? []).length === 0) return false;
+
+  const collisionResult = await supabase!
+    .from("user_food_items")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("id", key);
+  if (collisionResult.error) {
+    console.warn("Plaivra could not verify favorite collision safety.", collisionResult.error.message);
+    return false;
+  }
+  return (collisionResult.data ?? []).length === 0;
 }
 
-export async function setFavoriteFoodAsync(userId: string | null | undefined, key: FoodFavoriteKey, favorite: boolean, label?: string) {
-  if (!canUseUserData(userId)) return setFavoriteFood(userId, key, favorite);
+export async function setFavoriteFoodSnapshotAsync(
+  userId: string | null | undefined,
+  key: FoodFavoriteKey,
+  favorite: boolean,
+  options: { label?: string; authority?: FoodFavoriteAuthority } = {},
+): Promise<FoodFavoriteSnapshot> {
+  const authority = options.authority ?? "legacy";
+  if (!canUseUserData(userId)) {
+    return favoriteSnapshotFromLocal(setFavoriteFood(userId, key, favorite));
+  }
+
+  if (authority === "catalog") {
+    if (!isUuid(key)) throw new Error("Catalog favorite Food must be a valid ID.");
+    if (favorite) {
+      const result = await supabase!.from("food_favorites").insert({ user_id: userId, food_id: key });
+      if (result.error && result.error.code !== "23505") {
+        throw new Error(`Plaivra could not update canonical Catalog favorite. ${result.error.message}`);
+      }
+    } else {
+      const clearRetainedLegacy = await canSafelyClearRetainedCatalogLegacyFavorite(userId, key);
+      const catalogDelete = supabase!
+        .from("food_favorites")
+        .delete()
+        .eq("user_id", userId)
+        .eq("food_id", key);
+      const [catalogResult, legacyResult] = await Promise.all([
+        catalogDelete,
+        clearRetainedLegacy
+          ? supabase!.from("user_food_favorites").delete().eq("user_id", userId).eq("food_key", key)
+          : Promise.resolve({ error: null }),
+      ]);
+      if (catalogResult.error || legacyResult.error) {
+        const message = catalogResult.error?.message ?? legacyResult.error?.message ?? "database error";
+        throw new Error(`Plaivra could not remove Catalog favorite. ${message}`);
+      }
+    }
+    return getFavoriteFoodSnapshotAsync(userId);
+  }
 
   const result = favorite
     ? await supabase!
         .from("user_food_favorites")
-        .upsert({ user_id: userId, food_key: key, label: label ?? null }, { onConflict: "user_id,food_key" })
+        .upsert({ user_id: userId, food_key: key, label: options.label ?? null }, { onConflict: "user_id,food_key" })
     : await supabase!.from("user_food_favorites").delete().eq("user_id", userId).eq("food_key", key);
 
   if (result.error) {
     console.warn("Plaivra could not update synced food favorite.", result.error.message);
-    return setFavoriteFood(userId, key, favorite);
+    return favoriteSnapshotFromLocal(setFavoriteFood(userId, key, favorite));
   }
-  return getFavoriteFoodKeysAsync(userId);
+  return getFavoriteFoodSnapshotAsync(userId);
+}
+
+export async function setFavoriteFoodAsync(
+  userId: string | null | undefined,
+  key: FoodFavoriteKey,
+  favorite: boolean,
+  options: { label?: string; authority?: FoodFavoriteAuthority } = {},
+) {
+  return (await setFavoriteFoodSnapshotAsync(userId, key, favorite, options)).combinedKeys;
 }
 
 export function getSavedRecipes(userId: string | null | undefined) {

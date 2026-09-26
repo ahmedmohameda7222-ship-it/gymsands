@@ -25,8 +25,11 @@ import {
 import { addFoodLibraryItemToToday } from "@/services/database/food-library-logging";
 import {
   favoriteKeyForFood,
-  getFavoriteFoodKeysAsync,
-  setFavoriteFoodAsync
+  getFavoriteFoodSnapshotAsync,
+  isFoodFavoriteInSnapshot,
+  setFavoriteFoodSnapshotAsync,
+  withFoodFavoriteInSnapshot,
+  type FoodFavoriteSnapshot,
 } from "@/services/meals/food-logging-speed";
 import { scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
 import { userSafeError } from "@/lib/error-formatting";
@@ -36,6 +39,14 @@ const pageSize = 12;
 const mealOptions: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 const selectClassName = "h-12 w-full rounded-[14px] border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 const emptyFoodLogs: FoodLog[] = [];
+const emptyFavoriteSnapshot: FoodFavoriteSnapshot = {
+  catalogFoodIds: [],
+  legacyKeys: [],
+  sameOwnerMyFoodIds: [],
+  legacyCatalogCompatibilityIds: [],
+  combinedKeys: [],
+  collisionLookupComplete: false,
+};
 
 type FoodBrowserProps = {
   initialLogs?: FoodLog[];
@@ -124,7 +135,7 @@ function FoodBrowserInner({
   const [subcategories, setSubcategories] = useState<FoodSubcategory[]>([]);
   const [customMeals, setCustomMeals] = useState<CustomMeal[]>([]);
   const [foods, setFoods] = useState<FoodLibraryItem[]>([]);
-  const [favoriteKeys, setFavoriteKeys] = useState<string[]>([]);
+  const [favoriteSnapshot, setFavoriteSnapshot] = useState<FoodFavoriteSnapshot>(emptyFavoriteSnapshot);
   const [selectedKitchenId, setSelectedKitchenId] = useState("");
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
   const [query, setQuery] = useState("");
@@ -151,8 +162,12 @@ function FoodBrowserInner({
   );
   const selectedSubcategory = visibleSubcategories.find((subcategory) => subcategory.id === selectedSubcategoryId) ?? visibleSubcategories[0];
   const visibleFoods = useMemo(
-    () => foods.filter((food) => !favoritesOnly || favoriteKeys.includes(favoriteKeyForFood(food))).slice(0, visibleCount),
-    [favoriteKeys, favoritesOnly, foods, visibleCount]
+    () => foods.filter((food) => {
+      if (!favoritesOnly) return true;
+      const authority = food.is_global === false ? "legacy" : "catalog";
+      return isFoodFavoriteInSnapshot(favoriteSnapshot, favoriteKeyForFood(food), authority);
+    }).slice(0, visibleCount),
+    [favoriteSnapshot, favoritesOnly, foods, visibleCount]
   );
   useEffect(() => setMealType(mealOptions.includes(defaultMealType) ? defaultMealType : "Breakfast"), [defaultMealType]);
   useEffect(() => {
@@ -169,7 +184,7 @@ function FoodBrowserInner({
     Promise.allSettled([
       getFoodKitchens(user?.id ?? ""),
       user?.id ? getCustomMeals(user.id) : Promise.resolve<CustomMeal[]>([]),
-      getFavoriteFoodKeysAsync(user?.id)
+      getFavoriteFoodSnapshotAsync(user?.id)
     ])
       .then(([kitchenResult, mealsResult, favoritesResult]) => {
         if (!active) return;
@@ -185,7 +200,7 @@ function FoodBrowserInner({
         setKitchens(kitchenData.kitchens);
         setSubcategories(kitchenData.subcategories);
         setCustomMeals(mealsResult.status === "fulfilled" ? mealsResult.value : []);
-        setFavoriteKeys(favoritesResult.status === "fulfilled" ? favoritesResult.value : []);
+        setFavoriteSnapshot(favoritesResult.status === "fulfilled" ? favoritesResult.value : emptyFavoriteSnapshot);
 
         if (mealsResult.status === "rejected") {
           messages.push(userSafeError(mealsResult.reason, "Saved meals could not load. Food search is still available."));
@@ -418,19 +433,28 @@ function FoodBrowserInner({
     }
   }
 
-  async function toggleFavoriteForKey(key: string, label: string) {
+  async function toggleFavoriteForFood(food: FoodLibraryItem) {
+    const key = favoriteKeyForFood(food);
+    const label = food.food_name;
+    const authority = food.is_global === false ? "legacy" : "catalog";
     if (isPending(foodAction(key, "favorite"))) return;
-    const nextFavorite = !favoriteKeys.includes(key);
-    const previousKeys = favoriteKeys;
-    const optimisticKeys = nextFavorite
-      ? Array.from(new Set([...favoriteKeys, key]))
-      : favoriteKeys.filter((favoriteKey) => favoriteKey !== key);
+    const nextFavorite = !isFoodFavoriteInSnapshot(favoriteSnapshot, key, authority);
+    const previousSnapshot = favoriteSnapshot;
+    const optimisticSnapshot = withFoodFavoriteInSnapshot(
+      favoriteSnapshot,
+      key,
+      authority,
+      nextFavorite,
+    );
 
-    setFavoriteKeys(optimisticKeys);
+    setFavoriteSnapshot(optimisticSnapshot);
     setFoodAction(key, "favorite", { status: "pending", label: nextFavorite ? "Saving favorite..." : "Removing favorite..." });
     try {
-      const savedKeys = await setFavoriteFoodAsync(user?.id, key, nextFavorite, label);
-      setFavoriteKeys(savedKeys);
+      const savedSnapshot = await setFavoriteFoodSnapshotAsync(user?.id, key, nextFavorite, {
+        label,
+        authority,
+      });
+      setFavoriteSnapshot(savedSnapshot);
       setFoodAction(key, "favorite", {
         status: "success",
         label: nextFavorite ? "Food favorited." : "Food unfavorited.",
@@ -438,7 +462,7 @@ function FoodBrowserInner({
       });
       setNotice({ type: "success", title: nextFavorite ? "Food favorited" : "Food unfavorited", description: label });
     } catch (error) {
-      setFavoriteKeys(previousKeys);
+      setFavoriteSnapshot(previousSnapshot);
       setFoodAction(key, "favorite", { status: "error", label: "Favorite change was not saved.", description: userSafeError(error) });
       setNotice({ type: "error", title: "Favorite was not saved", description: userSafeError(error) });
     }
@@ -584,7 +608,11 @@ function FoodBrowserInner({
           {visibleFoods.map((food) => {
             const quantity = quantities[food.id] ?? 1;
             const favoriteKey = favoriteKeyForFood(food);
-            const favorite = favoriteKeys.includes(favoriteKey);
+            const favorite = isFoodFavoriteInSnapshot(
+              favoriteSnapshot,
+              favoriteKey,
+              food.is_global === false ? "legacy" : "catalog",
+            );
             const planAction = foodAction(food.id, "plan");
             const logAction = foodAction(food.id, "log");
             const favoriteAction = foodAction(favoriteKey, "favorite");
@@ -672,7 +700,7 @@ function FoodBrowserInner({
                       className="min-h-12 sm:col-span-2"
                       type="button"
                       variant={favorite ? "default" : "outline"}
-                      onClick={() => toggleFavoriteForKey(favoriteKey, food.food_name)}
+                      onClick={() => toggleFavoriteForFood(food)}
                       disabled={isPending(favoriteAction)}
                     >
                       {isPending(favoriteAction) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Heart className="h-4 w-4" />}

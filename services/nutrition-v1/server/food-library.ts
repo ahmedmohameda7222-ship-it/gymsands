@@ -259,14 +259,10 @@ function filterPayload(options: FoodLibraryQuery) {
   return payload;
 }
 
-export async function listFoodLibrary(
-  supabase: SupabaseClient,
-  _userId: string,
-  options: FoodLibraryQuery = {},
-): Promise<FoodLibraryPage> {
+function searchRpcArgs(options: FoodLibraryQuery) {
   const requested = Number(options.limit ?? MAX_PAGE_SIZE);
   const limit = Math.max(1, Math.min(MAX_PAGE_SIZE, Number.isFinite(requested) ? Math.floor(requested) : MAX_PAGE_SIZE));
-  const result = await supabase.rpc("search_food_catalog_v2", {
+  return {
     p_query: options.query?.trim() ?? "",
     p_language_tag: options.locale ?? "en",
     p_script_code: options.scriptCode?.trim() || null,
@@ -277,9 +273,31 @@ export async function listFoodLibrary(
     p_cuisine: options.cuisine?.trim() || null,
     p_scope: options.scope ?? "all",
     p_filters: filterPayload(options),
-  });
+  };
+}
+
+export async function listFoodLibrary(
+  supabase: SupabaseClient,
+  _userId: string,
+  options: FoodLibraryQuery = {},
+): Promise<FoodLibraryPage> {
+  const result = await supabase.rpc("search_food_catalog_v2", searchRpcArgs(options));
   const data = checked(result as unknown as { data: unknown; error: { message?: string } | null }, "Food Catalog V2 authoritative search");
   if (!isFoodLibraryPage(data)) throw new Error("Food Catalog V2 authoritative search returned an invalid page.");
+  return data;
+}
+
+export async function listFoodLibraryForMcp(
+  supabase: SupabaseClient,
+  connectionId: string,
+  options: FoodLibraryQuery = {},
+): Promise<FoodLibraryPage> {
+  const result = await supabase.rpc("search_food_catalog_v2_for_mcp_v1", {
+    p_connection_id: connectionId,
+    ...searchRpcArgs(options),
+  });
+  const data = checked(result as unknown as { data: unknown; error: { message?: string } | null }, "Food Catalog V2 MCP authoritative search");
+  if (!isFoodLibraryPage(data)) throw new Error("Food Catalog V2 MCP authoritative search returned an invalid page.");
   return data;
 }
 

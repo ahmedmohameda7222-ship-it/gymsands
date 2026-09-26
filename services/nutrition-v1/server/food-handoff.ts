@@ -16,6 +16,7 @@ import type {
 import {
   mergePersonalOverrideNutrition,
   readCurrentPersonalOverride,
+  readCurrentPersonalOverrideForMcp,
   type CurrentPersonalOverride,
 } from "@/services/nutrition-v1/server/personal-overrides";
 
@@ -278,6 +279,27 @@ export async function resolveCatalogNewUseSelectionWithAuthorities(
   const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(catalogSupabase, input.foodId);
   const selectedName = exactSelectedName(view, displayName, languageTag);
   return resolveCatalogNewUseSelectionFromView(ownerSupabase, view, selectedName);
+}
+
+export async function resolveCatalogNewUseSelectionForMcp(
+  supabase: SupabaseClient,
+  connectionId: string,
+  userId: string,
+  input: { foodId: string; displayName: string; languageTag?: string | null },
+): Promise<CatalogNewUseSelection> {
+  if (!isUuid(connectionId)) throw new Error("MCP connection must be a valid ID.");
+  if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
+  if (!isUuid(input.foodId)) throw new Error("Food must be a valid ID.");
+  const displayName = requiredText(input.displayName, "Food display name");
+  const languageTag = optionalText(input.languageTag);
+  const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, input.foodId);
+  const selectedName = exactSelectedName(view, displayName, languageTag);
+  const personalOverride = await readCurrentPersonalOverrideForMcp(
+    supabase,
+    connectionId,
+    view.resolvedFoodId,
+  );
+  return resolveCatalogNewUseSelectionFromResolvedAuthority(view, selectedName, personalOverride);
 }
 
 function requestedServingOptionId(input: FoodHandoffInput) {
@@ -557,6 +579,47 @@ export async function resolveFoodHandoffWithAuthorities(
   }
 
   const result = await ownerSupabase
+    .from("user_food_items")
+    .select(MY_FOOD_HANDOFF_AUTHORITY_SELECT)
+    .eq("id", input.foodId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (result.error) throw new Error(`Personal Food could not be resolved. ${result.error.message ?? "Database request failed."}`);
+  if (!result.data) throw new Error("Personal Food is unavailable.");
+
+  return resolveMyFoodHandoffFromResolvedAuthority(userId, result.data, {
+    ...input,
+    source: "my_food",
+  });
+}
+
+
+export async function resolveFoodHandoffForMcp(
+  supabase: SupabaseClient,
+  connectionId: string,
+  userId: string,
+  input: FoodHandoffInput,
+): Promise<ResolvedFoodHandoff> {
+  if (!isUuid(connectionId)) throw new Error("MCP connection must be a valid ID.");
+  if (!isUuid(userId)) throw new Error("Owner must be a valid ID.");
+  if (!isUuid(input.foodId)) throw new Error("Food must be a valid ID.");
+  if (input.source !== "catalog" && input.source !== "my_food") throw new Error("Food source is invalid.");
+
+  if (input.source === "catalog") {
+    const view = await resolveCurrentGenerationFoodForNewUseFromSupabase(supabase, input.foodId);
+    const personalOverride = await readCurrentPersonalOverrideForMcp(
+      supabase,
+      connectionId,
+      view.resolvedFoodId,
+    );
+    return resolveFoodHandoffFromResolvedCatalogOwnerAuthority(userId, view, personalOverride, {
+      ...input,
+      source: "catalog",
+    });
+  }
+
+  const result = await supabase
     .from("user_food_items")
     .select(MY_FOOD_HANDOFF_AUTHORITY_SELECT)
     .eq("id", input.foodId)

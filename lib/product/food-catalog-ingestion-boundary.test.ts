@@ -16,6 +16,7 @@ const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_r
 const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
 const PLAN7_INGESTION_REACTIVATION_MIGRATION = "20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql";
 const PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION = "20260919034630_food_catalog_owner_override_read_authority.sql";
+const PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION = "20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql";
 const INTERNAL_TABLES = [
   "food_ingestion_batches",
   "food_ingestion_runs",
@@ -177,18 +178,22 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         localFile: PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION,
         state: "pending",
       }),
+      expect.objectContaining({
+        localFile: PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION,
+        state: "pending",
+      }),
     ]);
     for (const pendingEntry of currentPendingEntries) {
       expect(pendingEntry).not.toHaveProperty("productionVersion");
       expect(pendingEntry).not.toHaveProperty("productionName");
     }
-    expect(current.pendingCount).toBe(4);
-    expect(current.unresolvedCount).toBe(4);
+    expect(current.pendingCount).toBe(5);
+    expect(current.unresolvedCount).toBe(5);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
         state: "pending",
-        pendingCount: 4,
-        unresolvedCount: 4,
+        pendingCount: 5,
+        unresolvedCount: 5,
       })
     );
   });
