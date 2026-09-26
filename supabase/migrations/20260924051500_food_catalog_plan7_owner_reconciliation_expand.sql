@@ -370,23 +370,25 @@ begin
       doc.script_code,
       doc.aliases,
       doc.nutrition_labels,
-      (
-        override_revision.id is not null
-        and override_revision.is_deleted = false
-        and canonical_nutrition.id is not null
-        and coalesce((
-          jsonb_typeof(override_revision.nutrition_override->'calories') = 'number'
-          or jsonb_typeof(override_revision.nutrition_override->'protein_g') = 'number'
-          or jsonb_typeof(override_revision.nutrition_override->'carbs_g') = 'number'
-          or jsonb_typeof(override_revision.nutrition_override->'fat_g') = 'number'
-          or jsonb_typeof(override_revision.nutrition_override->'saturated_fat_g') = 'number'
-          or jsonb_typeof(override_revision.nutrition_override->'fiber_g') = 'number'
-          or jsonb_typeof(override_revision.nutrition_override->'sugars_g') = 'number'
-          or jsonb_typeof(override_revision.nutrition_override->'sodium_mg') = 'number'
-        ), false)
-      ) as using_personal_values,
       case
-        when override_revision.id is not null
+        when override_pointer.user_id is not null then (
+          override_revision.is_deleted = false
+          and canonical_nutrition.id is not null
+          and coalesce((
+            jsonb_typeof(override_revision.nutrition_override->'calories') = 'number'
+            or jsonb_typeof(override_revision.nutrition_override->'protein_g') = 'number'
+            or jsonb_typeof(override_revision.nutrition_override->'carbs_g') = 'number'
+            or jsonb_typeof(override_revision.nutrition_override->'fat_g') = 'number'
+            or jsonb_typeof(override_revision.nutrition_override->'saturated_fat_g') = 'number'
+            or jsonb_typeof(override_revision.nutrition_override->'fiber_g') = 'number'
+            or jsonb_typeof(override_revision.nutrition_override->'sugars_g') = 'number'
+            or jsonb_typeof(override_revision.nutrition_override->'sodium_mg') = 'number'
+          ), false)
+        )
+        else correction.food_id is not null
+      end as using_personal_values,
+      case
+        when override_pointer.user_id is not null
           and override_revision.is_deleted = false
           and canonical_nutrition.id is not null
           and jsonb_typeof(override_revision.nutrition_override->'calories') = 'number'
@@ -395,10 +397,16 @@ begin
           canonical_nutrition.basis_amount,
           canonical_nutrition.basis_unit
         )
+        when override_pointer.user_id is not null then doc.calories_100
+        when correction.food_id is not null then private.food_catalog_search_per_100_v2(
+          coalesce(correction.calories, doc.calories_100),
+          coalesce(correction.basis_amount, 100),
+          coalesce(correction.basis_unit, doc.nutrition_basis_unit)
+        )
         else doc.calories_100
       end as calories_100,
       case
-        when override_revision.id is not null
+        when override_pointer.user_id is not null
           and override_revision.is_deleted = false
           and canonical_nutrition.id is not null
           and jsonb_typeof(override_revision.nutrition_override->'protein_g') = 'number'
@@ -407,10 +415,16 @@ begin
           canonical_nutrition.basis_amount,
           canonical_nutrition.basis_unit
         )
+        when override_pointer.user_id is not null then doc.protein_100
+        when correction.food_id is not null then private.food_catalog_search_per_100_v2(
+          coalesce(correction.protein_g, doc.protein_100),
+          coalesce(correction.basis_amount, 100),
+          coalesce(correction.basis_unit, doc.nutrition_basis_unit)
+        )
         else doc.protein_100
       end as protein_100,
       case
-        when override_revision.id is not null
+        when override_pointer.user_id is not null
           and override_revision.is_deleted = false
           and canonical_nutrition.id is not null
           and jsonb_typeof(override_revision.nutrition_override->'carbs_g') = 'number'
@@ -419,10 +433,16 @@ begin
           canonical_nutrition.basis_amount,
           canonical_nutrition.basis_unit
         )
+        when override_pointer.user_id is not null then doc.carbs_100
+        when correction.food_id is not null then private.food_catalog_search_per_100_v2(
+          coalesce(correction.carbs_g, doc.carbs_100),
+          coalesce(correction.basis_amount, 100),
+          coalesce(correction.basis_unit, doc.nutrition_basis_unit)
+        )
         else doc.carbs_100
       end as carbs_100,
       case
-        when override_revision.id is not null
+        when override_pointer.user_id is not null
           and override_revision.is_deleted = false
           and canonical_nutrition.id is not null
           and jsonb_typeof(override_revision.nutrition_override->'fat_g') = 'number'
@@ -431,10 +451,16 @@ begin
           canonical_nutrition.basis_amount,
           canonical_nutrition.basis_unit
         )
+        when override_pointer.user_id is not null then doc.fat_100
+        when correction.food_id is not null then private.food_catalog_search_per_100_v2(
+          coalesce(correction.fat_g, doc.fat_100),
+          coalesce(correction.basis_amount, 100),
+          coalesce(correction.basis_unit, doc.nutrition_basis_unit)
+        )
         else doc.fat_100
       end as fat_100,
       case
-        when override_revision.id is not null
+        when override_pointer.user_id is not null
           and override_revision.is_deleted = false
           and canonical_nutrition.id is not null
           and jsonb_typeof(override_revision.nutrition_override->'saturated_fat_g') = 'number'
@@ -443,10 +469,16 @@ begin
           canonical_nutrition.basis_amount,
           canonical_nutrition.basis_unit
         )
+        when override_pointer.user_id is not null then doc.saturated_fat_100
+        when correction.food_id is not null then private.food_catalog_search_per_100_v2(
+          coalesce(correction.saturated_fat_g, doc.saturated_fat_100),
+          coalesce(correction.basis_amount, 100),
+          coalesce(correction.basis_unit, doc.nutrition_basis_unit)
+        )
         else doc.saturated_fat_100
       end as saturated_fat_100,
       case
-        when override_revision.id is not null
+        when override_pointer.user_id is not null
           and override_revision.is_deleted = false
           and canonical_nutrition.id is not null
           and jsonb_typeof(override_revision.nutrition_override->'fiber_g') = 'number'
@@ -455,10 +487,16 @@ begin
           canonical_nutrition.basis_amount,
           canonical_nutrition.basis_unit
         )
+        when override_pointer.user_id is not null then doc.fiber_100
+        when correction.food_id is not null then private.food_catalog_search_per_100_v2(
+          coalesce(correction.fiber_g, doc.fiber_100),
+          coalesce(correction.basis_amount, 100),
+          coalesce(correction.basis_unit, doc.nutrition_basis_unit)
+        )
         else doc.fiber_100
       end as fiber_100,
       case
-        when override_revision.id is not null
+        when override_pointer.user_id is not null
           and override_revision.is_deleted = false
           and canonical_nutrition.id is not null
           and jsonb_typeof(override_revision.nutrition_override->'sugars_g') = 'number'
@@ -467,10 +505,16 @@ begin
           canonical_nutrition.basis_amount,
           canonical_nutrition.basis_unit
         )
+        when override_pointer.user_id is not null then doc.sugars_100
+        when correction.food_id is not null then private.food_catalog_search_per_100_v2(
+          coalesce(correction.sugars_g, doc.sugars_100),
+          coalesce(correction.basis_amount, 100),
+          coalesce(correction.basis_unit, doc.nutrition_basis_unit)
+        )
         else doc.sugars_100
       end as sugars_100,
       case
-        when override_revision.id is not null
+        when override_pointer.user_id is not null
           and override_revision.is_deleted = false
           and canonical_nutrition.id is not null
           and jsonb_typeof(override_revision.nutrition_override->'sodium_mg') = 'number'
@@ -479,10 +523,16 @@ begin
           canonical_nutrition.basis_amount,
           canonical_nutrition.basis_unit
         )
+        when override_pointer.user_id is not null then doc.sodium_mg_100
+        when correction.food_id is not null then private.food_catalog_search_per_100_v2(
+          coalesce(correction.sodium_mg, doc.sodium_mg_100),
+          coalesce(correction.basis_amount, 100),
+          coalesce(correction.basis_unit, doc.nutrition_basis_unit)
+        )
         else doc.sodium_mg_100
       end as sodium_mg_100,
       case
-        when override_revision.id is not null
+        when override_pointer.user_id is not null
           and override_revision.is_deleted = false
           and canonical_nutrition.id is not null
           and (
@@ -496,6 +546,8 @@ begin
             or jsonb_typeof(override_revision.nutrition_override->'sodium_mg') = 'number'
           )
         then canonical_nutrition.basis_unit
+        when override_pointer.user_id is not null then doc.nutrition_basis_unit
+        when correction.food_id is not null then coalesce(correction.basis_unit, doc.nutrition_basis_unit)
         else doc.nutrition_basis_unit
       end as nutrition_basis_unit,
       case
@@ -547,6 +599,11 @@ begin
      and override_revision.user_id = override_pointer.user_id
      and override_revision.food_id = override_pointer.food_id
      and override_revision.revision_number = override_pointer.pointer_revision
+    left join public.food_personal_corrections correction
+      on correction.user_id = p_user_id
+     and correction.food_id = doc.food_id
+     and correction.is_active = true
+     and override_pointer.user_id is null
     where v_generation_id is not null
       and doc.generation_id = v_generation_id
       and doc.projection_version = v_projection_version
