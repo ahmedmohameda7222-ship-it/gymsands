@@ -28,17 +28,19 @@ describe("Plan 7 Tasks 13-14 owner reconciliation and expand authority", () => {
     expect(sql).not.toContain("set_config('request.jwt.claim.sub");
   });
 
-  it("replaces legacy Personal Correction search authority with Plan 6 pointer/revision authority", () => {
+  it("keeps legacy Personal Correction as expand compatibility beneath exact Plan 6 pointer authority", () => {
     const sql = source(`supabase/migrations/${migrationFiles[0]}`).toLowerCase();
     const coreStart = sql.indexOf("create or replace function private.food_catalog_search_v2_for_owner_v1");
     const coreEnd = sql.indexOf("create or replace function public.search_food_catalog_v2(", coreStart);
     const core = sql.slice(coreStart, coreEnd);
     expect(core).toContain("food_personal_overrides");
     expect(core).toContain("food_personal_override_revisions");
+    expect(core).toContain("food_personal_corrections");
+    expect(core).toContain("correction.is_active = true");
+    expect(core).toContain("override_pointer.user_id is null");
     expect(core).toContain("food_catalog_generation_foods");
     expect(core).toContain("food_nutrition_revisions");
     expect(core).toContain("private.food_catalog_search_per_100_v2");
-    expect(core).not.toContain("food_personal_corrections");
   });
 
   it("shares Personal Override resolution and exposes only a service-role MCP bridge", () => {

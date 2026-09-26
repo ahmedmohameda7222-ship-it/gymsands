@@ -276,6 +276,21 @@ set current_generation_id='a5700000-0000-4000-8000-000000000001',
     updated_at=now()
 where singleton_key;
 
+insert into auth.users(
+  id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at
+) values
+('a5c00000-0000-4000-8000-000000000001','authenticated','authenticated','plan7-search-a@example.test','','{"provider":"email","providers":["email"]}'::jsonb,'{}'::jsonb,clock_timestamp(),clock_timestamp()),
+('a5c00000-0000-4000-8000-000000000002','authenticated','authenticated','plan7-search-b@example.test','','{"provider":"email","providers":["email"]}'::jsonb,'{}'::jsonb,clock_timestamp(),clock_timestamp());
+
+insert into public.account_access_states(user_id,state,reason_code,disabled_at) values
+('a5c00000-0000-4000-8000-000000000001','active','plan7-search-fixture',null),
+('a5c00000-0000-4000-8000-000000000002','active','plan7-search-fixture',null)
+on conflict(user_id) do update
+set state=excluded.state,reason_code=excluded.reason_code,disabled_at=excluded.disabled_at,updated_at=clock_timestamp();
+
+insert into public.chatgpt_connections(id,user_id,token_hash,label,scopes,is_active,revoked_at) values
+('a5e00000-0000-4000-8000-000000000001','a5c00000-0000-4000-8000-000000000001','plan7-search-token-a','Plan7 search A','{}',true,null);
+
 select set_config('request.jwt.claim.sub','a5c00000-0000-4000-8000-000000000001',true);
 
 -- Explicit language/script + explicit market ranking: DE Food is first, no market hiding.
@@ -360,6 +375,59 @@ begin
 end
 $benchmark$;
 
+-- Plan 7 expand compatibility: legacy Personal Correction remains Search authority
+-- only when no exact Plan 6 pointer exists. Historical basis/null semantics are preserved.
+insert into public.food_personal_corrections(
+  id,user_id,food_id,calories,protein_g,carbs_g,fat_g,saturated_fat_g,fiber_g,sugars_g,sodium_mg,
+  basis_amount,basis_unit,note,is_active
+) values
+('a5f00000-0000-4000-8000-000000000001','a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000020',
+ 0,null,null,null,null,null,null,null,50,'g','legacy active basis fixture',true),
+('a5f00000-0000-4000-8000-000000000002','a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000019',
+ 0,null,null,null,null,null,null,null,100,'g','legacy inactive fixture',false),
+('a5f00000-0000-4000-8000-000000000003','a5c00000-0000-4000-8000-000000000002','a5000000-0000-4000-8000-000000000018',
+ 0,null,null,null,null,null,null,null,100,'g','other owner legacy fixture',true),
+('a5f00000-0000-4000-8000-000000000004','a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000025',
+ 444,77,null,null,null,null,null,null,100,'g','legacy suppressed by Plan 6 nutrition',true),
+('a5f00000-0000-4000-8000-000000000005','a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000024',
+ 333,null,null,null,null,null,null,null,100,'g','legacy suppressed by Plan 6 note serving',true),
+('a5f00000-0000-4000-8000-000000000006','a5c00000-0000-4000-8000-000000000001','a5000000-0000-4000-8000-000000000023',
+ 333,null,null,null,null,null,null,null,100,'g','legacy suppressed by Plan 6 tombstone',true);
+
+select public.search_food_catalog_v2('Bench Food 20','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_legacy_active \gset
+select pg_temp.plan5_assert(
+  (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=0
+  and (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'protein_g')::numeric=20
+  and (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'basis_amount')::numeric=100
+  and :'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'basis_unit'='g'
+  and (:'plan7_legacy_active'::jsonb->'items'->0->>'usingPersonalValues')::boolean=true,
+  'Active legacy-only correction did not preserve zero / nullable fallback / historical basis semantics.'
+);
+
+select public.search_food_catalog_v2('Bench Food 19','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_legacy_inactive \gset
+select pg_temp.plan5_assert(
+  (:'plan7_legacy_inactive'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=119
+  and (:'plan7_legacy_inactive'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
+  'Inactive legacy Personal Correction affected Search.'
+);
+
+select public.search_food_catalog_v2('Bench Food 18','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_legacy_other_owner \gset
+select pg_temp.plan5_assert(
+  (:'plan7_legacy_other_owner'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=118
+  and (:'plan7_legacy_other_owner'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
+  'Another owner legacy Personal Correction affected Search.'
+);
+
+set local role service_role;
+select public.search_food_catalog_v2_for_mcp_v1(
+  'a5e00000-0000-4000-8000-000000000001','Bench Food 20','en','Latn',null,null,20,null,null,'all','{}'::jsonb
+) as plan7_legacy_mcp \gset
+reset role;
+select pg_temp.plan5_assert(
+  :'plan7_legacy_mcp'::jsonb=:'plan7_legacy_active'::jsonb,
+  'Browser and MCP Search differ under legacy correction fallback.'
+);
+
 -- Plan 7 / Plan 6 Personal Override overlay: exact pointed revision, NULL fallback,
 -- numeric zero, note/serving-only, tombstone, cross-owner isolation, and fail-closed corruption.
 insert into public.food_personal_override_revisions(
@@ -395,19 +463,32 @@ select pg_temp.plan5_assert(
   (:'plan7_override_active'::jsonb->'items'->0->'nutrition'->>'calories')::numeric<>999,
   'Search used a newer unpointed Personal Override revision.'
 );
+select pg_temp.plan5_assert(
+  (:'plan7_override_active'::jsonb->'items'->0->'nutrition'->>'protein_g')::numeric=10,
+  'Plan 6 pointer missing/null nutrient fell through to legacy Personal Correction.'
+);
+set local role service_role;
+select public.search_food_catalog_v2_for_mcp_v1(
+  'a5e00000-0000-4000-8000-000000000001','Bench Food 25','en','Latn',null,null,20,null,null,'all','{}'::jsonb
+) as plan7_override_active_mcp \gset
+reset role;
+select pg_temp.plan5_assert(
+  :'plan7_override_active_mcp'::jsonb=:'plan7_override_active'::jsonb,
+  'Browser and MCP Search differ under Plan 6 Personal Override authority.'
+);
 
 select public.search_food_catalog_v2('Bench Food 24','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_override_serving_note \gset
 select pg_temp.plan5_assert(
   (:'plan7_override_serving_note'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=124
   and (:'plan7_override_serving_note'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
-  'Serving/note-only Personal Override changed search nutrition or usingPersonalValues.'
+  'Serving/note-only Plan 6 pointer did not suppress legacy correction while preserving canonical nutrition.'
 );
 
 select public.search_food_catalog_v2('Bench Food 23','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_override_tombstone \gset
 select pg_temp.plan5_assert(
   (:'plan7_override_tombstone'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=123
   and (:'plan7_override_tombstone'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
-  'Tombstoned Personal Override changed search nutrition.'
+  'Tombstoned Plan 6 pointer did not suppress legacy correction while preserving canonical nutrition.'
 );
 
 select public.search_food_catalog_v2('Bench Food 22','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_override_other_owner \gset
