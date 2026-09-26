@@ -84,7 +84,9 @@ const db = vi.hoisted(() => {
 
       if (this.table === "user_food_favorites") {
         if (this.operation === "select") {
-          return { data: [...state.legacy].map((food_key) => ({ food_key })), error: null };
+          const requestedKey = this.filters.get("food_key");
+          const keys = [...state.legacy].filter((foodKey) => requestedKey === undefined || foodKey === requestedKey);
+          return { data: keys.map((food_key) => ({ food_key })), error: null };
         }
         const key = String(this.filters.get("food_key") ?? this.payload?.food_key ?? "");
         if (this.operation === "delete") {
@@ -98,7 +100,9 @@ const db = vi.hoisted(() => {
 
       if (this.table === "food_favorites") {
         if (this.operation === "select") {
-          return { data: [...state.catalog].map((food_id) => ({ food_id })), error: null };
+          const requestedId = this.filters.get("food_id");
+          const ids = [...state.catalog].filter((foodId) => requestedId === undefined || foodId === requestedId);
+          return { data: ids.map((food_id) => ({ food_id })), error: null };
         }
         const key = String(this.filters.get("food_id") ?? this.payload?.food_id ?? "");
         if (this.operation === "delete") {
