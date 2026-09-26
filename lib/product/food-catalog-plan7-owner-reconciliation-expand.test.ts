@@ -75,7 +75,7 @@ describe("Plan 7 Tasks 13-14 owner reconciliation and expand authority", () => {
     expect(speed).toContain('export type FoodFavoriteAuthority = "catalog" | "legacy"');
     expect(speed).toContain('.from("food_favorites")');
     expect(speed).toContain('authority === "catalog"');
-    expect(browser).toContain('authority: food.is_global === false ? "legacy" : "catalog"');
+    expect(browser).toContain('const authority = food.is_global === false ? "legacy" : "catalog"');
     expect(speed).toContain('.from("user_food_favorites")');
   });
 
