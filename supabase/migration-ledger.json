@@ -12,7 +12,7 @@
     "schemaAppliedUntrackedCount": 0,
     "pendingCount": 1,
     "unresolvedCount": 1,
-    "note": "Plaivra Production remains reconciled through 20261008123814_food_catalog_plan7_retirement_prerequisite with 129 physical records. Repository migration 20261008202500_food_catalog_plan7_retirement_contract.sql is pending the full exact-head QA cycle and immediate live pre-apply verification. It is the only unresolved migration and has not been applied or assigned a Production identity."
+    "note": "Plaivra Production remains reconciled through 20261008123814_food_catalog_plan7_retirement_prerequisite with 129 physical records. Repository migration 20261008202500_food_catalog_plan7_retirement_contract.sql is pending the full exact-head QA cycle and immediate live pre-apply verification. It is the only unresolved migration and has not been applied or assigned a Production identity. Do not replay applied migrations and do not apply the pending retirement contract before the required immediate preflight."
   },
   "entries": [
     {
