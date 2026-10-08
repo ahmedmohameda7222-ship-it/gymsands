@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-10-08T05:46:31Z",
+  "capturedAt": "2026-10-08T12:38:14Z",
   "auditedRepositoryCommit": "dfa14c3bc2c1524ff185b1ee4e170f4537a80230",
-  "productionMigrationCount": 63,
+  "productionMigrationCount": 64,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 1,
-  "unresolvedCount": 1,
+  "pendingCount": 0,
+  "unresolvedCount": 0,
   "historyRepair": {
-    "state": "pending",
+    "state": "reconciled",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 1,
-    "unresolvedCount": 1,
-    "note": "Production migration history remains physically reconciled through 20261008022805_food_catalog_plan7_owner_reconciliation_expand with 128 records, but the repository now contains one reviewed-in-progress Plan 7 Task 16 non-destructive retirement-prerequisite migration that is intentionally absent from Production pending independent Planner review and explicit apply authorization. No Production apply, retirement DROP, owner-data mutation, compatibility-marker promotion, Food population, generation promotion, or Activity Catalog mutation has occurred. Do not replay applied migrations and do not apply the pending prerequisite without authorization."
+    "pendingCount": 0,
+    "unresolvedCount": 0,
+    "note": "Production migration history is reconciled through 20261008123814_food_catalog_plan7_retirement_prerequisite with 129 physical records. The Task 16 non-destructive prerequisite was applied exactly once from reviewed repository authority after explicit owner authorization. No destructive retirement DROP, compatibility-marker promotion, Food population, generation promotion, or Activity Catalog mutation occurred. Do not replay applied migrations."
   },
   "entries": [
     {
@@ -853,9 +853,11 @@
     },
     {
       "localFile": "20261008060000_food_catalog_plan7_retirement_prerequisite.sql",
-      "state": "pending",
-      "note": "Absent from Supabase Production migration history. Task 16 non-destructive retirement prerequisite only: removes current Search V2 and account-purge dependencies on legacy Personal Corrections and revokes runtime EXECUTE on the retained old Food Library RPC without dropping objects or mutating owner/catalog data. Production remains at physical head 20261008022805_food_catalog_plan7_owner_reconciliation_expand with 128 records. Independent Planner review and explicit Production apply authorization are required. Do not replay or apply early."
+      "state": "applied_version_alias",
+      "note": "Repository migration applied exactly once to Plaivra Production on 2026-10-08 as generated identity 20261008123814_food_catalog_plan7_retirement_prerequisite from reviewed PR #186 migration Git blob ffaab3ba8d0dcbecff643658152fa51a970ff56c after exact-head green QA and explicit owner authorization. Read-back proved Search V2 and canonical account purge no longer reference public.food_personal_corrections; the old public.search_nutrition_food_library RPC remains present but anon/authenticated/service_role EXECUTE is revoked; owner/catalog counts remain unchanged. Do not replay.",
+      "productionVersion": "20261008123814",
+      "productionName": "food_catalog_plan7_retirement_prerequisite"
     }
   ],
-  "productionRecordCount": 128
+  "productionRecordCount": 129
 }
