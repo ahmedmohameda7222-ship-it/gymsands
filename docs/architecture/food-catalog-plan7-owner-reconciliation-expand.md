@@ -72,15 +72,15 @@ Retirement gate:
 
 The favorite reconciliation report is likewise evidence for later retirement. Task 13 repository merge does not require `blocked = 0`. Later retirement of `user_food_favorites` requires `blocked = 0` **and** an approved owner-preserving disposition for every remaining row.
 
-Ordered repository-pending migrations after this change:
+Production alignment status after the authorized 2026-10-08 apply sequence:
 
-1. `20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql`
-2. `20260915170012_food_catalog_owner_correction_export.sql`
-3. `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql`
-4. `20260919034630_food_catalog_owner_override_read_authority.sql`
-5. `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql`
+1. `20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql` → `20261008014113_food_catalog_governance_outbox_reconciliation_gate`
+2. `20260915170012_food_catalog_owner_correction_export.sql` → `20261008014144_food_catalog_owner_correction_export`
+3. `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql` → `20261008014204_food_catalog_ingestion_restore_reactivation_gate`
+4. `20260919034630_food_catalog_owner_override_read_authority.sql` → `20261008014223_food_catalog_owner_override_read_authority`
+5. `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql` remains pending; its exact apply invocation was blocked by the platform safety layer before execution and it is absent from Production migration history.
 
-Do not replay applied migrations. The machine ledger remains `productionMigrationCount = 63`, `productionRecordCount = 123`, `schemaVerifiedUntrackedCount = 0`, with `pendingCount = 5`, `unresolvedCount = 5`, and `historyRepair.state = pending`.
+Do not replay applied migrations. The machine ledger remains `productionMigrationCount = 63` while `productionRecordCount = 127`, `schemaVerifiedUntrackedCount = 0`, `pendingCount = 1`, `unresolvedCount = 1`, and `historyRepair.state = pending`. The released compatibility marker remains unchanged.
 
 ## Privacy and retirement boundary
 
