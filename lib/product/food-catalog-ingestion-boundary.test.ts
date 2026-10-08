@@ -157,18 +157,22 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
       }),
     ]);
     expect(currentPendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: "20261008060000_food_catalog_plan7_retirement_prerequisite.sql",
+        state: "pending",
+      }),
     ]);
     for (const pendingEntry of currentPendingEntries) {
       expect(pendingEntry).not.toHaveProperty("productionVersion");
       expect(pendingEntry).not.toHaveProperty("productionName");
     }
-    expect(current.pendingCount).toBe(0);
-    expect(current.unresolvedCount).toBe(0);
+    expect(current.pendingCount).toBe(1);
+    expect(current.unresolvedCount).toBe(1);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "reconciled",
-        pendingCount: 0,
-        unresolvedCount: 0,
+        state: "pending",
+        pendingCount: 1,
+        unresolvedCount: 1,
       })
     );
   });
