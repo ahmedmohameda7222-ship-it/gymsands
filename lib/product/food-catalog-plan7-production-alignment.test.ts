@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const LEDGER = "supabase/migration-ledger.json";
 
 describe("Food Catalog Plan 7 Production alignment evidence", () => {
-  it("records five exact Production aliases plus the pending Task 16 prerequisite", () => {
+  it("records all six exact Production aliases with a reconciled ledger", () => {
     const ledger = JSON.parse(readFileSync(LEDGER, "utf8")) as {
       productionMigrationCount: number;
       productionRecordCount: number;
@@ -42,20 +42,22 @@ describe("Food Catalog Plan 7 Production alignment evidence", () => {
       }));
     }
 
-    expect(ledger.productionMigrationCount).toBe(63);
-    expect(ledger.productionRecordCount).toBe(128);
+    expect(ledger.productionMigrationCount).toBe(64);
+    expect(ledger.productionRecordCount).toBe(129);
     expect(ledger.entries.find((entry) => entry.localFile === "20261008060000_food_catalog_plan7_retirement_prerequisite.sql"))
       .toEqual(expect.objectContaining({
-        state: "pending",
+        state: "applied_version_alias",
+        productionVersion: "20261008123814",
+        productionName: "food_catalog_plan7_retirement_prerequisite",
       }));
     expect(ledger.schemaVerifiedUntrackedCount).toBe(0);
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
     expect(ledger.historyRepair).toEqual(expect.objectContaining({
-      state: "pending",
+      state: "reconciled",
       schemaAppliedUntrackedCount: 0,
-      pendingCount: 1,
-      unresolvedCount: 1,
+      pendingCount: 0,
+      unresolvedCount: 0,
     }));
   });
 });
