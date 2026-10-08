@@ -114,12 +114,12 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
 
   it("preserves verified Plan 3/4/5 aliases after Plan 6 exactness reconciliation", () => {
     expect(ledger.productionMigrationCount).toBe(63);
-    expect(ledger.productionRecordCount).toBe(128);
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.productionRecordCount).toBe(129);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(ledger.historyRepair.pendingCount).toBe(0);
+    expect(ledger.historyRepair.unresolvedCount).toBe(0);
 
     const entry = ledger.entries.find((item) => item.localFile === "20260902150000_food_catalog_generation_authority.sql");
     expect(entry).toEqual({
@@ -137,16 +137,13 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
       productionName: "food_catalog_governance_control_plane",
     }));
     const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
-    expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: "20261008060000_food_catalog_plan7_retirement_prerequisite.sql",
-        state: "pending",
-      }),
-    ]);
-    for (const pendingEntry of pendingEntries) {
-      expect(pendingEntry.productionVersion).toBeUndefined();
-      expect(pendingEntry.productionName).toBeUndefined();
-    }
+    expect(pendingEntries).toEqual([]);
+    expect(ledger.entries.find((item) => item.localFile === "20261008060000_food_catalog_plan7_retirement_prerequisite.sql"))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008123814",
+        productionName: "food_catalog_plan7_retirement_prerequisite",
+      }));
     const plan6Correction = ledger.entries.find((item) => item.localFile === PLAN6_EXACTNESS_CORRECTION);
     expect(plan6Correction).toEqual(expect.objectContaining({
       state: "applied_version_alias",
