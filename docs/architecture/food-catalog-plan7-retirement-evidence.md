@@ -1,6 +1,6 @@
 # Food Catalog Plan 7 — Retirement Preflight Evidence
 
-**Status:** Task 16 read-only preflight in progress; **no destructive object is approved**
+**Status:** Task 16 preflight complete; exact three-object destructive scope approved for Task 17 implementation
 **Captured:** 2026-10-08
 **Plaivra Production project:** `bkwezjxvapaeasfvlhvv`
 **Deployed consumer-cutover artifact:** `a182923399a41faf5ca7b79d947a992e94cdd27a`
@@ -85,7 +85,7 @@ The legacy function still exists, but the Task 16 prerequisite revoked runtime E
 - `service_role`: no;
 - `anon`: no.
 
-A 30-minute Vercel runtime observation spanning the Production prerequisite apply reported no runtime errors on deployed artifact `a182923399a41faf5ca7b79d947a992e94cdd27a`. PostgreSQL statement history contains historical PostgREST calls to this RPC, so absence of repository consumers alone is not treated as proof that all historical/external consumers disappeared. The contract remains retained and non-executable pending exact destructive-set review.
+The reviewed rollout window from deployed cutover through post-prerequisite preflight shows no live caller after contract disable. Supabase unified logs contain no runtime invocation of this RPC; the only matching post-prerequisite log is the read-only management inspection itself. PostgreSQL statement history still records **21 historical PostgREST calls**, but the call count did not increase across the prerequisite observation window. Current EXECUTE is revoked for all application roles. This supplies live/external clearance for the disabled RPC itself.
 
 ### `food_aliases`
 
@@ -97,13 +97,13 @@ Live function reference:
 
 Live view references: none observed.
 
-Repository portability registry/dependency contracts still preserve this relation as transitional compatibility state. It is not currently retirement-safe.
+Repository non-historical references are limited to the portability registry/dependency contracts that Task 17 will update with the retirement migration. Production has zero rows, no view reference, and only the disabled old Search RPC references it. That RPC is in the same exact destructive set, so the reference is classified as internal to the reviewed retirement set. No live log usage was observed across the reviewed rollout window.
 
 ### `food_market_relevance`
 
 Current rows: **0**.
 
-No live function or view reference was found in the current database scan. Repository portability registry/dependency contracts still preserve the relation, and the frozen Plan 7 policy requires explicit external/reporting/live dependency clearance. That clearance has not been established. Zero rows is not authorization.
+No live function or view reference was found in the current database scan. Repository non-historical references are limited to portability registry/dependency contracts. Supabase unified logs show no use during the reviewed deployed-cutover window, and PostgreSQL statement history contains only schema/verification/count activity rather than an application/reporting reader. With zero rows and no current generation, the required repository + database + deployed/live/reporting precondition is satisfied for this exact retirement review.
 
 ### `food_personal_corrections`
 
@@ -113,7 +113,7 @@ Fresh exact table-reference scanning after the prerequisite apply finds only:
 
 - `search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)`.
 
-Current Search V2 and the canonical account-purge implementation no longer reference `public.food_personal_corrections`. The remaining reference is internal to the retained, now non-executable old Search contract. The table remains present with zero rows pending exact destructive-set review.
+Current Search V2 and the canonical account-purge implementation no longer reference `public.food_personal_corrections`. The remaining database reference is internal to the old Search contract, but the deployed Product still reads this table from `lib/privacy/data-export.ts`. Therefore this table is explicitly **retained** and is not in the Task 17 destructive set.
 
 ## Repository consumer observation
 
@@ -150,22 +150,28 @@ GitHub Actions run **37734481966**, job **113170815602**, completed **success**.
 
 The certification did not mutate Production.
 
-Important freshness boundary: run **37734481966** certified the exact deployed SHA before the Task 16 prerequisite changed the Production schema. Therefore it remains valid evidence for the deployed consumer artifact, but it is not by itself a fresh post-prerequisite proof of the combined deployed-artifact/current-schema state. The repository FULL_DR workflow must remain green on the post-prerequisite branch state, and Planner must decide whether the composite live-runtime + current-schema evidence is sufficient before Task 17.
+Run **37734481966** remains the exact deployed-artifact certification. Fresh current-schema certification was then completed on repository head `bc21b1c49dc13eab5a556ebff7a5e6504949e11a` through Integrated FULL_DR run **37837045883** / run number **413**, plus Portable Export Restore QA run **37837046086** / run number **493**. Both are green against the post-prerequisite migration chain ending at `20261008123814`.
 
-## Current retirement disposition
+The Git compare from deployed artifact `a182923399a41faf5ca7b79d947a992e94cdd27a` to schema-certification head `bc21b1c49dc13eab5a556ebff7a5e6504949e11a` changes only migration, verification, test, evidence, ledger, and retirement-preflight files; it changes no deployed Product/application runtime path. The machine preflight therefore treats these two proofs as a composite exact deployed-runtime/current-schema certification rather than falsely claiming the schema-certification commit itself is deployed.
 
-The current read-only evidence does **not** support creating destructive SQL.
+## Exact Task 16 Planner scope ruling
 
-Known blockers / staged evidence after prerequisite apply include:
+The Task 16 preflight supports one narrow destructive set for Task 17 implementation:
 
-1. the exact-deployed FULL_DR certification predates the prerequisite schema change, so Task 16 still needs an explicit Planner ruling on the fresh combined deployed-artifact/current-schema proof;
-2. `food_aliases` and `food_personal_corrections` are zero-row and are now referenced only by the retained non-executable old Search function; that relationship may be classified as internal to a future reviewed retirement set, but it is not self-authorizing;
-3. `food_market_relevance` is zero-row with no live function/view reference, but still lacks explicit external/reporting dependency clearance;
-4. root `food_items` retirement candidates still require exact per-column dependency proof and Planner selection.
+1. `function:public.search_nutrition_food_library`;
+2. `table:public.food_aliases`;
+3. `table:public.food_market_relevance`.
 
-The blocked `user_food_favorites` row is retained owner state, not a prerequisite to mutate or a candidate to retire.
+The set is approved as a unit for forward migration design. The migration must drop the disabled old Search function before `food_aliases`, must require both retired tables to be zero-row at apply time, and must use no `CASCADE`.
 
-The Task 16 non-destructive prerequisite migration `20261008060000_food_catalog_plan7_retirement_prerequisite.sql` is now applied exactly once in Production as `20261008123814_food_catalog_plan7_retirement_prerequisite`. No destructive Task 17 migration identity is allocated and the destructive set remains **not approved**.
+Explicitly **not approved for retirement**:
+
+- `table:public.food_personal_corrections` — retained because deployed privacy export remains a live repository/Product consumer;
+- `table:public.user_food_favorites` — retained owner state by prior Planner ruling;
+- every candidate root `food_items` column — fresh Production discovery shows current function and/or constraint dependencies;
+- all KEEP objects in the Plan 7 preflight inventory.
+
+The Task 16 non-destructive prerequisite migration `20261008060000_food_catalog_plan7_retirement_prerequisite.sql` is applied exactly once in Production as `20261008123814_food_catalog_plan7_retirement_prerequisite`. This Planner scope ruling authorizes Task 17 SQL **creation for only the three objects above**. Immediate live preflight is still mandatory before Production apply.
 
 ## Machine preflight
 
