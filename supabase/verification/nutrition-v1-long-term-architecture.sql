@@ -52,15 +52,16 @@ begin
   );
 
   perform pg_temp.nv1_long_term_assert(
-    has_function_privilege('authenticated', v_food, 'EXECUTE')
+    not has_function_privilege('authenticated', v_food, 'EXECUTE')
+    and not has_function_privilege('service_role', v_food, 'EXECUTE')
+    and not has_function_privilege('anon', v_food, 'EXECUTE')
     and has_function_privilege('authenticated', v_start, 'EXECUTE')
     and has_function_privilege('authenticated', v_start_over, 'EXECUTE')
     and has_function_privilege('authenticated', v_create_recipe, 'EXECUTE')
-    and not has_function_privilege('anon', v_food, 'EXECUTE')
     and not has_function_privilege('anon', v_start, 'EXECUTE')
     and not has_function_privilege('anon', v_start_over, 'EXECUTE')
     and not has_function_privilege('anon', v_create_recipe, 'EXECUTE'),
-    'Nutrition V1 long-term RPC execute grants invalid.'
+    'Nutrition V1 long-term RPC execute grants invalid after Plan 7 old Food Library contract disable.'
   );
 
   perform pg_temp.nv1_long_term_assert(
