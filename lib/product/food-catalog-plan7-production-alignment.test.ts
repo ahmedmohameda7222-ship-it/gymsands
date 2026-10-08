@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const LEDGER = "supabase/migration-ledger.json";
 
 describe("Food Catalog Plan 7 Production alignment evidence", () => {
-  it("records all six exact Production aliases with a reconciled ledger", () => {
+  it("records six exact Production aliases plus the pending Task 17 retirement contract", () => {
     const ledger = JSON.parse(readFileSync(LEDGER, "utf8")) as {
       productionMigrationCount: number;
       productionRecordCount: number;
@@ -50,14 +50,16 @@ describe("Food Catalog Plan 7 Production alignment evidence", () => {
         productionVersion: "20261008123814",
         productionName: "food_catalog_plan7_retirement_prerequisite",
       }));
+    expect(ledger.entries.find((entry) => entry.localFile === "20261008202500_food_catalog_plan7_retirement_contract.sql"))
+      .toEqual(expect.objectContaining({ state: "pending" }));
     expect(ledger.schemaVerifiedUntrackedCount).toBe(0);
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
     expect(ledger.historyRepair).toEqual(expect.objectContaining({
-      state: "reconciled",
+      state: "pending",
       schemaAppliedUntrackedCount: 0,
-      pendingCount: 0,
-      unresolvedCount: 0,
+      pendingCount: 1,
+      unresolvedCount: 1,
     }));
   });
 });
