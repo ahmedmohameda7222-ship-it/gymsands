@@ -142,7 +142,9 @@ insert into public.nutrition_recipe_actions (
   1, 'Step 2', array['b2700000-0000-4000-8000-000000000024'::uuid]
 );
 
-set local role authenticated;
+-- The retained legacy Food Library RPC is intentionally non-executable by runtime
+-- roles after the Plan 7 prerequisite. Keep semantic regression coverage under
+-- the database owner while preserving the same request claims.
 select set_config('request.jwt.claim.sub', 'b2700000-0000-4000-8000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
@@ -186,6 +188,8 @@ begin
   );
 end
 $food_paging$;
+
+set local role authenticated;
 
 -- Start Over failure injection: the invalid action key fails after the parent
 -- transition point, and the function-level transaction must roll everything back.
