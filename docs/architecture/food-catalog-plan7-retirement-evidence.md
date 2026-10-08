@@ -32,8 +32,8 @@ No compatibility marker was promoted as part of deployment.
 
 Read-only Production inspection after deployment established:
 
-- physical migration records: **128**;
-- latest physical migration: `20261008022805_food_catalog_plan7_owner_reconciliation_expand`;
+- physical migration records: **129**;
+- latest physical migration: `20261008123814_food_catalog_plan7_retirement_prerequisite`;
 - `current_generation_id = NULL`;
 - `pointer_revision = 0`;
 - generation count = **0**;
@@ -79,13 +79,13 @@ Fresh function/view inspection established:
 
 ### `public.search_nutrition_food_library(...)`
 
-The legacy function still exists. EXECUTE remains granted to:
+The legacy function still exists, but the Task 16 prerequisite revoked runtime EXECUTE:
 
-- `authenticated`: yes;
-- `service_role`: yes;
+- `authenticated`: no;
+- `service_role`: no;
 - `anon`: no.
 
-Repository Product/MCP cutover does not prove that unknown external callers no longer use this still-granted database contract. External/live dependency clearance remains required before it can enter an approved destructive set.
+A 30-minute Vercel runtime observation spanning the Production prerequisite apply reported no runtime errors on deployed artifact `a182923399a41faf5ca7b79d947a992e94cdd27a`. PostgreSQL statement history contains historical PostgREST calls to this RPC, so absence of repository consumers alone is not treated as proof that all historical/external consumers disappeared. The contract remains retained and non-executable pending exact destructive-set review.
 
 ### `food_aliases`
 
@@ -109,13 +109,11 @@ No live function or view reference was found in the current database scan. Repos
 
 Current rows: **0**.
 
-Live function references remain:
+Fresh exact table-reference scanning after the prerequisite apply finds only:
 
-- `private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)`;
-- `private.nutrition_v1_final_review_core_purge_account_application_data_a(uuid)`;
 - `search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)`.
 
-The deployed Product handoff is on Plan 6 Personal Override authority, but the database still carries transitional legacy-correction compatibility and account-deletion dependencies. The table is therefore not retirement-safe yet.
+Current Search V2 and the canonical account-purge implementation no longer reference `public.food_personal_corrections`. The remaining reference is internal to the retained, now non-executable old Search contract. The table remains present with zero rows pending exact destructive-set review.
 
 ## Repository consumer observation
 
@@ -152,21 +150,22 @@ GitHub Actions run **37734481966**, job **113170815602**, completed **success**.
 
 The certification did not mutate Production.
 
+Important freshness boundary: run **37734481966** certified the exact deployed SHA before the Task 16 prerequisite changed the Production schema. Therefore it remains valid evidence for the deployed consumer artifact, but it is not by itself a fresh post-prerequisite proof of the combined deployed-artifact/current-schema state. The repository FULL_DR workflow must remain green on the post-prerequisite branch state, and Planner must decide whether the composite live-runtime + current-schema evidence is sufficient before Task 17.
+
 ## Current retirement disposition
 
 The current read-only evidence does **not** support creating destructive SQL.
 
-Known blockers / staged prerequisites include:
+Known blockers / staged evidence after prerequisite apply include:
 
-1. `food_personal_corrections` is zero-row but remains referenced by current Search V2 and the canonical account-purge implementation in Production;
-2. `food_aliases` remains referenced by the retained old search function;
-3. the old search function is still executable by authenticated/service-role callers and requires staged contract-disable evidence before any DROP can be reviewed;
-4. `food_market_relevance` lacks the required external/reporting/live dependency clearance;
-5. root `food_items` retirement candidates still require exact per-column dependency proof and Planner selection.
+1. the exact-deployed FULL_DR certification predates the prerequisite schema change, so Task 16 still needs an explicit Planner ruling on the fresh combined deployed-artifact/current-schema proof;
+2. `food_aliases` and `food_personal_corrections` are zero-row and are now referenced only by the retained non-executable old Search function; that relationship may be classified as internal to a future reviewed retirement set, but it is not self-authorizing;
+3. `food_market_relevance` is zero-row with no live function/view reference, but still lacks explicit external/reporting dependency clearance;
+4. root `food_items` retirement candidates still require exact per-column dependency proof and Planner selection.
 
 The blocked `user_food_favorites` row is retained owner state, not a prerequisite to mutate or a candidate to retire.
 
-Accordingly, the Task 16 destructive set remains **not approved**. A separate repository-only non-destructive prerequisite migration, `20261008060000_food_catalog_plan7_retirement_prerequisite.sql`, is pending Planner review. It removes the two current legacy-correction runtime dependencies and revokes runtime EXECUTE on the retained old Search RPC without DROP/CASCADE or owner/catalog data mutation. It is not applied to Production. No Task 17 destructive migration identity is allocated.
+The Task 16 non-destructive prerequisite migration `20261008060000_food_catalog_plan7_retirement_prerequisite.sql` is now applied exactly once in Production as `20261008123814_food_catalog_plan7_retirement_prerequisite`. No destructive Task 17 migration identity is allocated and the destructive set remains **not approved**.
 
 ## Machine preflight
 
