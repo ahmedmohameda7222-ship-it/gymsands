@@ -156,25 +156,26 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         productionName: "food_catalog_governance_gtin_lock_exactness",
       }),
     ]);
-    expect(currentPendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: "20261008202500_food_catalog_plan7_retirement_contract.sql",
-        state: "pending",
-      }),
-    ]);
+    expect(currentPendingEntries).toEqual([]);
     expect(current.entries.find((entry) => entry.localFile === "20261008060000_food_catalog_plan7_retirement_prerequisite.sql"))
       .toEqual(expect.objectContaining({
         state: "applied_version_alias",
         productionVersion: "20261008123814",
         productionName: "food_catalog_plan7_retirement_prerequisite",
       }));
-    expect(current.pendingCount).toBe(1);
-    expect(current.unresolvedCount).toBe(1);
+    expect(current.entries.find((entry) => entry.localFile === "20261008202500_food_catalog_plan7_retirement_contract.sql"))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008224322",
+        productionName: "food_catalog_plan7_retirement_contract",
+      }));
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "pending",
-        pendingCount: 1,
-        unresolvedCount: 1,
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
       })
     );
   });
