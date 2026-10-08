@@ -11,7 +11,6 @@ const PLAN5_MIGRATION = "20260906183000_food_catalog_search_projection_v2.sql";
 const PLAN5_SERVING_CORRECTION = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 const PLAN6_MIGRATION = "20260908100000_food_catalog_governance_control_plane.sql";
 const PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
-const PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION = "20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql";
 const ledger = JSON.parse(
   readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"),
 );
