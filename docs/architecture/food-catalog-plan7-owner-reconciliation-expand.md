@@ -78,12 +78,11 @@ Production alignment status after the authorized 2026-10-08 apply sequence:
 3. `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql` → `20261008014204_food_catalog_ingestion_restore_reactivation_gate`
 4. `20260919034630_food_catalog_owner_override_read_authority.sql` → `20261008014223_food_catalog_owner_override_read_authority`
 5. `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql` → `20261008022805_food_catalog_plan7_owner_reconciliation_expand`
+6. `20261008060000_food_catalog_plan7_retirement_prerequisite.sql` → `20261008123814_food_catalog_plan7_retirement_prerequisite`
 
-Do not replay applied migrations. Production remains at `productionMigrationCount = 63`, `productionRecordCount = 128`, and physical head `20261008022805_food_catalog_plan7_owner_reconciliation_expand`.
+Do not replay applied migrations. Production is reconciled at `productionMigrationCount = 64`, `productionRecordCount = 129`, and physical head `20261008123814_food_catalog_plan7_retirement_prerequisite`. The machine ledger reports `schemaVerifiedUntrackedCount = 0`, `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`. The released compatibility marker remains unchanged at `20260724232734`.
 
-Task 16 now adds repository-only pending migration `20261008060000_food_catalog_plan7_retirement_prerequisite.sql`. Until independent Planner review and later explicit Production-apply authorization, the machine ledger therefore reports `schemaVerifiedUntrackedCount = 0`, `pendingCount = 1`, `unresolvedCount = 1`, and `historyRepair.state = pending`. The released compatibility marker remains unchanged at `20260724232734`.
-
-The prerequisite is non-destructive: it removes legacy Personal Correction dependencies from current Search V2 and account purge, and revokes runtime EXECUTE on the retained old Food Library RPC. It does not DROP any legacy object or mutate owner data.
+The Task 16 prerequisite is non-destructive: it removes legacy Personal Correction dependencies from current Search V2 and canonical account purge, and revokes runtime EXECUTE on the retained old Food Library RPC. It does not DROP any legacy object or mutate owner data.
 
 ## Privacy and retirement boundary
 
