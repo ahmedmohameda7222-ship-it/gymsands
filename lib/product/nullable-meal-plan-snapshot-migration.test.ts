@@ -8,7 +8,6 @@ const plan5MigrationName = "20260906183000_food_catalog_search_projection_v2.sql
 const plan5ServingCorrectionName = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 const plan6MigrationName = "20260908100000_food_catalog_governance_control_plane.sql";
 const plan6ExactnessCorrectionName = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
-const plan7OwnerReconciliationExpandMigrationName = "20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql";
 
 function read(relativePath: string) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
