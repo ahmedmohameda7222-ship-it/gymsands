@@ -440,15 +440,23 @@ Post-apply read-back proves 129 physical migration records with head `2026100812
 
 The repository ledger is reconciled at `productionMigrationCount = 63`, `productionRecordCount = 129`, `schemaVerifiedUntrackedCount = 0`, `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`. The released compatibility marker remains `20260724232734`. No destructive retirement DROP, Food population, generation promotion, compatibility-marker promotion, or Activity Catalog mutation occurred. Do not replay the applied migration.
 
-## Plan 7 Task 17 retirement contract — pending apply (2026-10-08)
+## Plan 7 Task 17 retirement contract — applied and reconciled (2026-10-08)
 
-Repository migration `20261008202500_food_catalog_plan7_retirement_contract.sql` is the only unresolved migration. It is pending the complete exact-head QA cycle and immediate live Production preflight before apply.
+Repository migration `20261008202500_food_catalog_plan7_retirement_contract.sql` was applied exactly once to Plaivra Production as generated identity `20261008224322_food_catalog_plan7_retirement_contract` from reviewed Git blob `fdf055f3be40ccad83bd7cf4721cee9654da61c4`.
 
-Exact destructive scope is limited to:
+Immediate pre-apply read-only verification proved:
+- Production physical head was `20261008123814_food_catalog_plan7_retirement_prerequisite`;
+- `public.food_aliases = 0` rows;
+- `public.food_market_relevance = 0` rows;
+- the old Food Library RPC existed but anon/authenticated/service_role EXECUTE was revoked;
+- `food_aliases` had no dependency except that same old RPC;
+- `food_market_relevance` had no function/view dependency.
+
+The apply retired exactly:
 - `public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)`;
 - `public.food_aliases`;
 - `public.food_market_relevance`.
 
-Retained state includes `public.food_personal_corrections`, `public.user_food_favorites`, `public.food_favorites`, every root `public.food_items` column, Search V2/rebuild authority, barcode authority, Personal Override authority, and the released compatibility marker.
+Post-apply read-back proves 130 physical migration-history records with head `20261008224322_food_catalog_plan7_retirement_contract`. Retained owner/current/search/security authority remains present, owner/catalog counts are unchanged, and the released compatibility marker remains `20260724232734`.
 
-Plaivra Production remains at 129 physical migration records with head `20261008123814_food_catalog_plan7_retirement_prerequisite` until this migration is applied. Repository ledger state is intentionally `pendingCount = 1`, `unresolvedCount = 1`, and `historyRepair.state = pending`. Do not replay or broaden the migration.
+Repository ledger state is reconciled with `productionMigrationCount = 63`, `productionRecordCount = 130`, `schemaVerifiedUntrackedCount = 0`, `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`. No Food population, provider ingestion, activation, generation promotion, compatibility-marker promotion, deployment, Activity Catalog mutation, or Plan 8 work occurred. Do not replay the applied migration.
