@@ -102,10 +102,15 @@ describe("Plan 7 Tasks 13-14 owner reconciliation and expand authority", () => {
         productionVersion: "20261008022805",
         productionName: "food_catalog_plan7_owner_reconciliation_expand",
       }));
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.entries.filter((entry: { state: string }) => entry.state === "pending").map((entry: { localFile: string }) => entry.localFile))
-      .toEqual(["20261008060000_food_catalog_plan7_retirement_prerequisite.sql"]);
+    expect(ledger.entries.find((entry: { localFile: string }) => entry.localFile === "20261008060000_food_catalog_plan7_retirement_prerequisite.sql"))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008123814",
+        productionName: "food_catalog_plan7_retirement_prerequisite",
+      }));
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.entries.filter((entry: { state: string }) => entry.state === "pending")).toHaveLength(0);
   });
 
   it("ships a read-only owner reconciliation report with the required aggregate surface", () => {
