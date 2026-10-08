@@ -94,7 +94,7 @@ function validRequest(overrides = {}) {
   };
 }
 
-test("current repository ledger is pending while the Task 17 retirement contract awaits apply", () => {
+test("current repository ledger is reconciled after the Task 17 retirement contract apply", () => {
   const state = deriveMigrationLedgerState(currentLedger);
   const pendingEntries = currentLedger.entries.filter((entry) => entry.state === "pending");
   assert.equal(state.reconciliationState, "reconciled");
@@ -107,11 +107,8 @@ test("current repository ledger is pending while the Task 17 retirement contract
   assert.deepEqual(pendingEntries, []);
 });
 
-test("promotion validation rejects the pending repository ledger", () => {
-  assert.throws(
-    () => validatePromotionRequest({ ...validRequest(), ledger: currentLedger }),
-    /Repository migration ledger is not release-ready/,
-  );
+test("promotion validation accepts the reconciled repository ledger in dry-run context", () => {
+  assert.doesNotThrow(() => validatePromotionRequest({ ...validRequest(), ledger: currentLedger }));
 });
 
 test("still rejects a synthetically unresolved repository ledger", () => {
