@@ -72,13 +72,14 @@ function candidateEvidence(input, id) {
 }
 
 function candidateReferences(evidence) {
+  const retirementSet = new Set(stringArray(evidence.retirementSetReferences));
   return [
     ...stringArray(evidence.databaseFunctionReferences),
     ...stringArray(evidence.databaseViewReferences),
     ...stringArray(evidence.databaseConstraintReferences),
     ...stringArray(evidence.repositoryRuntimeReferences),
     ...stringArray(evidence.liveObservedReferences),
-  ];
+  ].filter((reference) => !retirementSet.has(reference));
 }
 
 function candidateBlockers(id, evidence, owner) {
@@ -160,6 +161,7 @@ export function evaluatePlan7RetirementPreflight(input) {
       id,
       exists: evidence.exists === true,
       rowCount: Number.isSafeInteger(evidence.rowCount) ? evidence.rowCount : null,
+      retirementSetReferences: Object.freeze(stringArray(evidence.retirementSetReferences)),
       blockers: Object.freeze(reasons),
       eligibleForPlannerReview: reasons.length === 0,
     });
