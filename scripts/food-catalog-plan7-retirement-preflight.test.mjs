@@ -11,8 +11,9 @@ import {
 } from "./food-catalog-plan7-retirement-preflight.mjs";
 
 const DEPLOYED_SHA = "a182923399a41faf5ca7b79d947a992e94cdd27a";
-const LATEST_VERSION = "20261008022805";
-const LATEST_NAME = "food_catalog_plan7_owner_reconciliation_expand";
+const LATEST_VERSION = "20261008123814";
+const LATEST_NAME = "food_catalog_plan7_retirement_prerequisite";
+const SCHEMA_CERT_SHA = "b".repeat(40);
 const MARKER = "20260724232734";
 
 function keepEvidence() {
@@ -48,7 +49,7 @@ function baseEvidence() {
       expectedDatabaseMigrationVersion: MARKER,
     },
     migration: {
-      recordCount: 128,
+      recordCount: 129,
       latestVersion: LATEST_VERSION,
       latestName: LATEST_NAME,
     },
@@ -65,10 +66,18 @@ function baseEvidence() {
     portability: {
       profile: "FULL_DR",
       fresh: true,
-      exactHead: DEPLOYED_SHA,
+      exactHead: SCHEMA_CERT_SHA,
+      deployedRuntimeCommit: DEPLOYED_SHA,
       latestMigrationVersion: LATEST_VERSION,
       drReady: true,
       productionMutationPerformed: false,
+    },
+    repositoryDelta: {
+      verified: true,
+      runtimeEquivalent: true,
+      baseDeployedCommit: DEPLOYED_SHA,
+      schemaCertificationCommit: SCHEMA_CERT_SHA,
+      runtimeChangedPaths: [],
     },
     historicalConsumerReferences: {
       verified: true,
@@ -116,12 +125,13 @@ test("a clean candidate subset may be proposed while blocked candidates remain d
   assert.equal(result.productionMutationAuthorized, false);
 });
 
-test("missing fresh exact-head FULL_DR evidence blocks the whole retirement preflight", () => {
+test("missing fresh deployed-runtime/current-schema FULL_DR evidence blocks the whole retirement preflight", () => {
   const evidence = baseEvidence();
   evidence.portability = {
     profile: "CORE_PORTABLE",
     fresh: false,
-    exactHead: DEPLOYED_SHA,
+    exactHead: SCHEMA_CERT_SHA,
+    deployedRuntimeCommit: DEPLOYED_SHA,
     latestMigrationVersion: LATEST_VERSION,
     drReady: false,
     productionMutationPerformed: false,
@@ -133,6 +143,19 @@ test("missing fresh exact-head FULL_DR evidence blocks the whole retirement pref
   assert.equal(result.approvable, false);
   assert.ok(result.globalBlockers.includes("fresh_full_dr_missing"));
   assert.ok(result.globalBlockers.includes("full_dr_not_ready"));
+});
+
+test("runtime equivalence proof fails closed when deployed-to-certification runtime code changed", () => {
+  const evidence = baseEvidence();
+  evidence.repositoryDelta.runtimeEquivalent = false;
+  evidence.repositoryDelta.runtimeChangedPaths = ["services/nutrition-v1/server/food-library.ts"];
+  evidence.candidates["table:public.food_market_relevance"] = cleanCandidate();
+
+  const result = evaluatePlan7RetirementPreflight(evidence);
+
+  assert.equal(result.approvable, false);
+  assert.ok(result.globalBlockers.includes("runtime_equivalence_evidence_incomplete"));
+  assert.ok(result.globalBlockers.includes("runtime_code_changed_after_deploy"));
 });
 
 test("wrong project and Activity Catalog targets fail closed", () => {
@@ -271,35 +294,38 @@ test("keep-object evidence is mandatory and cannot self-authorize destructive SQ
   assert.equal(result.productionMutationAuthorized, false);
 });
 
-test("current live blocker shape produces no proposed destructive set", () => {
+test("post-prerequisite live shape proposes only the exact reviewed three-object retirement set", () => {
   const evidence = baseEvidence();
   evidence.ownerReconciliation = {
     total: 1,
     blocked: 1,
     retirementSafe: false,
   };
-  evidence.candidates["table:public.food_personal_corrections"] = cleanCandidate({
-    databaseFunctionReferences: [
-      "private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)",
-    ],
+  const oldSearch = "public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)";
+  evidence.candidates["function:public.search_nutrition_food_library"] = cleanCandidate({
+    executableRoles: [],
   });
   evidence.candidates["table:public.food_aliases"] = cleanCandidate({
-    databaseFunctionReferences: [
-      "search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)",
-    ],
+    databaseFunctionReferences: [oldSearch],
+    retirementSetReferences: [oldSearch],
   });
-  evidence.candidates["table:public.food_market_relevance"] = cleanCandidate({
-    externalDependencyState: "unknown",
-  });
-  evidence.candidates["function:public.search_nutrition_food_library"] = cleanCandidate({
-    liveDependencyState: "unknown",
-    externalDependencyState: "unknown",
+  evidence.candidates["table:public.food_market_relevance"] = cleanCandidate();
+  evidence.candidates["table:public.food_personal_corrections"] = cleanCandidate({
+    databaseFunctionReferences: [oldSearch],
+    retirementSetReferences: [oldSearch],
+    repositoryRuntimeReferences: ["lib/privacy/data-export.ts"],
   });
 
   const result = evaluatePlan7RetirementPreflight(evidence);
 
-  assert.equal(result.approvable, false);
-  assert.deepEqual(result.proposedDestructiveObjects, []);
+  assert.equal(result.approvable, true);
+  assert.deepEqual(result.proposedDestructiveObjects, [
+    "table:public.food_aliases",
+    "table:public.food_market_relevance",
+    "function:public.search_nutrition_food_library",
+  ]);
+  const corrections = result.candidateResults.find((item) => item.id === "table:public.food_personal_corrections");
+  assert.ok(corrections.blockers.includes("candidate_still_referenced"));
   assert.equal(result.plannerApprovalRequired, true);
 });
 
