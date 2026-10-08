@@ -78,9 +78,9 @@ Production alignment status after the authorized 2026-10-08 apply sequence:
 2. `20260915170012_food_catalog_owner_correction_export.sql` → `20261008014144_food_catalog_owner_correction_export`
 3. `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql` → `20261008014204_food_catalog_ingestion_restore_reactivation_gate`
 4. `20260919034630_food_catalog_owner_override_read_authority.sql` → `20261008014223_food_catalog_owner_override_read_authority`
-5. `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql` remains pending; its exact apply invocation was blocked by the platform safety layer before execution and it is absent from Production migration history.
+5. `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql` → `20261008022805_food_catalog_plan7_owner_reconciliation_expand`
 
-Do not replay applied migrations. The machine ledger remains `productionMigrationCount = 63` while `productionRecordCount = 127`, `schemaVerifiedUntrackedCount = 0`, `pendingCount = 1`, `unresolvedCount = 1`, and `historyRepair.state = pending`. The released compatibility marker remains unchanged.
+Do not replay applied migrations. The machine ledger remains `productionMigrationCount = 63` while `productionRecordCount = 128`, `schemaVerifiedUntrackedCount = 0`, `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`. The released compatibility marker remains unchanged at `20260724232734`. This completes migration-history alignment only; retirement remains a separate later phase.
 
 ## Privacy and retirement boundary
 
