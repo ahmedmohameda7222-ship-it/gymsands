@@ -1,6 +1,6 @@
 # Food Catalog Plan 7 — Retirement Preflight Evidence
 
-**Status:** Task 16 preflight complete; exact three-object destructive scope approved for Task 17 implementation
+**Status:** Task 17 retirement applied and read back; Task 18 final closure verification in progress
 **Captured:** 2026-10-08
 **Plaivra Production project:** `bkwezjxvapaeasfvlhvv`
 **Deployed consumer-cutover artifact:** `a182923399a41faf5ca7b79d947a992e94cdd27a`
@@ -187,3 +187,54 @@ The evaluator can identify a clean subset for Planner review while leaving block
 - `productionMutationAuthorized: false`.
 
 A green preflight is evidence for Planner review only. It never self-authorizes Task 17.
+
+## Task 17 Production apply and exact post-apply read-back
+
+Standing owner authorization covered migration apply once the approved Task 16 scope, exact-head QA, and immediate live preflight were satisfied.
+
+Applied repository migration:
+- local file: `20261008202500_food_catalog_plan7_retirement_contract.sql`;
+- reviewed Git blob: `fdf055f3be40ccad83bd7cf4721cee9654da61c4`;
+- generated Production identity: `20261008224322_food_catalog_plan7_retirement_contract`;
+- Plaivra Production project: `bkwezjxvapaeasfvlhvv`.
+
+The immediate pre-apply read-only gate proved:
+- physical head `20261008123814_food_catalog_plan7_retirement_prerequisite`;
+- `food_aliases = 0`;
+- `food_market_relevance = 0`;
+- old Search RPC present but non-executable by anon/authenticated/service_role;
+- no unexpected `food_aliases` function/view dependency outside the old Search RPC;
+- no `food_market_relevance` function/view dependency.
+
+Post-apply Production read-back proves:
+- physical migration records: **130**;
+- physical head: `20261008224322_food_catalog_plan7_retirement_contract`;
+- old `public.search_nutrition_food_library(...)`: **absent**;
+- `public.food_aliases`: **absent**;
+- `public.food_market_relevance`: **absent**;
+- `public.food_personal_corrections`: retained, **0** rows;
+- `public.user_food_favorites`: retained, **1** row;
+- `public.food_favorites`: retained, **0** rows;
+- `public.food_items = 0`;
+- SearchDocuments = **0**;
+- generations = **0**;
+- current generation = `NULL`, pointer revision = **0**;
+- browser Search V2 remains authenticated-only;
+- MCP Search V2 remains service_role-only;
+- barcode/current-generation/Personal Override authority remains present;
+- schema compatibility remains `2`;
+- released compatibility marker remains `20260724232734`;
+- deployed runtime remains `a182923399a41faf5ca7b79d947a992e94cdd27a`;
+- `/api/version` and `/api/health` remain HTTP 200;
+- Vercel post-apply runtime error scan found no runtime errors.
+
+No unapproved owner state, root Food column, current Search/rebuild function, barcode authority, Personal Override authority, compatibility marker, Food population, provider ingestion, generation pointer, Activity Catalog state, or Plan 8 scope changed.
+
+## Task 18 portability registry disposition
+
+The final-schema portability registry and restore dependency graph exclude the two formally retired relations `food_aliases` and `food_market_relevance`. Tests explicitly assert they are absent from both `CORE_PORTABLE` and `FULL_DR` segment sets.
+
+Retained owner families remain protected FULL_DR segments: `food_personal_corrections`, `food_favorites`, `user_food_favorites`, and Plan 6 Personal Override state. The old Search RPC is not a restore/search authority.
+
+Final Task 18 exact-head run identifiers are recorded after the post-apply coding/test/correction cycle completes.
+
