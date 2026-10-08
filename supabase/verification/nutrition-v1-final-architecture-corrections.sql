@@ -339,7 +339,10 @@ begin
 end
 $index_plans$;
 
-set local role authenticated;
+-- The legacy Food Library RPC remains present for compatibility verification but
+-- is non-executable by runtime roles after the Plan 7 prerequisite. Execute this
+-- semantic regression check as the database owner under the same request claims.
+reset role;
 select set_config('request.jwt.claim.sub', 'd2800000-0000-4000-8000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
