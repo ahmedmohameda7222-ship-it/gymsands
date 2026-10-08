@@ -109,16 +109,17 @@ describe("Plan 7 retirement prerequisite migration", () => {
     expect(migrationLower).not.toContain("release_schema_compatibility");
   });
 
-  it("keeps the verifier fail-closed on Search ACLs, owner state, and retained objects", () => {
+  it("keeps the verifier fail-closed after the later retirement contract", () => {
     const lower = verifier.toLowerCase();
     expect(lower).toContain("food_catalog_plan7_retirement_prerequisite");
-    expect(lower).toContain("not has_function_privilege('authenticated','public.search_nutrition_food_library");
-    expect(lower).toContain("not has_function_privilege('service_role','public.search_nutrition_food_library");
     expect(lower).toContain("to_regprocedure('public.search_nutrition_food_library");
+    expect(lower).toContain("is null");
     expect(lower).toContain("public.search_food_catalog_v2");
     expect(lower).toContain("public.search_food_catalog_v2_for_mcp_v1");
     expect(lower).toContain("public.user_food_favorites");
     expect(lower).toContain("public.food_personal_corrections");
+    expect(lower).toContain("to_regclass('public.food_aliases') is null");
+    expect(lower).toContain("to_regclass('public.food_market_relevance') is null");
     expect(lower).toContain("rollback;");
   });
 });
