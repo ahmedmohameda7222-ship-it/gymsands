@@ -439,3 +439,17 @@ Repository migration `20261008060000_food_catalog_plan7_retirement_prerequisite.
 Post-apply read-back proves 129 physical migration records with head `20261008123814_food_catalog_plan7_retirement_prerequisite`. The migration is non-destructive prerequisite work only: current Search V2 and canonical account purge no longer reference `public.food_personal_corrections`; the retained old Food Library RPC still exists but runtime EXECUTE is revoked for anon/authenticated/service_role. Owner/catalog counts are unchanged.
 
 The repository ledger is reconciled at `productionMigrationCount = 63`, `productionRecordCount = 129`, `schemaVerifiedUntrackedCount = 0`, `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`. The released compatibility marker remains `20260724232734`. No destructive retirement DROP, Food population, generation promotion, compatibility-marker promotion, or Activity Catalog mutation occurred. Do not replay the applied migration.
+
+## Plan 7 Task 17 retirement contract — pending apply (2026-10-08)
+
+Repository migration `20261008202500_food_catalog_plan7_retirement_contract.sql` is the only unresolved migration. It is pending the complete exact-head QA cycle and immediate live Production preflight before apply.
+
+Exact destructive scope is limited to:
+- `public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)`;
+- `public.food_aliases`;
+- `public.food_market_relevance`.
+
+Retained state includes `public.food_personal_corrections`, `public.user_food_favorites`, `public.food_favorites`, every root `public.food_items` column, Search V2/rebuild authority, barcode authority, Personal Override authority, and the released compatibility marker.
+
+Plaivra Production remains at 129 physical migration records with head `20261008123814_food_catalog_plan7_retirement_prerequisite` until this migration is applied. Repository ledger state is intentionally `pendingCount = 1`, `unresolvedCount = 1`, and `historyRepair.state = pending`. Do not replay or broaden the migration.
+
