@@ -28,18 +28,18 @@ The current repository/machine-ledger state records:
 
 - `20260908100000_food_catalog_governance_control_plane.sql`: `applied_version_alias` → `20260909081402_food_catalog_governance_control_plane`
 - `20260909083000_food_catalog_governance_gtin_lock_exactness.sql`: `applied_version_alias` → `20260910071241_food_catalog_governance_gtin_lock_exactness`
-- `20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql`: `pending` (repository-only; not applied to Production; no Production version/name)
-- `20260915170012_food_catalog_owner_correction_export.sql`: `pending` (repository-only; not applied to Production; no Production version/name)
-- `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql`: `pending` (repository-only; not applied to Production; no Production version/name)
-- `20260919034630_food_catalog_owner_override_read_authority.sql`: `pending` (repository-only Task 9 prerequisite; not applied to Production; no Production version/name)
-- `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql`: `pending` (repository-only Tasks 13-14 reconciliation/expand authority; not applied to Production; no Production version/name)
-- `pendingCount = 5`
+- `20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql`: `applied_version_alias` → `20261008014113_food_catalog_governance_outbox_reconciliation_gate`
+- `20260915170012_food_catalog_owner_correction_export.sql`: `applied_version_alias` → `20261008014144_food_catalog_owner_correction_export`
+- `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql`: `applied_version_alias` → `20261008014204_food_catalog_ingestion_restore_reactivation_gate`
+- `20260919034630_food_catalog_owner_override_read_authority.sql`: `applied_version_alias` → `20261008014223_food_catalog_owner_override_read_authority`
+- `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql`: `pending` (exact apply invocation blocked by the platform safety layer before execution; absent from Production migration history)
+- `pendingCount = 1`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 5`
+- `unresolvedCount = 1`
 - `historyRepair.state = pending`
 - migration-ledger `release_ready = false`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`. Applied migrations must not be replayed. All five pending Plan 7 migrations have no Production version or name because none has been applied. `historyRepair` remains `pending` with `pendingCount = 5`, `unresolvedCount = 5`, and `schemaAppliedUntrackedCount = 0`; migration-ledger `release_ready = false`. The Task 9 prerequisite and Tasks 13-14 expand entries are repository-only under explicit owner authorization to continue without fresh Production migration-history access; this ledger update makes no new claim about the current Production migration head and performs no Production mutation.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it therefore remains 63 and is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`; the physical Production migration-history record count is now **127** and the latest physical head is `20261008014223_food_catalog_owner_override_read_authority`. Applied migrations must not be replayed. The Tasks 13–14 owner reconciliation/expand migration is the only remaining pending repository migration. `historyRepair` remains `pending` with `pendingCount = 1`, `unresolvedCount = 1`, and `schemaAppliedUntrackedCount = 0`; migration-ledger `release_ready = false`. No retirement migration, compatibility-marker promotion, Food population, generation promotion, Production redeployment, or Activity Catalog mutation was performed by this partial alignment.
 
 ## Food Catalog Plan 6 governance control plane — Production exactness reconciled 2026-09-10
 
