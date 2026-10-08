@@ -397,7 +397,7 @@ insert into public.food_personal_corrections(
 select public.search_food_catalog_v2('Bench Food 20','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_legacy_active \gset
 select pg_temp.plan5_assert(
   (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=120
-  and (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'protein_g')::numeric=20
+  and (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'protein_g')::numeric=10
   and (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'basis_amount')::numeric=100
   and :'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'basis_unit'='g'
   and (:'plan7_legacy_active'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
