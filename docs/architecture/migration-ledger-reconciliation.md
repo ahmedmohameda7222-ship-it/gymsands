@@ -3,7 +3,7 @@
 **Project:** `bkwezjxvapaeasfvlhvv`
 **Current reconciliation date:** 2026-10-08
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history includes four reviewed Plan 7 expansion/portability migrations as generated aliases; one Tasks 13–14 expand migration remains pending and unapplied
+**Status:** Production migration history includes all five reviewed Plan 7 expansion/portability migrations as generated aliases; migration history is reconciled
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -13,9 +13,9 @@ Historical PR descriptions, completed implementation reports, and old audit snap
 
 Fresh Plaivra Production read-only inspection on 2026-10-08 established:
 
-- Physical Production migration records: **127**
+- Physical Production migration records: **128**
 - Exact repository-name applications tracked as `state = applied`: **63**
-- Latest physical Production record: `20261008014223_food_catalog_owner_override_read_authority`
+- Latest physical Production record: `20261008022805_food_catalog_plan7_owner_reconciliation_expand`
 - Original Plan 6 Production identity: `20260909081402_food_catalog_governance_control_plane`
 - Forward exactness-correction Production identity: `20260910071241_food_catalog_governance_gtin_lock_exactness`
 - Released compatibility marker: `20260724232734`
@@ -34,15 +34,15 @@ The current repository/machine-ledger state records:
 - `20260915170012_food_catalog_owner_correction_export.sql`: `applied_version_alias` → `20261008014144_food_catalog_owner_correction_export`
 - `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql`: `applied_version_alias` → `20261008014204_food_catalog_ingestion_restore_reactivation_gate`
 - `20260919034630_food_catalog_owner_override_read_authority.sql`: `applied_version_alias` → `20261008014223_food_catalog_owner_override_read_authority`
-- `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql`: `pending` (exact apply invocation blocked by the platform safety layer before execution; absent from Production migration history)
-- `pendingCount = 1`
+- `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql`: `applied_version_alias` → `20261008022805_food_catalog_plan7_owner_reconciliation_expand`
+- `pendingCount = 0`
 - `schemaVerifiedUntrackedCount = 0`
-- `unresolvedCount = 1`
-- `historyRepair.state = pending`
-- physical Production migration records: **127**
-- migration-ledger `release_ready = false`
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
+- physical Production migration records: **128**
+- migration-ledger `release_ready = true`
 
-The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it therefore remains 63 and is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`; the physical Production migration-history record count is now **127** and the latest physical head is `20261008014223_food_catalog_owner_override_read_authority`. Applied migrations must not be replayed. The Tasks 13–14 owner reconciliation/expand migration is the only remaining pending repository migration. `historyRepair` remains `pending` with `pendingCount = 1`, `unresolvedCount = 1`, and `schemaAppliedUntrackedCount = 0`; migration-ledger `release_ready = false`. No retirement migration, compatibility-marker promotion, Food population, generation promotion, Production redeployment, or Activity Catalog mutation was performed by this partial alignment.
+The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it therefore remains 63 and is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`; the physical Production migration-history record count is now **128** and the latest physical head is `20261008022805_food_catalog_plan7_owner_reconciliation_expand`. Applied migrations must not be replayed. No repository migrations remain pending or unresolved: `historyRepair.state = reconciled`, `pendingCount = 0`, `unresolvedCount = 0`, and `schemaAppliedUntrackedCount = 0`; migration-ledger `release_ready = true`. The released compatibility marker remains `20260724232734`; no marker promotion, retirement migration, Food population, generation promotion, Production redeployment, or Activity Catalog mutation was performed by this alignment.
 
 ## Food Catalog Plan 6 governance control plane — Production exactness reconciled 2026-09-10
 
