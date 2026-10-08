@@ -87,9 +87,7 @@ export const FOOD_CATALOG_PORTABLE_RELATIONS_V1: readonly PortableRelationRule[]
   rule("food_nutrition_revisions", A, "RESTORE_EXACT", ["id"]),
   rule("food_serving_options", A, "RESTORE_EXACT", ["id"]),
   rule("food_names", A, "RESTORE_EXACT", ["id"]),
-  rule("food_aliases", C, "RESTORE_EXACT", ["id"]),
   rule("food_barcodes", A, "RESTORE_EXACT", ["id"]),
-  rule("food_market_relevance", C, "RESTORE_EXACT", ["id"]),
   rule("food_taxonomy_namespaces", A, "VALIDATE_PRESEEDED", ["namespace_code"], { seedOwnership: "MIGRATION_OWNED" }),
   rule("food_taxonomy_nodes", A, "VALIDATE_PRESEEDED", ["node_code"], {
     seedOwnership: "MIGRATION_OWNED",
