@@ -71,7 +71,7 @@ Diagnostic mode exposed no owner ID or raw favorite key. The only diagnostic row
 
 with disposition `blocked` and reason `malformed_key`.
 
-Therefore **`user_food_favorites` is not retirement-safe**. The required zero-unmapped/approved-disposition condition is not met.
+Planner ruling: **`user_food_favorites` is retained owner state for Plan 7 closure**. The blocked row remains preserved exactly as-is; it is not a Plan 7 destructive candidate and does not globally block unrelated independently safe candidates. Catalog favorite authority remains `food_favorites`; My Food / retained legacy semantics remain `user_food_favorites`.
 
 ## Live database dependency evidence
 
@@ -130,29 +130,43 @@ Current non-historical repository search after the consumer cutover shows:
 
 This is repository evidence only; it does not substitute for live/external dependency clearance.
 
-## Fresh portability gate
+## Exact-deployed FULL_DR gate — complete
 
-Task 16 requires a fresh `FULL_DR` portability/search proof bound to the exact deployed artifact and current schema state.
+The exact deployed artifact `a182923399a41faf5ca7b79d947a992e94cdd27a` was certified through a manual `workflow_dispatch` on temporary branch `cert/plan7-a1829233-full-dr`, which points exactly to that commit and contains no additional commit.
 
-No exact-head `FULL_DR` certification for deployed commit `a182923399a41faf5ca7b79d947a992e94cdd27a` has been captured in this Task 16 evidence. The available GitHub connector does not expose the manual workflow-dispatch operation required to create that missing run.
+GitHub Actions run **37734481966**, job **113170815602**, completed **success**. Certification evidence includes:
 
-This is a global retirement blocker.
+- exact workflow head `a182923399a41faf5ca7b79d947a992e94cdd27a`;
+- `FULL_DR` profile;
+- chronological source and clean-target replay;
+- **128** migration records in the certification target;
+- PostgreSQL 17 target compatibility;
+- protected-segment verification;
+- restored Search V2 golden matrix with 20 cases;
+- service/security isolation verification;
+- `restoreVerified = true`;
+- `searchVerified = true`;
+- `securityVerified = true`;
+- `recoveryEligible = true`;
+- `drReady = true`.
+
+The certification did not mutate Production.
 
 ## Current retirement disposition
 
 The current read-only evidence does **not** support creating destructive SQL.
 
-Known blockers include:
+Known blockers / staged prerequisites include:
 
-1. fresh exact-deployed-head `FULL_DR` portability/search certification is missing;
-2. the single `user_food_favorites` row is blocked as `malformed_key`;
-3. `food_personal_corrections` remains referenced by live database functions;
-4. `food_aliases` remains referenced by the old search function;
-5. the old search function is still executable by authenticated/service-role callers and lacks external/live caller clearance;
-6. `food_market_relevance` lacks the required external/reporting/live dependency clearance;
-7. root `food_items` retirement candidates still require exact per-column dependency proof and Planner selection.
+1. `food_personal_corrections` is zero-row but remains referenced by current Search V2 and the canonical account-purge implementation in Production;
+2. `food_aliases` remains referenced by the retained old search function;
+3. the old search function is still executable by authenticated/service-role callers and requires staged contract-disable evidence before any DROP can be reviewed;
+4. `food_market_relevance` lacks the required external/reporting/live dependency clearance;
+5. root `food_items` retirement candidates still require exact per-column dependency proof and Planner selection.
 
-Accordingly, the Task 16 proposed destructive set is currently **empty**. No Task 17 migration identity is allocated and no DROP/ALTER contract SQL is created.
+The blocked `user_food_favorites` row is retained owner state, not a prerequisite to mutate or a candidate to retire.
+
+Accordingly, the Task 16 destructive set remains **not approved**. A separate repository-only non-destructive prerequisite migration, `20261008060000_food_catalog_plan7_retirement_prerequisite.sql`, is pending Planner review. It removes the two current legacy-correction runtime dependencies and revokes runtime EXECUTE on the retained old Search RPC without DROP/CASCADE or owner/catalog data mutation. It is not applied to Production. No Task 17 destructive migration identity is allocated.
 
 ## Machine preflight
 
