@@ -5,7 +5,6 @@ const MIGRATION = "supabase/migrations/20260908100000_food_catalog_governance_co
 const VERIFIER = "supabase/verification/food-catalog-governance-control-plane.sql";
 const LEDGER = "supabase/migration-ledger.json";
 const EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
-const PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION = "20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql";
 
 function read(path: string) { return readFileSync(path, "utf8"); }
 
