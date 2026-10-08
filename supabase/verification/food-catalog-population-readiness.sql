@@ -74,8 +74,7 @@ begin
         ('food_ingestion_batches'),
         ('food_ingestion_runs'),
         ('food_ingestion_batch_records'),
-        ('food_barcodes'),
-        ('food_market_relevance')
+        ('food_barcodes')
     ) as required(table_name)
     left join information_schema.tables t
       on t.table_schema = 'public' and t.table_name = required.table_name
@@ -193,13 +192,8 @@ begin
     raise exception 'GTIN same-Food provenance FK is missing.';
   end if;
 
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.food_market_relevance'::regclass
-      and conname = 'food_market_relevance_source_same_food_fk'
-      and contype = 'f'
-  ) then
-    raise exception 'Market relevance same-Food provenance FK is missing.';
+  if to_regclass('public.food_market_relevance') is not null then
+    raise exception 'Plan 7 retired public.food_market_relevance is still present.';
   end if;
 
   if exists (
@@ -209,8 +203,7 @@ begin
         ('food_ingestion_batches'),
         ('food_ingestion_runs'),
         ('food_ingestion_batch_records'),
-        ('food_barcodes'),
-        ('food_market_relevance')
+        ('food_barcodes')
     ) as required(table_name)
     join pg_class c on c.oid = to_regclass('public.' || required.table_name)
     where not c.relrowsecurity
@@ -227,7 +220,7 @@ begin
          and not has_table_privilege('service_role', 'public.' || required.table_name, 'INSERT,UPDATE,DELETE')
        )
   ) then
-    raise exception 'Food Catalog ingestion/GTIN/market RLS or privileges are too broad.';
+    raise exception 'Food Catalog ingestion/GTIN RLS or privileges are too broad.';
   end if;
 end
 $schema_contract$;
