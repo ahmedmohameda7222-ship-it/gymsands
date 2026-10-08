@@ -58,16 +58,13 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
       productionVersion: "20260910071241",
       productionName: "food_catalog_governance_gtin_lock_exactness",
     }));
-    expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: "20261008060000_food_catalog_plan7_retirement_prerequisite.sql",
-        state: "pending",
-      }),
-    ]);
-    for (const pendingEntry of pendingEntries) {
-      expect(pendingEntry).not.toHaveProperty("productionVersion");
-      expect(pendingEntry).not.toHaveProperty("productionName");
-    }
+    expect(pendingEntries).toEqual([]);
+    expect(ledger.entries.find((entry) => entry.localFile === "20261008060000_food_catalog_plan7_retirement_prerequisite.sql"))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008123814",
+        productionName: "food_catalog_plan7_retirement_prerequisite",
+      }));
     const plan4Entry = ledger.entries.find((entry) => entry.localFile === plan4MigrationName);
     expect(plan4Entry).toEqual(expect.objectContaining({
       localFile: plan4MigrationName,
