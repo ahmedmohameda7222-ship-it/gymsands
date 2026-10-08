@@ -452,4 +452,3 @@ Exact destructive scope is limited to:
 Retained state includes `public.food_personal_corrections`, `public.user_food_favorites`, `public.food_favorites`, every root `public.food_items` column, Search V2/rebuild authority, barcode authority, Personal Override authority, and the released compatibility marker.
 
 Plaivra Production remains at 129 physical migration records with head `20261008123814_food_catalog_plan7_retirement_prerequisite` until this migration is applied. Repository ledger state is intentionally `pendingCount = 1`, `unresolvedCount = 1`, and `historyRepair.state = pending`. Do not replay or broaden the migration.
-
