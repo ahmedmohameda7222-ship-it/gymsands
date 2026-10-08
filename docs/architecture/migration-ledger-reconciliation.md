@@ -1,9 +1,9 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Current reconciliation date:** 2026-09-10
+**Current reconciliation date:** 2026-10-08
 **Machine authority:** `supabase/migration-ledger.json`
-**Status:** Production migration history is reconciled through the Plan 6 GTIN-lock exactness correction; five repository-only Plan 7 migrations are pending and unapplied
+**Status:** Production migration history includes four reviewed Plan 7 expansion/portability migrations as generated aliases; one Tasks 13–14 expand migration remains pending and unapplied
 
 This document is the human-readable current migration authority. Exhaustive immutable repository-to-Production identity mappings live in `supabase/migration-ledger.json`; immutable SQL lives under `supabase/migrations/`; executable verification lives under `supabase/verification/`.
 
@@ -11,17 +11,19 @@ Historical PR descriptions, completed implementation reports, and old audit snap
 
 ## Current state
 
-Fresh Plaivra Production read-only inspection on 2026-09-10 established:
+Fresh Plaivra Production read-only inspection on 2026-10-08 established:
 
-- Physical Production migration records: **123**
+- Physical Production migration records: **127**
 - Exact repository-name applications tracked as `state = applied`: **63**
-- Latest physical Production record: `20260910071241_food_catalog_governance_gtin_lock_exactness`
+- Latest physical Production record: `20261008014223_food_catalog_owner_override_read_authority`
 - Original Plan 6 Production identity: `20260909081402_food_catalog_governance_control_plane`
 - Forward exactness-correction Production identity: `20260910071241_food_catalog_governance_gtin_lock_exactness`
 - Released compatibility marker: `20260724232734`
 - Schema compatibility: `2`
 - `food_items`, Food source/ingestion/generation/search populations remain **0**
 - `current_generation_id = NULL` and `pointer_revision = 0`
+- `food_personal_corrections = 0`, `user_food_favorites = 1`, and `food_favorites = 0`
+- Plan 6 Personal Override pointers/revisions remain **0**
 - Activity Catalog Production remains isolated from the Main Plaivra migration ledger
 
 The current repository/machine-ledger state records:
