@@ -129,4 +129,3 @@ Retained transitional owner state remains intentional:
 Final search recovery continues to use only `public.rebuild_food_catalog_search_projection_v2(uuid,text,text)`, browser `public.search_food_catalog_v2(...)`, and the service-role MCP Search V2 bridge. The released compatibility marker remains independent from the physical migration head.
 
 Task 18 closure evidence must bind a fresh exact repository head to chronological PostgreSQL 17 replay, populated and zero-row restore, deterministic Search V2 golden verification, protected FULL_DR evidence, owner/security assertions, and the verified Production retirement read-back. CI remains disposable and must report `productionMutationPerformed: false`; the historical Production mutation is recorded separately in retirement evidence and the migration ledger.
-
