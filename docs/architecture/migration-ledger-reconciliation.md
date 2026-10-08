@@ -37,6 +37,7 @@ The current repository/machine-ledger state records:
 - `schemaVerifiedUntrackedCount = 0`
 - `unresolvedCount = 1`
 - `historyRepair.state = pending`
+- physical Production migration records: **127**
 - migration-ledger `release_ready = false`
 
 The machine-ledger `productionMigrationCount` counts exact `state = applied` entries; it therefore remains 63 and is not the total number of physical Supabase migration-history records. Generated Production identities remain represented separately as `applied_version_alias`; the physical Production migration-history record count is now **127** and the latest physical head is `20261008014223_food_catalog_owner_override_read_authority`. Applied migrations must not be replayed. The Tasks 13–14 owner reconciliation/expand migration is the only remaining pending repository migration. `historyRepair` remains `pending` with `pendingCount = 1`, `unresolvedCount = 1`, and `schemaAppliedUntrackedCount = 0`; migration-ledger `release_ready = false`. No retirement migration, compatibility-marker promotion, Food population, generation promotion, Production redeployment, or Activity Catalog mutation was performed by this partial alignment.
