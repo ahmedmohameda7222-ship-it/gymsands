@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-10-08T12:38:14Z",
+  "capturedAt": "2026-10-08T20:04:00Z",
   "auditedRepositoryCommit": "dfa14c3bc2c1524ff185b1ee4e170f4537a80230",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 0,
-  "unresolvedCount": 0,
+  "pendingCount": 1,
+  "unresolvedCount": 1,
   "historyRepair": {
-    "state": "reconciled",
+    "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 0,
-    "unresolvedCount": 0,
-    "note": "Production migration history is reconciled through 20261008123814_food_catalog_plan7_retirement_prerequisite with 129 physical records. The Task 16 non-destructive prerequisite was applied exactly once from reviewed repository authority after explicit owner authorization. No destructive retirement DROP, compatibility-marker promotion, Food population, generation promotion, or Activity Catalog mutation occurred. Do not replay applied migrations."
+    "pendingCount": 1,
+    "unresolvedCount": 1,
+    "note": "Plaivra Production remains reconciled through 20261008123814_food_catalog_plan7_retirement_prerequisite with 129 physical records. Repository migration 20261008202500_food_catalog_plan7_retirement_contract.sql is pending the full exact-head QA cycle and immediate live pre-apply verification. It is the only unresolved migration and has not been applied or assigned a Production identity."
   },
   "entries": [
     {
@@ -857,6 +857,11 @@
       "note": "differs; Repository migration applied exactly once to Plaivra Production on 2026-10-08 as generated identity 20261008123814_food_catalog_plan7_retirement_prerequisite from reviewed PR #186 migration Git blob ffaab3ba8d0dcbecff643658152fa51a970ff56c after exact-head green QA and explicit owner authorization. Read-back proved Search V2 and canonical account purge no longer reference public.food_personal_corrections; the old public.search_nutrition_food_library RPC remains present but anon/authenticated/service_role EXECUTE is revoked; owner/catalog counts remain unchanged. Do not replay.",
       "productionVersion": "20261008123814",
       "productionName": "food_catalog_plan7_retirement_prerequisite"
+    },
+    {
+      "localFile": "20261008202500_food_catalog_plan7_retirement_contract.sql",
+      "state": "pending",
+      "note": "Task 17 exact three-object retirement contract approved by Task 16 Planner scope: drop only public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb), public.food_aliases, and public.food_market_relevance after fresh zero-row/dependency/runtime preflight. Retain food_personal_corrections, user_food_favorites, all root food_items columns, current Search V2/rebuild, barcode authority, Personal Override authority, and compatibility marker. Repository-only until the full coding/test/correction cycle and immediate pre-apply readback complete."
     }
   ],
   "productionRecordCount": 129
