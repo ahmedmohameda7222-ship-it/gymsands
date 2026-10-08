@@ -439,4 +439,3 @@ Repository migration `20261008060000_food_catalog_plan7_retirement_prerequisite.
 Fresh pre-implementation Production read-back remained at 128 physical migration records with head `20261008022805_food_catalog_plan7_owner_reconciliation_expand`. The pending migration is non-destructive prerequisite work only: it removes current Search V2 and account-purge dependencies on legacy Personal Corrections and stages the retained old Food Library RPC off by revoking runtime EXECUTE. It does not drop a function/table/column, mutate owner/catalog data, promote the compatibility marker, populate Food, promote a Catalog Generation, or mutate Activity Catalog.
 
 The repository ledger therefore reports one pending/unresolved migration and is not release-ready until the separate Planner review and later explicit Production-apply authorization are complete. Do not apply or replay the pending migration early.
-
