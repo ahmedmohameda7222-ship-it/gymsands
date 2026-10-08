@@ -854,7 +854,7 @@
     {
       "localFile": "20261008060000_food_catalog_plan7_retirement_prerequisite.sql",
       "state": "applied_version_alias",
-      "note": "Repository migration applied exactly once to Plaivra Production on 2026-10-08 as generated identity 20261008123814_food_catalog_plan7_retirement_prerequisite from reviewed PR #186 migration Git blob ffaab3ba8d0dcbecff643658152fa51a970ff56c after exact-head green QA and explicit owner authorization. Read-back proved Search V2 and canonical account purge no longer reference public.food_personal_corrections; the old public.search_nutrition_food_library RPC remains present but anon/authenticated/service_role EXECUTE is revoked; owner/catalog counts remain unchanged. Do not replay.",
+      "note": "differs; Repository migration applied exactly once to Plaivra Production on 2026-10-08 as generated identity 20261008123814_food_catalog_plan7_retirement_prerequisite from reviewed PR #186 migration Git blob ffaab3ba8d0dcbecff643658152fa51a970ff56c after exact-head green QA and explicit owner authorization. Read-back proved Search V2 and canonical account purge no longer reference public.food_personal_corrections; the old public.search_nutrition_food_library RPC remains present but anon/authenticated/service_role EXECUTE is revoked; owner/catalog counts remain unchanged. Do not replay.",
       "productionVersion": "20261008123814",
       "productionName": "food_catalog_plan7_retirement_prerequisite"
     }
