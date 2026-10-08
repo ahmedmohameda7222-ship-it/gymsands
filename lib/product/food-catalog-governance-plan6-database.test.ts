@@ -112,20 +112,16 @@ describe("Food Catalog Plan 6 database authority", () => {
     }));
     const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
     expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION,
-        state: "pending",
-      }),
     ]);
     for (const pendingEntry of pendingEntries) {
       expect(pendingEntry).not.toHaveProperty("productionVersion");
       expect(pendingEntry).not.toHaveProperty("productionName");
     }
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(ledger.historyRepair.pendingCount).toBe(0);
+    expect(ledger.historyRepair.unresolvedCount).toBe(0);
   });
 
   it("removes the Plan 2 temporary food-curation direct-access exception", () => {
