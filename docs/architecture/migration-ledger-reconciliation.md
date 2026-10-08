@@ -432,10 +432,10 @@ Repository migration `20260804174500_fix_profiles_update_policy_recursion.sql` w
 
 The repository filename and Production version differ, so the machine ledger preserves the immutable mapping as `applied_version_alias`. Do not replay it.
 
-## Plan 7 Task 16 retirement prerequisite — pending Planner gate (2026-10-08)
+## Plan 7 Task 16 retirement prerequisite — applied and reconciled (2026-10-08)
 
-Repository migration `20261008060000_food_catalog_plan7_retirement_prerequisite.sql` is intentionally **pending** and absent from Plaivra Production migration history.
+Repository migration `20261008060000_food_catalog_plan7_retirement_prerequisite.sql` was applied exactly once to Plaivra Production as generated identity `20261008123814_food_catalog_plan7_retirement_prerequisite` from reviewed Git blob `ffaab3ba8d0dcbecff643658152fa51a970ff56c` after exact-head green QA and explicit owner authorization.
 
-Fresh pre-implementation Production read-back remained at 128 physical migration records with head `20261008022805_food_catalog_plan7_owner_reconciliation_expand`. The pending migration is non-destructive prerequisite work only: it removes current Search V2 and account-purge dependencies on legacy Personal Corrections and stages the retained old Food Library RPC off by revoking runtime EXECUTE. It does not drop a function/table/column, mutate owner/catalog data, promote the compatibility marker, populate Food, promote a Catalog Generation, or mutate Activity Catalog.
+Post-apply read-back proves 129 physical migration records with head `20261008123814_food_catalog_plan7_retirement_prerequisite`. The migration is non-destructive prerequisite work only: current Search V2 and canonical account purge no longer reference `public.food_personal_corrections`; the retained old Food Library RPC still exists but runtime EXECUTE is revoked for anon/authenticated/service_role. Owner/catalog counts are unchanged.
 
-The repository ledger therefore reports one pending/unresolved migration and is not release-ready until the separate Planner review and later explicit Production-apply authorization are complete. Do not apply or replay the pending migration early.
+The repository ledger is reconciled at `productionMigrationCount = 64`, `productionRecordCount = 129`, `schemaVerifiedUntrackedCount = 0`, `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`. The released compatibility marker remains `20260724232734`. No destructive retirement DROP, Food population, generation promotion, compatibility-marker promotion, or Activity Catalog mutation occurred. Do not replay the applied migration.
