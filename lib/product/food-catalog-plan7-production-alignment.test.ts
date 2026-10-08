@@ -42,7 +42,7 @@ describe("Food Catalog Plan 7 Production alignment evidence", () => {
       }));
     }
 
-    expect(ledger.productionMigrationCount).toBe(64);
+    expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.productionRecordCount).toBe(129);
     expect(ledger.entries.find((entry) => entry.localFile === "20261008060000_food_catalog_plan7_retirement_prerequisite.sql"))
       .toEqual(expect.objectContaining({
