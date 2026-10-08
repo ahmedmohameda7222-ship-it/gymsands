@@ -59,11 +59,6 @@ function exactSha(value, label) {
   return normalized;
 }
 
-function nonNegativeInteger(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${label} must be a non-negative integer.`);
-  return value;
-}
-
 function stringArray(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === "string").map((item) => item.trim()).filter(Boolean) : [];
 }
@@ -171,7 +166,7 @@ export function evaluatePlan7RetirementPreflight(input) {
       exists: evidence.exists === true,
       rowCount: Number.isSafeInteger(evidence.rowCount) ? evidence.rowCount : null,
       blockers: Object.freeze(reasons),
-      eligibleForPlannerReview: blockers.length === 0 && reasons.length === 0,
+      eligibleForPlannerReview: reasons.length === 0,
     });
   });
 
@@ -188,7 +183,6 @@ export function evaluatePlan7RetirementPreflight(input) {
 
   const uniqueGlobalBlockers = [...new Set(blockers)];
   const approvable = uniqueGlobalBlockers.length === 0
-    && blockedCandidates.length === 0
     && proposedDestructiveObjects.length > 0;
 
   return Object.freeze({
