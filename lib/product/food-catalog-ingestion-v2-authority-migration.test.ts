@@ -231,11 +231,11 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
   it("records verified Plan 4/5 aliases after Plan 6 exactness reconciliation", () => {
     expect(ledger.productionMigrationCount).toBe(63);
     expect(ledger.productionRecordCount).toBe(128);
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
-    expect(ledger.historyRepair.state).toBe("reconciled");
-    expect(ledger.historyRepair.pendingCount).toBe(0);
-    expect(ledger.historyRepair.unresolvedCount).toBe(0);
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.historyRepair.state).toBe("pending");
+    expect(ledger.historyRepair.pendingCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
     expect(ledger.historyRepair.schemaAppliedUntrackedCount).toBe(0);
     expect(releaseCompatibility.databaseMigrationMarkerVersion).toBe("20260724232734");
 
@@ -247,6 +247,10 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     }));
     const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
     expect(pendingEntries).toEqual([
+      expect.objectContaining({
+        localFile: "20261008060000_food_catalog_plan7_retirement_prerequisite.sql",
+        state: "pending",
+      }),
     ]);
     for (const pendingEntry of pendingEntries) {
       expect(pendingEntry.productionVersion).toBeUndefined();
