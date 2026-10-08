@@ -30,7 +30,7 @@ function reconciledLedgerFixture(source) {
   };
 }
 
-test("release consumers preserve the declared marker on the reconciled prerequisite head", () => {
+test("release consumers preserve the declared marker while retirement is pending", () => {
   const releaseTarget = deriveReleaseTarget(ledger);
   const qualityTarget = deriveQualityLedgerTarget(ledger);
   const environment = qualityLedgerEnvironment(qualityTarget);
@@ -43,8 +43,10 @@ test("release consumers preserve the declared marker on the reconciled prerequis
   assert.equal(releaseTarget.expectedMigration, "20260724232734");
   assert.equal(releaseTarget.latestAppliedMigrationVersion, "20261008123814");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
-  assert.equal(releaseTarget.reconciliationState, "reconciled");
-  assert.deepEqual(pendingEntries.map((entry) => entry.localFile), []);
+  assert.equal(releaseTarget.reconciliationState, "pending");
+  assert.deepEqual(pendingEntries.map((entry) => entry.localFile), [
+    "20261008202500_food_catalog_plan7_retirement_contract.sql",
+  ]);
   assert.equal(plan5.state, "applied_version_alias");
   assert.equal(correction.state, "applied_version_alias");
   assert.equal(plan6.state, "applied_version_alias");
@@ -53,26 +55,26 @@ test("release consumers preserve the declared marker on the reconciled prerequis
   assert.equal(plan6Correction.state, "applied_version_alias");
   assert.equal(plan6Correction.productionVersion, "20260910071241");
   assert.equal(plan6Correction.productionName, "food_catalog_governance_gtin_lock_exactness");
-  assert.equal(ledger.pendingCount, 0);
-  assert.equal(releaseTarget.pendingCount, 0);
+  assert.equal(ledger.pendingCount, 1);
+  assert.equal(releaseTarget.pendingCount, 1);
   assert.equal(releaseTarget.schemaAppliedUntrackedCount, 0);
-  assert.equal(releaseTarget.unresolvedCount, 0);
-  assert.equal(releaseTarget.releaseReady, true);
-  assert.deepEqual(deriveReleaseReadyTarget(ledger), releaseTarget);
+  assert.equal(releaseTarget.unresolvedCount, 1);
+  assert.equal(releaseTarget.releaseReady, false);
+  assert.throws(() => deriveReleaseReadyTarget(ledger), /Migration ledger is not release-ready/);
   assert.equal(qualityTarget.expectedMigration, releaseTarget.expectedMigration);
   assert.equal(qualityTarget.latestAppliedMigrationVersion, releaseTarget.latestAppliedMigrationVersion);
-  assert.equal(qualityTarget.reconciliationState, "reconciled");
-  assert.equal(qualityTarget.pendingCount, 0);
-  assert.equal(qualityTarget.unresolvedCount, 0);
-  assert.equal(qualityTarget.releaseReady, true);
+  assert.equal(qualityTarget.reconciliationState, "pending");
+  assert.equal(qualityTarget.pendingCount, 1);
+  assert.equal(qualityTarget.unresolvedCount, 1);
+  assert.equal(qualityTarget.releaseReady, false);
   assert.equal(environment.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION, releaseTarget.expectedMigration);
-  assert.equal(environment.PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE, "reconciled");
-  assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "0");
-  assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "0");
+  assert.equal(environment.PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE, "pending");
+  assert.equal(environment.PLAIVRA_PENDING_MIGRATION_COUNT, "1");
+  assert.equal(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT, "1");
   assert.notEqual(releaseTarget.expectedMigration, releaseTarget.latestAppliedMigrationVersion);
 });
 
-test("preflight preserves the declared marker on the reconciled prerequisite head", () => {
+test("preflight preserves the declared marker but blocks release on pending retirement", () => {
   const expectedCommit = "a".repeat(40);
   const releaseTarget = deriveReleaseTarget(ledger);
   const migrationState = deriveMigrationLedgerState(ledger);
@@ -108,8 +110,8 @@ test("preflight preserves the declared marker on the reconciled prerequisite hea
 
   const result = evaluateReleasePreflight(input);
   assert.equal(result.failures.includes("release_manifest_migration_mismatch"), false);
-  assert.equal(result.failures.includes("migration_ledger_not_reconciled"), false);
-  assert.equal(result.releaseBlockers.includes("migration_ledger_not_reconciled"), false);
+  assert.equal(result.failures.includes("migration_ledger_not_reconciled"), true);
+  assert.equal(result.releaseBlockers.includes("migration_ledger_not_reconciled"), true);
 });
 
 test("reconciled fixtures still prove marker-versus-physical-head semantics", () => {
