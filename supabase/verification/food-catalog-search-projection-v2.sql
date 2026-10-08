@@ -375,8 +375,8 @@ begin
 end
 $benchmark$;
 
--- Plan 7 expand compatibility: legacy Personal Correction remains Search authority
--- only when no exact Plan 6 pointer exists. Historical basis/null semantics are preserved.
+-- Plan 7 Task 16 prerequisite: retained legacy Personal Correction rows no longer
+-- participate in current Search V2 authority. Plan 6 Personal Override remains the only owner nutrition overlay.
 insert into public.food_personal_corrections(
   id,user_id,food_id,calories,protein_g,carbs_g,fat_g,saturated_fat_g,fiber_g,sugars_g,sodium_mg,
   basis_amount,basis_unit,note,is_active
@@ -396,12 +396,12 @@ insert into public.food_personal_corrections(
 
 select public.search_food_catalog_v2('Bench Food 20','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_legacy_active \gset
 select pg_temp.plan5_assert(
-  (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=0
+  (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'calories')::numeric=120
   and (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'protein_g')::numeric=20
   and (:'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'basis_amount')::numeric=100
   and :'plan7_legacy_active'::jsonb->'items'->0->'nutrition'->>'basis_unit'='g'
-  and (:'plan7_legacy_active'::jsonb->'items'->0->>'usingPersonalValues')::boolean=true,
-  'Active legacy-only correction did not preserve zero / nullable fallback / historical basis semantics.'
+  and (:'plan7_legacy_active'::jsonb->'items'->0->>'usingPersonalValues')::boolean=false,
+  'Retained active legacy Personal Correction still affected current Search V2.'
 );
 
 select public.search_food_catalog_v2('Bench Food 19','en','Latn',null,null,20,null,null,'all','{}'::jsonb) as plan7_legacy_inactive \gset
@@ -425,7 +425,7 @@ select public.search_food_catalog_v2_for_mcp_v1(
 reset role;
 select pg_temp.plan5_assert(
   :'plan7_legacy_mcp'::jsonb=:'plan7_legacy_active'::jsonb,
-  'Browser and MCP Search differ under legacy correction fallback.'
+  'Browser and MCP Search differ while ignoring retained legacy Personal Corrections.'
 );
 
 -- Plan 7 / Plan 6 Personal Override overlay: exact pointed revision, NULL fallback,
