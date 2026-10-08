@@ -92,13 +92,13 @@ describe("Plan 7 Tasks 13-14 owner reconciliation and expand authority", () => {
     expect(browser).not.toContain("favoriteKeys.includes(favoriteKeyForFood(food))");
   });
 
-  it("keeps Task 14 expand-only and keeps the expand migration pending until exact Production apply", () => {
+  it("keeps Task 14 expand-only after exact Production apply", () => {
     const sql = source(`supabase/migrations/${migrationFiles[0]}`).toLowerCase();
     expect(sql).not.toMatch(/\bdrop\s+(table|column|function)\b/);
     const ledger = JSON.parse(source("supabase/migration-ledger.json"));
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.entries.filter((entry: { state: string }) => entry.state === "pending")).toHaveLength(1);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.entries.filter((entry: { state: string }) => entry.state === "pending")).toHaveLength(0);
   });
 
   it("ships a read-only owner reconciliation report with the required aggregate surface", () => {
