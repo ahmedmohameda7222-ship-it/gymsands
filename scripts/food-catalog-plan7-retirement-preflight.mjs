@@ -85,6 +85,7 @@ function candidateBlockers(id, evidence, owner) {
   const blockers = [];
   if (evidence.exists !== true) blockers.push("candidate_not_present");
   if (candidateReferences(evidence).length > 0) blockers.push("candidate_still_referenced");
+  if (stringArray(evidence.executableRoles).length > 0) blockers.push("candidate_still_executable");
   if (evidence.externalDependencyState !== "clear") blockers.push("external_dependency_not_cleared");
   if (evidence.liveDependencyState !== "clear") blockers.push("live_dependency_not_cleared");
 
