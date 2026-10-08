@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const LEDGER = "supabase/migration-ledger.json";
 
 describe("Food Catalog Plan 7 Production alignment evidence", () => {
-  it("records the four exact Production aliases already applied while leaving only the expand migration pending", () => {
+  it("records all five exact Production aliases and a reconciled migration ledger", () => {
     const ledger = JSON.parse(readFileSync(LEDGER, "utf8")) as {
       productionMigrationCount: number;
       productionRecordCount: number;
@@ -30,6 +30,7 @@ describe("Food Catalog Plan 7 Production alignment evidence", () => {
       ["20260915170012_food_catalog_owner_correction_export.sql", "20261008014144", "food_catalog_owner_correction_export"],
       ["20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql", "20261008014204", "food_catalog_ingestion_restore_reactivation_gate"],
       ["20260919034630_food_catalog_owner_override_read_authority.sql", "20261008014223", "food_catalog_owner_override_read_authority"],
+      ["20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql", "20261008022805", "food_catalog_plan7_owner_reconciliation_expand"],
     ] as const;
 
     for (const [localFile, productionVersion, productionName] of expectedAliases) {
@@ -41,22 +42,16 @@ describe("Food Catalog Plan 7 Production alignment evidence", () => {
       }));
     }
 
-    expect(ledger.entries.find((entry) =>
-      entry.localFile === "20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql"
-    )).toEqual(expect.objectContaining({
-      state: "pending",
-    }));
-
     expect(ledger.productionMigrationCount).toBe(63);
-    expect(ledger.productionRecordCount).toBe(127);
+    expect(ledger.productionRecordCount).toBe(128);
     expect(ledger.schemaVerifiedUntrackedCount).toBe(0);
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
     expect(ledger.historyRepair).toEqual(expect.objectContaining({
-      state: "pending",
+      state: "reconciled",
       schemaAppliedUntrackedCount: 0,
-      pendingCount: 1,
-      unresolvedCount: 1,
+      pendingCount: 0,
+      unresolvedCount: 0,
     }));
   });
 });
