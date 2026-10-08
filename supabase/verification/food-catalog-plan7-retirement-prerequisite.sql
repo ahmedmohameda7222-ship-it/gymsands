@@ -92,11 +92,8 @@ select pg_temp.plan7_retirement_prerequisite_assert(
 );
 
 select pg_temp.plan7_retirement_prerequisite_assert(
-  to_regprocedure('public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)') is not null
-  and not has_function_privilege('anon','public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)','EXECUTE')
-  and not has_function_privilege('authenticated','public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)','EXECUTE')
-  and not has_function_privilege('service_role','public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)','EXECUTE'),
-  'old Food Library RPC must remain present but non-executable by runtime roles'
+  to_regprocedure('public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)') is null,
+  'Plan 7 retired Food Library RPC still exists after the contract migration'
 );
 
 select pg_temp.plan7_retirement_prerequisite_assert(
@@ -119,10 +116,10 @@ select pg_temp.plan7_retirement_prerequisite_assert(
 select pg_temp.plan7_retirement_prerequisite_assert(
   to_regclass('public.food_personal_corrections') is not null
   and to_regclass('public.user_food_favorites') is not null
-  and to_regclass('public.food_aliases') is not null
-  and to_regclass('public.food_market_relevance') is not null
+  and to_regclass('public.food_aliases') is null
+  and to_regclass('public.food_market_relevance') is null
   and to_regclass('public.food_items') is not null,
-  'a retained Plan 7 compatibility/owner object was dropped'
+  'Plan 7 prerequisite/retirement object disposition drifted'
 );
 
 select pg_temp.plan7_retirement_prerequisite_assert(
