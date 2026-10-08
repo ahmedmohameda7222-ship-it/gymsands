@@ -197,6 +197,21 @@ test("zero personal-correction rows are still blocked while database functions r
   assert.ok(!candidate.blockers.includes("personal_corrections_nonzero"));
 });
 
+test("legacy search remains blocked while application roles retain EXECUTE", () => {
+  const evidence = baseEvidence();
+  evidence.candidates["function:public.search_nutrition_food_library"] = cleanCandidate({
+    executableRoles: ["authenticated", "service_role"],
+  });
+
+  const result = evaluatePlan7RetirementPreflight(evidence);
+  const candidate = result.candidateResults.find(
+    (item) => item.id === "function:public.search_nutrition_food_library",
+  );
+
+  assert.ok(candidate.blockers.includes("candidate_still_executable"));
+  assert.ok(!result.proposedDestructiveObjects.includes("function:public.search_nutrition_food_library"));
+});
+
 test("zero food_market_relevance rows are insufficient without external/live clearance", () => {
   const evidence = baseEvidence();
   evidence.candidates["table:public.food_market_relevance"] = cleanCandidate({
