@@ -74,7 +74,6 @@ function rule(
 
 const A = "PORTABLE_AUTHORITY" as const;
 const H = "PORTABLE_AUDIT_HISTORY" as const;
-const C = "TRANSITIONAL_PORTABLE_COMPATIBILITY" as const;
 const PA = "PROTECTED_PORTABLE_AUTHORITY" as const;
 const PH = "PROTECTED_PORTABLE_AUDIT_HISTORY" as const;
 
