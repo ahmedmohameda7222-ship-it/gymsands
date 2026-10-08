@@ -8,10 +8,6 @@ const plan5MigrationName = "20260906183000_food_catalog_search_projection_v2.sql
 const plan5ServingCorrectionName = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 const plan6MigrationName = "20260908100000_food_catalog_governance_control_plane.sql";
 const plan6ExactnessCorrectionName = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
-const plan7ReconciliationMigrationName = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
-const plan7OwnerExportMigrationName = "20260915170012_food_catalog_owner_correction_export.sql";
-const plan7IngestionReactivationMigrationName = "20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql";
-const plan7OwnerOverrideReadMigrationName = "20260919034630_food_catalog_owner_override_read_authority.sql";
 const plan7OwnerReconciliationExpandMigrationName = "20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql";
 
 function read(relativePath: string) {
@@ -65,22 +61,6 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
     }));
     expect(pendingEntries).toEqual([
       expect.objectContaining({
-        localFile: plan7ReconciliationMigrationName,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: plan7OwnerExportMigrationName,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: plan7IngestionReactivationMigrationName,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: plan7OwnerOverrideReadMigrationName,
-        state: "pending",
-      }),
-      expect.objectContaining({
         localFile: plan7OwnerReconciliationExpandMigrationName,
         state: "pending",
       }),
@@ -109,11 +89,11 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
       productionVersion: "20260907215257",
       productionName: "food_catalog_search_serving_semantics_correction",
     }));
-    expect(ledger.pendingCount).toBe(5);
-    expect(ledger.unresolvedCount).toBe(5);
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
     expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(5);
-    expect(ledger.historyRepair.unresolvedCount).toBe(5);
+    expect(ledger.historyRepair.pendingCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {
