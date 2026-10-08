@@ -231,12 +231,12 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
 
   it("records verified Plan 4/5 aliases after Plan 6 exactness reconciliation", () => {
     expect(ledger.productionMigrationCount).toBe(63);
-    expect(ledger.productionRecordCount).toBe(127);
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.productionRecordCount).toBe(128);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(ledger.historyRepair.pendingCount).toBe(0);
+    expect(ledger.historyRepair.unresolvedCount).toBe(0);
     expect(ledger.historyRepair.schemaAppliedUntrackedCount).toBe(0);
     expect(releaseCompatibility.databaseMigrationMarkerVersion).toBe("20260724232734");
 
@@ -248,10 +248,6 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     }));
     const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
     expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION,
-        state: "pending",
-      }),
     ]);
     for (const pendingEntry of pendingEntries) {
       expect(pendingEntry.productionVersion).toBeUndefined();
@@ -293,9 +289,9 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
     expect(reconciliationDoc).toContain(PLAN5_MIGRATION_FILE);
     expect(reconciliationDoc).toContain("20260906200129_food_catalog_search_projection_v2");
     expect(reconciliationDoc).toContain("20260907215257_food_catalog_search_serving_semantics_correction");
-    expect(reconciliationDoc).toContain("physical production migration records: **127**");
-    expect(reconciliationDoc).toContain("`pendingcount = 1`");
-    expect(reconciliationDoc).toContain("`unresolvedcount = 1`");
+    expect(reconciliationDoc).toContain("physical production migration records: **128**");
+    expect(reconciliationDoc).toContain("`pendingcount = 0`");
+    expect(reconciliationDoc).toContain("`unresolvedcount = 0`");
     expect(reconciliationDoc).toContain(PLAN6_MIGRATION_FILE);
     expect(reconciliationDoc).toContain(PLAN6_EXACTNESS_CORRECTION);
     expect(reconciliationDoc).toContain("20260910071241_food_catalog_governance_gtin_lock_exactness");
