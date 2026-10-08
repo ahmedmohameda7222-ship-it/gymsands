@@ -5,10 +5,6 @@ const MIGRATION = "supabase/migrations/20260908100000_food_catalog_governance_co
 const VERIFIER = "supabase/verification/food-catalog-governance-control-plane.sql";
 const LEDGER = "supabase/migration-ledger.json";
 const EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
-const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
-const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
-const PLAN7_INGESTION_REACTIVATION_MIGRATION = "20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql";
-const PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION = "20260919034630_food_catalog_owner_override_read_authority.sql";
 const PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION = "20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql";
 
 function read(path: string) { return readFileSync(path, "utf8"); }
@@ -117,22 +113,6 @@ describe("Food Catalog Plan 6 database authority", () => {
     const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
     expect(pendingEntries).toEqual([
       expect.objectContaining({
-        localFile: PLAN7_PENDING_MIGRATION,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: PLAN7_OWNER_EXPORT_MIGRATION,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: PLAN7_INGESTION_REACTIVATION_MIGRATION,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION,
-        state: "pending",
-      }),
-      expect.objectContaining({
         localFile: PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION,
         state: "pending",
       }),
@@ -141,11 +121,11 @@ describe("Food Catalog Plan 6 database authority", () => {
       expect(pendingEntry).not.toHaveProperty("productionVersion");
       expect(pendingEntry).not.toHaveProperty("productionName");
     }
-    expect(ledger.pendingCount).toBe(5);
-    expect(ledger.unresolvedCount).toBe(5);
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unresolvedCount).toBe(1);
     expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(5);
-    expect(ledger.historyRepair.unresolvedCount).toBe(5);
+    expect(ledger.historyRepair.pendingCount).toBe(1);
+    expect(ledger.historyRepair.unresolvedCount).toBe(1);
   });
 
   it("removes the Plan 2 temporary food-curation direct-access exception", () => {
