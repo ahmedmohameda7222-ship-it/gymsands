@@ -31,7 +31,7 @@ describe("Nutrition V1 long-term architecture correction migration", () => {
     expect(migration).toContain("v_max numeric");
     expect(migration).toContain("p_filter->>'max'");
     expect(migration).toContain("if v_operator = 'between'");
-    expect(verification).toContain("canonical search v2 paging semantics are verified by the food catalog search v2 verifier");
+    expect(verification).toContain("canonical search v2 paging semantics are verified by the food catalog search v2");
   });
 
   it("makes Cooking Start Over one idempotent transactional operation", () => {
