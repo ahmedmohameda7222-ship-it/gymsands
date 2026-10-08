@@ -60,10 +60,6 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
       productionName: "food_catalog_governance_gtin_lock_exactness",
     }));
     expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: plan7OwnerReconciliationExpandMigrationName,
-        state: "pending",
-      }),
     ]);
     for (const pendingEntry of pendingEntries) {
       expect(pendingEntry).not.toHaveProperty("productionVersion");
@@ -89,11 +85,11 @@ describe("nullable Meal Plan snapshot migration boundary", () => {
       productionVersion: "20260907215257",
       productionName: "food_catalog_search_serving_semantics_correction",
     }));
-    expect(ledger.pendingCount).toBe(1);
-    expect(ledger.unresolvedCount).toBe(1);
-    expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(1);
-    expect(ledger.historyRepair.unresolvedCount).toBe(1);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(ledger.historyRepair.pendingCount).toBe(0);
+    expect(ledger.historyRepair.unresolvedCount).toBe(0);
   });
 
   it("keeps direct/manual Meal Plan authoring strict numeric", () => {
