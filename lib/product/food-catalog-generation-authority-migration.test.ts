@@ -137,12 +137,13 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
       productionName: "food_catalog_governance_control_plane",
     }));
     const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
-    expect(pendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: "20261008202500_food_catalog_plan7_retirement_contract.sql",
-        state: "pending",
-      }),
-    ]);
+    expect(pendingEntries).toEqual([]);
+    expect(ledger.entries.find((item) => item.localFile === "20261008202500_food_catalog_plan7_retirement_contract.sql"))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008224322",
+        productionName: "food_catalog_plan7_retirement_contract",
+      }));
     expect(ledger.entries.find((item) => item.localFile === "20261008060000_food_catalog_plan7_retirement_prerequisite.sql"))
       .toEqual(expect.objectContaining({
         state: "applied_version_alias",
