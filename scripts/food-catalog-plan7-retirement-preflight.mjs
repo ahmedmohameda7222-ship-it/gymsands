@@ -10,7 +10,6 @@ export const PLAN7_RETIREMENT_CANDIDATES = Object.freeze([
   "table:public.food_market_relevance",
   "function:public.search_nutrition_food_library",
   "table:public.food_personal_corrections",
-  "table:public.user_food_favorites",
   "column:public.food_items.food_name",
   "column:public.food_items.serving_size",
   "column:public.food_items.calories",
@@ -44,6 +43,7 @@ export const PLAN7_KEEP_OBJECTS = Object.freeze([
   "table:public.food_personal_overrides",
   "table:public.food_personal_override_revisions",
   "table:public.food_personal_override_operations",
+  "table:public.user_food_favorites",
 ]);
 
 const EXPECTED_OLD_SEARCH_SIGNATURE =
@@ -91,12 +91,6 @@ function candidateBlockers(id, evidence, owner) {
 
   if (id === "table:public.food_personal_corrections") {
     if (evidence.rowCount !== 0) blockers.push("personal_corrections_nonzero");
-  }
-
-  if (id === "table:public.user_food_favorites") {
-    if (!boolean(owner.retirementSafe)) blockers.push("owner_favorites_not_retirement_safe");
-    if (owner.blocked !== 0) blockers.push("owner_favorites_blocked_rows");
-    if (!Number.isSafeInteger(owner.total) || owner.total < 0) blockers.push("owner_favorites_total_invalid");
   }
 
   if (id === "table:public.food_market_relevance" && evidence.rowCount !== 0) {
