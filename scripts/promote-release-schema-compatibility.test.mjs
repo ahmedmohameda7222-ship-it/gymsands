@@ -94,21 +94,26 @@ function validRequest(overrides = {}) {
   };
 }
 
-test("current repository ledger is reconciled after the Task 16 prerequisite apply", () => {
+test("current repository ledger is pending while the Task 17 retirement contract awaits apply", () => {
   const state = deriveMigrationLedgerState(currentLedger);
   const pendingEntries = currentLedger.entries.filter((entry) => entry.state === "pending");
-  assert.equal(state.reconciliationState, "reconciled");
-  assert.equal(state.pendingCount, 0);
+  assert.equal(state.reconciliationState, "pending");
+  assert.equal(state.pendingCount, 1);
   assert.equal(state.schemaAppliedUntrackedCount, 0);
   assert.equal(state.ledgerDriftReviewCount, 0);
-  assert.equal(state.unresolvedCount, 0);
-  assert.equal(state.releaseReady, true);
+  assert.equal(state.unresolvedCount, 1);
+  assert.equal(state.releaseReady, false);
   assert.equal(state.latestAppliedMigrationVersion, TARGET_MARKER);
-  assert.deepEqual(pendingEntries, []);
+  assert.deepEqual(pendingEntries.map((entry) => entry.localFile), [
+    "20261008202500_food_catalog_plan7_retirement_contract.sql",
+  ]);
 });
 
-test("promotion validation accepts the reconciled repository ledger in dry-run context", () => {
-  assert.doesNotThrow(() => validatePromotionRequest({ ...validRequest(), ledger: currentLedger }));
+test("promotion validation rejects the pending repository ledger", () => {
+  assert.throws(
+    () => validatePromotionRequest({ ...validRequest(), ledger: currentLedger }),
+    /Repository migration ledger is not release-ready/,
+  );
 });
 
 test("still rejects a synthetically unresolved repository ledger", () => {
