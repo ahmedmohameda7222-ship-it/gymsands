@@ -162,22 +162,22 @@ test("deployed commit and reconciled migration identity are exact global gates",
   assert.ok(result.globalBlockers.includes("unresolved_migrations_present"));
 });
 
-test("legacy owner favorites require explicit retirement-safe disposition and zero blocked rows", () => {
+test("legacy owner favorites are retained owner state, not a Plan 7 retirement candidate", () => {
   const evidence = baseEvidence();
   evidence.ownerReconciliation = {
     total: 1,
     blocked: 1,
     retirementSafe: false,
   };
-  evidence.candidates["table:public.user_food_favorites"] = cleanCandidate({ rowCount: 1 });
 
   const result = evaluatePlan7RetirementPreflight(evidence);
-  const candidate = result.candidateResults.find((item) => item.id === "table:public.user_food_favorites");
 
-  assert.deepEqual(candidate.blockers, [
-    "owner_favorites_not_retirement_safe",
-    "owner_favorites_blocked_rows",
-  ]);
+  assert.ok(!PLAN7_RETIREMENT_CANDIDATES.includes("table:public.user_food_favorites"));
+  assert.ok(PLAN7_KEEP_OBJECTS.includes("table:public.user_food_favorites"));
+  assert.equal(
+    result.candidateResults.some((item) => item.id === "table:public.user_food_favorites"),
+    false,
+  );
   assert.ok(!result.proposedDestructiveObjects.includes("table:public.user_food_favorites"));
 });
 
@@ -242,20 +242,11 @@ test("keep-object evidence is mandatory and cannot self-authorize destructive SQ
 
 test("current live blocker shape produces no proposed destructive set", () => {
   const evidence = baseEvidence();
-  evidence.portability = {
-    profile: "CORE_PORTABLE",
-    fresh: false,
-    exactHead: DEPLOYED_SHA,
-    latestMigrationVersion: LATEST_VERSION,
-    drReady: false,
-    productionMutationPerformed: false,
-  };
   evidence.ownerReconciliation = {
     total: 1,
     blocked: 1,
     retirementSafe: false,
   };
-  evidence.candidates["table:public.user_food_favorites"] = cleanCandidate({ rowCount: 1 });
   evidence.candidates["table:public.food_personal_corrections"] = cleanCandidate({
     databaseFunctionReferences: [
       "private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)",
@@ -284,7 +275,8 @@ test("current live blocker shape produces no proposed destructive set", () => {
 test("candidate inventory preserves the frozen keep-versus-retire boundary", () => {
   assert.ok(PLAN7_RETIREMENT_CANDIDATES.includes("column:public.food_items.food_name"));
   assert.ok(PLAN7_RETIREMENT_CANDIDATES.includes("table:public.food_aliases"));
-  assert.ok(PLAN7_RETIREMENT_CANDIDATES.includes("table:public.user_food_favorites"));
+  assert.ok(!PLAN7_RETIREMENT_CANDIDATES.includes("table:public.user_food_favorites"));
+  assert.ok(PLAN7_KEEP_OBJECTS.includes("table:public.user_food_favorites"));
   assert.ok(!PLAN7_RETIREMENT_CANDIDATES.includes("column:public.food_items.id"));
   assert.ok(!PLAN7_RETIREMENT_CANDIDATES.includes("column:public.food_items.lifecycle_status"));
   assert.ok(PLAN7_KEEP_OBJECTS.includes("function:public.search_food_catalog_v2"));
