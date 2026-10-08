@@ -107,6 +107,7 @@ function globalBlockers(input) {
   const migration = safeObject(input.migration);
   const ledger = safeObject(input.ledger);
   const portability = safeObject(input.portability);
+  const repositoryDelta = safeObject(input.repositoryDelta);
   const compatibility = safeObject(input.compatibility);
   const historical = safeObject(input.historicalConsumerReferences);
 
@@ -138,10 +139,26 @@ function globalBlockers(input) {
 
   if (portability.profile !== "FULL_DR") blockers.push("fresh_full_dr_missing");
   if (!boolean(portability.fresh)) blockers.push("fresh_full_dr_missing");
-  if (portability.exactHead !== expectedCommit) blockers.push("full_dr_head_mismatch");
+
+  const portabilityHead = String(portability.exactHead ?? "").trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(portabilityHead)) blockers.push("full_dr_head_invalid");
+  if (portability.deployedRuntimeCommit !== expectedCommit) blockers.push("full_dr_deployed_runtime_mismatch");
   if (portability.latestMigrationVersion !== expectedLatest) blockers.push("full_dr_schema_head_mismatch");
   if (!boolean(portability.drReady)) blockers.push("full_dr_not_ready");
   if (portability.productionMutationPerformed !== false) blockers.push("full_dr_mutated_production");
+
+  if (!boolean(repositoryDelta.verified) || !boolean(repositoryDelta.runtimeEquivalent)) {
+    blockers.push("runtime_equivalence_evidence_incomplete");
+  }
+  if (repositoryDelta.baseDeployedCommit !== expectedCommit) {
+    blockers.push("runtime_equivalence_base_mismatch");
+  }
+  if (repositoryDelta.schemaCertificationCommit !== portabilityHead) {
+    blockers.push("runtime_equivalence_certification_mismatch");
+  }
+  if (stringArray(repositoryDelta.runtimeChangedPaths).length > 0) {
+    blockers.push("runtime_code_changed_after_deploy");
+  }
 
   if (!boolean(historical.verified) || historical.unresolvedCount !== 0) {
     blockers.push("historical_consumer_reference_evidence_incomplete");
