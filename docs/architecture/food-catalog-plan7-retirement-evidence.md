@@ -237,4 +237,3 @@ The final-schema portability registry and restore dependency graph exclude the t
 Retained owner families remain protected FULL_DR segments: `food_personal_corrections`, `food_favorites`, `user_food_favorites`, and Plan 6 Personal Override state. The old Search RPC is not a restore/search authority.
 
 Final Task 18 exact-head run identifiers are recorded after the post-apply coding/test/correction cycle completes.
-
