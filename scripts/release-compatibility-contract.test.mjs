@@ -16,7 +16,7 @@ const contract = JSON.parse(
   readFileSync(new URL("../config/release-compatibility.json", import.meta.url), "utf8"),
 );
 
-test("declared database marker remains distinct from the applied physical head while Plan 7 is pending", () => {
+test("declared database marker remains distinct from the reconciled physical head", () => {
   const resolved = resolveReleaseCompatibilityContract({ ledger, contract });
   const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
   const plan4 = ledger.entries.find((entry) => entry.localFile === PLAN4_MIGRATION);
@@ -27,15 +27,9 @@ test("declared database marker remains distinct from the applied physical head w
 
   assert.equal(resolved.schemaCompatibilityVersion, "2");
   assert.equal(resolved.expectedDatabaseMigrationVersion, "20260724232734");
-  assert.equal(resolved.latestAppliedMigrationVersion, "20261008022805");
+  assert.equal(resolved.latestAppliedMigrationVersion, "20261008123814");
   assert.ok(resolved.latestAppliedMigrationVersion.localeCompare(resolved.expectedDatabaseMigrationVersion) > 0);
-  assert.deepEqual(pendingEntries.map((entry) => entry.localFile), [
-    "20261008060000_food_catalog_plan7_retirement_prerequisite.sql",
-  ]);
-  for (const pendingEntry of pendingEntries) {
-    assert.equal(pendingEntry.productionVersion, undefined);
-    assert.equal(pendingEntry.productionName, undefined);
-  }
+  assert.deepEqual(pendingEntries.map((entry) => entry.localFile), []);
   assert.equal(plan4.state, "applied_version_alias");
   assert.equal(plan5.state, "applied_version_alias");
   assert.equal(correction.state, "applied_version_alias");
@@ -45,23 +39,23 @@ test("declared database marker remains distinct from the applied physical head w
   assert.equal(plan6Correction.state, "applied_version_alias");
   assert.equal(plan6Correction.productionVersion, "20260910071241");
   assert.equal(plan6Correction.productionName, "food_catalog_governance_gtin_lock_exactness");
-  assert.equal(resolved.migrationLedgerReconciliationState, "pending");
-  assert.equal(ledger.pendingCount, 1);
-  assert.equal(resolved.pendingMigrationCount, 1);
+  assert.equal(resolved.migrationLedgerReconciliationState, "reconciled");
+  assert.equal(ledger.pendingCount, 0);
+  assert.equal(resolved.pendingMigrationCount, 0);
   assert.equal(resolved.schemaAppliedUntrackedCount, 0);
-  assert.equal(resolved.unresolvedMigrationCount, 1);
+  assert.equal(resolved.unresolvedMigrationCount, 0);
 });
 
-test("Next build metadata preserves the declared marker while Task 16 prerequisite is pending", async () => {
+test("Next build metadata preserves the declared marker after prerequisite reconciliation", async () => {
   const { releaseMetadata } = await import("../next.config.mjs");
 
   assert.equal(releaseMetadata.schemaCompatibilityVersion, "2");
   assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, "20260724232734");
-  assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20261008022805");
-  assert.equal(releaseMetadata.migrationLedgerReconciliationState, "pending");
-  assert.equal(releaseMetadata.pendingMigrationCount, "1");
+  assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20261008123814");
+  assert.equal(releaseMetadata.migrationLedgerReconciliationState, "reconciled");
+  assert.equal(releaseMetadata.pendingMigrationCount, "0");
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, "0");
-  assert.equal(releaseMetadata.unresolvedMigrationCount, "1");
+  assert.equal(releaseMetadata.unresolvedMigrationCount, "0");
 });
 
 test("rejects a marker that is not represented by a resolved Production migration", () => {
