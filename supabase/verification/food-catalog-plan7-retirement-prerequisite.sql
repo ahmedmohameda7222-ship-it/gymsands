@@ -93,7 +93,6 @@ select pg_temp.plan7_retirement_prerequisite_assert(
 
 select pg_temp.plan7_retirement_prerequisite_assert(
   to_regprocedure('public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)') is not null
-  and not has_function_privilege('PUBLIC','public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)','EXECUTE')
   and not has_function_privilege('anon','public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)','EXECUTE')
   and not has_function_privilege('authenticated','public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)','EXECUTE')
   and not has_function_privilege('service_role','public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)','EXECUTE'),
