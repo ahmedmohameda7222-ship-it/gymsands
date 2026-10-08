@@ -212,6 +212,37 @@ test("legacy search remains blocked while application roles retain EXECUTE", () 
   assert.ok(!result.proposedDestructiveObjects.includes("function:public.search_nutrition_food_library"));
 });
 
+test("explicit future-retirement-set references are reported separately from unsupported dependencies", () => {
+  const evidence = baseEvidence();
+  const oldSearch = "public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)";
+  evidence.candidates["table:public.food_aliases"] = cleanCandidate({
+    databaseFunctionReferences: [oldSearch],
+    retirementSetReferences: [oldSearch],
+  });
+
+  const result = evaluatePlan7RetirementPreflight(evidence);
+  const candidate = result.candidateResults.find((item) => item.id === "table:public.food_aliases");
+
+  assert.deepEqual(candidate.blockers, []);
+  assert.deepEqual(candidate.retirementSetReferences, [oldSearch]);
+  assert.ok(result.proposedDestructiveObjects.includes("table:public.food_aliases"));
+});
+
+test("unclassified references remain fail-closed unsupported dependencies", () => {
+  const evidence = baseEvidence();
+  const unknown = "public.unknown_live_consumer(uuid)";
+  evidence.candidates["table:public.food_aliases"] = cleanCandidate({
+    databaseFunctionReferences: [unknown],
+  });
+
+  const result = evaluatePlan7RetirementPreflight(evidence);
+  const candidate = result.candidateResults.find((item) => item.id === "table:public.food_aliases");
+
+  assert.ok(candidate.blockers.includes("candidate_still_referenced"));
+  assert.deepEqual(candidate.retirementSetReferences, []);
+  assert.ok(!result.proposedDestructiveObjects.includes("table:public.food_aliases"));
+});
+
 test("zero food_market_relevance rows are insufficient without external/live clearance", () => {
   const evidence = baseEvidence();
   evidence.candidates["table:public.food_market_relevance"] = cleanCandidate({
