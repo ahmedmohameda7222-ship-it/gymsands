@@ -40,15 +40,13 @@ describe("Plan 7 relation/load-mode registry", () => {
     }
   });
 
-  it("preserves aliases and legacy market relevance as transitional portable state", () => {
-    expect(findPortableRelationRule("food_aliases")).toMatchObject({
-      classification: "TRANSITIONAL_PORTABLE_COMPATIBILITY",
-      loadMode: "RESTORE_EXACT",
-    });
-    expect(findPortableRelationRule("food_market_relevance")).toMatchObject({
-      classification: "TRANSITIONAL_PORTABLE_COMPATIBILITY",
-      loadMode: "RESTORE_EXACT",
-    });
+  it("excludes formally retired alias and market-relevance relations from portable state", () => {
+    expect(findPortableRelationRule("food_aliases")).toBeUndefined();
+    expect(findPortableRelationRule("food_market_relevance")).toBeUndefined();
+    expect(requiredSegmentsForProfile("CORE_PORTABLE")).not.toContain("food_aliases");
+    expect(requiredSegmentsForProfile("CORE_PORTABLE")).not.toContain("food_market_relevance");
+    expect(requiredSegmentsForProfile("FULL_DR")).not.toContain("food_aliases");
+    expect(requiredSegmentsForProfile("FULL_DR")).not.toContain("food_market_relevance");
   });
 
   it("separates source-live ingestion lease state from restore-only reconstruction transients", () => {
