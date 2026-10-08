@@ -79,10 +79,11 @@ Production alignment status after the authorized 2026-10-08 apply sequence:
 4. `20260919034630_food_catalog_owner_override_read_authority.sql` → `20261008014223_food_catalog_owner_override_read_authority`
 5. `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql` → `20261008022805_food_catalog_plan7_owner_reconciliation_expand`
 6. `20261008060000_food_catalog_plan7_retirement_prerequisite.sql` → `20261008123814_food_catalog_plan7_retirement_prerequisite`
+7. `20261008202500_food_catalog_plan7_retirement_contract.sql` → `20261008224322_food_catalog_plan7_retirement_contract`
 
-Do not replay applied migrations. Production is reconciled at `productionMigrationCount = 63`, `productionRecordCount = 129`, and physical head `20261008123814_food_catalog_plan7_retirement_prerequisite`. The machine ledger reports `schemaVerifiedUntrackedCount = 0`, `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`. The released compatibility marker remains unchanged at `20260724232734`.
+Do not replay applied migrations. Production is reconciled at `productionMigrationCount = 63`, `productionRecordCount = 130`, and physical head `20261008224322_food_catalog_plan7_retirement_contract`. The machine ledger reports `schemaVerifiedUntrackedCount = 0`, `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`. The released compatibility marker remains unchanged at `20260724232734`.
 
-The Task 16 prerequisite is non-destructive: it removes legacy Personal Correction dependencies from current Search V2 and canonical account purge, and revokes runtime EXECUTE on the retained old Food Library RPC. It does not DROP any legacy object or mutate owner data.
+The Task 16 prerequisite removed current Search V2/account-purge dependency on legacy Personal Corrections and disabled the old Food Library RPC. Task 17 then retired exactly the approved three-object set without `CASCADE`: the old Food Library RPC, `public.food_aliases`, and `public.food_market_relevance`. Retained owner state, all root `food_items` columns, current Search V2/rebuild, barcode authority, Personal Override authority, and the compatibility marker were preserved.
 
 ## Privacy and retirement boundary
 
