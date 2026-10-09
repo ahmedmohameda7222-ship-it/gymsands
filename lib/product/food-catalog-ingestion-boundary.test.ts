@@ -12,11 +12,6 @@ const PLAN5_MIGRATION = "20260906183000_food_catalog_search_projection_v2.sql";
 const PLAN5_SERVING_CORRECTION = "20260907165500_food_catalog_search_serving_semantics_correction.sql";
 const PLAN6_MIGRATION = "20260908100000_food_catalog_governance_control_plane.sql";
 const PLAN6_EXACTNESS_CORRECTION = "20260909083000_food_catalog_governance_gtin_lock_exactness.sql";
-const PLAN7_PENDING_MIGRATION = "20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql";
-const PLAN7_OWNER_EXPORT_MIGRATION = "20260915170012_food_catalog_owner_correction_export.sql";
-const PLAN7_INGESTION_REACTIVATION_MIGRATION = "20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql";
-const PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION = "20260919034630_food_catalog_owner_override_read_authority.sql";
-const PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION = "20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql";
 const INTERNAL_TABLES = [
   "food_ingestion_batches",
   "food_ingestion_runs",
@@ -72,7 +67,7 @@ function readableRuntimePaths(paths: string[]): string[] {
 }
 
 describe("Food Catalog Batch 0 ingestion boundary", () => {
-  it("preserves finalized Batch 0 authority while recording later Production aliases and the pending Plan 7 migrations", () => {
+  it("preserves finalized Batch 0 authority while recording later Production aliases and the pending Plan 7 expand migration", () => {
     const base = readLedgerAt(APPROVED_BASE_SHA);
     const batch0 = readLedgerAt(BATCH0_FINAL_SHA);
     const current = readCurrentLedger();
@@ -161,39 +156,26 @@ describe("Food Catalog Batch 0 ingestion boundary", () => {
         productionName: "food_catalog_governance_gtin_lock_exactness",
       }),
     ]);
-    expect(currentPendingEntries).toEqual([
-      expect.objectContaining({
-        localFile: PLAN7_PENDING_MIGRATION,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: PLAN7_OWNER_EXPORT_MIGRATION,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: PLAN7_INGESTION_REACTIVATION_MIGRATION,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: PLAN7_OWNER_OVERRIDE_READ_AUTHORITY_MIGRATION,
-        state: "pending",
-      }),
-      expect.objectContaining({
-        localFile: PLAN7_OWNER_RECONCILIATION_EXPAND_MIGRATION,
-        state: "pending",
-      }),
-    ]);
-    for (const pendingEntry of currentPendingEntries) {
-      expect(pendingEntry).not.toHaveProperty("productionVersion");
-      expect(pendingEntry).not.toHaveProperty("productionName");
-    }
-    expect(current.pendingCount).toBe(5);
-    expect(current.unresolvedCount).toBe(5);
+    expect(currentPendingEntries).toEqual([]);
+    expect(current.entries.find((entry) => entry.localFile === "20261008060000_food_catalog_plan7_retirement_prerequisite.sql"))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008123814",
+        productionName: "food_catalog_plan7_retirement_prerequisite",
+      }));
+    expect(current.entries.find((entry) => entry.localFile === "20261008202500_food_catalog_plan7_retirement_contract.sql"))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008224322",
+        productionName: "food_catalog_plan7_retirement_contract",
+      }));
+    expect(current.pendingCount).toBe(0);
+    expect(current.unresolvedCount).toBe(0);
     expect(current.historyRepair).toEqual(
       expect.objectContaining({
-        state: "pending",
-        pendingCount: 5,
-        unresolvedCount: 5,
+        state: "reconciled",
+        pendingCount: 0,
+        unresolvedCount: 0,
       })
     );
   });

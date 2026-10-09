@@ -116,3 +116,16 @@ Evidence must state:
 Completion requires exact-head GREEN evidence for Tasks 1–8, including `CORE_PORTABLE` and deterministic protected-fixture `FULL_DR` evidence, plus review of this runbook and the PR diff.
 
 That completion still does **not** authorize Workstream 2. Consumer cutover or legacy retirement begins only after separate planner authorization. The PR remains unmerged until normal review/merge authority approves it.
+
+## Plan 7 post-retirement final-schema boundary
+
+After the approved Task 17 retirement contract, the canonical portable schema no longer contains `public.food_aliases` or `public.food_market_relevance`. The old `public.search_nutrition_food_library(...)` RPC is also absent. They must not appear in V1 portable relation segments, restore dependency ordering, search rebuild authority, or final-schema verification.
+
+Retained transitional owner state remains intentional:
+- `public.food_personal_corrections` remains FULL_DR-protected owner state because privacy export still consumes it;
+- `public.user_food_favorites` remains FULL_DR-protected heterogeneous My Food/legacy owner state;
+- `public.food_favorites` remains Catalog favorite authority.
+
+Final search recovery continues to use only `public.rebuild_food_catalog_search_projection_v2(uuid,text,text)`, browser `public.search_food_catalog_v2(...)`, and the service-role MCP Search V2 bridge. The released compatibility marker remains independent from the physical migration head.
+
+Task 18 closure evidence must bind a fresh exact repository head to chronological PostgreSQL 17 replay, populated and zero-row restore, deterministic Search V2 golden verification, protected FULL_DR evidence, owner/security assertions, and the verified Production retirement read-back. CI remains disposable and must report `productionMutationPerformed: false`; the historical Production mutation is recorded separately in retirement evidence and the migration ledger.

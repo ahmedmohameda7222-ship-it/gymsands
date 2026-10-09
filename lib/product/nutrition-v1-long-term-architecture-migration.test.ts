@@ -24,14 +24,14 @@ describe("Nutrition V1 long-term architecture correction migration", () => {
     expect(migration).toContain("after_cursor as");
     expect(migration).toContain("limit v_limit + 1");
     expect(migration).not.toMatch(/limit\s+80\b/);
-    expect(verification).toContain("valid 81st catalog match");
+    expect(verification).toContain("plan 7 retired food library rpc still exists");
   });
 
   it("preserves the canonical between numeric-filter contract in database-authoritative search", () => {
     expect(migration).toContain("v_max numeric");
     expect(migration).toContain("p_filter->>'max'");
     expect(migration).toContain("if v_operator = 'between'");
-    expect(verification).toContain("between nutrition filter");
+    expect(verification).toContain("canonical search v2 paging semantics are verified by the food catalog search v2");
   });
 
   it("makes Cooking Start Over one idempotent transactional operation", () => {

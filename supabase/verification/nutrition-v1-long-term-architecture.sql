@@ -33,34 +33,33 @@ grant execute on function pg_temp.nv1_long_term_rejected(text, text) to public;
 
 do $catalog$
 declare
-  v_food regprocedure := to_regprocedure('public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)');
   v_start regprocedure := to_regprocedure('public.start_nutrition_cooking_session(uuid,uuid,numeric,timestamp with time zone)');
   v_start_over regprocedure := to_regprocedure('public.start_over_nutrition_cooking_session(uuid,timestamp with time zone)');
   v_create_recipe regprocedure := to_regprocedure('public.create_nutrition_recipe_draft(text,numeric,numeric,integer,text,jsonb)');
 begin
-  perform pg_temp.nv1_long_term_assert(v_food is not null, 'Nutrition V1 authoritative Food Library RPC missing.');
+  perform pg_temp.nv1_long_term_assert(
+    to_regprocedure('public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb)') is null,
+    'Plan 7 retired Food Library RPC still exists.'
+  );
   perform pg_temp.nv1_long_term_assert(v_start is not null, 'Nutrition V1 atomic Cooking start RPC missing.');
   perform pg_temp.nv1_long_term_assert(v_start_over is not null, 'Nutrition V1 atomic Start Over RPC missing.');
   perform pg_temp.nv1_long_term_assert(v_create_recipe is not null, 'Nutrition V1 atomic initial Recipe RPC missing.');
 
   perform pg_temp.nv1_long_term_assert(
-    (select prosecdef from pg_proc where oid = v_food)
-    and (select prosecdef from pg_proc where oid = v_start)
+    (select prosecdef from pg_proc where oid = v_start)
     and (select prosecdef from pg_proc where oid = v_start_over)
     and (select prosecdef from pg_proc where oid = v_create_recipe),
     'Nutrition V1 long-term RPCs must use explicit owner-derived security-definer authority.'
   );
 
   perform pg_temp.nv1_long_term_assert(
-    has_function_privilege('authenticated', v_food, 'EXECUTE')
-    and has_function_privilege('authenticated', v_start, 'EXECUTE')
+    has_function_privilege('authenticated', v_start, 'EXECUTE')
     and has_function_privilege('authenticated', v_start_over, 'EXECUTE')
     and has_function_privilege('authenticated', v_create_recipe, 'EXECUTE')
-    and not has_function_privilege('anon', v_food, 'EXECUTE')
     and not has_function_privilege('anon', v_start, 'EXECUTE')
     and not has_function_privilege('anon', v_start_over, 'EXECUTE')
     and not has_function_privilege('anon', v_create_recipe, 'EXECUTE'),
-    'Nutrition V1 long-term RPC execute grants invalid.'
+    'Nutrition V1 long-term retained RPC execute grants invalid after Plan 7 retirement.'
   );
 
   perform pg_temp.nv1_long_term_assert(
@@ -141,50 +140,12 @@ insert into public.nutrition_recipe_actions (
   1, 'Step 2', array['b2700000-0000-4000-8000-000000000024'::uuid]
 );
 
-set local role authenticated;
+-- Canonical Search V2 paging semantics are verified by the Food Catalog Search V2
+-- verifier. The retired Nutrition V1 Food Library RPC must not be recreated.
 select set_config('request.jwt.claim.sub', 'b2700000-0000-4000-8000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
-do $food_paging$
-declare
-  v_page jsonb;
-  v_cursor text := null;
-  v_page_number integer;
-begin
-  for v_page_number in 1..5 loop
-    v_page := public.search_nutrition_food_library(
-      '', 'en', v_cursor, 20, 'LT scalable', 'LT cuisine', 'all',
-      '{"protein":{"operator":"gte","value":20}}'::jsonb
-    );
-    perform pg_temp.nv1_long_term_assert(
-      jsonb_array_length(v_page->'items') = 20,
-      format('Nutrition V1 Food Library page %s did not retain the approved 20-result scale.', v_page_number)
-    );
-    if v_page_number < 5 then
-      perform pg_temp.nv1_long_term_assert(v_page->>'nextCursor' is not null, 'Nutrition V1 Food Library keyset cursor ended too early.');
-    end if;
-    v_cursor := v_page->>'nextCursor';
-  end loop;
-
-  perform pg_temp.nv1_long_term_assert(
-    exists (
-      select 1
-      from jsonb_array_elements(v_page->'items') item
-      where item->>'id' = 'c0000000-0000-4000-8000-000000000081'
-    ),
-    'Nutrition V1 Food Library could not discover/page the valid 81st catalog match.'
-  );
-
-  v_page := public.search_nutrition_food_library(
-    '', 'en', null, 20, 'LT scalable', 'LT cuisine', 'all',
-    '{"protein":{"operator":"between","value":30,"max":20}}'::jsonb
-  );
-  perform pg_temp.nv1_long_term_assert(
-    jsonb_array_length(v_page->'items') = 20,
-    'Nutrition V1 Food Library between nutrition filter did not preserve inclusive endpoint-order-independent semantics.'
-  );
-end
-$food_paging$;
+set local role authenticated;
 
 -- Start Over failure injection: the invalid action key fails after the parent
 -- transition point, and the function-level transaction must roll everything back.

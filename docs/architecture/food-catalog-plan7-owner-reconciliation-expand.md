@@ -56,7 +56,7 @@ Correct Plaivra Production project: `bkwezjxvapaeasfvlhvv`.
 
 No Production query, migration apply, or mutation is authorized by this Tasks 13–14 correction pass. The Task 14 migration is now a true expand migration: a nonzero `food_personal_corrections` population is **not by itself an expand/apply blocker**, because exact active legacy rows remain Search V2 compatibility authority whenever that owner/Food has no Plan 6 pointer.
 
-The zero/nonzero gate belongs to the later Task 16/17 contract/retirement preflight. At that future explicitly authorized live preflight, obtain a fresh read-only count:
+The zero/nonzero gate belongs to the later Task 16 contract/retirement preflight. At that later live preflight, obtain a fresh read-only count:
 
 ```sql
 begin read only;
@@ -65,22 +65,25 @@ from public.food_personal_corrections;
 rollback;
 ```
 
-Retirement gate:
+Task 16 Planner ruling after deployed cutover:
 
-- If `food_personal_corrections = 0`, a verified no-op owner-data retirement migration may be acceptable after the required live cutover evidence.
-- If `food_personal_corrections > 0`, **STOP retirement** and require an explicit reviewed owner-preserving semantic migration. Do not discard corrections.
+- Production `food_personal_corrections = 0`, so the non-destructive prerequisite may remove current Search V2 and account-purge dependencies on this legacy table while keeping the table/data itself intact pending later destructive review.
+- If a later live read ever finds `food_personal_corrections > 0`, retirement must stop and require explicit owner-preserving review.
+- `user_food_favorites` is **retained owner state for Plan 7 closure**. Its single blocked row is preserved, is not mutated to force `blocked = 0`, and is removed from the Plan 7 destructive candidate set. The Catalog / My Food dual-authority model remains unchanged.
 
-The favorite reconciliation report is likewise evidence for later retirement. Task 13 repository merge does not require `blocked = 0`. Later retirement of `user_food_favorites` requires `blocked = 0` **and** an approved owner-preserving disposition for every remaining row.
+Production alignment status after the authorized 2026-10-08 apply sequence:
 
-Ordered repository-pending migrations after this change:
+1. `20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql` → `20261008014113_food_catalog_governance_outbox_reconciliation_gate`
+2. `20260915170012_food_catalog_owner_correction_export.sql` → `20261008014144_food_catalog_owner_correction_export`
+3. `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql` → `20261008014204_food_catalog_ingestion_restore_reactivation_gate`
+4. `20260919034630_food_catalog_owner_override_read_authority.sql` → `20261008014223_food_catalog_owner_override_read_authority`
+5. `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql` → `20261008022805_food_catalog_plan7_owner_reconciliation_expand`
+6. `20261008060000_food_catalog_plan7_retirement_prerequisite.sql` → `20261008123814_food_catalog_plan7_retirement_prerequisite`
+7. `20261008202500_food_catalog_plan7_retirement_contract.sql` → `20261008224322_food_catalog_plan7_retirement_contract`
 
-1. `20260915170011_food_catalog_governance_outbox_reconciliation_gate.sql`
-2. `20260915170012_food_catalog_owner_correction_export.sql`
-3. `20260917023000_food_catalog_ingestion_restore_reactivation_gate.sql`
-4. `20260919034630_food_catalog_owner_override_read_authority.sql`
-5. `20260924051500_food_catalog_plan7_owner_reconciliation_expand.sql`
+Do not replay applied migrations. Production is reconciled at `productionMigrationCount = 63`, `productionRecordCount = 130`, and physical head `20261008224322_food_catalog_plan7_retirement_contract`. The machine ledger reports `schemaVerifiedUntrackedCount = 0`, `pendingCount = 0`, `unresolvedCount = 0`, and `historyRepair.state = reconciled`. The released compatibility marker remains unchanged at `20260724232734`.
 
-Do not replay applied migrations. The machine ledger remains `productionMigrationCount = 63`, `productionRecordCount = 123`, `schemaVerifiedUntrackedCount = 0`, with `pendingCount = 5`, `unresolvedCount = 5`, and `historyRepair.state = pending`.
+The Task 16 prerequisite removed current Search V2/account-purge dependency on legacy Personal Corrections and disabled the old Food Library RPC. Task 17 then retired exactly the approved three-object set without `CASCADE`: the old Food Library RPC, `public.food_aliases`, and `public.food_market_relevance`. Retained owner state, all root `food_items` columns, current Search V2/rebuild, barcode authority, Personal Override authority, and the compatibility marker were preserved.
 
 ## Privacy and retirement boundary
 

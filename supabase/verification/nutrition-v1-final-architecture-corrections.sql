@@ -58,14 +58,8 @@ begin
     'Nutrition V1 normalized catalog Food-name trigram index missing.'
   );
   perform pg_temp.nv1_final_assert(
-    exists (
-      select 1 from pg_indexes
-      where schemaname = 'public'
-        and indexname = 'nutrition_food_aliases_normalized_text_trgm_idx'
-        and indexdef like '%gin_trgm_ops%'
-        and indexdef like '%normalize_nutrition_food_search_text%'
-    ),
-    'Nutrition V1 normalized alias trigram index missing.'
+    to_regclass('public.food_aliases') is null,
+    'Plan 7 retired public.food_aliases is still present.'
   );
   perform pg_temp.nv1_final_assert(
     exists (
@@ -291,25 +285,11 @@ insert into public.food_items (
   'Final scale', 'Final test', 100, 'g', true, 'active'
 );
 
-insert into public.food_aliases (food_id, locale, alias, normalized_alias, alias_type)
-select
-  ('d2810000-0000-4000-8000-' || lpad(series::text, 12, '0'))::uuid,
-  'en',
-  'Final filler alias ' || lpad(series::text, 5, '0'),
-  'final filler alias ' || lpad(series::text, 5, '0'),
-  'alias'
-from generate_series(1, 12000) as series;
-insert into public.food_aliases (food_id, locale, alias, normalized_alias, alias_type) values (
-  'd2820000-0000-4000-8000-000000000002', 'en', 'Hidden Scalable Needle Alias', 'hidden scalable needle alias', 'alias'
-);
-
 analyze public.food_items;
-analyze public.food_aliases;
 
 do $index_plans$
 declare
   v_name_plan json;
-  v_alias_plan json;
 begin
   execute $sql$
     explain (analyze, buffers, format json)
@@ -321,47 +301,11 @@ begin
       and private.normalize_nutrition_food_search_text(food.food_name) like '%scalable needle%'
   $sql$ into v_name_plan;
 
-  execute $sql$
-    explain (analyze, buffers, format json)
-    select alias.food_id
-    from public.food_aliases alias
-    where private.normalize_nutrition_food_search_text(alias.alias) like '%scalable needle%'
-  $sql$ into v_alias_plan;
-
   perform pg_temp.nv1_final_assert(
     v_name_plan::text like '%nutrition_food_items_normalized_name_trgm_idx%',
     'Normalized Food-name search did not use the canonical trigram index on the scaled fixture.'
   );
-  perform pg_temp.nv1_final_assert(
-    v_alias_plan::text like '%nutrition_food_aliases_normalized_text_trgm_idx%',
-    'Normalized Food-alias search did not use the canonical trigram index on the scaled fixture.'
-  );
 end
 $index_plans$;
-
-set local role authenticated;
-select set_config('request.jwt.claim.sub', 'd2800000-0000-4000-8000-000000000001', true);
-select set_config('request.jwt.claim.role', 'authenticated', true);
-
-do $public_search$
-declare
-  v_page jsonb;
-begin
-  v_page := public.search_nutrition_food_library(
-    'scalable needle', 'en', null, 20, 'Final scale', 'Final test', 'all', '{}'::jsonb
-  );
-  perform pg_temp.nv1_final_assert(
-    exists (
-      select 1
-      from jsonb_array_elements(v_page->'items') item
-      where item->>'id' in (
-        'd2820000-0000-4000-8000-000000000001',
-        'd2820000-0000-4000-8000-000000000002'
-      )
-    ),
-    'Scaled Food Library search could not discover a normalized name/alias match.'
-  );
-end
-$public_search$;
 
 rollback;

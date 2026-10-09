@@ -119,15 +119,14 @@ select pg_temp.plan7_expand_assert(
 );
 
 select pg_temp.plan7_expand_assert(
-  position('public.food_personal_corrections' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
-  and position('correction.is_active = true' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
-  and position('override_pointer.user_id is null' in lower(pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure)))>0
+  position('public.food_personal_corrections' in lower(pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure)))=0
   and position('public.food_personal_overrides' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
   and position('public.food_personal_override_revisions' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
+  and position('override_revision.revision_number = override_pointer.pointer_revision' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
   and position('public.food_catalog_generation_foods' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
   and position('public.food_nutrition_revisions' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0
   and position('private.food_catalog_search_per_100_v2' in pg_get_functiondef('private.food_catalog_search_v2_for_owner_v1(uuid,text,text,text,text,text,integer,text,text,text,jsonb)'::regprocedure))>0,
-  'search core does not preserve legacy correction fallback beneath exact Plan 6 pointer authority'
+  'search core did not cut legacy Personal Corrections while preserving exact Plan 6 pointer authority'
 );
 
 select pg_temp.plan7_expand_assert(

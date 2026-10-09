@@ -75,13 +75,16 @@ begin
     'nutrition_cooking_sessions',
     'nutrition_cooking_action_states',
     'nutrition_cooking_timers',
-    'food_personal_corrections',
     'food_favorites'
   ] loop
     if position(v_table in v_nutrition_core_definition) = 0 then
       raise exception 'Nutrition V1 delegated purge authority does not reference %', v_table;
     end if;
   end loop;
+
+  if position('public.food_personal_corrections' in lower(v_nutrition_core_definition)) > 0 then
+    raise exception 'Nutrition V1 delegated purge authority still references retained legacy Personal Corrections';
+  end if;
 
   if position('nutrition_saved_meal_creation_operations' in v_public_definition) = 0 then
     raise exception 'Public account purge authority does not explicitly cover Saved Meal creation replay rows';

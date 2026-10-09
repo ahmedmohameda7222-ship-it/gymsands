@@ -35,16 +35,8 @@ grant execute on function pg_temp.nv1_food_rejected(text, text) to public;
 
 do $catalog$
 begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conrelid = 'public.food_aliases'::regclass
-      and contype = 'c'
-      and pg_get_constraintdef(oid) like '%en%'
-      and pg_get_constraintdef(oid) like '%de%'
-      and pg_get_constraintdef(oid) like '%ar%'
-  ) then
-    raise exception 'Nutrition V1 food alias locale contract missing.';
+  if to_regclass('public.food_aliases') is not null then
+    raise exception 'Plan 7 retired public.food_aliases is still present.';
   end if;
 
   if exists (
@@ -90,12 +82,8 @@ begin
     select 1 from pg_indexes
     where schemaname = 'public' and indexname = 'food_items_name_trgm_idx'
       and indexdef like '%gin_trgm_ops%'
-  ) or not exists (
-    select 1 from pg_indexes
-    where schemaname = 'public' and indexname = 'food_aliases_normalized_trgm_idx'
-      and indexdef like '%gin_trgm_ops%'
   ) then
-    raise exception 'Nutrition V1 food search index missing.';
+    raise exception 'Nutrition V1 food-name search index missing.';
   end if;
 
   if not exists (
@@ -181,11 +169,6 @@ insert into public.food_source_records (
     '{"amount":100,"unit":"g"}'::jsonb,
     '{}'::jsonb
   );
-
-insert into public.food_aliases (food_id, locale, alias, normalized_alias, alias_type) values
-  ('a2130000-0000-4000-8000-000000000010', 'en', 'Chicken breast', 'chicken breast', 'localized_name'),
-  ('a2130000-0000-4000-8000-000000000010', 'de', 'Hähnchenbrust', 'hähnchenbrust', 'localized_name'),
-  ('a2130000-0000-4000-8000-000000000010', 'ar', 'صدر دجاج', 'صدر دجاج', 'localized_name');
 
 select pg_temp.nv1_food_assert(
   (select is_verified is false and verified_source_record_id is null

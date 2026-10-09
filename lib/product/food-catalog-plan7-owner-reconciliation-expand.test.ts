@@ -92,13 +92,31 @@ describe("Plan 7 Tasks 13-14 owner reconciliation and expand authority", () => {
     expect(browser).not.toContain("favoriteKeys.includes(favoriteKeyForFood(food))");
   });
 
-  it("keeps Task 14 expand-only and records the fifth pending repository migration", () => {
+  it("keeps Task 14 expand-only after exact Production apply", () => {
     const sql = source(`supabase/migrations/${migrationFiles[0]}`).toLowerCase();
     expect(sql).not.toMatch(/\bdrop\s+(table|column|function)\b/);
     const ledger = JSON.parse(source("supabase/migration-ledger.json"));
-    expect(ledger.pendingCount).toBe(5);
-    expect(ledger.unresolvedCount).toBe(5);
-    expect(ledger.entries.filter((entry: { state: string }) => entry.state === "pending")).toHaveLength(5);
+    expect(ledger.entries.find((entry: { localFile: string }) => entry.localFile === migrationFiles[0]))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008022805",
+        productionName: "food_catalog_plan7_owner_reconciliation_expand",
+      }));
+    expect(ledger.entries.find((entry: { localFile: string }) => entry.localFile === "20261008060000_food_catalog_plan7_retirement_prerequisite.sql"))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008123814",
+        productionName: "food_catalog_plan7_retirement_prerequisite",
+      }));
+    expect(ledger.entries.find((entry: { localFile: string }) => entry.localFile === "20261008202500_food_catalog_plan7_retirement_contract.sql"))
+      .toEqual(expect.objectContaining({
+        state: "applied_version_alias",
+        productionVersion: "20261008224322",
+        productionName: "food_catalog_plan7_retirement_contract",
+      }));
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.entries.filter((entry: { state: string }) => entry.state === "pending")).toHaveLength(0);
   });
 
   it("ships a read-only owner reconciliation report with the required aggregate surface", () => {

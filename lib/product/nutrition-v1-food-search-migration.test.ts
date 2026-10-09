@@ -120,12 +120,12 @@ describe("Nutrition V1 Food search and curation migration contract", () => {
 
   it("ships executable verification and registers it before release preflight", () => {
     for (const phrase of [
-      "nutrition v1 food alias locale contract missing",
+      "plan 7 retired public.food_aliases is still present",
       "nutrition v1 food provenance contract missing",
       "nutrition v1 food personal correction owner isolation leaked",
       "nutrition v1 food favorite uniqueness missing",
       "nutrition v1 food verification boundary invalid",
-      "nutrition v1 food search index missing",
+      "nutrition v1 food-name search index missing",
       "nutrition v1 food duplicate redirect invalid",
     ]) {
       expect(verification).toContain(phrase);
