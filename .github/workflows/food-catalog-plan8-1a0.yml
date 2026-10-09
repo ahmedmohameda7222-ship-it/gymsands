@@ -1,44 +1,109 @@
-name: Food Catalog Plan 8 USDA source probe
+name: Food Catalog Plan 8 USDA Foundation 1A0 Offline QA
+
 on:
   push:
     branches:
       - feat/food-catalog-plan8-usda-foundation-1a0
   workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: food-catalog-plan8-offline-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  foundation-release-probe:
+  exact-release-offline-dry-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     steps:
-      - name: Download exact official USDA Foundation April 2026 JSON ZIP
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run focused adapter tests
+        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/food-catalog/ingestion/usda-foundation/adapter.test.ts
+      - name: Run provider-neutral ingestion regression suite
+        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/food-catalog/ingestion
+      - name: Lint and typecheck
         run: |
-          curl --fail --location --retry 3 --silent --show-error             'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_json_2026-04-30.zip'             --output /tmp/foundation-2026-04.zip
-          sha256sum /tmp/foundation-2026-04.zip
-          wc -c /tmp/foundation-2026-04.zip
-      - name: Inspect release schema without retaining data
+          npm run lint
+          npm run typecheck
+      - name: Download exact official USDA April 2026 Foundation archive and check lock
+        shell: bash
         run: |
-          python - <<'PY'
-          import zipfile,json,collections
-          p='/tmp/foundation-2026-04.zip'
-          with zipfile.ZipFile(p) as z:
-              print('MEMBERS',[(i.filename,i.file_size) for i in z.infolist()])
-              names=[i.filename for i in z.infolist() if i.filename.lower().endswith('.json')]
-              if len(names)!=1: raise RuntimeError('expected one Foundation JSON file')
-              data=json.loads(z.read(names[0]))
-              print('ROOT',list(data.keys()) if isinstance(data,dict) else type(data).__name__)
-              for k,v in data.items():
-                  if isinstance(v,list):
-                      print('ARRAY',k,'length',len(v),'nulls',sum(x is None for x in v))
-                      foods=[x for x in v if isinstance(x,dict)]
-                      print('FOOD_FIELDS',sorted({a for x in foods for a in x.keys()}))
-                      print('FIRST',json.dumps({f:foods[0].get(f) for f in ['fdcId','dataType','description','publicationDate','foodCategory']}))
-                      for f in ['foodNutrients','foodPortions']:
-                          sample=next((e for food in foods for e in food.get(f,[]) if isinstance(e,dict)),{})
-                          print(f+'_FIELDS',sorted(sample.keys()), 'EXAMPLE',json.dumps(sample)[:1000])
-                      nutrients=collections.Counter((n.get('nutrient') or {}).get('id') for x in foods for n in x.get('foodNutrients',[]) if isinstance(n,dict))
-                      print('NUTRIENT_TARGET_COUNTS',{str(n):nutrients[n] for n in [1003,1004,1005,1079,1093,1258,2000,1063,2047,2048,1008]})
-                      for f in ['foodNutrients','foodPortions']:
-                          print(f+'_COUNT',sum(len(x.get(f,[])) for x in foods))
-                      print('TYPES',dict(collections.Counter(x.get('dataType') for x in foods)))
-          PY
+          set -euo pipefail
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_json_2026-04-30.zip' \
+            --output "$RUNNER_TEMP/plan8-usda-foundation.zip"
+          node --input-type=module - "$RUNNER_TEMP/plan8-usda-foundation.zip" <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const lock=JSON.parse(fs.readFileSync('data/food-catalog/source-locks/usda-foundation-2026-04.json','utf8'));
+          const bytes=fs.readFileSync(process.argv[2]);
+          const sha=crypto.createHash('sha256').update(bytes).digest('hex');
+          console.log('USDA_ZIP_SHA256='+sha);
+          console.log('USDA_ZIP_BYTES='+bytes.length);
+          if(sha!==lock.sourceChecksumSha256 || bytes.length!==lock.sourceBytes) process.exit(1);
+          NODE
+      - name: Verify wrong artifact is refused before processing
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'wrong-release' > "$RUNNER_TEMP/plan8-invalid.zip"
+          if ./node_modules/.bin/vite-node scripts/food-catalog-plan8-1a0.ts \
+              --zip "$RUNNER_TEMP/plan8-invalid.zip" \
+              --index data/food-catalog/source-locks/plan8-1a0-empty-match-index.json \
+              --output "$RUNNER_TEMP/plan8-should-not-exist"; then
+            echo "FAIL: import accepted an incorrect source" >&2
+            exit 1
+          fi
+          test ! -d "$RUNNER_TEMP/plan8-should-not-exist"
+      - name: Full exact release 1A0 dry-run A
+        run: |
+          ./node_modules/.bin/vite-node scripts/food-catalog-plan8-1a0.ts \
+            --zip "$RUNNER_TEMP/plan8-usda-foundation.zip" \
+            --index data/food-catalog/source-locks/plan8-1a0-empty-match-index.json \
+            --output "$RUNNER_TEMP/plan8-a"
+      - name: Independent full exact release 1A0 dry-run B
+        run: |
+          ./node_modules/.bin/vite-node scripts/food-catalog-plan8-1a0.ts \
+            --zip "$RUNNER_TEMP/plan8-usda-foundation.zip" \
+            --index data/food-catalog/source-locks/plan8-1a0-empty-match-index.json \
+            --output "$RUNNER_TEMP/plan8-b"
+      - name: Prove byte-identical ManifestContent and semantic identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          for item in manifest-content.json qa.json checksums.json qa.md; do
+            cmp "$RUNNER_TEMP/plan8-a/$item" "$RUNNER_TEMP/plan8-b/$item"
+          done
+          echo "PLAN8_REPLAY_A=$(cat "$RUNNER_TEMP/plan8-a/checksums.json")"
+          echo "PLAN8_REPLAY_B=$(cat "$RUNNER_TEMP/plan8-b/checksums.json")"
+          node --input-type=module - "$RUNNER_TEMP/plan8-a/qa.json" <<'NODE'
+          import fs from 'node:fs';
+          const qa=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(qa.input.foundationSourceRecords!==363 || qa.input.nullNonRecordSlots!==32) process.exit(1);
+          if(qa.population.input!==363 || qa.population.accepted+qa.population.rejected+qa.population.quarantined!==363) process.exit(1);
+          if(qa.nutrition.legacyFallback!==0 || qa.market.globalRelevanceCount!==0) process.exit(1);
+          NODE
+      - name: Preserve reproducible offline-only QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan8-1a0-offline-evidence-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/plan8-a/manifest-content.json
+            ${{ runner.temp }}/plan8-a/qa.json
+            ${{ runner.temp }}/plan8-a/qa.md
+            ${{ runner.temp }}/plan8-a/checksums.json
+            ${{ runner.temp }}/plan8-b/checksums.json
+          if-no-files-found: warn
+          retention-days: 30
