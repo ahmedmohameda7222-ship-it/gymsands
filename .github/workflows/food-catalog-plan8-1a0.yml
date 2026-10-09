@@ -1,0 +1,44 @@
+name: Food Catalog Plan 8 USDA source probe
+on:
+  push:
+    branches:
+      - feat/food-catalog-plan8-usda-foundation-1a0
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  foundation-release-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download exact official USDA Foundation April 2026 JSON ZIP
+        run: |
+          curl --fail --location --retry 3 --silent --show-error             'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_json_2026-04-30.zip'             --output /tmp/foundation-2026-04.zip
+          sha256sum /tmp/foundation-2026-04.zip
+          wc -c /tmp/foundation-2026-04.zip
+      - name: Inspect release schema without retaining data
+        run: |
+          python - <<'PY'
+          import zipfile,json,collections
+          p='/tmp/foundation-2026-04.zip'
+          with zipfile.ZipFile(p) as z:
+              print('MEMBERS',[(i.filename,i.file_size) for i in z.infolist()])
+              names=[i.filename for i in z.infolist() if i.filename.lower().endswith('.json')]
+              if len(names)!=1: raise RuntimeError('expected one Foundation JSON file')
+              data=json.loads(z.read(names[0]))
+              print('ROOT',list(data.keys()) if isinstance(data,dict) else type(data).__name__)
+              for k,v in data.items():
+                  if isinstance(v,list):
+                      print('ARRAY',k,'length',len(v),'nulls',sum(x is None for x in v))
+                      foods=[x for x in v if isinstance(x,dict)]
+                      print('FOOD_FIELDS',sorted({a for x in foods for a in x.keys()}))
+                      print('FIRST',json.dumps({f:foods[0].get(f) for f in ['fdcId','dataType','description','publicationDate','foodCategory']}))
+                      for f in ['foodNutrients','foodPortions']:
+                          sample=next((e for food in foods for e in food.get(f,[]) if isinstance(e,dict)),{})
+                          print(f+'_FIELDS',sorted(sample.keys()), 'EXAMPLE',json.dumps(sample)[:1000])
+                      nutrients=collections.Counter((n.get('nutrient') or {}).get('id') for x in foods for n in x.get('foodNutrients',[]) if isinstance(n,dict))
+                      print('NUTRIENT_TARGET_COUNTS',{str(n):nutrients[n] for n in [1003,1004,1005,1079,1093,1258,2000,1063,2047,2048,1008]})
+                      for f in ['foodNutrients','foodPortions']:
+                          print(f+'_COUNT',sum(len(x.get(f,[])) for x in foods))
+                      print('TYPES',dict(collections.Counter(x.get('dataType') for x in foods)))
+          PY
