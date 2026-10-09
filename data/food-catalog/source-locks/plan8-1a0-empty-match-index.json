@@ -1,0 +1,14 @@
+{
+  "snapshotId": "plan8-1a0-empty-catalog-assumption-2026-10-09",
+  "captureMethod": "offline documented empty-catalog assumption; not an independent Production read-only database export",
+  "readOnly": true,
+  "productionMutationsAuthorized": false,
+  "matchIndex": {
+    "sourceIdentities": [],
+    "gtinOwners": [],
+    "redirects": [],
+    "semanticIdentities": [],
+    "qualifiedAliases": [],
+    "possibleDuplicateNames": []
+  }
+}
