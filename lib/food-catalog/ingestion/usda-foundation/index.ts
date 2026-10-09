@@ -75,7 +75,7 @@ export type UsdaFoundationFood = {
   publicationDate?: string;
   foodCategory?: { description?: string; id?: number; code?: string } | null;
   foodNutrients?: UsdaNutrient[];
-  foodPortions?: UsdaPortion[];
+  foodPortions?: UsdaPortion[] | null;
   [key: string]: unknown;
 };
 
@@ -120,7 +120,9 @@ function validateFoodShape(food: unknown, slot: number): asserts food is UsdaFou
   }
   if (typeof f.description !== "string") throw new Error(`Missing USDA description for fdcId ${f.fdcId}.`);
   if (!Array.isArray(f.foodNutrients)) throw new Error(`Invalid USDA foodNutrients for fdcId ${f.fdcId}.`);
-  if (!Array.isArray(f.foodPortions)) throw new Error(`Invalid USDA foodPortions for fdcId ${f.fdcId}.`);
+  if (f.foodPortions !== undefined && f.foodPortions !== null && !Array.isArray(f.foodPortions)) {
+    throw new Error(`Invalid USDA foodPortions for fdcId ${f.fdcId}.`);
+  }
 }
 
 export function parseUsdaFoundationJson(json: string): ParsedFoundationJson {
