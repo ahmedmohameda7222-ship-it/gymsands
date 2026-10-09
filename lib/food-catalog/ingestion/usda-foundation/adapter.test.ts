@@ -81,6 +81,18 @@ describe("USDA Foundation 1A0 source authority", () => {
     ] }))).toThrow(/fdcId/);
   });
 
+  it("retains Foods with absent optional foodPortions rather than silently skipping records", () => {
+    const withoutPortions = { ...example };
+    delete withoutPortions.foodPortions;
+    const parsed = parseUsdaFoundationJson(JSON.stringify({ FoundationFoods: [withoutPortions] }));
+    expect(parsed.foods).toHaveLength(1);
+    const [candidate] = createUsdaFoundationAdapter(lock).toCandidates({
+      sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes, foods: parsed.foods
+    });
+    expect(candidate?.servings).toEqual([]);
+    expect((candidate?.sourceServing as { rawPortions: unknown[] }).rawPortions).toEqual([]);
+  });
+
   it("maps release-aware nutrition and chooses Specific before General; source zero survives", () => {
     const [candidate] = createUsdaFoundationAdapter(lock).toCandidates({
       sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes, foods: [example]
