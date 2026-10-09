@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           printf 'wrong-release' > "$RUNNER_TEMP/plan8-invalid.zip"
-          if ./node_modules/.bin/vite-node scripts/food-catalog-plan8-1a0.ts \
+          if node scripts/food-catalog-plan8-1a0-runner.mjs \
               --zip "$RUNNER_TEMP/plan8-invalid.zip" \
               --index data/food-catalog/source-locks/plan8-1a0-empty-match-index.json \
               --output "$RUNNER_TEMP/plan8-should-not-exist"; then
@@ -68,13 +68,13 @@ jobs:
           test ! -d "$RUNNER_TEMP/plan8-should-not-exist"
       - name: Full exact release 1A0 dry-run A
         run: |
-          ./node_modules/.bin/vite-node scripts/food-catalog-plan8-1a0.ts \
+          node scripts/food-catalog-plan8-1a0-runner.mjs \
             --zip "$RUNNER_TEMP/plan8-usda-foundation.zip" \
             --index data/food-catalog/source-locks/plan8-1a0-empty-match-index.json \
             --output "$RUNNER_TEMP/plan8-a"
       - name: Independent full exact release 1A0 dry-run B
         run: |
-          ./node_modules/.bin/vite-node scripts/food-catalog-plan8-1a0.ts \
+          node scripts/food-catalog-plan8-1a0-runner.mjs \
             --zip "$RUNNER_TEMP/plan8-usda-foundation.zip" \
             --index data/food-catalog/source-locks/plan8-1a0-empty-match-index.json \
             --output "$RUNNER_TEMP/plan8-b"
