@@ -1,0 +1,30 @@
+{
+  "snapshotId": "plan8-1a0-prod-read-only-empty-catalog-2026-10-09",
+  "captureMethod": "2026-10-09 independent read-only Production Supabase SELECT COUNT(*) verification of global Food authority tables; all rows 0",
+  "readOnly": true,
+  "productionMutationsAuthorized": false,
+  "matchIndex": {
+    "sourceIdentities": [],
+    "gtinOwners": [],
+    "redirects": [],
+    "semanticIdentities": [],
+    "qualifiedAliases": [],
+    "possibleDuplicateNames": []
+  },
+  "captureEvidence": {
+    "observationDate": "2026-10-09",
+    "projectId": "bkwezjxvapaeasfvlhvv",
+    "verification": "read-only SELECT COUNT(*)",
+    "tableCounts": {
+      "food_items": 0,
+      "food_source_records": 0,
+      "food_barcodes": 0,
+      "food_merge_events": 0,
+      "food_names": 0,
+      "food_ingestion_batches": 0,
+      "food_ingestion_runs": 0,
+      "food_catalog_generations": 0,
+      "food_catalog_search_documents": 0
+    }
+  }
+}

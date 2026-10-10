@@ -1,0 +1,57 @@
+{
+  "provider": "USDA_FDC",
+  "dataset": "FoundationFoods",
+  "release": "2026-04-30",
+  "sourceReleaseDate": "2026-04-30",
+  "sourceVersion": "2026-04-30",
+  "sourceFilename": "FoodData_Central_foundation_food_json_2026-04-30.zip",
+  "sourceJsonFilename": "FoodData_Central_foundation_food_json_2026-04-30.json",
+  "sourceUrl": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_json_2026-04-30.zip",
+  "sourceChecksumSha256": "186e988ec542e913f51ef62b86a47758e8cdd0d1dc3889e7b055581f3c09c77a",
+  "sourceBytes": 469303,
+  "importerVersion": "plan8-1a0-v2",
+  "configChecksumSha256": "3fee7e87bd808b014fedf68c0dd51fef6677a1a6ffe974c39921cf916d401d5b",
+  "licenseName": "CC0 1.0 Universal",
+  "licenseReference": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "expectedDataType": "Foundation",
+  "productionAuthority": false,
+  "config": {
+    "schemaVersion": "usda-foundation-1a0-config-v2",
+    "adapterVersion": "2",
+    "nutrition": {
+      "calories": [
+        2048,
+        2047
+      ],
+      "protein_g": [
+        1003
+      ],
+      "fat_g": [
+        1004
+      ],
+      "carbs_g": [
+        1005
+      ],
+      "fiber_g": [
+        1079
+      ],
+      "saturated_fat_g": [
+        1258
+      ],
+      "sugars_g": [
+        2000,
+        1063
+      ],
+      "sodium_mg": [
+        1093
+      ]
+    },
+    "legacyEnergyFallback": false,
+    "namingPolicy": "preserve_usda_description",
+    "belowLimitPolicy": "numeric_or_textual_below_limit_zero_is_unknown",
+    "taxonomyMappings": {},
+    "marketPolicy": "usda_us_provenance_only_no_market_assignment",
+    "identityPolicy": "versioned_fdc_source_identity_plus_namespaced_ndb_semantic_v1",
+    "basis": "100_g"
+  }
+}
