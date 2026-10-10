@@ -11,14 +11,14 @@
 - One JSON member `FoodData_Central_foundation_food_json_2026-04-30.json`, 6721650 uncompressed bytes.
 - Root `FoundationFoods`: **395 array slots; 363 Food objects with dataType=Foundation and 32 null non-record slots**. The null slots are counted but are not Foods; never silently treated as rejected Foods.
 - Licence: **CC0 1.0 Universal**, https://creativecommons.org/publicdomain/zero/1.0/.
-- Lock: `data/food-catalog/source-locks/usda-foundation-2026-04.json`; importer `plan8-1a0-v1`; adapter config version `1`; config hash is verified at runtime using stable JSON.
+- Lock: `data/food-catalog/source-locks/usda-foundation-2026-04.json`; importer `plan8-1a0-v2`; adapter config version `2`; config hash is verified at runtime using stable JSON.
 - No raw ZIP or extracted USDA data is committed.
 
 ## Architecture and identity
 
 The focused `lib/food-catalog/ingestion/usda-foundation/index.ts` adapter implements `FoodCatalogSourceAdapter` and emits the existing `FoodCatalogCandidateInput`. Normalization, validation, canonical matching, quarantine and deterministic ManifestContent SHA-256 are exclusively delegated to the existing Plan 4 ingestion engine. There is no second framework, Production DB client or migration.
 
-Source record identity is the USDA Foundation numeric `fdcId` string scoped to provider/dataset/version. `fdcId` is **not** Plaivra Food ID. Each record includes a stable, deterministic source-record checksum generated from canonicalized raw JSON fields; exact original archive bytes are pinned by the top-level ZIP hash. Aliases, GTIN, brands and Plaivra canonical semantic signatures are not fabricated. The adapter may attach narrowly supported `raw/cooked/frozen/dried` state evidence only to fully matched comma-separated tokens. The engine preserves no name-only automatic match, and ambiguous canonical indexes quarantine.
+Source record identity is the USDA Foundation numeric `fdcId` string scoped to provider/dataset/version. `fdcId` is **not** Plaivra Food ID. Each record includes a stable, deterministic source-record checksum generated from canonicalized raw JSON fields; exact original archive bytes are pinned by the top-level ZIP hash. Aliases, GTIN and brands are not fabricated. Exact usable USDA Foundation `ndbNumber` is separately preserved in `sourceNutrition.ndbNumber`, normalized deterministically to a numeric NDB identifier (minimum five digits), and used as `USDA_FDC:FoundationFoods:NDB:<normalized>` structured identity evidence. The SHA-256 semantic signature is namespaced over stable JSON `{ algorithm: "usda-foundation-semantic-identity-v1", provider: "USDA_FDC", dataset: "FoundationFoods", ndbNumber: normalized }` and prefixed with its algorithm version. Malformed/missing/ambiguous NDBs do not authorize matching; duplicate NDBs within the same release quarantine via Plan 4 strong-collision checks. Provider/dataset/version/fdcId source-record identity retains the highest matching precedence, with conflicting semantic owners quarantined rather than silently merged. Descriptions and nutrient resemblance are never hashed into stable identity. The adapter may attach narrowly supported `raw/cooked/frozen/dried` state evidence only to fully matched comma-separated tokens. The engine preserves no name-only automatic match, and ambiguous canonical indexes quarantine.
 
 ## Nutrient mapping
 
@@ -35,7 +35,7 @@ Source record identity is the USDA Foundation numeric `fdcId` string scoped to p
 | `sugars_g` | 2000, then 1063 | g | declared total-sugar authorities; never reconstruct from individual sugars |
 | `sodium_mg` | 1093 | mg | reject unexpected units |
 
-Never average alternate authorities. Explicit measured zero remains zero; absent amount becomes null. Where a numeric zero is explicitly marked below detection/quantification/reporting limit in the available nutrient footnote/derivation evidence, represent its canonical value as null and retain full raw source nutrition. Foundation record nutrient field/LOQ details not recognized as explicit metadata remain a **Planner review limitation**; do not claim laboratory zero classification beyond the evidence. Report chosen nutrient IDs and below-limit count in QA.
+Never average alternate authorities. Explicit measured zero remains zero; absent amount becomes null. Where a mapped nutrient has amount `0` and explicit numeric USDA `loq > 0`, the canonical value is null; explicit textual below-detection/quantification evidence is an additional null path. Ordinary measured zero remains zero and nonzero values remain exact (even where a numeric LOQ field is present). All raw nutrient facts, including `loq`, are retained. The QA reports numeric and textual below-limit counts separately, plus raw numeric LOQ cases. Undocumented source LOQ semantics remain a Planner review limitation, not grounds for imputation.
 
 ## Portions and naming
 
@@ -65,10 +65,19 @@ node scripts/food-catalog-plan8-1a0-runner.mjs \
 
 Run independently a second time with a different `--output`. The command refuses a changed ZIP hash/size, unexpected ZIP member/release, changed adapter config hash, malformed source root and duplicate Food IDs. Outputs: `manifest-content.json`, `qa.json`, `qa.md`, `checksums.json`. There are no timestamps, paths, or run IDs inside manifest content. The only writer is local `fs.writeFile` to the caller-designated offline output path. The dedicated workflow `.github/workflows/food-catalog-plan8-1a0.yml` downloads the source separately, runs full release twice, compares all resulting files and uploads CI review artifacts under `plan8-1a0-offline-evidence-<headSha>`.
 
+
+## Plan 8 1A0 v2 correction: independently reviewable evidence
+
+- Earlier v1 full-release hashes `db575dcca49a5c5517cf6d3ada0093410ebd27ca82a29333c87dbb7760389bfb` (ManifestContent) and `c26dce6c444fbb060f4c94d86928e54c7b46618ac8b4cdcb2d0ffb33b509fa60` (semantic batch) are **historical pre-correction evidence**, not v2 hashes. Exact final v2 hashes must come from new full archive replay.
+- Source lock retains the exact same official ZIP and SHA. Adapter/importer version `2` / `plan8-1a0-v2`; config SHA-256 `3fee7e87bd808b014fedf68c0dd51fef6677a1a6ffe974c39921cf916d401d5b`.
+- New machine-readable QA schema `plaivra-food-catalog-usda-foundation-1a0-qa-v2` explicitly contains `identity.rawNdbStatusCounts` (present/missing/malformed), deterministic duplicate/malformed NDB examples, `nutrition.legacy1008PresentButIntentionallyExcluded`, `nutrition.no2048Or2047Or1008EnergyAuthority`, selected 2048/2047/1008 authority counts, dual total-sugars source/selected/conflict counts with exact differing values, negative 1005 examples with disposition, and numeric/text zero-below-LOQ evidence counts.
+- Valid NDB matches can carry across FDC releases without weakening exact immutable versioned source-record identity. The existing provider-neutral Plan 4 matching engine is unchanged.
+- The v2 QA dataset remains **offline only**. A green replay is not authority for Production import, Activation, Generation promotion or Plan 9.
+
 ## Explicit non-actions, limitations and exit gate
 
 **Not performed:** Production Food writes, Production ingestion batches/runs, Food activation, Catalog Generation creation/promotion, current-generation pointer change, SearchDocuments population, schema compatibility promotion, Production DB migration, Activity Catalog change, FNDDS/Branded import, Plan 9, merge or deployment.
 
-**Open for Planner inspection:** alternate total sugar authorities, absent/ambiguous nutrient LOQ fields, source portion insufficiency, USDA category mapping, conservative unresolved market scopes and source-only semantic identity. These policies intentionally prefer absent evidence to invented precision.
+**Open for Planner inspection:** alternate total sugar authorities, absent/ambiguous nutrient LOQ fields, source portion insufficiency, USDA category mapping, conservative unresolved market scopes and source-backed NDB semantic identity (missing/malformed values remain unresolved). These policies intentionally prefer absent evidence to invented precision.
 
 **Do not declare Plan 8 complete until:** exact-head focused tests, complete ingestion tests, lint, typecheck, full required unit suite, appropriate build/DB verification, two independent full-release SHA checks and all required CI pass on the exact final head. Record actual QA metrics/hashes and final run IDs from CI, never predict them. The PR remains Draft awaiting the Planner; Plan 9 remains untouched.
