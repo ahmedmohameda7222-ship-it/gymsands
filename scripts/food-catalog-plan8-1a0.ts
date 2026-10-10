@@ -3,7 +3,7 @@
  * Production runtime entry points are imported by this command.
  *
  * Usage (repository root, Node 24):
- *   ./node_modules/.bin/vite-node scripts/food-catalog-plan8-1a0.ts \
+ *   node scripts/food-catalog-plan8-1a0-runner.mjs \
  *     --zip /path/to/FoodData_Central_foundation_food_json_2026-04-30.zip \
  *     --index data/food-catalog/source-locks/plan8-1a0-empty-match-index.json \
  *     --output /tmp/plaivra-plan8-run1
@@ -116,6 +116,26 @@ function buildQa(
   }));
   const energyIds: string[] = [];
   const categories: string[] = [];
+  const ndbStatuses: string[] = [];
+  const malformedNdbExamples: Array<{ fdcId: string; rawNdbNumber: unknown }> = [];
+  const normalizedNdbOwners = new Map<string, string[]>();
+  const selectedSugarIds: string[] = [];
+  const sugar2000Ids: string[] = [];
+  const sugar1063Ids: string[] = [];
+  const sugarBothIds: string[] = [];
+  const sugarConflicts: Array<{
+    fdcId: string; description: string; nutrient2000: number; nutrient1063: number; selectedId: number | null;
+  }> = [];
+  const negativeCarbs: Array<{
+    fdcId: string; description: string; value: number; decision: string; disposition: string;
+    issueCodes: string[];
+  }> = [];
+  let legacy1008Present = 0;
+  let legacy1008PresentButExcluded = 0;
+  let noEnergyAuthorityAny = 0;
+  let numericLoqSelectedZero = 0;
+  let textualLoqSelectedZero = 0;
+  let rawNumericLoqWithZero = 0;
   let sourcePortions = 0;
   let unusablePortions = 0;
   let retainedPortions = 0;
@@ -123,11 +143,72 @@ function buildQa(
   let mappedTaxonomyFoods = 0;
   let belowLimitObservations = 0;
   const transformClasses = { unchanged: n, safeNormalized: 0, rejectedUnsafe: 0 };
-  for (const { candidate } of rows) {
+  for (const { candidate, decision, disposition, issues } of rows) {
     const nutrientEvidence = candidate.sourceNutrition as {
       selectedNutrientIds: Record<string, number | null>;
       belowLimitNutrientIds: number[];
+      numericLoqNutrientIds: number[];
+      textualLoqNutrientIds: number[];
+      ndbNumber: unknown;
+      normalizedNdbNumber: string | null;
+      ndbIdentityStatus: "present" | "missing" | "malformed";
+      rawNutrients: Array<{ nutrient: { id: number }; amount?: number | null; loq?: number | null }>;
     };
+    const amounts = new Map(nutrientEvidence.rawNutrients.map((nutrient) => [
+      nutrient.nutrient.id, nutrient.amount
+    ]));
+    const rawAmount = (id: number): number | null => {
+      const value = amounts.get(id);
+      return typeof value === "number" && Number.isFinite(value) ? value : null;
+    };
+    const hasAmount = (id: number): boolean => rawAmount(id) !== null;
+    const selectedEnergyId = nutrientEvidence.selectedNutrientIds.calories;
+    const raw2000 = rawAmount(2000);
+    const raw1063 = rawAmount(1063);
+    selectedSugarIds.push(String(nutrientEvidence.selectedNutrientIds.sugars_g ?? "missing"));
+    if (raw2000 !== null) sugar2000Ids.push(candidate.sourceRecordId);
+    if (raw1063 !== null) sugar1063Ids.push(candidate.sourceRecordId);
+    if (raw2000 !== null && raw1063 !== null) {
+      sugarBothIds.push(candidate.sourceRecordId);
+      if (raw2000 !== raw1063) sugarConflicts.push({
+        fdcId: candidate.sourceRecordId,
+        description: candidate.canonicalName,
+        nutrient2000: raw2000,
+        nutrient1063: raw1063,
+        selectedId: nutrientEvidence.selectedNutrientIds.sugars_g
+      });
+    }
+    if (hasAmount(1008)) {
+      legacy1008Present++;
+      if (selectedEnergyId !== 2048 && selectedEnergyId !== 2047) legacy1008PresentButExcluded++;
+    }
+    if (![2048, 2047, 1008].some(hasAmount)) noEnergyAuthorityAny++;
+    const sourceCarbs = rawAmount(1005);
+    if (sourceCarbs !== null && sourceCarbs < 0) negativeCarbs.push({
+      fdcId: candidate.sourceRecordId,
+      description: candidate.canonicalName,
+      value: sourceCarbs,
+      decision: decision.kind,
+      disposition: disposition.kind,
+      issueCodes: issues.map((issue) => issue.code)
+    });
+    ndbStatuses.push(nutrientEvidence.ndbIdentityStatus);
+    if (nutrientEvidence.ndbIdentityStatus === "malformed" && malformedNdbExamples.length < 12) {
+      malformedNdbExamples.push({
+        fdcId: candidate.sourceRecordId, rawNdbNumber: nutrientEvidence.ndbNumber
+      });
+    }
+    if (nutrientEvidence.normalizedNdbNumber !== null) {
+      const owners = normalizedNdbOwners.get(nutrientEvidence.normalizedNdbNumber) ?? [];
+      owners.push(candidate.sourceRecordId);
+      normalizedNdbOwners.set(nutrientEvidence.normalizedNdbNumber, owners);
+    }
+    numericLoqSelectedZero += nutrientEvidence.numericLoqNutrientIds.length;
+    textualLoqSelectedZero += nutrientEvidence.textualLoqNutrientIds.length;
+    rawNumericLoqWithZero += nutrientEvidence.rawNutrients.filter((nutrient) =>
+      nutrient.amount === 0 && typeof nutrient.loq === "number"
+      && Number.isFinite(nutrient.loq) && nutrient.loq > 0
+    ).length;
     const servingEvidence = candidate.sourceServing as {
       rawPortions: unknown[];
       unusablePortionIds: number[];
@@ -148,6 +229,13 @@ function buildQa(
     throw new Error("Source portion evidence count reconciliation failure.");
   }
   const categoryDistribution = tally(categories);
+  sugarConflicts.sort((a,b) => Number(a.fdcId) - Number(b.fdcId));
+  negativeCarbs.sort((a,b) => Number(a.fdcId) - Number(b.fdcId));
+  const duplicatedNdbEvidence = [...normalizedNdbOwners.entries()]
+    .filter(([, owners]) => owners.length > 1)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(0, 20)
+    .map(([ndbNumber, fdcIds]) => ({ ndbNumber, fdcIds: [...fdcIds].sort() }));
   const sourceIdentities = new Set(indexSnapshot.matchIndex.sourceIdentities.map((e) =>
     [e.provider, e.dataset, e.sourceVersion, e.sourceRecordId].join("\u0000")));
   const sourceIdentityMatches = rows.filter((r) => r.decision.kind === "match"
@@ -167,7 +255,7 @@ function buildQa(
       reasons: entry.disposition.reasonCodes
     }));
   return {
-    schemaVersion: "plaivra-food-catalog-usda-foundation-1a0-qa-v1",
+    schemaVersion: "plaivra-food-catalog-usda-foundation-1a0-qa-v2",
     status: "OFFLINE_EVIDENCE_ONLY",
     productionAuthority: false,
     source: {
@@ -188,14 +276,52 @@ function buildQa(
       matchIndexChecksumSha256: indexChecksum
     },
     population: { ...counts, decisions, dispositions },
+    identity: {
+      algorithm: "usda-foundation-semantic-identity-v1",
+      sourceRecordIdentity: "provider+dataset+sourceVersion+fdcId",
+      rawNdbStatusCounts: {
+        present: ndbStatuses.filter((v) => v === "present").length,
+        missing: ndbStatuses.filter((v) => v === "missing").length,
+        malformed: ndbStatuses.filter((v) => v === "malformed").length
+      },
+      distinctUsableNdbNumbers: normalizedNdbOwners.size,
+      duplicatedNdbEvidence,
+      malformedNdbExamples
+    },
+    sourcePolicies: {
+      energyAuthorityPrecedence: [2048, 2047],
+      legacy1008FallbackEnabled: false,
+      totalSugarsAuthorityPrecedence: [2000, 1063],
+      negativeCarbohydratePolicy: "reject_not_clamp"
+    },
     nutrition: {
       coverage: nutritionCoverage,
       selectedEnergyAuthorities: tally(energyIds),
       atwaterSpecific: energyIds.filter((v) => v === "2048").length,
       atwaterGeneral: energyIds.filter((v) => v === "2047").length,
       legacyFallback: energyIds.filter((v) => v === "1008").length,
+      legacy1008Selected: energyIds.filter((v) => v === "1008").length,
+      legacy1008Present,
+      legacy1008PresentButIntentionallyExcluded: legacy1008PresentButExcluded,
+      no2048Or2047Or1008EnergyAuthority: noEnergyAuthorityAny,
       missingEnergy: energyIds.filter((v) => v === "missing").length,
+      selectedSugarsAuthorities: tally(selectedSugarIds),
+      totalSugarsAuthority: {
+        nutrient2000Records: sugar2000Ids.length,
+        nutrient1063Records: sugar1063Ids.length,
+        bothPresentRecords: sugarBothIds.length,
+        bothDifferentRecords: sugarConflicts.length,
+        selectedAuthorityCountById: tally(selectedSugarIds),
+        differingSourceExamples: sugarConflicts.slice(0, 25)
+      },
+      negativeSourceCarbohydrate1005: {
+        count: negativeCarbs.length,
+        affectedExamples: negativeCarbs.slice(0, 25)
+      },
       belowLimitSetUnknown: belowLimitObservations,
+      numericLoqSelectedZeroAsUnknown: numericLoqSelectedZero,
+      textualLoqSelectedZeroAsUnknown: textualLoqSelectedZero,
+      rawNumericLoqZeroWithPositiveLimit: rawNumericLoqWithZero,
       calorieMacroWarnings: rows.filter((r) => r.issues.some((i) => i.code === "suspicious_calorie_macro_delta")).length
     },
     portions: {
@@ -281,6 +407,11 @@ async function run(): Promise<void> {
     `- Expected decisions: ${JSON.stringify(result.manifestContent.expectedMutations)}`,
     `- Nutrition coverage: ${JSON.stringify(qa.nutrition.coverage)}`,
     `- Energy sources: ${JSON.stringify(qa.nutrition.selectedEnergyAuthorities)}`,
+    `- Legacy 1008 present/excluded: ${qa.nutrition.legacy1008PresentButIntentionallyExcluded}; no energy authority: ${qa.nutrition.no2048Or2047Or1008EnergyAuthority}`,
+    `- NDB stable identity coverage: ${JSON.stringify(qa.identity.rawNdbStatusCounts)}`,
+    `- Sugars source dual-authority coverage: ${JSON.stringify(qa.nutrition.totalSugarsAuthority)}`,
+    `- Negative source carbohydrate 1005: ${JSON.stringify(qa.nutrition.negativeSourceCarbohydrate1005)}`,
+    `- Numeric/text below-LOQ selected zeros: ${qa.nutrition.numericLoqSelectedZeroAsUnknown}/${qa.nutrition.textualLoqSelectedZeroAsUnknown}`,
     `- Portion evidence: ${JSON.stringify(qa.portions)}`,
     `- Mapped/unmapped taxonomy: ${qa.taxonomy.mappedPlaivraFoodCount}/${qa.taxonomy.unmappedFoodCount}`,
     `- Market: ${lock.config.marketPolicy}; global relevant: ${qa.market.globalRelevanceCount}`,
