@@ -186,12 +186,15 @@ describe("USDA Foundation 1A0 source authority", () => {
 
   it("does not match unrelated NDB identities, even when descriptions are identical", () => {
     const adapter = createUsdaFoundationAdapter(lock);
-    const [first, second] = adapter.toCandidates({
+    const candidatePair = adapter.toCandidates({
       sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes, foods: [
         { ...example, ndbNumber: "12345" },
         { ...example, fdcId: 234567, ndbNumber: "12346" }
       ]
     });
+    // Adapter output is source-fdcId sorted, not input-order dependent.
+    const first = candidatePair.find((entry) => entry.sourceRecordId === "321358");
+    const second = candidatePair.find((entry) => entry.sourceRecordId === "234567");
     expect(first!.identityEvidence!.semanticSignature).not.toBe(second!.identityEvidence!.semanticSignature);
     const index = {
       ...emptyIndex,
