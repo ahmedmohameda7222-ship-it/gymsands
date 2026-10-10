@@ -21,15 +21,15 @@ const lock: UsdaFoundationLock = {
   sourceUrl: "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_json_2026-04-30.zip",
   sourceChecksumSha256: sourceHash,
   sourceBytes: 469303,
-  importerVersion: "plan8-1a0-v1",
+  importerVersion: "plan8-1a0-v2",
   configChecksumSha256: "b".repeat(64),
   licenseName: "CC0 1.0 Universal",
   licenseReference: "https://creativecommons.org/publicdomain/zero/1.0/",
   expectedDataType: "Foundation",
   productionAuthority: false,
   config: {
-    schemaVersion: "usda-foundation-1a0-config-v1",
-    adapterVersion: "1",
+    schemaVersion: "usda-foundation-1a0-config-v2",
+    adapterVersion: "2",
     nutrition: {
       calories: [2048, 2047], protein_g: [1003], fat_g: [1004],
       carbs_g: [1005], fiber_g: [1079], saturated_fat_g: [1258],
@@ -37,10 +37,10 @@ const lock: UsdaFoundationLock = {
     },
     legacyEnergyFallback: false,
     namingPolicy: "preserve_usda_description",
-    belowLimitPolicy: "explicit_below_limit_zero_is_unknown",
+    belowLimitPolicy: "numeric_or_textual_below_limit_zero_is_unknown",
     taxonomyMappings: {},
     marketPolicy: "usda_us_provenance_only_no_market_assignment",
-    identityPolicy: "source_identity_only_no_inferred_semantic_match",
+    identityPolicy: "versioned_fdc_source_identity_plus_namespaced_ndb_semantic_v1",
     basis: "100_g"
   }
 };
