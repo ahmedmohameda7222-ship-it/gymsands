@@ -93,6 +93,25 @@ jobs:
           if(qa.input.foundationSourceRecords!==363 || qa.input.nullNonRecordSlots!==32) process.exit(1);
           if(qa.population.input!==363 || qa.population.accepted+qa.population.rejected+qa.population.quarantined!==363) process.exit(1);
           if(qa.nutrition.legacyFallback!==0 || qa.market.globalRelevanceCount!==0) process.exit(1);
+          if(qa.schemaVersion!=='plaivra-food-catalog-usda-foundation-1a0-qa-v2') process.exit(1);
+          if(qa.source.importerVersion!=='plan8-1a0-v2' || qa.source.adapterVersion!=='2') process.exit(1);
+          const ndb=qa.identity?.rawNdbStatusCounts;
+          if(!ndb || ndb.present+ndb.missing+ndb.malformed!==363) process.exit(1);
+          if(qa.identity.algorithm!=='usda-foundation-semantic-identity-v1') process.exit(1);
+          const energy=qa.nutrition;
+          if(energy.atwaterSpecific+energy.atwaterGeneral+energy.missingEnergy!==363) process.exit(1);
+          if(energy.legacy1008Selected!==0 || energy.legacy1008PresentButIntentionallyExcluded<=0) process.exit(1);
+          if(energy.no2048Or2047Or1008EnergyAuthority+energy.legacy1008PresentButIntentionallyExcluded!==energy.missingEnergy) process.exit(1);
+          const sugars=energy.totalSugarsAuthority;
+          if(sugars.bothPresentRecords<=0 || sugars.bothDifferentRecords<=0) process.exit(1);
+          if(sugars.bothDifferentRecords!==sugars.differingSourceExamples.length) process.exit(1);
+          if(energy.negativeSourceCarbohydrate1005.count!==10) process.exit(1);
+          if(!energy.negativeSourceCarbohydrate1005.affectedExamples.every(x=>
+            x.disposition==='reject' && x.issueCodes.includes('invalid_nutrition'))) process.exit(1);
+          if(typeof energy.numericLoqSelectedZeroAsUnknown!=='number'
+            || typeof energy.textualLoqSelectedZeroAsUnknown!=='number') process.exit(1);
+          if(qa.manifestContentChecksumSha256==='db575dcca49a5c5517cf6d3ada0093410ebd27ca82a29333c87dbb7760389bfb') process.exit(1);
+          if(qa.semanticBatchIdentityChecksumSha256==='c26dce6c444fbb060f4c94d86928e54c7b46618ac8b4cdcb2d0ffb33b509fa60') process.exit(1);
           NODE
       - name: Preserve reproducible offline-only QA artifacts
         if: always()
