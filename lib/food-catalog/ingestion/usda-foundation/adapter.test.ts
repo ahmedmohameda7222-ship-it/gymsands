@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildFoodCatalogDryRun } from "../engine";
-import type { FoodCatalogMatchIndex } from "../matching";
+import { decideCanonicalMatch, type FoodCatalogMatchIndex } from "../matching";
+import { normalizeFoodCatalogCandidate } from "../normalize";
 import {
   createUsdaFoundationAdapter,
   parseUsdaFoundationJson,
@@ -143,6 +144,140 @@ describe("USDA Foundation 1A0 source authority", () => {
     expect(item!.nutrition.fat_g).toBe(0);
     expect((item!.sourceNutrition as { belowLimitNutrientIds: number[] }).belowLimitNutrientIds)
       .toContain(1003);
+  });
+
+
+  it("uses stable NDB identity across release and fdcId changes without changing source authority", () => {
+    const old = { ...example, fdcId: 111111, ndbNumber: "01234" };
+    const fresh = { ...example, fdcId: 222222, ndbNumber: 1234, description: "Renamed USDA food" };
+    const adapter = createUsdaFoundationAdapter(lock);
+    const oldCandidate = adapter.toCandidates({
+      sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes, foods: [old]
+    })[0]!;
+    const freshCandidate = adapter.toCandidates({
+      sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes, foods: [fresh]
+    })[0]!;
+    expect(oldCandidate.sourceRecordId).toBe("111111");
+    expect(freshCandidate.sourceRecordId).toBe("222222");
+    expect(oldCandidate.identityEvidence?.semanticSignature).toMatch(/^usda-foundation-semantic-identity-v1:[a-f0-9]{64}$/);
+    expect(oldCandidate.identityEvidence?.semanticSignature).toBe(freshCandidate.identityEvidence?.semanticSignature);
+    expect(oldCandidate.identityEvidence?.structuredEvidenceKey).toBe("USDA_FDC:FoundationFoods:NDB:01234");
+    expect((oldCandidate.sourceNutrition as { ndbNumber: unknown }).ndbNumber).toBe("01234");
+    const nextRelease = {
+      ...adapter.describeSource({ sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes, foods: [fresh] }),
+      sourceVersion: "2027-04-30", sourceReleaseDate: "2027-04-30"
+    };
+    const result = decideCanonicalMatch({
+      source: nextRelease,
+      candidate: normalizeFoodCatalogCandidate(freshCandidate),
+      index: { ...emptyIndex,
+        sourceIdentities: [{
+          provider: "USDA_FDC", dataset: "FoundationFoods", sourceVersion: "2026-04-30",
+          sourceRecordId: "111111", foodId: "canonical-prior-release"
+        }],
+        semanticIdentities: [{
+          semanticSignature: oldCandidate.identityEvidence!.semanticSignature!,
+          foodId: "canonical-prior-release"
+        }]
+      }
+    });
+    expect(result).toEqual({ kind: "match", foodId: "canonical-prior-release" });
+  });
+
+  it("does not match unrelated NDB identities, even when descriptions are identical", () => {
+    const adapter = createUsdaFoundationAdapter(lock);
+    const [first, second] = adapter.toCandidates({
+      sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes, foods: [
+        { ...example, ndbNumber: "12345" },
+        { ...example, fdcId: 234567, ndbNumber: "12346" }
+      ]
+    });
+    expect(first!.identityEvidence!.semanticSignature).not.toBe(second!.identityEvidence!.semanticSignature);
+    const index = {
+      ...emptyIndex,
+      semanticIdentities: [{
+        semanticSignature: first!.identityEvidence!.semanticSignature!,
+        foodId: "existing-other-food"
+      }],
+      possibleDuplicateNames: [{
+        normalizedName: second!.canonicalName.toLowerCase(), foodId: "existing-other-food"
+      }]
+    };
+    const run = buildFoodCatalogDryRun(adapter, {
+      sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes, foods: [
+        { ...example, fdcId: 234567, ndbNumber: "12346" }
+      ]
+    }, index);
+    expect(run.manifestContent.candidates[0]!.decision.kind).toBe("possible_duplicate");
+  });
+
+  it("fails closed for missing, malformed, ambiguous or duplicate NDB evidence", () => {
+    const adapter = createUsdaFoundationAdapter(lock);
+    for (const ndbNumber of [undefined, null, "", "abc12", "12-34", 0, -1, 12.5, "00000", "1".repeat(30), ["12345"], { number: "12345" }]) {
+      const [entry] = adapter.toCandidates({
+        sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes,
+        foods: [{ ...example, ndbNumber }]
+      });
+      expect(entry!.identityEvidence?.semanticSignature).toBeNull();
+      expect(entry!.identityEvidence?.structuredEvidenceKey).toBeNull();
+    }
+    const run = buildFoodCatalogDryRun(adapter, {
+      sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes,
+      foods: [{ ...example, ndbNumber: "12345" }, {
+        ...example, fdcId: 444444, description: "Another food", ndbNumber: "12345"
+      }]
+    }, emptyIndex);
+    expect(run.manifestContent.candidates.every((entry) => entry.disposition.kind === "quarantine")).toBe(true);
+    expect(run.manifestContent.candidates.every((entry) => entry.disposition.reasonCodes.includes("identity_conflict"))).toBe(true);
+  });
+
+  it("gives exact provider/dataset/version/fdcId source owner precedence over semantic NDB owner", () => {
+    const adapter = createUsdaFoundationAdapter(lock);
+    const run = buildFoodCatalogDryRun(adapter, {
+      sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes,
+      foods: [{ ...example, ndbNumber: "12345" }]
+    }, {
+      ...emptyIndex,
+      sourceIdentities: [{
+        provider: "USDA_FDC", dataset: "FoundationFoods", sourceVersion: "2026-04-30",
+        sourceRecordId: "321358", foodId: "authoritative-source-root"
+      }],
+      semanticIdentities: [{
+        semanticSignature: adapter.toCandidates({
+          sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes,
+          foods: [{ ...example, ndbNumber: "12345" }]
+        })[0]!.identityEvidence!.semanticSignature!,
+        foodId: "conflicting-semantic-root"
+      }]
+    });
+    expect(run.manifestContent.candidates[0]!.decision).toEqual({ kind: "match", foodId: "authoritative-source-root" });
+    expect(run.manifestContent.candidates[0]!.disposition.kind).toBe("quarantine");
+  });
+
+  it("numeric LOQ zero maps to null, while true zero and nonzero with LOQ remain numeric", () => {
+    const adapter = createUsdaFoundationAdapter(lock);
+    const [entry] = adapter.toCandidates({
+      sourceZipSha256: sourceHash, sourceZipBytes: lock.sourceBytes,
+      foods: [{ ...example, foodNutrients: [
+        nutrient(1003, 0, "g", { loq: 0.01 }),
+        nutrient(1004, 0),
+        nutrient(1005, 3, "g", { loq: 0.5 }),
+        nutrient(1079, 0, "g", { footnote: "Below limit of quantification" }),
+        nutrient(1093, 0, "mg", { loq: 0 })
+      ] }]
+    });
+    expect(entry!.nutrition.protein_g).toBeNull();
+    expect(entry!.nutrition.fat_g).toBe(0);
+    expect(entry!.nutrition.carbs_g).toBe(3);
+    expect(entry!.nutrition.fiber_g).toBeNull();
+    expect(entry!.nutrition.sodium_mg).toBe(0);
+    const evidence = entry!.sourceNutrition as {
+      numericLoqNutrientIds: number[]; textualLoqNutrientIds: number[];
+      rawNutrients: Array<{ nutrient: { id: number }; loq?: number }>
+    };
+    expect(evidence.numericLoqNutrientIds).toContain(1003);
+    expect(evidence.textualLoqNutrientIds).toContain(1079);
+    expect(evidence.rawNutrients.find((n) => n.nutrient.id === 1003)?.loq).toBe(0.01);
   });
 
   it("preserves qualified descriptions and refuses invented portion conversions", () => {
