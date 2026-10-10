@@ -54,6 +54,7 @@ type UsdaNutrient = {
   id?: number;
   nutrient?: { id?: number; name?: string; unitName?: string };
   amount?: number | null;
+  loq?: number | null;
   foodNutrientDerivation?: { code?: string; description?: string };
   footnote?: string | null;
   [key: string]: unknown;
@@ -70,6 +71,7 @@ type UsdaPortion = {
 
 export type UsdaFoundationFood = {
   fdcId: number;
+  ndbNumber?: unknown;
   dataType: string;
   description: string;
   publicationDate?: string;
@@ -92,6 +94,41 @@ export type UsdaFoundationArtifact = {
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/**
+ * NDB numbers identify a Foundation Food across updated/versioned FDC records.
+ * USDA NDB numbers are numeric identifiers conventionally represented with five
+ * digits. Normalize leading zeroes, but refuse nonnumeric or unsafe forms.
+ * Never derive identity from descriptions or nutrient resemblance.
+ */
+export function normalizeUsdaFoundationNdbNumber(raw: unknown): {
+  status: "present" | "missing" | "malformed";
+  normalized: string | null;
+} {
+  if (raw === null || raw === undefined || raw === "") {
+    return { status: "missing", normalized: null };
+  }
+  const token = typeof raw === "number"
+    ? Number.isSafeInteger(raw) && raw > 0 ? String(raw) : null
+    : typeof raw === "string" ? raw.trim() : null;
+  if (token === null || !/^\\d{1,8}$/.test(token)) {
+    return { status: "malformed", normalized: null };
+  }
+  const numeric = Number(token);
+  if (!Number.isSafeInteger(numeric) || numeric === 0) {
+    return { status: "malformed", normalized: null };
+  }
+  return { status: "present", normalized: String(numeric).padStart(5, "0") };
+}
+
+export function usdaFoundationSemanticSignature(normalizedNdb: string): string {
+  return "usda-foundation-semantic-identity-v1:" + digest(stableJson({
+    algorithm: "usda-foundation-semantic-identity-v1",
+    provider: "USDA_FDC",
+    dataset: "FoundationFoods",
+    ndbNumber: normalizedNdb
+  }));
 }
 
 function sortObjects<T>(values: readonly T[]): T[] {
@@ -175,6 +212,8 @@ function mapNutrition(food: UsdaFoundationFood, lock: UsdaFoundationLock): {
   rawNutrients: UsdaNutrient[];
   selectedNutrientIds: Record<string, number | null>;
   belowLimitNutrientIds: number[];
+  numericLoqNutrientIds: number[];
+  textualLoqNutrientIds: number[];
 } {
   const source = sortObjects(food.foodNutrients ?? []);
   const byId = new Map<number, UsdaNutrient>();
@@ -190,6 +229,8 @@ function mapNutrition(food: UsdaFoundationFood, lock: UsdaFoundationLock): {
   }
   const selectedNutrientIds: Record<string, number | null> = {};
   const belowLimitNutrientIds: number[] = [];
+  const numericLoqNutrientIds: number[] = [];
+  const textualLoqNutrientIds: number[] = [];
   const units: Record<string, string> = {
     calories: "kcal", protein_g: "g", fat_g: "g", carbs_g: "g",
     fiber_g: "g", saturated_fat_g: "g", sugars_g: "g", sodium_mg: "mg"
@@ -212,8 +253,17 @@ function mapNutrition(food: UsdaFoundationFood, lock: UsdaFoundationLock): {
         entry.foodNutrientDerivation?.code
       ].filter(Boolean).join(" ");
       const belowLimit = /below\s+(?:the\s+)?(?:detection|quantification|reporting|limit)|less\s+than\s+(?:the\s+)?(?:limit|loq|lod)|\b(?:loq|lod|not detected|undetected)\b|<\s*(?:loq|lod)/i.test(explanatory);
-      if (entry.amount === 0 && belowLimit) {
+      if (entry.loq !== undefined && entry.loq !== null
+        && (typeof entry.loq !== "number" || !Number.isFinite(entry.loq) || entry.loq < 0)) {
+        throw new Error(`Invalid numeric USDA loq for nutrient ${id}, fdcId ${food.fdcId}.`);
+      }
+      const numericBelowLimit = entry.amount === 0
+        && typeof entry.loq === "number" && entry.loq > 0;
+      const textualBelowLimit = entry.amount === 0 && belowLimit;
+      if (numericBelowLimit || textualBelowLimit) {
         belowLimitNutrientIds.push(id);
+        if (numericBelowLimit) numericLoqNutrientIds.push(id);
+        if (textualBelowLimit) textualLoqNutrientIds.push(id);
         return null;
       }
       return entry.amount;
@@ -232,7 +282,7 @@ function mapNutrition(food: UsdaFoundationFood, lock: UsdaFoundationLock): {
     basis_amount: 100,
     basis_unit: "g"
   };
-  return { nutrition, rawNutrients: source, selectedNutrientIds, belowLimitNutrientIds };
+  return { nutrition, rawNutrients: source, selectedNutrientIds, belowLimitNutrientIds, numericLoqNutrientIds, textualLoqNutrientIds };
 }
 
 function portionsFor(food: UsdaFoundationFood): {
@@ -282,8 +332,9 @@ function evidenceFromDescription(description: string): { state: string | null; p
 
 function toCandidate(food: UsdaFoundationFood, lock: UsdaFoundationLock): FoodCatalogCandidateInput {
   const normalizedRaw = canonicalRawFood(food);
-  const { nutrition, rawNutrients, selectedNutrientIds, belowLimitNutrientIds } =
-    mapNutrition(food, lock);
+  const { nutrition, rawNutrients, selectedNutrientIds, belowLimitNutrientIds,
+    numericLoqNutrientIds, textualLoqNutrientIds } = mapNutrition(food, lock);
+  const ndb = normalizeUsdaFoundationNdbNumber(food.ndbNumber);
   const { servings, rawPortions, unusablePortionIds } = portionsFor(food);
   const category = food.foodCategory?.description ?? null;
   return {
@@ -299,9 +350,9 @@ function toCandidate(food: UsdaFoundationFood, lock: UsdaFoundationLock): FoodCa
     aliases: [],
     names: [{ locale: "en-US", script: "Latn", role: "source", value: food.description }],
     identityEvidence: {
-      semanticSignature: null,
+      semanticSignature: ndb.normalized === null ? null : usdaFoundationSemanticSignature(ndb.normalized),
       ...evidenceFromDescription(food.description),
-      structuredEvidenceKey: null
+      structuredEvidenceKey: ndb.normalized === null ? null : `USDA_FDC:FoundationFoods:NDB:${ndb.normalized}`
     },
     servings,
     taxonomyEvidence: category === null ? [] : [{
@@ -317,6 +368,11 @@ function toCandidate(food: UsdaFoundationFood, lock: UsdaFoundationLock): FoodCa
       sourceProviderMarket: "USDA/USA provenance; not a market-scope assignment",
       selectedNutrientIds,
       belowLimitNutrientIds,
+      numericLoqNutrientIds,
+      textualLoqNutrientIds,
+      ndbNumber: food.ndbNumber ?? null,
+      normalizedNdbNumber: ndb.normalized,
+      ndbIdentityStatus: ndb.status,
       rawNutrients
     },
     sourceServing: { rawPortions, unusablePortionIds }
