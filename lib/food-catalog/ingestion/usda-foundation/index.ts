@@ -112,7 +112,7 @@ export function normalizeUsdaFoundationNdbNumber(raw: unknown): {
   const token = typeof raw === "number"
     ? Number.isSafeInteger(raw) && raw > 0 ? String(raw) : null
     : typeof raw === "string" ? raw.trim() : null;
-  if (token === null || !/^\\d{1,8}$/.test(token)) {
+  if (token === null || !/^\d{1,8}$/.test(token)) {
     return { status: "malformed", normalized: null };
   }
   const numeric = Number(token);
