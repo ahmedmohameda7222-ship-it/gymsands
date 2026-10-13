@@ -30,7 +30,7 @@ function reconciledLedgerFixture(source) {
   };
 }
 
-test("release consumers preserve the declared marker while retirement is pending", () => {
+test("release consumers preserve the declared marker after Plan 9 schema apply", () => {
   const releaseTarget = deriveReleaseTarget(ledger);
   const qualityTarget = deriveQualityLedgerTarget(ledger);
   const environment = qualityLedgerEnvironment(qualityTarget);
@@ -41,7 +41,7 @@ test("release consumers preserve the declared marker while retirement is pending
   const plan6Correction = ledger.entries.find((entry) => entry.localFile === PLAN6_EXACTNESS_CORRECTION);
 
   assert.equal(releaseTarget.expectedMigration, "20260724232734");
-  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20261008224322");
+  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20261013034307");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
   assert.equal(releaseTarget.reconciliationState, "reconciled");
   assert.deepEqual(pendingEntries.map((entry) => entry.localFile), []);
@@ -72,7 +72,7 @@ test("release consumers preserve the declared marker while retirement is pending
   assert.notEqual(releaseTarget.expectedMigration, releaseTarget.latestAppliedMigrationVersion);
 });
 
-test("preflight preserves the declared marker but blocks release on pending retirement", () => {
+test("preflight preserves the declared marker while Plan 9 schema is reconciled", () => {
   const expectedCommit = "a".repeat(40);
   const releaseTarget = deriveReleaseTarget(ledger);
   const migrationState = deriveMigrationLedgerState(ledger);
