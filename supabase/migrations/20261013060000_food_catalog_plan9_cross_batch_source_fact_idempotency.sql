@@ -155,7 +155,7 @@ begin
           raise exception 'Source evidence is already associated with a different canonical Food.' using errcode = '23514';
         end if;
         update public.food_source_records set food_id = v_food_id where id = v_source_record.id and food_id is null;
-        
+
         -- Plan 9: source facts belong to the immutable versioned source record,
         -- not to each review batch. A cross-batch MATCH of an already
         -- materialized source MUST NOT append duplicate name/nutrition/portion
