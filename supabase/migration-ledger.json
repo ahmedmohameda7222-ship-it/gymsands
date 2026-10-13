@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-10-08T22:43:22Z",
+  "capturedAt": "2026-10-13T03:43:07Z",
   "auditedRepositoryCommit": "dfa14c3bc2c1524ff185b1ee4e170f4537a80230",
-  "productionMigrationCount": 63,
+  "productionMigrationCount": 64,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 1,
-  "unresolvedCount": 1,
+  "pendingCount": 0,
+  "unresolvedCount": 0,
   "historyRepair": {
-    "state": "pending",
+    "state": "reconciled",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 1,
-    "unresolvedCount": 1,
-    "note": "Production through 20261008224322 remains historically reconciled with 130 records. Plan 9 forward migration is pending deployment, NOT in Production migration history. Do not replay previously applied migrations. Production Food data writes require separate exact authorization."
+    "pendingCount": 0,
+    "unresolvedCount": 0,
+    "note": "Plaivra Main Production migration history reconciled through 20261013034307_food_catalog_plan9_batch_review_authority with 131 physical records. Plan 9 schema-only RPC and capability CHECK applied with reviewable branch migration. Food and ingestion populations remain zero, current-generation pointer NULL. Human governance owner bootstrap and each Production ingestion/activation/promotion require separate evidence-based approval. Do not replay already applied migrations."
   },
   "entries": [
     {
@@ -867,9 +867,11 @@
     },
     {
       "localFile": "20261013040000_food_catalog_plan9_batch_review_authority.sql",
-      "state": "pending",
-      "note": "Plan 9 reviewed human-only USDA Foundation ingestion batch decision RPC. As of 2026-10-13 this migration is repository-only: NOT applied to Production. Exact chronological local migration replay and security verification run in disposable PR CI; Production apply requires independently reviewed exact-head CI and read-only migration/ACL/recovery preflight. Do not replay applied migrations. No Production Food data operations authorized."
+      "state": "applied_version_alias",
+      "note": "differs; Plan 9 narrow human ingestion batch review-authority migration applied exactly once to Plaivra Main Production on 2026-10-13 as generated migration 20261013034307_food_catalog_plan9_batch_review_authority, from frozen PR #188 Git blob b52377cfa44049ab6bff0776b056ea6edb4cc66b after clean chronological migration replay, rollback-only adversarial role/semantic/CAS/reconciliation verification, local database integration, full DR/portable-restore checks and schema-only authorization. Immediate readback: postgres-owned SECURITY DEFINER public.food_catalog_review_ingestion_batch_v1(jsonb) exists; anon/service_role EXECUTE false; authenticated EXECUTE true, narrow food.ingestion.review capability CHECK present, Main physical migration history head 20261013034307, 131 records, governance principals/capabilities/audit, Foods, batches, runs, generations, SearchDocuments remain zero and current_generation_id remains NULL. Historic compatibility marker unchanged. No Production batch registration/dry run, provider ingestion, activation, generation promotion, Product deployment or Activity Catalog change. Do not replay.",
+      "productionVersion": "20261013034307",
+      "productionName": "food_catalog_plan9_batch_review_authority"
     }
   ],
-  "productionRecordCount": 130
+  "productionRecordCount": 131
 }
