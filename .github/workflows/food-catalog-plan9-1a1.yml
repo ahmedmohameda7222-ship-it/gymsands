@@ -35,7 +35,7 @@ jobs:
       - name: USDA canary tests
         run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/food-catalog/ingestion/usda-foundation/canary.test.ts
       - name: Plan 9 human approval migration contract
-        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/product/food-catalog-plan9-batch-review-migration.test.ts
+        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/product/food-catalog-plan9-batch-review-migration.test.ts services/food-catalog/server/ingestion-dry-run-plan9.test.ts
       - name: All ingestion regression tests
         run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/food-catalog/ingestion
       - name: Lint and typecheck
