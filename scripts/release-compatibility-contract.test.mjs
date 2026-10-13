@@ -16,7 +16,7 @@ const contract = JSON.parse(
   readFileSync(new URL("../config/release-compatibility.json", import.meta.url), "utf8"),
 );
 
-test("declared database marker remains distinct while the retirement contract is pending", () => {
+test("declared compatibility marker remains distinct from applied Plan 9 schema head", () => {
   const resolved = resolveReleaseCompatibilityContract({ ledger, contract });
   const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
   const plan4 = ledger.entries.find((entry) => entry.localFile === PLAN4_MIGRATION);
@@ -27,7 +27,7 @@ test("declared database marker remains distinct while the retirement contract is
 
   assert.equal(resolved.schemaCompatibilityVersion, "2");
   assert.equal(resolved.expectedDatabaseMigrationVersion, "20260724232734");
-  assert.equal(resolved.latestAppliedMigrationVersion, "20261008224322");
+  assert.equal(resolved.latestAppliedMigrationVersion, "20261013034307");
   assert.ok(resolved.latestAppliedMigrationVersion.localeCompare(resolved.expectedDatabaseMigrationVersion) > 0);
   assert.deepEqual(pendingEntries.map((entry) => entry.localFile), []);
   assert.equal(plan4.state, "applied_version_alias");
@@ -46,12 +46,12 @@ test("declared database marker remains distinct while the retirement contract is
   assert.equal(resolved.unresolvedMigrationCount, 0);
 });
 
-test("Next build metadata preserves the declared marker after retirement reconciliation", async () => {
+test("Next build metadata preserves the declared marker after Plan 9 schema migration reconciliation", async () => {
   const { releaseMetadata } = await import("../next.config.mjs");
 
   assert.equal(releaseMetadata.schemaCompatibilityVersion, "2");
   assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, "20260724232734");
-  assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20261008224322");
+  assert.equal(releaseMetadata.latestAppliedMigrationVersion, "20261013034307");
   assert.equal(releaseMetadata.migrationLedgerReconciliationState, "reconciled");
   assert.equal(releaseMetadata.pendingMigrationCount, "0");
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, "0");
