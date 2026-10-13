@@ -210,6 +210,21 @@ begin
   exception when unique_violation then null;
   end;
 
+  -- Regression: SQL NULL is not a valid action; it must not silently become
+  -- the ELSE/reject transition, even with a legitimate reviewer and exact batch.
+  begin
+    perform public.food_catalog_review_ingestion_batch_v1(
+      v_cmd || jsonb_build_object(
+        'operationId','92000000-0000-4000-8000-000000000039',
+        'decision',null,'expectedReviewState','reviewed'));
+    raise exception 'NULL decision unexpectedly accepted as a rejection.';
+  exception when invalid_parameter_value then null;
+  end;
+  if (select review_state from public.food_ingestion_batches
+       where id='92000000-0000-4000-8000-000000000010') <> 'reviewed' then
+    raise exception 'NULL decision mutated review state.';
+  end if;
+
   v_cmd := v_cmd || jsonb_build_object(
     'operationId','92000000-0000-4000-8000-000000000033',
     'decision','approve','expectedReviewState','reviewed',
