@@ -14,8 +14,8 @@ export function selectUsdaFoundationCanary(lock: UsdaFoundationLock, artifact: U
   const accepted = full.manifestContent.candidates.filter(x => x.disposition.kind === "accept").map(row => {
     const food = byId.get(row.candidate.sourceRecordId);
     if (!food) throw new Error("Missing original Foundation source record.");
-    const missing = optionals.filter(k => row.candidate.nutrition[k] === null);
-    if (!row.candidate.servings.length) missing.push("fiber_g");
+    const missing: string[] = optionals.filter(k => row.candidate.nutrition[k] === null);
+    if (!row.candidate.servings.length) missing.push("no-supported-source-serving");
     return { food, row, category: food.foodCategory?.description ?? "(unclassified)", missing };
   });
   type Entry = typeof accepted[number];
@@ -59,6 +59,6 @@ export function selectUsdaFoundationCanary(lock: UsdaFoundationLock, artifact: U
   const canary = buildFoodCatalogDryRun(adapter, { ...artifact, foods: selectedFoods }, index);
   if (canary.manifestContent.expectedMutations.accepted !== 80 || canary.manifestContent.expectedMutations.input !== 80)
     throw new Error("Canary re-evaluation did not accept exactly 80 original source Foods.");
-  const selection = { policy: "plan9-1a1-stratified-v1", sourceChecksumSha256: lock.sourceChecksumSha256, configChecksumSha256: lock.configChecksumSha256, rows };
+  const selection = { policy: "plan9-1a1-stratified-v1", cohortCounts: { strong: 60, missingEnergy: 10, evidenceEdge: 10 }, sourceChecksumSha256: lock.sourceChecksumSha256, configChecksumSha256: lock.configChecksumSha256, rows };
   return { selection, selectionChecksumSha256: digest(selection), matchIndexChecksumSha256: digest(index), canary };
 }
