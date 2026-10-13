@@ -1,0 +1,98 @@
+name: Food Catalog Plan 9 USDA Foundation 1A1 Offline Canary
+
+on:
+  push:
+    branches:
+      - feat/food-catalog-plan9-usda-foundation-rollout
+  pull_request:
+    paths:
+      - 'lib/food-catalog/ingestion/**'
+      - 'scripts/food-catalog-plan9-1a1*'
+      - 'data/food-catalog/source-locks/**'
+      - '.github/workflows/food-catalog-plan9-1a1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: food-catalog-plan9-canary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: USDA canary tests
+        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/food-catalog/ingestion/usda-foundation/canary.test.ts
+      - name: All ingestion regression tests
+        run: ./node_modules/.bin/vitest run --config vitest.unit.config.mjs lib/food-catalog/ingestion
+      - name: Lint and typecheck
+        run: |
+          npm run lint
+          npm run typecheck
+      - name: Download and validate locked original USDA ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_json_2026-04-30.zip' \
+            --output "$RUNNER_TEMP/foundation.zip"
+          node --input-type=module - "$RUNNER_TEMP/foundation.zip" <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const lock=JSON.parse(fs.readFileSync('data/food-catalog/source-locks/usda-foundation-2026-04.json','utf8'));
+          const bytes=fs.readFileSync(process.argv[2]);
+          if(bytes.length!==lock.sourceBytes || crypto.createHash('sha256').update(bytes).digest('hex')!==lock.sourceChecksumSha256) process.exit(1);
+          NODE
+      - name: Locked canary replay A
+        run: |
+          node scripts/food-catalog-plan9-1a1-runner.mjs \
+            --zip "$RUNNER_TEMP/foundation.zip" \
+            --index data/food-catalog/source-locks/plan9-1a1-match-index-2026-10-13.json \
+            --output "$RUNNER_TEMP/plan9-a"
+      - name: Independent locked canary replay B
+        run: |
+          node scripts/food-catalog-plan9-1a1-runner.mjs \
+            --zip "$RUNNER_TEMP/foundation.zip" \
+            --index data/food-catalog/source-locks/plan9-1a1-match-index-2026-10-13.json \
+            --output "$RUNNER_TEMP/plan9-b"
+      - name: Check exact reproducibility and 1A1 counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in canary-selection.json manifest-content.json qa.json checksums.json; do
+            cmp "$RUNNER_TEMP/plan9-a/$file" "$RUNNER_TEMP/plan9-b/$file"
+          done
+          node --input-type=module - "$RUNNER_TEMP/plan9-a/qa.json" <<'NODE'
+          import fs from 'node:fs';
+          const qa=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(qa.status!=='OFFLINE_EVIDENCE_ONLY' || qa.productionAuthority!==false) process.exit(1);
+          if(qa.mutations.input!==80 || qa.mutations.accepted!==80) process.exit(1);
+          if(qa.input.sourceFoodCount!==363 || qa.input.nullSlots!==32) process.exit(1);
+          if(qa.selection.rows.length!==80 || new Set(qa.selection.rows.map(x=>x.fdcId)).size!==80) process.exit(1);
+          for(const [kind,n] of Object.entries({strong:60,missingEnergy:10,evidenceEdge:10}))
+            if(qa.selection.rows.filter(x=>x.cohort===kind).length!==n) process.exit(1);
+          NODE
+      - name: Preserve exact-source canary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan9-1a1-offline-evidence-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/plan9-a/canary-selection.json
+            ${{ runner.temp }}/plan9-a/manifest-content.json
+            ${{ runner.temp }}/plan9-a/qa.json
+            ${{ runner.temp }}/plan9-a/checksums.json
+            ${{ runner.temp }}/plan9-b/checksums.json
+          if-no-files-found: warn
+          retention-days: 30
