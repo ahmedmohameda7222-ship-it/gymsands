@@ -5,14 +5,14 @@
   "auditedRepositoryCommit": "dfa14c3bc2c1524ff185b1ee4e170f4537a80230",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 0,
-  "unresolvedCount": 0,
+  "pendingCount": 1,
+  "unresolvedCount": 1,
   "historyRepair": {
-    "state": "reconciled",
+    "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 0,
-    "unresolvedCount": 0,
-    "note": "Plaivra Production migration history is reconciled through 20261008224322_food_catalog_plan7_retirement_contract with 130 physical records. The approved Task 17 three-object retirement contract was applied exactly once after immediate live preflight. No Food population, provider ingestion, activation, generation promotion, compatibility-marker promotion, deployment, Activity Catalog mutation, or Plan 8 work occurred. Do not replay applied migrations."
+    "pendingCount": 1,
+    "unresolvedCount": 1,
+    "note": "Production through 20261008224322 remains historically reconciled with 130 records. Plan 9 forward migration is pending deployment, NOT in Production migration history. Do not replay previously applied migrations. Production Food data writes require separate exact authorization."
   },
   "entries": [
     {
@@ -864,6 +864,11 @@
       "note": "differs; repository migration applied exactly once to Plaivra Production on 2026-10-08 as generated identity 20261008224322_food_catalog_plan7_retirement_contract from reviewed PR #186 Git blob fdf055f3be40ccad83bd7cf4721cee9654da61c4 after exact-head QA, Task 16 exact three-object scope approval, immediate zero-row/dependency/ACL preflight, and standing owner authorization. Post-apply read-back proved only public.search_nutrition_food_library(text,text,text,integer,text,text,text,jsonb), public.food_aliases, and public.food_market_relevance were retired; retained owner/current/search/security authority and compatibility marker were unchanged. Do not replay.",
       "productionVersion": "20261008224322",
       "productionName": "food_catalog_plan7_retirement_contract"
+    },
+    {
+      "localFile": "20261013040000_food_catalog_plan9_batch_review_authority.sql",
+      "state": "pending",
+      "note": "Plan 9 reviewed human-only USDA Foundation ingestion batch decision RPC. As of 2026-10-13 this migration is repository-only: NOT applied to Production. Exact chronological local migration replay and security verification run in disposable PR CI; Production apply requires independently reviewed exact-head CI and read-only migration/ACL/recovery preflight. Do not replay applied migrations. No Production Food data operations authorized."
     }
   ],
   "productionRecordCount": 130
