@@ -225,6 +225,22 @@ begin
     raise exception 'NULL decision mutated review state.';
   end if;
 
+  -- The exact expected-count object is mandatory even for a rejection;
+  -- NULL must never bypass SQL's three-valued IF boolean.
+  begin
+    perform public.food_catalog_review_ingestion_batch_v1(
+      v_cmd || jsonb_build_object(
+        'operationId','92000000-0000-4000-8000-000000000040',
+        'decision','reject','expectedReviewState','reviewed',
+        'expectedMutations',null));
+    raise exception 'NULL expected counts unexpectedly accepted.';
+  exception when invalid_parameter_value then null;
+  end;
+  if (select review_state from public.food_ingestion_batches
+       where id='92000000-0000-4000-8000-000000000010') <> 'reviewed' then
+    raise exception 'NULL expected counts mutated review state.';
+  end if;
+
   v_cmd := v_cmd || jsonb_build_object(
     'operationId','92000000-0000-4000-8000-000000000033',
     'decision','approve','expectedReviewState','reviewed',
