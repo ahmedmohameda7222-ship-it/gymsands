@@ -82,6 +82,13 @@ jobs:
           if(qa.mutations.input!==80 || qa.mutations.accepted!==80) process.exit(1);
           if(qa.input.sourceFoodCount!==363 || qa.input.nullSlots!==32) process.exit(1);
           if(qa.selection.rows.length!==80 || new Set(qa.selection.rows.map(x=>x.fdcId)).size!==80) process.exit(1);
+          const e=qa.evidence;
+          if(!e || e.identity.usableNdbNumbers!==80 || e.identity.distinctFdcIds!==80) process.exit(1);
+          if(e.nutrition.coverage.calories.present!==70 || e.nutrition.coverage.calories.missing!==10) process.exit(1);
+          if(e.nutrition.energySelectedAuthority['2048'] + e.nutrition.energySelectedAuthority['2047'] + e.nutrition.energySelectedAuthority.missing!==80) process.exit(1);
+          if(e.nutrition.legacy1008Selected!==0 || e.market.globallyRelevantFoods!==0 || e.market.assignedMarketScopes!==0) process.exit(1);
+          if(e.serving.rawSourcePortions!==e.serving.retainedExactSourcePortions+e.serving.unusableSourcePortions) process.exit(1);
+          if(e.anomalies.issueCodes.length!==0 || e.anomalies.rejected!==0 || e.anomalies.quarantined!==0) process.exit(1);
           for(const [kind,n] of Object.entries({strong:60,missingEnergy:10,evidenceEdge:10}))
             if(qa.selection.rows.filter(x=>x.cohort===kind).length!==n) process.exit(1);
           NODE
