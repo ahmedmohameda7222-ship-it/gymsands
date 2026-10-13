@@ -5,14 +5,14 @@
   "auditedRepositoryCommit": "dfa14c3bc2c1524ff185b1ee4e170f4537a80230",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 0,
-  "unresolvedCount": 0,
+  "pendingCount": 1,
+  "unresolvedCount": 1,
   "historyRepair": {
-    "state": "reconciled",
+    "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 0,
-    "unresolvedCount": 0,
-    "note": "Plaivra Main history reconciled to 20261013040648_food_catalog_plan9_review_decision_hardening with 132 physical Production migrations. Repository exact-file applied entries remain 63; Plan 9 migrations are applied_version_alias records. Food/source/ingestion/activation/generation/search/principal populations remain zero, pointer NULL. Released compatibility marker was not promoted. No Production data writes; Owner bootstrap and each data-operation approval remain separately gated. Do not replay applied migrations."
+    "pendingCount": 1,
+    "unresolvedCount": 1,
+    "note": "Production physical history remains reconciled through 20261013040648 (132 records) with 63 exact applied repository files and existing Plan 9 aliases. New 20261013060000_food_catalog_plan9_cross_batch_source_fact_idempotency.sql remains pending review and clean disposable replay; no Production schema application or data mutation yet. Do not replay applied migrations. Owner recovery and each Production Food data-operation authorization remain separate mandatory gates."
   },
   "entries": [
     {
@@ -878,6 +878,11 @@
       "note": "differs; forward-only Plan 9 NULL decision/count validation correction applied on 2026-10-13 to Plaivra Main as generated 20261013040648_food_catalog_plan9_review_decision_hardening, from reviewed repo migration blob 11977f6a052ca67fef9b83164bd46b38fe597521 after chronological local migration replay and rollback-only adversarial review/capability/semantic/reconciliation/CAS verification at PR #188 job 38344452605. The original schema-only Plan 9 RPC migration remains immutable. Immediate Production readback: decision/expected-state/source/expected-counts NULL guards present, owner postgres/SECURITY DEFINER, anon/service_role EXECUTE=false, authenticated=true, Food/source/batch/run/principal/grant/audit/generation/search-document counts all zero and current-generation pointer NULL. No Production batch registration or Food data operation. Do not replay.",
       "productionVersion": "20261013040648",
       "productionName": "food_catalog_plan9_review_decision_hardening"
+    },
+    {
+      "localFile": "20261013060000_food_catalog_plan9_cross_batch_source_fact_idempotency.sql",
+      "state": "pending",
+      "note": "Forward-only Plan 9 schema-only correction. Disposable real 80-to-363 USDA RPC ingestion at run 38358309988 confirmed duplicate source nutrition/names/servings on cross-batch MATCH; redefines only the v2 ingestion persist-candidate command with versioned-source-fact reuse guard. Clean disposable migration replay, full integration re-test and security preflight required before authorized Main Production schema application. Do not replay any already-applied migration or authorize Production Food writes."
     }
   ],
   "productionRecordCount": 132
