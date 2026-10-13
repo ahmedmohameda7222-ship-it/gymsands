@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: plan9-real-db-${{ github.ref }}
-  cancel-in-progress: true
+  group: plan9-real-db-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   disposable-foundation-e2e:
