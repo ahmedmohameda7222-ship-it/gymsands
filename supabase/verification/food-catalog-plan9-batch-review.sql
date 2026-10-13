@@ -220,10 +220,7 @@ begin
     raise exception 'NULL decision unexpectedly accepted as a rejection.';
   exception when invalid_parameter_value then null;
   end;
-  if (select review_state from public.food_ingestion_batches
-       where id='92000000-0000-4000-8000-000000000010') <> 'reviewed' then
-    raise exception 'NULL decision mutated review state.';
-  end if;
+  -- Actual review-state immutability is checked after RESET ROLE; authenticated callers cannot SELECT these RLS tables.
 
   -- The exact expected-count object is mandatory even for a rejection;
   -- NULL must never bypass SQL's three-valued IF boolean.
@@ -236,10 +233,7 @@ begin
     raise exception 'NULL expected counts unexpectedly accepted.';
   exception when invalid_parameter_value then null;
   end;
-  if (select review_state from public.food_ingestion_batches
-       where id='92000000-0000-4000-8000-000000000010') <> 'reviewed' then
-    raise exception 'NULL expected counts mutated review state.';
-  end if;
+  -- The successful exact approval below plus post-RESET ROLE readback verifies these calls made no mutation.
 
   v_cmd := v_cmd || jsonb_build_object(
     'operationId','92000000-0000-4000-8000-000000000033',
