@@ -13,8 +13,8 @@ describe("Plan 9 human ingestion batch review migration", () => {
     expect(migration).toContain("private.food_catalog_governance_principal_for_user()");
     expect(migration).toContain("private.food_catalog_governance_begin_operation(");
     expect(migration).toContain("private.food_catalog_governance_finish_operation(");
-    expect(migration).toMatch(/revoke execute on function public\.food_catalog_review_ingestion_batch_v1\(jsonb\) \\s+from public, anon, authenticated, service_role/);
-    expect(migration).toMatch(/grant execute on function public\.food_catalog_review_ingestion_batch_v1\(jsonb\) \\s+to authenticated/);
+    expect(migration).toMatch(/revoke execute on function public\.food_catalog_review_ingestion_batch_v1\(jsonb\)\s+from public, anon, authenticated, service_role/);
+    expect(migration).toMatch(/grant execute on function public\.food_catalog_review_ingestion_batch_v1\(jsonb\)\s+to authenticated/);
     expect(migration).not.toMatch(/grant execute[^;]*to service_role/i);
   });
 
