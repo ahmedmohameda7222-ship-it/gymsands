@@ -290,3 +290,80 @@ export async function executeApprovedFoodCatalogDraftMutation(
 export function manifestCandidateCount(content: FoodCatalogDryRunManifestContent): number {
   return content.candidates.length;
 }
+
+
+/**
+ * Plan 9 control-plane dry run. Intentionally writes persisted batch/run/source
+ * review evidence: the caller must obtain an exact separate Production approval.
+ * It never acquires a Production lease or creates an active canonical Food.
+ */
+export async function executeFoodCatalogDatabaseDryRun(
+  store: FoodCatalogIngestionCommandStore,
+  input: ExecuteApprovedFoodCatalogDraftMutationInput,
+): Promise<ExecuteApprovedFoodCatalogDraftMutationResult> {
+  assertExactManifest(input);
+  if (!Number.isSafeInteger(input.attemptNumber) || input.attemptNumber < 1) {
+    throw new Error("Plan 9 DB dry run requires a positive attemptNumber.");
+  }
+  const op = (command: string, sourceRecordId?: string) => deterministicUuid(
+    "food-catalog-plan9-dry-run-operation-v1",
+    input.semanticIdentityChecksumSha256,
+    input.manifestContentChecksumSha256,
+    input.attemptNumber,
+    command,
+    sourceRecordId ?? null,
+  );
+  const prepared = await store.prepareExecution(op("prepare-execution"), {
+    executionMode: "dry_run",
+    attemptNumber: input.attemptNumber,
+    manifestContentChecksumSha256: input.manifestContentChecksumSha256,
+    semanticIdentityChecksumSha256: input.semanticIdentityChecksumSha256,
+    source: input.manifestContent.source,
+    expectedMutations: input.manifestContent.expectedMutations,
+  });
+  const batchId = requiredString(prepared, "batchId");
+  const runId = requiredString(prepared, "runId");
+  if (prepared.executionMode !== "dry_run") {
+    throw new Error("Plan 9 DB dry run refused a Production execution attempt.");
+  }
+  for (const entry of input.manifestContent.candidates) {
+    const sourceRecordId = entry.candidate.sourceRecordId;
+    const foodId = productionFoodId(entry, input.semanticIdentityChecksumSha256);
+    const command: Record<string, unknown> = {
+      runId, decisionKind: entry.decision.kind,
+      dispositionKind: entry.disposition.kind,
+      decision: entry.decision, disposition: entry.disposition,
+      issues: entry.issues, candidate: entry.candidate,
+    };
+    if (foodId) command.foodId = foodId;
+    await store.persistCandidate(op("persist-candidate", sourceRecordId), command);
+    if (entry.disposition.kind === "quarantine") {
+      await store.recordQuarantine(op("record-quarantine", sourceRecordId), {
+        runId, sourceRecordId, decisionKind: entry.decision.kind,
+        reasonCodes: entry.disposition.reasonCodes,
+        candidateFoodIds: decisionCandidateFoodIds(entry),
+        evidence: {
+          issues: entry.issues,
+          identityEvidence: entry.candidate.identityEvidence,
+        },
+      });
+    }
+  }
+  const reconciled = await store.recordReconciliation(op("record-reconciliation"), {
+    runId,
+    manifestContentChecksumSha256: input.manifestContentChecksumSha256,
+    semanticIdentityChecksumSha256: input.semanticIdentityChecksumSha256,
+    completed: true,
+  });
+  const reconciliationId = requiredString(reconciled, "reconciliationId");
+  if (reconciled.ok !== true) {
+    await store.failRun(op("fail-run"), {
+      runId, reconciliationId,
+      mismatchCodes: Array.isArray(reconciled.mismatchCodes)
+        ? reconciled.mismatchCodes.map(String) : ["unknown"],
+    });
+    throw new Error("Plan 9 DB dry-run reconciliation failed; review evidence must be preserved.");
+  }
+  const completed = await store.completeRun(op("complete-run"), { runId });
+  return { batchId, runId, status: requiredString(completed, "status"), reconciliationId };
+}
