@@ -229,8 +229,8 @@ describe("Food Catalog Plan 4 ingestion V2 authority migration", () => {
   });
 
   it("records verified Plan 4/5 aliases while Task 17 retirement is pending", () => {
-    expect(ledger.productionMigrationCount).toBe(64);
-    expect(ledger.productionRecordCount).toBe(131);
+    expect(ledger.productionMigrationCount).toBe(63);
+    expect(ledger.productionRecordCount).toBe(132);
     expect(ledger.pendingCount).toBe(0);
     expect(ledger.unresolvedCount).toBe(0);
     expect(ledger.historyRepair.state).toBe("reconciled");
