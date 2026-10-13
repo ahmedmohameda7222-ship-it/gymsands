@@ -19,8 +19,8 @@ jobs:
     env:
       PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
       PLAIVRA_PLAN9_DISPOSABLE_ONLY: "true"
-      PLAIVRA_PLAN9_SOURCE_ZIP: ${{ runner.temp }}/plan9-foundation-original.zip
-      PLAIVRA_PLAN9_E2E_EVIDENCE: ${{ runner.temp }}/plan9-real-db-evidence.json
+      PLAIVRA_PLAN9_SOURCE_ZIP: /tmp/plan9-foundation-original.zip
+      PLAIVRA_PLAN9_E2E_EVIDENCE: /tmp/plan9-real-db-evidence.json
       SUPABASE_TELEMETRY_DISABLED: "1"
       DO_NOT_TRACK: "1"
     steps:
@@ -41,7 +41,7 @@ jobs:
       - name: Chronological disposable database migration replay
         run: >-
           node scripts/replay-local-migration-chain.mjs
-          --log "${{ runner.temp }}/plan9-real-db-migrations.log" --prove-future-order
+          --log "/tmp/plan9-real-db-migrations.log" --prove-future-order
       - name: Download locked original USDA Foundation release
         shell: bash
         run: |
@@ -66,7 +66,7 @@ jobs:
         with:
           name: plan9-disposable-real-db-${{ github.sha }}
           path: |
-            ${{ runner.temp }}/plan9-real-db-evidence.json
-            ${{ runner.temp }}/plan9-real-db-migrations.log
+            /tmp/plan9-real-db-evidence.json
+            /tmp/plan9-real-db-migrations.log
           if-no-files-found: warn
           retention-days: 30
