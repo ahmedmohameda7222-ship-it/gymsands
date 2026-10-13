@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-10-13T03:43:07Z",
+  "capturedAt": "2026-10-13T04:06:48Z",
   "auditedRepositoryCommit": "dfa14c3bc2c1524ff185b1ee4e170f4537a80230",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 1,
-  "unresolvedCount": 1,
+  "pendingCount": 0,
+  "unresolvedCount": 0,
   "historyRepair": {
-    "state": "pending",
+    "state": "reconciled",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 1,
-    "unresolvedCount": 1,
-    "note": "Production migration history is reconciled at 131 physical records through 20261013034307, with a new Plan 9 NULL-decision correction forward schema migration pending review/Production apply. Do not replay the applied migrations. The repository migration ledger is not release-ready while this correction is pending; no Food data operations or new principal bootstrap are authorized."
+    "pendingCount": 0,
+    "unresolvedCount": 0,
+    "note": "Plaivra Main history reconciled to 20261013040648_food_catalog_plan9_review_decision_hardening with 132 physical Production migrations. Repository exact-file applied entries remain 63; Plan 9 migrations are applied_version_alias records. Food/source/ingestion/activation/generation/search/principal populations remain zero, pointer NULL. Released compatibility marker was not promoted. No Production data writes; Owner bootstrap and each data-operation approval remain separately gated. Do not replay applied migrations."
   },
   "entries": [
     {
@@ -874,9 +874,11 @@
     },
     {
       "localFile": "20261013050000_food_catalog_plan9_review_decision_hardening.sql",
-      "state": "pending",
-      "note": "Plan 9 security review found missing/NULL decision and expected count inputs can exploit SQL three-valued IF handling in the human review RPC; the forward-only correction is repository-only until exact-head local chronological replay, adversarial SQL test, permissions audit and schema-only Production apply. Existing original migration is already applied and must never be edited or replayed. No Production data operation approved."
+      "state": "applied_version_alias",
+      "note": "differs; forward-only Plan 9 NULL decision/count validation correction applied on 2026-10-13 to Plaivra Main as generated 20261013040648_food_catalog_plan9_review_decision_hardening, from reviewed repo migration blob 11977f6a052ca67fef9b83164bd46b38fe597521 after chronological local migration replay and rollback-only adversarial review/capability/semantic/reconciliation/CAS verification at PR #188 job 38344452605. The original schema-only Plan 9 RPC migration remains immutable. Immediate Production readback: decision/expected-state/source/expected-counts NULL guards present, owner postgres/SECURITY DEFINER, anon/service_role EXECUTE=false, authenticated=true, Food/source/batch/run/principal/grant/audit/generation/search-document counts all zero and current-generation pointer NULL. No Production batch registration or Food data operation. Do not replay.",
+      "productionVersion": "20261013040648",
+      "productionName": "food_catalog_plan9_review_decision_hardening"
     }
   ],
-  "productionRecordCount": 131
+  "productionRecordCount": 132
 }
