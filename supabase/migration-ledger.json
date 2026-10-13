@@ -5,14 +5,14 @@
   "auditedRepositoryCommit": "dfa14c3bc2c1524ff185b1ee4e170f4537a80230",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 1,
-  "unresolvedCount": 1,
+  "pendingCount": 0,
+  "unresolvedCount": 0,
   "historyRepair": {
-    "state": "pending",
+    "state": "reconciled",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 1,
-    "unresolvedCount": 1,
-    "note": "Production physical history remains reconciled through 20261013040648 (132 records) with 63 exact applied repository files and existing Plan 9 aliases. New 20261013060000_food_catalog_plan9_cross_batch_source_fact_idempotency.sql remains pending review and clean disposable replay; no Production schema application or data mutation yet. Do not replay applied migrations. Owner recovery and each Production Food data-operation authorization remain separate mandatory gates."
+    "pendingCount": 0,
+    "unresolvedCount": 0,
+    "note": "Main Production history reconciled through 20261013070122_food_catalog_plan9_cross_batch_source_fact_idempotency with 133 physical migration records, 63 exact-file applied repository entries and three Plan 9 applied-version aliases. All Production Food, batch, run, Owner, grant, generation, SearchDocument counts still zero; current-generation NULL; compatibility marker 20260724232734 unchanged. New Plan 9 80→363 isolated real DB integration GREEN. Do not replay already applied migrations. Individual Production Food/Owner authorization gates remain closed."
   },
   "entries": [
     {
@@ -881,9 +881,11 @@
     },
     {
       "localFile": "20261013060000_food_catalog_plan9_cross_batch_source_fact_idempotency.sql",
-      "state": "pending",
-      "note": "Forward-only Plan 9 schema-only correction. Disposable real 80-to-363 USDA RPC ingestion at run 38358309988 confirmed duplicate source nutrition/names/servings on cross-batch MATCH; redefines only the v2 ingestion persist-candidate command with versioned-source-fact reuse guard. Clean disposable migration replay, full integration re-test and security preflight required before authorized Main Production schema application. Do not replay any already-applied migration or authorize Production Food writes."
+      "state": "applied_version_alias",
+      "note": "differs; repository Plan 9 forward-only USDA cross-batch immutable-source-fact idempotency correction applied exactly once to Main Production on 2026-10-13 under actual generated identity 20261013070122_food_catalog_plan9_cross_batch_source_fact_idempotency. Exact reviewed repository Git blob ff074d50fa1df4ab250a61f68568e0a54dfb7441 replayed with all chronological migrations on disposable PostgreSQL, and full real 80→363 USDA dry-run/human-review/draft-only lifecycle GREEN at job 38359339102: 353 Foods (80 stable MATCH+273 CREATE), 10 rejected, no source fact duplicates, no activation/generation. Main postapply readback: 133 physical migration records; persist RPC postgres-owned SECURITY DEFINER, service_role EXECUTE=true, anon/authenticated=false, cross-batch guard=true; review RPC authentication boundary preserved; Food/source/batch/run/principal/grant/generation/search counts remain zero, current pointer NULL, released compatibility marker unchanged at 20260724232734. This schema correction does not authorize Production batches, ingestion, principal grants or publication. Do not replay.",
+      "productionVersion": "20261013070122",
+      "productionName": "food_catalog_plan9_cross_batch_source_fact_idempotency"
     }
   ],
-  "productionRecordCount": 132
+  "productionRecordCount": 133
 }
