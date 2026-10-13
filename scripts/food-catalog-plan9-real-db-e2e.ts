@@ -81,10 +81,10 @@ function approve(batch:any,dry:any){
  assert.equal(approved.reviewState,"approved");
 }
 function manifestSourceSnapshot(){
- return jsonExpr(`coalesce(jsonb_agg(jsonb_build_object(
+ return jsonExpr(`(select coalesce(jsonb_agg(jsonb_build_object(
  'sourceRecordId',s.source_record_id,'foodId',s.food_id,'sourceId',s.id)
  order by s.source_record_id), '[]'::jsonb)
- from public.food_source_records s where s.food_id is not null`);
+ from public.food_source_records s where s.food_id is not null)`);
 }
 function factsForCanary(){
  return jsonExpr(`jsonb_build_object(
@@ -99,15 +99,15 @@ function factsForCanary(){
    join public.food_ingestion_batches b on b.id=mr.batch_id where b.input_count=80)))`);
 }
 function realMatchIndex(){
- const rows=jsonExpr(`coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from (
+ const rows=jsonExpr(`(select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from (
   select s.provider,s.source_dataset as "dataset",s.source_version as "sourceVersion",
     s.source_record_id as "sourceRecordId",s.food_id as "foodId",
     s.source_nutrition->>'normalizedNdbNumber' as "ndb"
   from public.food_source_records s join public.food_items f on f.id=s.food_id
-  where f.merged_into_food_id is null order by s.source_record_id) x`);
- const names=jsonExpr(`coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from (
+  where f.merged_into_food_id is null order by s.source_record_id) x)`);
+ const names=jsonExpr(`(select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from (
  select n.normalized_text as "normalizedName", n.food_id as "foodId"
- from public.food_names n order by normalized_text,food_id) x`);
+ from public.food_names n order by normalized_text,food_id) x)`);
  return {
   sourceIdentities:rows.map(({provider,dataset,sourceVersion,sourceRecordId,foodId}:any)=>
    ({provider,dataset,sourceVersion,sourceRecordId,foodId})),
@@ -151,8 +151,8 @@ export async function run(){
  const after1=summary();
  assert.equal(after1.foods,80);assert.equal(after1.sources,80);assert.equal(after1.materialized,80);
  assert.equal(after1.generations,0);assert.equal(after1.search,0);assert.equal(after1.current,null);
- assert.equal(jsonExpr("count(*) from public.food_items where lifecycle_status <> 'draft'"),0);
- assert.equal(jsonExpr("count(*) from public.food_nutrition_revisions where calories is null"),10);
+ assert.equal(jsonExpr("(select count(*) from public.food_items where lifecycle_status <> 'draft')"),0);
+ assert.equal(jsonExpr("(select count(*) from public.food_nutrition_revisions where calories is null)"),10);
  const ids=manifestSourceSnapshot(),facts1=factsForCanary();
  assert.equal((await executeApprovedFoodCatalogDraftMutation(store,prepare(selected.canary,"foundation-1a1"))).runId,phase1.draft.runId);
  assert.deepEqual(summary(),after1,"same 1A1 operation replay");
@@ -174,7 +174,7 @@ export async function run(){
  assert.equal(after2.sources,363);
  assert.equal(after2.materialized,80+expected.accepted);
  assert.equal(after2.generations,0);assert.equal(after2.search,0);assert.equal(after2.current,null);
- assert.equal(jsonExpr("count(*) from public.food_items where lifecycle_status <> 'draft'"),0);
+ assert.equal(jsonExpr("(select count(*) from public.food_items where lifecycle_status <> 'draft')"),0);
  assert.equal((await executeApprovedFoodCatalogDraftMutation(store,prepare(full,"foundation-1a2"))).runId,phase2.draft.runId);
  assert.deepEqual(summary(),after2,"same 1A2 operation replay");
  const evidence={disposition:"DISPOSABLE_ONLY",sourceChecksumSha256:lock.sourceChecksumSha256,
