@@ -1,0 +1,72 @@
+name: Food Catalog Plan 9 Real Foundation DB Lifecycle
+
+on:
+  push:
+    branches: [feat/food-catalog-plan9-usda-foundation-rollout]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plan9-real-db-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  disposable-foundation-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PLAIVRA_PLAN9_DISPOSABLE_ONLY: "true"
+      PLAIVRA_PLAN9_SOURCE_ZIP: ${{ runner.temp }}/plan9-foundation-original.zip
+      PLAIVRA_PLAN9_E2E_EVIDENCE: ${{ runner.temp }}/plan9-real-db-evidence.json
+      SUPABASE_TELEMETRY_DISABLED: "1"
+      DO_NOT_TRACK: "1"
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Chronological disposable database migration replay
+        run: >-
+          node scripts/replay-local-migration-chain.mjs
+          --log "${{ runner.temp }}/plan9-real-db-migrations.log" --prove-future-order
+      - name: Download locked original USDA Foundation release
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_json_2026-04-30.zip' \
+            --output "$PLAIVRA_PLAN9_SOURCE_ZIP"
+          node --input-type=module - "$PLAIVRA_PLAN9_SOURCE_ZIP" <<'NODE'
+          import {readFileSync} from "node:fs";
+          import {createHash} from "node:crypto";
+          const lock=JSON.parse(readFileSync("data/food-catalog/source-locks/usda-foundation-2026-04.json","utf8"));
+          const bytes=readFileSync(process.argv[2]);
+          if(bytes.length!==lock.sourceBytes ||
+             createHash("sha256").update(bytes).digest("hex")!==lock.sourceChecksumSha256)
+            throw new Error("USDA Foundation source-lock mismatch");
+          NODE
+      - name: Real 80-to-full USDA Foundation database lifecycle
+        run: node scripts/food-catalog-plan9-real-db-e2e-runner.mjs
+      - name: Preserve non-Production integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan9-disposable-real-db-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/plan9-real-db-evidence.json
+            ${{ runner.temp }}/plan9-real-db-migrations.log
+          if-no-files-found: warn
+          retention-days: 30
