@@ -470,3 +470,14 @@ Required next sequence:
 7. merge only after explicit Planner approval.
 
 Do not waive the exact-head PR regression or canonical Quality gate.
+## Current Plan 9 continuity override — 2026-10-13 (supersedes the historic Plan 3 next move)
+
+**Scope:** single Plan 9 rollout assignment, Draft PR #188; `main` still at `c07b9a2041e39d9e2e69d040d26e8875cb165aed`. Plan 8 is completed/merged; no Plan 10. See `docs/superpowers/specs/2026-10-13-food-catalog-plan9-usda-rollout-design.md`, `docs/superpowers/plans/2026-10-13-food-catalog-plan9-usda-rollout.md` and the dated production migration ledger.
+
+**Production schema apply performed:** human-only Plan 9 ingestion review RPC/capability as generated `20261013034307_food_catalog_plan9_batch_review_authority`; exact repository migration blob `b52377cfa44049ab6bff0776b056ea6edb4cc66b`. The migration has been read back: EXECUTE authenticated=true / anon=false / service_role=false, 131 physical migration records, no Food population or current-generation transition. No compatibility-marker promotion, Product deployment or Activity Catalog change.
+
+**1A1 offline authority:** 80 original Foundation Food records selected deterministically from the locked `2026-04-30` USDA ZIP; 60 strong, 10 no selected calories, 10 other evidence-edge. Selection SHA-256 `b3b4719102d936d1ddf9ffe9aacdb3a351514a0e54f95ea012431980647cf4bf`; manifest SHA-256 `10db18aaeae621b4618e868a4f47de9c02ab3ea876b407b7064f54cf31674a33`; semantic SHA-256 `6e57f559c0d31785df00f5ce61c1f2920e8854ecb372d76468e8dc0a852a8f06`. Input/accepted/created 80/80/80, all others zero. Exact SHA/selection identity must be rechecked against current Production source-index before any persistent operation. All offline evidence is distinct from approved Production run authority.
+
+**Blocking security precondition:** Production governance principals=0, capability grants=0. Existing Owner-management RPC requires a live Owner, so it cannot bootstrap one from zero by impersonation. Provisioning/recovery requires a separately validated, approved human identity and safe maintenance authority. Do not invent or directly insert a principal merely to pass QA.
+
+**Current Next Move:** (1) finalize and independently review exact-head PR #188 CI and repo/Production ledger; (2) close genuine migration/adversarial test failures, if any; (3) establish an authorized active Owner recovery principal through a separately approved legitimate recovery process; (4) recheck real Production index and all Food/batch/generation counts against the canary lock; (5) present exact `1A1` persistent batch/database dry-run decision package and seek the named approval. On approval resume draft ingestion, then separate activation and generation promotion approvals; do not initiate full 1A2 before healthy first canary evidence. Never merge/deploy without corresponding release approval.
