@@ -64,6 +64,67 @@ const checksums = {
   manifestContentChecksumSha256: result.canary.manifestContentChecksumSha256,
   semanticBatchIdentityChecksumSha256: result.canary.semanticBatchIdentityChecksumSha256
 };
+const nutrientKeys = [
+  "calories", "protein_g", "fat_g", "carbs_g", "saturated_fat_g",
+  "fiber_g", "sugars_g", "sodium_mg"
+] as const;
+const selected = result.canary.manifestContent.candidates;
+const nutritionCoverage = Object.fromEntries(nutrientKeys.map(key => [
+  key, {
+    present: selected.filter(row => row.candidate.nutrition[key] !== null).length,
+    missing: selected.filter(row => row.candidate.nutrition[key] === null).length
+  }
+]));
+const nutritionEvidence = selected.map(row => row.candidate.sourceNutrition as {
+  ndbIdentityStatus: string;
+  normalizedNdbNumber: string | null;
+  selectedNutrientIds: { calories: number | null };
+  numericLoqNutrientIds: number[];
+  textualLoqNutrientIds: number[];
+});
+const servingEvidence = selected.map(row => row.candidate.sourceServing as {
+  rawPortions: unknown[];
+  unusablePortionIds: number[];
+});
+const energySelections = Object.fromEntries(["2048", "2047", "missing"].map(key => [
+  key, nutritionEvidence.filter(evidence =>
+    String(evidence.selectedNutrientIds.calories ?? "missing") === key).length
+]));
+const rawPortions = servingEvidence.reduce((sum, evidence) => sum + evidence.rawPortions.length, 0);
+const unusablePortions = servingEvidence.reduce((sum, evidence) => sum + evidence.unusablePortionIds.length, 0);
+const retainedPortions = selected.reduce((sum, row) => sum + row.candidate.servings.length, 0);
+const selectedNdb = nutritionEvidence.map(evidence => evidence.normalizedNdbNumber);
+const issues = selected.flatMap(row => row.issues.map(issue => issue.code)).sort();
+if (rawPortions !== retainedPortions + unusablePortions
+  || selectedNdb.some(value => value === null)
+  || new Set(selectedNdb).size !== 80
+  || selected.some(row => row.candidate.globallyRelevant || row.candidate.marketScopes.length > 0)
+  || energySelections["2048"]! + energySelections["2047"]! + energySelections.missing! !== 80) {
+  throw new Error("Canary provenance, identity, energy or source-serving QA invariants failed.");
+}
+const evidenceQA = {
+  nutrition: {
+    coverage: nutritionCoverage,
+    energySelectedAuthority: energySelections,
+    legacy1008Selected: nutritionEvidence.filter(evidence => evidence.selectedNutrientIds.calories === 1008).length,
+    belowLimitNumericNutrientFlags: nutritionEvidence.reduce((n, evidence) => n + evidence.numericLoqNutrientIds.length, 0),
+    belowLimitTextualNutrientFlags: nutritionEvidence.reduce((n, evidence) => n + evidence.textualLoqNutrientIds.length, 0)
+  },
+  serving: {
+    foodsWithSourceBackedServings: selected.filter(row => row.candidate.servings.length > 0).length,
+    rawSourcePortions: rawPortions, unusableSourcePortions: unusablePortions,
+    retainedExactSourcePortions: retainedPortions
+  },
+  identity: {
+    usableNdbNumbers: new Set(selectedNdb).size,
+    ndbStatus: Object.fromEntries(["present", "missing", "malformed"].map(key => [
+      key, nutritionEvidence.filter(evidence => evidence.ndbIdentityStatus === key).length
+    ])),
+    distinctFdcIds: new Set(selected.map(row => row.candidate.sourceRecordId)).size
+  },
+  market: { globallyRelevantFoods: 0, assignedMarketScopes: 0 },
+  anomalies: { issueCodes: issues, rejected: counts.rejected, quarantined: counts.quarantined }
+};
 const qa = {
   schemaVersion: "plaivra-food-catalog-plan9-foundation-1a1-qa-v1",
   status: "OFFLINE_EVIDENCE_ONLY", productionAuthority: false,
@@ -72,6 +133,7 @@ const qa = {
   input: { sourceFoodCount: parsed.foods.length, nullSlots: parsed.nullSlotCount },
   cohorts: result.selection.cohortCounts ?? { strong: 60, missingEnergy: 10, evidenceEdge: 10 },
   selection: result.selection,
+  evidence: evidenceQA,
   mutations: counts, checksums,
   note: "A CI/offline result cannot substitute for a separately authorized reconciled Production database dry run."
 };
