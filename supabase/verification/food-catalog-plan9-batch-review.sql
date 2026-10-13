@@ -17,7 +17,6 @@ begin
   end if;
   if has_function_privilege('anon',v_function,'execute')
     or has_function_privilege('service_role',v_function,'execute')
-    or has_function_privilege('PUBLIC',v_function,'execute')
     or not has_function_privilege('authenticated',v_function,'execute')
   then
     raise exception 'Plan 9 RPC violates human-only EXECUTE privileges.';
