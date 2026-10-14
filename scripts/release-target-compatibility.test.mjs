@@ -41,7 +41,7 @@ test("release consumers preserve the declared marker after Plan 9 schema apply",
   const plan6Correction = ledger.entries.find((entry) => entry.localFile === PLAN6_EXACTNESS_CORRECTION);
 
   assert.equal(releaseTarget.expectedMigration, "20260724232734");
-  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20261013040648");
+  assert.equal(releaseTarget.latestAppliedMigrationVersion, "20261013070122");
   assert.equal(releaseTarget.schemaCompatibilityVersion, "2");
   assert.equal(releaseTarget.reconciliationState, "reconciled");
   assert.deepEqual(pendingEntries.map((entry) => entry.localFile), []);
