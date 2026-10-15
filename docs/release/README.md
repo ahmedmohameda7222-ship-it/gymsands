@@ -84,7 +84,7 @@ Canonical Quality must retain results for:
 - rendered QA and Train QA;
 - release manifest, evidence index, artifact metadata, and unit-failure parity.
 
-Exact Release must verify the existing canonical run and artifact, then retain its own validation summary and read-only release-preflight artifact. Generated screenshots, logs, and manifests belong in workflow artifacts, not permanent source files.
+Exact Release must verify the existing canonical run and artifact, then retain its own validation summary and read-only release-preflight artifact. Stage-1 GitHub preflight must execute with explicit `--mode release`, record `mode=release` and `releaseReady=true`, and independently prove `productionPromotionAuthorized=false`. The Stage-1 validation context restricts Production authority; it must not silently downgrade strict release-readiness evaluation to review mode. Generated screenshots, logs, and manifests belong in workflow artifacts, not permanent source files.
 
 ## Build metadata and `/api/version`
 

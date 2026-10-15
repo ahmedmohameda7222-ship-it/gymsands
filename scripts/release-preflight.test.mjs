@@ -4,7 +4,14 @@ import { REQUIRED_QUALITY_GATE_NAMES } from "./quality-evidence-contract.mjs";
 import {
   evaluateReleasePreflight,
   resolvePreflightMode,
+  resolvePreflightModeForContext,
 } from "./release-preflight.mjs";
+
+import {
+  PRODUCTION_AUTHORIZATION_CONTEXT,
+  STAGE1_VALIDATION_CONTEXT,
+  authorizeProductionPromotion,
+} from "./release-identity-contract.mjs";
 
 const sha = "60a204d5fc20fc396be1b1b47e748c42ebba6abf";
 const buildTimestamp = "2026-07-14T01:00:00.000Z";
@@ -98,6 +105,35 @@ test("defaults omitted mode to release even in a pull-request environment", () =
     if (previousEventName === undefined) delete process.env.GITHUB_EVENT_NAME;
     else process.env.GITHUB_EVENT_NAME = previousEventName;
   }
+});
+
+test("Stage-1 strict release mode rejects review-only pending state without granting marker promotion", () => {
+  const mode = resolvePreflightModeForContext({
+    requestedMode: "release",
+    context: STAGE1_VALIDATION_CONTEXT,
+  });
+  assert.equal(mode, "release");
+  assert.equal(resolvePreflightModeForContext({
+    requestedMode: undefined,
+    context: STAGE1_VALIDATION_CONTEXT,
+  }), "release");
+  assert.equal(resolvePreflightModeForContext({
+    requestedMode: "review",
+    context: STAGE1_VALIDATION_CONTEXT,
+  }), "review");
+  assert.equal(evaluateReleasePreflight({ ...pendingInput(), mode }).ready, false);
+  assert.equal(evaluateReleasePreflight({ ...pendingInput(), mode: "review" }).ready, true);
+  assert.equal(authorizeProductionPromotion({
+    context: STAGE1_VALIDATION_CONTEXT,
+    token: "",
+    reviewedCommit: sha,
+    qualityRunId: "12345",
+    expectedMigration: "20260715010000",
+  }), false);
+  assert.throws(() => resolvePreflightModeForContext({
+    requestedMode: "review",
+    context: PRODUCTION_AUTHORIZATION_CONTEXT,
+  }), /strict release mode/);
 });
 
 test("strict release mode rejects a valid pending-only migration state", () => {
