@@ -345,6 +345,7 @@ function verifyPreflightArtifact({
   for (const [key, value] of Object.entries(expected)) {
     if (String(evidence[key]) !== value) throw new Error(`Preflight ${key} mismatch.`);
   }
+  if (evidence.mode !== "release" || evidence.releaseReady !== true) throw new Error("Strict preflight release eligibility not proven.");
   if (evidence.ready !== true || evidence.qualityArtifactValid !== true) throw new Error("Preflight not ready.");
   if (evidence.productionPromotionAuthorized !== false) throw new Error("Stage-1 preflight authorized promotion.");
   if (evidence.productionMutationPerformed !== false || evidence.deploymentPerformed !== false) {

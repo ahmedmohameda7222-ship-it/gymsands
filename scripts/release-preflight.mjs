@@ -75,6 +75,14 @@ export function resolvePreflightMode(value) {
   return normalizePreflightMode(value?.trim() ? value : "release");
 }
 
+export function resolvePreflightModeForContext({ requestedMode, context }) {
+  const mode = resolvePreflightMode(requestedMode);
+  if (validationContext(context) === PRODUCTION_AUTHORIZATION_CONTEXT && mode !== "release") {
+    throw new Error("Production marker promotion authorization requires strict release mode.");
+  }
+  return mode;
+}
+
 function unique(values) {
   return [...new Set(values)];
 }
@@ -378,6 +386,7 @@ async function main() {
   const requestId = validationRequestId(options["validation-request-id"]);
   const preflightId = validationRequestId(options["preflight-request-id"], "Preflight request ID");
   const context = validationContext(options["validation-context"] || STAGE1_VALIDATION_CONTEXT);
+  const mode = resolvePreflightModeForContext({ requestedMode: options.mode, context });
   const requestedMigration = expectedMigrationVersion(options["expected-migration"]);
 
   const reportsPath = isAbsolute(options["quality-reports"] ?? "")
@@ -405,7 +414,7 @@ async function main() {
 
   const manifest = artifact.manifest || readJson(resolve(reportsPath, "release-manifest.json"), "release manifest");
   const evaluation = evaluateReleasePreflight({
-    mode: context === PRODUCTION_AUTHORIZATION_CONTEXT ? "release" : "review",
+    mode,
     expectedCommit,
     checkedOutCommit,
     expectedRepository,
@@ -456,6 +465,7 @@ async function main() {
     schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount,
     unresolvedMigrationCount: migrationState.unresolvedCount,
     validationContext: context,
+    mode: evaluation.mode,
     qualityArtifactValid: artifact.valid,
     ready,
     reviewReady: evaluation.reviewReady,

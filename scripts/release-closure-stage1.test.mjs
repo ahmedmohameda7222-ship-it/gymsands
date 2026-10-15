@@ -221,6 +221,19 @@ test("Release preflight workflow consumes the exact run-keyed artifact read-only
   );
 });
 
+test("hosted Stage-1 preflight must execute and prove strict release mode, not review", () => {
+  const workflow = source(".github/workflows/release-preflight.yml");
+  const runner = source("scripts/release-preflight.mjs");
+  const orchestrator = source("scripts/exact-release-orchestrator.mjs");
+  assert.match(workflow, /--mode release/);
+  assert.match(workflow, /evidence\.mode !== "release"/);
+  assert.match(workflow, /evidence\.releaseReady !== true/);
+  assert.match(runner, /resolvePreflightModeForContext\(/);
+  assert.match(runner, /mode: evaluation\.mode,/);
+  assert.match(orchestrator, /evidence\.mode !== "release"/);
+  assert.match(orchestrator, /evidence\.releaseReady !== true/);
+});
+
 test("canonical artifact validation accepts exact matching evidence", () => {
   const reportsPath = createReports();
   try {
