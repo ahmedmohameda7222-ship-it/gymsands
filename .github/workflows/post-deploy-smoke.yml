@@ -108,7 +108,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Download exact same-commit quality evidence
+      - name: Download immutable reviewed Quality evidence
         uses: actions/download-artifact@v4
         with:
           name: quality-reports-${{ inputs.quality_run_id }}
@@ -116,7 +116,22 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.quality_run_id }}
 
+      - name: Verify exact reviewed same-commit preview identity
+        if: inputs.expected_environment == 'preview'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("quality-reports/release-manifest.json", "utf8"));
+            if (manifest.release?.commitSha !== process.argv[1]) throw new Error("Preview Quality commit mismatch.");
+            if (!Object.values(manifest.qualityGates ?? {}).every(e => e.status === "passed" && e.evidence)) {
+              throw new Error("Preview Quality gates are incomplete.");
+            }
+          ' "${{ inputs.expected_commit }}"
+
       - name: Verify immutable Quality, merged PR, provider and live release provenance
+        if: inputs.expected_environment == 'production'
         shell: bash
         run: |
           set -euo pipefail
@@ -189,6 +204,10 @@ jobs:
         shell: bash
         run: |
           set +e
+          provenance_args=()
+          if [ "${{ inputs.expected_environment }}" = "production" ]; then
+            provenance_args=(--provenance-evidence post-deploy-provenance.json)
+          fi
           npm run release:manifest -- \
             --commit "${{ inputs.expected_commit }}" \
             --build-timestamp "${DEPLOYED_BUILD_TIMESTAMP:-}" \
@@ -198,7 +217,7 @@ jobs:
             --quality-reports quality-reports \
             --deployment-url "${{ inputs.deployment_url }}" \
             --deployment-evidence quality-reports/post-deploy-smoke.json \
-            --provenance-evidence post-deploy-provenance.json \
+            "${provenance_args[@]}" \
             --output quality-reports/final-release-manifest.json 2>&1 | tee quality-reports/final-release-manifest.log
           echo "${PIPESTATUS[0]}" > quality-reports/final-release-manifest.exit
           exit 0
