@@ -29,6 +29,8 @@ function fixture() {
       parents: [{ sha: BASE }],
     },
     qualityRun: {
+      name: "Quality / pr-77-123456-1-" + REVIEWED,
+      display_title: "Quality / pr-77-123456-1-" + REVIEWED,
       id: 123456, head_sha: REVIEWED, status: "completed", conclusion: "success",
       event: "pull_request", run_attempt: 1,
       path: ".github/workflows/quality.yml",
@@ -47,6 +49,7 @@ function fixture() {
       },
       metadata: {
         repository: REPO, reviewedCommit: REVIEWED, comparisonBase: BASE,
+        validationRequestId: "pr-77-123456-1-" + REVIEWED,
         workflowRunId: "123456", workflowRunAttempt: "1",
         expectedDatabaseMigrationVersion: MIGRATION,
       },
@@ -115,6 +118,9 @@ for (const [name, mutate] of [
   ["octopus merge", f => { f.deployedGitCommit.parents.push({ sha: "e".repeat(40) }); }],
   ["different source tree", f => { f.deployedGitCommit.commit.tree.sha = "e".repeat(40); }],
   ["arbitrary same-tree commit", f => { f.pr.merge_commit_sha = "e".repeat(40); }],
+  ["unrelated PR Quality run with same commit", f => { f.qualityRun.name = "Quality / pr-76-123456-1-" + REVIEWED; }],
+  ["spoofed Quality run title", f => { f.qualityRun.display_title = "Quality / pr-76-123456-1-" + REVIEWED; }],
+  ["unrelated PR Quality validation request", f => { f.qualityValidation.metadata.validationRequestId = "pr-76-123456-1-" + REVIEWED; }],
   ["Quality run failed", f => { f.qualityRun.conclusion = "failure"; }],
   ["Quality run incomplete", f => { f.qualityRun.status = "in_progress"; }],
   ["wrong Quality HEAD", f => { f.qualityRun.head_sha = DEPLOYED; }],
