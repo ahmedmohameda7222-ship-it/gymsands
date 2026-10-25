@@ -16,7 +16,27 @@ on:
         required: true
         type: string
       quality_run_id:
-        description: GitHub Actions run ID containing quality-reports-<run id> for the same commit
+        description: Immutable canonical Quality run ID for reviewed source commit
+        required: true
+        type: string
+      reviewed_commit:
+        description: Reviewed Quality PR HEAD (leave blank only for exact same-commit release)
+        required: false
+        type: string
+      pull_request_number:
+        description: Exact merged PR number required when squash SHA differs from Quality SHA
+        required: false
+        type: string
+      comparison_base:
+        description: Reviewed PR comparison base; blank derives from canonical Quality metadata
+        required: false
+        type: string
+      vercel_deployment_id:
+        description: Exact READY Vercel deployment ID
+        required: true
+        type: string
+      vercel_project_id:
+        description: Exact Vercel project ID of deployment
         required: true
         type: string
       expected_environment:
@@ -31,6 +51,7 @@ on:
 permissions:
   actions: read
   contents: read
+  pull-requests: read
 
 concurrency:
   group: post-deploy-smoke-${{ inputs.expected_environment }}
@@ -45,6 +66,9 @@ jobs:
       PLAIVRA_DEPLOYMENT_URL: ${{ inputs.deployment_url }}
       PLAIVRA_EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit }}
       PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: ${{ inputs.expected_migration }}
+      GITHUB_TOKEN: ${{ github.token }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
       PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
       PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
       PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
@@ -92,19 +116,28 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.quality_run_id }}
 
-      - name: Verify downloaded quality identity
+      - name: Verify immutable Quality, merged PR, provider and live release provenance
         shell: bash
         run: |
           set -euo pipefail
-          node -e '
-            const fs = require("node:fs");
-            const manifest = JSON.parse(fs.readFileSync("quality-reports/release-manifest.json", "utf8"));
-            const expected = process.argv[1].toLowerCase();
-            if (manifest.release?.commitSha !== expected) throw new Error("Downloaded quality manifest commit mismatch.");
-            for (const [gate, evidence] of Object.entries(manifest.qualityGates ?? {})) {
-              if (evidence.status !== "passed" || !evidence.evidence) throw new Error(`Quality gate ${gate} lacks retained passing evidence.`);
-            }
-          ' "${{ inputs.expected_commit }}"
+          reviewed="${{ inputs.reviewed_commit || inputs.expected_commit }}"
+          base="${{ inputs.comparison_base }}"
+          if [ -z "$base" ]; then
+            base="$(node -p 'JSON.parse(require("node:fs").readFileSync("quality-reports/artifact-metadata.json", "utf8")).comparisonBase')"
+          fi
+          node scripts/post-deploy-provenance.mjs \
+            --reviewed-commit "$reviewed" \
+            --deployed-commit "${{ inputs.expected_commit }}" \
+            --comparison-base "$base" \
+            --pr-number "${{ inputs.pull_request_number }}" \
+            --quality-run-id "${{ inputs.quality_run_id }}" \
+            --expected-migration "${{ inputs.expected_migration }}" \
+            --deployment-id "${{ inputs.vercel_deployment_id }}" \
+            --vercel-project-id "${{ inputs.vercel_project_id }}" \
+            --deployment-url "${{ inputs.deployment_url }}" \
+            --environment "${{ inputs.expected_environment }}" \
+            --quality-reports quality-reports \
+            --output quality-reports/post-deploy-provenance.json
 
       - name: Run anonymous and authenticated smoke layers
         shell: bash
@@ -165,6 +198,7 @@ jobs:
             --quality-reports quality-reports \
             --deployment-url "${{ inputs.deployment_url }}" \
             --deployment-evidence quality-reports/post-deploy-smoke.json \
+            --provenance-evidence post-deploy-provenance.json \
             --output quality-reports/final-release-manifest.json 2>&1 | tee quality-reports/final-release-manifest.log
           echo "${PIPESTATUS[0]}" > quality-reports/final-release-manifest.exit
           exit 0
