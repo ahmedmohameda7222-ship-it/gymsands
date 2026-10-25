@@ -73,10 +73,6 @@ jobs:
       VERCEL_DEPLOYMENT_ID_INPUT: ${{ inputs.vercel_deployment_id }}
       VERCEL_PROJECT_ID_INPUT: ${{ inputs.vercel_project_id }}
       RELEASE_ENVIRONMENT_INPUT: ${{ inputs.expected_environment }}
-      PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
-      PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
-      PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
-      PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
 
     steps:
       - name: Validate exact workflow inputs
@@ -163,6 +159,11 @@ jobs:
             --output quality-reports/post-deploy-provenance.json
 
       - name: Run anonymous and authenticated smoke layers
+        env:
+      PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
+      PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
+      PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
+      PLAIVRA_SMOKE_EMPTY_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_EMPTY_PASSWORD }}
         shell: bash
         run: |
           set +e
