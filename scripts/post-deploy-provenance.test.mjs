@@ -144,3 +144,51 @@ for (const [name, mutate] of [
 test("squash requires identifiable reviewed PR and may not use tree-only authority", () => {
   assert.throws(() => accepted(patch(f => { f.prNumber = null; f.pr = null; })));
 });
+
+
+import { validateCompletedSmokeEvidence } from "./post-deploy-smoke-evidence.mjs";
+const smoke = () => ({
+  expectedCommit: DEPLOYED, expectedMigration: MIGRATION,
+  exits: { anonymous: "0", populated: "0", empty: "0" },
+  anonymous: {
+    expectedCommit: DEPLOYED, expectedMigration: MIGRATION,
+    version: { commitSha: DEPLOYED, databaseMigrationVersion: MIGRATION,
+      releaseReady: true, artifactIdentityValid: true },
+    checks: { health: "passed", versionEndpoint: "passed", releaseReadiness: "passed" },
+  },
+  populated: {
+    accountState: "populated", passed: true, expectedCommit: DEPLOYED,
+    expectedMigration: MIGRATION, credentialsLogged: false, syntheticDataOnly: true,
+    pageErrors: [], consoleErrors: [], failedRequests: [], serverErrors: [],
+  },
+  empty: {
+    accountState: "empty", passed: true, expectedCommit: DEPLOYED,
+    expectedMigration: MIGRATION, credentialsLogged: false, syntheticDataOnly: true,
+    pageErrors: [], consoleErrors: [], failedRequests: [], serverErrors: [],
+  },
+});
+test("retained anonymous, populated, and empty smoke require independent green evidence", () => {
+  assert.equal(validateCompletedSmokeEvidence(smoke()).anonymous.status, "passed");
+  assert.equal(validateCompletedSmokeEvidence(smoke()).authenticatedPopulated.status, "passed");
+  assert.equal(validateCompletedSmokeEvidence(smoke()).authenticatedEmpty.status, "passed");
+});
+for (const [name, edit] of [
+  ["missing anonymous result", f => { f.anonymous = null; }],
+  ["failed anonymous readiness", f => { f.anonymous.checks.releaseReadiness = "failed"; }],
+  ["wrong anonymous commit", f => { f.anonymous.version.commitSha = REVIEWED; }],
+  ["wrong anonymous migration", f => { f.anonymous.version.databaseMigrationVersion = "20260724232735"; }],
+  ["anonymous process failed", f => { f.exits.anonymous = "1"; }],
+  ["populated account failed", f => { f.populated.passed = false; }],
+  ["empty account failed", f => { f.empty.passed = false; }],
+  ["missing populated summary", f => { f.populated = null; }],
+  ["populated process failed", f => { f.exits.populated = "1"; }],
+  ["empty process failed", f => { f.exits.empty = "1"; }],
+  ["wrong empty account binding", f => { f.empty.accountState = "populated"; }],
+  ["auth session error", f => { f.populated.pageErrors = ["session leak"]; }],
+  ["HTTP 5xx", f => { f.empty.serverErrors = [{ status: 500 }]; }],
+  ["credential leak indicator", f => { f.populated.credentialsLogged = true; }],
+  ["nonsynthetic account", f => { f.populated.syntheticDataOnly = false; }],
+]) test("final manifest refuses " + name, () => {
+  const f = smoke(); edit(f);
+  assert.throws(() => validateCompletedSmokeEvidence(f));
+});
