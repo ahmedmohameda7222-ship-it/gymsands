@@ -12,6 +12,7 @@ const MIGRATION = "20260724232734";
 function fixture() {
   return {
     repository: REPO, reviewedCommit: REVIEWED, deployedCommit: DEPLOYED,
+    mainRef: { commit: { sha: DEPLOYED } },
     comparisonBase: BASE, qualityRunId: "123456", prNumber: 77,
     expectedMigration: MIGRATION, expectedProjectId: "prj-verified",
     expectedDeploymentId: "dpl-verified", expectedEnvironment: "production",
@@ -105,6 +106,7 @@ for (const [name, mutate] of [
   ["foreign PR head repository", f => { f.pr.head.repo.full_name = "attacker/gymsands"; }],
   ["unmerged PR", f => { f.pr.merged = false; }],
   ["wrong PR number", f => { f.pr.number = 76; }],
+  ["main moved after deployment", f => { f.mainRef.commit.sha = "e".repeat(40); }],
   ["wrong PR HEAD", f => { f.pr.head.sha = "e".repeat(40); }],
   ["wrong approved comparison base", f => { f.pr.base.sha = "e".repeat(40); }],
   ["wrong merge commit", f => { f.pr.merge_commit_sha = "e".repeat(40); }],
