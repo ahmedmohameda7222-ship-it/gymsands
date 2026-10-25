@@ -22,6 +22,9 @@ import {
   sha256File,
 } from "./quality-evidence-contract.mjs";
 import { installedNextVersion } from "./release-runtime-versions.mjs";
+import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
+import { validateCanonicalQualityArtifact } from "./release-preflight.mjs";
+import { validateCompletedSmokeEvidence } from "./post-deploy-smoke-evidence.mjs";
 import {
   deriveReleaseTarget,
   expectedMigrationVersion,
@@ -196,20 +199,20 @@ export function createEvidenceIndex(reportsPath, metadata) {
   return { index, path, sha256: sha256Content(serialized) };
 }
 
-export function applyQualityEvidence(manifest, reportsDirectory) {
+export function applyQualityEvidence(manifest, reportsDirectory, reviewedSourceCommit = manifest.release.commitSha) {
   if (!reportsDirectory) return null;
   const reportsPath = isAbsolute(reportsDirectory) ? reportsDirectory : resolve(process.cwd(), reportsDirectory);
   if (!existsSync(reportsPath)) throw new Error(`Quality reports directory does not exist: ${reportsPath}`);
   const metadata = readArtifactMetadata(reportsPath);
   if (metadata.repository !== EXPECTED_REPOSITORY) throw new Error("Artifact repository mismatch.");
-  if (metadata.reviewedCommit !== manifest.release.commitSha) throw new Error("Artifact reviewed commit mismatch.");
+  if (metadata.reviewedCommit !== reviewedSourceCommit) throw new Error("Artifact reviewed commit mismatch.");
   if (metadata.expectedDatabaseMigrationVersion !== manifest.release.expectedDatabaseMigrationVersion) {
     throw new Error("Artifact expected migration mismatch.");
   }
   if (!metadata.fullReleaseQuality) throw new Error("Artifact is not a full release-quality run.");
 
   const provenance = {
-    commitSha: manifest.release.commitSha,
+    commitSha: reviewedSourceCommit,
     qualityBuildTimestamp: metadata.qualityBuildTimestamp,
   };
   const failures = [];
@@ -295,8 +298,63 @@ async function main() {
     throw new Error(`Manifest commit ${commitSha} does not match checked-out commit ${checkedOutCommit}.`);
   }
 
+  const reportsPath = options["quality-reports"]
+    ? (isAbsolute(options["quality-reports"])
+      ? options["quality-reports"] : resolve(process.cwd(), options["quality-reports"]))
+    : null;
+  const provenanceRelative = options["provenance-evidence"]
+    ? safeRelativePath(options["provenance-evidence"]) : null;
+  const provenancePath = provenanceRelative && reportsPath
+    ? resolve(reportsPath, provenanceRelative) : null;
+  if (provenanceRelative && !reportsPath) throw new Error("Provenance requires canonical Quality reports.");
+  const provenance = provenancePath ? readJson(provenancePath, "post-deploy provenance") : null;
+  const reviewedSourceCommit = provenance
+    ? exactCommit(provenance.reviewedCommit, "Reviewed source commit") : commitSha;
+  if (provenance) {
+    if (provenance.schemaVersion !== 1 || !["verified-squash", "same-commit"].includes(provenance.mode)
+      || provenance.repository !== EXPECTED_REPOSITORY
+      || exactCommit(provenance.deployedCommit, "Deployed commit") !== commitSha
+      || provenance.expectedDatabaseMigrationVersion !== releaseTarget.expectedMigration
+      || provenance.schemaCompatibilityVersion !== releaseTarget.schemaCompatibilityVersion
+      || provenance.releaseReady !== true
+      || provenance.providerCommitSha !== commitSha
+      || provenance.versionCommitSha !== commitSha
+      || provenance.deploymentState !== "READY"
+      || provenance.productionMutationPerformed !== false || provenance.deploymentPerformed !== false) {
+      throw new Error("Post-deploy provenance identity or authority mismatch.");
+    }
+    if (provenance.mode === "verified-squash") {
+      if (reviewedSourceCommit === commitSha || !Number.isSafeInteger(provenance.pullRequest)
+        || !provenance.sourceTree || provenance.sourceTree !== provenance.deployedTree) {
+        throw new Error("Squash source tree and verified merged PR lineage are required.");
+      }
+    } else if (reviewedSourceCommit !== commitSha) {
+      throw new Error("Same-commit provenance identity mismatch.");
+    }
+    const artifactMetadata = readArtifactMetadata(reportsPath);
+    if (artifactMetadata.reviewedCommit !== reviewedSourceCommit
+      || artifactMetadata.comparisonBase !== provenance.comparisonBase
+      || artifactMetadata.workflowRunId !== provenance.qualityRunId
+      || Number(artifactMetadata.workflowRunAttempt) !== provenance.qualityRunAttempt) {
+      throw new Error("Post-deploy provenance does not match canonical Quality metadata.");
+    }
+    const immutable = validateCanonicalQualityArtifact({
+      reportsPath, expectedCommit: reviewedSourceCommit,
+      expectedRepository: EXPECTED_REPOSITORY,
+      qualityRunId: provenance.qualityRunId,
+      expectedComparisonBase: provenance.comparisonBase,
+      expectedValidationRequestId: artifactMetadata.validationRequestId,
+      expectedMigration: releaseTarget.expectedMigration,
+      migrationState: deriveMigrationLedgerState(migrationLedger),
+    });
+    if (!immutable.valid) {
+      throw new Error("Canonical Quality artifact not valid: " + immutable.failures.join(","));
+    }
+  }
+
   manifest.release = {
     commitSha,
+    reviewedSourceCommitSha: reviewedSourceCommit,
     buildTimestamp: exactTimestamp(options["build-timestamp"] || process.env.PLAIVRA_BUILD_TIMESTAMP, "Build timestamp"),
     environment: requiredIdentifier(
       "Environment",
@@ -321,16 +379,43 @@ async function main() {
     architecture: arch,
   };
 
-  const qualityContext = applyQualityEvidence(manifest, options["quality-reports"]);
+  const qualityContext = applyQualityEvidence(manifest, options["quality-reports"], reviewedSourceCommit);
   const deployedUrl = deploymentUrl(options["deployment-url"]);
   if (deployedUrl) {
+    if (!qualityContext || !provenance || !provenancePath) {
+      throw new Error("Final Production manifest requires verified Quality and provider provenance.");
+    }
+    if (new URL(deployedUrl).hostname !== provenance.deploymentHost) {
+      throw new Error("Production URL differs from verified Vercel alias.");
+    }
     const deploymentEvidence = safeRelativePath(options["deployment-evidence"] || "post-deploy-smoke.json");
-    const deploymentEvidencePath = qualityContext ? resolve(qualityContext.reportsPath, deploymentEvidence.replace(/^quality-reports\//, "")) : null;
+    const relativeSmoke = deploymentEvidence.replace(/^quality-reports\//, "");
+    const checkRead = (name) => readJson(resolve(qualityContext.reportsPath, name), name);
+    const checkExit = (name) => readFileSync(
+      resolve(qualityContext.reportsPath, name), "utf8",
+    ).trim();
+    manifest.smoke = validateCompletedSmokeEvidence({
+      expectedCommit: commitSha,
+      expectedMigration: releaseTarget.expectedMigration,
+      anonymous: checkRead(relativeSmoke),
+      populated: checkRead("authenticated-smoke-populated/summary.json"),
+      empty: checkRead("authenticated-smoke-empty/summary.json"),
+      exits: {
+        anonymous: checkExit("post-deploy-smoke.exit"),
+        populated: checkExit("authenticated-smoke-populated.exit"),
+        empty: checkExit("authenticated-smoke-empty.exit"),
+      },
+    });
+    manifest.provenance = {
+      ...provenance, evidence: provenanceRelative,
+      evidenceSha256: sha256File(provenancePath),
+    };
     manifest.deployment = {
-      status: deploymentEvidencePath && existsSync(deploymentEvidencePath) ? "passed" : "missing",
-      url: deployedUrl,
-      providerEvidence: deploymentEvidence,
+      status: "passed", url: deployedUrl,
+      providerEvidence: provenanceRelative,
+      smokeEvidence: relativeSmoke,
       deployedCommitSha: commitSha,
+      providerDeploymentId: provenance.deploymentId,
     };
   }
 
