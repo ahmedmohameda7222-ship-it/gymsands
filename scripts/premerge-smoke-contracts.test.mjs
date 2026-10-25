@@ -46,5 +46,5 @@ test("post-deploy readiness gates are production-only while artifact identity st
   assert.match(smoke, /if \(version\.artifactIdentityValid !== true\)/);
   assert.match(smoke, /if \(mode === "production"\)/);
   const workflow = source(".github/workflows/post-deploy-smoke.yml");
-  assert.match(workflow, /--mode "\$\{\{ inputs\.expected_environment \}\}"/);
+  assert.match(workflow, /--mode "\$RELEASE_ENVIRONMENT_INPUT"/);
 });
