@@ -26,13 +26,14 @@ function treeSha(object) {
 
 export function verifyPostDeployProvenance(evidence) {
   const {
-    repository, reviewedCommit, deployedCommit, comparisonBase, qualityRunId,
+    repository, reviewedCommit, deployedCommit, comparisonBase, qualityRunId, mainRef,
     expectedMigration, prNumber, pr, reviewedGitCommit, deployedGitCommit,
     qualityRun, qualityArtifact, qualityValidation,
     expectedProjectId, expectedDeploymentId, expectedEnvironment, deploymentHost,
     providerDeployment, providerAlias, version, health,
   } = evidence;
   demand(repository === EXPECTED_REPOSITORY, "Unexpected repository");
+  demand(mainRef?.commit?.sha === deployedCommit, "Production main has moved from verified deployment");
   const reviewed = exact(reviewedCommit, "Reviewed source commit");
   const deployed = exact(deployedCommit, "Deployed commit");
   const base = exact(comparisonBase, "Comparison base");
@@ -198,12 +199,13 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const gh = "https://api.github.com/repos/" + repository;
   const auth = env.GITHUB_TOKEN;
   const api = (path, label) => jsonGet(gh + path, auth, label);
-  const [pr, reviewedGitCommit, deployedGitCommit, qualityRun, listing] = await Promise.all([
+  const [pr, reviewedGitCommit, deployedGitCommit, qualityRun, listing, mainRef] = await Promise.all([
     prNumber ? api("/pulls/" + prNumber, "Merged PR") : Promise.resolve(null),
     api("/commits/" + reviewed, "Reviewed commit"),
     reviewed === deployed ? Promise.resolve(null) : api("/commits/" + deployed, "Squash commit"),
     api("/actions/runs/" + id, "Canonical Quality"),
     api("/actions/runs/" + id + "/artifacts?per_page=100", "Quality artifacts"),
+    api("/branches/main", "Production main identity"),
   ]);
   const artifactList = listing.artifacts ?? [];
   demand(artifactList.filter(a => a.name === "quality-reports-" + id).length === 1,
@@ -237,7 +239,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     publicJson("https://" + deploymentHost + "/api/health", "/api/health"),
   ]);
   const evidence = verifyPostDeployProvenance({
-    repository, reviewedCommit: reviewed, deployedCommit: deployed,
+    repository, reviewedCommit: reviewed, deployedCommit: deployed, mainRef,
     comparisonBase: base, qualityRunId: id, prNumber, pr,
     reviewedGitCommit, deployedGitCommit, qualityRun,
     qualityArtifact: artifactList[0].name === "quality-reports-" + id
