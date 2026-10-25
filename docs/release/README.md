@@ -138,6 +138,45 @@ After candidate pushes, inspect the Vercel deployment list for the exact pushed 
 
 Netlify remains separate. Its production ignore gate uses `scripts/netlify-production-release-gate.mjs` and requires the exact approved `PLAIVRA_PRODUCTION_RELEASE_SHA`. Preview and branch behavior do not replace Vercel Production evidence.
 
+## Squash-aware Production acceptance (read-only)
+
+The canonical Quality artifact belongs to the **reviewed PR HEAD**, not necessarily to
+the commit created by the approved squash merge. Never rewrite Quality metadata to
+pretend that these SHAs are equal. For a squash release, dispatch the existing
+`.github/workflows/post-deploy-smoke.yml` only after the reviewed correction PR has
+completed standard Quality → Exact Release → strict read-only preflight → approved merge.
+
+Supply the actual READY Vercel Production deployment URL and **deployed squash SHA**
+as `deployment_url` and `expected_commit`, plus the **reviewed Quality HEAD**
+as `reviewed_commit`, the merged `pull_request_number`, reviewed `comparison_base`,
+canonical `quality_run_id`, released `expected_migration`, exact
+`vercel_deployment_id`, and `vercel_project_id`. If no squash occurred, leave the
+optional reviewed/PR fields blank and the existing same-commit identity remains valid.
+The workflow uses `GITHUB_TOKEN` read permissions and a configured `VERCEL_TOKEN`
+read-only provider credential. Set `VERCEL_TEAM_ID` as a repository variable if
+required by Vercel team scope. Never paste tokens into dispatch inputs, logs or chat.
+Missing Vercel access blocks acceptance rather than trusting an unverified URL.
+
+`scripts/post-deploy-provenance.mjs` verifies GitHub's exact merged PR, recorded
+merge SHA, approved head/base, squash first parent, matching immutable Git trees,
+the successful canonical Quality run, attempt, and artifact file/hash/gate contracts.
+It separately checks READY Vercel deployment, project, Git SHA, main branch,
+alias, `/api/version`, `/api/health`, schema compatibility, and migration marker.
+Matching source trees alone never authorizes a substitution. The verifier emits
+sanitized provenance only; it performs no deployment, database write, marker
+promotion or other Production mutation.
+
+The existing workflow then runs anonymous, populated and empty synthetic browser
+checks with configured GitHub Actions secrets. The final manifest retains distinct
+reviewed/deployed SHAs, verified merge provenance and successful smoke results.
+Evidence-file presence cannot substitute for zero smoke exit codes, zero page/
+console/network/HTTP 5xx errors, session isolation and sanitized screenshots.
+Retain the workflow's immutable artifact for independent acceptance review.
+
+Keep any corrective PR Draft until scoped validation is complete. Obtain independent
+review and exact release approval before a Production-triggering merge. Smoke
+acceptance never authorizes Food ingestion or governance grants.
+
 ## Production runbook
 
 1. Complete code review and all required scoped PR checks for the candidate change.
