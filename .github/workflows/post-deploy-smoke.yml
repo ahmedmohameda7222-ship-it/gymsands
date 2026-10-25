@@ -66,9 +66,13 @@ jobs:
       PLAIVRA_DEPLOYMENT_URL: ${{ inputs.deployment_url }}
       PLAIVRA_EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit }}
       PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: ${{ inputs.expected_migration }}
-      GITHUB_TOKEN: ${{ github.token }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+      QUALITY_RUN_INPUT: ${{ inputs.quality_run_id }}
+      REVIEWED_COMMIT_INPUT: ${{ inputs.reviewed_commit }}
+      COMPARISON_BASE_INPUT: ${{ inputs.comparison_base }}
+      PR_NUMBER_INPUT: ${{ inputs.pull_request_number }}
+      VERCEL_DEPLOYMENT_ID_INPUT: ${{ inputs.vercel_deployment_id }}
+      VERCEL_PROJECT_ID_INPUT: ${{ inputs.vercel_project_id }}
+      RELEASE_ENVIRONMENT_INPUT: ${{ inputs.expected_environment }}
       PLAIVRA_SMOKE_POPULATED_EMAIL: ${{ secrets.PLAIVRA_SMOKE_POPULATED_EMAIL }}
       PLAIVRA_SMOKE_POPULATED_PASSWORD: ${{ secrets.PLAIVRA_SMOKE_POPULATED_PASSWORD }}
       PLAIVRA_SMOKE_EMPTY_EMAIL: ${{ secrets.PLAIVRA_SMOKE_EMPTY_EMAIL }}
@@ -79,9 +83,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "${{ inputs.expected_commit }}" =~ ^[0-9a-fA-F]{40}$ ]]
-          [[ "${{ inputs.expected_migration }}" =~ ^[0-9]{12,14}$ ]]
-          [[ "${{ inputs.quality_run_id }}" =~ ^[0-9]+$ ]]
+          [[ "$PLAIVRA_EXPECTED_COMMIT_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+          [[ "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION" =~ ^[0-9]{12,14}$ ]]
+          [[ "$QUALITY_RUN_INPUT" =~ ^[0-9]+$ ]]
 
       - name: Checkout selected release commit
         uses: actions/checkout@v4
@@ -93,7 +97,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "${{ inputs.expected_commit }}"
+          test "$(git rev-parse HEAD)" = "$PLAIVRA_EXPECTED_COMMIT_SHA"
           test "${GITHUB_REPOSITORY}" = "ahmedmohameda7222-ship-it/gymsands"
 
       - name: Set up Node.js
@@ -128,29 +132,33 @@ jobs:
             if (!Object.values(manifest.qualityGates ?? {}).every(e => e.status === "passed" && e.evidence)) {
               throw new Error("Preview Quality gates are incomplete.");
             }
-          ' "${{ inputs.expected_commit }}"
+          ' "$PLAIVRA_EXPECTED_COMMIT_SHA"
 
       - name: Verify immutable Quality, merged PR, provider and live release provenance
         if: inputs.expected_environment == 'production'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
         shell: bash
         run: |
           set -euo pipefail
-          reviewed="${{ inputs.reviewed_commit || inputs.expected_commit }}"
-          base="${{ inputs.comparison_base }}"
+          reviewed="${REVIEWED_COMMIT_INPUT:-$PLAIVRA_EXPECTED_COMMIT_SHA}"
+          base="$COMPARISON_BASE_INPUT"
           if [ -z "$base" ]; then
             base="$(node -p 'JSON.parse(require("node:fs").readFileSync("quality-reports/artifact-metadata.json", "utf8")).comparisonBase')"
           fi
           node scripts/post-deploy-provenance.mjs \
             --reviewed-commit "$reviewed" \
-            --deployed-commit "${{ inputs.expected_commit }}" \
+            --deployed-commit "$PLAIVRA_EXPECTED_COMMIT_SHA" \
             --comparison-base "$base" \
-            --pr-number "${{ inputs.pull_request_number }}" \
-            --quality-run-id "${{ inputs.quality_run_id }}" \
-            --expected-migration "${{ inputs.expected_migration }}" \
-            --deployment-id "${{ inputs.vercel_deployment_id }}" \
-            --vercel-project-id "${{ inputs.vercel_project_id }}" \
-            --deployment-url "${{ inputs.deployment_url }}" \
-            --environment "${{ inputs.expected_environment }}" \
+            --pr-number "$PR_NUMBER_INPUT" \
+            --quality-run-id "$QUALITY_RUN_INPUT" \
+            --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION" \
+            --deployment-id "$VERCEL_DEPLOYMENT_ID_INPUT" \
+            --vercel-project-id "$VERCEL_PROJECT_ID_INPUT" \
+            --deployment-url "$PLAIVRA_DEPLOYMENT_URL" \
+            --environment "$RELEASE_ENVIRONMENT_INPUT" \
             --quality-reports quality-reports \
             --output quality-reports/post-deploy-provenance.json
 
@@ -159,29 +167,29 @@ jobs:
         run: |
           set +e
           npm run smoke:postdeploy -- \
-            --url "${{ inputs.deployment_url }}" \
-            --mode "${{ inputs.expected_environment }}" \
-            --expected-commit "${{ inputs.expected_commit }}" \
-            --expected-migration "${{ inputs.expected_migration }}" \
-            --expected-environment "${{ inputs.expected_environment }}" \
+            --url "$PLAIVRA_DEPLOYMENT_URL" \
+            --mode "$RELEASE_ENVIRONMENT_INPUT" \
+            --expected-commit "$PLAIVRA_EXPECTED_COMMIT_SHA" \
+            --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION" \
+            --expected-environment "$RELEASE_ENVIRONMENT_INPUT" \
             --output quality-reports/post-deploy-smoke.json 2>&1 | tee quality-reports/post-deploy-smoke.log
           echo "${PIPESTATUS[0]}" > quality-reports/post-deploy-smoke.exit
 
           npm run smoke:authenticated -- \
-            --url "${{ inputs.deployment_url }}" \
-            --mode "${{ inputs.expected_environment }}" \
+            --url "$PLAIVRA_DEPLOYMENT_URL" \
+            --mode "$RELEASE_ENVIRONMENT_INPUT" \
             --account populated \
-            --expected-commit "${{ inputs.expected_commit }}" \
-            --expected-migration "${{ inputs.expected_migration }}" \
+            --expected-commit "$PLAIVRA_EXPECTED_COMMIT_SHA" \
+            --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION" \
             --output quality-reports/authenticated-smoke-populated 2>&1 | tee quality-reports/authenticated-smoke-populated.log
           echo "${PIPESTATUS[0]}" > quality-reports/authenticated-smoke-populated.exit
 
           npm run smoke:authenticated -- \
-            --url "${{ inputs.deployment_url }}" \
-            --mode "${{ inputs.expected_environment }}" \
+            --url "$PLAIVRA_DEPLOYMENT_URL" \
+            --mode "$RELEASE_ENVIRONMENT_INPUT" \
             --account empty \
-            --expected-commit "${{ inputs.expected_commit }}" \
-            --expected-migration "${{ inputs.expected_migration }}" \
+            --expected-commit "$PLAIVRA_EXPECTED_COMMIT_SHA" \
+            --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION" \
             --output quality-reports/authenticated-smoke-empty 2>&1 | tee quality-reports/authenticated-smoke-empty.log
           echo "${PIPESTATUS[0]}" > quality-reports/authenticated-smoke-empty.exit
           exit 0
@@ -205,17 +213,17 @@ jobs:
         run: |
           set +e
           provenance_args=()
-          if [ "${{ inputs.expected_environment }}" = "production" ]; then
+          if [ "$RELEASE_ENVIRONMENT_INPUT" = "production" ]; then
             provenance_args=(--provenance-evidence post-deploy-provenance.json)
           fi
           npm run release:manifest -- \
-            --commit "${{ inputs.expected_commit }}" \
+            --commit "$PLAIVRA_EXPECTED_COMMIT_SHA" \
             --build-timestamp "${DEPLOYED_BUILD_TIMESTAMP:-}" \
-            --environment "${{ inputs.expected_environment }}" \
+            --environment "$RELEASE_ENVIRONMENT_INPUT" \
             --schema-compatibility 2 \
-            --expected-migration "${{ inputs.expected_migration }}" \
+            --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION" \
             --quality-reports quality-reports \
-            --deployment-url "${{ inputs.deployment_url }}" \
+            --deployment-url "$PLAIVRA_DEPLOYMENT_URL" \
             --deployment-evidence quality-reports/post-deploy-smoke.json \
             "${provenance_args[@]}" \
             --output quality-reports/final-release-manifest.json 2>&1 | tee quality-reports/final-release-manifest.log
