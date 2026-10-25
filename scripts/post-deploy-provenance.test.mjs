@@ -212,3 +212,16 @@ test("synthetic credentials are available only to smoke execution, never npm ci"
   assert.doesNotMatch(jobEnv, /PLAIVRA_SMOKE_(POPULATED|EMPTY)_(EMAIL|PASSWORD)/);
   assert.match(workflow, /- name: Run anonymous and authenticated smoke layers[\s\S]*?env:\s*\n[\s\S]*?PLAIVRA_SMOKE_POPULATED_EMAIL:\s*\$\{\{\s*secrets\.PLAIVRA_SMOKE_POPULATED_EMAIL/);
 });
+
+
+test("main ref and exact dispatch SHA are verified before checkout or secret access", async () => {
+  const { readFileSync } = await import("node:fs");
+  const workflow = readFileSync(new URL("../.github/workflows/post-deploy-smoke.yml", import.meta.url), "utf8");
+  const gate = workflow.indexOf("- name: Restrict dispatch to exact main commit");
+  const checkout = workflow.indexOf("- name: Checkout selected release commit");
+  assert.ok(gate > 0 && gate < checkout, "Trusted main identity gate must precede checkout");
+  const trusted = workflow.slice(gate, checkout);
+  assert.match(trusted, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
+  assert.match(trusted, /test "\$GITHUB_SHA" = "\$PLAIVRA_EXPECTED_COMMIT_SHA"/);
+  assert.match(trusted, /set -euo pipefail/);
+});
