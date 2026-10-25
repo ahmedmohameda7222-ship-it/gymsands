@@ -59,6 +59,17 @@ export function verifyPostDeployProvenance(evidence) {
     qualityValidation.failures.length === 0, "Canonical Quality file/hash/gate verification failed");
   const qm = qualityValidation.metadata;
   const qmRelease = qualityValidation.manifest?.release;
+  const validationRequest = qm?.validationRequestId;
+  demand(typeof validationRequest === "string" &&
+    /^pr-[1-9][0-9]*-[1-9][0-9]*-1-[a-f0-9]{40}$/.test(validationRequest),
+    "Canonical Quality validation request identity missing");
+  demand(qualityRun?.name === "Quality / " + validationRequest &&
+    qualityRun?.display_title === "Quality / " + validationRequest,
+    "Canonical Quality run identity and dispatch title mismatch");
+  if (!sameCommit) {
+    demand(validationRequest === "pr-" + prNumber + "-" + runId + "-1-" + reviewed,
+      "Canonical Quality belongs to a different PR");
+  }
   demand(qm?.repository === repository && qm?.reviewedCommit === reviewed &&
     qm?.comparisonBase === base && String(qm?.workflowRunId) === runId &&
     String(qm?.workflowRunAttempt) === "1" &&
