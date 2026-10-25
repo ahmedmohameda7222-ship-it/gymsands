@@ -112,9 +112,9 @@ describe("Food Catalog Plan 3 generation-authority migration", () => {
     expect(applyOnlySql).toMatch(/insert\s+into\s+public\.food_catalog_current_generation/i);
   });
 
-  it("preserves verified Plan 3/4/5 aliases after Plan 6 exactness reconciliation", () => {
+  it("preserves verified Plan 3/4/5 aliases after Plan 9 schema-only reconciliation", () => {
     expect(ledger.productionMigrationCount).toBe(63);
-    expect(ledger.productionRecordCount).toBe(130);
+    expect(ledger.productionRecordCount).toBe(133);
     expect(ledger.pendingCount).toBe(0);
     expect(ledger.unresolvedCount).toBe(0);
     expect(ledger.historyRepair.state).toBe("reconciled");
