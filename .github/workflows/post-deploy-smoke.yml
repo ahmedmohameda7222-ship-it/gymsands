@@ -83,6 +83,13 @@ jobs:
           [[ "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION" =~ ^[0-9]{12,14}$ ]]
           [[ "$QUALITY_RUN_INPUT" =~ ^[0-9]+$ ]]
 
+      - name: Restrict dispatch to exact main commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$PLAIVRA_EXPECTED_COMMIT_SHA"
+
       - name: Checkout selected release commit
         uses: actions/checkout@v4
         with:
