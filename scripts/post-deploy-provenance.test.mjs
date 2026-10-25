@@ -204,3 +204,11 @@ test("Production workflow does not interpolate dispatch inputs into privileged s
   assert.match(source, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/);
   assert.match(source, /VERCEL_TOKEN:\s*\$\{\{\s*secrets\.VERCEL_TOKEN\s*\}\}/);
 });
+
+test("synthetic credentials are available only to smoke execution, never npm ci", async () => {
+  const { readFileSync } = await import("node:fs");
+  const workflow = readFileSync(new URL("../.github/workflows/post-deploy-smoke.yml", import.meta.url), "utf8");
+  const jobEnv = workflow.split("    env:\n")[1].split("\n    steps:")[0];
+  assert.doesNotMatch(jobEnv, /PLAIVRA_SMOKE_(POPULATED|EMPTY)_(EMAIL|PASSWORD)/);
+  assert.match(workflow, /- name: Run anonymous and authenticated smoke layers[\s\S]*?env:\s*\n[\s\S]*?PLAIVRA_SMOKE_POPULATED_EMAIL:\s*\$\{\{\s*secrets\.PLAIVRA_SMOKE_POPULATED_EMAIL/);
+});
