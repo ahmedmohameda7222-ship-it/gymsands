@@ -195,3 +195,12 @@ for (const [name, edit] of [
   const f = smoke(); edit(f);
   assert.throws(() => validateCompletedSmokeEvidence(f));
 });
+
+
+test("Production workflow does not interpolate dispatch inputs into privileged shell scripts", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../.github/workflows/post-deploy-smoke.yml", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /["']\$\{\{\s*inputs\.[^}]+\}\}["']/);
+  assert.match(source, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/);
+  assert.match(source, /VERCEL_TOKEN:\s*\$\{\{\s*secrets\.VERCEL_TOKEN\s*\}\}/);
+});
