@@ -381,7 +381,17 @@ async function main() {
 
   const qualityContext = applyQualityEvidence(manifest, options["quality-reports"], reviewedSourceCommit);
   const deployedUrl = deploymentUrl(options["deployment-url"]);
-  if (deployedUrl) {
+  if (deployedUrl && manifest.release.environment !== "production") {
+    if (!qualityContext || reviewedSourceCommit !== commitSha) {
+      throw new Error("Preview manifest requires exact same-commit Quality identity.");
+    }
+    const evidence = safeRelativePath(options["deployment-evidence"] || "post-deploy-smoke.json");
+    const summaryFile = resolve(qualityContext.reportsPath, evidence.replace(/^quality-reports\//, ""));
+    manifest.deployment = {
+      status: existsSync(summaryFile) ? "passed" : "missing",
+      url: deployedUrl, providerEvidence: evidence, deployedCommitSha: commitSha,
+    };
+  } else if (deployedUrl) {
     if (!qualityContext || !provenance || !provenancePath) {
       throw new Error("Final Production manifest requires verified Quality and provider provenance.");
     }
