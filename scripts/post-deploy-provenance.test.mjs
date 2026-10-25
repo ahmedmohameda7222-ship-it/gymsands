@@ -92,6 +92,7 @@ test("verified squash retains distinct source and deployed SHA, tree and PR line
 test("ordinary same-commit release remains accepted without a PR", () => {
   const f = fixture();
   f.deployedCommit = REVIEWED;
+  f.mainRef.commit.sha = REVIEWED;
   f.prNumber = null; f.pr = null;
   f.providerDeployment.meta.githubCommitSha = REVIEWED;
   f.version.commitSha = REVIEWED; f.health.release.commitSha = REVIEWED;
