@@ -103,8 +103,11 @@ export function verifyPostDeployProvenance(evidence) {
   demand(typeof expectedProjectId === "string" && expectedProjectId.length > 0 &&
     typeof expectedDeploymentId === "string" && expectedDeploymentId.length > 0,
     "Vercel deployment and project IDs are required");
+  const providerProjectIds = [providerDeployment?.projectId, providerDeployment?.project?.id]
+    .filter(id => id != null);
   demand(providerDeployment?.id === expectedDeploymentId &&
-    providerDeployment?.projectId === expectedProjectId &&
+    providerProjectIds.length > 0 &&
+    providerProjectIds.every(id => id === expectedProjectId) &&
     providerDeployment?.target === "production" &&
     providerDeployment?.readyState === "READY", "Vercel Production deployment is not exact and READY");
   const [org, repo] = repository.split("/");
