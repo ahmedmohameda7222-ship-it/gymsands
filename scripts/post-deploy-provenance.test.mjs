@@ -156,6 +156,16 @@ test("squash requires identifiable reviewed PR and may not use tree-only authori
 
 
 import { validateCompletedSmokeEvidence } from "./post-deploy-smoke-evidence.mjs";
+const REQUIRED_SMOKE_ROUTES = [
+  "dashboard", "train", "active-workout", "eat", "meal-plan", "progress",
+  "settings", "privacy-controls",
+];
+const REQUIRED_ANONYMOUS_CHECKS = [
+  "landing", "versionEndpoint", "commitMatch", "buildTimestamp", "artifactIdentity",
+  "schemaMarkerCompatibility", "migrationVersionCompatibility",
+  "migrationLedgerReconciliation", "releaseReadiness", "health", "login", "legalLinks",
+];
+const smokeRoutes = () => REQUIRED_SMOKE_ROUTES.map(id => ({ id, passed: true }));
 const smoke = () => ({
   expectedCommit: DEPLOYED, expectedMigration: MIGRATION,
   exits: { anonymous: "0", populated: "0", empty: "0" },
@@ -163,16 +173,24 @@ const smoke = () => ({
     expectedCommit: DEPLOYED, expectedMigration: MIGRATION,
     version: { commitSha: DEPLOYED, databaseMigrationVersion: MIGRATION,
       releaseReady: true, artifactIdentityValid: true },
-    checks: { health: "passed", versionEndpoint: "passed", releaseReadiness: "passed" },
+    checks: Object.fromEntries(REQUIRED_ANONYMOUS_CHECKS.map(name => [name, "passed"])),
   },
   populated: {
     accountState: "populated", passed: true, expectedCommit: DEPLOYED,
     expectedMigration: MIGRATION, credentialsLogged: false, syntheticDataOnly: true,
+    version: { commitSha: DEPLOYED, expectedDatabaseMigrationVersion: MIGRATION,
+      releaseReady: true },
+    routes: smokeRoutes(),
+    incidentState: { foodLogCount: 1, nutritionLoaded: true, activeTarget: true,
+      remainingValuesRendered: true },
     pageErrors: [], consoleErrors: [], failedRequests: [], serverErrors: [],
   },
   empty: {
     accountState: "empty", passed: true, expectedCommit: DEPLOYED,
     expectedMigration: MIGRATION, credentialsLogged: false, syntheticDataOnly: true,
+    version: { commitSha: DEPLOYED, expectedDatabaseMigrationVersion: MIGRATION,
+      releaseReady: true },
+    routes: smokeRoutes(), incidentState: { foodLogCount: 0 },
     pageErrors: [], consoleErrors: [], failedRequests: [], serverErrors: [],
   },
 });
@@ -202,6 +220,34 @@ for (const [name, edit] of [
   assert.throws(() => validateCompletedSmokeEvidence(f));
 });
 
+
+test("final manifest rejects incomplete anonymous checks and authenticated route evidence", () => {
+  const incomplete = smoke();
+  delete incomplete.anonymous.checks.landing;
+  assert.throws(() => validateCompletedSmokeEvidence(incomplete), /POST_DEPLOY_SMOKE_INCOMPLETE/);
+
+  const missingRoutes = smoke();
+  missingRoutes.populated.routes = [];
+  assert.throws(() => validateCompletedSmokeEvidence(missingRoutes), /POST_DEPLOY_SMOKE_INCOMPLETE/);
+
+  const missingOneRoute = smoke();
+  missingOneRoute.empty.routes.pop();
+  assert.throws(() => validateCompletedSmokeEvidence(missingOneRoute), /POST_DEPLOY_SMOKE_INCOMPLETE/);
+});
+
+test("final manifest rejects incomplete synthetic incident state and authenticated version identity", () => {
+  const incomplete = smoke();
+  delete incomplete.populated.incidentState.activeTarget;
+  assert.throws(() => validateCompletedSmokeEvidence(incomplete), /POST_DEPLOY_SMOKE_INCOMPLETE/);
+
+  const emptyWithLogs = smoke();
+  emptyWithLogs.empty.incidentState.foodLogCount = 2;
+  assert.throws(() => validateCompletedSmokeEvidence(emptyWithLogs), /POST_DEPLOY_SMOKE_INCOMPLETE/);
+
+  const wrongIdentity = smoke();
+  wrongIdentity.populated.version.commitSha = REVIEWED;
+  assert.throws(() => validateCompletedSmokeEvidence(wrongIdentity), /POST_DEPLOY_SMOKE_INCOMPLETE/);
+});
 
 test("Production workflow does not interpolate dispatch inputs into privileged shell scripts", async () => {
   const { readFileSync } = await import("node:fs");
