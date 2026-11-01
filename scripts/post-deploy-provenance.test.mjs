@@ -257,7 +257,9 @@ test("Preview dispatch remains branch-capable and Vercel IDs are Production-only
   const gate = workflow.indexOf("- name: Restrict dispatch to exact main commit");
   const checkout = workflow.indexOf("- name: Checkout selected release commit");
   assert.ok(gate > 0 && checkout > gate);
-  assert.match(workflow.slice(gate, checkout), /if: inputs\\.expected_environment == 'production'/);
-  assert.match(workflow, /vercel_deployment_id:\\s*\\n\\s*description:[^\\n]*\\n\\s*required: false/);
-  assert.match(workflow, /vercel_project_id:\\s*\\n\\s*description:[^\\n]*\\n\\s*required: false/);
+  assert.ok(workflow.slice(gate, checkout).includes("if: inputs.expected_environment == 'production'"));
+  const vercelDeploymentInput = workflow.split("      vercel_deployment_id:\n")[1].split("      vercel_project_id:\n")[0];
+  const vercelProjectInput = workflow.split("      vercel_project_id:\n")[1].split("      expected_environment:\n")[0];
+  assert.ok(vercelDeploymentInput.includes("required: false"));
+  assert.ok(vercelProjectInput.includes("required: false"));
 });
