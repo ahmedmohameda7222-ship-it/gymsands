@@ -263,3 +263,58 @@ test("Preview dispatch remains branch-capable and Vercel IDs are Production-only
   assert.ok(vercelDeploymentInput.includes("required: false"));
   assert.ok(vercelProjectInput.includes("required: false"));
 });
+
+test("deployed manifest assembly preserves downloaded canonical index bytes and hash", async (t) => {
+  const { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { dirname, join } = await import("node:path");
+  const { createHash } = await import("node:crypto");
+  const { applyQualityEvidence } = await import("./create-release-manifest.mjs");
+  const { REQUIRED_QUALITY_GATES, REQUIRED_CANONICAL_FILES } =
+    await import("./quality-evidence-contract.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "plaivra-smoke-quality-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const write = (name, content) => {
+    const dest = join(dir, name);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, content);
+  };
+  const qualityBuildTimestamp = "2026-10-20T01:00:00.000Z";
+  const capturedAt = "2026-10-20T02:00:00.000Z";
+  const metadata = {
+    repository: REPO, reviewedCommit: REVIEWED, comparisonBase: BASE,
+    workflowRunId: "123456", workflowRunAttempt: "1",
+    validationRequestId: "pr-77-123456-1-" + REVIEWED,
+    expectedDatabaseMigrationVersion: MIGRATION,
+    fullReleaseQuality: true, eventType: "pull_request",
+    qualityBuildTimestamp, capturedAt,
+  };
+  write("artifact-metadata.json", JSON.stringify(metadata));
+  for (const name of REQUIRED_CANONICAL_FILES) {
+    if (name !== "artifact-metadata.json") write(name, "{}\\n");
+  }
+  for (const gateName of Object.values(REQUIRED_QUALITY_GATES)) {
+    write(gateName + ".log", "passed\\n");
+    write(gateName + ".exit", "0\\n");
+    write(gateName + ".meta.json", JSON.stringify({
+      name: gateName, capturedAt, commitSha: REVIEWED, exitCode: 0, passed: true,
+    }));
+  }
+  const originalIndex = JSON.stringify({ schemaVersion: 1, canonical: true }) + "\\n";
+  const originalDigest = createHash("sha256").update(originalIndex).digest("hex");
+  write("evidence-index.json", originalIndex);
+  const canonicalManifest = JSON.stringify({
+    release: { commitSha: REVIEWED },
+    qualityArtifact: { evidenceIndexSha256: originalDigest },
+  }) + "\\n";
+  write("release-manifest.json", canonicalManifest);
+  write("post-deploy-smoke.json", "{ }\\n");
+  const finalManifest = {
+    release: { commitSha: DEPLOYED, expectedDatabaseMigrationVersion: MIGRATION },
+    qualityGates: {}, smoke: {},
+  };
+  applyQualityEvidence(finalManifest, dir, REVIEWED, { preserveCanonicalIndex: true });
+  assert.equal(readFileSync(join(dir, "evidence-index.json"), "utf8"), originalIndex);
+  assert.equal(readFileSync(join(dir, "release-manifest.json"), "utf8"), canonicalManifest);
+  assert.equal(finalManifest.qualityArtifact.evidenceIndexSha256, originalDigest);
+});
