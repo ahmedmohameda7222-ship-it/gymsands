@@ -318,3 +318,39 @@ test("deployed manifest assembly preserves downloaded canonical index bytes and 
   assert.equal(readFileSync(join(dir, "release-manifest.json"), "utf8"), canonicalManifest);
   assert.equal(finalManifest.qualityArtifact.evidenceIndexSha256, originalDigest);
 });
+
+test("missing protected synthetic credentials fail closed with sanitized retained evidence", async (t) => {
+  const { spawnSync } = await import("node:child_process");
+  const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const dir = mkdtempSync(join(tmpdir(), "plaivra-smoke-no-credentials-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const env = { ...process.env };
+  delete env.PLAIVRA_SMOKE_POPULATED_EMAIL;
+  delete env.PLAIVRA_SMOKE_POPULATED_PASSWORD;
+  const cli = fileURLToPath(new URL("./authenticated-release-smoke.mjs", import.meta.url));
+  const completed = spawnSync(process.execPath, [
+    cli, "--url", "http://localhost:3000", "--mode", "local",
+    "--account", "populated", "--expected-commit", DEPLOYED,
+    "--expected-migration", MIGRATION, "--output", dir,
+  ], { env, encoding: "utf8" });
+  assert.equal(completed.status, 1, completed.stderr);
+  const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+  assert.equal(summary.passed, false);
+  assert.equal(summary.failureCode, "AUTHENTICATED_SMOKE_FAILED");
+  assert.equal(summary.credentialsLogged, false);
+  assert.equal(summary.syntheticDataOnly, true);
+});
+
+test("final manifest rejects console errors and network failures independently", () => {
+  assert.throws(() => validateCompletedSmokeEvidence({
+    ...smoke(),
+    populated: { ...smoke().populated, consoleErrors: ["unexpected console error"] },
+  }));
+  assert.throws(() => validateCompletedSmokeEvidence({
+    ...smoke(),
+    empty: { ...smoke().empty, failedRequests: [{ error: "ERR_CONNECTION_RESET" }] },
+  }));
+});
