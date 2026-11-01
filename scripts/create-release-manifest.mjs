@@ -199,7 +199,7 @@ export function createEvidenceIndex(reportsPath, metadata) {
   return { index, path, sha256: sha256Content(serialized) };
 }
 
-export function applyQualityEvidence(manifest, reportsDirectory, reviewedSourceCommit = manifest.release.commitSha) {
+export function applyQualityEvidence(manifest, reportsDirectory, reviewedSourceCommit = manifest.release.commitSha, { preserveCanonicalIndex = false } = {}) {
   if (!reportsDirectory) return null;
   const reportsPath = isAbsolute(reportsDirectory) ? reportsDirectory : resolve(process.cwd(), reportsDirectory);
   if (!existsSync(reportsPath)) throw new Error(`Quality reports directory does not exist: ${reportsPath}`);
@@ -234,7 +234,16 @@ export function applyQualityEvidence(manifest, reportsDirectory, reviewedSourceC
   manifest.smoke.authenticatedPopulated = { status: "pending", evidence: null };
   manifest.smoke.authenticatedEmpty = { status: "pending", evidence: null };
 
-  const evidenceIndex = createEvidenceIndex(reportsPath, metadata);
+  const indexPath = resolve(reportsPath, "evidence-index.json");
+  const evidenceIndex = preserveCanonicalIndex
+    ? { sha256: sha256File(indexPath) }
+    : createEvidenceIndex(reportsPath, metadata);
+  if (preserveCanonicalIndex) {
+    const originalQuality = readJson(resolve(reportsPath, "release-manifest.json"), "canonical Quality manifest");
+    if (originalQuality.qualityArtifact?.evidenceIndexSha256 !== evidenceIndex.sha256) {
+      throw new Error("Downloaded canonical Quality evidence index hash mismatch.");
+    }
+  }
   manifest.qualityArtifact = {
     repository: metadata.repository,
     workflowRunId: metadata.workflowRunId,
@@ -379,8 +388,10 @@ async function main() {
     architecture: arch,
   };
 
-  const qualityContext = applyQualityEvidence(manifest, options["quality-reports"], reviewedSourceCommit);
   const deployedUrl = deploymentUrl(options["deployment-url"]);
+  const qualityContext = applyQualityEvidence(manifest, options["quality-reports"], reviewedSourceCommit, {
+    preserveCanonicalIndex: Boolean(deployedUrl),
+  });
   if (deployedUrl && manifest.release.environment !== "production") {
     if (!qualityContext || reviewedSourceCommit !== commitSha) {
       throw new Error("Preview manifest requires exact same-commit Quality identity.");
