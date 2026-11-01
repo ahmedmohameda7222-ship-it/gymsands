@@ -152,6 +152,10 @@ as `reviewed_commit`, the merged `pull_request_number`, reviewed `comparison_bas
 canonical `quality_run_id`, released `expected_migration`, exact
 `vercel_deployment_id`, and `vercel_project_id`. If no squash occurred, leave the
 optional reviewed/PR fields blank and the existing same-commit identity remains valid.
+For Preview dispatches, use the selected Preview branch and same-commit Quality
+identity; the strict current-main dispatch lock and Vercel provider ID inputs
+apply only to Production. The downloaded canonical Quality evidence index is
+preserved byte-for-byte when constructing the deployed-release manifest.
 The workflow uses `GITHUB_TOKEN` read permissions and a configured `VERCEL_TOKEN`
 read-only provider credential. Set `VERCEL_TEAM_ID` as a repository variable if
 required by Vercel team scope. Never paste tokens into dispatch inputs, logs or chat.
