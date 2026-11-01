@@ -139,6 +139,7 @@ export function sanitizeEvidence(value, key = "") {
     return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, sanitizeEvidence(childValue, childKey)]));
   }
   if (typeof value !== "string") return value;
+  if (key === "failureCode" && value === "AUTHENTICATED_SMOKE_FAILED") return value;
   if (/^(?:expectedCommit|commitSha)$/i.test(key) && EXACT_SHA.test(value)) return value.toLowerCase();
   if (/screenshot/i.test(key)) return sanitizeEvidenceArtifactPath(value);
   if (/url$/i.test(key)) return /^https?:\/\//i.test(value) ? sanitizeEvidenceUrl(value) : sanitizedText(value, 1000);
