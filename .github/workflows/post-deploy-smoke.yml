@@ -32,12 +32,12 @@ on:
         required: false
         type: string
       vercel_deployment_id:
-        description: Exact READY Vercel deployment ID
-        required: true
+        description: Exact READY Vercel deployment ID (Production only)
+        required: false
         type: string
       vercel_project_id:
-        description: Exact Vercel project ID of deployment
-        required: true
+        description: Exact Vercel project ID of deployment (Production only)
+        required: false
         type: string
       expected_environment:
         description: Environment reported by /api/version
@@ -84,6 +84,7 @@ jobs:
           [[ "$QUALITY_RUN_INPUT" =~ ^[0-9]+$ ]]
 
       - name: Restrict dispatch to exact main commit
+        if: inputs.expected_environment == 'production'
         shell: bash
         run: |
           set -euo pipefail
