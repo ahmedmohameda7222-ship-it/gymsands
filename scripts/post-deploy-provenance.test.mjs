@@ -291,24 +291,24 @@ test("deployed manifest assembly preserves downloaded canonical index bytes and 
   };
   write("artifact-metadata.json", JSON.stringify(metadata));
   for (const name of REQUIRED_CANONICAL_FILES) {
-    if (name !== "artifact-metadata.json") write(name, "{}\\n");
+    if (name !== "artifact-metadata.json") write(name, "{}\n");
   }
   for (const gateName of Object.values(REQUIRED_QUALITY_GATES)) {
-    write(gateName + ".log", "passed\\n");
-    write(gateName + ".exit", "0\\n");
+    write(gateName + ".log", "passed\n");
+    write(gateName + ".exit", "0\n");
     write(gateName + ".meta.json", JSON.stringify({
       name: gateName, capturedAt, commitSha: REVIEWED, exitCode: 0, passed: true,
     }));
   }
-  const originalIndex = JSON.stringify({ schemaVersion: 1, canonical: true }) + "\\n";
+  const originalIndex = JSON.stringify({ schemaVersion: 1, canonical: true }) + "\n";
   const originalDigest = createHash("sha256").update(originalIndex).digest("hex");
   write("evidence-index.json", originalIndex);
   const canonicalManifest = JSON.stringify({
     release: { commitSha: REVIEWED },
     qualityArtifact: { evidenceIndexSha256: originalDigest },
-  }) + "\\n";
+  }) + "\n";
   write("release-manifest.json", canonicalManifest);
-  write("post-deploy-smoke.json", "{ }\\n");
+  write("post-deploy-smoke.json", "{ }\n");
   const finalManifest = {
     release: { commitSha: DEPLOYED, expectedDatabaseMigrationVersion: MIGRATION },
     qualityGates: {}, smoke: {},
