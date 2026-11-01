@@ -231,3 +231,33 @@ test("main ref and exact dispatch SHA are verified before checkout or secret acc
   assert.match(trusted, /test "\$GITHUB_SHA" = "\$PLAIVRA_EXPECTED_COMMIT_SHA"/);
   assert.match(trusted, /set -euo pipefail/);
 });
+
+test("Vercel deployment GET project.id shape is accepted without a top-level projectId", () => {
+  const f = fixture();
+  delete f.providerDeployment.projectId;
+  f.providerDeployment.project = { id: f.expectedProjectId, name: "plaivra" };
+  assert.equal(accepted(f).vercelProjectId, f.expectedProjectId);
+});
+
+test("Vercel deployment with inconsistent project identifiers is rejected", () => {
+  const f = fixture();
+  f.providerDeployment.project = { id: "other-project" };
+  assert.throws(() => accepted(f));
+});
+
+test("Vercel deployment without any project identity is rejected", () => {
+  const f = fixture();
+  delete f.providerDeployment.projectId;
+  assert.throws(() => accepted(f));
+});
+
+test("Preview dispatch remains branch-capable and Vercel IDs are Production-only inputs", async () => {
+  const { readFileSync } = await import("node:fs");
+  const workflow = readFileSync(new URL("../.github/workflows/post-deploy-smoke.yml", import.meta.url), "utf8");
+  const gate = workflow.indexOf("- name: Restrict dispatch to exact main commit");
+  const checkout = workflow.indexOf("- name: Checkout selected release commit");
+  assert.ok(gate > 0 && checkout > gate);
+  assert.match(workflow.slice(gate, checkout), /if: inputs\\.expected_environment == 'production'/);
+  assert.match(workflow, /vercel_deployment_id:\\s*\\n\\s*description:[^\\n]*\\n\\s*required: false/);
+  assert.match(workflow, /vercel_project_id:\\s*\\n\\s*description:[^\\n]*\\n\\s*required: false/);
+});
