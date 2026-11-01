@@ -354,3 +354,11 @@ test("final manifest rejects console errors and network failures independently",
     empty: { ...smoke().empty, failedRequests: [{ error: "ERR_CONNECTION_RESET" }] },
   }));
 });
+
+test("smoke evidence retains only the known fixed failure code and still redacts tokens", async () => {
+  const { sanitizeEvidence } = await import("./authenticated-release-smoke.mjs");
+  assert.equal(sanitizeEvidence({ failureCode: "AUTHENTICATED_SMOKE_FAILED" }).failureCode,
+    "AUTHENTICATED_SMOKE_FAILED");
+  assert.equal(sanitizeEvidence({ failureCode: "Bearer sensitive_token_123456789XYZ" }).failureCode,
+    "[REDACTED]");
+});
