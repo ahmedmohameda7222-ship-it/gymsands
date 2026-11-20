@@ -48,17 +48,20 @@ npm ci
 npm run dev
 ```
 
-Primary local validation:
+## Nutrition closure development branch (unreleased)
+
+On `feat/nutrition-microtasks-2026-11-20`, legacy test sources, test workflows and test runner commands are intentionally removed before the planned **new Nutrition-only QA gate**. They are not available on this branch yet. Do not deploy or merge this branch while its mandatory final QA is absent. This deletion does not change the approved Production release policy or current `main`.
+
+Static commands available for later review (not executed during the development-only no-test stage):
 
 ```bash
 npm run lint
 npm run typecheck
-npm run test:scripts
-npm run test:unit
 npm run build
+npm run migration:ledger:check
 ```
 
-Use the narrower domain suites when the changed scope requires them. The CI change-scope authority determines the complete required gate set for pull requests.
+The final new Nutrition-only suite must validate code, canonical Food/USDA/FNDDS ingestion, governance and release evidence before any release authorization. Existing exact-release and post-deployment workflows remain fail-closed pending new canonical Quality evidence. See `docs/operations/nutrition-closure-microtask-progress.md` for the untested state and approval gates.
 
 ## Non-negotiable repository rules
 

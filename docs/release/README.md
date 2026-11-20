@@ -17,9 +17,13 @@ Keep these operations separate:
 
 A passing Draft PR check is not phase closure. A passing review preflight is not production release authorization. Any failed or blocked strict release preflight is a no-go before merge. The migration ledger must be reconciled before the production-triggering merge. A provider `READY` state alone is not acceptance.
 
+## Temporary Nutrition-only QA transition on the isolated development branch
+
+At `feat/nutrition-microtasks-2026-11-20`, the former PR Quality and phase-close Quality workflow definitions and corresponding test sources were removed **only from this unmerged branch** as part of an explicitly untested staged rebuild. The following two-tier CI description is retained as historical release-design context from the protected `main` baseline, not as an operational claim about this branch. A replacement Nutrition-only Quality gate has **not** been implemented or verified; do not dispatch Exact Release or Production smoke from this branch or represent old Quality evidence as validation of its current HEAD. The retained release verifier, schema marker, version health and Vercel acceptance remain fail-closed, and Production merge/deployment needs separate exact approval.
+
 ## Two-tier pull-request validation
 
-### Automatic scoped PR Quality
+### Historical automatic scoped PR Quality (removed on this development branch)
 
 `.github/workflows/pr-quality.yml` runs on each PR head and uses `scripts/ci-change-scope.mjs` to choose independent parallel jobs:
 
@@ -42,7 +46,7 @@ Successful checks print concise status. Failed checks print a bounded useful tai
 
 The exact PCS-4A candidate lane matrix and rendered selection authority are documented in `docs/ci/pcs4-ci-operating-model.md`.
 
-### Canonical phase-close Quality
+### Historical canonical phase-close Quality (removed on this development branch)
 
 `.github/workflows/quality.yml` runs only on the standard `ready_for_review` PR event. It retains every complete release gate and produces `quality-reports-<run-id>`.
 
@@ -158,8 +162,8 @@ Do not use provider “redeploy previous” as an unverified shortcut. Select a 
 ## Related current authority
 
 - `AGENTS.md`
-- `.github/workflows/pr-quality.yml`
-- `.github/workflows/quality.yml`
+- Former `.github/workflows/pr-quality.yml` (historical, absent on the unmerged Nutrition branch)
+- Former `.github/workflows/quality.yml` (historical, absent on the unmerged Nutrition branch)
 - `.github/workflows/exact-release-quality-validation.yml`
 - `docs/ci/pcs4-ci-operating-model.md`
 - `docs/operations/launch-runbook.md`
