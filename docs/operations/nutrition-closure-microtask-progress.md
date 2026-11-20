@@ -171,11 +171,11 @@ N097: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N098: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N099: SCOPE_PROVISIONAL_BLOCKED_G11
 N100: BLOCKED_G11_UNFINISHED_CODE
-N101: WORKFLOW_SOURCE_COMMITTED_UNEXECUTED
+N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: FRESH_FOUNDATION_CONTRACT_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: DISPOSABLE_DB_GOVERNANCE_TESTS_AUTHORED_NOT_RUN
-N104: GENERATION_DOMAIN_TESTS_AUTHORED_REAL_DB_GAP
-N105: CONSUMER_DOMAIN_TESTS_AUTHORED_API_INTEGRATION_GAP
+N104: FIFTEEN_GENERATION_TESTS_AUTHORED_REAL_DB_GAP
+N105: TWENTY_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: MCP_PRIVACY_SCOPE_TESTS_AUTHORED_AUTH_INTEGRATION_GAP
 N107: BROWSER_MATRIX_AUTHORED_SYNTHETIC_FIXTURES_ABSENT
 N108: MIGRATION_SOURCE_TESTS_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -183,7 +183,7 @@ N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
 N111: BLOCKED_G11
 N112: BLOCKED_G11
-N113: BLOCKED_G11
+N113: CONTENT_ADDRESSED_MANIFEST_GENERATOR_AUTHORED_UNEXECUTED_G11
 N114: BLOCKED_G11
 N115: BLOCKED_G03_G11
 N116: READ_ONLY_VERIFIED_PLAN9_NOT_PERFORMED
@@ -221,3 +221,17 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Independent GitHub recursive-tree readback confirms all seven new Nutrition-only test group paths and runner on branch, no push trigger or app-wide test command. 133 applied migrations were byte-identical in prior exact-tree review. No automated tests, CI, database migration replay or browser fixtures were executed during this session.
 - Outstanding: disposable Supabase/Postgres setup, synthetic local auth accounts and storage state for EN/DE/AR, local app server/Chromium, original USDA Foundation/FNDDS ZIP bytes and verified FNDDS source lock, G-09/G-10/G-11 human decisions. N102-N108 remain authored-but-unverified, not VALIDATED_IN_FINAL_QA.
 - Original USDA Foundation download attempt from this sandbox failed. Historical source SHA remains source-lock authority, not a freshly rehashed ZIP.
+
+## N101–N113 QA candidate follow-up (source-complete components, NOT executed)
+
+- Commit `c11dc97d0f739f83c390d72b3d7095087c38c7e1` prepared G11-gated local Supabase CLI + PostgreSQL client + Chromium prerequisites, local chronological migration replay and checksum-verifiable official USDA Foundation download; no CI dispatch, runtime, external data or Production operation performed.
+- Commit `890e3e32801e6bff76d6802cdf1f580c8e88e5f4` changed the isolated Nutrition runner to reject zero tests, skipped tests, unsuccessful TAP counts and failed subprocess exit status even when a test file exists. Required individual group minima: 12+6+15+20+7+7+4 = **71** cases. Browser cases instantiate six EN/DE/AR x empty/populated test cases from a loop, plus one navigation test. This is a proposed minimum, NOT completed QA coverage.
+- Commit `12ef61196043e6d92e9094452043475a413f1c4c` ignored generated `nutrition-quality-reports/` data and screenshots.
+- Commit `ed64cb757a5884b168a8709e5c11623cceaee440` refined official Egypt/Saudi/UAE source-eligibility research. Readable publication is not a bulk commercial source license. G10 remains unresolved and no market data ingested.
+- Commit `8971390c358ec29d7f7af3cba0810e1cb8a05235` extended generation source contract QA to 15 cases: sealed checksum, cross-Food facts, preferred name, active legal grant, invalidated grant, redirect chain/target and integrity mismatch. Does not substitute for real Postgres CAS/rollback.
+- Commit `d03b105103e838bb2c319e7af1e09736f15648ba` added explicit Vite `@/` alias resolution for four new isolated TS-domain suites; static configuration fix only.
+- Commit `9b135c07cc8dfa9935034be26ebb7dd522248889` extended consumer cases to 20: Recipe frozen cache, unknown nutrients, cooking timers and dependencies, owner-keyed local store, date-bound/overlapping targets and weekly boundaries. Does not substitute for real HTTP owner isolation.
+- Commit `6ea87474fcbbe65dff7bfd62003c2edafcdd3422` strengthened real rendered Food Library browser assertions: populated users must show Food rows, empty users must show empty state, no visible API errors, keyboard focus, EN/DE/AR direction and mobile/desktop screenshots. Original local synthetic Auth storage-state fixtures are not available and no browser run occurred.
+- Commit `ff1edff4bed6c2cc32aa236a8b45827ad84077a9` extended the QA manifest template to fingerprint exact reviewed Git tree, all seven test file bytes, Foundation and FNDDS source-lock files where present, migration ledger, run logs, per-group counts/exit codes and SHA256 sidecar. No immutable **passing** run artifact exists. N113 authored source is not N113 final acceptance.
+- The workflow is conditional on a new Nutrition PR manually marked ready **after** G11-approved exact SHA and base; no such approval was obtained, no Nutrition candidate PR was created and **NO test suite was run**. Local Node is v22, repo mandates Node v24; container cannot fetch GitHub via DNS. Never treat static inspection as a green test, CI, security review, source archive rehash or release.
+- G01/G02/G03/G04–G11 external gates remain CLOSED. Plan9 current Generation remains NULL from actual latest read-only Main observation; do not perform Owner bootstrap, USDA dry-run/draft/activation/promotion, FNDDS implementation/ingestion, market bulk import, merge or deployment without exact approvals and verified prerequisite data.
