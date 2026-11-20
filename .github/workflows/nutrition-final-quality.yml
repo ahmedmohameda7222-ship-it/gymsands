@@ -1,0 +1,83 @@
+# Nutrition-only final acceptance lane. No push trigger; no pre-QA testing.
+# Created unexecuted during isolated implementation. G-11 approval is external.
+name: Nutrition-only final Quality
+
+on:
+  pull_request:
+    branches: [main]
+    types: [ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nutrition-final-quality-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  nutrition-final:
+    # The explicit approval label must be applied before ready-for-review.
+    # This label is an operator signal, NOT a substitute for G-11 approval.
+    if: >-
+      ${{ github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.draft == false &&
+          contains(github.event.pull_request.labels.*.name, 'nutrition-final-qa-authorized') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      REVIEWED_SHA: ${{ github.event.pull_request.head.sha }}
+      COMPARISON_BASE: ${{ github.event.pull_request.base.sha }}
+      NUTRITION_QUALITY_OUTPUT: nutrition-quality-reports
+
+    steps:
+      - name: Checkout exact reviewed PR head, not synthetic merge ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fail closed on commit/base drift or missing test runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid reviewed SHA'; exit 1; }
+          [[ "$COMPARISON_BASE" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid comparison base'; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$REVIEWED_SHA" ]] || { echo 'Reviewed SHA drift'; exit 1; }
+          git cat-file -e "${COMPARISON_BASE}^{commit}"
+          git merge-base --is-ancestor "$COMPARISON_BASE" "$REVIEWED_SHA"
+          test -f scripts/nutrition-final-quality.mjs || {
+            echo 'Nutrition-only final acceptance runner is missing. Release not ready.'
+            exit 1
+          }
+          mkdir -p "$NUTRITION_QUALITY_OUTPUT"
+          printf 'reviewedSha=%s\ncomparisonBase=%s\nrepository=%s\nrunId=%s\n' \
+            "$REVIEWED_SHA" "$COMPARISON_BASE" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
+            > "$NUTRITION_QUALITY_OUTPUT/identity.txt"
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install exact locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Execute only new Nutrition-owned final acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/nutrition-final-quality.mjs \
+            --reviewed-commit "$REVIEWED_SHA" \
+            --comparison-base "$COMPARISON_BASE" \
+            --output "$NUTRITION_QUALITY_OUTPUT"
+
+      - name: Preserve raw Nutrition acceptance artifacts even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nutrition-final-quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: nutrition-quality-reports/
+          if-no-files-found: warn
+          retention-days: 30
