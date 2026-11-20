@@ -2,6 +2,7 @@ node_modules
 .next
 out
 quality-reports/
+nutrition-quality-reports/
 ci-reports/
 ruvector.db
 .env
