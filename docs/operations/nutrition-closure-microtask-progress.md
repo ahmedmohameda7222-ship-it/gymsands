@@ -199,7 +199,7 @@ N125: PRODUCTION_BLOCKERS_DOCUMENTED
 N126: RECONCILED_IN_LEDGER_NOT_COMPLETE
 N127: NONLAUNCH_BACKLOG_PROPOSED_NOT_APPROVED
 N128: NO_NUTRITION_QA_RUN_SCOPE_ONLY
-N129: BLOCKED_G11_SIGNOFF_ABSENT
+N129: BLOCKED_G01_G11_RELEASE_EVIDENCE_CONTRACT_INCOMPATIBLE
 N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 ```
 
@@ -235,3 +235,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Commit `ff1edff4bed6c2cc32aa236a8b45827ad84077a9` extended the QA manifest template to fingerprint exact reviewed Git tree, all seven test file bytes, Foundation and FNDDS source-lock files where present, migration ledger, run logs, per-group counts/exit codes and SHA256 sidecar. No immutable **passing** run artifact exists. N113 authored source is not N113 final acceptance.
 - The workflow is conditional on a new Nutrition PR manually marked ready **after** G11-approved exact SHA and base; no such approval was obtained, no Nutrition candidate PR was created and **NO test suite was run**. Local Node is v22, repo mandates Node v24; container cannot fetch GitHub via DNS. Never treat static inspection as a green test, CI, security review, source archive rehash or release.
 - G01/G02/G03/G04–G11 external gates remain CLOSED. Plan9 current Generation remains NULL from actual latest read-only Main observation; do not perform Owner bootstrap, USDA dry-run/draft/activation/promotion, FNDDS implementation/ingestion, market bulk import, merge or deployment without exact approvals and verified prerequisite data.
+
+## Final self-review finding: missing release evidence compatibility (no subagent reviewer)
+
+- Source-reviewed `scripts/create-release-manifest.mjs`: it still calls `applyQualityEvidence()` and requires canonical `artifact-metadata.json` with `fullReleaseQuality:true`, identical reviewed SHA/expected migration and every gate in `REQUIRED_QUALITY_GATES` from `scripts/quality-evidence-contract.mjs`. Newly authored `scripts/nutrition-final-quality.mjs` produces separate `nutrition-qa-manifest.json` and SHA256 sidecar, **not that canonical format**. Old `quality.yml` / `pr-quality.yml` workflows are removed on this branch. Therefore final Nutrition QA success would NOT, by itself, satisfy exact release preflight or Production deployment manifest. N113/N129 release-ready acceptance BLOCKED.
+- This is an Important architecture/contract integration finding, not a cosmetic test. Fix requires approved review of an equivalently strict, source-bound Nutrition-only evidence contract and its integration with existing release manifest/exact release verifier, without weakening PR #189 squash provenance or spoofing legacy canonical gates. Separate G01/G11 authority is missing. No speculative bypass is added.
+- **Ruling:** Continue safe *authoring* of isolated final-QA source while the exact run remains blocked; do not treat authored tests as approved final QA or full Plan10 implementation. This is a narrow scheduling accommodation to user's instruction to keep working. If wrong, QA source will require revision after the real FNDDS/market/Production source contracts are established.
+- Self-review only: this environment has no separate reviewer subagent or native checked-out Git worktree. Exact GitHub commit/tree audit is available; full test execution, independent security review and release acceptance have not occurred. Do not merge.
