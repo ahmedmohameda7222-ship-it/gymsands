@@ -202,3 +202,11 @@ N128: NO_NUTRITION_QA_RUN_SCOPE_ONLY
 N129: BLOCKED_G11_SIGNOFF_ABSENT
 N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 ```
+
+## Subsequent independent gate review — 2026-11-20
+
+- N101 narrowed release-safety correction: commit `038b96db09c20cb17ca55b1dc8766e7e72c590fa` changes **only** `.github/workflows/nutrition-final-quality.yml`. GitHub documents that `jobs.<job_id>.if` false yields skipped / **Success**, even for required checks (https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-jobs-with-conditions). The authorization label, local PR-head and ready-state guards now run as the **first mandatory step** and fail with nonzero exit for missing authorization; no workflow trigger was enabled and the test runner remains absent. This was source/diff-reviewed only; **no QA run or test suite executed**. G-11 has not been approved.
+- Independent exact Git-tree review of prior head `fc5da7baa6c8400c014a121ee3bf58f6fb7d25f7`: base 2,033 blobs, branch 1,225, 815 removed/7 added/5 modified; 656 test/spec sources and 10 old QA workflows removed, no remaining recognized `*.test.*` or `*.spec.*`; **all 133 applied migration file blobs unchanged**. No Production/Activity Catalog mutation inferred from Git state.
+- Fresh read-only Main Supabase observation `2026-11-20T18:14:06.880209Z`: 133 migration records; 0 Food items, source records, ingestion batches/runs, catalog generations/search documents, governance principals; current generation pointer NULL. Earlier readback and this observation agree on the hard Plan 9 dependency blocker.
+- Source research reconfirmed official USDA `2026-04` Foundation and `2024-10` FNDDS 2021–2023 downloads (https://fdc.nal.usda.gov/download-datasets/) and MRI BLS 4.0 CC BY 4.0 source (https://blsdb.de/download). **Original USDA ZIP bytes were NOT downloaded or rehashed.** FNDDS parser/source-lock, EG/SA/AE reuse rights and all G-09/G-10 execution approvals remain outstanding.
+- External authority is unchanged: **G-01 PR #189 disposition, G-02 Actions/required-check modification, G-04 first human Owner, G-05–G-08 per-step Production operations, G-09 Plan 10 sequencing, G-10 local dataset rights, G-11 QA and release approval are NOT implied by an instruction to keep working**. Do not merge, deploy, mutate production or assert Nutrition complete without that evidence.
