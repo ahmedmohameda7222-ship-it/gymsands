@@ -46,8 +46,26 @@ for(const [locale,expectedDir] of languages){
         assert.equal(await main.getAttribute("lang"),locale);
         assert.equal(await main.getAttribute("dir"),expectedDir);
         assert.equal(await main.getByRole("heading",{level:1}).count(),1);
+        const search=main.locator("input").first();
         assert.ok(await main.locator("input").count()>0);
-        await page.screenshot({path:join(screenshotDir,"food-"+locale+"-"+kind+".png"),fullPage:true});
+        await search.focus();
+        assert.equal(await search.evaluate(el=>el===document.activeElement),true);
+        // "Populated" is proven by real rendered Food rows; an empty UI is not a pass.
+        const results=main.locator('section[aria-live="polite"]');
+        const rows=results.locator(':scope > div.grid > div');
+        if(kind==="populated"){
+          await rows.first().waitFor({state:"visible",timeout:20000});
+          assert.ok(await rows.count()>0);
+        }else{
+          await results.locator(':scope > div.text-center').waitFor({state:"visible",timeout:20000});
+          assert.equal(await rows.count(),0);
+        }
+        assert.equal(await main.getByRole("alert").count(),0,"No silent Food API failure allowed");
+        await page.screenshot({path:join(screenshotDir,"food-mobile-"+locale+"-"+kind+".png"),fullPage:true});
+        await page.setViewportSize({width:1440,height:900});
+        assert.equal(await main.getAttribute("dir"),expectedDir);
+        assert.equal(await main.getAttribute("lang"),locale);
+        await page.screenshot({path:join(screenshotDir,"food-desktop-"+locale+"-"+kind+".png"),fullPage:true});
         assert.deepEqual(errors,[]);
       }finally{await context.close()}
     });
