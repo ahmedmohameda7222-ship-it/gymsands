@@ -9,14 +9,15 @@ import { resolve, relative, sep, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
+// Required minimum assertions, not just an exit status from an empty test file.
 const groups=Object.freeze({
-  "food-catalog-source":"tests/nutrition-final/food-catalog-source.test.mjs",
-  "governance-ingestion":"tests/nutrition-final/governance-ingestion.test.mjs",
-  "activation-generation-search":"tests/nutrition-final/activation-generation-search.test.mjs",
-  "nutrition-consumers":"tests/nutrition-final/nutrition-consumers.test.mjs",
-  "nutrition-privacy-mcp":"tests/nutrition-final/nutrition-privacy-mcp.test.mjs",
-  "nutrition-browser-locale":"tests/nutrition-final/nutrition-browser-locale.test.mjs",
-  "nutrition-migration-release":"tests/nutrition-final/nutrition-migration-release.test.mjs"
+  "food-catalog-source": {file:"tests/nutrition-final/food-catalog-source.test.mjs",minTests:12},
+  "governance-ingestion": {file:"tests/nutrition-final/governance-ingestion.test.mjs",minTests:6},
+  "activation-generation-search": {file:"tests/nutrition-final/activation-generation-search.test.mjs",minTests:8},
+  "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:10},
+  "nutrition-privacy-mcp": {file:"tests/nutrition-final/nutrition-privacy-mcp.test.mjs",minTests:7},
+  "nutrition-browser-locale": {file:"tests/nutrition-final/nutrition-browser-locale.test.mjs",minTests:7},
+  "nutrition-migration-release": {file:"tests/nutrition-final/nutrition-migration-release.test.mjs",minTests:4}
 });
 const shaPattern=/^[a-f0-9]{40}$/;
 function readOptions(argv){
@@ -55,11 +56,12 @@ function main(){
   const relativeOutput=relative(root,output);
   if(relativeOutput===""||relativeOutput.startsWith(".."+sep)||
      relativeOutput===".."||relativeOutput.startsWith(sep)||
-     !relativeOutput.startsWith("nutrition-quality-reports")){
+     !(relativeOutput==="nutrition-quality-reports" ||
+       relativeOutput.startsWith("nutrition-quality-reports"+sep))){
     throw Error("QA output must be under nutrition-quality-reports, never app source");
   }
   mkdirSync(output,{recursive:true});
-  const absent=Object.values(groups).filter(file=>!existsSync(resolve(root,file)));
+  const absent=Object.values(groups).filter(({file})=>!existsSync(resolve(root,file))).map(({file})=>file);
   const state={schemaVersion:1,repository:"ahmedmohameda7222-ship-it/gymsands",
     reviewedCommit:reviewed,comparisonBase:base,runId:process.env.GITHUB_RUN_ID||null,
     runAttempt:process.env.GITHUB_RUN_ATTEMPT||null,
@@ -71,19 +73,29 @@ function main(){
   }
 
   let failures=0;
-  for(const [name,file] of Object.entries(groups)){
+  for(const [name,{file,minTests}] of Object.entries(groups)){
     // "node --test" invokes only the new Nutrition-only cases.
     const argv=["--test",file];
     const run=spawnSync(process.execPath,argv,{cwd:root,encoding:"utf8",
       timeout:20*60*1000,maxBuffer:32*1024*1024,env:{...process.env,NUTRITION_QA_OFFLINE:"true"}});
     const log=String(run.stdout||"")+String(run.stderr||"")+(run.error?"\n"+String(run.error):"");
-    const exit=Number.isInteger(run.status)?run.status:1;
+    const tapCount=Number(log.match(/^# tests ([0-9]+)$/m)?.[1]??NaN);
+    const tapPass=Number(log.match(/^# pass ([0-9]+)$/m)?.[1]??NaN);
+    const tapFail=Number(log.match(/^# fail ([0-9]+)$/m)?.[1]??NaN);
+    const tapSkipped=Number(log.match(/^# skipped ([0-9]+)$/m)?.[1]??NaN);
+    const coverageVerified=Number.isSafeInteger(tapCount)&&tapCount>=minTests
+      && tapPass===tapCount&&tapFail===0&&tapSkipped===0;
+    // Even an exit-zero test file is a failure if it ran fewer than the scoped cases.
+    const exit=Number.isInteger(run.status)&&run.status===0&&coverageVerified?0:1;
     const logName=name+".log";
     const bytes=Buffer.from(log);
     writeFileSync(join(output,logName),bytes);
     writeFileSync(join(output,name+".exit"),String(exit)+"\n");
     state.groups.push({name,command:[process.execPath,...argv],exitCode:exit,
       log:logName,logSha256:hash(bytes),bytes:bytes.length,
+      observedTests:Number.isSafeInteger(tapCount)?tapCount:null,
+      requiredMinimumTests:minTests,passedTests:Number.isSafeInteger(tapPass)?tapPass:null,
+      skippedTests:Number.isSafeInteger(tapSkipped)?tapSkipped:null,
       timedOut:!!run.error&&run.error.code==="ETIMEDOUT"});
     if(exit!==0)failures++;
     process.stdout.write(name+": "+(exit===0?"PASS":"FAIL")+" ("+exit+")\n");
