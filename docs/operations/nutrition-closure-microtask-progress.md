@@ -31,7 +31,7 @@ Development branch: `feat/nutrition-microtasks-2026-11-20`. No merge, deployment
 - N012 624 unit tests; N013 24 integration tests; N014 8 visual tests; N015 105 disposable SQL verification scripts; N016 26 QA/test runner scripts; N017 7 test configurations/fixtures; N019 one dead Vitest parity runner.
 - N018 removed 25 obsolete test/QA package commands, 4 unused test-only devDependencies and 100 unreachable package-lock nodes, while retaining @playwright/test for operational authenticated release smoke. Static package/lockfile root-dependency parity and closure checks passed; npm ci, typecheck, lint, build and test were intentionally **not run**.
 - N019 updated README and release docs to label the removed PR Quality and canonical Quality lanes as historical on this unmerged branch; retained exact release verifier fail closed. Existing historical docs preserved.
-- N020 exact Git tree audit: **656/656** test sources removed; **105** disposable SQL cases removed; **9 operational SQL** files preserved; **127** immutable migrations, migration ledger and all inspected essential Auth, release, uptime, privacy and deployment controls byte-identical. No direct Production, main, release or PR changes.
+- N020 exact Git tree audit: **656/656** test sources removed; **105** disposable SQL cases removed; **9 operational SQL** files preserved; **133** immutable migrations, migration ledger and all inspected essential Auth, release, uptime, privacy and deployment controls byte-identical. No direct Production, main, release or PR changes.
 - Commits: N011 `3e375f38476bb0f34b6887e7451678640e821cf4`, N012 `f3cdb0b7d850b20a315eedbe9ad335b75535f7b3`, N013 `f626edf8503251fada66ada50b2b2e3c2bd471d1`, N014 `97c8050d6ffc67c847464b481583137ba250dc5d`, N015 `824df3eab3045946f02aa15011c173479ccf9006`, N016 `006d8ab15afa3ec80621d562127ee5c5d2fa86a8`, N017 `632dd2efbce4d635c5fca001d4920e65c9f6da9e`, N018 `ea8f1607dc7e8f068977a28b6dee24975eeb298b`, N019 `ccf01451656d95efbd06c02f051adc39341b5fce`.
 - Current committed branch pre-ledger checkpoint: `ccf01451656d95efbd06c02f051adc39341b5fce`; Vercel branch preview deployment count zero.
 - Risk: CI absent on this development branch; status CODE_COMPLETE_UNTESTED, **not releasable**. Release gates must be recreated for Nutrition-only QA before candidate PR or any Production operation.
@@ -59,6 +59,15 @@ Development branch: `feat/nutrition-microtasks-2026-11-20`. No merge, deployment
 4. G-09 resolve Plan10 sequencing and original FNDDS source-lock bytes; G-10 approve source reuse and each of six market rollouts.
 5. G-11 independently authorize final Nutrition-only tests and acceptance after complete code, then owner/Planner release signoff.
 
+
+
+## Independent full Git-tree verification after all source edits
+
+Base `main` `de7c7ccea943e9b793a2a65b34f2a06a6f33be49` contains **2,033 blobs**; current branch `a7f1ada4b94860105d296b5752abd5e8e518b726` contains **1,225 blobs**. Exact tree diff: **815 deletions, 7 additions, 5 modifications**. Disjoint deletion classes: 656 test/spec sources, 106 disposable SQL files, 10 CI workflows, 36 extra test/QA-only script helpers/runners and 7 configs/fixtures. No other paths deleted, and no `*.test.*` or `*.spec.*` source patterns remain. All **133** applied migration source files are byte-identical, along with sampled critical auth/privacy, release, deployment and uptime assets.
+
+The seven added files are the scoped Nutrition final workflow and six plan/progress/source/consumer/backlog documents; the five modified files are `README.md`, `docs/release/README.md`, `eslint.config.mjs`, `package-lock.json`, and `package.json`. The new Nutrition QA workflow is **unexecuted and cannot pass yet** (required runner absent), not a passing replacement Quality artifact.
+
+Same readback: GitHub `main` unchanged; PR #189 still OPEN/UNMERGED at `9da131e24fb9a38d1afa88881e62d7498429d005`; Vercel recorded **0** deployments from the isolated development branch. No Production mutation and no automated tests have been performed. Latest exact static branch HEAD before this ledger update: `a7f1ada4b94860105d296b5752abd5e8e518b726`.
 
 ## Current states
 ```text
@@ -188,8 +197,8 @@ N123: BLOCKED_G11
 N124: BLOCKED_G11
 N125: PRODUCTION_BLOCKERS_DOCUMENTED
 N126: RECONCILED_IN_LEDGER_NOT_COMPLETE
-N127: NOT_STARTED_BACKLOG_UNAPPROVED
-N128: NO_NUTRITION_QA_EVIDENCE
+N127: NONLAUNCH_BACKLOG_PROPOSED_NOT_APPROVED
+N128: NO_NUTRITION_QA_RUN_SCOPE_ONLY
 N129: BLOCKED_G11_SIGNOFF_ABSENT
 N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 ```
