@@ -35,7 +35,13 @@ function readOptions(argv){
 }
 const sh=(args)=>execFileSync("git",args,{cwd:root,encoding:"utf8"}).trim();
 const hash=(buffer)=>createHash("sha256").update(buffer).digest("hex");
-function writeJson(p,value){writeFileSync(p,JSON.stringify(value,null,2)+"\n","utf8");}
+// Immutable artifact digest covers all source-lock, file and test-result evidence.
+function writeManifest(output,value){
+  const bytes=Buffer.from(JSON.stringify(value,null,2)+"\n","utf8");
+  writeFileSync(join(output,"nutrition-qa-manifest.json"),bytes);
+  writeFileSync(join(output,"nutrition-qa-manifest.sha256"),hash(bytes)+"  nutrition-qa-manifest.json\n","utf8");
+}
+const sourceDigest=(path)=>existsSync(resolve(root,path))?hash(readFileSync(resolve(root,path))):null;
 function main(){
   const options=readOptions(process.argv.slice(2));
   const reviewed=options["--reviewed-commit"];
@@ -65,10 +71,19 @@ function main(){
   const state={schemaVersion:1,repository:"ahmedmohameda7222-ship-it/gymsands",
     reviewedCommit:reviewed,comparisonBase:base,runId:process.env.GITHUB_RUN_ID||null,
     runAttempt:process.env.GITHUB_RUN_ATTEMPT||null,
-    generatedAt:new Date().toISOString(),scope:"nutrition-only",groups:[],missing:absent,
-    result:"BLOCKED"};
+    generatedAt:new Date().toISOString(),scope:"nutrition-only",
+    checkedOutTreeSha:sh(["rev-parse","HEAD^{tree}"]),
+    evidenceInputs:{
+      testSources:Object.values(groups).map(({file})=>({path:file,sha256:sourceDigest(file)})),
+      sourceLocks:[
+        "data/food-catalog/source-locks/usda-foundation-2026-04.json",
+        "data/food-catalog/source-locks/usda-fndds-2024-10.json"
+      ].map(path=>({path,sha256:sourceDigest(path)})),
+      migrationLedgerSha256:sourceDigest("supabase/migration-ledger.json")
+    },
+    groups:[],missing:absent,result:"BLOCKED"};
   if(absent.length){
-    writeJson(join(output,"nutrition-qa-manifest.json"),state);
+    writeManifest(output,state);
     throw Error("Required Nutrition test groups not implemented: "+absent.join(", "));
   }
 
@@ -102,7 +117,7 @@ function main(){
   }
   state.result=failures===0?"PASS":"FAIL";
   state.failureCount=failures;
-  writeJson(join(output,"nutrition-qa-manifest.json"),state);
+  writeManifest(output,state);
   if(failures!==0)throw Error(failures+" Nutrition QA group(s) failed");
 }
 try{main()}catch(error){console.error(error instanceof Error?error.message:String(error));process.exitCode=1;}
