@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test,after } from "node:test";
 import { createServer } from "vite";
-const vite=await createServer({configFile:false,server:{middlewareMode:true},
+const vite=await createServer({configFile:false,resolve:{alias:{"@":process.cwd()}},server:{middlewareMode:true},
   appType:"custom",logLevel:"error"});
 after(async()=>vite.close());
 const { sumNutritionFacts, scaleNutritionFacts, hasCompleteNutrition }=

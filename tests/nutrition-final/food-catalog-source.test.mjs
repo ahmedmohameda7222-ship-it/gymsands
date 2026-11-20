@@ -8,6 +8,7 @@ import { createServer } from "vite";
 
 const vite = await createServer({
   configFile: false,
+  resolve: { alias: { "@": process.cwd() } },
   server: { middlewareMode: true },
   appType: "custom",
   logLevel: "error"
