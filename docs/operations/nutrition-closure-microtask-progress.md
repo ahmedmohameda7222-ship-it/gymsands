@@ -172,13 +172,13 @@ N098: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N099: SCOPE_PROVISIONAL_BLOCKED_G11
 N100: BLOCKED_G11_UNFINISHED_CODE
 N101: WORKFLOW_SOURCE_COMMITTED_UNEXECUTED
-N102: NOT_STARTED_FINAL_QA_NOT_AUTHORIZED
-N103: NOT_STARTED_FINAL_QA_NOT_AUTHORIZED
-N104: NOT_STARTED_FINAL_QA_NOT_AUTHORIZED
-N105: NOT_STARTED_FINAL_QA_NOT_AUTHORIZED
-N106: NOT_STARTED_FINAL_QA_NOT_AUTHORIZED
-N107: NOT_STARTED_FINAL_QA_NOT_AUTHORIZED
-N108: NOT_STARTED_FINAL_QA_NOT_AUTHORIZED
+N102: FRESH_FOUNDATION_CONTRACT_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
+N103: DISPOSABLE_DB_GOVERNANCE_TESTS_AUTHORED_NOT_RUN
+N104: GENERATION_DOMAIN_TESTS_AUTHORED_REAL_DB_GAP
+N105: CONSUMER_DOMAIN_TESTS_AUTHORED_API_INTEGRATION_GAP
+N106: MCP_PRIVACY_SCOPE_TESTS_AUTHORED_AUTH_INTEGRATION_GAP
+N107: BROWSER_MATRIX_AUTHORED_SYNTHETIC_FIXTURES_ABSENT
+N108: MIGRATION_SOURCE_TESTS_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
 N111: BLOCKED_G11
@@ -210,3 +210,14 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Fresh read-only Main Supabase observation `2026-11-20T18:14:06.880209Z`: 133 migration records; 0 Food items, source records, ingestion batches/runs, catalog generations/search documents, governance principals; current generation pointer NULL. Earlier readback and this observation agree on the hard Plan 9 dependency blocker.
 - Source research reconfirmed official USDA `2026-04` Foundation and `2024-10` FNDDS 2021–2023 downloads (https://fdc.nal.usda.gov/download-datasets/) and MRI BLS 4.0 CC BY 4.0 source (https://blsdb.de/download). **Original USDA ZIP bytes were NOT downloaded or rehashed.** FNDDS parser/source-lock, EG/SA/AE reuse rights and all G-09/G-10 execution approvals remain outstanding.
 - External authority is unchanged: **G-01 PR #189 disposition, G-02 Actions/required-check modification, G-04 first human Owner, G-05–G-08 per-step Production operations, G-09 Plan 10 sequencing, G-10 local dataset rights, G-11 QA and release approval are NOT implied by an instruction to keep working**. Do not merge, deploy, mutate production or assert Nutrition complete without that evidence.
+
+## Fresh Nutrition-only final QA source work (2026-11-20, isolated branch only)
+
+- Reopened actual ZIP master plan and instructions. Continued work does not supply exact Production Owner, dataset legal, Plan10 sequencing, or per-operation authorization identities; their gates remain closed.
+- Commit 376bb3d4e8380ed44adb1bf8a14ec1543313266a added new scripts/nutrition-final-quality.mjs runner and 12 Food Catalog normalization/matching/source regression cases. The runner requires exact Git head/base, identity-bound G-11 approval values and seven scoped groups; writes per-gate raw logs, exit codes and digests.
+- Commit fbaab96092e52d2228c3b51d814d51bf608736ba added 8 generation/domain, 10 Nutrition consumer/offline, and 7 privacy/MCP permission tests. These are source-level tests, not real backend integration evidence.
+- Commit 1ef46051e8b856aa255278203d1adca05daa75f1 added 6 disposable PostgreSQL governance tests (localhost:54322 only), a generated EN/DE/AR x empty/populated browser matrix plus destination navigation, and 4 migration/source integrity checks. Browser tests require real synthetic local Auth storage fixtures; source tests deliberately fail without original USDA ZIPs and approved FNDDS lock.
+- Commit a6c90fd7e752b69f79028d99090e0ce05d39bac0 binds the currently unexecuted Nutrition QA workflow to exact owner-controlled repository variable approvals for reviewed SHA and base, above and beyond its PR label.
+- Independent GitHub recursive-tree readback confirms all seven new Nutrition-only test group paths and runner on branch, no push trigger or app-wide test command. 133 applied migrations were byte-identical in prior exact-tree review. No automated tests, CI, database migration replay or browser fixtures were executed during this session.
+- Outstanding: disposable Supabase/Postgres setup, synthetic local auth accounts and storage state for EN/DE/AR, local app server/Chromium, original USDA Foundation/FNDDS ZIP bytes and verified FNDDS source lock, G-09/G-10/G-11 human decisions. N102-N108 remain authored-but-unverified, not VALIDATED_IN_FINAL_QA.
+- Original USDA Foundation download attempt from this sandbox failed. Historical source SHA remains source-lock authority, not a freshly rehashed ZIP.
