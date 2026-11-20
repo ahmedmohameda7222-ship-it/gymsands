@@ -36,3 +36,27 @@ OFF data are covered by the **ODbL**, individual database contents under the Dat
 ## G-10 evidence gaps and release gate
 
 No market source archive has been downloaded, hashed, field-reviewed or ingested in this session. Final source-owner licensing decisions for EG/SA/AE and any branded dataset remain **unresolved**. No country-specific canary, manifest, batch, draft, activation, generation or live relevance proof exists. N067–N091 are **design/preparation only**, not complete production coverage. After G-10 authorization, prepare per-market exact source locks, deterministic mapping candidates, representative queries and approval runbooks, then execute each governed operation only after final Nutrition QA and exact human approvals.
+
+## Additional primary-source evidence, November 20, 2026
+
+These findings refine the **research and rights request**, not the legal approval or ingest status. No original national source database archive was acquired or bulk copied.
+
+### SA — a direct source is publicly readable, but bulk redistribution remains unapproved
+
+- SFDA announced an official bilingual national Saudi Food Composition Tables book in June 2026; its announcement states 130 Saudi dishes were prepared/analyzed, with 49 macro- and micronutrients. Source: https://sfda.gov.sa/en/news/19089 .
+- FAO's national FCDB directory independently lists Saudi Food Composition Tables (2025), free access to a **static PDF**, and searchable SFDA website https://fd.sfda.gov.sa/ . Source: https://www.fao.org/food-composition/tables-and-databases/detail/saudi-arabia--2025%29-saudi-food-composition-tables/en .
+- Exact public PDF location: https://www.sfda.gov.sa/sites/default/files/2026-04/SFCT-E.pdf (English); Arabic counterpart https://www.sfda.gov.sa/sites/default/files/2026-04/SFCT-A.pdf . **These were not downloaded or data-extracted**. Access to a publication and the SFDA generic open-data policy do NOT establish machine-readable feed rights, commercial bulk republication rights, or permission to copy the printed composition table into Plaivra's permanent private canonical Catalog.
+- Next owner decision: request a dataset-specific written license/reuse and attribution confirmation from SFDA, approved digital extract or API, permitted commercial/private search indexing, exact-version source bytes and provenance. No N084–N087 canary/publish until legal and exact G-10 approval.
+
+### EG — FAO confirms print-only rather than downloadable bulk source
+
+- FAO Food Composition directory describes the Egyptian National Nutrition Institute's Food Composition Tables for Egypt (1996) as **print-only**; related bibliographic citation is NNI 2006. Source: https://www.fao.org/food-composition/tables-and-databases/detail/%28egypt--1996%29-food-composition-tables-for-egypt/en . A FAO bibliographic listing is not a downloadable licensed database.
+- Next owner decision: obtain NNI permission, an authoritative current-version digital export and commercial reuse/redistribution terms; otherwise restrict EG coverage to legitimately source-backed global and separately verified local facts, NOT scans or unlicensed book transcription.
+
+### AE — research is a discovery lead, not a licensed Food Catalog
+
+- A 2026 Abu Dhabi Food Intake24 research report describes a platform that uses USDA FDC and references 23 traditional Emirati composite dishes, 75 Kuwaiti dishes and 104 Emirati-household recipes in its research design. Source: https://www.frontiersin.org/journals/nutrition/articles/10.3389/fnut.2026.1866000/full . These counts are *research-reported inputs*, not a supplied, validated or licensed Plaivra import table; the article license is not automatically a license for underlying third-party nutrient data.
+- UAE Ministry of Health and Prevention publishes an open-data catalog/policy, but no specific licensed Emirati Food Composition Table archive was identified in that catalog. Sources: https://mohap.gov.ae/en/open-data/mohap-open-data and https://mohap.gov.ae/en/open-data/open-data-policy .
+- Next owner decision: contact responsible original source/data owners (e.g., Food Intake24 researchers / regional INFOODS collaborators), obtain dataset-level rights and exact provenance, evaluate recipe/food evidence separately; do not derive single-food nutrient facts by treating household recipe estimates as measured food analyses.
+
+**Net disposition:** SA public *reading access* is independently established; EG print-only limitation is clearer; AE research/data-owner contacts are potential paths. Commercial bulk reproduction permissions and exact source bytes remain **unverified for EG, SA and AE**. G-10 remains CLOSED for all such imports and promotions.
