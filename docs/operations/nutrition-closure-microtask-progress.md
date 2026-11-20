@@ -23,28 +23,41 @@ Development branch: `feat/nutrition-microtasks-2026-11-20`. No merge, deployment
 - N026–N027 and N033–N051 are deferred until final Nutrition QA, then individually approved.
 - Do not mark Nutrition complete while data remains unpublished or final QA missing.
 
+
+## Isolated cleanup checkpoint (2026-11-20)
+
+- Source removal verified by independent **full Git tree comparison**, not GitHub compare API's first 300 paths: base 2033 blobs, branch 1229 blobs, 805 deletions, 1 added tracking document and 4 modified documents/manifests, no other changes.
+- N011 removed exactly 10 **CI-only workflow YAMLs** on branch. Retained 5 exact-release, read-only preflight, smoke, uptime and alert-routing workflows. Global Actions switch, checks and rules were not changed; N009/N010 G-02 blocked.
+- N012 624 unit tests; N013 24 integration tests; N014 8 visual tests; N015 105 disposable SQL verification scripts; N016 26 QA/test runner scripts; N017 7 test configurations/fixtures; N019 one dead Vitest parity runner.
+- N018 removed 25 obsolete test/QA package commands, 4 unused test-only devDependencies and 100 unreachable package-lock nodes, while retaining @playwright/test for operational authenticated release smoke. Static package/lockfile root-dependency parity and closure checks passed; npm ci, typecheck, lint, build and test were intentionally **not run**.
+- N019 updated README and release docs to label the removed PR Quality and canonical Quality lanes as historical on this unmerged branch; retained exact release verifier fail closed. Existing historical docs preserved.
+- N020 exact Git tree audit: **656/656** test sources removed; **105** disposable SQL cases removed; **9 operational SQL** files preserved; **127** immutable migrations, migration ledger and all inspected essential Auth, release, uptime, privacy and deployment controls byte-identical. No direct Production, main, release or PR changes.
+- Commits: N011 `3e375f38476bb0f34b6887e7451678640e821cf4`, N012 `f3cdb0b7d850b20a315eedbe9ad335b75535f7b3`, N013 `f626edf8503251fada66ada50b2b2e3c2bd471d1`, N014 `97c8050d6ffc67c847464b481583137ba250dc5d`, N015 `824df3eab3045946f02aa15011c173479ccf9006`, N016 `006d8ab15afa3ec80621d562127ee5c5d2fa86a8`, N017 `632dd2efbce4d635c5fca001d4920e65c9f6da9e`, N018 `ea8f1607dc7e8f068977a28b6dee24975eeb298b`, N019 `ccf01451656d95efbd06c02f051adc39341b5fce`.
+- Current committed branch pre-ledger checkpoint: `ccf01451656d95efbd06c02f051adc39341b5fce`; Vercel branch preview deployment count zero.
+- Risk: CI absent on this development branch; status CODE_COMPLETE_UNTESTED, **not releasable**. Release gates must be recreated for Nutrition-only QA before candidate PR or any Production operation.
+
 ## Current states
 ```text
 N001: CODE_COMPLETE_UNTESTED
 N002: CODE_COMPLETE_UNTESTED
 N003: BLOCKED_G01
-N004: IN_PROGRESS
-N005: IN_PROGRESS
-N006: IN_PROGRESS
+N004: CODE_COMPLETE_UNTESTED
+N005: CODE_COMPLETE_UNTESTED
+N006: CODE_COMPLETE_UNTESTED
 N007: CODE_COMPLETE_UNTESTED
-N008: IN_PROGRESS
-N009: NOT_STARTED
-N010: NOT_STARTED
-N011: NOT_STARTED
-N012: NOT_STARTED
-N013: NOT_STARTED
-N014: NOT_STARTED
-N015: NOT_STARTED
-N016: NOT_STARTED
-N017: NOT_STARTED
-N018: NOT_STARTED
-N019: NOT_STARTED
-N020: NOT_STARTED
+N008: CODE_COMPLETE_UNTESTED
+N009: BLOCKED_G02
+N010: BLOCKED_G02
+N011: CODE_COMPLETE_UNTESTED
+N012: CODE_COMPLETE_UNTESTED
+N013: CODE_COMPLETE_UNTESTED
+N014: CODE_COMPLETE_UNTESTED
+N015: CODE_COMPLETE_UNTESTED
+N016: CODE_COMPLETE_UNTESTED
+N017: CODE_COMPLETE_UNTESTED
+N018: CODE_COMPLETE_UNTESTED
+N019: CODE_COMPLETE_UNTESTED
+N020: CODE_COMPLETE_UNTESTED
 N021: NOT_STARTED
 N022: NOT_STARTED
 N023: NOT_STARTED
