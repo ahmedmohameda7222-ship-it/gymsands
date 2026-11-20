@@ -14,7 +14,7 @@ const groups=Object.freeze({
   "food-catalog-source": {file:"tests/nutrition-final/food-catalog-source.test.mjs",minTests:12},
   "governance-ingestion": {file:"tests/nutrition-final/governance-ingestion.test.mjs",minTests:6},
   "activation-generation-search": {file:"tests/nutrition-final/activation-generation-search.test.mjs",minTests:15},
-  "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:10},
+  "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:20},
   "nutrition-privacy-mcp": {file:"tests/nutrition-final/nutrition-privacy-mcp.test.mjs",minTests:7},
   "nutrition-browser-locale": {file:"tests/nutrition-final/nutrition-browser-locale.test.mjs",minTests:7},
   "nutrition-migration-release": {file:"tests/nutrition-final/nutrition-migration-release.test.mjs",minTests:4}
