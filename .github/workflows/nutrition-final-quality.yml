@@ -25,6 +25,11 @@ jobs:
       REVIEWED_SHA: ${{ github.event.pull_request.head.sha }}
       COMPARISON_BASE: ${{ github.event.pull_request.base.sha }}
       NUTRITION_QUALITY_OUTPUT: nutrition-quality-reports
+      # Owner-controlled repository variables are exact SHA-bound QA authorization.
+      # They are unset by default. PR labels alone must never authorize QA.
+      NUTRITION_QA_APPROVED: ${{ vars.NUTRITION_QA_APPROVED }}
+      NUTRITION_QA_APPROVAL_SHA: ${{ vars.NUTRITION_QA_APPROVAL_SHA }}
+      NUTRITION_QA_APPROVAL_BASE: ${{ vars.NUTRITION_QA_APPROVAL_BASE }}
 
     steps:
       - name: Fail closed on missing Nutrition final-QA operator signal
