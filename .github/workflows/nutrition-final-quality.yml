@@ -30,6 +30,11 @@ jobs:
       NUTRITION_QA_APPROVED: ${{ vars.NUTRITION_QA_APPROVED }}
       NUTRITION_QA_APPROVAL_SHA: ${{ vars.NUTRITION_QA_APPROVAL_SHA }}
       NUTRITION_QA_APPROVAL_BASE: ${{ vars.NUTRITION_QA_APPROVAL_BASE }}
+      # Disposable local Supabase only; no hosted credentials or writes.
+      NUTRITION_DISPOSABLE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      NUTRITION_FOUNDATION_ARCHIVE_PATH: /tmp/nutrition-foundation-original.zip
+      SUPABASE_TELEMETRY_DISABLED: '1'
 
     steps:
       - name: Fail closed on missing Nutrition final-QA operator signal
@@ -68,6 +73,14 @@ jobs:
             "$REVIEWED_SHA" "$COMPARISON_BASE" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
             > "$NUTRITION_QUALITY_OUTPUT/identity.txt"
 
+      - name: Require exact G-11 approval identity before installing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$NUTRITION_QA_APPROVED" == "true" ]] || { echo 'G-11 authorization absent'; exit 1; }
+          [[ "$NUTRITION_QA_APPROVAL_SHA" == "$REVIEWED_SHA" ]] || { echo 'Reviewed SHA not authorized'; exit 1; }
+          [[ "$NUTRITION_QA_APPROVAL_BASE" == "$COMPARISON_BASE" ]] || { echo 'Base SHA not authorized'; exit 1; }
+
       - name: Set up Node 24
         uses: actions/setup-node@v4
         with:
@@ -76,6 +89,43 @@ jobs:
 
       - name: Install exact locked dependencies
         run: npm ci --ignore-scripts
+
+      - name: Set up isolated local Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Install disposable database and browser tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+          npx playwright install --with-deps chromium
+
+      - name: Rehearse immutable migration chain on disposable local PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/replay-local-migration-chain.mjs --log nutrition-quality-reports/migration-replay.log
+
+      - name: Download and verify exact locked Foundation source offline fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_json_2026-04-30.zip' \
+            --output "$NUTRITION_FOUNDATION_ARCHIVE_PATH"
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const lock = JSON.parse(readFileSync('data/food-catalog/source-locks/usda-foundation-2026-04.json','utf8'));
+          const bytes = readFileSync(process.env.NUTRITION_FOUNDATION_ARCHIVE_PATH);
+          if (bytes.length !== lock.sourceBytes ||
+              createHash('sha256').update(bytes).digest('hex') !== lock.sourceChecksumSha256)
+            throw new Error('Original USDA Foundation archive integrity failure');
+          NODE
 
       - name: Execute only new Nutrition-owned final acceptance
         shell: bash
