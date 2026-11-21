@@ -180,3 +180,19 @@ test("Recipe publishing, Saved Meal write and handoff commit reject anonymous HT
   await unauthenticatedApi("POST","/api/nutrition/v1/saved-meals");
   await unauthenticatedApi("POST","/api/nutrition/v1/handoffs/commit");
 });
+
+// N097: during an auth-context switch, React passive effects from the same
+// render can see new userId but stale prior owner's plate/pendingOperationId.
+// The new owner key must never receive the previous owner's draft payload.
+const {canPersistDiaryDraftForHydratedOwner}=await vite.ssrLoadModule(
+  "/lib/nutrition-v1/diary-draft-owner.ts");
+test("Diary draft storage cannot write previous account plate into next account key",()=>{
+  const ownerA="plaivra:nutrition-v1:diary-draft:owner-A:2026-11-21:lunch";
+  const ownerB="plaivra:nutrition-v1:diary-draft:owner-B:2026-11-21:lunch";
+  assert.equal(canPersistDiaryDraftForHydratedOwner(ownerA,ownerA),true);
+  assert.equal(canPersistDiaryDraftForHydratedOwner(ownerB,ownerA),false);
+  assert.equal(canPersistDiaryDraftForHydratedOwner(ownerA,ownerB),false);
+  assert.equal(canPersistDiaryDraftForHydratedOwner(ownerB,null),false);
+  assert.equal(canPersistDiaryDraftForHydratedOwner(null,ownerA),false);
+  assert.equal(canPersistDiaryDraftForHydratedOwner("",""),false);
+});
