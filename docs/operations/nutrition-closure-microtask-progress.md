@@ -177,7 +177,7 @@ N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
 N105: FORTY_SIX_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
-N107: FIFTEEN_BROWSER_CASES_AUTHORED_UNTESTED
+N107: SIXTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -649,3 +649,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Independently traced `listRecipeHome` last-used-time projection: the `nutrition_log_groups` source query used a global descending `created_at` and `.limit(Math.min(80,limit*4))`. A single very frequently logged Recipe could occupy the entire cap and make other displayed Recipes' `lastUsedAt` **falsely null**. This is separate from, but analogous to, the previously corrected global published-version cap, and affects stable recently-used ranking.
 - Authored pure N105 regression **first, NOT RUN** at `3c595ad08e82f79dad30159e093f7758e55034ff`. Added `recipeUsageBackfillIds` in existing `lib/nutrition-v1/recipe-list-page.ts` at `48763c56317e4d91230fa049dab0642ec4d479fa`. Wired source-only `listRecipeHome` at `c25d195acef9397a116f904bb16ae29c39eae569`: a **saturated** global log page triggers bounded latest-per-root fallback requests only for missing roots, with `user_id`, `source_type=recipe`, `source_id` restrictions, error checking and ID assertion. On uncapped pages there are no additional queries; maximum fallback fanout is bounded by the 40-root home page.
 - Increased Nutrition consumer final-only minimum 45→**46** in `0a5cbf88c07b08f9b318dc67382982413ed8accd`. Seven-group source minimum **162 = 25+18+32+46+19+15+7**. **SOURCE_AUTHORED_UNTESTED**; database/browser/performance tests, CI, migration and Production write not performed. Final QA must measure saturated-page latency as this trades rare fanout for correctness.
+
+
+## N096 skipped Shopping review locale closure — 2026-11-21
+
+- Source-audited remaining literal JSX copy in `components/nutrition/meal-plan/meal-plan-page.tsx` after the five-dialog localization. Found the skipped-item warning `Shopping review:`, the English-only source contribution explanation and `Review & Remove` button in the conditional `skippedReview` view. In DE/AR this mixed-language warning hid an important **frozen contribution still included** caveat.
+- Wrote N107 source assertion before implementation at `c4babed2d1315296d4499e65385d091a3303f773`, **NOT EXECUTED**, then atomically added three real EN/DE/AR keys `shoppingReviewTitle`, `skippedShoppingContribution`, `reviewAndRemove` and replaced only two component text expressions at `0e814b28c6e436a91beebacc93826e5fb049da8c`. The message preserves the actual frozen Food name through `nt(...,{ name: skippedReview.frozen_name })`, no changes to the skip/review removal command or source-preservation behavior.
+- N107 final-only browser/locale minimum **15→16** at `b7acda3b9dd5b9b3a9a8f6f1b0dfe74f9f7b64f9`. Total seven-group source-declared minimum **163 = 25+18+32+46+19+16+7**. **SOURCE_AUTHORED_UNTESTED**; no Playwright/browser/screen reader, CI, Prod, workflow YAML, migration, release or rights operation executed.
