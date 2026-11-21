@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { parseRecipeHandoffQueryQuantity } from "@/lib/nutrition-v1/handoff-quantity";
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
 import { resolveRecipeHandoff } from "@/services/nutrition-v1/server/recipe-handoff";
@@ -13,8 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ reci
     const recipeVersionId = search.get("recipeVersionId");
     if (!recipeVersionId) throw new NutritionRequestError("Recipe version is required.");
     const rawQuantity = search.get("quantity");
-    const quantity = rawQuantity === null || rawQuantity.trim() === "" ? 1 : Number(rawQuantity);
-    if (!Number.isFinite(quantity) || quantity <= 0) throw new NutritionRequestError("Recipe serving quantity must be greater than zero.");
+    const quantity = parseRecipeHandoffQueryQuantity(rawQuantity);
+    if (quantity === null) throw new NutritionRequestError("Recipe serving quantity must be greater than zero.");
     return nutritionJson(await resolveRecipeHandoff(context.supabase, context.user.id, recipeId, recipeVersionId, quantity));
   } catch (error) {
     return nutritionErrorResponse(error);
