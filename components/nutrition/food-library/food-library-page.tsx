@@ -109,10 +109,15 @@ export function FoodLibraryPage() {
   async function toggleFavorite(food: FoodLibraryCandidate) {
     if (food.source !== "catalog") return;
     const favorite = !food.favorite;
-    setRows((current) => current.map((row) => row.id === food.id && row.source === food.source ? { ...row, favorite } : row));
-    setSelected((current) => current?.food.id === food.id && current.food.source === food.source ? { ...current, food: { ...current.food, favorite } } : current);
-    const response = await foodLibraryApi("/api/nutrition/v1/foods", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ foodId: food.id, favorite }) });
-    if (!response.ok) void load();
+    try {
+      const response = await foodLibraryApi("/api/nutrition/v1/foods", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ foodId: food.id, favorite }) });
+      if (!response.ok) throw new Error("Favorite could not be saved.");
+      setRows((current) => current.map((row) => row.id === food.id && row.source === food.source ? { ...row, favorite } : row));
+      setSelected((current) => current?.food.id === food.id && current.food.source === food.source ? { ...current, food: { ...current.food, favorite } } : current);
+      setError(null);
+    } catch {
+      setError(nt("foodLibraryLoadFailed"));
+    }
   }
 
   function openWorkspace(mode: WorkspaceState["mode"], food: FoodLibraryCandidate | null = null) {
