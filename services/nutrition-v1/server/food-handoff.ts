@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealFoodItemSnapshot } from "@/lib/nutrition-v1/contracts";
 import { isUuid } from "@/lib/utils";
+import { parsePositiveHandoffQuantity } from "@/lib/nutrition-v1/handoff-quantity";
 import {
   projectCurrentGenerationCompatibility,
   resolveCurrentGenerationFoodForNewUseFromSupabase,
@@ -74,8 +75,8 @@ function numberOrNull(value: unknown) {
 }
 
 function positive(value: unknown, label: string) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${label} must be greater than zero.`);
+  const parsed = parsePositiveHandoffQuantity(value);
+  if (parsed === null) throw new Error(`${label} must be greater than zero.`);
   return parsed;
 }
 
