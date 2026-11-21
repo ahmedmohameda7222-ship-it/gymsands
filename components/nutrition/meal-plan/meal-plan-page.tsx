@@ -481,12 +481,19 @@ export function MealPlanPage() {
   }
 
   async function markEaten(item: PlannedOccurrenceRow) {
+    if (!ownerId) return;
+    const requestContextKey = cacheKey(ownerId, weekStart);
+    if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
     if (item.source_type === "placeholder") { setNotice("Confirm or replace this Placeholder in the logging flow before Plaivra records actual intake."); logWithChanges(item); return; }
     try {
       await mealPlanApi("/api/nutrition/v1/meal-plan/week", { method: "POST", body: JSON.stringify({ kind: "complete", occurrenceId: item.id, operationId: crypto.randomUUID(), executionSnapshot: null }) });
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
       cancelMealReminder(item.id);
       await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Planned meal could not be completed."); }
+    } catch (cause) {
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
+      setError(cause instanceof Error ? cause.message : "Planned meal could not be completed.");
+    }
   }
   function logWithChanges(item: PlannedOccurrenceRow) { router.push(`/calories?date=${encodeURIComponent(item.plan_date)}&plannedOccurrence=${encodeURIComponent(item.id)}`); }
 
