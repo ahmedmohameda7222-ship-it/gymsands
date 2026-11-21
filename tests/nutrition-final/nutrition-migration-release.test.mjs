@@ -1,13 +1,21 @@
 /** Nutrition-only immutable migration/source lineage checks. No hosted DB. */
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync,readFileSync } from "node:fs";
+import { existsSync,readFileSync,statSync } from "node:fs";
 import { test } from "node:test";
 import { resolve } from "node:path";
 
 const shaPattern=/^[a-f0-9]{40}$/;
-const sha256=(b)=>createHash("sha256").update(b).digest("hex");
+// Official USDA archives can be large; external hashing avoids a huge in-memory Buffer.
+function verifyOriginalArchive(path, expectedBytes, expectedSha256){
+  const stat=statSync(path);
+  assert.equal(stat.isFile(),true,"Source archive must be a regular file");
+  assert.equal(stat.size,expectedBytes,"Original source bytes differ");
+  const stdout=execFileSync("sha256sum",["--",path],{
+    encoding:"utf8",timeout:5*60*1000,maxBuffer:1024*1024
+  });
+  assert.equal(stdout.slice(0,64),expectedSha256,"Original source archive SHA256 differs");
+}
 function git(...args){return execFileSync("git",args,{encoding:"utf8",timeout:20000}).trim()}
 function reviewed(){
   const base=process.env.NUTRITION_QA_APPROVAL_BASE;
@@ -35,9 +43,7 @@ test("original locked Foundation ZIP has exact unchanged source bytes and SHA",(
   const lock=JSON.parse(readFileSync("data/food-catalog/source-locks/usda-foundation-2026-04.json","utf8"));
   const archivePath=process.env.NUTRITION_FOUNDATION_ARCHIVE_PATH;
   if(!archivePath||!existsSync(archivePath))throw Error("Missing exact original USDA Foundation source archive; cannot approve");
-  const bytes=readFileSync(archivePath);
-  assert.equal(bytes.length,lock.sourceBytes);
-  assert.equal(sha256(bytes),lock.sourceChecksumSha256);
+  verifyOriginalArchive(archivePath,lock.sourceBytes,lock.sourceChecksumSha256);
 });
 test("Plan10 FNDDS original source lock and bytes are mandatory, not inferred",()=>{
   const lockFile="data/food-catalog/source-locks/usda-fndds-2024-10.json";
@@ -46,11 +52,9 @@ test("Plan10 FNDDS original source lock and bytes are mandatory, not inferred",(
   assert.equal(lock.dataset,"FNDDS");
   const original=process.env.NUTRITION_FNDDS_ARCHIVE_PATH;
   assert.ok(original&&existsSync(original),"FNDDS original source bytes missing");
-  const bytes=readFileSync(original);
   assert.ok(Number.isSafeInteger(lock.sourceBytes)&&lock.sourceBytes>0);
-  assert.equal(bytes.length,lock.sourceBytes);
   assert.match(lock.sourceChecksumSha256,/^[a-f0-9]{64}$/);
-  assert.equal(sha256(bytes),lock.sourceChecksumSha256);
+  verifyOriginalArchive(original,lock.sourceBytes,lock.sourceChecksumSha256);
 });
 
 

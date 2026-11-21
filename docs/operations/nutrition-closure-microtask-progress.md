@@ -358,3 +358,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Bounded scan of all 40 remaining repository `scripts/*.mjs|*.ts|*.js` sources found only one reference to a removed legacy `*.test.*` path outside the new Nutrition-only runner: a comment in preserved `scripts/replay-local-migration-chain.mjs` naming `scripts/permanent-quality-replay.test.mjs`.
 - Commit `23904cc6fdd51ca2c02c026193399c4f4981e550` changed only that comment to state the migration replay anchors are retained for traceability. Migration runtime commands, SQL, imports and executable behavior were not modified; this is not proof that the replay ran.
 - The seven references to `tests/nutrition-final/*.test.mjs` in the new runner are intentional, not stale. The scanned script subset does not establish zero obsolete references across all repository documentation or old Git history.
+
+## N108 source archive memory safety
+
+- Adjusted new Nutrition-only N108 Foundation/FNDDS archive byte-size and SHA-256 verification to stream through the approved Ubuntu SHA256 CLI with `statSync` rather than `readFileSync` potentially large USDA ZIPs. Exact checksum and byte-count equality remains mandatory.
+- The original source archives are absent/unverified and this check was **not executed**. No schema, business logic, review authority or release contract was weakened.
