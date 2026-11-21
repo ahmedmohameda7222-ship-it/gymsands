@@ -347,3 +347,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - A would-be exit-zero suite now still returns FAIL with `missingRequiredEvidence` when any required log/screenshot or original archive is absent. This distinguishes authored tests from immutable, complete runtime artifacts.
 - Manifest includes explicit `scopeCaveats` flags proving UI auth is a mock, not a real session or Production owner authorization; published Food Generation and legacy full-release canonical Quality are not established. `productionReleaseEligible` stays false regardless of isolated suite result.
 - No QA execution, source download, Production authorization or release-compatibility bypass was performed. A future accepted release still needs real source/ownership/release-integrity signoff.
+
+## N113 QA source memory-bound archive hashing correction
+
+- Source review identified an operational memory issue in the new N113 evidence reporter: `readFileSync` buffered the entire original USDA archives before hashing. Replaced this with GNU `sha256sum -- <file>` plus `statSync` length on the approved Ubuntu-only CI runner, preserving exact whole-archive SHA256 evidence without allocating a potentially large Buffer.
+- Original ZIP archives were not downloaded, hashed or tested in this coding pass. The existing G-11 and FNDDS-source fail-closed gates remain intact; this is authoring-level code review, not a passing QA result.

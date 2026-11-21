@@ -4,7 +4,7 @@
  */
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve, relative, sep, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,8 +51,16 @@ const fileEvidence=(path)=> {
 function archiveEvidence(envKey){
   const path=process.env[envKey]??null;
   if(!path||!existsSync(path))return {sourceEnv:envKey,exists:false,sha256:null,bytes:null};
-  const data=readFileSync(path);
-  return {sourceEnv:envKey,exists:true,sha256:hash(data),bytes:data.length};
+  // Original USDA archives can be large. Stream through the runner's GNU
+  // sha256sum executable instead of buffering entire ZIPs into Node memory.
+  const info=statSync(path);
+  if(!info.isFile())throw Error("USDA source evidence must be a regular file");
+  const output=execFileSync("sha256sum",["--",path],{
+    encoding:"utf8",timeout:5*60*1000,maxBuffer:1024*1024
+  });
+  const sha256=output.slice(0,64);
+  if(!/^[a-f0-9]{64}$/.test(sha256))throw Error("Malformed USDA SHA256 evidence");
+  return {sourceEnv:envKey,exists:true,sha256,bytes:info.size};
 }
 function browserEvidence(outputRelative){
   const paths=[];
