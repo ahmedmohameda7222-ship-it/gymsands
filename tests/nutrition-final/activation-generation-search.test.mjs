@@ -311,3 +311,24 @@ test("disposable Arabic Food search keeps exact private owner isolation",()=>{
   assert.equal(ownerSearch("ar",userOne),"1|my_food|Owner A Rice");
   assert.equal(ownerSearch("ar",userTwo),"1|my_food|Owner B Rice");
 });
+
+
+test("only configured service role can invoke sealed Generation promotion and rollback",()=>{
+  const query="SELECT "+
+    ["food_catalog_promote_generation_v1","food_catalog_rollback_generation_v1"].map(name=>{
+      const signature="'public."+name+"(jsonb)'";
+      return "has_function_privilege('anon',"+signature+",'EXECUTE'),"+
+        "has_function_privilege('authenticated',"+signature+",'EXECUTE'),"+
+        "has_function_privilege('service_role',"+signature+",'EXECUTE')";
+    }).join(",");
+  assert.equal(localSearchSql(query),"f|f|t|f|f|t");
+});
+test("authenticated members cannot write or bypass the current Generation pointer",()=>{
+  const query="SELECT "+
+    "c.relrowsecurity,"+
+    "has_table_privilege('authenticated',c.oid,'UPDATE'),"+
+    "has_table_privilege('authenticated',c.oid,'INSERT'),"+
+    "has_table_privilege('anon',c.oid,'SELECT') "+
+    "FROM pg_class c WHERE c.oid='public.food_catalog_current_generation'::regclass";
+  assert.equal(localSearchSql(query),"t|f|f|f");
+});

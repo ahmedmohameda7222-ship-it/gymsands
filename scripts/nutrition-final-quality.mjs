@@ -13,7 +13,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const groups=Object.freeze({
   "food-catalog-source": {file:"tests/nutrition-final/food-catalog-source.test.mjs",minTests:25},
   "governance-ingestion": {file:"tests/nutrition-final/governance-ingestion.test.mjs",minTests:18},
-  "activation-generation-search": {file:"tests/nutrition-final/activation-generation-search.test.mjs",minTests:28},
+  "activation-generation-search": {file:"tests/nutrition-final/activation-generation-search.test.mjs",minTests:30},
   "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:27},
   "nutrition-privacy-mcp": {file:"tests/nutrition-final/nutrition-privacy-mcp.test.mjs",minTests:19},
   "nutrition-browser-locale": {file:"tests/nutrition-final/nutrition-browser-locale.test.mjs",minTests:11},

@@ -174,7 +174,7 @@ N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
-N104: TWENTY_EIGHT_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
+N104: THIRTY_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
@@ -323,3 +323,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Added three **actual local PostgreSQL search RPC integration** cases grounded in the applied `20260906183000_food_catalog_search_projection_v2.sql`, using `public.search_food_catalog_v2` as the authenticated user. Two synthetic `auth.users` and private `user_food_items` are created per test inside disposable BEGIN/ROLLBACK; JWT claims alternate between owner A and B; asserts each language en/de/ar returns exactly the one owned Food, never the other.
 - This covers current Food Library private search/RLS under a NULL catalog generation, not published global Food generation, activation, CAS, rollback, Arabic nutrient localization or real access-token lifecycle. The test suite remains **unexecuted pending G-11**.
 - N104 group minimum 28 authored checks; actual SQL execution and complete API owner integration still require independent QA evidence.
+
+## N104 follow-up — Generation service authorization at PostgreSQL boundary
+
+- Added two local disposable-DB metadata assertions from `20260902150000_food_catalog_generation_authority.sql`: sealed generation promotion and rollback RPCs executable only by service_role, and the current Generation pointer is RLS-enabled and not INSERT/UPDATE-readable by unauthorized authenticated/anon roles. These are defensive checks, not a simulation of real CAS/rollback controls.
+- N104 now has 30 authored tests including EN/DE/AR synthetic owner search SQL. Real Production Generation promotion, rollback, validated seal and exact authorization must remain separately approved; no tests run until G-11.
