@@ -167,7 +167,7 @@ N093: HANDOFF_QUANTITY_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
 N096: DIARY_RECIPE_MEAL_PLAN_LOCALE_SOURCE_ONLY_UNTESTED
-N097: PRIVACY_MCP_AUTHORITY_STATIC_TRACED_UNTESTED
+N097: DIRECT_17_TABLE_49_POLICY_RLS_CENSUS_RUNTIME_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
 N100: BLOCKED_G11_UNFINISHED_CODE
@@ -656,3 +656,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Source-audited remaining literal JSX copy in `components/nutrition/meal-plan/meal-plan-page.tsx` after the five-dialog localization. Found the skipped-item warning `Shopping review:`, the English-only source contribution explanation and `Review & Remove` button in the conditional `skippedReview` view. In DE/AR this mixed-language warning hid an important **frozen contribution still included** caveat.
 - Wrote N107 source assertion before implementation at `c4babed2d1315296d4499e65385d091a3303f773`, **NOT EXECUTED**, then atomically added three real EN/DE/AR keys `shoppingReviewTitle`, `skippedShoppingContribution`, `reviewAndRemove` and replaced only two component text expressions at `0e814b28c6e436a91beebacc93826e5fb049da8c`. The message preserves the actual frozen Food name through `nt(...,{ name: skippedReview.frozen_name })`, no changes to the skip/review removal command or source-preservation behavior.
 - N107 final-only browser/locale minimum **15→16** at `b7acda3b9dd5b9b3a9a8f6f1b0dfe74f9f7b64f9`. Total seven-group source-declared minimum **163 = 25+18+32+46+19+16+7**. **SOURCE_AUTHORED_UNTESTED**; no Playwright/browser/screen reader, CI, Prod, workflow YAML, migration, release or rights operation executed.
+
+
+## N097 Production RLS metadata inspection — 2026-11-21
+
+- Independently ran **SELECT-only** Main Supabase metadata queries over `pg_class`, `pg_namespace` and `pg_policies`, inspected each actual policy `roles`, `qual`, and `with_check` (not names alone). All **17** public `nutrition_%` tables have RLS enabled, with **49** policies, **49** scoped to role `authenticated`, **0** policies without explicit `auth.uid()` condition in either predicate, and **0** INSERT/UPDATE policies without `auth.uid()`-guarded WITH CHECK. Published Recipe versions and Diary log groups correctly use owner-scoped SELECT rather than directly writable immutable published/log rows.
+- Captured exact read queries, results and privileges caveats in `docs/operations/nutrition-privacy-rls-readonly-census-2026-11-21.md` commit `70d89ae23bfeffffd4907b1069cb781d4e9c273a`. `relforcerowsecurity=false` on all 17: privileged/service roles may bypass; actual security-definer EXECUTE grants and real two-owner negative request behavior remain to be verified at G-11/N112. **No claim of finished runtime isolation**, RLS metadata read is not authorization testing and made no DB mutations.
