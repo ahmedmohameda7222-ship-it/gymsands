@@ -134,13 +134,19 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   }, [cookingAuthContextKey]);
 
   const writeLocalForOwner = useCallback((ownerId: string, next: CookingLocalSession) => {
+    const requestContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)
+      || (authOwnerId !== null && authOwnerId !== ownerId)) return;
     window.localStorage.setItem(cookingLocalStorageKey(ownerId, recipeId), serializeCookingLocalSession(next));
-  }, [recipeId]);
+  }, [authOwnerId, recipeId]);
 
   const writeLocal = useCallback((next: CookingLocalSession) => {
-    if (!userId || !storageKey) return;
+    const requestContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!userId || !storageKey
+      || !sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)
+      || (authOwnerId !== null && authOwnerId !== userId)) return;
     window.localStorage.setItem(storageKey, serializeCookingLocalSession(next));
-  }, [storageKey, userId]);
+  }, [authOwnerId, recipeId, storageKey, userId]);
 
   const materialize = useCallback((bundle: Awaited<ReturnType<typeof getActiveCookingSession>>) => {
     if (!bundle) return null;
