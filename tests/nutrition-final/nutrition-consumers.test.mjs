@@ -609,3 +609,33 @@ test("Recipe recently-used timestamps backfill roots starved by one prolific dia
   assert.deepEqual(recipeUsageBackfillIds(ids,[...logs.slice(0,7),{source_id:"other-a"}],8),["other-b"]);
   assert.throws(()=>recipeUsageBackfillIds(ids,logs,-1),/cap must be positive/i);
 });
+
+// N095: every Saved Meal item is untrusted JSON; the old HTTP route checked
+// only Array.isArray, then canonicalization dereferenced item.kind before a
+// typed request error could be raised (generic 500 for null/array elements).
+const { validateSavedMealWriteInput }=await vite.ssrLoadModule(
+  "/lib/nutrition-v1/saved-meal-write-input.ts");
+test("Saved Meal write rejects malformed item shapes before authority lookup",()=>{
+  const food={kind:"food",food_id:"00000000-0000-4000-8000-000000000101",
+    frozen_name:"Rice",resolved_quantity:1,resolved_serving_label:"100 g"};
+  const recipe={kind:"recipe",recipe:{recipe_id:"00000000-0000-4000-8000-000000000102",
+    recipe_version_id:"00000000-0000-4000-8000-000000000103",
+    resolved_serving_quantity:1,resolved_serving_label:"1 serving"}};
+  assert.equal(validateSavedMealWriteInput({name:"Dinner",items:[food,recipe]}),null);
+  assert.equal(validateSavedMealWriteInput({name:"Dinner",items:[food],
+    operationId:"00000000-0000-4000-8000-000000000104"},true),null);
+  for(const items of [null,[],[null],[false],[[]],[{}],
+    [{...food,kind:"saved_meal"}],[{...food,food_id:"invalid"}],
+    [{...food,resolved_quantity:true}],[{...food,resolved_quantity:"2"}],
+    [{...food,resolved_quantity:0}],[{...food,frozen_name:"   "}],
+    [{...recipe,recipe:null}],[{...recipe,recipe:{...recipe.recipe,resolved_serving_quantity:"1"}}],
+    Array.from({length:101},()=>food)]){
+    assert.equal(typeof validateSavedMealWriteInput({name:"Dinner",items}),"string");
+  }
+  for(const name of ["", "  ","a".repeat(201),false]){
+    assert.equal(typeof validateSavedMealWriteInput({name,items:[food]}),"string");
+  }
+  assert.equal(typeof validateSavedMealWriteInput({name:"Dinner",items:[food],operationId:"bad"},true),"string");
+  assert.equal(typeof validateSavedMealWriteInput({name:"Dinner",items:[food],note:12}),"string");
+  assert.equal(typeof validateSavedMealWriteInput({name:"Dinner",items:[food],isFavorite:"true"}),"string");
+});
