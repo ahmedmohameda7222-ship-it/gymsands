@@ -570,3 +570,15 @@ test("Diary logged nutrition facts and quantities are never coerced from JSON st
     assert.equal(parseDiaryWriteQuantity(raw),null);
   }
 });
+
+// N095: before invoking the idempotent water RPC, positive milliliters must
+// remain positive after integer normalization; no unsafe numeric payloads.
+const {parseDiaryWaterAmountMl}=await vite.ssrLoadModule("/lib/nutrition-v1/diary-write-numbers.ts");
+test("Diary water amount never rounds a positive input down to an unlogged zero",()=>{
+  assert.equal(parseDiaryWaterAmountMl(250),250);
+  assert.equal(parseDiaryWaterAmountMl(0.5),1);
+  assert.equal(parseDiaryWaterAmountMl(2.49),2);
+  for(const v of [undefined,null,false,true,"250",0,0.1,0.49,-1,NaN,Infinity,-Infinity,Number.MAX_SAFE_INTEGER+1]){
+    assert.equal(parseDiaryWaterAmountMl(v),null);
+  }
+});
