@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { createSupabaseServerClient } from "@/lib/integrations/env";
 import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
+import { validateSavedMealWriteInput } from "@/lib/nutrition-v1/saved-meal-write-input";
 import { canonicalizeSavedMealItems } from "@/services/nutrition-v1/server/saved-meal-write-authority";
 import { createSavedMeal, type SavedMealItemWriteIntent } from "@/services/nutrition-v1/server/saved-meals";
 
@@ -40,9 +41,9 @@ export async function POST(request: Request) {
   if (context instanceof NextResponse) return context;
   try {
     const body = bodyObject(await request.json().catch(() => ({})));
+    const invalid = validateSavedMealWriteInput(body, true);
+    if (invalid) throw new NutritionRequestError(invalid);
     const operationId = requiredText(body.operationId, "Operation ID");
-    if (typeof body.name !== "string") throw new NutritionRequestError("Saved Meal name is required.");
-    if (!Array.isArray(body.items)) throw new NutritionRequestError("Saved Meal items are required.");
     const items = await canonicalizeSavedMealItems(
       context.supabase,
       createSupabaseServerClient(null, true),
