@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: THIRTY_TWO_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: THIRTY_THREE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -411,3 +411,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Added pure, portable `lib/nutrition-v1/user-food-write-numbers.ts` helper (commit `c8ab7157eda7ef2ea9ddc2c0191d5e3daf7aa237`) and replaced the coercing required-nonnegative check in `services/nutrition-v1/server/user-foods.ts` (commit `598c1f85182b3221952c1bf9234f9a31d8d7469a`). Explicit numeric zero is preserved; missing or non-number calories are rejected rather than fabricated, and nullable macros still remain NULL when absent.
 - Updated Nutrition-only runner N105 minimum from 31 to 32 (commit `bbdc7f25c44ad9d690f81b64d8855f5389c98716`). No migrations, Production code, live database, CI job, or actual validation run were executed. Full red-green acceptance awaits separately authorized G-11.
 - Ruling: a measured-zero vs unknown-input validation defect is within pre-final consumer-code review N095; correcting it is not permission to relax the main Food Catalog unknown/null controls.
+
+## N095 custom Food basis amount input hardening — 2026-11-21
+
+- Static source review confirmed a second coercion flaw in Custom Food writes: nullable serving basis `basisAmount` had `Number(value)` directly after a null/blank guard. This accepted a boolean `true` as 1 unit, or arbitrary numeric strings as a measured serving basis, despite the `UserFoodWriteInput` declared `number | null` contract.
+- New N105 test authored first in `a7ab160eaabc434e28d9777d6f194797dc98e186`: explicit null/absent/empty basis remains unknown, only finite positive JSON numbers accepted, zero/negative/non-number rejected.
+- New portable pure `optionalPositiveFoodNumber` helper authored at `216bc66f1b394ae3ddf3fad795ea63aee4e800f4`; service wired to it in `b2cdeb5fab9dbefd42aa23edbdae77935216fad9`. Existing valid browser UI sends actual numbers, unchanged schema and API shape.
+- Nutrition-only runner case count N105 raised to **33** in `6490ad6d3572b7d5a4a00daeaaa82847c28ea436`. Both numeric boundary fixes remain UNTESTED until G-11. No run, Production change, or schema rewrite performed.
