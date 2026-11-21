@@ -32,7 +32,7 @@ const LOCAL_PROJECT_ID = "gymsands";
 const AW2C_FILE = `${AW2C_VERSION}_active_workout_aw2c_timeline_events.sql`;
 const LEGACY_HELPER = fileURLToPath(new URL("./replay-local-migration-chain-legacy.mjs", import.meta.url));
 
-// Retained source-contract anchors exercised by scripts/permanent-quality-replay.test.mjs.
+// Released migration replay command anchors, retained for traceability.
 // ["db", "reset", "--local", "--no-seed", "--version", ORIGINAL_AW2A_VERSION]
 // ["migration", "up", "--local", "--include-all"]
 // ["start", "--exclude", DATABASE_ONLY_EXCLUDES]
