@@ -42,6 +42,30 @@ function writeManifest(output,value){
   writeFileSync(join(output,"nutrition-qa-manifest.sha256"),hash(bytes)+"  nutrition-qa-manifest.json\n","utf8");
 }
 const sourceDigest=(path)=>existsSync(resolve(root,path))?hash(readFileSync(resolve(root,path))):null;
+const fileEvidence=(path)=> {
+  const absolute=resolve(root,path);
+  if(!existsSync(absolute))return {path,exists:false,sha256:null,bytes:null};
+  const bytes=readFileSync(absolute);
+  return {path,exists:true,sha256:hash(bytes),bytes:bytes.length};
+};
+function archiveEvidence(envKey){
+  const path=process.env[envKey]??null;
+  if(!path||!existsSync(path))return {sourceEnv:envKey,exists:false,sha256:null,bytes:null};
+  const data=readFileSync(path);
+  return {sourceEnv:envKey,exists:true,sha256:hash(data),bytes:data.length};
+}
+function browserEvidence(outputRelative){
+  const paths=[];
+  for(const locale of ["en","de","ar"]){
+    for(const state of ["empty","populated"]){
+      for(const width of ["mobile","desktop"]){
+        paths.push(join(outputRelative,"browser",
+          "food-"+width+"-"+locale+"-"+state+".png"));
+      }
+    }
+  }
+  return paths.map(fileEvidence);
+}
 function main(){
   const options=readOptions(process.argv.slice(2));
   const reviewed=options["--reviewed-commit"];
@@ -75,11 +99,20 @@ function main(){
     checkedOutTreeSha:sh(["rev-parse","HEAD^{tree}"]),
     evidenceInputs:{
       testSources:Object.values(groups).map(({file})=>({path:file,sha256:sourceDigest(file)})),
+      runnerSha256:sourceDigest("scripts/nutrition-final-quality.mjs"),
+      workflowSha256:sourceDigest(".github/workflows/nutrition-final-quality.yml"),
       sourceLocks:[
         "data/food-catalog/source-locks/usda-foundation-2026-04.json",
         "data/food-catalog/source-locks/usda-fndds-2024-10.json"
       ].map(path=>({path,sha256:sourceDigest(path)})),
       migrationLedgerSha256:sourceDigest("supabase/migration-ledger.json")
+    },
+    scopeCaveats:{
+      browserUsesSyntheticMockAuth:true,
+      provesLiveOwnerSessionAuthorization:false,
+      provesActualPublishedCatalogGeneration:false,
+      provesExactReleaseCanonicalQuality:false,
+      productionReleaseEligible:false
     },
     groups:[],missing:absent,result:"BLOCKED"};
   if(absent.length){
@@ -115,9 +148,34 @@ function main(){
     if(exit!==0)failures++;
     process.stdout.write(name+": "+(exit===0?"PASS":"FAIL")+" ("+exit+")\n");
   }
+  const outputRelative=relative(root,output);
+  const externalArtifacts=[
+    fileEvidence(join(outputRelative,"identity.txt")),
+    fileEvidence(join(outputRelative,"migration-replay.log")),
+    fileEvidence(join(outputRelative,"browser-devserver.log")),
+    fileEvidence(join(outputRelative,"browser-fixtures","manifest.json"))
+  ];
+  const screenshots=browserEvidence(outputRelative);
+  const archives=[
+    archiveEvidence("NUTRITION_FOUNDATION_ARCHIVE_PATH"),
+    archiveEvidence("NUTRITION_FNDDS_ARCHIVE_PATH")
+  ];
+  const mandatoryArtifactMissing=externalArtifacts
+    .filter(item=>!item.exists).map(item=>item.path);
+  const missingScreenshots=screenshots.filter(item=>!item.exists).map(item=>item.path);
+  const missingFoundation=archives[0].exists!==true;
+  const missingFndds=archives[1].exists!==true;
+  state.externalEvidence={files:externalArtifacts,screenshots,archives};
+  state.missingRequiredEvidence=[
+    ...mandatoryArtifactMissing,...missingScreenshots,
+    ...(missingFoundation?["NUTRITION_FOUNDATION_ARCHIVE_PATH"]:[]),
+    ...(missingFndds?["NUTRITION_FNDDS_ARCHIVE_PATH"]:[])
+  ];
+  if(state.missingRequiredEvidence.length)failures++;
   state.result=failures===0?"PASS":"FAIL";
   state.failureCount=failures;
   writeManifest(output,state);
-  if(failures!==0)throw Error(failures+" Nutrition QA group(s) failed");
+  if(failures!==0)throw Error(failures+
+    " Nutrition QA group(s)/evidence gate(s) failed");
 }
 try{main()}catch(error){console.error(error instanceof Error?error.message:String(error));process.exitCode=1;}

@@ -183,7 +183,7 @@ N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
 N111: BLOCKED_G11
 N112: BLOCKED_G11
-N113: CONTENT_ADDRESSED_MANIFEST_GENERATOR_AUTHORED_UNEXECUTED_G11
+N113: ENHANCED_EVIDENCE_MANIFEST_AUTHORED_UNEXECUTED_G11
 N114: BLOCKED_G11
 N115: BLOCKED_G03_G11
 N116: READ_ONLY_VERIFIED_PLAN9_NOT_PERFORMED
@@ -340,3 +340,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Added two synthetic transaction-scoped Saved Meal cases based on active `20260828220000_nutrition_v1_saved_meal_creation_idempotency.sql` and `20260828032200_nutrition_v1_final_closure.sql`: same owner+operation+frozen food snapshot retry returns one root, one immutable child and one operation record; changed semantics under the exact same key is rejected.
 - All inputs are synthetic, Food UUID is a frozen snapshot fixture only, and SQL is restricted to localhost:54322 with rollback. Tests do not prove an actual current-generation Food, authoritative source lineage or public API owner isolation. No tests executed; G-11 remains closed.
 - N105 now has 31 authored cases.
+
+## N113 follow-up — retained evidence inputs and explicit non-release scope
+
+- Extended Nutrition-only runner's as-yet-unexecuted manifest: hashes of exact runner/workflow source; local identity and migration replay logs; local devserver and UI-fixture manifest; 12 expected mobile/desktop screenshots for EN/DE/AR x empty/populated; original Foundation and FNDDS archive SHA256 and byte counts (if source files exist).
+- A would-be exit-zero suite now still returns FAIL with `missingRequiredEvidence` when any required log/screenshot or original archive is absent. This distinguishes authored tests from immutable, complete runtime artifacts.
+- Manifest includes explicit `scopeCaveats` flags proving UI auth is a mock, not a real session or Production owner authorization; published Food Generation and legacy full-release canonical Quality are not established. `productionReleaseEligible` stays false regardless of isolated suite result.
+- No QA execution, source download, Production authorization or release-compatibility bypass was performed. A future accepted release still needs real source/ownership/release-integrity signoff.
