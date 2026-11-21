@@ -1,0 +1,373 @@
+{
+  "schemaVersion": 1,
+  "artifactKind": "nutrition_six_market_source_contingent_search_benchmark",
+  "status": "DESIGN_ONLY_NOT_DATA_NOT_RUN",
+  "createdOn": "2026-11-21",
+  "launchMarkets": [
+    "US",
+    "DE",
+    "GB",
+    "EG",
+    "SA",
+    "AE"
+  ],
+  "canonicalSource": "existing Plaivra current-generation Food Catalog only",
+  "sourceArchivesVerified": false,
+  "prodGenerationPublished": false,
+  "rightsApprovedForAllMarkets": false,
+  "instructions": "All listed query strings are proposed user intents, not verified Foods, nutritional measurements, approved translations, or licensed source candidates. Do not assert matched Food ID, nutrition, country assignment, or PASS until backed by a verified, approved source record, current published generation and actual member-search evidence. Never create duplicate canonical Foods from synonyms.",
+  "requiredFutureAssertions": [
+    "distinct forms and preparations stay distinct when their source nutrition identities differ",
+    "name and alias match uses source/curated provenance, never language alone as market relevance",
+    "same current canonical Food root may appear in multiple country scopes without duplicated Food ID",
+    "no missing nutrition encoded as zero and no serving inferred without source evidence",
+    "only current immutable generation search documents count as a published catalog result",
+    "commercial branded or GTIN rows require separate provider rights and exact product identity",
+    "denied or unverified canaries stay quarantined and cannot produce false search success",
+    "real EN/DE/AR member search requires G-11 QA and approved synthetic/authorized accounts"
+  ],
+  "markets": [
+    {
+      "market": "US",
+      "languageTag": "en",
+      "sourceLicenseAndGenerationApprovalRequired": true,
+      "verifiedSourceCandidates": 0,
+      "publishedExpectedResults": null,
+      "searchIntents": [
+        {
+          "query": "rolled oats",
+          "kind": "generic",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "black beans cooked",
+          "kind": "preparation",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "chicken breast raw",
+          "kind": "raw_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "chicken breast cooked",
+          "kind": "cooked_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "whole wheat tortilla",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "peanut butter",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        }
+      ]
+    },
+    {
+      "market": "DE",
+      "languageTag": "de",
+      "sourceLicenseAndGenerationApprovalRequired": true,
+      "verifiedSourceCandidates": 0,
+      "publishedExpectedResults": null,
+      "searchIntents": [
+        {
+          "query": "Vollkornbrot",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "Quark",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "Spätzle",
+          "kind": "localized_name",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "Kartoffeln gekocht",
+          "kind": "preparation",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "Sauerkraut",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "Roggenbrötchen",
+          "kind": "localized_name",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        }
+      ]
+    },
+    {
+      "market": "GB",
+      "languageTag": "en",
+      "sourceLicenseAndGenerationApprovalRequired": true,
+      "verifiedSourceCandidates": 0,
+      "publishedExpectedResults": null,
+      "searchIntents": [
+        {
+          "query": "porridge oats",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "baked beans",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "wholemeal bread",
+          "kind": "localized_name",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "scone",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "Cheddar cheese",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "black pudding",
+          "kind": "market_form",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        }
+      ]
+    },
+    {
+      "market": "EG",
+      "languageTag": "ar",
+      "sourceLicenseAndGenerationApprovalRequired": true,
+      "verifiedSourceCandidates": 0,
+      "publishedExpectedResults": null,
+      "searchIntents": [
+        {
+          "query": "فول مدمس",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "طعمية",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "كشري",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "عيش بلدي",
+          "kind": "regional_bread",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "ملوخية",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "بصارة",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        }
+      ]
+    },
+    {
+      "market": "SA",
+      "languageTag": "ar",
+      "sourceLicenseAndGenerationApprovalRequired": true,
+      "verifiedSourceCandidates": 0,
+      "publishedExpectedResults": null,
+      "searchIntents": [
+        {
+          "query": "كبسة دجاج",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "جريش",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "قرصان",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "مراصيع",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "تمر",
+          "kind": "generic",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "مرقوق",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        }
+      ]
+    },
+    {
+      "market": "AE",
+      "languageTag": "ar",
+      "sourceLicenseAndGenerationApprovalRequired": true,
+      "verifiedSourceCandidates": 0,
+      "publishedExpectedResults": null,
+      "searchIntents": [
+        {
+          "query": "هريس",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "مجبوس",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "لقيمات",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "بلاليط",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "ثريد",
+          "kind": "regional_dish",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        },
+        {
+          "query": "خبز رقاق",
+          "kind": "regional_bread",
+          "expectedCanonicalFoodId": null,
+          "expectedSourceRecordId": null,
+          "expectedNutrition": null,
+          "sourceVerified": false
+        }
+      ]
+    }
+  ]
+}
