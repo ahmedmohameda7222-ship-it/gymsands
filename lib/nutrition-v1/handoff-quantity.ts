@@ -4,3 +4,8 @@ export function parsePositiveHandoffQuantity(value: unknown): number | null {
     ? value
     : null;
 }
+
+/** Only an omitted Recipe quantity has the historical default of one serving. */
+export function parseRecipeHandoffQuantity(value: unknown): number | null {
+  return parsePositiveHandoffQuantity(value === undefined ? 1 : value);
+}
