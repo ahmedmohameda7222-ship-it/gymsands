@@ -176,7 +176,7 @@ N102: FRESH_FOUNDATION_CONTRACT_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
-N106: MCP_PRIVACY_SCOPE_TESTS_AUTHORED_AUTH_INTEGRATION_GAP
+N106: SIXTEEN_MCP_PRIVACY_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: BROWSER_MATRIX_AUTHORED_SYNTHETIC_FIXTURES_ABSENT
 N108: MIGRATION_SOURCE_TESTS_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
@@ -260,3 +260,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Added seven isolated Nutrition-owned cases directly against the existing Recipe draft clone, Recipe cover path, personal correction operation and cooking voice helpers: immutable frozen Recipe sources, exact remapping of dependency/ingredient/equipment IDs, duplicate/unresolved link denial, owner-keyed media boundaries, stable correction idempotency tied to semantic payload+CAS, NULL-versus-zero distinction, and explicit unknown voice actions.
 - N105 count is now 27 authored test cases. All use synthetic local values; none touch Production or migrate data. Service/API owner-isolation, Food-to-consumer writes, RLS and actual event replay still lack end-to-end QA. Tests remain **unexecuted** under G-11.
+
+## N106 follow-up — MCP and privacy contract source
+
+- Added nine new synthetic-only cases from actual `lib/mcp/idempotency.ts`, `lib/mcp/safety.ts` and `lib/privacy/deletion-request.ts`: owner/tool-separated idempotency UUIDs, invalid key rejection, exact deletion confirmation/impact, stable deletion request hash, recent reauthentication, owner-specific deletion subject digest, recursive output redaction, echoed text redaction, and rejection of caller-controlled owner identity.
+- N106 now has 16 authored tests. No real account deletion/export, OAuth flow, MCP API request or Production data access occurred. Integration consent/owner isolation and idempotency-RPC replay remain unverified. G-11 remains closed.

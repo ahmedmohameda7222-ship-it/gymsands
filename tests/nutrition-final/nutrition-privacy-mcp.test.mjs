@@ -48,3 +48,94 @@ test("account deletion requires nontrivial exact confirmation and recent auth",(
   assert.ok(RECENT_REAUTHENTICATION_MS>0);
   assert.ok(RECENT_REAUTHENTICATION_MS<=10*60*1000);
 });
+
+
+// N106: real pure security/idempotency implementations, synthetic-only payloads.
+const {deriveMcpMutationOperationId}=
+  await vite.ssrLoadModule("/lib/mcp/idempotency.ts");
+const {validateMcpToolInput,minimizeMcpOutput,sanitizeMcpToolResult}=
+  await vite.ssrLoadModule("/lib/mcp/safety.ts");
+const {ACCOUNT_DELETION_IMPACT_VERSION}=await vite.ssrLoadModule(
+  "/lib/privacy/deletion-contract.ts");
+const {validateAccountDeletionRequest,isRecentReauthentication,deletionSubjectHash}=
+  await vite.ssrLoadModule("/lib/privacy/deletion-request.ts");
+
+test("MCP idempotency UUID is stable for exact user/tool/key and isolated by owner",()=>{
+  const input={idempotency_key:"read-only-example-123456"};
+  const one=deriveMcpMutationOperationId({userId:"owner-a"},"add_water",input);
+  const same=deriveMcpMutationOperationId({userId:"owner-a"},"add_water",input);
+  const other=deriveMcpMutationOperationId({userId:"owner-b"},"add_water",input);
+  const tool=deriveMcpMutationOperationId({userId:"owner-a"},"write_food",input);
+  assert.match(one,/^[a-f0-9-]{36}$/);
+  assert.equal(one,same);
+  assert.notEqual(one,other);
+  assert.notEqual(one,tool);
+});
+test("MCP mutation refuses unstable or short idempotency key",()=>{
+  assert.throws(()=>deriveMcpMutationOperationId({userId:"owner"},
+    "add_water",{idempotency_key:"short"}),/stable 16-200/);
+});
+test("deletion request fails closed for incorrect confirmation and missing impact",()=>{
+  const key="0123456789ABCDEF";
+  assert.equal(validateAccountDeletionRequest({confirmation:"delete",impact_version:ACCOUNT_DELETION_IMPACT_VERSION,idempotency_key:key}).code,
+    "confirmation_required");
+  assert.equal(validateAccountDeletionRequest({confirmation:ACCOUNT_DELETION_CONFIRMATION,impact_version:"stale",idempotency_key:key}).code,
+    "impact_acknowledgement_required");
+});
+test("valid deletion acknowledgement requires stable idempotency key hash",()=>{
+  const requested=validateAccountDeletionRequest({
+    confirmation:ACCOUNT_DELETION_CONFIRMATION,
+    impact_version:ACCOUNT_DELETION_IMPACT_VERSION,
+    idempotency_key:"0123456789ABCDEF"
+  });
+  assert.equal(requested.ok,true);
+  assert.match(requested.idempotencyKeyHash,/^[0-9a-f]{64}$/);
+  assert.equal(validateAccountDeletionRequest({
+    confirmation:ACCOUNT_DELETION_CONFIRMATION,
+    impact_version:ACCOUNT_DELETION_IMPACT_VERSION,
+    idempotency_key:"short"
+  }).code,"invalid_idempotency_key");
+});
+test("deletion fresh authentication rejects expired and future sign-ins",()=>{
+  const now=Date.parse("2026-11-20T12:00:00.000Z");
+  assert.equal(isRecentReauthentication("2026-11-20T11:55:00.000Z",now),true);
+  assert.equal(isRecentReauthentication("2026-11-20T11:49:00.000Z",now),false);
+  assert.equal(isRecentReauthentication("2026-11-20T12:01:00.000Z",now),false);
+});
+test("deletion subject digest does not reuse IDs across owners",()=>{
+  const first=deletionSubjectHash("owner-A");
+  assert.equal(deletionSubjectHash("owner-A"),first);
+  assert.notEqual(deletionSubjectHash("owner-B"),first);
+  assert.match(first,/^[0-9a-f]{64}$/);
+});
+test("MCP output minimization strips owner IDs and credentials recursively",()=>{
+  const result=minimizeMcpOutput({
+    owner_id:"private",updated_at:"2026-11-20T12:00:00Z",
+    nested:{connection_id:"private-connection",access_token:"secret",
+      notes:"internal note",text:"Bearer abc123"}
+  });
+  assert.equal(result.owner_id,undefined);
+  assert.equal(result.updated_at,"2026-11-20T12:00:00Z");
+  assert.equal(result.nested.connection_id,undefined);
+  assert.equal(result.nested.access_token,undefined);
+  assert.equal(result.nested.notes,undefined);
+  assert.equal(result.nested.text,"Bearer [REDACTED]");
+});
+test("MCP result scrubs both structured payload and echoed text",()=>{
+  const data={ok:true,owner_id:"private-owner",token:"private-secret",name:"Rice"};
+  const result=sanitizeMcpToolResult({
+    structuredContent:data,content:[{type:"text",text:JSON.stringify(data)}]
+  });
+  assert.deepEqual(result.structuredContent,{ok:true,name:"Rice"});
+  assert.equal(result.content[0].text,JSON.stringify({ok:true,name:"Rice"}));
+});
+test("MCP input validation forbids caller-controlled owner identity",()=>{
+  const tool={
+    inputSchema:{type:"object",properties:{query:{type:"string"}},
+      additionalProperties:false},
+    annotations:{destructiveHint:false}
+  };
+  const result=validateMcpToolInput(tool,{query:"rice",owner_id:"spoofed"});
+  assert.equal(result.success,false);
+  assert.ok(result.errors.some(error=>error.includes("server-controlled")));
+});
