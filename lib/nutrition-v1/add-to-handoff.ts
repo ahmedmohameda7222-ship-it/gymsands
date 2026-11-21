@@ -1,3 +1,5 @@
+import { parsePositiveHandoffQueryQuantity, parseRecipeHandoffQueryQuantity } from "./handoff-quantity";
+
 export type AddToDestination = "diary" | "meal_plan" | "saved_meal" | "recipe";
 
 export type AddToHandoffSource =
@@ -21,12 +23,12 @@ export function parseAddToHandoff(search: URLSearchParams, destination: AddToDes
   const foodId = search.get(foodKey);
   if (foodId) {
     const source = search.get("source");
-    const quantity = Number(search.get("quantity"));
+    const quantity = parsePositiveHandoffQueryQuantity(search.get("quantity"));
     const serving = search.get("serving")?.trim() ?? "";
     const servingOptionId = search.get("servingOptionId")?.trim() || null;
     const displayName = search.get("displayName")?.trim() || null;
     const languageTag = search.get("languageTag")?.trim() || null;
-    if ((source !== "catalog" && source !== "my_food") || !Number.isFinite(quantity) || quantity <= 0 || !serving) return null;
+    if ((source !== "catalog" && source !== "my_food") || quantity === null || !serving) return null;
     if (source === "catalog" && displayName === null) return null;
     return { type: "food", id: foodId, source, quantity, serving, servingOptionId, displayName, languageTag };
   }
@@ -34,9 +36,8 @@ export function parseAddToHandoff(search: URLSearchParams, destination: AddToDes
   if (destination !== "recipe" && search.get("source") === "recipe") {
     const id = search.get("recipeId");
     const versionId = search.get("recipeVersionId");
-    const rawQuantity = search.get("quantity");
-    const quantity = rawQuantity === null || rawQuantity.trim() === "" ? 1 : Number(rawQuantity);
-    if (id && versionId && Number.isFinite(quantity) && quantity > 0) return { type: "recipe", id, versionId, quantity };
+    const quantity = parseRecipeHandoffQueryQuantity(search.get("quantity"));
+    if (id && versionId && quantity !== null) return { type: "recipe", id, versionId, quantity };
   }
   return null;
 }
