@@ -582,3 +582,18 @@ test("Diary water amount never rounds a positive input down to an unlogged zero"
     assert.equal(parseDiaryWaterAmountMl(v),null);
   }
 });
+
+// N095: a single frequently revised Recipe must not crowd other roots out of
+// the globally limited versions query and cause published Recipes to look draft.
+const {recipeVersionBackfillIds}=await vite.ssrLoadModule("/lib/nutrition-v1/recipe-list-page.ts");
+test("Recipe home pagination backfills roots starved by global version result cap",()=>{
+  const roots=["recipe-heavy","recipe-a","recipe-b","recipe-unpublished"];
+  const capped=Array.from({length:6},()=>({recipe_id:"recipe-heavy"}));
+  assert.deepEqual(recipeVersionBackfillIds(roots,capped,6),
+    ["recipe-a","recipe-b","recipe-unpublished"]);
+  assert.deepEqual(recipeVersionBackfillIds(roots,capped.slice(0,5),6),[],
+    "An uncapped response already covers every existing version");
+  assert.deepEqual(recipeVersionBackfillIds(roots,[...capped.slice(0,5),{recipe_id:"recipe-a"}],6),
+    ["recipe-b","recipe-unpublished"]);
+  assert.throws(()=>recipeVersionBackfillIds(roots,capped,0),/cap must be positive/i);
+});
