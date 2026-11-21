@@ -28,6 +28,9 @@ export function sumNutritionFacts(values: NutritionFacts[]): NutritionFacts {
       total += nutrient;
     }
 
+    if (!unknown && !Number.isFinite(total)) {
+      throw new Error(`${key} sum finite result overflow.`);
+    }
     result[key] = unknown ? null : total;
   }
 
@@ -42,7 +45,10 @@ export function scaleNutritionFacts(value: NutritionFacts, scale: number): Nutri
   return Object.fromEntries(
     nutrientKeys.map((key) => {
       const nutrient = validateKnownNutritionValue(value[key], key);
-      return [key, nutrient === null ? null : nutrient * scale];
+      if (nutrient === null) return [key, null];
+      const scaled = nutrient * scale;
+      if (!Number.isFinite(scaled)) throw new Error(`${key} scaled finite result overflow.`);
+      return [key, scaled];
     }),
   ) as NutritionFacts;
 }
