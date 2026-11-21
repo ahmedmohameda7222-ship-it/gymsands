@@ -396,3 +396,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Vercel project `prj_xuwRDlDXsnkSAgX8dZc9t22IFehI` connected account read-only `list_deployments`: current latest READY Production deployment `dpl_o1WSQe1TCymQBhJEbGenfH27AJjd` is still source SHA `de7c7ccea943e9b793a2a65b34f2a06a6f33be49`. Development branch `feat/nutrition-microtasks-2026-11-20` has **zero** Vercel deployments returned by exact branch filter.
 - GitHub main SHA from independent read is still `de7c7ccea943e9b793a2a65b34f2a06a6f33be49`; PR #189 remains OPEN, not merged. No Vercel production alias or Supabase target was changed by this source-only session.
 - These are provider metadata records, NOT live `/api/version` or `/api/health` runtime acceptance, and do not satisfy G03/G11 deployment signoff.
+
+## N113 reviewed-source integrity gate — 2026-11-21
+
+- Root cause (source-only): The Nutrition-only QA runner previously checked `git rev-parse HEAD` but did not test whether tracked worktree files or untracked importable Nutrition/library modules matched the reviewed commit. This could misbind passing test results to an altered filesystem.
+- Fix authored at `e99c5b0dae7b54b77d0902104211f856c07be913`: `scripts/nutrition-final-quality.mjs` now inspects both tracked working tree (`git diff --quiet HEAD --`) and untracked source files in the app/components/data/lib/scripts/services/tests/.github/migration roots. It fails with a BLOCKED manifest before suites if dirty and records post-suite integrity as an additional PASS/FAIL condition.
+- This is not evidence of a passing suite: G-11 has **not** authorized executing tests. No automated tests, migration replay, original USDA archive hashing, CI job, Production writes, merge or deployment have run in this work.
+- Ruling: enforce exact reviewed-worktree identity within future N113 acceptance, without changing any existing Production release controls or moving G-01/G-09/G-11 approval boundaries.
