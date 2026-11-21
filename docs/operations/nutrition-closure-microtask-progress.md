@@ -163,11 +163,11 @@ N089: AE_MARKET_G10_LICENSE_UNVERIFIED
 N090: AE_MARKET_G10_LICENSE_UNVERIFIED
 N091: AE_MARKET_G10_LICENSE_UNVERIFIED
 N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
-N093: JSON_AND_URL_HANDOFF_QUANTITIES_STRICT_SOURCE_ONLY_UNTESTED
+N093: JSON_URL_AND_ADD_TO_SERVING_GRAMMAR_STRICT_SOURCE_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: OWNER_WEEK_SHOPPING_CACHE_AND_COOKING_REVISIONS_GUARDED_UNTESTED
-N096: MEAL_PLAN_FAVORITES_SHOPPING_RECIPE_LOCALES_SOURCE_ONLY_UNTESTED
-N097: RLS_RPC_DIARY_COOKING_RECIPE_SHOPPING_OWNER_CONTEXT_GUARDED_UNTESTED
+N096: MEAL_PLAN_SHOPPING_RECIPE_AND_ADD_TO_LOCALES_SOURCE_UNTESTED
+N097: RPC_DIARY_COOKING_SHOPPING_RECIPE_HANDOFF_OWNER_CONTEXT_SOURCE_GUARDED_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
 N100: BLOCKED_G11_UNFINISHED_CODE
@@ -176,8 +176,8 @@ N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
 N105: FIFTY_FIVE_CONSUMER_CASES_AUTHORED_UNTESTED
-N106: THIRTY_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
-N107: TWENTY_BROWSER_CASES_AUTHORED_UNTESTED
+N106: THIRTY_ONE_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
+N107: TWENTY_ONE_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -771,3 +771,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Manual/derived Shopping numeric entry previously accepted blank input via `Number("")→0`. N105 pure regression FIRST `0856e053195e9e23598ebc93c964db08bd9640c9`, NOT RUN; strict nonnegative decimal parser `lib/nutrition-v1/shopping-write-quantity.ts` at `3cda8566504b10bf04cbacd781e60930c8d884e2`, wired at `6ace978b126129bb74c0b4acd8326032c817657d`. Explicit measured **0** remains permitted for Shopping, but blank/hex/malformed no longer silently rewrite measurements.
 - UI `addManual()` previously cleared user-entered manual item draft **before** awaiting server acceptance, losing item details on failure. N107 source regression FIRST at `e805f32270d2f46ceda1e3d0ef39da30118ca5b5`, NOT RUN. `saveShopping` now returns success/failure; only accepted saves clear the form, and only if the user has not edited a **newer** draft during the request (final code `a99e3075d7c153adf97765c71b39c46b56703107`). Failed network writes leave original input visible for retry; auth/week switch explicitly clears the old user's draft.
 - Fresh direct GitHub source comparison `ce6d3a413005c35987fe06faeae6a1008a86fc18` to `a99e3075d7c153adf97765c71b39c46b56703107`: **14** commits / **7** changed paths / **0** migrations / **0** workflows. Final-only scoped QA minimum now **187 = 25+18+32+55+30+20+7**; direct source test count consumer 55, privacy/MCP 30, browser 13 static + generated. **NO QA, browser-auth replay, CI, lint, build, Production mutations, merge or release.** These fixes remain **SOURCE_AUTHORED_UNTESTED** and require actual G-11 acceptance.
+
+
+## N093/N096/N097 Add-To Handoff owner and locale closure — 2026-11-21
+
+- Source-traced shared `components/nutrition/handoffs/add-to-handoff-consumer.tsx` across all four destinations. Operation IDs were already stored under owner-qualified `sessionStorage` keys, but **in-flight** Food/Recipe preview and POST response could complete after an authenticated user/source/destination change, updating the next owner's dialog state, clearing old pending idempotency data or navigating away incorrectly. Authored one N106 source regression **first** at `09935d3ee43ccd9ffd38eafe774be9006f36ec01`, **NOT RUN**. Added request-context key based on auth owner, destination and exact URL search; layout-phase invalidation clears old preview, operation ref and user fields (`22e444341e56a09020f7e87631c82a2f2daa76aa`). Preview effects ignore stale network responses (`36360965d4f69a25b44c3eba4ed0f94f93fdab8c`); commit checks exact context before POST/after awaited response, and **only** the still-current owner action may clear operation token or route to the destination (`2e27c30258295edf8256c2cd6ecfdf233e3e9c9b`). No server auth, idempotency RPC, or stored key algorithm changed. Real login-switch tests remain G-11.
+- Add-To handoff dialog was **English-only** for titles, source loading, serving/date/meal labels, choices, Saved Meal/Recipe selectors, buttons and user errors under German/Arabic UI. Wrote N107 EN/DE/AR source contract **first** at `eedac0bfe03f21423e8ee45eb7b1c5d485a7d09a`, **NOT RUN**. Added **30** translation keys × **3** languages (**90** dictionary entries) at `a2a67b97360535123baebf98e7614144b3593150`. Client request errors, Recipe serving parser and translation hook wired at `c6c7cedd62432b2281c1605f9a79a31ba057bade`; shared modal labels, meal option display names, RTL `dir`/language and action names wired at `b94f77b3cb4dd56ac7d5e0b1ba3f76c6640cdcf1`. **Canonical Diary/Meal Plan values remain unchanged**: translated labels are display only. Recipe input now calls strict `parsePositiveHandoffQueryQuantity` rather than `Number(recipeQuantity)` to reject blank/hex/malformed serving input, preserving positive decimal/e exponent. Some backend-origin error messages may still be English; this source work is not a full locale/browser PASS.
+- Direct branch readback independently confirmed 21 selected dialog translation keys have exactly EN/DE/AR definitions and active `nt` references. From prior HEAD `18b417eeadb47e9800a6eba8d5a421bbf8be47c1` to `91882a37e5dba44b5bff85d74b6468a11e00342f`: **9** commits, **5** changed paths, no migrations/workflow YAML. Final Nutrition-only runner minimum now **189 = 25+18+32+55+31+21+7**. **NO tests, CI, build, deployments, Production data writes, source imports or release approvals** were performed. N093/N096/N097 remain **SOURCE_AUTHORED_UNTESTED**.
