@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FORTY_THREE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FORTY_FOUR_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: TWELVE_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -614,3 +614,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Source traced `POST /api/nutrition/v1/log` → `logDiaryMeal` → `validateItems`/ `validateFacts` in `services/nutrition-v1/server/diary.ts`. Existing `nullableNutrition` called `Number(value)`: JSON `false` could be accepted as measured nutrient zero, and numeric strings as measured amounts; `positive` also accepted JSON `true`/numeric strings as a serving quantity. More critically, `validateItems` validated those transformations but returned the **original unnormalized JSON items**, then passed them into immutable `log_nutrition_group` input. The existing typed `NutritionRequestError` machinery handles invalid input as 400; this is an actual source validation/data integrity gap unlike the retracted earlier executionSnapshot false positive.
 - Authored N105 pure regression **first** at `01ff8dfa2e9f5c4a7de0a066b2f2c8304139de54` requiring explicit finite nonnegative numeric nutrition fact or `null` and positive numeric item quantity, no JS boolean/string coercion. **Not executed.** Created `lib/nutrition-v1/diary-write-numbers.ts` at `05e0da8f1153d398c77776145cc4758390b960d4`. Service wiring `bce62a088c5243bc6e2e99a4eacbe42a51db9ec0` rejects invalid input with `NutritionRequestError`, normalizes missing fact to `null`, and sends only normalized quantity/nutrition values to existing idempotent RPC; preserved source snapshot, ownership, existing DB numeric readback and SQL.
 - Nutrition-only N105 consumer required minimum 42→**43** at `6cb779c77de64df8a5d7f921581aaeabcbc4109b`. Seven groups' authored minimum now **156 = 25+18+32+43+19+12+7**. Status **SOURCE_AUTHORED_UNTESTED**; no runtime 400 proof, tests, CI, migration, Production write, deployment or merge.
+
+
+## N095 Diary water positive post-rounding invariant — 2026-11-21
+
+- Traced `POST /api/nutrition/v1/diary` → `addDiaryWater` in `services/nutrition-v1/server/diary.ts`. The prior `Math.round(positive(amountMl, "Water amount"))` accepted an input in `(0,0.5)` milliliters then converted it to an integer zero before `log_nutrition_water`; it also accepted finite numbers whose rounded integer was beyond `Number.MAX_SAFE_INTEGER`. Either value violates the intended positive measured integer write contract and could surface a DB error instead of an input rejection.
+- Authored N105 pure regression **first** at `000175424c317f721505c20e4b6359458cb1e93f`, not executed, covering 250mL and safe fractional rounding, invalid zero/negative/string/boolean/nonfinite and unsafe integers. Added `parseDiaryWaterAmountMl` into existing pure `lib/nutrition-v1/diary-write-numbers.ts` at `7522b139642c035e46f14b085fe259fc64e0b881`. Wired `addDiaryWater` to require safely rounded positive integer or throw typed `NutritionRequestError` (400) before calling idempotent RPC at `b93b68f318f4a7edb79a08e760664786c86a5da8`.
+- Updated final-only N105 consumer test minimum **43→44** in `ceafd3e84ef257c987cfe06eddfd20246ab13cc8`. Seven groups' source minimum now **157 = 25+18+32+44+19+12+7**. No actual test pass, DB write, CI, migration, merge or release; source fix remains **UNTES​TED**.
