@@ -259,3 +259,18 @@ test("Meal Plan offline copy retry errors use persisted lastError contract",()=>
   assert.ok(!copy.includes("{ error: cause instanceof Error"),
     "An unknown error property would not be displayed by queue readers");
 });
+
+// N096: a failed manual Shopping POST must not discard the user's draft form.
+test("Shopping manual draft survives failed save and clears only after acceptance",()=>{
+  const src=readFileSync(resolve("components/nutrition/meal-plan/shopping-list.tsx"),"utf8");
+  const start=src.indexOf("async function addManual(");
+  const end=src.indexOf("function patchManual(",start);
+  assert.ok(start>0&&end>start,"Missing async manual Shopping save");
+  const handler=src.slice(start,end);
+  assert.ok(handler.includes("const saved = await saveShopping("),
+    "Manual form must await acknowledged Shopping write");
+  assert.ok(handler.includes("if (saved) setDraft("),
+    "Manual Shopping input must only be cleared after server acceptance");
+  assert.ok(src.includes("return false;")&&src.includes("return true;"),
+    "Shopping save must report real success/failure");
+});
