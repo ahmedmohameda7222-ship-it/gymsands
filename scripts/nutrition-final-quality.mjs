@@ -74,6 +74,17 @@ function browserEvidence(outputRelative){
   }
   return paths.map(fileEvidence);
 }
+// A matching Git HEAD does not prove the filesystem matches that commit.
+function inspectReviewedSourceTree(){
+  const diff=spawnSync("git",["diff","--quiet","HEAD","--"],{cwd:root,encoding:"utf8"});
+  const trackedClean=diff.status===0&&!diff.error;
+  const paths=sh(["ls-files","--others","--exclude-standard","--",
+    ".github","app","components","data","lib","scripts","services",
+    "supabase/migrations","tests"]);
+  const unexpectedSourcePaths=paths?paths.split("\n").filter(Boolean):[];
+  return {trackedClean,unexpectedSourcePaths,
+    valid:trackedClean&&unexpectedSourcePaths.length===0};
+}
 function main(){
   const options=readOptions(process.argv.slice(2));
   const reviewed=options["--reviewed-commit"];
@@ -122,7 +133,12 @@ function main(){
       provesExactReleaseCanonicalQuality:false,
       productionReleaseEligible:false
     },
-    groups:[],missing:absent,result:"BLOCKED"};
+    groups:[],missing:absent,result:"BLOCKED",
+    reviewedSourceIntegrity:{before:inspectReviewedSourceTree(),after:null}};
+  if(!state.reviewedSourceIntegrity.before.valid){
+    writeManifest(output,state);
+    throw Error("Reviewed Nutrition source tree is dirty before QA execution");
+  }
   if(absent.length){
     writeManifest(output,state);
     throw Error("Required Nutrition test groups not implemented: "+absent.join(", "));
@@ -174,6 +190,8 @@ function main(){
   const missingFoundation=archives[0].exists!==true;
   const missingFndds=archives[1].exists!==true;
   state.externalEvidence={files:externalArtifacts,screenshots,archives};
+  state.reviewedSourceIntegrity.after=inspectReviewedSourceTree();
+  if(!state.reviewedSourceIntegrity.after.valid)failures++;
   state.missingRequiredEvidence=[
     ...mandatoryArtifactMissing,...missingScreenshots,
     ...(missingFoundation?["NUTRITION_FOUNDATION_ARCHIVE_PATH"]:[]),
