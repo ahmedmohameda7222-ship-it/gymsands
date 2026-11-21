@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: THIRTY_THREE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: THIRTY_FOUR_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -418,3 +418,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - New N105 test authored first in `a7ab160eaabc434e28d9777d6f194797dc98e186`: explicit null/absent/empty basis remains unknown, only finite positive JSON numbers accepted, zero/negative/non-number rejected.
 - New portable pure `optionalPositiveFoodNumber` helper authored at `216bc66f1b394ae3ddf3fad795ea63aee4e800f4`; service wired to it in `b2cdeb5fab9dbefd42aa23edbdae77935216fad9`. Existing valid browser UI sends actual numbers, unchanged schema and API shape.
 - Nutrition-only runner case count N105 raised to **33** in `6490ad6d3572b7d5a4a00daeaaa82847c28ea436`. Both numeric boundary fixes remain UNTESTED until G-11. No run, Production change, or schema rewrite performed.
+
+## N093 Food/Recipe handoff quantity contract — 2026-11-21
+
+- Root-cause source review: `app/api/nutrition/v1/handoffs/commit/route.ts` converted user `raw.quantity` with `Number(...)` before resolving Food or Recipe, allowing boolean `true` and numeric strings to fabricate measured serving quantities. The server Food handoff service had the same coercing positive-number gate.
+- Regression case authored first in `f3855ae71c3e30e93481a6ee176e733d7c19f1fa` (N105): only finite positive numeric JSON quantities are accepted; booleans, strings, null, zero/negative, objects and infinity are rejected.
+- Portable pure validator `lib/nutrition-v1/handoff-quantity.ts` added in `c0846a03e4b6857eb2a6fb2abd8c9a4854800009`; route validation before authority/read in `d95f61eed0e3395a388716a717efff086887fcd3` raises `NutritionRequestError` (400). `services/nutrition-v1/server/food-handoff.ts` uses the same strict validator as of `d1584265aeb00187f1dbcdb86248fd890444a85b` for non-HTTP callers.
+- Existing Recipe missing-quantity default of numeric 1 is preserved explicitly; Food handoff still requires an explicit quantity. N105 runner minimum raised to 34 in `d331b0bb286ecb4b77443c409653ac05747a615e`.
+- Code and tests remain **authored but unexecuted** until G-11; no user or Production database rows were touched and no full Nutrition release closure is claimed.
