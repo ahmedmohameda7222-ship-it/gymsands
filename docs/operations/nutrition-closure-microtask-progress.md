@@ -163,9 +163,9 @@ N089: AE_MARKET_G10_LICENSE_UNVERIFIED
 N090: AE_MARKET_G10_LICENSE_UNVERIFIED
 N091: AE_MARKET_G10_LICENSE_UNVERIFIED
 N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
-N093: HANDOFF_QUANTITY_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
+N093: JSON_AND_URL_HANDOFF_QUANTITIES_STRICT_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
-N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
+N095: PAGINATION_WRITES_FILTERS_AND_OVERFLOW_SOURCE_ONLY_UNTESTED
 N096: DIARY_RECIPE_MEAL_PLAN_LOCALE_SOURCE_ONLY_UNTESTED
 N097: RLS_AND_RPC_GRANTS_READ_ONLY_TRACED_RUNTIME_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
@@ -714,3 +714,12 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Direct Main Supabase **SELECT-only** `pg_proc`/ `pg_namespace`/ function/schema grants census at **2026-11-21 03:16:29.489292 UTC**, with each overloaded `public/private` signature containing `nutrition`, `food_catalog` or `food_ingestion`. In `public`: **85** functions, **77** SECURITY DEFINER, **0** anon EXECUTE, **48** SECURITY DEFINER with authenticated EXECUTE. In `private`: **64** functions, **36** SECURITY DEFINER, **12** anon EXECUTE, but **0** with both anonymous schema USAGE and function EXECUTE and **0** anonymous-callable SECURITY DEFINER by those grants. `private` anonymous EXECUTE rows are non-definer helper/trigger functions without schema USAGE. Logged exact evidence/SQL interpretation in `docs/operations/nutrition-rpc-security-definer-grants-census-2026-11-21.md` at `d3f51c7c885fb8c5b83220491179840be3c67475`.
 - **16** authenticated-callable public definer function bodies lack direct literal `auth.uid()` text; several use delegated governance/capability authority. A string test is **not** vulnerability proof. Do not change grants or claim runtime cross-owner isolation without actual nested call-chain review, disposable two-owner JWT denial attempts and independent N112 review. Source-gate status **RLS_AND_RPC_GRANTS_READ_ONLY_TRACED_RUNTIME_UNTESTED**; no Production SQL writes or CI.
+
+
+## 2026-11-21 direct continuation checkpoint after N093/N095/N097
+
+- Direct readback of GitHub branch `feat/nutrition-microtasks-2026-11-20` from baseline `c15f8070b47d5d889b98f4a5fbb45040e39cc93d` to `62f35ff1234a93e46fcfd7f9c5fac826b163725a`: **31 new commits**, **17** net changed paths, **zero** changed migrations and **zero** changed workflow files. PR #189 remains **OPEN**; `main` remains `de7c7ccea943e9b793a2a65b34f2a06a6f33be49`. No new PR/merge, release or deployment.
+- New source work: Saved Meal POST/PATCH rejects invalid JSON item shape/name/UUID and does not dereference null before authority lookup; Food/Recipe JSON handoff checks finite nutrition/scaled shopping values and returns typed quantity overflow HTTP 400; Recipe and Food URL handoffs share decimal/exponent-only grammar (an omitted Recipe quantity defaults to 1, **explicit blank never does**); Food Library objective numeric filters now reject malformed requested constraints rather than silently dropping them while the UI still shows active constraint chips; pure Nutrition sum and scale reject numeric overflow without converting unknown nutrients into zero. These are static code changes, **not runtime PASS**.
+- Scoped QA runner now requires **168 authored test declarations** across seven groups: `25+18+32+51+19+16+7`. Direct source readback confirmed exactly 51 declarations in the consumer file; browser has 9 statically declared tests plus loop-generated cases. **NO Nutrition tests, CI, build, lint or migrations were executed**. FNDDS original source lock still absent.
+- New direct Production **read-only** `SELECT` at **2026-11-21 03:17:28.874501 UTC** confirmed **133** immutable applied migrations; Food items **0**, source records **0**, catalog generations **0**, ingestion batches/runs **0**, governance principals **0**, current generation **NULL**. RPC grant audit separately verified zero anon-callable SECURITY DEFINER in scoped `public/private` functions and identified 16 authenticated-callable public definer functions without an inline `auth.uid()` string; those require nested authority review, **not a demonstrated exploit**.
+- All **130** task status rows retained; N093/N095/N097 remain source/read-only progress **UNTES​TED**, N099/100/109–115/117–124/128–130 still fail closed on final source/QA/Owner/G-09/G-10/release gates. Cannot truthfully claim 130 completed or safe to publish. Continue only against freshly verified GitHub HEAD, preserving exact source and release provenance.
