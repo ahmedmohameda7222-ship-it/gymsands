@@ -123,7 +123,7 @@ N049: DEFERRED_TO_POST_QA_UNAPPROVED
 N050: DEFERRED_TO_POST_QA_UNAPPROVED
 N051: DEFERRED_TO_POST_QA_UNAPPROVED
 N052: BLOCKED_G09_PLAN9_NOT_HEALTHY
-N053: FNDDS_OFFICIAL_SOURCE_IDENTIFIED_BYTES_UNKNOWN
+N053: OFFICIAL_RELEASE_LICENSE_CONFIRMED_BYTES_UNKNOWN
 N054: DESIGN_PROPOSED_G09_UNAPPROVED
 N055: GENERIC_FIELD_MAPPING_ONLY
 N056: BLOCKED_G09_AND_UNVERIFIED_SOURCE
@@ -539,3 +539,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - All 19 API route files call `requireNutritionUser`, return via `nutritionJson` and have no static references to `window`, `document`, `localStorage`, `sessionStorage` or `navigator`. The shared HTTP authority accepts a bearer token and derives owner from authenticated Supabase `getUser()`; browser-only `supabase.auth.getSession()` lives in `components/**` fetch adapters rather than being required in server route contracts. Nutrition queue/timer serialization helpers operate over JSON inputs; browser storage access is in UI ownership layers. This supports native client integration without adding a second canonical backend.
 - Portability caveats: React Native or mobile native shell will require its own bearer-token provider, secure local storage, offline/online event subscription and UUID generator adapter; `crypto.randomUUID()` appears in the client-local Cooking helper and cannot be assumed universal across native runtimes. No iOS/Android client work or platform support is claimed.
 - **STATIC_BOUNDARY_REVIEWED_UNTESTED** only. No mobile request replay, cross-platform runtime tests, CI, Production, security approval or release authorization occurred.
+
+
+## N053 FNDDS official source/legal refresh — 2026-11-21
+
+- Read current USDA FoodData Central download page and US government homepage license text. The official FNDDS 2021–2023 JSON ZIP remains the October 31, 2024 `FoodData_Central_survey_food_json_2024-10-31.zip` release at `https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_survey_food_json_2024-10-31.zip`, USDA displayed size 3.7 MB zipped / 64 MB unpacked (rounded). Official USDA FDC content is CC0 1.0/public domain with citation request; this does not prove rights to third-party data. Documented precise links/uncertainties in `docs/architecture/food-catalog-plan10-fndds-source-design-proposal.md` commit `2576bc748fee6ba94f73d634f97cd04b63e3543a`.
+- The official ZIP cannot be fetched by container (DNS failure) or web archive retriever (unsupported binary ZIP). No original archive SHA256, member-level JSON verification, field schema or FNDDS source lock is yet present. Do not accept third-party claimed hash as verification. Plan 9 current published Food generation remains an independent G-09 prerequisite; no sequencing exception inferred.
+- Status **OFFICIAL_RELEASE_LICENSE_CONFIRMED_BYTES_UNKNOWN**, not imported, not complete; no CI, adapters, migrations, database writes, approvals, staging or Production operations.
