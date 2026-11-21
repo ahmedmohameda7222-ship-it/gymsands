@@ -639,3 +639,14 @@ test("Saved Meal write rejects malformed item shapes before authority lookup",()
   assert.equal(typeof validateSavedMealWriteInput({name:"Dinner",items:[food],note:12}),"string");
   assert.equal(typeof validateSavedMealWriteInput({name:"Dinner",items:[food],isFavorite:"true"}),"string");
 });
+
+// N095: a finite ingredient/serving multiplied by a finite scale can still
+// produce Infinity; JSON encodes Infinity as null and falsely marks it unknown.
+test("Nutrition aggregation rejects finite inputs whose output overflows",()=>{
+  const huge={calories:Number.MAX_VALUE,protein_g:1,carbs_g:1,fat_g:1,fiber_g:1};
+  assert.throws(()=>scaleNutritionFacts(huge,2),/finite.*overflow|overflow.*finite/i);
+  assert.throws(()=>sumNutritionFacts([huge,huge]),/finite.*overflow|overflow.*finite/i);
+  assert.equal(scaleNutritionFacts({...full,calories:null},2).calories,null);
+  assert.equal(sumNutritionFacts([huge,{...full,calories:null}]).calories,null,
+    "Known-partial overflow must not replace unknown propagation");
+});
