@@ -73,7 +73,7 @@ Same readback: GitHub `main` unchanged; PR #189 still OPEN/UNMERGED at `9da131e2
 ```text
 N001: VERIFIED_READ_ONLY
 N002: STATIC_REVIEWED
-N003: BLOCKED_G01
+N003: DISPOSITION_RETAIN_PR189_UNMERGED_RELEASE_INTEGRITY
 N004: BRANCH_ISOLATED_NO_PREVIEW
 N005: PARTIAL_ADMIN_ACCESS_403
 N006: TEST_INVENTORY_COMPLETE
@@ -440,3 +440,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Parsed all N001–N130 statuses: **130 unique task entries**, **46** explicitly `BLOCKED` or `DEFERRED`. N093 and N095 now identify verified boundary fixes authored but not tested; these are not completion claims.
 - The seven Nutrition-only test group minimums sum to **147 authored cases** (25/18/32/35/19/11/7). Static test case declarations and source diffs do not certify a passing run; G-11 QA still absent.
 - Code freeze, G-01 PR189 release disposition, G-04 verified human Owner, G-05–G-08 Plan9, G-09 FNDDS verified source/approved sequencing, G-10 country evidence, and G-11 QA/Production release signoffs all remain unresolved. **NUTRITION_COMPLETE = false**.
+
+
+## N003 current user disposition — 2026-11-21
+
+- A current user instruction explicitly requests continuous execution rather than stopping for generic approvals. For G-01, the conservative implementation disposition is **retain the reviewed release-integrity correction in PR #189 for a future compatible, exact-SHA integration**; do not automatically close, merge, or substitute its runtime protections with the Nutrition-only QA manifest.
+- Exact PR #189 inspected as OPEN/UNMERGED, HEAD `9da131e24fb9a38d1afa88881e62d7498429d005`; its 8-file patch contains four indispensable runtime release-integrity scripts, two test files, one release workflow and one operator document. The current Nutrition branch still lacks a proven source-compatible canonical release-quality bridge.
+- Ruling: choose **preservation, not supersession**, while treating PR #189 integration as release-scope work requiring a proved final-evidence contract. This avoids losing squash-provenance protections to satisfy the legacy-test-removal objective. No PR state or Production mutation is necessary to make this disposition.
+- N003 decision is recorded, but the final integration is **NOT_VERIFIED / NOT_MERGED**; the pending N129 release-evidence compatibility defect and Nutrition-final-QA execution are not waived by a blanket continuation request. No test suite was executed and no claim of production-readiness is made.
