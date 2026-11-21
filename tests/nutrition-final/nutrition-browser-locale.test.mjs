@@ -226,3 +226,23 @@ test("Food Library favorite state only commits after server acceptance",()=>{
   assert.ok(handler.includes("catch")&&handler.includes("setError("),
     "Rejected network request must surface an error instead of unhandled rejection");
 });
+
+// N096: Meal Plan action labels and notices must not fall back to English
+// even though the page and its dialogs already support DE/AR layouts.
+test("Meal Plan action notices and reminder messages have EN DE AR strings",()=>{
+  const source=readFileSync(resolve("components/nutrition/meal-plan/meal-plan-page.tsx"),"utf8");
+  const dict=readFileSync(resolve("lib/i18n/nutrition-v1.ts"),"utf8");
+  for(const key of [
+    "markEaten","logWithChanges","placeholderCannotMarkEaten",
+    "copyEmptyDay","copyEmptyWeek","copySuccessDay","copySuccessWeek",
+    "planningPromptCopied","planningPromptFallback","mealReminderNow"
+  ]){
+    assert.equal(dict.split(key+':').length-1,3,"Missing localized action "+key);
+    assert.ok(source.includes('nt("'+key+'"')||source.includes('"'+key+'"'),
+      "Missing localized action call "+key);
+  }
+  assert.equal(source.includes('const markEatenLabel = "Mark eaten"'),false);
+  assert.equal(source.includes('const logWithChangesLabel = "Log with changes"'),false);
+  assert.equal(source.includes('There is nothing to copy from this'),false);
+  assert.equal(source.includes('copied with fresh planned-item identities'),false);
+});
