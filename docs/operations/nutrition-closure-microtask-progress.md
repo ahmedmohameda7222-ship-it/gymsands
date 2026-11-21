@@ -174,7 +174,7 @@ N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
-N104: THIRTY_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
+N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
 N105: THIRTY_ONE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
@@ -376,3 +376,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - `scripts/post-deploy-smoke-evidence.mjs` — **fail-closed smoke artifact/runtime validator**: requires every anonymous and authenticated route result, exact source/migration, zero exits. Retain equivalent strict checks.
 - `scripts/premerge-smoke-contracts.test.mjs` — **test-only contract check**; remove/rebuild after approved final QA rather than treating it as release runtime.
 - **Ruling:** PR189 has **two tests, one workflow, one operator doc and four indispensable runtime scripts**; changes cannot be wholesale discarded nor merged into this deletion branch implicitly. G-01 decision to retain runtime patch versus defer/supersede remains external. No PR merge/close, workflow dispatch, runtime deployment or Production action performed.
+
+## N104 fail-closed authoritative search cursor and market policy
+
+- Added two disposable authenticated search-RPC rejection cases: a forged/unbound cursor `{}` cannot match signed generation/query context, and unregistered country scope `XX` cannot bypass registered active market policy. SQL definitions verified in applied `20260906183000_food_catalog_search_projection_v2.sql`.
+- Both transaction-scoped synthetic identities are created under localhost-only PostgreSQL, and any failure rolls back. N104 now has 32 authored cases. Tests **not executed**; no actual Production Generation or country rollout involved.

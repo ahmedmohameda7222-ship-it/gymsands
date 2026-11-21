@@ -332,3 +332,29 @@ test("authenticated members cannot write or bypass the current Generation pointe
     "FROM pg_class c WHERE c.oid='public.food_catalog_current_generation'::regclass";
   assert.equal(localSearchSql(query),"t|f|f|f");
 });
+
+
+test("disposable authoritative search rejects a cursor without matching generation context",()=>{
+  const query=ownerSearchFixture()+
+    "SELECT set_config('request.jwt.claim.sub','"+userOne+"',true); "+
+    "SELECT public.search_food_catalog_v2("+
+    "p_query=>'owner',p_language_tag=>'en',p_cursor=>'{}');";
+  const result=spawnSql("psql",["-X","-q","-A","-t","-v","ON_ERROR_STOP=1",
+    "-d",dbUrl(),"-c",query],{encoding:"utf8",timeout:15000,
+    env:{...process.env,PGCONNECT_TIMEOUT:"5"}});
+  assert.equal(result.error,undefined);
+  assert.notEqual(result.status,0,"Unbound cursor must not be accepted");
+  assert.match(String(result.stderr),/Cursor does not match Food Catalog search context/);
+});
+test("disposable authoritative search rejects market scopes not active in registry",()=>{
+  const query=ownerSearchFixture()+
+    "SELECT set_config('request.jwt.claim.sub','"+userOne+"',true); "+
+    "SELECT public.search_food_catalog_v2("+
+    "p_query=>'owner',p_language_tag=>'de',p_market_scope_code=>'XX');";
+  const result=spawnSql("psql",["-X","-q","-A","-t","-v","ON_ERROR_STOP=1",
+    "-d",dbUrl(),"-c",query],{encoding:"utf8",timeout:15000,
+    env:{...process.env,PGCONNECT_TIMEOUT:"5"}});
+  assert.equal(result.error,undefined);
+  assert.notEqual(result.status,0,"Unregistered market must fail closed");
+  assert.match(String(result.stderr),/market scope is invalid/);
+});
