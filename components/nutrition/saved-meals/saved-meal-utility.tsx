@@ -327,7 +327,9 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
   }
 
   async function save() {
-    if (busy || !name.trim() || !items.length) return;
+    if (busy || !name.trim() || !items.length || !open || !ownerId) return;
+    const requestScope = activeSavedMealContextRef.current;
+    if (!isCurrentSavedMealContext(requestScope)) return;
     setBusy(true);
     try {
       const editingId = mode === "edit" ? detail?.savedMeal.id : null;
@@ -344,17 +346,20 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
         method: editingId ? "PATCH" : "POST",
         body: JSON.stringify(requestBody),
       });
+      if (!isCurrentSavedMealContext(requestScope)) return;
       if (createOperation) {
         if (!ownerId) throw new Error("Please sign in before completing Saved Meal creation.");
         clearSavedMealCreateOperation(ownerId, createOperation.operationId);
         setMode("browse");
       }
       await loadActive();
+      if (!isCurrentSavedMealContext(requestScope)) return;
       await openDetail(body.savedMeal.id);
     } catch (cause) {
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setError(cause instanceof Error ? cause.message : text.saveFailed);
     } finally {
-      setBusy(false);
+      if (isCurrentSavedMealContext(requestScope)) setBusy(false);
     }
   }
 
