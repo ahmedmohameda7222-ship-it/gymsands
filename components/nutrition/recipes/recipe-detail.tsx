@@ -55,6 +55,7 @@ export function RecipeDetail({ recipeId }: { recipeId: string }) {
   }, [requestContextKey]);
 
   const load = useCallback(async () => {
+    if (activeRecipeContextKeyRef.current !== requestContextKey) return;
     setLoading(true);
     setError(null);
     setCached(false);
@@ -63,11 +64,13 @@ export function RecipeDetail({ recipeId }: { recipeId: string }) {
     window.localStorage.removeItem(legacyCacheKey(recipeId));
     try {
       const result = await recipeApi<{ recipe: PublishedDetail }>(`/${recipeId}?published=true`);
+      if (activeRecipeContextKeyRef.current !== requestContextKey) return;
       setDetail(result.recipe);
       setDetailOwnerId(ownerId);
       const snapshot = toSnapshot(result.recipe);
       if (ownerId && snapshot) window.localStorage.setItem(ownerCacheKey(ownerId, recipeId), serializePublishedRecipeCache(snapshot));
     } catch (cause) {
+      if (activeRecipeContextKeyRef.current !== requestContextKey) return;
       const snapshot = ownerId ? parsePublishedRecipeCache(window.localStorage.getItem(ownerCacheKey(ownerId, recipeId))) : null;
       const trustedSnapshot = snapshot && snapshot.recipeId === recipeId && typeof snapshot.recipeVersionId === "string" && snapshot.recipeVersionId.length > 0 ? snapshot : null;
       if (trustedSnapshot) {
@@ -78,9 +81,9 @@ export function RecipeDetail({ recipeId }: { recipeId: string }) {
         setError(cause instanceof Error ? cause.message : nt("recipeLoadFailed"));
       }
     } finally {
-      setLoading(false);
+      if (activeRecipeContextKeyRef.current === requestContextKey) setLoading(false);
     }
-  }, [nt, ownerId, recipeId]);
+  }, [nt, ownerId, recipeId, requestContextKey]);
   useEffect(() => {
     if (authLoading) return;
     void load();
