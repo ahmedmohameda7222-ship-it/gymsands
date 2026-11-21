@@ -111,19 +111,31 @@ export function ShoppingList() {
   function removeManual(id: string) { void saveShopping({ ...shoppingOverride, manualItems: shoppingOverride.manualItems.filter((item) => item.id !== id) }); }
 
   async function carryUncheckedItems() {
+    if (!ownerId) return;
+    const requestContextKey = `${ownerId}:${weekStart}`;
+    if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
     const carry = shoppingOverride.manualItems.filter((item) => item.state === "Needed");
     if (!carry.length) { setNotice(nt("noUncheckedToCarry")); return; }
-    if (busy) return; setBusy(true);
+    if (busy) return;
+    setBusy(true);
     try {
       const nextWeekStart = shift(weekStart, 7);
       const nextData = await mealPlanApi<ApiResponse>(`/api/nutrition/v1/meal-plan/week?weekStart=${encodeURIComponent(nextWeekStart)}&date=${encodeURIComponent(nextWeekStart)}`);
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      if (nextData.week && nextData.week.user_id !== ownerId) throw new Error("Next shopping week owner identity mismatch.");
       const nextShopping = shoppingFromWeek(nextData.week);
       const carried = carry.map((item) => ({ ...item, id: crypto.randomUUID(), state: "Needed" as const }));
       const nextOverride = { ...(nextData.week?.week_override_json ?? {}), shopping: { ...nextShopping, manualItems: [...nextShopping.manualItems, ...carried] } };
       await mealPlanApi("/api/nutrition/v1/meal-plan/week", { method: "POST", body: JSON.stringify({ kind: "mutate", weekId: nextData.week?.id ?? null, weekStartDate: nextWeekStart, baseRevision: nextData.week?.revision ?? 0, operationId: crypto.randomUUID(), mutation: { weekOverride: nextOverride } }) });
-      setNotice(nt("carriedItems", { count: carried.length })); setError("");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : nt("carryFailed")); }
-    finally { setBusy(false); }
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      setNotice(nt("carriedItems", { count: carried.length }));
+      setError("");
+    } catch (cause) {
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      setError(cause instanceof Error ? cause.message : nt("carryFailed"));
+    } finally {
+      if (sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) setBusy(false);
+    }
   }
 
   const stateLabel = (state: ShoppingState) => nt(state === "Needed" ? "needed" : state === "Purchased" ? "purchased" : "dontNeed");
