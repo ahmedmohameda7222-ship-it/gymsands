@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isUuid } from "@/lib/utils";
+import { requireNonNegativeFoodNumber } from "@/lib/nutrition-v1/user-food-write-numbers";
 import {
   resolveCurrentGenerationFoodForNewUseFromSupabase,
 } from "@/services/food-catalog/server/current-generation-service";
@@ -48,15 +49,9 @@ function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function requiredNonNegative(value: unknown, label: string) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < 0) throw new Error(`${label} must be a non-negative number.`);
-  return number;
-}
-
 function nullableNonNegative(value: unknown, label: string) {
   if (value === null || value === undefined || value === "") return null;
-  return requiredNonNegative(value, label);
+  return requireNonNegativeFoodNumber(value, label);
 }
 
 function nullablePositive(value: unknown, label: string) {
@@ -81,7 +76,7 @@ function normalizeWrite(input: UserFoodWriteInput) {
   return {
     food_name: name,
     serving_size: servingLabel,
-    calories: requiredNonNegative(input.calories, "Calories"),
+    calories: requireNonNegativeFoodNumber(input.calories, "Calories"),
     protein_g: nullableNonNegative(input.proteinG, "Protein"),
     carbs_g: nullableNonNegative(input.carbsG, "Carbs"),
     fat_g: nullableNonNegative(input.fatG, "Fat"),
