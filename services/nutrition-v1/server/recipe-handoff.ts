@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealRecipeItemSnapshot } from "@/lib/nutrition-v1/contracts";
 import { readPublishedRecipeNutritionFact } from "@/lib/nutrition-v1/recipe-cache";
+import { NutritionHandoffScaleOverflowError, scaleFiniteHandoffNutritionFact } from "@/lib/nutrition-v1/handoff-scaling";
 import { isUuid } from "@/lib/utils";
 
 export type ResolvedRecipeHandoff = {
@@ -43,7 +44,7 @@ function requiredText(value: unknown, label: string) {
 }
 
 function scaled(value: number | null, quantity: number) {
-  return value === null ? null : value * quantity;
+  return scaleFiniteHandoffNutritionFact(value, quantity);
 }
 
 function servingLabel(quantity: number) {
@@ -115,10 +116,14 @@ export async function resolveRecipeHandoff(
     const item = record(raw);
     const ingredientQuantity = Number(item.quantity);
     if (typeof item.food_id !== "string" || !isUuid(item.food_id) || !Number.isFinite(ingredientQuantity) || ingredientQuantity <= 0 || typeof item.unit !== "string" || !item.unit.trim()) return [];
+    const scaledIngredientQuantity = (ingredientQuantity / servings) * quantity;
+    if (!Number.isFinite(scaledIngredientQuantity) || scaledIngredientQuantity <= 0) {
+      throw new NutritionHandoffScaleOverflowError();
+    }
     return [{
       foodId: item.food_id,
       name: typeof item.ingredient_name === "string" && item.ingredient_name.trim() ? item.ingredient_name.trim() : name,
-      quantity: (ingredientQuantity / servings) * quantity,
+      quantity: scaledIngredientQuantity,
       unit: item.unit.trim(),
       qualifier: null,
     }];
