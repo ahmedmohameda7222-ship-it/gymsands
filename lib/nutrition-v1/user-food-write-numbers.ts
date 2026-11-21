@@ -26,3 +26,17 @@ export function optionalPositiveFoodNumber(value: unknown, label: string): numbe
   }
   return value;
 }
+
+/** Label fields are required human-readable strings, not coerced JSON values. */
+export function requireNonBlankFoodText(value: unknown, label: string): string {
+  const clean = typeof value === "string" ? value.trim() : "";
+  if (!clean) throw new InvalidNutritionFoodInputError(`${label} is required.`);
+  return clean;
+}
+
+/** Basis units are an explicit, narrow API allowlist. Unknown units cannot persist. */
+export function requireFoodBasisUnit(value: unknown): "g" | "ml" | "serving" | "piece" | "custom" | null {
+  if (value === null) return null;
+  if (value === "g" || value === "ml" || value === "serving" || value === "piece" || value === "custom") return value;
+  throw new InvalidNutritionFoodInputError("Serving basis is invalid.");
+}
