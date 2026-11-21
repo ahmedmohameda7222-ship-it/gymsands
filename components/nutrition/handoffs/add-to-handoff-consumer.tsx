@@ -236,33 +236,33 @@ export function AddToHandoffConsumer({ destination }: Props) {
     }
   }
 
-  const title = destination === "diary" ? "Add to Diary" : destination === "meal_plan" ? "Add to Meal Plan" : destination === "saved_meal" ? "Save as Meal" : "Add Food to Recipe";
-  const action = destination === "diary" ? "Add to Diary" : destination === "meal_plan" ? "Add to plan" : destination === "saved_meal" ? "Create Saved Meal" : targetRecipeId ? "Add to Working Draft" : "Add to new Recipe";
+  const title = destination === "diary" ? nt("handoffAddToDiary") : destination === "meal_plan" ? nt("handoffAddToMealPlan") : destination === "saved_meal" ? nt("handoffSaveAsMeal") : nt("handoffAddFoodToRecipe");
+  const action = destination === "diary" ? nt("handoffAddToDiary") : destination === "meal_plan" ? nt("handoffAddToPlan") : destination === "saved_meal" ? nt("createSavedMeal") : targetRecipeId ? nt("handoffAddToWorkingDraft") : nt("handoffAddToNewRecipe");
   const mealChoices = destination === "meal_plan"
-    ? [{ value: "breakfast", label: "Breakfast" }, { value: "lunch", label: "Lunch" }, { value: "dinner", label: "Dinner" }, { value: "snack", label: "Snack" }]
-    : [{ value: "Breakfast", label: "Breakfast" }, { value: "Lunch", label: "Lunch" }, { value: "Dinner", label: "Dinner" }, { value: "Snack", label: "Snack" }];
+    ? [{ value: "breakfast", label: nt("handoffBreakfast") }, { value: "lunch", label: nt("handoffLunch") }, { value: "dinner", label: nt("handoffDinner") }, { value: "snack", label: nt("handoffSnack") }]
+    : [{ value: "Breakfast", label: nt("handoffBreakfast") }, { value: "Lunch", label: nt("handoffLunch") }, { value: "Dinner", label: nt("handoffDinner") }, { value: "Snack", label: nt("handoffSnack") }];
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-0 sm:items-center sm:p-6" role="presentation">
-      <section role="dialog" aria-modal="true" aria-labelledby={`handoff-${destination}-title`} className="w-full max-w-lg rounded-t-3xl border border-border bg-background p-5 shadow-2xl sm:rounded-3xl">
+      <section role="dialog" dir={dir} lang={language} aria-modal="true" aria-labelledby={`handoff-${destination}-title`} className="w-full max-w-lg rounded-t-3xl border border-border bg-background p-5 shadow-2xl sm:rounded-3xl">
         <header className="flex items-center justify-between gap-3">
-          <div><h2 id={`handoff-${destination}-title`} className="text-lg font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{sourceName || "Resolving canonical Nutrition source…"}</p></div>
-          <button type="button" onClick={() => router.back()} className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted" aria-label="Close Add To"><X className="h-5 w-5" /></button>
+          <div><h2 id={`handoff-${destination}-title`} className="text-lg font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{sourceName || nt("handoffResolvingSource")}</p></div>
+          <button type="button" onClick={() => router.back()} className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted" aria-label={nt("handoffClose")}><X className="h-5 w-5" /></button>
         </header>
 
-        {currentSource.type === "recipe" ? <label className="mt-5 grid gap-1 text-sm font-medium">Serving quantity<input type="number" min="0.1" step="0.25" inputMode="decimal" value={recipeQuantity} onChange={(event) => { pendingOperationIdRef.current = null; setRecipeQuantity(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label> : null}
+        {currentSource.type === "recipe" ? <label className="mt-5 grid gap-1 text-sm font-medium">{nt("handoffServingQuantity")}<input type="number" min="0.1" step="0.25" inputMode="decimal" value={recipeQuantity} onChange={(event) => { pendingOperationIdRef.current = null; setRecipeQuantity(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label> : null}
 
         {(destination === "diary" || destination === "meal_plan") ? <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary date" : "Plan date"}<input type="date" value={date} onChange={(event) => { pendingOperationIdRef.current = null; setDate(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label>
-          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? "Diary meal" : "Meal slot"}<select value={meal} onChange={(event) => { pendingOperationIdRef.current = null; setMeal(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">Choose…</option>{mealChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select></label>
+          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? nt("handoffDiaryDate") : nt("handoffPlanDate")}<input type="date" value={date} onChange={(event) => { pendingOperationIdRef.current = null; setDate(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label>
+          <label className="grid gap-1 text-sm font-medium">{destination === "diary" ? nt("handoffDiaryMeal") : nt("mealSlot")}<select value={meal} onChange={(event) => { pendingOperationIdRef.current = null; setMeal(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">{nt("handoffChoose")}</option>{mealChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select></label>
         </div> : null}
 
-        {destination === "saved_meal" ? <div className="mt-5 grid gap-4"><label className="grid gap-1 text-sm font-medium">Saved Meal name<input value={savedMealName} onChange={(event) => { pendingOperationIdRef.current = null; setSavedMealName(event.target.value); }} maxLength={200} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label><label className="grid gap-1 text-sm font-medium">Note <span className="font-normal text-muted-foreground">(optional)</span><textarea value={note} onChange={(event) => { pendingOperationIdRef.current = null; setNote(event.target.value); }} rows={3} className="rounded-xl border border-border bg-background p-3 font-normal" /></label></div> : null}
+        {destination === "saved_meal" ? <div className="mt-5 grid gap-4"><label className="grid gap-1 text-sm font-medium">{nt("handoffSavedMealName")}<input value={savedMealName} onChange={(event) => { pendingOperationIdRef.current = null; setSavedMealName(event.target.value); }} maxLength={200} className="h-11 rounded-xl border border-border bg-background px-3 font-normal" /></label><label className="grid gap-1 text-sm font-medium">{nt("noteOptional")}<textarea value={note} onChange={(event) => { pendingOperationIdRef.current = null; setNote(event.target.value); }} rows={3} className="rounded-xl border border-border bg-background p-3 font-normal" /></label></div> : null}
 
-        {destination === "recipe" ? <div className="mt-5"><label className="grid gap-1 text-sm font-medium">Recipe authoring target<select value={targetRecipeId} onChange={(event) => { pendingOperationIdRef.current = null; setTargetRecipeId(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">New Recipe Working Draft</option>{recipeChoices.map((recipe) => <option key={recipe.recipeId} value={recipe.recipeId}>{recipe.name}</option>)}</select></label><p className="mt-2 text-xs text-muted-foreground">My Recipes owns the Recipe. This handoff only pre-seeds the selected Food, serving, and quantity.</p></div> : null}
+        {destination === "recipe" ? <div className="mt-5"><label className="grid gap-1 text-sm font-medium">{nt("handoffRecipeAuthoringTarget")}<select value={targetRecipeId} onChange={(event) => { pendingOperationIdRef.current = null; setTargetRecipeId(event.target.value); }} className="h-11 rounded-xl border border-border bg-background px-3 font-normal"><option value="">{nt("handoffNewRecipeDraft")}</option>{recipeChoices.map((recipe) => <option key={recipe.recipeId} value={recipe.recipeId}>{recipe.name}</option>)}</select></label><p className="mt-2 text-xs text-muted-foreground">{nt("handoffRecipeTargetHint")}</p></div> : null}
 
         {error ? <p role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
-        <button type="button" onClick={() => void commit()} disabled={loading || !sourceName} className="mt-5 min-h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">{loading ? "Saving…" : action}</button>
+        <button type="button" onClick={() => void commit()} disabled={loading || !sourceName} className="mt-5 min-h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">{loading ? nt("saving") : action}</button>
       </section>
     </div>
   );
