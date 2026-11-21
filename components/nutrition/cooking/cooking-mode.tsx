@@ -359,6 +359,9 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     next: CookingLocalSession,
     operation: CookingOfflineMutation,
   ) => {
+    const requestContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)
+      || (authOwnerId !== null && userId !== authOwnerId)) return next;
     const queued = queueCookingMutation(next, operation);
     writeLocal(queued);
     setSession(queued);
@@ -371,15 +374,17 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
         actionStates: actionSyncRows(queued),
         timers: timerSyncRows(queued),
       });
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return queued;
       const acknowledged = acknowledgeCookingMutations({ ...queued, stateRevision: result.stateRevision }, [operation.operationId]);
       writeLocal(acknowledged);
       setSession(acknowledged);
       return acknowledged;
     } catch {
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return queued;
       setStatusMessage(language === "ar" ? "تم الحفظ على هذا الجهاز · ستتم إعادة محاولة مزامنة الخادم عند توفرها." : language === "de" ? "Auf diesem Gerät gespeichert · die Serversynchronisierung wird erneut versucht." : "Saved on this device · server sync will retry when available.");
       return queued;
     }
-  }, [language, userId, writeLocal]);
+  }, [authOwnerId, language, recipeId, userId, writeLocal]);
 
   useEffect(() => {
     if (!session || session.status !== "active") return;
