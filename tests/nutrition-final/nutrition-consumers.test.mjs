@@ -650,3 +650,20 @@ test("Nutrition aggregation rejects finite inputs whose output overflows",()=>{
   assert.equal(sumNutritionFacts([huge,{...full,calories:null}]).calories,null,
     "Known-partial overflow must not replace unknown propagation");
 });
+
+// N095: Food/Recipe handoffs have their own frozen-fact scaling paths and must
+// never allow Infinity to be serialized as a fabricated unknown nutrition null.
+const {scaleFiniteHandoffNutritionFact,NutritionHandoffScaleOverflowError}=
+  await vite.ssrLoadModule("/lib/nutrition-v1/handoff-scaling.ts");
+test("Handoff scaling keeps known values finite and rejects quantity overflow",()=>{
+  assert.equal(scaleFiniteHandoffNutritionFact(null,2),null);
+  assert.equal(scaleFiniteHandoffNutritionFact(100,2),200);
+  assert.equal(scaleFiniteHandoffNutritionFact(1.23456,2,true),2.469);
+  assert.equal(scaleFiniteHandoffNutritionFact(0,2,true),0);
+  assert.throws(()=>scaleFiniteHandoffNutritionFact(Number.MAX_VALUE,2),
+    (e)=>e instanceof NutritionHandoffScaleOverflowError&&e.status===400);
+  assert.throws(()=>scaleFiniteHandoffNutritionFact(Number.MAX_VALUE,2,true),
+    (e)=>e instanceof NutritionHandoffScaleOverflowError);
+  assert.throws(()=>scaleFiniteHandoffNutritionFact(Infinity,2),/source nutrition/i);
+  assert.throws(()=>scaleFiniteHandoffNutritionFact(1,false),/serving quantity/i);
+});
