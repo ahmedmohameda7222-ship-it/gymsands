@@ -167,7 +167,7 @@ N093: HANDOFF_QUANTITY_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
 N096: DIARY_INPUT_LABELS_FIXED_SOURCE_ONLY_UNTESTED
-N097: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
+N097: PRIVACY_MCP_AUTHORITY_STATIC_TRACED_UNTESTED
 N098: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N099: SCOPE_PROVISIONAL_BLOCKED_G11
 N100: BLOCKED_G11_UNFINISHED_CODE
@@ -523,3 +523,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Authored N107 **source-contract** test before code at `0710fd101502835cdc1627b064c12f79727d9ee6`, **not run**, requiring exact `aria-label` bindings on the seven inputs. Implemented matching localized `aria-label` attributes at `227890d2b0827f4fe410a694b3e37cbb48f3369e`; no JS event behavior changes or new strings. This is not a screen-reader/browser test pass: those still require G-11.
 - Updated N107 runner minimum 11 → **12**, seven-group authored minimum **154** = 25+18+32+41+19+12+7. Static review also observed explicit `lang/dir` and `bdi dir=auto` on many surrounding Nutrition surfaces; no blanket accessibility-complete claim. Attempt to call available Designer UI preflight capability returned `UNAVAILABLE`; no external audit accepted in its place.
 - **SOURCE_AUTHORED_UNTESTED**, not accessibility-certified. No tests, CI, Production changes, migrations, merges or deployments.
+
+
+## N097 privacy and MCP authority static trace — 2026-11-21
+
+- Inspected `lib/nutrition-v1/http.ts`, `lib/integrations/env.ts`, `lib/mcp/server.ts`, `lib/mcp/scopes.ts`, `lib/mcp/context-projections.ts`, `lib/mcp/safety.ts`, `lib/privacy/data-export.ts`, `lib/privacy/account-deletion-worker.ts`, `app/api/user/data-export/route.ts`, `app/api/user/privacy-requests/route.ts` and immutable `supabase/migrations/20260825120400_nutrition_v1_privacy_purge_authority.sql`.
+- Source findings: `requireNutritionUser` inherits bearer authentication, live `auth.getUser()`, and account access-state checks; Nutrition JSON emits `private, no-store` plus `Vary: Authorization`. `data-export.ts` enumerates canonical Recipe, Saved Meal, targets, plan, log and Cooking tables with `eq(user_id, user.id)` and separately calls approved owner-scoped source override export RPCs; export route requires account auth. SQL purge authority deletes owner Recipe/Meal Plan/Cooking records and checks they are absent within same transaction; worker checks legal holds and revokes MCP credentials before account deletion. MCP server validates input, enforces each listed tool's scope and sanitizes output; `daily_execution` projection verifies section scopes again before composing results, avoiding the false positive of a front-door `any` scope check alone.
+- Static inspection did **not** establish actual RLS deny checks, owner-escape attempts, provider export revocation, disposable DB purge replay or actual MCP runtime permissions; no new security defect is asserted without reproduction. N106/N109 and final independent security review remain mandatory; no schema revisions or Production operations.
+- **STATIC_SOURCE_TRACED_UNTESTED**; user privacy and least privilege remain unverified at runtime, not marked complete.
