@@ -494,3 +494,15 @@ test("Optimistic revisions accept only explicit nonnegative integer numbers",()=
   }
   for(const v of [0,1,12,Number.MAX_SAFE_INTEGER])assert.equal(parseNonNegativeRevision(v),v);
 });
+
+// N093 follow-up: an explicit blank query parameter is not an omitted quantity.
+// The GET handoff has a text query contract, unlike the POST JSON number contract.
+const {parseRecipeHandoffQueryQuantity}=await vite.ssrLoadModule("/lib/nutrition-v1/handoff-quantity.ts");
+test("Recipe handoff GET query defaults only when quantity key is absent",()=>{
+  assert.equal(parseRecipeHandoffQueryQuantity(null),1);
+  assert.equal(parseRecipeHandoffQueryQuantity("1"),1);
+  assert.equal(parseRecipeHandoffQueryQuantity(" 2.5 "),2.5);
+  for(const input of ["","  ","0","-1","NaN","Infinity","not-a-number"]){
+    assert.equal(parseRecipeHandoffQueryQuantity(input),null);
+  }
+});
