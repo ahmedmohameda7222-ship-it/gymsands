@@ -191,12 +191,13 @@ function validOwnedWeekProjection(value: unknown, ownerId: string, weekStartDate
   } else if (value.occurrences.length) {
     return false;
   }
+  const expectedWeekId = cacheRecord(week) ? week.id : null;
   return value.occurrences.every((occurrence: unknown) => {
     if (!cacheRecord(occurrence) || occurrence.user_id !== ownerId
       || !validText(occurrence.id) || !validText(occurrence.plan_date)
       || !validText(occurrence.meal_slot_key) || !validText(occurrence.frozen_name)
       || !cacheRecord(occurrence.frozen_snapshot)) return false;
-    if (week !== null && occurrence.week_id !== week.id) return false;
+    if (expectedWeekId !== null && occurrence.week_id !== expectedWeekId) return false;
     return true;
   });
 }
