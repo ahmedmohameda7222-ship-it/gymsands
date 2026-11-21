@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Plus, ShoppingCart, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -15,6 +15,7 @@ import {
   markMealPlanMutationFailed,
   reconcileMealPlanQueue,
   replayMealPlanMutationExactFirst,
+  sameMealPlanOwnerWeekContext,
   serializeMealPlanQueue,
   type MealPlanMutationTarget,
   type MealPlanOfflineMutation,
@@ -222,7 +223,9 @@ export function MealPlanPage() {
   const [copyDraft, setCopyDraft] = useState<CopyDraft | null>(null);
   const [bulkCopyDraft, setBulkCopyDraft] = useState<BulkCopyDraft | null>(null);
   const [skippedReview, setSkippedReview] = useState<PlannedOccurrenceRow | null>(null);
-  const syncingRef = useRef(false);
+  const activeMealPlanContextKey = ownerId ? cacheKey(ownerId, weekStart) : null;
+  const activeMealPlanContextKeyRef = useRef<string | null>(activeMealPlanContextKey);
+  const syncingContextKeyRef = useRef<string | null>(null);
   const reminderTimersRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -237,6 +240,16 @@ export function MealPlanPage() {
     if (timer !== undefined) window.clearTimeout(timer);
     reminderTimersRef.current.delete(occurrenceId);
   }, []);
+
+  useLayoutEffect(() => {
+    // Owner/week changes invalidate all previous async UI, queue and reminder work.
+    activeMealPlanContextKeyRef.current = activeMealPlanContextKey;
+    setData(null);
+    setError("");
+    setSyncState("");
+    setLoading(Boolean(activeMealPlanContextKey));
+    for (const occurrenceId of reminderTimersRef.current.keys()) cancelMealReminder(occurrenceId);
+  }, [activeMealPlanContextKey, cancelMealReminder]);
 
   const scheduleMealReminder = useCallback((item: PlannedOccurrenceRow, plannedTime: string) => {
     cancelMealReminder(item.id);
