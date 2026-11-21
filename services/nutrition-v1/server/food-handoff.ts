@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SavedMealFoodItemSnapshot } from "@/lib/nutrition-v1/contracts";
 import { isUuid } from "@/lib/utils";
 import { parsePositiveHandoffQuantity } from "@/lib/nutrition-v1/handoff-quantity";
+import { scaleFiniteHandoffNutritionFact } from "@/lib/nutrition-v1/handoff-scaling";
 import {
   projectCurrentGenerationCompatibility,
   resolveCurrentGenerationFoodForNewUseFromSupabase,
@@ -92,7 +93,7 @@ function optionalText(value: unknown) {
 }
 
 function scale(value: number | null, quantity: number) {
-  return value === null ? null : Math.round(value * quantity * 1000) / 1000;
+  return scaleFiniteHandoffNutritionFact(value, quantity, true);
 }
 
 function nutritionFromView(view: CurrentGenerationFoodView): FoodLibraryNutrition {
