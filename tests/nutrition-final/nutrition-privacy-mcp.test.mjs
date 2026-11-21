@@ -324,3 +324,18 @@ test("Cooking automatic expired timer cannot reintroduce prior owner state",()=>
   assert.ok(effect.includes("sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)"),
     "Expired timer must reject prior owner/Recipe state before setSession");
 });
+
+// N097: owner-qualified Recipe cache keys alone are insufficient when an old
+// fetch Promise can settle after changing owner/Recipe and overwrite UI state.
+test("Recipe published cache and late load cannot leak across account switching",()=>{
+  const src=readFileSync(resolve("components/nutrition/recipes/recipe-detail.tsx"),"utf8");
+  assert.ok(src.includes("activeRecipeContextKeyRef"),"Missing Recipe request context ref");
+  assert.ok(src.includes("useLayoutEffect(() => {"),"Owner switch must clear previous Recipe detail before paint");
+  const begin=src.indexOf("const load = useCallback(async () => {");
+  const end=src.indexOf("useEffect(() => {",begin);
+  assert.ok(begin>0&&end>begin);
+  const handler=src.slice(begin,end);
+  assert.ok(handler.includes("if (activeRecipeContextKeyRef.current !== requestContextKey) return;"),
+    "Late Recipe API and offline-cache results must be ignored after owner change");
+  assert.ok(handler.includes("ownerCacheKey(ownerId, recipeId)"),"Owner-qualified cache must remain in use");
+});
