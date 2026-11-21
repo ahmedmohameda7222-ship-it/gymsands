@@ -32,3 +32,13 @@ Read actual official JSON member names/schema and archived field dictionary; def
 - **Final Nutrition-only QA** must exercise RLS/owner boundaries, duplicate 1A1→1A2→1B cases, null nutrition and portions, CAS/concurrency, source immutability and member-facing generation search.
 
 **G-09 unresolved:** approved Plan 9 prerequisite has not passed (Production Foods still 0). This document is not authority to implement N056–N059 or to execute N118–N120.
+
+## N053 source/license evidence refresh — 2026-11-21
+
+**Authoritative live pages reviewed (source metadata only):**
+
+1. [USDA FDC downloadable datasets](https://fdc.nal.usda.gov/download-datasets/) still identifies the FNDDS **2021–2023** cycle, release **10/2024**, original **JSON** archive `FoodData_Central_survey_food_json_2024-10-31.zip`. The USDA page lists **3.7 MB zipped / 64 MB unzipped** as rounded display figures, **not verified byte lengths**. The archived FNDDS 2019–2020 and 2017–2018 releases are different releases and must not be substituted for 2021–2023.
+2. [USDA FDC homepage licensing](https://fdc.nal.usda.gov/) explicitly states USDA FoodData Central data are **public domain / CC0 1.0**, and requests naming FDC as source. Keep the recommended citation and exact release/harvest date in manifest. This is the licensing claim **for official USDA FDC content**, not an automatic right to blend it with third-party branded/Open Food Facts data.
+3. [USDA FDC data type documentation](https://fdc.nal.usda.gov/data-documentation/) distinguishes survey Food nutrient/portion records from Foundation. No implied conversion from survey portion labels to gram/mL amounts without an actual source weight field.
+
+**Exact source state:** official link metadata is confirmed but the ZIP could not be retrieved: archive browsing returned `Unsupported content-type: application/zip` and the execution container has no working DNS for the official source. No exact compressed SHA256, byte length, member list, JSON schema, nutrient field consistency or deterministic sample hash was computed. Do not add a pinned lock with an imagined digest or copy a third-party checksum. Keep N053 in `OFFICIAL_RELEASE_LICENSE_CONFIRMED_BYTES_UNKNOWN`; `N056–N059` and `N118–N120` remain blocked by G-09 and the missing exact original bytes.
