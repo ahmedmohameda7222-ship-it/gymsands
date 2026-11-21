@@ -132,7 +132,7 @@ N058: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N059: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N060: CANARY_DECISION_PACKET_PREPARED_G09_UNAPPROVED
 N061: POST_CANARY_1B2_PACKET_PREPARED_G09_BLOCKED
-N062: SCHEMA_REVIEWED_LIVE_MARKETS_EMPTY
+N062: DIRECT_PRODUCTION_GAP_CENSUS_ALL_SIX_ZERO
 N063: DESIGN_PREPARED
 N064: DESIGN_PREPARED
 N065: DESIGN_PREPARED
@@ -582,3 +582,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Legacy canonical release producer demands **19 full-app Quality gates**, canonical workout and artifact metadata and `fullReleaseQuality`, plus exact same-commit proof. The Nutrition-only seven-group manifest is distinct in path/schema and missing the app-wide gates by explicit user policy; post-deploy smoke currently downloads the **legacy** artifact name. The Nutrition runner additionally requires an original FNDDS archive, absent from its workflow and source lock; the current workflow is guaranteed to remain **fail-closed** pending G09/verified original ZIP.
 - Explicit decision needed from owner/Planner to retain full Quality by changing QA scope, or approve a versioned Nutrition-only release evidence profile across producer, consumer, deployment, auth smoke and squash provenance without weakening protections. No silent `fullReleaseQuality` flag forgery, synthetic success or PR #189 squash verifier loss.
 - N099 status **CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED**; N129 final signoff remains blocked. No test/build/workflow dispatch/production deploy.
+
+
+## N062 live six-market coverage — 2026-11-21
+
+- Independently read Production `information_schema.columns` for `public.food_market_assignments`, `food_names`, and `food_catalog_search_documents`, then ran a single **read-only per-market LEFT JOIN census** at 2026-11-21 02:36:45.545922 UTC. For **AE, DE, EG, GB, SA, US**, each market has **0 assignment rows, 0 distinct Food roots, 0 `assign` actions, 0 indexed search documents tagged with that scope**. This is a real direct absence-of-market-data observation, not a projection from simply knowing generic Food count was zero.
+- Recorded query semantics/schema and exact observed result in `docs/architecture/food-catalog-six-market-source-eligibility.md` at `b9a15f977f7a9a7818ccec110d15f16cb56dcb3b`. All six market source licenses and governed operations still require G-10; no canonical data, market assignment or generation has been mutated. N062 status **DIRECT_PRODUCTION_GAP_CENSUS_ALL_SIX_ZERO**.
