@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: THIRTY_FIVE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: THIRTY_SIX_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -457,3 +457,12 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Main branch-protection GET returned HTTP 403 (`Resource not accessible by integration`), so admin-only required check/webhook settings are not independently attested. Repository rulesets endpoint returned `[]`; isolated development branch reports `protected=false` and no required status checks. The accessible GitHub fetch endpoint does not expose repository webhook inventory. These unknowns must not be misreported as disabled or safe.
 - Independent Vercel provider listing: Production READY deployment `dpl_o1WSQe1TCymQBhJEbGenfH27AJjd` remains on `de7c7ccea943e9b793a2a65b34f2a06a6f33be49`; Nutrition branch currently has zero deployments. No GitHub repo settings, deploy configuration, workflow dispatch, main branch, PR state, CI runner or Production data was changed.
 - N005 is now **SOURCE_INVENTORY_READ_ONLY_ADMIN_UNVERIFIED**. N009/N010 global disablement must not be claimed without admin-level evidence or actual verified changes; future release provenance workflows are retained.
+
+
+## N095/N105 client-label input correction — 2026-11-21
+
+- Source-traced custom Food `normalizeWrite` after the previous strict-number patches. Missing/blank Food name, missing/blank serving label, and unrecognized `basisUnit` raised ordinary `Error` objects. The API's `nutritionErrorResponse` intentionally maps ordinary service errors to 500, so these three invalid client payload classes would be mislabeled as internal failures.
+- Authored one N105 regression first at `a074ed47fdbbad595b1e25a62eeb822a069e72ab`; it requires trimmed valid labels, the exact five allowed basis units and null, and typed `InvalidNutritionFoodInputError` (`status=400`, `code=nutrition_request_invalid`) for blank/non-string labels and invalid units. It has **not run**.
+- Added two pure validators in `lib/nutrition-v1/user-food-write-numbers.ts` at `69cbfd97f49ddb64bfb8b831ae0b9f3491ec110b`, then wired only `normalizeWrite` name, serving-label and basis-unit checks at `be61fb078bf50ab70469b8d3c7e4d9942bd3680b`. Existing valid JSON labels and basis units retain their API shape; errors remain bounded by the existing response layer. No database SQL or migration changed.
+- Updated Nutrition final runner minimum N105 `35 → 36` in `0b3b872b703f6a27fb1980a2198145ebcda2fa65`, bringing the **statically declared minimum to 148** cases (25+18+32+36+19+11+7). Independent GitHub comparison confirms exactly 4 changed files and zero migrations over this correction range. No unit, integration, browser, local DB, CI or Production execution occurred.
+- Disposition: `SOURCE_AUTHORED_UNTESTED`; QA red→green, exact release evidence, independent review and publish acceptance remain pending. No claim that a real HTTP response was observed.
