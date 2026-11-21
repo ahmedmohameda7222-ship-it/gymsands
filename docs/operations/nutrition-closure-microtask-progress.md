@@ -133,7 +133,7 @@ N059: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N060: CANARY_DECISION_PACKET_PREPARED_G09_UNAPPROVED
 N061: POST_CANARY_1B2_PACKET_PREPARED_G09_BLOCKED
 N062: DIRECT_PRODUCTION_GAP_CENSUS_ALL_SIX_ZERO
-N063: DESIGN_PREPARED
+N063: MARKET_SEARCH_BENCHMARK_36_INTENTS_SOURCE_UNVERIFIED
 N064: DESIGN_PREPARED
 N065: DESIGN_PREPARED
 N066: DESIGN_PREPARED
@@ -588,3 +588,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Independently read Production `information_schema.columns` for `public.food_market_assignments`, `food_names`, and `food_catalog_search_documents`, then ran a single **read-only per-market LEFT JOIN census** at 2026-11-21 02:36:45.545922 UTC. For **AE, DE, EG, GB, SA, US**, each market has **0 assignment rows, 0 distinct Food roots, 0 `assign` actions, 0 indexed search documents tagged with that scope**. This is a real direct absence-of-market-data observation, not a projection from simply knowing generic Food count was zero.
 - Recorded query semantics/schema and exact observed result in `docs/architecture/food-catalog-six-market-source-eligibility.md` at `b9a15f977f7a9a7818ccec110d15f16cb56dcb3b`. All six market source licenses and governed operations still require G-10; no canonical data, market assignment or generation has been mutated. N062 status **DIRECT_PRODUCTION_GAP_CENSUS_ALL_SIX_ZERO**.
+
+
+## N063 machine-readable six-market query benchmark — 2026-11-21
+
+- Created `data/food-catalog/quality/six-market-search-intents-v1.json` at `8af642190a8e87fca88d62f3977d7889f4431f0f`; verified GitHub readback: schemaVersion 1, exactly **6** launch markets (US/DE/GB/EG/SA/AE), **36** market-specific proposed user queries and explicit fields `expectedCanonicalFoodId:null`, `expectedSourceRecordId:null`, `expectedNutrition:null`, `sourceVerified:false`. Queries cover country dishes, localized spelling and raw-vs-cooked/recipe forms; they are user-search **intent strings**, NOT evidence that named Foods exist in a licensed source.
+- Machine artifact identifies future assertions on exact current generation, canonical identity across markets, source-backed portions, no fabricated nutrients, proper rights for brands/GTINs, quarantine and actual member search under approved G-11. Live census at 2026-11-21 02:36 UTC has **0** market assignments and **0** scoped search documents across all six markets; no benchmark may be marked PASS today.
+- State **MARKET_SEARCH_BENCHMARK_36_INTENTS_SOURCE_UNVERIFIED**, no adapter/alias/Food record, data ingestion, test execution, license approval or Production mutation. This provides test design, not launch coverage.
