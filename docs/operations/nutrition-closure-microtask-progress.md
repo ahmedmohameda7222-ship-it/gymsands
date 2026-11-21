@@ -165,9 +165,9 @@ N091: AE_MARKET_G10_LICENSE_UNVERIFIED
 N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N093: JSON_AND_URL_HANDOFF_QUANTITIES_STRICT_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
-N095: OWNER_WEEK_OFFLINE_REPLAY_CACHE_GUARDED_SOURCE_ONLY_UNTESTED
+N095: OWNER_WEEK_OFFLINE_REPLAY_CACHE_AND_COOKING_REVISION_GUARDED_UNTESTED
 N096: DIARY_RECIPE_MEAL_PLAN_FAVORITES_AND_ACTION_LOCALES_SOURCE_UNTESTED
-N097: RLS_RPC_AND_DIARY_OWNER_DRAFT_GUARDED_RUNTIME_UNTESTED
+N097: RLS_RPC_DIARY_AND_COOKING_OWNER_CONTEXT_SOURCE_GUARDED_RUNTIME_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
 N100: BLOCKED_G11_UNFINISHED_CODE
@@ -175,8 +175,8 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FIFTY_THREE_CONSUMER_CASES_AUTHORED_UNTESTED
-N106: TWENTY_FOUR_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
+N105: FIFTY_FOUR_CONSUMER_CASES_AUTHORED_UNTESTED
+N106: TWENTY_EIGHT_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
 N107: NINETEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
@@ -754,3 +754,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Read USDA's primary source [FoodData Central Download Field Descriptions](https://fdc.nal.usda.gov/portal-data/external/dataDictionary) (PDF; direct screenshot inspected) and official [Downloadable Data](https://fdc.nal.usda.gov/download-datasets/) 2021–2023 FNDDS dataset listing. Source-level field definitions are now **documented** (not inferred from Foundation): `survey_fndds_food.food_code` alongside `fdc_id` and `wweia_category_number`; FNDDS household `food_portion.portion_description`, `modifier` code and `gram_weight`; crucially `food_portion.amount` is **not defined** for Survey/FNDDS and `measure_unit_id=9999` is **not a real serving unit**. `food_nutrient.amount` is documented per 100g with a `nutrient` table ID/units join; `input_food` defines Survey ingredients/source relations that must remain provenance rather than editable Recipe materialization.
 - Updated `docs/architecture/food-catalog-plan10-fndds-field-readiness-matrix.md` at `104957c025091c658e8b1392b6d43204f2c2f354` with exact official dictionary-vs-Plaivra schema mapping and explicit negative adapter rules, retaining the true G-09 block. **The original 2024-10 FNDDS ZIP download still failed**, no official ZIP bytes/member-level JSON, SHA256, real nutrient IDs, survey codes, or actual source records were verified. Do not count this as an implemented adapter, manifest, source lock, QA PASS or Production publication.
 - N055 status `OFFICIAL_DICTIONARY_CROSSWALK_VERIFIED_ZIP_SCHEMA_UNVERIFIED`; N056–N059 / N118–N120 remain blocked. No tests, CI, schema or database writes.
+
+
+## N097 Cooking owner/recipe async race and N095 safe revisions — 2026-11-21
+
+- Source-traced `components/nutrition/cooking/cooking-mode.tsx` with `lib/nutrition-v1/cooking-local-store.ts`. `initialize(authOwnerId)`, `flushPending`, `persistAndSync`, Resume/Start Over/action/End callbacks and automatic timer expiry may resolve **after** an auth user or Recipe switch, previously calling `setSession`/ `setResumeCandidate` with the old owner's frozen Cooking data. This is a serious **source-inferred race**, not a reproduced cross-owner exploit. All local keys were owner-scoped but UI async callbacks had no owner/Recipe request context checks.
+- Authored N106 4 source/pure test cases FIRST (all **NOT RUN**) at `3b776c40f0370c0a051b3b10bdc4fc0b59ccdad1`, `83f55a415fd90fd48195097ca380ed090375f245`, `be6afda99bc63fb79af72bd124926c5b8db7fa10`. Added pure `sameCookingOwnerRecipeContext` at `aa372aff1018acc07212b92c6b6a32b19e2c1bf5`. UI now uses layout-phase context invalidation on auth/Recipe changes; `initialize` discards prior-owner async reads and start/restore results; `flushPending`, `persistAndSync`, Resume, Start Over, Update Action, End Session and automatic timer completion check context before committing local/global UI state. `writeLocal` and `writeLocalForOwner` also reject an old callback's writes to another auth context, without deleting existing owner-scoped recoverable storage. Final complete set of these source edits at `aa70ea4609570e51b4eee8db34cafec3a6bd3ee6`. This is not independently verified in Playwright or with two JWTs.
+- `cooking-local-store.ts` previously accepted unsafe integers beyond JS `Number.MAX_SAFE_INTEGER` in both session and per-action `stateRevision`; exact CAS/recovery cannot be guaranteed. N105 pure regression **first** at `599a0d193a33311b7e84f6648f88b79cfc629651`, NOT RUN. Minimal `Number.isInteger`→`Number.isSafeInteger` at `13b8a5287889f5b050a7294325ca3e468bc718c5` ensures deserializer rejects malformed/unsafe local revisions.
+- Final-only runner now has **183** required source-authored QA cases in 7 groups: **25+18+32+54+28+19+7** (`505becb4bf84dc1769219cc06bd27ce5a9fec0d4`). Direct GitHub readback confirms 54 consumer and 28 privacy/MCP direct test declarations. Diff from prior `7327338aee747f2304ec94ebcfcbe2ab84e92a7a` = **20 commits / 7 paths**, **0 migrations**, **0 workflow YAML changes**, no Production mutations. **SOURCE_AUTHORED_UNTESTED**; two-user auth transition, Cooking local offline sync, red/green tests, React build/typecheck, QA acceptance and cross-owner denial are outstanding. G-11 not satisfied.
