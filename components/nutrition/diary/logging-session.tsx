@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -169,6 +169,8 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
   const [quickFat, setQuickFat] = useState("");
   const [quickName, setQuickName] = useState("");
   const key = useMemo(() => userId ? draftKey(userId, date, meal, plannedOccurrence?.id) : null, [date, meal, plannedOccurrence?.id, userId]);
+  const activeDraftKeyRef = useRef<string | null>(key);
+  useLayoutEffect(() => { activeDraftKeyRef.current = key; }, [key]);
 
   useEffect(() => {
     // Clear the old owner's in-memory plate before enabling writes for this key.
@@ -385,15 +387,16 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
   function removePlateItem(id: string) { setPendingOperationId(null); setPlate((current) => current.filter((item) => item.id !== id)); setSubmitState("editing"); }
 
   async function submitPlate() {
-    if (!plate.length || submitState === "submitting") return;
+    if (!canPersistDiaryDraftForHydratedOwner(key, hydratedDraftKey) || !plate.length || submitState === "submitting") return;
+    const submitOwnerKey = key;
     const operationId = pendingOperationId ?? crypto.randomUUID();
     if (!pendingOperationId) {
       setPendingOperationId(operationId);
-      if (key) localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), plate, pendingOperationId: operationId } satisfies DraftPayload));
+      if (canPersistDiaryDraftForHydratedOwner(key, hydratedDraftKey)) localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), plate, pendingOperationId: operationId } satisfies DraftPayload));
     }
     setSubmitState("submitting"); setFeedback(text.loggingPlate);
-    try { const executionSnapshot = plannedOccurrence ? { ...plannedOccurrence.frozenSnapshot, items: executionItems(plate), actualItems: plate, actualSource: sourceForPlate(plate) } : null; const payload = plannedOccurrence ? { kind: "complete_planned", occurrenceId: plannedOccurrence.id, operationId, executionSnapshot } : { operationId, date, meal, source: sourceForPlate(plate), items: plate }; const response = await fetch("/api/nutrition/v1/log", { method: "POST", headers: authHeaders(token, true), body: JSON.stringify(payload) }); if (!response.ok) throw new Error(); setSubmitState("confirmed"); setPendingOperationId(null); clearConfirmedDraft(); setPlate([]); setFeedback(plannedOccurrence ? text.plannedLogged : text.plateLogged); onConfirmed(); }
-    catch { setSubmitState("failed"); setFeedback(text.plateFailed); }
+    try { const executionSnapshot = plannedOccurrence ? { ...plannedOccurrence.frozenSnapshot, items: executionItems(plate), actualItems: plate, actualSource: sourceForPlate(plate) } : null; const payload = plannedOccurrence ? { kind: "complete_planned", occurrenceId: plannedOccurrence.id, operationId, executionSnapshot } : { operationId, date, meal, source: sourceForPlate(plate), items: plate }; const response = await fetch("/api/nutrition/v1/log", { method: "POST", headers: authHeaders(token, true), body: JSON.stringify(payload) }); if (activeDraftKeyRef.current !== submitOwnerKey) return; if (!response.ok) throw new Error(); setSubmitState("confirmed"); setPendingOperationId(null); clearConfirmedDraft(); setPlate([]); setFeedback(plannedOccurrence ? text.plannedLogged : text.plateLogged); onConfirmed(); }
+    catch { if (activeDraftKeyRef.current !== submitOwnerKey) return; setSubmitState("failed"); setFeedback(text.plateFailed); }
   }
 
   const modes: Array<{ value: LoggerMode; label: string }> = [
@@ -474,7 +477,7 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
           {mode === "saved-meals" ? <section className="space-y-3"><div><h3 className="font-semibold">{et("savedMeals")}</h3><p className="text-sm text-muted-foreground">{text.savedMealDescription}</p></div>{savedMeals.length ? <div className="divide-y divide-border">{savedMeals.map((saved) => <div key={saved.id} className="flex min-h-16 items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="font-semibold"><bdi dir="auto">{saved.name}</bdi></p><p className="text-xs text-muted-foreground">{saved.bundle.items.length} {itemLabel(saved.bundle.items.length)}</p></div><button type="button" onClick={() => addSavedMeal(saved)} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{text.addToPlate}</button></div>)}</div> : <p className="text-sm text-muted-foreground">{text.noSavedMeals}</p>}</section> : null}
           {mode === "recipes" ? <section className="space-y-3"><div><h3 className="font-semibold">{text.recipes}</h3><p className="text-sm text-muted-foreground">{text.recipeDescription}</p></div>{recipes.length ? <div className="divide-y divide-border">{recipes.map((recipe) => <div key={recipe.recipeId} className="flex min-h-16 items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="font-semibold"><bdi dir="auto">{recipe.name}</bdi></p><p className="text-xs text-muted-foreground">{text.serving} · {recipe.nutritionPerServing?.calories ?? "—"} kcal</p></div><button type="button" onClick={() => addRecipe(recipe)} className="min-h-11 rounded-xl border border-border px-3 text-sm font-medium">{text.addToPlate}</button></div>)}</div> : <p className="text-sm text-muted-foreground">{text.noRecipes}</p>}</section> : null}
           {feedback ? <p className="mt-4 text-sm text-muted-foreground" aria-live="polite">{feedback}</p> : null}
-          <PlateDock plate={plate} pending={submitState === "submitting"} onQuantityChange={updateQuantity} onRemove={removePlateItem} onSubmit={() => void submitPlate()} />
+          <PlateDock plate={plate} pending={submitState === "submitting" || !canPersistDiaryDraftForHydratedOwner(key, hydratedDraftKey)} onQuantityChange={updateQuantity} onRemove={removePlateItem} onSubmit={() => void submitPlate()} />
         </div>
       </div>
     </div>
