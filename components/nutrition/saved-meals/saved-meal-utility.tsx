@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Plus, Search, Trash2, X } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -208,6 +208,34 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // A reopened modal must not accept responses from the preceding open session.
+  const savedMealContextKey = `${ownerId ?? "__signed_out__"}:${open ? "open" : "closed"}`;
+  const activeSavedMealContextRef = useRef<{ key: string; generation: number }>({ key: savedMealContextKey, generation: 0 });
+  useLayoutEffect(() => {
+    const previousGeneration = activeSavedMealContextRef.current.generation;
+    activeSavedMealContextRef.current = { key: savedMealContextKey, generation: previousGeneration + 1 };
+    setMode("browse");
+    setActive([]);
+    setDeleted([]);
+    setDetail(null);
+    setName("");
+    setNote("");
+    setItems([]);
+    setQuery("");
+    setFoods([]);
+    setFoodServingSelections({});
+    setFoodServingChoiceKeys({});
+    setRecipes([]);
+    setLoading(false);
+    setBusy(false);
+    setBusyId(null);
+    setError("");
+  }, [savedMealContextKey]);
+  const isCurrentSavedMealContext = useCallback((scope: { key: string; generation: number }) => (
+    scope.key === savedMealContextKey
+    && activeSavedMealContextRef.current.key === scope.key
+    && activeSavedMealContextRef.current.generation === scope.generation
+  ), [savedMealContextKey]);
 
   const request = useCallback(async <T,>(url: string, init: RequestInit = {}) => {
     const response = await fetch(url, {
