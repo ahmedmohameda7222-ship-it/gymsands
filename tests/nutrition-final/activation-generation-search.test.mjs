@@ -248,3 +248,66 @@ test("utility cursor constrains page limit and cannot skip all results when inva
   assert.deepEqual(paginateFoodLibraryResults(ranked,{limit:2,cursor:"invalid"}).items,
     ranked.slice(0,2));
 });
+
+
+// Current-generation search RPC integration on a fully disposable local DB.
+// Two Auth identities and owner-keyed Foods exist only inside ROLLBACK.
+const {spawnSync:spawnSql}=await import("node:child_process");
+const dbUrl=()=>{
+  const raw=process.env.NUTRITION_DISPOSABLE_DB_URL;
+  if(!raw)throw Error("Missing local Nutrition database connection");
+  const url=new URL(raw);
+  if(!["postgres:","postgresql:"].includes(url.protocol) ||
+     !["127.0.0.1","localhost","[::1]"].includes(url.hostname) ||
+     url.port!=="54322" || url.pathname!=="/postgres")
+    throw Error("Refusing non-disposable PostgreSQL target");
+  return raw;
+};
+const userOne="ed200000-0000-4000-8000-000000000001";
+const userTwo="ed200000-0000-4000-8000-000000000002";
+function ownerSearchFixture(){
+  const values=(id,name)=>"('"+id+"','authenticated','authenticated','"+
+    name+"@nutrition-qa.invalid','',"+
+    "'{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,"+
+    "'{}'::jsonb,now(),now())";
+  return "BEGIN; INSERT INTO auth.users "+
+    "(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) "+
+    "VALUES "+values(userOne,"search-owner-a")+","+values(userTwo,"search-owner-b")+"; "+
+    "INSERT INTO public.user_food_items "+
+    "(user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g) VALUES "+
+    "('"+userOne+"','Owner A Rice','100 g',100,3,22,1),"+
+    "('"+userTwo+"','Owner B Rice','100 g',210,6,28,2); "+
+    "SET LOCAL ROLE authenticated; "+
+    "SELECT set_config('request.jwt.claim.role','authenticated',true); ";
+}
+function localSearchSql(script){
+  const result=spawnSql("psql",["-X","-q","-A","-t","-v","ON_ERROR_STOP=1",
+    "-d",dbUrl(),"-c",script],{encoding:"utf8",timeout:15000,
+    maxBuffer:1024*1024,env:{...process.env,PGCONNECT_TIMEOUT:"5"}});
+  assert.equal(result.error,undefined,"Disposable psql executable missing");
+  assert.equal(result.status,0,String(result.stderr));
+  return String(result.stdout).trim().split(/\r?\n/).at(-1);
+}
+function ownerSearch(locale,owner){
+  const script=ownerSearchFixture()+
+    "SELECT set_config('request.jwt.claim.sub','"+owner+"',true); "+
+    "SELECT jsonb_array_length(result->'items'),"+
+    "result->'items'->0->>'source',"+
+    "result->'items'->0->>'name' "+
+    "FROM (SELECT public.search_food_catalog_v2("+
+    "p_query=>'owner',p_language_tag=>'"+locale+"',p_scope=>'my_food',p_limit=>20) AS result) q; "+
+    "ROLLBACK;";
+  return localSearchSql(script);
+}
+test("disposable English Food search shows only authenticated owner's private Food",()=>{
+  assert.equal(ownerSearch("en",userOne),"1|my_food|Owner A Rice");
+  assert.equal(ownerSearch("en",userTwo),"1|my_food|Owner B Rice");
+});
+test("disposable German Food search keeps exact private owner isolation",()=>{
+  assert.equal(ownerSearch("de",userOne),"1|my_food|Owner A Rice");
+  assert.equal(ownerSearch("de",userTwo),"1|my_food|Owner B Rice");
+});
+test("disposable Arabic Food search keeps exact private owner isolation",()=>{
+  assert.equal(ownerSearch("ar",userOne),"1|my_food|Owner A Rice");
+  assert.equal(ownerSearch("ar",userTwo),"1|my_food|Owner B Rice");
+});
