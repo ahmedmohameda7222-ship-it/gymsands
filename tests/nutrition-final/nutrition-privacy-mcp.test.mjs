@@ -247,3 +247,20 @@ test("Meal Plan editor and bulk copy never queue prior owner's mutations after a
     assert.ok(handler.includes("catch"),"Network error path must be explicit: "+startMark);
   }
 });
+
+// N095/N106: a late mark-eaten or bulk-copy result must not confirm success
+// or clear the new user's editor after owner/week navigation.
+test("Meal Plan mark-eaten and bulk-copy promises cannot confirm after owner switch",()=>{
+  const src=readFileSync(resolve("components/nutrition/meal-plan/meal-plan-page.tsx"),"utf8");
+  const slices=[
+    ["async function markEaten(", "function logWithChanges("],
+    ["async function saveBulkCopy(", "return ("]
+  ];
+  for(const [startMark,endMark] of slices){
+    const start=src.indexOf(startMark),end=src.indexOf(endMark,start);
+    assert.ok(start>0&&end>start,"Missing mutation handler "+startMark);
+    const body=src.slice(start,end);
+    assert.ok(body.includes("sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)"),
+      "Missing owner/week promise guard in "+startMark);
+  }
+});
