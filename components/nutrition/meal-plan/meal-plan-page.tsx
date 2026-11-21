@@ -555,10 +555,16 @@ export function MealPlanPage() {
 
   async function writeCopiesToWeek(targetWeekStart: string, copies: MealPlanOccurrenceMutation[]) {
     if (!ownerId || !data) return;
+    const requestContextKey = cacheKey(ownerId, weekStart);
+    if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
     if (targetWeekStart === weekStart) { await mutateWeek({ upsertOccurrences: copies }); return; }
     let targetData: WeekResponse | null = null;
     try { targetData = await mealPlanApi<WeekResponse>(`/api/nutrition/v1/meal-plan/week?weekStart=${encodeURIComponent(targetWeekStart)}&date=${encodeURIComponent(targetWeekStart)}`); }
-    catch { targetData = readCachedWeek(ownerId, targetWeekStart); }
+    catch {
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
+      targetData = readCachedWeek(ownerId, targetWeekStart);
+    }
+    if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
     if (!targetData) targetData = { week: null, occurrences: [], target: data.target, pendingChangeRequests: [], shoppingNeeds: [] };
     const groups = new Map<string, MealPlanOccurrenceMutation[]>();
     for (const copy of copies) {
@@ -569,6 +575,7 @@ export function MealPlanPage() {
     let workingWeekId = targetData.week?.id ?? null;
     let workingRevision = targetData.week?.revision ?? 0;
     for (const [targetId, group] of groups) {
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
       const mutation = prepareMutation({ upsertOccurrences: group });
       const targetAuthority: MealPlanMutationTarget = { kind: "meal_slot", id: targetId };
       const operationId = crypto.randomUUID();
@@ -578,9 +585,11 @@ export function MealPlanPage() {
           method: "POST",
           body: JSON.stringify({ kind: "mutate", weekId: isLocalWeekId(workingWeekId) ? null : workingWeekId, weekStartDate: targetWeekStart, baseRevision: workingRevision, operationId, mutation }),
         });
+        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
         workingWeekId = result.weekId; workingRevision = result.revision;
         working = applyMutationLocally(working, mutation, { weekId: result.weekId, revision: result.revision, userId: ownerId, weekStart: targetWeekStart });
       } catch (cause) {
+        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
         const queued: MealPlanOfflineMutation = {
           operationId, weekId: workingWeekId ?? localWeekId(targetWeekStart), baseRevision: workingRevision, target: targetAuthority,
           payload: { weekStartDate: targetWeekStart, mutation, baseSnapshot: targetSnapshot(working, targetAuthority) },
@@ -594,6 +603,7 @@ export function MealPlanPage() {
         working = applyMutationLocally(working, mutation, { weekId: optimisticWeekId, revision: workingRevision, userId: ownerId, weekStart: targetWeekStart });
       }
     }
+    if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
     writeCachedWeek(ownerId, targetWeekStart, working);
   }
 
