@@ -7,6 +7,8 @@ import { X } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { foodLibraryApi } from "@/components/nutrition/food-library/food-library-api";
 import { parseAddToHandoff, type AddToDestination, type AddToHandoffSource } from "@/lib/nutrition-v1/add-to-handoff";
+import { parsePositiveHandoffQueryQuantity } from "@/lib/nutrition-v1/handoff-quantity";
+import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 import { localeWeekStartDay, startOfMealPlanWeek } from "@/lib/nutrition-v1/week-start";
 
 type RecipeChoice = { recipeId: string; name: string; status?: string };
@@ -86,6 +88,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
   const router = useRouter();
   const search = useSearchParams();
   const { user } = useAuth();
+  const { nt, dir, language } = useNutritionV1Translation();
   const ownerId = user?.id ?? null;
   const source = useMemo(() => parseAddToHandoff(new URLSearchParams(search.toString()), destination), [destination, search]);
   const [sourceName, setSourceName] = useState("");
@@ -133,7 +136,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
           if (!cancelled && activeHandoffContextKeyRef.current === previewContextKey) setRecipeChoices((result.recipes ?? []).filter((item) => item.status === "draft"));
         }
       } catch (cause) {
-        if (!cancelled && activeHandoffContextKeyRef.current === previewContextKey) setError(cause instanceof Error ? cause.message : "Nutrition handoff could not be loaded.");
+        if (!cancelled && activeHandoffContextKeyRef.current === previewContextKey) setError(cause instanceof Error ? cause.message : nt("handoffErrorLoad"));
       }
     })();
     return () => { cancelled = true; };
@@ -148,10 +151,10 @@ export function AddToHandoffConsumer({ destination }: Props) {
     setError("");
     let successfulOperationKey: string | null = null;
     try {
-      if (!ownerId) throw new Error("Please sign in before completing this Nutrition handoff.");
-      const resolvedRecipeQuantity = currentSource.type === "recipe" ? Number(recipeQuantity) : null;
-      if (currentSource.type === "recipe" && (!Number.isFinite(resolvedRecipeQuantity) || Number(resolvedRecipeQuantity) <= 0)) {
-        throw new Error("Choose a serving quantity greater than zero.");
+      if (!ownerId) throw new Error(nt("handoffErrorSignIn"));
+      const resolvedRecipeQuantity = currentSource.type === "recipe" ? parsePositiveHandoffQueryQuantity(recipeQuantity) : null;
+      if (currentSource.type === "recipe" && resolvedRecipeQuantity === null) {
+        throw new Error(nt("handoffErrorServing"));
       }
       const payload: Record<string, unknown> = {
         destination,
@@ -178,13 +181,13 @@ export function AddToHandoffConsumer({ destination }: Props) {
       };
 
       if (destination === "diary") {
-        if (!date || !meal) throw new Error("Choose the Diary date and meal before adding this item.");
+        if (!date || !meal) throw new Error(nt("handoffErrorDiary"));
         const operationKey = commandOperationStorageKey(ownerId, "diary", currentSource, resolvedRecipeQuantity, [date, meal]);
         payload.operationId = claimOperationId(operationKey);
         payload.date = date;
         payload.meal = meal;
       } else if (destination === "meal_plan") {
-        if (!date || !meal) throw new Error("Choose the plan date and meal slot before adding this item.");
+        if (!date || !meal) throw new Error(nt("handoffErrorPlan"));
         const locale = typeof navigator === "undefined" ? "en-GB" : navigator.language;
         const weekStartDate = startOfMealPlanWeek(date, localeWeekStartDay(locale));
         const operationKey = commandOperationStorageKey(ownerId, "meal_plan", currentSource, resolvedRecipeQuantity, [date, meal, weekStartDate]);
@@ -193,7 +196,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
         payload.mealSlot = meal;
         payload.weekStartDate = weekStartDate;
       } else if (destination === "saved_meal") {
-        if (!savedMealName.trim()) throw new Error("Name the Saved Meal before creating it.");
+        if (!savedMealName.trim()) throw new Error(nt("handoffErrorMealName"));
         const normalizedName = savedMealName.trim();
         const normalizedNote = note.trim();
         const operationKey = commandOperationStorageKey(ownerId, "saved_meal", currentSource, resolvedRecipeQuantity, [normalizedName, normalizedNote]);
@@ -203,7 +206,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
       } else if (destination === "recipe") {
         payload.targetRecipeId = targetRecipeId || null;
         if (!targetRecipeId) {
-          if (currentSource.type !== "food") throw new Error("Only Food can be added to a new Recipe.");
+          if (currentSource.type !== "food") throw new Error(nt("handoffErrorFoodOnly"));
           const operationKey = newRecipeOperationStorageKey(ownerId, currentSource);
           payload.operationId = claimOperationId(operationKey);
         }
@@ -227,7 +230,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
       router.refresh();
     } catch (cause) {
       if (activeHandoffContextKeyRef.current !== requestContextKey) return;
-      setError(cause instanceof Error ? cause.message : "Nutrition handoff could not be completed.");
+      setError(cause instanceof Error ? cause.message : nt("handoffErrorComplete"));
     } finally {
       if (activeHandoffContextKeyRef.current === requestContextKey) setLoading(false);
     }
