@@ -198,3 +198,15 @@ test("Meal Plan editing and copying dialogs retain EN DE AR translated copy",()=
     assert.equal(src.includes(legacy),false,"Untranslated Meal Plan modal text: "+legacy);
   }
 });
+
+// N096: skipped-item review must not show English-only messages in DE/AR.
+test("Skipped Shopping review uses EN DE AR labels and source details",()=>{
+  const src=readFileSync(resolve("components/nutrition/meal-plan/meal-plan-page.tsx"),"utf8");
+  const dict=readFileSync(resolve("lib/i18n/nutrition-v1.ts"),"utf8");
+  for(const key of ["shoppingReviewTitle","skippedShoppingContribution","reviewAndRemove"]){
+    assert.ok(src.includes('nt("'+key+'"'),"Missing localized Shopping text: "+key);
+    assert.equal(dict.split(key+':').length-1,3,"Missing EN DE AR Shopping key: "+key);
+  }
+  assert.equal(src.includes("was skipped, but its frozen Shopping contribution is still included."),false);
+  assert.equal(src.includes(">Review & Remove</button>"),false);
+});
