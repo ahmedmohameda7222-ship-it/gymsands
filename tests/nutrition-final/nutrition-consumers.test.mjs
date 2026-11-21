@@ -437,3 +437,21 @@ test("Food and Recipe handoff quantities cannot be fabricated from booleans or s
   assert.equal(parsePositiveHandoffQuantity(1),1);
   assert.equal(parsePositiveHandoffQuantity(0.5),0.5);
 });
+
+
+// Invalid payloads must not silently turn into generic 500 server failures.
+const { InvalidNutritionFoodInputError }=
+  await vite.ssrLoadModule("/lib/nutrition-v1/user-food-write-numbers.ts");
+test("Custom Food invalid nutrition numbers carry a client-input HTTP status contract",()=>{
+  for(const invalid of [
+    ()=>requireNonNegativeFoodNumber(null,"Calories"),
+    ()=>requireNonNegativeFoodNumber(false,"Protein"),
+    ()=>optionalPositiveFoodNumber(true,"Basis amount")
+  ]){
+    assert.throws(invalid,(error)=>
+      error instanceof InvalidNutritionFoodInputError
+      && error.status===400
+      && error.code==="nutrition_request_invalid"
+    );
+  }
+});
