@@ -169,3 +169,11 @@ test("Recipe equipment name, quantity, and note have localized accessible names"
       "Missing localized equipment field label: "+key);
   }
 });
+
+// N096: date selector needs a localized accessible name separate from the
+// adjacent previous/next day buttons. The existing Eat dictionary has "date".
+test("Diary date input is named with the existing EN DE AR locale text",()=>{
+  const src=readFileSync(resolve("components/nutrition/diary/diary-page.tsx"),"utf8");
+  assert.ok(src.includes('<input type="date" aria-label={et("date")}'),
+    "The diary date picker must identify itself to assistive technology");
+});
