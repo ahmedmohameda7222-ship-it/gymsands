@@ -246,3 +246,16 @@ test("Meal Plan action notices and reminder messages have EN DE AR strings",()=>
   assert.equal(source.includes('There is nothing to copy from this'),false);
   assert.equal(source.includes('copied with fresh planned-item identities'),false);
 });
+
+// N095: queued cross-week copies must preserve errors in the contract-defined
+// lastError field, not in a silently ignored ad-hoc JSON "error" property.
+test("Meal Plan offline copy retry errors use persisted lastError contract",()=>{
+  const src=readFileSync(resolve("components/nutrition/meal-plan/meal-plan-page.tsx"),"utf8");
+  const start=src.indexOf("async function writeCopiesToWeek("),end=src.indexOf("async function saveBulkCopy(",start);
+  assert.ok(start>0&&end>start);
+  const copy=src.slice(start,end);
+  assert.ok(copy.includes("{ lastError: cause instanceof Error"),
+    "Copy failure reason must be stored in the queued mutation lastError field");
+  assert.ok(!copy.includes("{ error: cause instanceof Error"),
+    "An unknown error property would not be displayed by queue readers");
+});
