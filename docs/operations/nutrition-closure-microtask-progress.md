@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FIFTY_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FIFTY_ONE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: SIXTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -701,3 +701,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Authored one N105 regression **first** at `49945d37a123cbe0a58d2b3f1b97fbcd9061cf86`, not executed. Added shared positive decimal/exponent URL query parser to `lib/nutrition-v1/handoff-quantity.ts` at `d5e6fc6aac3af926dced2c6f17ee283a0c8ed0fd`. A same-session source readback identified an incorrect double-backslash literal in that draft; **immediately corrected source** at `acb090828cbb65474d13db8c47993996a119f4dc` and confirmed the regex contains exactly four intended single escapes. No success claimed for the transient draft.
 - Wired client Food/Recipe Add-To consistently at `920881999252ae12d2033786d21a7c2679bdfe5a` and authoritative Food GET at `51e58e29b6e30c1d8479f756f62dbcca81f9066e`. Omitted Recipe quantity still defaults **1**, but explicit blank/hex/binary/octal/nonfinite fails; valid positive decimal and exponent strings remain supported. Authoritative Recipe GET delegates to shared parser already. No Food or Recipe source resolution, owner scope, DB contract or provenance changes.
 - Final-only N105 consumer minimum **49→50** at `d8dba210a8ce1300847e2301c794979212e91e4c`; seven-group source minimum **167 = 25+18+32+50+19+16+7**. **SOURCE_AUTHORED_UNTESTED**, no actual browser/server/CI test, Production data write, release or merge.
+
+
+## N095 Food Library invalid objective filter safety — 2026-11-21
+
+- Source traced `components/nutrition/food-library/food-library-page.tsx` rendering `proteinMin`/`carbsMax` filter chips from raw input and `GET /api/nutrition/v1/foods` numeric parsing. Both legacy `proteinMin`/`carbsMax` and generic `proteinOp`/ `carbsOp`/ `fatOp` filter parsers previously returned `undefined` for malformed explicit numeric constraints, silently **omitting the filter** while the UI continued to display it as active, potentially returning unconstrained Foods. `Number(value)` also accepted hex/binary/octal and negative nutrient gram filters.
+- Authored one N105 pure decimal-input regression **first, NOT RUN**, at `b16b9ebad33c6fa33d2b85a143fba621e0868745`. Added `lib/nutrition-v1/food-search-query-numbers.ts` at `b1ad623cf1ae3b8d3b45b6f53fd1b61efd1a94c1` with nonnegative finite decimal/exponent grammar (including 0); excludes hex, binary, octal, negative, NaN, Infinity, malformed and ambiguous comma values. Updated `app/api/nutrition/v1/foods/route.ts` at `9c1b9ecc91748068b8f1b327f4c27afa7b82e74e`: explicit invalid operator/values/required between max now fail closed with bounded `NutritionRequestError` 400 rather than secretly removing the requested condition. Missing/blank **legacy** optional min/max remain no filter for normal empty UI, while an explicit generic operator without its value fails closed. Server catalog ranking/RPC and owner scope unchanged.
+- Updated final-only N105 consumer minimum **50→51** at `c22461c5a88c8dcb34ba48c641a814ffc47b246d`; seven-group authored minimum **168 = 25+18+32+51+19+16+7**. **SOURCE_AUTHORED_UNTESTED**, not actual filter enforcement/browser PASS; no tests, CI, Production, migrations or deploy.
