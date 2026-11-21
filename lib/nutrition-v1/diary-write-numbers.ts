@@ -12,3 +12,11 @@ export function parseDiaryWriteQuantity(value: unknown): number | null {
     ? value
     : null;
 }
+
+/** Rounded hydration milliliters must stay positive and safely integral. */
+export function parseDiaryWaterAmountMl(value: unknown): number | null {
+  const positive = parseDiaryWriteQuantity(value);
+  if (positive === null) return null;
+  const rounded = Math.round(positive);
+  return Number.isSafeInteger(rounded) && rounded > 0 ? rounded : null;
+}
