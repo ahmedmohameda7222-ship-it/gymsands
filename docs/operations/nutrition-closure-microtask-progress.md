@@ -288,3 +288,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Authored three further Nutrition-only HTTP tests against exact local `127.0.0.1:3000` server. They issue unauthenticated GET/POST for Food Library, Diary, Meal Plan, Saved Meals, Recipe publishing and Food/Recipe handoff commit, require HTTP 401, private no-store and Authorization vary, and verify JSON errors.
 - Tests are deny-only with no personal data or Production URL. They are designed to use actual Next.js route handlers and `requireNutritionUser`, NOT fake HTTP responses. This still does not prove valid owner token, cross-user RLS isolation, or persistence replay; G-11 integration evidence remains outstanding.
 - Minimum N106 cases increased 16->19. No tests executed; even if these tests eventually pass they are strictly unauthorized HTTP smoke, not full privacy/API acceptance.
+
+## Latest read-only Production state — 2026-11-21
+
+- Source: PLAIVRA connected Supabase, Main project `bkwezjxvapaeasfvlhvv`, **read-only aggregate SQL**, observed `2026-11-21 00:33:03.741662 UTC`.
+- Exact counts: 133 applied migration records; 0 `food_items`, 0 `food_source_records`, 0 `food_ingestion_batches`, 0 `food_ingestion_runs`, 0 `food_catalog_generations`, 0 `food_catalog_search_documents`, 0 `food_catalog_governance_principals`; `food_catalog_current_generation.current_generation_id` is NULL.
+- No production Owner, reviewed batch, active generation, market publication or healthy Plan 9 status can be inferred; in fact these absent counts establish those deployment tasks are outstanding. No live database write was performed.
+- Current authorized code branch remains isolated and unmerged. Newly authored Nutrition tests, CI and fixtures have **not run**, and no release or QA approval was obtained.
