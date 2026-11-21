@@ -166,7 +166,7 @@ N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N093: HANDOFF_QUANTITY_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
-N096: DIARY_INPUT_LABELS_FIXED_SOURCE_ONLY_UNTESTED
+N096: DIARY_AND_RECIPE_INPUT_LABELS_SOURCE_ONLY_UNTESTED
 N097: PRIVACY_MCP_AUTHORITY_STATIC_TRACED_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
@@ -177,7 +177,7 @@ N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
 N105: FORTY_FOUR_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
-N107: TWELVE_BROWSER_CASES_AUTHORED_UNTESTED
+N107: FOURTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -621,3 +621,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Traced `POST /api/nutrition/v1/diary` → `addDiaryWater` in `services/nutrition-v1/server/diary.ts`. The prior `Math.round(positive(amountMl, "Water amount"))` accepted an input in `(0,0.5)` milliliters then converted it to an integer zero before `log_nutrition_water`; it also accepted finite numbers whose rounded integer was beyond `Number.MAX_SAFE_INTEGER`. Either value violates the intended positive measured integer write contract and could surface a DB error instead of an input rejection.
 - Authored N105 pure regression **first** at `000175424c317f721505c20e4b6359458cb1e93f`, not executed, covering 250mL and safe fractional rounding, invalid zero/negative/string/boolean/nonfinite and unsafe integers. Added `parseDiaryWaterAmountMl` into existing pure `lib/nutrition-v1/diary-write-numbers.ts` at `7522b139642c035e46f14b085fe259fc64e0b881`. Wired `addDiaryWater` to require safely rounded positive integer or throw typed `NutritionRequestError` (400) before calling idempotent RPC at `b93b68f318f4a7edb79a08e760664786c86a5da8`.
 - Updated final-only N105 consumer test minimum **43→44** in `ceafd3e84ef257c987cfe06eddfd20246ab13cc8`. Seven groups' source minimum now **157 = 25+18+32+44+19+12+7**. No actual test pass, DB write, CI, migration, merge or release; source fix remains **UNTES​TED**.
+
+
+## N096 Recipe equipment and Diary date picker names — 2026-11-21
+
+- Exact JSX source audit found three bare Recipe equipment inputs (name, quantity, optional note) in `components/nutrition/recipes/recipe-editor.tsx` labeled only by placeholders, and a bare `<input type="date">` in `components/nutrition/diary/diary-page.tsx` between previous/next buttons with no accessible name. Verified Recipe Home search was **already** inside a visible `<label>` with screen-reader-only text; did not change it or invent a defect. Existing localization keys `nt("equipment")`, `nt("equipmentQuantity")`, `nt("optionalNote")`, `et("date")` already exist.
+- Authored N107 source regressions FIRST, **not run**, at `25d142996f52ca3b66560003376b1e9335a55dab` and `01fc77086a1246de81a3fee6898fc93eab987e0e`. Added three localized `aria-label` bindings for Recipe equipment inputs at `6926acb17af4fbd8bf9de2d7068c534344737c7c` and the Diary date label at `51e56c2300d4ab6b18ae49c4963f129a1d6f5a83`.
+- Final Nutrition-only browser/locale source minimum increased 12→**14** at `d85aec546a29bb8a3d69d9ac0490f2f35362109e`. Total seven-group authored minimum **159 = 25+18+32+44+19+14+7**. Direct code diff includes exactly two components, regression file and runner; no translations added, DB/schema/workflows changed or test run. **SOURCE_AUTHORED_UNTESTED**; true screen-reader keyboard/browser acceptance remains G-11.
