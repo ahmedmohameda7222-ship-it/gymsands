@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Clock3, Mic, Pause, Play, RotateCcw, SkipForward, Square } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -16,6 +16,7 @@ import {
   acknowledgeCookingMutations,
   completeLocalCookingSession,
   cookingLocalStorageKey,
+  sameCookingOwnerRecipeContext,
   endLocalCookingSession,
   materializeCookingLocalSession,
   parseCookingLocalSession,
@@ -120,6 +121,17 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   const [clock, setClock] = useState(() => Date.now());
   const wakeLockRef = useRef<WakeLockHandle | null>(null);
   const storageKey = useMemo(() => userId ? cookingLocalStorageKey(userId, recipeId) : null, [recipeId, userId]);
+  const cookingAuthContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+  const activeCookingContextKeyRef = useRef<string | null>(cookingAuthContextKey);
+  useLayoutEffect(() => {
+    // Clear the preceding owner's Cooking snapshot before the next paint.
+    activeCookingContextKeyRef.current = cookingAuthContextKey;
+    setUserId(null);
+    setSession(null);
+    setResumeCandidate(null);
+    setError(null);
+    setLoading(true);
+  }, [cookingAuthContextKey]);
 
   const writeLocalForOwner = useCallback((ownerId: string, next: CookingLocalSession) => {
     window.localStorage.setItem(cookingLocalStorageKey(ownerId, recipeId), serializeCookingLocalSession(next));
