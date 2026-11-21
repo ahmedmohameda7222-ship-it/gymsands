@@ -177,7 +177,7 @@ N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
 N105: FIFTY_THREE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: TWENTY_FOUR_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
-N107: EIGHTEEN_BROWSER_CASES_AUTHORED_UNTESTED
+N107: NINETEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -740,3 +740,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - `readCachedWeek` previously cast arbitrary legacy `localStorage` JSON directly as `WeekResponse`, permitting malformed/owner-crossed cached projections. Authored N105 versioned-envelope owner mismatch/malformed cache regression FIRST at `721a6f925b02b75f880bb8e7d69e3bc6c311bd93`, **NOT RUN**. Added V2 `serializeOwnedMealPlanWeekCache` / `deserializeOwnedMealPlanWeekCache` in `meal-plan-offline.ts` at `84a0a8bfbaeb0a3dbc1d77ec782235ddc5696054`, including owner/week/version check and owned week/occurrence projection checks. Refined type narrowing at `b54c33a6c329fa36b9774ff80823717086105a02`; wired read/write at `b6710771f96290ac572dd4f950e5e34316731625`. Deliberately reject and remove **old owner-unbound cache JSON** (offline weeks must reload from authorized online source to be cached again); no DB cache/Queue schema changed. This is not a cryptographic signature or proof of JWT ownership by itself.
 - N096 Meal Plan still had module-level English `Mark eaten` and `Log with changes`, English-only copy/empty/success ChatGPT notices, Placeholder warning and browser notification body. Authored N107 EN/DE/AR source contract FIRST at `0d2c36b8b84f9639fbb64953a7b85e12476cbd6d` (**NOT RUN**). Added 10 i18n keys × 3 locales at `46151fb5a77183ed775a11190bc47b767aa3495e`, wired labels/notices/reminders at `f1eb2530ca8598073033ed550bd52c777668988f`. Did not change current version/root nutritional data, reminder permissions or actual Diary Intake.
 - Fresh direct GitHub source comparison from `ab0ad22c4d0c1bb1d90f722996841d63beba5e98` to `9d4c3cc926e0ec0fdae3c409720bdf02ca5cb39c`: **21** commits, **7** net changed paths, **0** workflow/migration paths. Exactly 53 consumer test declarations and 24 privacy/MCP test declarations, source browser file 11 direct test declarations plus generated locale cases. Runner minimum is **177** across seven groups: **25+18+32+53+24+18+7**. No tests, CI, full-app QA, lint, production build, synthetic two-user browser replay or release approval were executed. Final scope/G-09/G-10/G-11 and operational Owner decisions remain. These are **source-authored untested** corrections, not accepted closure.
+
+
+## N095 cross-week offline copy lastError contract — 2026-11-21
+
+- Source-audited `writeCopiesToWeek` during N095 follow-up. Online cross-week copy failures were enqueued with `status: "needs_attention"` but stored an ad-hoc `error` property even though `MealPlanOfflineMutation` has **`lastError?: string`**; queue serializers/consumers ignore the unknown `error` field. This silently loses the diagnostic needed to reconcile queued copy failures.
+- Authored N107 source contract regression **first**, **NOT RUN**, at `6770b0d548f6d7b2ee958b75c5de054eb0e7fd6b`. Minimal source fix at `86578052f98a9cca80cdd83e8cca74d4b0acc57b` writes `lastError` under the existing typed queue contract; no server/RPC/schema or offline retry behavior altered. Final-only N107 browser source minimum **18→19** at `a0915d3b786e8f28d47b9f24d31c2e234853ada9`.
+- Seven-group authored QA minimum now **178 = 25+18+32+53+24+19+7**. This is **SOURCE_AUTHORED_UNTESTED**, not a reproduced browser result, runtime queue replay, CI or Production acceptance.
