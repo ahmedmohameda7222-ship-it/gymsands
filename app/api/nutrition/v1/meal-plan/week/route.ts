@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { isIsoDate } from "@/lib/date-utils";
+import { parseNonNegativeRevision } from "@/lib/nutrition-v1/write-revision";
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
 import {
@@ -72,8 +73,8 @@ export async function POST(request: Request) {
     const body = object(await request.json().catch(() => ({})), "Meal Plan command");
     if (body.kind === "mutate") {
       const mutation = object(body.mutation ?? {}, "Meal Plan mutation") as MealPlanWeekMutation;
-      const baseRevision = Number(body.baseRevision);
-      if (!Number.isInteger(baseRevision) || baseRevision < 0) throw new NutritionRequestError("Base revision is invalid.");
+      const baseRevision = parseNonNegativeRevision(body.baseRevision);
+      if (baseRevision === null) throw new NutritionRequestError("Base revision is invalid.");
       if (typeof body.operationId !== "string") throw new NutritionRequestError("Operation ID is required.");
       const result = await mutateMealPlanWeek(context.supabase, context.user.id, {
         weekId: typeof body.weekId === "string" ? body.weekId : null,
