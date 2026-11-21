@@ -178,7 +178,7 @@ N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: SIXTEEN_MCP_PRIVACY_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
-N108: MIGRATION_SOURCE_TESTS_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
+N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
 N111: BLOCKED_G11
@@ -277,3 +277,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Nutrition-only G11 workflow now starts `next dev` on localhost:3000 with `NEXT_PUBLIC_USE_MOCK_AUTH=true` and no Supabase credentials, verifies local HTTP readiness, then exports exact fixture paths to the Actions job before invoking the scoped runner.
 - Browser page routes only `/api/nutrition/v1/foods?*` to a clearly labeled synthetic Food fixture (or empty page), enabling actual UI layout, locale, offline and error-state assertions without Production dependencies. **Mock auth is not genuine authenticated owner isolation**; all associated screenshots and UI results must be labeled as mock-only, and N107 cannot be marked final QA accepted until separate real disposable API/auth/RLS tests run.
 - No browser test, local server, CI workflow, fixture generator or Production operation was executed here. Authoring is not evidence of passing QA.
+
+## N108 follow-up — exact release-runtime and source-lock tests
+
+- Added three Nutrition-only release-integrity cases: immutable release-critical script/YAML Git blobs compared to the exact base, source lock structure/CC0-vs-production-authority boundary, and absence of reintroduced legacy `*.test.*` / `*.spec.*` tracked files outside the seven Nutrition-only groups.
+- N108 now has seven scoped tests, but this is unexecuted source. It **does not assert PR #189 merged**, because `scripts/post-deploy-provenance.mjs` remains in PR #189, not `main`. Quality/release evidence integration and full FNDDS original archives remain blocked G-01/G-09/G-11.

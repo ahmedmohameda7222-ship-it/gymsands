@@ -52,3 +52,47 @@ test("Plan10 FNDDS original source lock and bytes are mandatory, not inferred",(
   assert.match(lock.sourceChecksumSha256,/^[a-f0-9]{64}$/);
   assert.equal(sha256(bytes),lock.sourceChecksumSha256);
 });
+
+
+// Exact release-integrity runtime files must remain byte-identical to the
+// released baseline until separately approved PR #189 disposition (G-01).
+test("Nutrition candidate preserves current Production release integrity runtimes",()=>{
+  const {base}=reviewed();
+  const protectedPaths=[
+    "scripts/create-release-manifest.mjs",
+    "scripts/release-preflight.mjs",
+    "scripts/quality-evidence-contract.mjs",
+    "scripts/verify-built-release-metadata.mjs",
+    "scripts/check-migration-ledger.mjs",
+    ".github/workflows/release-preflight.yml"
+  ];
+  for(const file of protectedPaths){
+    const previous=git("rev-parse",base+":"+file);
+    const current=git("rev-parse","HEAD:"+file);
+    assert.equal(current,previous,
+      "Release-critical source was edited without separate approved disposition: "+file);
+  }
+});
+test("original Foundation source lock has exact immutable release and hex evidence",()=>{
+  const path="data/food-catalog/source-locks/usda-foundation-2026-04.json";
+  const lock=JSON.parse(readFileSync(path,"utf8"));
+  assert.equal(lock.provider,"USDA_FDC");
+  assert.equal(lock.dataset,"FoundationFoods");
+  assert.equal(lock.sourceVersion,"2026-04-30");
+  assert.equal(lock.sourceFilename,"FoodData_Central_foundation_food_json_2026-04-30.zip");
+  assert.equal(new URL(lock.sourceUrl).protocol,"https:");
+  assert.match(lock.sourceChecksumSha256,/^[a-f0-9]{64}$/);
+  assert.match(lock.configChecksumSha256,/^[a-f0-9]{64}$/);
+  assert.ok(Number.isSafeInteger(lock.sourceBytes)&&lock.sourceBytes>0);
+  assert.equal(lock.productionAuthority,false,"Research lock cannot grant Production authority");
+});
+test("Nutrition QA does not silently reintroduce legacy app-wide tracked tests",()=>{
+  const tracked=git("ls-files").split("\n").filter(Boolean);
+  const knownCases=tracked.filter(path=>/(\.test\.|\.spec\.)[cm]?[jt]sx?$/.test(path));
+  assert.ok(knownCases.length>=7,"Required final Nutrition suites missing");
+  const unexpected=knownCases.filter(path=>
+    !/^tests\/nutrition-final\/[^/]+\.test\.mjs$/.test(path));
+  assert.deepEqual(unexpected,[],"Legacy non-Nutrition QA files reintroduced");
+  const scoped=tracked.filter(path=>/^tests\/nutrition-final\/[^/]+\.test\.mjs$/.test(path));
+  assert.equal(scoped.length,7);
+});

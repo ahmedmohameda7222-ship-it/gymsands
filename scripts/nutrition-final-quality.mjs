@@ -17,7 +17,7 @@ const groups=Object.freeze({
   "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:27},
   "nutrition-privacy-mcp": {file:"tests/nutrition-final/nutrition-privacy-mcp.test.mjs",minTests:16},
   "nutrition-browser-locale": {file:"tests/nutrition-final/nutrition-browser-locale.test.mjs",minTests:11},
-  "nutrition-migration-release": {file:"tests/nutrition-final/nutrition-migration-release.test.mjs",minTests:4}
+  "nutrition-migration-release": {file:"tests/nutrition-final/nutrition-migration-release.test.mjs",minTests:7}
 });
 const shaPattern=/^[a-f0-9]{40}$/;
 function readOptions(argv){
