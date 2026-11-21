@@ -211,6 +211,8 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   }, [authOwnerId, recipeId, writeLocalForOwner]);
 
   const initialize = useCallback(async (authenticatedOwnerId: string | null) => {
+    const requestContextKey = `${authenticatedOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
     setLoading(true);
     setError(null);
     setDirection(document.documentElement.dir === "rtl" ? "rtl" : "ltr");
@@ -223,10 +225,12 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       let ownerId = authenticatedOwnerId;
       if (!ownerId) {
         const auth = await supabase.auth.getUser();
+        if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
         if (auth.error) throw auth.error;
         ownerId = auth.data.user?.id ?? null;
       }
       if (!ownerId) throw new Error(nt("cookingSignIn"));
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       setUserId(ownerId);
       const ownerStorageKey = cookingLocalStorageKey(ownerId, recipeId);
       window.localStorage.removeItem(`plaivra:nutrition:cooking:${recipeId}:active`);
@@ -235,6 +239,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
         const reconciled = recovered.session.pendingMutations.length
           ? await flushPending(recovered.session, ownerId)
           : recovered.session;
+        if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
         if (reconciled.status === "active") {
           writeLocalForOwner(ownerId, reconciled);
           setResumeCandidate(reconciled);
@@ -253,6 +258,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
         return;
       }
       const active = await getActiveCookingSession(supabase, ownerId, recipeId);
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       if (active) {
         const local = materialize(active);
         if (!local) throw new Error(nt("cookingRecoveryFailed"));
@@ -261,17 +267,21 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
         setLoading(false);
         return;
       }
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       const started = await startCookingSession(supabase, ownerId, { recipeId });
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       const created = await getActiveCookingSession(supabase, ownerId, recipeId);
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       if (!created) throw new Error(`${nt("cookingLoadFailed")} ${started.sessionId}`);
       const local = materialize(created);
       if (!local) throw new Error(nt("cookingMaterializeFailed"));
       writeLocalForOwner(ownerId, local);
       setSession(local);
     } catch (cause) {
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       setError(cause instanceof Error ? cause.message : nt("cookingStartFailed"));
     } finally {
-      setLoading(false);
+      if (sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) setLoading(false);
     }
   }, [flushPending, materialize, nt, recipeId, router, writeLocalForOwner]);
 
