@@ -60,6 +60,7 @@ export function ShoppingList() {
     setError("");
     setNotice("");
     setBusy(false);
+    setDraft({ name: "", quantity: "1", unit: "item", notes: "" });
   }, [shoppingContextKey]);
 
   useEffect(() => { if (!user?.id) return; setWeekStartOverride(parseMealPlanWeekStartOverride(window.localStorage.getItem(weekStartOverrideKey(user.id)))); }, [user?.id]);
@@ -85,20 +86,22 @@ export function ShoppingList() {
   const excludedOccurrenceIds = useMemo(() => shoppingExcludedOccurrenceIds(data?.week ?? null), [data]);
 
   async function saveShopping(next: ShoppingOverride) {
-    if (busy || !ownerId) return;
+    if (busy || !ownerId) return false;
     const requestContextKey = `${ownerId}:${weekStart}`;
-    if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+    if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return false;
     setBusy(true);
     try {
       const nextOverride = { ...(data?.week?.week_override_json ?? {}), shopping: next };
       await mealPlanApi("/api/nutrition/v1/meal-plan/week", { method: "POST", body: JSON.stringify({ kind: "mutate", weekId: data?.week?.id ?? null, weekStartDate: weekStart, baseRevision: data?.week?.revision ?? 0, operationId: crypto.randomUUID(), mutation: { weekOverride: nextOverride } }) });
       if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
       await load();
-      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return false;
       setNotice("");
+      return true;
     } catch (cause) {
-      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return false;
       setError(cause instanceof Error ? cause.message : nt("shoppingSaveFailed"));
+      return false;
     } finally {
       if (sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) setBusy(false);
     }
@@ -106,7 +109,7 @@ export function ShoppingList() {
 
   function setDerivedState(need: ShoppingNeed, state: ShoppingState) { void saveShopping({ ...shoppingOverride, states: { ...shoppingOverride.states, [keyFor(need)]: state } }); }
   function patchDerived(need: ShoppingNeed, patch: Partial<DerivedEdit>) { const key = keyFor(need); const current = shoppingOverride.derivedEdits[key] ?? { quantity: null, notes: "" }; void saveShopping({ ...shoppingOverride, derivedEdits: { ...shoppingOverride.derivedEdits, [key]: { ...current, ...patch } } }); }
-  function addManual() { const name = draft.name.trim(); const quantity = parseShoppingWriteQuantity(draft.quantity); if (!name || quantity === null) return; void saveShopping({ ...shoppingOverride, manualItems: [...shoppingOverride.manualItems, { id: crypto.randomUUID(), name, quantity, unit: draft.unit.trim() || "item", state: "Needed", notes: draft.notes.trim() }] }); setDraft({ name: "", quantity: "1", unit: "item", notes: "" }); }
+  async function addManual() { const name = draft.name.trim(); const quantity = parseShoppingWriteQuantity(draft.quantity); if (!name || quantity === null) return; const saved = await saveShopping({ ...shoppingOverride, manualItems: [...shoppingOverride.manualItems, { id: crypto.randomUUID(), name, quantity, unit: draft.unit.trim() || "item", state: "Needed", notes: draft.notes.trim() }] }); if (saved) setDraft({ name: "", quantity: "1", unit: "item", notes: "" }); }
   function patchManual(item: ManualItem, patch: Partial<ManualItem>) { void saveShopping({ ...shoppingOverride, manualItems: shoppingOverride.manualItems.map((current) => current.id === item.id ? { ...current, ...patch } : current) }); }
   function removeManual(id: string) { void saveShopping({ ...shoppingOverride, manualItems: shoppingOverride.manualItems.filter((item) => item.id !== id) }); }
 
