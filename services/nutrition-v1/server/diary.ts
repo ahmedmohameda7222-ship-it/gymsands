@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isIsoDate } from "@/lib/date-utils";
 import { isUuid } from "@/lib/utils";
+import { parseDiaryWriteNutritionFact, parseDiaryWriteQuantity } from "@/lib/nutrition-v1/diary-write-numbers";
 import type { NutritionTargetValues } from "@/lib/nutrition-v1/targets";
 import { NutritionRequestError } from "@/services/nutrition-v1/server/errors";
 import { getEffectiveNutritionTarget } from "@/services/nutrition-v1/server/targets";
@@ -142,28 +143,31 @@ function record(value: unknown, label = "Frozen snapshot") {
 }
 
 function nullableNutrition(value: unknown, label: string) {
-  if (value === null || value === undefined || value === "") return null;
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < 0) {
+  const number = parseDiaryWriteNutritionFact(value);
+  if (number === undefined) {
     throw new NutritionRequestError(`${label} must be a non-negative number or unknown.`);
   }
   return number;
 }
 
 function positive(value: unknown, label: string) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) {
+  const number = parseDiaryWriteQuantity(value);
+  if (number === null) {
     throw new NutritionRequestError(`${label} must be greater than zero.`);
   }
   return number;
 }
 
-function validateFacts(value: DiaryNutritionFacts) {
-  nullableNutrition(value.caloriesKcal, "Calories");
-  nullableNutrition(value.proteinG, "Protein");
-  nullableNutrition(value.carbsG, "Carbohydrates");
-  nullableNutrition(value.fatG, "Fat");
-  return value;
+function validateFacts(value: DiaryNutritionFacts): DiaryNutritionFacts {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new NutritionRequestError("Diary nutrition facts must be an object.");
+  }
+  return {
+    caloriesKcal: nullableNutrition(value.caloriesKcal, "Calories"),
+    proteinG: nullableNutrition(value.proteinG, "Protein"),
+    carbsG: nullableNutrition(value.carbsG, "Carbohydrates"),
+    fatG: nullableNutrition(value.fatG, "Fat"),
+  };
 }
 
 function normalizeSource(source: LogMealSource) {
@@ -187,19 +191,19 @@ function normalizeSource(source: LogMealSource) {
   throw new NutritionRequestError("Unsupported Diary source.");
 }
 
-function validateItems(items: DiaryLogItem[]) {
+function validateItems(items: DiaryLogItem[]): DiaryLogItem[] {
   if (!Array.isArray(items) || !items.length) throw new NutritionRequestError("At least one Plate item is required.");
   if (items.length > 100) throw new NutritionRequestError("A Plate cannot contain more than 100 items.");
-  for (const item of items) {
-    if (!item || typeof item !== "object") throw new NutritionRequestError("Plate items are invalid.");
+  return items.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new NutritionRequestError("Plate items are invalid.");
     requiredText(item.foodName, "Food name", 300);
     requiredText(item.servingLabel, "Serving label", 120);
-    positive(item.quantity, "Quantity");
-    validateFacts(item.nutrition);
+    const quantity = positive(item.quantity, "Quantity");
+    const nutrition = validateFacts(item.nutrition);
     optionalId(item.foodItemId, "Food");
     optionalId(item.userFoodItemId, "Personal Food");
-  }
-  return items;
+    return { ...item, quantity, nutrition };
+  });
 }
 
 function targetFacts(target: NutritionTargetValues | null): DiaryNutritionFacts {
