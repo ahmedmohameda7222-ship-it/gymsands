@@ -57,8 +57,7 @@ type CopyDraft = { item: PlannedOccurrenceRow; dates: string[] };
 type BulkCopyDraft = { scope: "day" | "week"; targetDate: string };
 
 const coreSlots = ["Breakfast", "Lunch", "Dinner", "Snacks"];
-const markEatenLabel = "Mark eaten";
-const logWithChangesLabel = "Log with changes";
+
 const CACHE_PREFIX = "plaivra:nutrition-v1:meal-plan:cache";
 const QUEUE_PREFIX = "plaivra:nutrition-v1:meal-plan:queue";
 const MAX_BROWSER_TIMEOUT_MS = 2_000_000_000;
@@ -209,6 +208,8 @@ export function MealPlanPage() {
   const params = useSearchParams();
   const { user } = useAuth();
   const { nt, language, dir, locale } = useNutritionV1Translation();
+  const markEatenLabel = nt("markEaten");
+  const logWithChangesLabel = nt("logWithChanges");
   const ownerId = user?.id ?? null;
   const today = useTodayDate();
   const requestedDate = params.get("date");
@@ -271,14 +272,14 @@ export function MealPlanPage() {
       const remaining = target.getTime() - Date.now();
       if (remaining <= 0) {
         reminderTimersRef.current.delete(item.id);
-        try { new Notification(item.frozen_name, { body: `${item.meal_slot_key} is planned now.`, tag: `plaivra-meal-${item.id}` }); } catch { /* reminder delivery never blocks planning */ }
+        try { new Notification(item.frozen_name, { body: nt("mealReminderNow", { slot: item.meal_slot_key }), tag: `plaivra-meal-${item.id}` }); } catch { /* reminder delivery never blocks planning */ }
         return;
       }
       const timer = window.setTimeout(scheduleNext, Math.min(remaining, MAX_BROWSER_TIMEOUT_MS));
       reminderTimersRef.current.set(item.id, timer);
     };
     scheduleNext();
-  }, [cancelMealReminder]);
+  }, [cancelMealReminder, nt]);
 
   useEffect(() => {
     if (!data) return;
@@ -495,7 +496,7 @@ export function MealPlanPage() {
     if (!ownerId) return;
     const requestContextKey = cacheKey(ownerId, weekStart);
     if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
-    if (item.source_type === "placeholder") { setNotice("Confirm or replace this Placeholder in the logging flow before Plaivra records actual intake."); logWithChanges(item); return; }
+    if (item.source_type === "placeholder") { setNotice(nt("placeholderCannotMarkEaten")); logWithChanges(item); return; }
     try {
       await mealPlanApi("/api/nutrition/v1/meal-plan/week", { method: "POST", body: JSON.stringify({ kind: "complete", occurrenceId: item.id, operationId: crypto.randomUUID(), executionSnapshot: null }) });
       if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
@@ -630,7 +631,7 @@ export function MealPlanPage() {
     const requestContextKey = cacheKey(ownerId, weekStart);
     if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
     const sourceRows = bulkCopyDraft.scope === "day" ? selectedOccurrences : data.occurrences;
-    if (!sourceRows.length) { setNotice(`There is nothing to copy from this ${bulkCopyDraft.scope}.`); setBulkCopyDraft(null); return; }
+    if (!sourceRows.length) { setNotice(nt(bulkCopyDraft.scope === "day" ? "copyEmptyDay" : "copyEmptyWeek")); setBulkCopyDraft(null); return; }
     const targetWeekStart = bulkCopyDraft.scope === "week" ? startOfMealPlanWeek(bulkCopyDraft.targetDate, effectiveFirstDay) : startOfMealPlanWeek(bulkCopyDraft.targetDate, effectiveFirstDay);
     const copies = sourceRows.flatMap((item) => {
       const targetDate = bulkCopyDraft.scope === "day" ? bulkCopyDraft.targetDate : shift(targetWeekStart, dayOffset(weekStart, item.plan_date));
@@ -638,7 +639,7 @@ export function MealPlanPage() {
     });
     await writeCopiesToWeek(targetWeekStart, copies);
     if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
-    setNotice(`${bulkCopyDraft.scope === "day" ? "Day" : "Week"} copied with fresh planned-item identities. Execution, reminder, and Shopping state were not copied.`);
+    setNotice(nt(bulkCopyDraft.scope === "day" ? "copySuccessDay" : "copySuccessWeek"));
     setBulkCopyDraft(null);
   }
 
@@ -661,8 +662,8 @@ export function MealPlanPage() {
   }
   async function planWithChatGPT() {
     const prompt = `Help me propose changes for my Plaivra Meal Plan week starting ${weekStart}. Treat the plan as intention only. Return structured ADD, CHANGE, and REMOVE proposals for explicit review; do not log anything as eaten.`;
-    try { await navigator.clipboard.writeText(prompt); setNotice("ChatGPT planning prompt copied. Review any returned proposal before Plaivra applies it."); }
-    catch { setNotice("Open ChatGPT externally and ask for structured Meal Plan changes. Review every proposal before applying it in Plaivra."); }
+    try { await navigator.clipboard.writeText(prompt); setNotice(nt("planningPromptCopied")); }
+    catch { setNotice(nt("planningPromptFallback")); }
   }
 
   const syncLabel = (state: string) => state === "Needs attention"
