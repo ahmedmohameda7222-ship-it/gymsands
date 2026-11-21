@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isUuid } from "@/lib/utils";
-import { requireNonNegativeFoodNumber } from "@/lib/nutrition-v1/user-food-write-numbers";
+import { requireNonNegativeFoodNumber, optionalPositiveFoodNumber } from "@/lib/nutrition-v1/user-food-write-numbers";
 import {
   resolveCurrentGenerationFoodForNewUseFromSupabase,
 } from "@/services/food-catalog/server/current-generation-service";
@@ -54,13 +54,6 @@ function nullableNonNegative(value: unknown, label: string) {
   return requireNonNegativeFoodNumber(value, label);
 }
 
-function nullablePositive(value: unknown, label: string) {
-  if (value === null || value === undefined || value === "") return null;
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) throw new Error(`${label} must be greater than zero.`);
-  return number;
-}
-
 function checked<T>(result: { data: T | null; error: { message?: string } | null }, label: string): T {
   if (result.error) throw new Error(`${label}: ${result.error.message ?? "database error"}`);
   return result.data as T;
@@ -80,7 +73,7 @@ function normalizeWrite(input: UserFoodWriteInput) {
     protein_g: nullableNonNegative(input.proteinG, "Protein"),
     carbs_g: nullableNonNegative(input.carbsG, "Carbs"),
     fat_g: nullableNonNegative(input.fatG, "Fat"),
-    nutrition_basis_amount: nullablePositive(input.basisAmount, "Basis amount"),
+    nutrition_basis_amount: optionalPositiveFoodNumber(input.basisAmount, "Basis amount"),
     nutrition_basis_unit: basisUnit,
     notes: text(input.notes) || null,
     category: text(input.category) || "Custom",
