@@ -364,33 +364,41 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
   }
 
   async function removeCurrent() {
-    if (!detail || busy) return;
+    if (!detail || busy || !open || !ownerId) return;
+    const requestScope = activeSavedMealContextRef.current;
+    if (!isCurrentSavedMealContext(requestScope)) return;
     setBusy(true);
     try {
       await request(`/api/nutrition/v1/saved-meals/${encodeURIComponent(detail.savedMeal.id)}`, { method: "DELETE" });
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setDetail(null);
       setMode("browse");
       await loadActive();
     } catch (cause) {
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setError(cause instanceof Error ? cause.message : text.deleteFailed);
     } finally {
-      setBusy(false);
+      if (isCurrentSavedMealContext(requestScope)) setBusy(false);
     }
   }
 
   async function lifecycle(id: string, operation: "restore" | "purge") {
-    if (busyId) return;
+    if (busyId || !open || !ownerId) return;
+    const requestScope = activeSavedMealContextRef.current;
+    if (!isCurrentSavedMealContext(requestScope)) return;
     setBusyId(id);
     try {
       await request(`/api/nutrition/v1/saved-meals/${encodeURIComponent(id)}/commands`, {
         method: "POST",
         body: JSON.stringify({ operation }),
       });
+      if (!isCurrentSavedMealContext(requestScope)) return;
       await Promise.all([loadActive(), loadDeleted()]);
     } catch (cause) {
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setError(cause instanceof Error ? cause.message : text.lifecycleFailed);
     } finally {
-      setBusyId(null);
+      if (isCurrentSavedMealContext(requestScope)) setBusyId(null);
     }
   }
 
