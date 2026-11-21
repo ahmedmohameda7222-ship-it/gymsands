@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: TWENTY_NINE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: THIRTY_ONE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -334,3 +334,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Reviewed applied Nutrition V1 grouped log implementation and historical `supabase/verification/nutrition-v1-plan-diary-targets.sql` as a contract reference (its legacy tests were not restored). Added two new Nutrition-only disposable SQL tests: exact duplicate operation ID log replay yields one grouped log and one unknown-macro source Food log; a second synthetic authenticated owner cannot read the first owner's grouped log.
 - Both user identities and all SQL rows are created inside disposable localhost:54322 transactions and rolled back. No actual OAuth/API token flow, other-user data, live Postgres or Production was used. Tests are **authored but unexecuted until G-11**.
 - N105 now has 29 scoped cases; full Meal Plan/Saved Meal/Recipe handoff and published generation integration remains outstanding.
+
+## N105 follow-up — Saved Meal atomic idempotency
+
+- Added two synthetic transaction-scoped Saved Meal cases based on active `20260828220000_nutrition_v1_saved_meal_creation_idempotency.sql` and `20260828032200_nutrition_v1_final_closure.sql`: same owner+operation+frozen food snapshot retry returns one root, one immutable child and one operation record; changed semantics under the exact same key is rejected.
+- All inputs are synthetic, Food UUID is a frozen snapshot fixture only, and SQL is restricted to localhost:54322 with rollback. Tests do not prove an actual current-generation Food, authoritative source lineage or public API owner isolation. No tests executed; G-11 remains closed.
+- N105 now has 31 authored cases.

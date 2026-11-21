@@ -350,3 +350,42 @@ test("separate authenticated owner cannot read another member's grouped Diary",(
     "ROLLBACK;");
   assert.equal(result,"0");
 });
+
+
+// Saved Meal first-try/replay identity under real disposable PostgreSQL authority.
+const savedMealOperationId="ed300000-0000-4000-8000-000000000060";
+const syntheticFrozenFoodId="ed300000-0000-4000-8000-000000000070";
+function savedMealCommand(name="QA Synthetic Meal"){
+  const item=JSON.stringify([{
+    kind:"food",food_id:syntheticFrozenFoodId,resolved_quantity:1,
+    resolved_serving_label:"100 g",frozen_name:"Synthetic Rice",
+    nutrition:{calories:null,protein_g:null,carbs_g:null,fat_g:null}
+  }]).replaceAll("'","''");
+  return "SELECT public.create_nutrition_saved_meal_idempotent('"+
+    savedMealOperationId+"','"+name+"',null,false,'"+item+"'::jsonb); ";
+}
+test("disposable Saved Meal retry converges to one frozen root and one child",()=>{
+  const result=diarySql(diarySetup()+
+    savedMealCommand()+savedMealCommand()+
+    "SELECT "+
+    "(SELECT count(*) FROM public.nutrition_saved_meals "+
+      "WHERE user_id='"+ownerDiary+"' AND name='QA Synthetic Meal'),"+
+    "(SELECT count(*) FROM public.nutrition_saved_meal_items "+
+      "WHERE user_id='"+ownerDiary+"'),"+
+    "(SELECT count(*) FROM private.nutrition_saved_meal_creation_operations "+
+      "WHERE user_id='"+ownerDiary+"' AND operation_id='"+savedMealOperationId+"'); "+
+    "ROLLBACK;");
+  assert.equal(result,"1|1|1");
+});
+test("same Saved Meal idempotency key with different frozen content is rejected",()=>{
+  const query=diarySetup()+savedMealCommand()+
+    savedMealCommand("Changed meal semantics");
+  const result=spawnDiarySql("psql",["-X","-q","-A","-t","-v","ON_ERROR_STOP=1",
+    "-d",localDiaryDatabase(),"-c",query],{
+    encoding:"utf8",timeout:15000,maxBuffer:1024*1024,
+    env:{...process.env,PGCONNECT_TIMEOUT:"5"}
+  });
+  assert.equal(result.error,undefined);
+  assert.notEqual(result.status,0,"Wrong-semantic retry cannot succeed");
+  assert.match(String(result.stderr),/already used with different input/);
+});
