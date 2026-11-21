@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: THIRTY_EIGHT_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: THIRTY_NINE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -482,3 +482,12 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Authored N105 regression first in `b6104f03713769ae134dd0c4f990314685c4a2b8` demanding only nonnegative safe integer JSON numbers, including explicit 0. Added portable `lib/nutrition-v1/write-revision.ts` in `bcd6700e7d56ebb0eb529c7f263f8902ab2acd07` and wired `Meal Plan week POST mutate` in `717bf06e6b40bbf2608dff232f6e3a1ee6b29735` and `Recipe PATCH autosave` in `9219e98a2acc99db5c3f1f9150114454c342e0d2`. Existing invalid revision errors remain HTTP 400 via `NutritionRequestError`; no DB schema, service contracts or accepted nonnegative number semantics changed.
 - Updated N105 future QA runner minimum `37 → 38` at `c48c3fd2c23160944582c9654b2f4395485df457`. Total minimum seven groups **150** (25+18+32+38+19+11+7) authored cases, **0 executed**. Direct GitHub code diff is exactly: `app/api/nutrition/v1/meal-plan/week/route.ts`, `app/api/nutrition/v1/recipes/[recipeId]/route.ts`, `lib/nutrition-v1/write-revision.ts`, `scripts/nutrition-final-quality.mjs`, `tests/nutrition-final/nutrition-consumers.test.mjs`.
 - Disposition `SOURCE_AUTHORED_UNTESTED`; no CI, full app QA, local DB execution, Production write, deployed release or PR merge. Test red/green verification remains a final QA obligation, not a completed claim.
+
+
+## N093 Recipe GET blank query handoff correction — 2026-11-21
+
+- Re-read exact Recipe GET handoff route on branch `bf56fcf90911c4ba7801c3a4a71e9e3aab2225e6`. Existing `rawQuantity === null || rawQuantity.trim() === "" ? 1 : Number(rawQuantity)` treated an **explicit empty/whitespace `quantity` query parameter** as a measured single serving. This violated the N093 resolved contract: omitted Recipe quantity alone may default to one; explicit invalid quantities must fail without fabricated measurements.
+- Authored N105 case first at `1ec29e581750674d4a92528f436eb20cacd9a011`, proving desired absent/null-query-key default `1`, positive numeric query values and rejection of explicitly blank, nonpositive, non-finite and malformed values; **the test was not executed** under pre-final QA policy.
+- Added portable `parseRecipeHandoffQueryQuantity(value: string | null)` in `lib/nutrition-v1/handoff-quantity.ts` at `fe790f97294be9ca32f4ac8bf43ad4ed205cfa36`, preserving valid numeric query behavior. Wired only `app/api/nutrition/v1/recipes/[recipeId]/handoff/route.ts` at `31c74f9f446094b18df2799b2cf7a534af3dbd0c` to reject an explicit blank quantity via bounded 400 `NutritionRequestError` before service lookup.
+- Raised N105 future-run minimum from 38 to **39** in `scripts/nutrition-final-quality.mjs` at `5c973e92df68618f9d08acf0a8793de4a8f4e7a4`. The seven-group authored minimum is now **151 = 25+18+32+39+19+11+7**. Independent GitHub comparison shows exactly four touched files: route, pure helper, consumer tests and final QA runner; **zero workflow/migration changes**.
+- Status **SOURCE_AUTHORED_UNTESTED**; no automated tests, CI, browser, local DB replay, Production mutations, PR merge or deploy. This is a source-level correction pending the authorized Nutrition-only final run, not runtime-verified completion.
