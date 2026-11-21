@@ -1,4 +1,5 @@
 import { nutritionJson } from "@/lib/nutrition-v1/http";
+import { InvalidNutritionFoodInputError } from "@/lib/nutrition-v1/user-food-write-numbers";
 import { RecipeDraftRevisionConflictError } from "@/services/nutrition-v1/server/recipes";
 
 const DEFAULT_INVALID_MESSAGE = "Nutrition request is invalid.";
@@ -29,6 +30,13 @@ export function nutritionErrorResponse(error: unknown) {
   if (error instanceof NutritionRequestError) {
     return nutritionJson(
       { error: error.publicMessage, code: error.code },
+      { status: error.status },
+    );
+  }
+
+  if (error instanceof InvalidNutritionFoodInputError) {
+    return nutritionJson(
+      { error: boundedPublicMessage(error.message), code: error.code },
       { status: error.status },
     );
   }
