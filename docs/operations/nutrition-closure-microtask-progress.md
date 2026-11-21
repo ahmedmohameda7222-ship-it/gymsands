@@ -173,7 +173,7 @@ N099: SCOPE_PROVISIONAL_BLOCKED_G11
 N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: FRESH_FOUNDATION_CONTRACT_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
-N103: DISPOSABLE_DB_GOVERNANCE_TESTS_AUTHORED_NOT_RUN
+N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: FIFTEEN_GENERATION_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: MCP_PRIVACY_SCOPE_TESTS_AUTHORED_AUTH_INTEGRATION_GAP
@@ -242,3 +242,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - This is an Important architecture/contract integration finding, not a cosmetic test. Fix requires approved review of an equivalently strict, source-bound Nutrition-only evidence contract and its integration with existing release manifest/exact release verifier, without weakening PR #189 squash provenance or spoofing legacy canonical gates. Separate G01/G11 authority is missing. No speculative bypass is added.
 - **Ruling:** Continue safe *authoring* of isolated final-QA source while the exact run remains blocked; do not treat authored tests as approved final QA or full Plan10 implementation. This is a narrow scheduling accommodation to user's instruction to keep working. If wrong, QA source will require revision after the real FNDDS/market/Production source contracts are established.
 - Self-review only: this environment has no separate reviewer subagent or native checked-out Git worktree. Exact GitHub commit/tree audit is available; full test execution, independent security review and release acceptance have not occurred. Do not merge.
+
+## N103 follow-up — disposable governance/ingestion integration source only
+
+- Ruling: use existing local `postgresql://...@127.0.0.1:54322/postgres` guard and only synthetic transaction-scoped SQL; no additional Plan9/Plan10 operation, Production connection, migration or CI suite is authorized.
+- Added seven cases based directly on `20260904100000_food_catalog_ingestion_v2_authority.sql` and `20261013050000_food_catalog_plan9_review_decision_hardening.sql`: nine protected RLS tables, direct-write grant denial for anon/authenticated/service_role, nine immutable before-update/delete triggers, exact operation replay, checksum-conflict rejection, absent Production lease rejection and forged/no-session human review denial.
+- All fixture writes are inside uncommitted disposable transactions, and all SQL connections pass the localhost:54322 guard. Cases deliberately require actual disposable migration replay and are not unit mocks.
+- New N103 count: 13 asserted cases. **No SQL tests or CI run executed**; the G-11 authorization gate and absent runtime remain explicit. Source inspection alone does not establish passing RLS, database runtime or ingestion idempotency.
