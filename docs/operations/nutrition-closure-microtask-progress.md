@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FORTY_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FORTY_ONE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -507,3 +507,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Rechecked the **exact historical source** `FoodData_Central_foundation_food_json_2026-04-30.zip` from the immutable `data/food-catalog/source-locks/usda-foundation-2026-04.json`: expected 469303 ZIP bytes, SHA256 `186e988ec542e913f51ef62b86a47758e8cdd0d1dc3889e7b055581f3c09c77a`, source release 2026-04-30. No alternate release or source hash substituted.
 - USDA's official `https://fdc.nal.usda.gov/download-datasets/` still lists the **April 2026 Foundation JSON** archive, distinct from the newer October 2026 release. Actual byte retrieval from the exact official archive URL failed in the execution container; independent `curl -IL` failed DNS resolution of `fdc.nal.usda.gov` in that container. The web metadata fetch identified an application/zip resource but did not provide ZIP bytes. External third-party mirrors and published checksum claims were not treated as cryptographic verification.
 - Disposition: `OFFICIAL_LOCK_REVIEWED_ZIP_NOT_REHASHED`, unchanged. No downloaded archive, `sha256sum`, decompression, original JSON inspection, canary replay, local-db dry-run or Production mutation can honestly be reported from this attempt. Future exact byte-based N029/N102/N108 acceptance needs network access to the original pinned ZIP plus local hash and member checks.
+
+
+## N095 Meal Plan occurrence HTTP JSON number boundary — 2026-11-21
+
+- Source trace at `6ebb2266e89e7f60293996e7daf8eaf87f974edd`: `POST /api/nutrition/v1/meal-plan/week` → `mutateMealPlanWeek` → `normalizeOccurrenceForMutation`. The mutation path reused `Number(value)` to validate `resolvedQuantity` and `position`. This accepted JSON `true` as one serving, `false` as position zero, and numeric strings as measurements/positions; the writer must not silently invent measured values or accept type mismatches. Distinct persisted DB numeric-text readback still legitimately uses the older conversion helpers.
+- Authored one N105 pure behavior regression first at `7eae186f8dbd1b791b0d2d28a822427aea0ce15d`, **NOT EXECUTED**, requiring only finite positive numeric quantities or explicit null, and safe nonnegative integer positions (missing defaults 0); invalid inputs require `NutritionRequestError` HTTP 400 rather than generic 500.
+- Narrow service change at `61ed7640ff45ee8579bfef67bb43d2fc4748dd43`: introduced `mutationPositiveNumber` and `mutationPosition` exclusively for the HTTP mutation source; did not change the persisted projection or SQL signatures. Final-only runner consumer minimum increased 40 → **41**, group source minimum **153** = 25+18+32+41+19+11+7.
+- **SOURCE_AUTHORED_UNTESTED**; no actual red/green test run, CI, full build, database action, deployment or review acceptance. Do not count as runtime-verified completion.
