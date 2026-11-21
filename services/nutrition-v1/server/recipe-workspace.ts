@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { RecipeNutritionPerServing } from "@/lib/nutrition-v1/recipe-cache";
-import { recipeVersionBackfillIds } from "@/lib/nutrition-v1/recipe-list-page";
+import { recipeVersionBackfillIds, recipeUsageBackfillIds } from "@/lib/nutrition-v1/recipe-list-page";
 import { normalizeOwnedRecipeCoverPath } from "@/lib/nutrition-v1/recipe-cover-path";
 import { clonePublishedRecipeGraphForDraft } from "@/lib/nutrition-v1/recipe-versioning";
 import { getCurrentCatalogTrustStates } from "@/services/nutrition-v1/server/current-food-trust";
@@ -225,9 +225,31 @@ export async function listRecipeHome(
       }
     }
   }
+  const usageRows = (usageResult.data ?? []) as Array<{ source_id: string | null; created_at: string }>;
   const lastUsed = new Map<string, string>();
-  for (const row of (usageResult.data ?? []) as Array<{ source_id: string | null; created_at: string }>) {
+  for (const row of usageRows) {
     if (row.source_id && !lastUsed.has(row.source_id)) lastUsed.set(row.source_id, row.created_at);
+  }
+  // An unusually high frequency Recipe can consume the entire global recent-log
+  // page, even if other displayed Recipes were also used. Resolve only missing
+  // roots after saturation, always within this authenticated owner and source type.
+  const missingUsageIds = recipeUsageBackfillIds(ids, usageRows, Math.min(80, limit * 4));
+  if (missingUsageIds.length) {
+    const backfills = await Promise.all(missingUsageIds.map((id) =>
+      supabase.from("nutrition_log_groups").select("source_id,created_at")
+        .eq("user_id", userId).eq("source_type", "recipe").eq("source_id", id)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    ));
+    for (let index = 0; index < missingUsageIds.length; index += 1) {
+      const result = backfills[index];
+      dbError(result.error);
+      if (result.data) {
+        if (result.data.source_id !== missingUsageIds[index]) {
+          throw new Error("Recipe usage row did not match its owner-scoped root.");
+        }
+        lastUsed.set(missingUsageIds[index], result.data.created_at);
+      }
+    }
   }
 
   return roots.map((root) => {
