@@ -241,3 +241,66 @@ test("the locked Foundation adapter rejects fabricated source ZIP digest or size
     ...localArtifact([]),sourceZipBytes:lock.sourceBytes+1
   }),/checksum or byte-size mismatch/);
 });
+
+
+// Plan9 cross-batch/cross-release identity and adversarial redirect cases.
+test("identical source identity resolves retired Food owner to stable redirect root",()=>{
+  const index=emptyIndex();
+  index.sourceIdentities.push({
+    provider:"USDA_FDC",dataset:"FoundationFoods",
+    sourceVersion:"2026-04-30",sourceRecordId:"123",foodId:"retired"
+  });
+  index.redirects.push({sourceFoodId:"retired",targetFoodId:"canonical"});
+  assert.deepEqual(match(candidate(),index),{kind:"match",foodId:"canonical"});
+});
+test("a cross-release Foundation Food only reuses canonical ID via strong semantic evidence",()=>{
+  const oldSource={...source,sourceVersion:"2026-10-30"};
+  const oldIdentity={provider:"USDA_FDC",dataset:"FoundationFoods",
+    sourceVersion:"2026-04-30",sourceRecordId:"123",foodId:"stable"};
+  const withoutEvidence=emptyIndex();
+  withoutEvidence.sourceIdentities.push(oldIdentity);
+  assert.deepEqual(decideCanonicalMatch({
+    source:oldSource,candidate:candidate(),index:withoutEvidence
+  }),{kind:"create"});
+  const semantic=usdaFoundationSemanticSignature("00123");
+  const withEvidence=emptyIndex();
+  withEvidence.sourceIdentities.push(oldIdentity);
+  withEvidence.semanticIdentities.push({semanticSignature:semantic,foodId:"stable"});
+  const enriched=candidate({identityEvidence:{
+    semanticSignature:semantic,preparation:null,state:null,form:null
+  }});
+  assert.deepEqual(decideCanonicalMatch({
+    source:oldSource,candidate:enriched,index:withEvidence
+  }),{kind:"match",foodId:"stable"});
+});
+test("qualified alias requires exact state/preparation/form, never the name alone",()=>{
+  const index=emptyIndex();
+  index.qualifiedAliases.push({
+    normalizedAlias:"rice",state:"cooked",preparation:"boiled",
+    form:"whole",foodId:"existing"
+  });
+  assert.deepEqual(match(candidate({aliases:[{locale:"en",value:"Rice"}]}),index),
+    {kind:"create"});
+  const c=candidate({
+    aliases:[{locale:"en",value:"Rice"}],
+    identityEvidence:{
+      semanticSignature:null,preparation:"boiled",state:"cooked",form:"whole"
+    }
+  });
+  assert.deepEqual(match(c,index),{kind:"match",foodId:"existing"});
+});
+test("cyclic redirect ownership is quarantined instead of inventing a root",()=>{
+  const index=emptyIndex();
+  index.sourceIdentities.push({
+    provider:"USDA_FDC",dataset:"FoundationFoods",
+    sourceVersion:"2026-04-30",sourceRecordId:"123",foodId:"a"
+  });
+  index.redirects.push({sourceFoodId:"a",targetFoodId:"b"},
+    {sourceFoodId:"b",targetFoodId:"a"});
+  const c=candidate();
+  const reasons=deriveCanonicalConflictReasons({source,candidate:c,index});
+  assert.ok(reasons.includes("identity_conflict"));
+  assert.equal(deriveProcessingDisposition({
+    decision:match(c,index),issues:[],conflictReasons:reasons
+  }).kind,"quarantine");
+});

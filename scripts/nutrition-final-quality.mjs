@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 // Required minimum assertions, not just an exit status from an empty test file.
 const groups=Object.freeze({
-  "food-catalog-source": {file:"tests/nutrition-final/food-catalog-source.test.mjs",minTests:21},
+  "food-catalog-source": {file:"tests/nutrition-final/food-catalog-source.test.mjs",minTests:25},
   "governance-ingestion": {file:"tests/nutrition-final/governance-ingestion.test.mjs",minTests:13},
   "activation-generation-search": {file:"tests/nutrition-final/activation-generation-search.test.mjs",minTests:25},
   "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:27},

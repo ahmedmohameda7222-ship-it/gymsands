@@ -172,7 +172,7 @@ N098: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N099: SCOPE_PROVISIONAL_BLOCKED_G11
 N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
-N102: TWENTY_ONE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
+N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
@@ -300,3 +300,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Added nine targeted Foundation adapter cases from current `lib/food-catalog/ingestion/usda-foundation/index.ts` and approved lock JSON: exact five-digit NDB normalization, stable NDB-based identity, absence of invented identity, numeric/textual LOQ->NULL versus measured zero, invalid/duplicate nutrient denial, measured portion-only conversion, no invented country relevance, and source-archive digest/byte count guard.
 - Foundation source group now contains 21 authored cases. Synthetic in-memory objects do not prove source ZIP integrity, 1A1/1A2 cross-batch reconciliation, full native USDA data or Plan10 FNDDS import. Original ZIP rehash still missing; G-09/G-11 remain closed, no test suite executed.
+
+## N102 follow-up — strong identity cross-batch and redirect safeguards
+
+- Added four source matching cases based on current canonical matching implementation: redirect-root retention across reviewed source reingestion, no release-version-only auto-merge, explicit same-NDB semantic evidence to preserve canonical ID across releases, qualified alias requiring exact state/preparation/form evidence, and cycle ownership quarantined rather than force-matched.
+- N102 group now contains 25 authored tests. Still no actual original USDA archive bytes, cross-batch database writes, FNDDS adapter or final G-11 run. Source-only tests do not establish Production idempotency or release readiness.
