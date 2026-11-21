@@ -1,7 +1,7 @@
 /** Browser QA with synthetic local account fixtures; refuses Production hosts. */
 import assert from "node:assert/strict";
 import { after,test } from "node:test";
-import { existsSync,mkdirSync } from "node:fs";
+import { existsSync,mkdirSync,readFileSync } from "node:fs";
 import { join,resolve } from "node:path";
 import { chromium } from "@playwright/test";
 
@@ -140,5 +140,22 @@ test("local Food Library API failure is surfaced as a user-visible error",async(
     assert.ok((await main.getByRole("alert").textContent())?.trim());
   }finally{
     await context.close();
+  }
+});
+
+// N096 / N107 source-label regression: the actual browser accessibility matrix
+// remains deferred to final QA, but these accessible input names must be kept.
+test("Diary logging input accessible-name source contract",()=>{
+  const src=readFileSync(resolve("components/nutrition/diary/logging-session.tsx"),"utf8");
+  for(const label of [
+    'aria-label={et("searchFoods")}',
+    'aria-label={et("barcode")}',
+    'aria-label={text.optionalName}',
+    'aria-label={et("calories")}',
+    'aria-label={text.optionalProtein}',
+    'aria-label={text.optionalCarbs}',
+    'aria-label={text.optionalFat}'
+  ]){
+    assert.ok(src.includes(label),"Missing accessible input name: "+label);
   }
 });
