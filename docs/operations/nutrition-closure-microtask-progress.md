@@ -177,7 +177,7 @@ N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: SIXTEEN_MCP_PRIVACY_CASES_AUTHORED_AUTH_INTEGRATION_GAP
-N107: BROWSER_MATRIX_AUTHORED_SYNTHETIC_FIXTURES_ABSENT
+N107: ELEVEN_BROWSER_CASES_AUTHORED_SYNTHETIC_FIXTURES_ABSENT
 N108: MIGRATION_SOURCE_TESTS_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -265,3 +265,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Added nine new synthetic-only cases from actual `lib/mcp/idempotency.ts`, `lib/mcp/safety.ts` and `lib/privacy/deletion-request.ts`: owner/tool-separated idempotency UUIDs, invalid key rejection, exact deletion confirmation/impact, stable deletion request hash, recent reauthentication, owner-specific deletion subject digest, recursive output redaction, echoed text redaction, and rejection of caller-controlled owner identity.
 - N106 now has 16 authored tests. No real account deletion/export, OAuth flow, MCP API request or Production data access occurred. Integration consent/owner isolation and idempotency-RPC replay remain unverified. G-11 remains closed.
+
+## N107 follow-up — offline and API error browser cases
+
+- Extended rendered synthetic user/browser matrix to include **3 additional locale-specific offline/reconnection tests** and one local 503 Food API failure test. Required group floor now 11 cases (6 locale/account pairs, one four-destination smoke, three offline-state cases, one API-error case).
+- All flows remain restricted to localhost and supplied isolated synthetic authenticated storage states. Browser app server and six real isolated fixture states are absent, and the tests are **not executed**. A simulated API fault only proves UI error presentation when eventually run, not backend reliability.

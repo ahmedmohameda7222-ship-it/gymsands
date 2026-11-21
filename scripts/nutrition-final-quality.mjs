@@ -16,7 +16,7 @@ const groups=Object.freeze({
   "activation-generation-search": {file:"tests/nutrition-final/activation-generation-search.test.mjs",minTests:25},
   "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:27},
   "nutrition-privacy-mcp": {file:"tests/nutrition-final/nutrition-privacy-mcp.test.mjs",minTests:16},
-  "nutrition-browser-locale": {file:"tests/nutrition-final/nutrition-browser-locale.test.mjs",minTests:7},
+  "nutrition-browser-locale": {file:"tests/nutrition-final/nutrition-browser-locale.test.mjs",minTests:11},
   "nutrition-migration-release": {file:"tests/nutrition-final/nutrition-migration-release.test.mjs",minTests:4}
 });
 const shaPattern=/^[a-f0-9]{40}$/;

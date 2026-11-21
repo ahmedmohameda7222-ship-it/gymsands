@@ -81,3 +81,47 @@ test("populated synthetic account can reach all four core Nutrition destinations
     }
   }finally{await context.close()}
 });
+
+
+// N107 authenticated browser error-state and offline visibility matrix.
+// These require local isolated synthetic sessions; no Production hostname allowed.
+for(const [locale] of languages){
+  test("offline Food Library state is visible and clears on reconnection in "+locale,async()=>{
+    const {base,context,page}=await open(locale,"populated");
+    try{
+      const response=await page.goto(base+"/calories/food-hub",{
+        waitUntil:"domcontentloaded",timeout:30000
+      });
+      assert.equal(response?.status(),200);
+      const main=page.locator("main[lang]");
+      await main.waitFor({state:"visible",timeout:15000});
+      await context.setOffline(true);
+      const offlineStatus=main.getByRole("status");
+      await offlineStatus.waitFor({state:"visible",timeout:10000});
+      assert.ok((await offlineStatus.textContent())?.trim());
+      await context.setOffline(false);
+      await offlineStatus.waitFor({state:"hidden",timeout:10000});
+    }finally{
+      await context.close();
+    }
+  });
+}
+test("local Food Library API failure is surfaced as a user-visible error",async()=>{
+  const {base,context,page}=await open("en","empty");
+  try{
+    await page.route("**/api/nutrition/v1/foods?**",async route=>{
+      await route.fulfill({status:503,contentType:"application/json",
+        body:JSON.stringify({error:"synthetic local fault"})});
+    });
+    const result=await page.goto(base+"/calories/food-hub",{
+      waitUntil:"domcontentloaded",timeout:30000
+    });
+    assert.equal(result?.status(),200);
+    const main=page.locator("main[lang]");
+    await main.waitFor({state:"visible",timeout:15000});
+    await main.getByRole("alert").waitFor({state:"visible",timeout:15000});
+    assert.ok((await main.getByRole("alert").textContent())?.trim());
+  }finally{
+    await context.close();
+  }
+});
