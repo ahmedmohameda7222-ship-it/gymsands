@@ -390,3 +390,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - The number **143 is authored case count, not passing tests or completed tasks**. No tests, CI workflow, browser, disposable PostgreSQL or original archive hash command ran. Current Nutrition complete/Production eligible = **false**, not inferred from source code.
 - G01 PR189 disposition, G02 required-check rules, G04 exact first Owner identity, G05–08 each Plan9 operation, G09 sequencing+FNDDS bytes, G10 EG/SA/AE/market rights, G11 exact QA approval/signoff remain external gates. Existing Production zero Food/Generation/Owner and NULL current-generation pointer remain last independently read-only observed facts.
 - Next permitted operation is external independent approval review; after G11 exact candidate freeze, execute the scoped QA once, fix real failures, repeat with exact SHAs and document true PASS/FAIL. Do not merge, alter Production, fabricate licensed source rights or start post-release steps without gate acceptance.
+
+## Final verified deployment containment before approval handoff
+
+- Vercel project `prj_xuwRDlDXsnkSAgX8dZc9t22IFehI` connected account read-only `list_deployments`: current latest READY Production deployment `dpl_o1WSQe1TCymQBhJEbGenfH27AJjd` is still source SHA `de7c7ccea943e9b793a2a65b34f2a06a6f33be49`. Development branch `feat/nutrition-microtasks-2026-11-20` has **zero** Vercel deployments returned by exact branch filter.
+- GitHub main SHA from independent read is still `de7c7ccea943e9b793a2a65b34f2a06a6f33be49`; PR #189 remains OPEN, not merged. No Vercel production alias or Supabase target was changed by this source-only session.
+- These are provider metadata records, NOT live `/api/version` or `/api/health` runtime acceptance, and do not satisfy G03/G11 deployment signoff.
