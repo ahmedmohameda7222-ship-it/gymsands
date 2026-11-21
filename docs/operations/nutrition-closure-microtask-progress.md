@@ -433,3 +433,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Authored N105 error-class contract regression first at `5c80733f1549267318f151a9b88f4feba811e71c`, requiring `InvalidNutritionFoodInputError` to declare `status=400` and `code=nutrition_request_invalid`.
 - Added pure typed input error class to `lib/nutrition-v1/user-food-write-numbers.ts` at `d25c5de8666a2d475912bda2557c0928891305b8`, and narrow handler in `services/nutrition-v1/server/errors.ts` at `6300a8526e43b0d505abbbc18088795c32ea922e`. Only invalid Food number errors are reclassified; actual unexpected failures remain 500 and the public message remains bounded.
 - N105 scoped minimum raised from 34 to **35** at `fcf7e78b213134d5e7d61a8d44862e28997ff4a0`. All work is still untested until G-11 and no live requests/accounts were used.
+
+## N126 post-N093/N095 scoped diff reconciliation — 2026-11-21
+
+- Independently re-read branch `1ca64e424abbcef47392645162482b314931afc3` against unchanged main/base `de7c7ccea943e9b793a2a65b34f2a06a6f33be49` via recursive GitHub trees. Difference: 815 removed legacy files, 18 added files, 11 modified files; the **133 applied migration SQL blobs are byte-identical**.
+- Parsed all N001–N130 statuses: **130 unique task entries**, **46** explicitly `BLOCKED` or `DEFERRED`. N093 and N095 now identify verified boundary fixes authored but not tested; these are not completion claims.
+- The seven Nutrition-only test group minimums sum to **147 authored cases** (25/18/32/35/19/11/7). Static test case declarations and source diffs do not certify a passing run; G-11 QA still absent.
+- Code freeze, G-01 PR189 release disposition, G-04 verified human Owner, G-05–G-08 Plan9, G-09 FNDDS verified source/approved sequencing, G-10 country evidence, and G-11 QA/Production release signoffs all remain unresolved. **NUTRITION_COMPLETE = false**.
