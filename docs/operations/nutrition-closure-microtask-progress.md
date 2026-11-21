@@ -166,7 +166,7 @@ N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N093: HANDOFF_QUANTITY_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
-N096: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
+N096: DIARY_INPUT_LABELS_FIXED_SOURCE_ONLY_UNTESTED
 N097: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N098: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N099: SCOPE_PROVISIONAL_BLOCKED_G11
@@ -177,7 +177,7 @@ N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
 N105: FORTY_ONE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
-N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
+N107: TWELVE_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -515,3 +515,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Authored one N105 pure behavior regression first at `7eae186f8dbd1b791b0d2d28a822427aea0ce15d`, **NOT EXECUTED**, requiring only finite positive numeric quantities or explicit null, and safe nonnegative integer positions (missing defaults 0); invalid inputs require `NutritionRequestError` HTTP 400 rather than generic 500.
 - Narrow service change at `61ed7640ff45ee8579bfef67bb43d2fc4748dd43`: introduced `mutationPositiveNumber` and `mutationPosition` exclusively for the HTTP mutation source; did not change the persisted projection or SQL signatures. Final-only runner consumer minimum increased 40 → **41**, group source minimum **153** = 25+18+32+41+19+11+7.
 - **SOURCE_AUTHORED_UNTESTED**; no actual red/green test run, CI, full build, database action, deployment or review acceptance. Do not count as runtime-verified completion.
+
+
+## N096 Diary input accessible-name correction — 2026-11-21
+
+- Source-audited EN/DE/AR Nutrition components; `components/nutrition/diary/logging-session.tsx` had seven input controls (food search, barcode, Quick Add optional name, calories, protein, carbs and fat) identified solely by placeholders. Placeholder-only identification is not a durable accessible-name contract, especially for non-visual input. Existing loggerCopy + Eat translations already provided localized labels; no new copy, navigation or layout design needed.
+- Authored N107 **source-contract** test before code at `0710fd101502835cdc1627b064c12f79727d9ee6`, **not run**, requiring exact `aria-label` bindings on the seven inputs. Implemented matching localized `aria-label` attributes at `227890d2b0827f4fe410a694b3e37cbb48f3369e`; no JS event behavior changes or new strings. This is not a screen-reader/browser test pass: those still require G-11.
+- Updated N107 runner minimum 11 → **12**, seven-group authored minimum **154** = 25+18+32+41+19+12+7. Static review also observed explicit `lang/dir` and `bdi dir=auto` on many surrounding Nutrition surfaces; no blanket accessibility-complete claim. Attempt to call available Designer UI preflight capability returned `UNAVAILABLE`; no external audit accepted in its place.
+- **SOURCE_AUTHORED_UNTESTED**, not accessibility-certified. No tests, CI, Production changes, migrations, merges or deployments.
