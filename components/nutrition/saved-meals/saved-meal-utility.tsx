@@ -428,6 +428,9 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
   }
 
   async function addFood(food: FoodLibraryCandidate) {
+    if (!open || !ownerId) return;
+    const requestScope = activeSavedMealContextRef.current;
+    if (!isCurrentSavedMealContext(requestScope)) return;
     try {
       if (food.source === "my_food") {
         if (!food.servingLabel) { setError(text.servingUnavailable); return; }
@@ -439,6 +442,7 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
         if (!selection) {
           const params = new URLSearchParams({ displayName: food.name, languageTag: food.locale });
           selection = await request<CatalogSelection>(`/api/nutrition/v1/foods/${encodeURIComponent(food.id)}/selection?${params.toString()}`);
+          if (!isCurrentSavedMealContext(requestScope)) return;
           setFoodServingSelections((current) => ({ ...current, [food.id]: selection! }));
           if (selection.servingChoices.length === 1) {
             setFoodServingChoiceKeys((current) => ({
@@ -456,11 +460,13 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
           id: crypto.randomUUID(), kind: "food", name: food.name, servingLabel: `1 × ${choice.label}`, payload: foodPayload(food, choice),
         }]);
       }
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setMode(detail ? "edit" : "create");
       setQuery("");
       setFoods([]);
       setError("");
     } catch (cause) {
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setError(cause instanceof Error ? cause.message : text.servingUnavailable);
     }
   }
