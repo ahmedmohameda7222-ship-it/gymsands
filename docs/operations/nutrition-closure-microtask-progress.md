@@ -164,7 +164,7 @@ N090: AE_MARKET_G10_LICENSE_UNVERIFIED
 N091: AE_MARKET_G10_LICENSE_UNVERIFIED
 N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N093: HANDOFF_QUANTITY_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
-N094: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
+N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
 N096: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N097: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: THIRTY_NINE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FORTY_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -491,3 +491,12 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Added portable `parseRecipeHandoffQueryQuantity(value: string | null)` in `lib/nutrition-v1/handoff-quantity.ts` at `fe790f97294be9ca32f4ac8bf43ad4ed205cfa36`, preserving valid numeric query behavior. Wired only `app/api/nutrition/v1/recipes/[recipeId]/handoff/route.ts` at `31c74f9f446094b18df2799b2cf7a534af3dbd0c` to reject an explicit blank quantity via bounded 400 `NutritionRequestError` before service lookup.
 - Raised N105 future-run minimum from 38 to **39** in `scripts/nutrition-final-quality.mjs` at `5c973e92df68618f9d08acf0a8793de4a8f4e7a4`. The seven-group authored minimum is now **151 = 25+18+32+39+19+11+7**. Independent GitHub comparison shows exactly four touched files: route, pure helper, consumer tests and final QA runner; **zero workflow/migration changes**.
 - Status **SOURCE_AUTHORED_UNTESTED**; no automated tests, CI, browser, local DB replay, Production mutations, PR merge or deploy. This is a source-level correction pending the authorized Nutrition-only final run, not runtime-verified completion.
+
+
+## N094 published Recipe metadata fact consistency — 2026-11-21
+
+- Compared exact `services/nutrition-v1/server/recipe-published.ts` against `services/nutrition-v1/server/recipe-handoff.ts`: the published-detail projection rejects non-number nutrition facts, while the handoff's `nutritionNumber` called `Number(value)`, fabricating a measured **zero** from JSON booleans `false` or whitespace strings, and accepting numeric strings the published view rejects. This disagreement can propagate to frozen Diary/Saved Meal snapshots. No evidence that a current Production row triggers it: this is a verified source contract inconsistency, not observed runtime data loss.
+- Authored one N105 pure behavior regression first at `18d1ffc115042fcf9000cd37096e39f557f7bd21`, requiring explicit finite nonnegative number or `null`; booleans/strings/unknown/negative/non-finite must stay unknown. The test was **not executed** under pre-final policy.
+- Reused the existing `lib/nutrition-v1/recipe-cache.ts` numeric guard with exported `readPublishedRecipeNutritionFact` at `7addb13b8b7b23abe79548a76a6610fd762f519d`. Replaced only the five metadata nutrition reads in `services/nutrition-v1/server/recipe-handoff.ts` at `765f7e961fb7afb3564afed99002d9cee7ef2f87`, preserving explicit zero and source snapshots. Did not alter stored data or published Recipe pages.
+- N105 final-only minimum **39→40**, seven groups' authored minimum **152** = 25+18+32+40+19+11+7 as of `06754216c444aaf7a7b0a5ad92edc1764a6f079a`. Independent GitHub compare confirms exactly four modified files: `lib/nutrition-v1/recipe-cache.ts`, `services/nutrition-v1/server/recipe-handoff.ts`, `tests/nutrition-final/nutrition-consumers.test.mjs`, `scripts/nutrition-final-quality.mjs`; no workflows/migrations.
+- **SOURCE_AUTHORED_UNTESTED**. No CI, actual test run, production database mutation, recipe publication or deployment; red/green and real consumer acceptance remain outstanding.
