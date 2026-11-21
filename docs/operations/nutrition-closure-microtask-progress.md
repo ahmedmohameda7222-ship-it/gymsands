@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FORTY_EIGHT_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FORTY_NINE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: SIXTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -686,3 +686,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Source-traced `lib/nutrition-v1/nutrition-value.ts`: `scaleNutritionFacts` accepted individually finite facts and finite scaling factors but returned `Infinity` if their product overflowed; `sumNutritionFacts` likewise returned `Infinity` for finite addends whose sum overflowed. JSON serialization coerces `Infinity` to **`null`**, falsely treating a numeric overflow as an unknown measured nutrient and risking frozen-value corruption.
 - Authored N105 regression **first, NOT RUN**, at `17eece6f745262b62a03064ca4014f85be04cbe1`, covering overflow from maximum finite inputs, normal facts, and separate unknown propagation. Minimal pure source change `a6165cae3e3d44b10c138639144ac1eb0f5956b2` now throws on nonfinite results of known sums/scales while preserving `null` precedence for unknown measured inputs (unknown result remains `null`, no invented zero). No 4/4/9 calculation added.
 - N105 consumer minimum **47→48** at `7caa997e3edc01af0c4dd710143a292915515371`; seven-group authored minimum **165 = 25+18+32+48+19+16+7**. Related Food/Recipe handoff scale paths will need their own validation; this pure utility is not an assertion that every caller is protected. No actual RED/GREEN test, CI, Production, migration or deploy.
+
+
+## N095 Food and Recipe handoff overflow boundaries — 2026-11-21
+
+- Inspected separate frozen Nutrition scaling in `services/nutrition-v1/server/food-handoff.ts` and `recipe-handoff.ts`. Both multiplied individually finite known nutrient values by finite positive serving quantities without checking result finiteness; Recipe shopping ingredients could likewise overflow or underflow to zero after `ingredientQuantity/servings*quantity`. These unsafe results risk silent JSON `Infinity→null` or invalid Shopping values despite valid source nutrient presence.
+- Added pure N105 regression **first, NOT RUN** at `c279b49561e79063ade4070cbd191f44d25626fe`. New `lib/nutrition-v1/handoff-scaling.ts` at `8a93e402b1f44d298f50fb364289a8376b5248d3` enforces nonnegative known finite facts, positive finite quantity, finite scaled results and preserves Food's 0.001 rounding when its multiplier is representable. It returns explicit `null` only for originally unknown values; it never serializes overflow as a fabricated unknown. `NutritionHandoffScaleOverflowError` has a bounded static public error/status 400; `nutritionErrorResponse` handles it at `9748cc6b23786488f63686a5374fe016f9f7b7f3`.
+- Routed Food values at `5a04fa5e39bcc0518af46b79ecb567ec27bd8876`; Recipe frozen values and derived Shopping quantities at `78569e63c37ff3cdcc1fcdd71553efea9d8ea62f`, preserving source identity and owner lookups. N105 consumer minimum **48→49**, seven-group authored minimum **166 = 25+18+32+49+19+16+7** (runner `eda2e2554fb918a71837194d65905af78faa5c9b`). **SOURCE_AUTHORED_UNTESTED**; not a real HTTP 400 pass, no tests/CI, DB changes, merges, deployments or Production writes.
