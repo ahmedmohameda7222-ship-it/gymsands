@@ -165,8 +165,8 @@ N091: AE_MARKET_G10_LICENSE_UNVERIFIED
 N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N093: JSON_AND_URL_HANDOFF_QUANTITIES_STRICT_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
-N095: PAGINATION_WRITES_FILTERS_AND_OVERFLOW_SOURCE_ONLY_UNTESTED
-N096: DIARY_RECIPE_MEAL_PLAN_AND_FAVORITE_UI_SOURCE_ONLY_UNTESTED
+N095: OWNER_WEEK_OFFLINE_REPLAY_CACHE_GUARDED_SOURCE_ONLY_UNTESTED
+N096: DIARY_RECIPE_MEAL_PLAN_FAVORITES_AND_ACTION_LOCALES_SOURCE_UNTESTED
 N097: RLS_RPC_AND_DIARY_OWNER_DRAFT_GUARDED_RUNTIME_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
@@ -175,9 +175,9 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FIFTY_ONE_CONSUMER_CASES_AUTHORED_UNTESTED
-N106: TWENTY_ONE_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
-N107: SEVENTEEN_BROWSER_CASES_AUTHORED_UNTESTED
+N105: FIFTY_THREE_CONSUMER_CASES_AUTHORED_UNTESTED
+N106: TWENTY_FOUR_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
+N107: EIGHTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -731,3 +731,12 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Security investigation into `components/nutrition/diary/logging-session.tsx` found two passive React effects: changing `userId/date/meal` started asynchronous `setPlate([])` state reset, but persistence effect could still see **stale prior owner's `plate`/`pendingOperationId`** from the same render, writing those bytes to the new owner-specific localStorage key. This is a plausible cross-account private data leak/race from source ordering (not independently reproduced in browser). Authored N106 pure owner-key negative regression FIRST at `771b7d8402720636fd891858b3fb87772031d867`; implemented pure `canPersistDiaryDraftForHydratedOwner` at `9b79b2108e2e303122d54c6d00f215940ee1468c` and used an explicit `hydratedDraftKey` gate at `6d7bc973e15f750d7cf7ae66f860d0d4303578cc`. New account/date/meal is hydrated first; an old plate cannot be written under an unhydrated new key. An empty hydrated plate removes persisted stale draft; absent user clears in-memory state.
 - Follow-up found a second race: `submitPlate()` could be triggered with the prior account plate while a new JWT was active, and a late async response for account A could reset the newly authenticated B plate. Wrote N106 source guard regression FIRST at `04266c53777a8455606dcca224a1aa92a6fa5db4` (NOT EXECUTED). Hardened submit at `c77164a42b7e0509633e47a235f774141df357bd` to require the current hydrated key before POST or persistence, mark the PlateDock pending while hydration is incomplete, and ignore a response/error from a previous key using a `useLayoutEffect`-refreshed current-key reference. No backend auth contract, migrations or user row changes.
 - Updated Nutrition-only runner at `2cd99e757b0bb51ac9740bdc764462ff8e29e859`: `nutrition-browser-locale` minimum **16→17**, `nutrition-privacy-mcp` **19→21**. Seven-group **171** authored minimum = 25+18+32+51+21+17+7. **SOURCE_AUTHORED_UNTESTED**: the real two-user auth-switch/browser replay, in-flight request simulation and network-failure behavior remain required at G-11; no tests/CI, Production data or deployment changes.
+
+
+## N095/N096 Meal Plan owner-week replay and cache closure — 2026-11-21
+
+- Source investigation of `components/nutrition/meal-plan/meal-plan-page.tsx` found an owner/week navigation race: `fetchWeek()` and `flushQueue()` (including CAS replay, local queue write and cached-week write) could continue after `ownerId` or `weekStart` changed, allowing stale account/week UI or cache updates and causing a global boolean `syncingRef` to block new-owner replay. Cross-owner behavior was **source-inferred**, not reproduced with two JWTs. `markEaten`, `mutateWeek`, and cross-week `writeCopiesToWeek` also awaited requests before updating local plan state with no post-await context check.
+- Authored pure N105 owner/week predicate test FIRST `135cd74b756648f2ccf2db5d6622816f7dc01171`, N106 source race contracts FIRST `524ab3d3e47ac9291e9b136d83fd41f92bd3efa6`, `92cc80e375d215d8f81561c1119d877b35847e8c`, `ee28e1ce513e9d7fa8810e98d0418947f64ea0ff` (**NOT RUN**). Added pure `sameMealPlanOwnerWeekContext` to `lib/nutrition-v1/meal-plan-offline.ts` at `cc90224a9ce74bc8032ce3f36c1e2d0048835efc`. UI now tracks a `useLayoutEffect`-updated current owner/week key, clears prior private screen/reminder state on key change, checks context before/after awaited reads and writes in fetch, replay, mutate, mark-eaten, and cross-week bulk copy; replay mutex is keyed by owner/week. Work happened on the isolated dev branch only. A duplicate intermediate guard introduced during source editing at `87d3b19d3c4ae2f5b94493f704e395b0729f1edb` was removed with an explicit owner nonnull guard at `ed78a3768aedbda455ae4caa9e46019472cef899`; neither draft was tested/released.
+- `readCachedWeek` previously cast arbitrary legacy `localStorage` JSON directly as `WeekResponse`, permitting malformed/owner-crossed cached projections. Authored N105 versioned-envelope owner mismatch/malformed cache regression FIRST at `721a6f925b02b75f880bb8e7d69e3bc6c311bd93`, **NOT RUN**. Added V2 `serializeOwnedMealPlanWeekCache` / `deserializeOwnedMealPlanWeekCache` in `meal-plan-offline.ts` at `84a0a8bfbaeb0a3dbc1d77ec782235ddc5696054`, including owner/week/version check and owned week/occurrence projection checks. Refined type narrowing at `b54c33a6c329fa36b9774ff80823717086105a02`; wired read/write at `b6710771f96290ac572dd4f950e5e34316731625`. Deliberately reject and remove **old owner-unbound cache JSON** (offline weeks must reload from authorized online source to be cached again); no DB cache/Queue schema changed. This is not a cryptographic signature or proof of JWT ownership by itself.
+- N096 Meal Plan still had module-level English `Mark eaten` and `Log with changes`, English-only copy/empty/success ChatGPT notices, Placeholder warning and browser notification body. Authored N107 EN/DE/AR source contract FIRST at `0d2c36b8b84f9639fbb64953a7b85e12476cbd6d` (**NOT RUN**). Added 10 i18n keys × 3 locales at `46151fb5a77183ed775a11190bc47b767aa3495e`, wired labels/notices/reminders at `f1eb2530ca8598073033ed550bd52c777668988f`. Did not change current version/root nutritional data, reminder permissions or actual Diary Intake.
+- Fresh direct GitHub source comparison from `ab0ad22c4d0c1bb1d90f722996841d63beba5e98` to `9d4c3cc926e0ec0fdae3c409720bdf02ca5cb39c`: **21** commits, **7** net changed paths, **0** workflow/migration paths. Exactly 53 consumer test declarations and 24 privacy/MCP test declarations, source browser file 11 direct test declarations plus generated locale cases. Runner minimum is **177** across seven groups: **25+18+32+53+24+18+7**. No tests, CI, full-app QA, lint, production build, synthetic two-user browser replay or release approval were executed. Final scope/G-09/G-10/G-11 and operational Owner decisions remain. These are **source-authored untested** corrections, not accepted closure.
