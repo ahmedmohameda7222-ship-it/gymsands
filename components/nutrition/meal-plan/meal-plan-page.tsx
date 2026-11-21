@@ -11,12 +11,14 @@ import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { useNutritionV1Translation, type NutritionV1Key } from "@/lib/i18n/nutrition-v1";
 import {
   deserializeMealPlanQueue,
+  deserializeOwnedMealPlanWeekCache,
   enqueueMealPlanMutation,
   markMealPlanMutationFailed,
   reconcileMealPlanQueue,
   replayMealPlanMutationExactFirst,
   sameMealPlanOwnerWeekContext,
   serializeMealPlanQueue,
+  serializeOwnedMealPlanWeekCache,
   type MealPlanMutationTarget,
   type MealPlanOfflineMutation,
 } from "@/lib/nutrition-v1/meal-plan-offline";
@@ -76,11 +78,20 @@ function localWeekId(weekStart: string) { return `local:${weekStart}`; }
 function isLocalWeekId(value: string | null | undefined) { return Boolean(value?.startsWith("local:")); }
 
 function readCachedWeek(userId: string, weekStart: string): WeekResponse | null {
-  try { const raw = window.localStorage.getItem(cacheKey(userId, weekStart)); return raw ? JSON.parse(raw) as WeekResponse : null; }
-  catch { return null; }
+  try {
+    const key = cacheKey(userId, weekStart);
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const projection = deserializeOwnedMealPlanWeekCache(raw, userId, weekStart) as WeekResponse | null;
+    if (!projection) window.localStorage.removeItem(key);
+    return projection;
+  } catch { return null; }
 }
 function writeCachedWeek(userId: string, weekStart: string, value: WeekResponse) {
-  try { window.localStorage.setItem(cacheKey(userId, weekStart), JSON.stringify(value)); } catch { /* opportunistic cache */ }
+  try {
+    window.localStorage.setItem(cacheKey(userId, weekStart),
+      serializeOwnedMealPlanWeekCache(userId, weekStart, value));
+  } catch { /* opportunistic validated cache; never cache unknown owner data */ }
 }
 function readQueue(userId: string, weekStart: string) {
   try { return deserializeMealPlanQueue(window.localStorage.getItem(queueKey(userId, weekStart)) ?? "[]"); }
