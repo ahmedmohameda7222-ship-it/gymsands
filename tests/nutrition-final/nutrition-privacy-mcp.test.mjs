@@ -214,3 +214,19 @@ test("Diary submission rejects stale account plate and ignores late responses",(
   assert.ok(src.includes("localStorage.removeItem(key)"),
     "Deleting the last plate item must remove the old draft from storage");
 });
+
+// N095/N106 cross-account async source contract. Both network responses and
+// local queued replay can outlive owner/week navigation; guard side effects.
+test("Meal Plan async response and offline replay cannot cross owner/week boundary",()=>{
+  const src=readFileSync(resolve("components/nutrition/meal-plan/meal-plan-page.tsx"),"utf8");
+  assert.ok(src.includes("activeMealPlanContextKeyRef"),"Missing current owner/week reference");
+  assert.ok(src.includes("sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)"),
+    "Async load and sync must verify the exact request context");
+  const start=src.indexOf("const flushQueue = useCallback("), end=src.indexOf("const load = useCallback(",start);
+  assert.ok(start>0&&end>start);
+  const replay=src.slice(start,end);
+  assert.ok(replay.indexOf("if (!sameMealPlanOwnerWeekContext(")<replay.indexOf("writeQueue(ownerId, weekStart, remaining)"),
+    "Persisted queue and local UI status may only be updated for the same owner/week");
+  assert.ok(replay.includes("syncingContextKeyRef.current === requestContextKey"),
+    "Replay mutex must be scoped by owner/week instead of globally blocking new users");
+});
