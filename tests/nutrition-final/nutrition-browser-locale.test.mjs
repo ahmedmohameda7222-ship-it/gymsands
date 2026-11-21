@@ -210,3 +210,19 @@ test("Skipped Shopping review uses EN DE AR labels and source details",()=>{
   assert.equal(src.includes("was skipped, but its frozen Shopping contribution is still included."),false);
   assert.equal(src.includes(">Review & Remove</button>"),false);
 });
+
+// N096: failed favorite requests must not make the UI show unsaved favorites.
+// This source contract is independent of the deferred synthetic browser run.
+test("Food Library favorite state only commits after server acceptance",()=>{
+  const src=readFileSync(resolve("components/nutrition/food-library/food-library-page.tsx"),"utf8");
+  const begin=src.indexOf("async function toggleFavorite(");
+  const end=src.indexOf("\n  function openWorkspace(",begin);
+  assert.ok(begin>0&&end>begin,"Expected bounded favorite mutation handler");
+  const handler=src.slice(begin,end);
+  assert.ok(handler.includes("await foodLibraryApi("),"Favorites must await server response");
+  assert.ok(handler.indexOf("await foodLibraryApi(")<handler.indexOf("setRows("),
+    "Favorite display must update only after response");
+  assert.ok(handler.includes("if (!response.ok) throw"),"Failed HTTP response must not mark saved");
+  assert.ok(handler.includes("catch")&&handler.includes("setError("),
+    "Rejected network request must surface an error instead of unhandled rejection");
+});
