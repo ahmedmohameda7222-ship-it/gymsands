@@ -167,7 +167,7 @@ N093: HANDOFF_QUANTITY_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
 N096: DIARY_RECIPE_MEAL_PLAN_LOCALE_SOURCE_ONLY_UNTESTED
-N097: DIRECT_17_TABLE_49_POLICY_RLS_CENSUS_RUNTIME_UNTESTED
+N097: RLS_AND_RPC_GRANTS_READ_ONLY_TRACED_RUNTIME_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
 N100: BLOCKED_G11_UNFINISHED_CODE
@@ -708,3 +708,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Source traced `components/nutrition/food-library/food-library-page.tsx` rendering `proteinMin`/`carbsMax` filter chips from raw input and `GET /api/nutrition/v1/foods` numeric parsing. Both legacy `proteinMin`/`carbsMax` and generic `proteinOp`/ `carbsOp`/ `fatOp` filter parsers previously returned `undefined` for malformed explicit numeric constraints, silently **omitting the filter** while the UI continued to display it as active, potentially returning unconstrained Foods. `Number(value)` also accepted hex/binary/octal and negative nutrient gram filters.
 - Authored one N105 pure decimal-input regression **first, NOT RUN**, at `b16b9ebad33c6fa33d2b85a143fba621e0868745`. Added `lib/nutrition-v1/food-search-query-numbers.ts` at `b1ad623cf1ae3b8d3b45b6f53fd1b61efd1a94c1` with nonnegative finite decimal/exponent grammar (including 0); excludes hex, binary, octal, negative, NaN, Infinity, malformed and ambiguous comma values. Updated `app/api/nutrition/v1/foods/route.ts` at `9c1b9ecc91748068b8f1b327f4c27afa7b82e74e`: explicit invalid operator/values/required between max now fail closed with bounded `NutritionRequestError` 400 rather than secretly removing the requested condition. Missing/blank **legacy** optional min/max remain no filter for normal empty UI, while an explicit generic operator without its value fails closed. Server catalog ranking/RPC and owner scope unchanged.
 - Updated final-only N105 consumer minimum **50→51** at `c22461c5a88c8dcb34ba48c641a814ffc47b246d`; seven-group authored minimum **168 = 25+18+32+51+19+16+7**. **SOURCE_AUTHORED_UNTESTED**, not actual filter enforcement/browser PASS; no tests, CI, Production, migrations or deploy.
+
+
+## N097 Production RPC grants / SECURITY DEFINER audit — 2026-11-21
+
+- Direct Main Supabase **SELECT-only** `pg_proc`/ `pg_namespace`/ function/schema grants census at **2026-11-21 03:16:29.489292 UTC**, with each overloaded `public/private` signature containing `nutrition`, `food_catalog` or `food_ingestion`. In `public`: **85** functions, **77** SECURITY DEFINER, **0** anon EXECUTE, **48** SECURITY DEFINER with authenticated EXECUTE. In `private`: **64** functions, **36** SECURITY DEFINER, **12** anon EXECUTE, but **0** with both anonymous schema USAGE and function EXECUTE and **0** anonymous-callable SECURITY DEFINER by those grants. `private` anonymous EXECUTE rows are non-definer helper/trigger functions without schema USAGE. Logged exact evidence/SQL interpretation in `docs/operations/nutrition-rpc-security-definer-grants-census-2026-11-21.md` at `d3f51c7c885fb8c5b83220491179840be3c67475`.
+- **16** authenticated-callable public definer function bodies lack direct literal `auth.uid()` text; several use delegated governance/capability authority. A string test is **not** vulnerability proof. Do not change grants or claim runtime cross-owner isolation without actual nested call-chain review, disposable two-owner JWT denial attempts and independent N112 review. Source-gate status **RLS_AND_RPC_GRANTS_READ_ONLY_TRACED_RUNTIME_UNTESTED**; no Production SQL writes or CI.
