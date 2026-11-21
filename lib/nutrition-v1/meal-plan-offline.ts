@@ -170,3 +170,63 @@ export function sameMealPlanOwnerWeekContext(
     && currentKey.length > 0
     && currentKey === requestKey;
 }
+
+const OWNED_MEAL_PLAN_CACHE_VERSION = 2;
+
+function cacheRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Reject foreign-owner rows and malformed projections before using offline data. */
+function validOwnedWeekProjection(value: unknown, ownerId: string, weekStartDate: string): boolean {
+  if (!cacheRecord(value) || !Array.isArray(value.occurrences)
+    || !Array.isArray(value.pendingChangeRequests) || !Array.isArray(value.shoppingNeeds)
+    || !cacheRecord(value.target)) return false;
+  const week = value.week;
+  if (week !== null) {
+    if (!cacheRecord(week) || week.user_id !== ownerId
+      || week.week_start_date !== weekStartDate || !validText(week.id)
+      || !Number.isSafeInteger(week.revision) || Number(week.revision) < 0
+      || !cacheRecord(week.week_override_json)) return false;
+  } else if (value.occurrences.length) {
+    return false;
+  }
+  return value.occurrences.every((occurrence: unknown) => {
+    if (!cacheRecord(occurrence) || occurrence.user_id !== ownerId
+      || !validText(occurrence.id) || !validText(occurrence.plan_date)
+      || !validText(occurrence.meal_slot_key) || !validText(occurrence.frozen_name)
+      || !cacheRecord(occurrence.frozen_snapshot)) return false;
+    if (week !== null && occurrence.week_id !== week.id) return false;
+    return true;
+  });
+}
+
+/** V2 envelope deliberately refuses old unbound cache JSON rather than leaking data. */
+export function serializeOwnedMealPlanWeekCache(
+  ownerId: string,
+  weekStartDate: string,
+  projection: unknown,
+): string {
+  if (!validText(ownerId) || !validText(weekStartDate)
+    || !validOwnedWeekProjection(projection, ownerId, weekStartDate)) {
+    throw new Error("Meal Plan offline cache owner/week or projection is invalid.");
+  }
+  return JSON.stringify({ version: OWNED_MEAL_PLAN_CACHE_VERSION, ownerId, weekStartDate, projection });
+}
+
+export function deserializeOwnedMealPlanWeekCache(
+  source: string | null,
+  ownerId: string,
+  weekStartDate: string,
+): unknown | null {
+  if (!source || !validText(ownerId) || !validText(weekStartDate)) return null;
+  try {
+    const envelope: unknown = JSON.parse(source);
+    if (!cacheRecord(envelope) || envelope.version !== OWNED_MEAL_PLAN_CACHE_VERSION
+      || envelope.ownerId !== ownerId || envelope.weekStartDate !== weekStartDate
+      || !validOwnedWeekProjection(envelope.projection, ownerId, weekStartDate)) return null;
+    return envelope.projection;
+  } catch {
+    return null;
+  }
+}
