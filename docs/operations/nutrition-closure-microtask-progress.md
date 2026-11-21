@@ -186,7 +186,7 @@ N112: BLOCKED_G11
 N113: ENHANCED_EVIDENCE_MANIFEST_AUTHORED_UNEXECUTED_G11
 N114: BLOCKED_G11
 N115: BLOCKED_G03_G11
-N116: READ_ONLY_VERIFIED_PLAN9_NOT_PERFORMED
+N116: DIRECT_READ_ONLY_VERIFIED_ZERO_GENERATION_2026_11_21
 N117: BLOCKED_G05_G06_G07_G08
 N118: BLOCKED_G09
 N119: BLOCKED_G09
@@ -546,3 +546,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Read current USDA FoodData Central download page and US government homepage license text. The official FNDDS 2021–2023 JSON ZIP remains the October 31, 2024 `FoodData_Central_survey_food_json_2024-10-31.zip` release at `https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_survey_food_json_2024-10-31.zip`, USDA displayed size 3.7 MB zipped / 64 MB unpacked (rounded). Official USDA FDC content is CC0 1.0/public domain with citation request; this does not prove rights to third-party data. Documented precise links/uncertainties in `docs/architecture/food-catalog-plan10-fndds-source-design-proposal.md` commit `2576bc748fee6ba94f73d634f97cd04b63e3543a`.
 - The official ZIP cannot be fetched by container (DNS failure) or web archive retriever (unsupported binary ZIP). No original archive SHA256, member-level JSON verification, field schema or FNDDS source lock is yet present. Do not accept third-party claimed hash as verification. Plan 9 current published Food generation remains an independent G-09 prerequisite; no sequencing exception inferred.
 - Status **OFFICIAL_RELEASE_LICENSE_CONFIRMED_BYTES_UNKNOWN**, not imported, not complete; no CI, adapters, migrations, database writes, approvals, staging or Production operations.
+
+
+## N116 direct Production read-only invariant — 2026-11-21
+
+- Queried the linked **PLAIVRA Main Supabase** project `bkwezjxvapaeasfvlhvv` with a single explicit **SELECT-only** statement and `now()` on **2026-11-21 02:32:34.607634 UTC**. Production returned **133 applied migrations**; public Food items **0**, source records **0**, ingestion batches **0**, ingestion runs **0**, catalog generations **0**, search documents **0**, governance principals **0**, and current generation pointer **NULL**.
+- Independent repeat of N007/N116 baseline; therefore **no Plan 9 ingestion, approval, draft, activation or CAS promotion occurred since previous verified zero**. Do not issue duplicate/fabricated ingestion commands. Live operational gates G-04–G-11 remain unresolved; this SELECT is not an operator authorization or a proof of code-branch runtime quality.
+- Status `READ_ONLY_VERIFIED_PLAN9_NOT_PERFORMED`; no database write, deploy, CI, merge or application-state mutation.
