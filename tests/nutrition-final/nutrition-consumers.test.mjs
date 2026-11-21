@@ -474,3 +474,14 @@ test("Custom Food malformed labels and basis units are bounded client input erro
   for(const v of ["g","ml","serving","piece","custom"])assert.equal(requireFoodBasisUnit(v),v);
   assert.equal(requireFoodBasisUnit(null),null);
 });
+
+// N093: JSON null is an explicit invalid quantity, not the same as an absent key.
+const {parseRecipeHandoffQuantity}=await vite.ssrLoadModule("/lib/nutrition-v1/handoff-quantity.ts");
+test("Recipe quantity defaults only when absent, never for explicit null",()=>{
+  assert.equal(parseRecipeHandoffQuantity(undefined),1);
+  assert.equal(parseRecipeHandoffQuantity(1),1);
+  assert.equal(parseRecipeHandoffQuantity(0.75),0.75);
+  for(const input of [null,false,true,"", "1",0,-1,NaN,Infinity,{},[]]){
+    assert.equal(parseRecipeHandoffQuantity(input),null);
+  }
+});
