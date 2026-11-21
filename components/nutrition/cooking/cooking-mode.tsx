@@ -423,10 +423,15 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
 
   const onResume = useCallback(() => {
     if (!resumeCandidate || !userId) return;
+    const requestContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)
+      || (authOwnerId !== null && userId !== authOwnerId)) return;
     setSession(resumeCandidate);
     setResumeCandidate(null);
-    void flushPending(resumeCandidate, userId).then((next) => setSession(next));
-  }, [flushPending, resumeCandidate, userId]);
+    void flushPending(resumeCandidate, userId).then((next) => {
+      if (sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) setSession(next);
+    });
+  }, [authOwnerId, flushPending, recipeId, resumeCandidate, userId]);
 
   const onStartOver = useCallback(async () => {
     if (!resumeCandidate) return;
