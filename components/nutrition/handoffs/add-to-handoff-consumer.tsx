@@ -143,6 +143,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
   const currentSource = source;
 
   async function commit() {
+    if (activeHandoffContextKeyRef.current !== requestContextKey) return;
     setLoading(true);
     setError("");
     let successfulOperationKey: string | null = null;
@@ -213,6 +214,7 @@ export function AddToHandoffConsumer({ destination }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (activeHandoffContextKeyRef.current !== requestContextKey) return;
       pendingOperationIdRef.current = null;
       if (successfulOperationKey) clearStoredOperationId(successfulOperationKey);
       if (destination === "diary") router.replace(`/calories?date=${encodeURIComponent(date)}`);
@@ -224,9 +226,10 @@ export function AddToHandoffConsumer({ destination }: Props) {
       else router.back();
       router.refresh();
     } catch (cause) {
+      if (activeHandoffContextKeyRef.current !== requestContextKey) return;
       setError(cause instanceof Error ? cause.message : "Nutrition handoff could not be completed.");
     } finally {
-      setLoading(false);
+      if (activeHandoffContextKeyRef.current === requestContextKey) setLoading(false);
     }
   }
 
