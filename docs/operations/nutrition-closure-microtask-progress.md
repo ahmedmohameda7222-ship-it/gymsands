@@ -125,7 +125,7 @@ N051: DEFERRED_TO_POST_QA_UNAPPROVED
 N052: BLOCKED_G09_PLAN9_NOT_HEALTHY
 N053: OFFICIAL_RELEASE_LICENSE_CONFIRMED_BYTES_UNKNOWN
 N054: DESIGN_PROPOSED_G09_UNAPPROVED
-N055: GENERIC_FIELD_MAPPING_ONLY
+N055: CANONICAL_DESTINATION_MAPPED_ORIGINAL_SCHEMA_MISSING
 N056: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N057: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N058: BLOCKED_G09_AND_UNVERIFIED_SOURCE
@@ -595,3 +595,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Created `data/food-catalog/quality/six-market-search-intents-v1.json` at `8af642190a8e87fca88d62f3977d7889f4431f0f`; verified GitHub readback: schemaVersion 1, exactly **6** launch markets (US/DE/GB/EG/SA/AE), **36** market-specific proposed user queries and explicit fields `expectedCanonicalFoodId:null`, `expectedSourceRecordId:null`, `expectedNutrition:null`, `sourceVerified:false`. Queries cover country dishes, localized spelling and raw-vs-cooked/recipe forms; they are user-search **intent strings**, NOT evidence that named Foods exist in a licensed source.
 - Machine artifact identifies future assertions on exact current generation, canonical identity across markets, source-backed portions, no fabricated nutrients, proper rights for brands/GTINs, quarantine and actual member search under approved G-11. Live census at 2026-11-21 02:36 UTC has **0** market assignments and **0** scoped search documents across all six markets; no benchmark may be marked PASS today.
 - State **MARKET_SEARCH_BENCHMARK_36_INTENTS_SOURCE_UNVERIFIED**, no adapter/alias/Food record, data ingestion, test execution, license approval or Production mutation. This provides test design, not launch coverage.
+
+
+## N055 destination-schema mapping readiness — 2026-11-21
+
+- Inspected actual `lib/food-catalog/ingestion/adapter.ts`, `contracts.ts`, `validate.ts`, `normalize.ts`, `matching.ts`, plus existing `usda-foundation/index.ts`. Added precise destination-side FNDDS mapping requirements, unit/basis/nullable nutrition/portion/identity/source fields and provider-neutral processing preconditions in `docs/architecture/food-catalog-plan10-fndds-field-readiness-matrix.md` at `95513a40ddda28b91c2d1aa891b1976662d18ad4`.
+- The **original FNDDS ZIP and data dictionary are not independently available**. No field names/nutrient IDs/portion keys/root JSON/member counts are asserted; Foundation nutrient ID configuration cannot simply be copied to FNDDS. This is a verified canonical **destination** contract, not an implemented source-specific adapter or complete source-field map. Status `CANONICAL_DESTINATION_MAPPED_ORIGINAL_SCHEMA_MISSING` and G-09 blocked; no Production, tests or source data manipulation.
