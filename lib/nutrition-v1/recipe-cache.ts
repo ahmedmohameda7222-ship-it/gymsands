@@ -47,6 +47,12 @@ function nullableFiniteNonNegative(value: unknown): value is number | null {
   return value === null || finiteNonNegative(value);
 }
 
+/** A published Recipe JSON fact is known only when explicitly numeric. */
+export function readPublishedRecipeNutritionFact(value: unknown): number | null {
+  return finiteNonNegative(value) ? value : null;
+}
+
+
 function assertPublishedSnapshot(snapshot: PublishedRecipeCacheSnapshot) {
   if (snapshot.status !== "published" || !snapshot.recipeId.trim() || !snapshot.recipeVersionId.trim()) {
     throw new Error("Only an identified published Recipe version may be cached.");
