@@ -1,5 +1,6 @@
 import { nutritionJson } from "@/lib/nutrition-v1/http";
 import { InvalidNutritionFoodInputError } from "@/lib/nutrition-v1/user-food-write-numbers";
+import { NutritionHandoffScaleOverflowError } from "@/lib/nutrition-v1/handoff-scaling";
 import { RecipeDraftRevisionConflictError } from "@/services/nutrition-v1/server/recipes";
 
 const DEFAULT_INVALID_MESSAGE = "Nutrition request is invalid.";
@@ -28,6 +29,13 @@ export class NutritionRequestError extends Error {
 
 export function nutritionErrorResponse(error: unknown) {
   if (error instanceof NutritionRequestError) {
+    return nutritionJson(
+      { error: error.publicMessage, code: error.code },
+      { status: error.status },
+    );
+  }
+
+  if (error instanceof NutritionHandoffScaleOverflowError) {
     return nutritionJson(
       { error: error.publicMessage, code: error.code },
       { status: error.status },
