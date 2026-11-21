@@ -125,7 +125,7 @@ N051: DEFERRED_TO_POST_QA_UNAPPROVED
 N052: BLOCKED_G09_PLAN9_NOT_HEALTHY
 N053: OFFICIAL_RELEASE_LICENSE_CONFIRMED_BYTES_UNKNOWN
 N054: DESIGN_PROPOSED_G09_UNAPPROVED
-N055: CANONICAL_DESTINATION_MAPPED_ORIGINAL_SCHEMA_MISSING
+N055: OFFICIAL_DICTIONARY_CROSSWALK_VERIFIED_ZIP_SCHEMA_UNVERIFIED
 N056: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N057: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N058: BLOCKED_G09_AND_UNVERIFIED_SOURCE
@@ -747,3 +747,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Source-audited `writeCopiesToWeek` during N095 follow-up. Online cross-week copy failures were enqueued with `status: "needs_attention"` but stored an ad-hoc `error` property even though `MealPlanOfflineMutation` has **`lastError?: string`**; queue serializers/consumers ignore the unknown `error` field. This silently loses the diagnostic needed to reconcile queued copy failures.
 - Authored N107 source contract regression **first**, **NOT RUN**, at `6770b0d548f6d7b2ee958b75c5de054eb0e7fd6b`. Minimal source fix at `86578052f98a9cca80cdd83e8cca74d4b0acc57b` writes `lastError` under the existing typed queue contract; no server/RPC/schema or offline retry behavior altered. Final-only N107 browser source minimum **18→19** at `a0915d3b786e8f28d47b9f24d31c2e234853ada9`.
 - Seven-group authored QA minimum now **178 = 25+18+32+53+24+19+7**. This is **SOURCE_AUTHORED_UNTESTED**, not a reproduced browser result, runtime queue replay, CI or Production acceptance.
+
+
+## N055 official USDA FDC documented FNDDS fields — 2026-11-21
+
+- Read USDA's primary source [FoodData Central Download Field Descriptions](https://fdc.nal.usda.gov/portal-data/external/dataDictionary) (PDF; direct screenshot inspected) and official [Downloadable Data](https://fdc.nal.usda.gov/download-datasets/) 2021–2023 FNDDS dataset listing. Source-level field definitions are now **documented** (not inferred from Foundation): `survey_fndds_food.food_code` alongside `fdc_id` and `wweia_category_number`; FNDDS household `food_portion.portion_description`, `modifier` code and `gram_weight`; crucially `food_portion.amount` is **not defined** for Survey/FNDDS and `measure_unit_id=9999` is **not a real serving unit**. `food_nutrient.amount` is documented per 100g with a `nutrient` table ID/units join; `input_food` defines Survey ingredients/source relations that must remain provenance rather than editable Recipe materialization.
+- Updated `docs/architecture/food-catalog-plan10-fndds-field-readiness-matrix.md` at `104957c025091c658e8b1392b6d43204f2c2f354` with exact official dictionary-vs-Plaivra schema mapping and explicit negative adapter rules, retaining the true G-09 block. **The original 2024-10 FNDDS ZIP download still failed**, no official ZIP bytes/member-level JSON, SHA256, real nutrient IDs, survey codes, or actual source records were verified. Do not count this as an implemented adapter, manifest, source lock, QA PASS or Production publication.
+- N055 status `OFFICIAL_DICTIONARY_CROSSWALK_VERIFIED_ZIP_SCHEMA_UNVERIFIED`; N056–N059 / N118–N120 remain blocked. No tests, CI, schema or database writes.
