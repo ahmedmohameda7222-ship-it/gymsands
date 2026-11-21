@@ -166,7 +166,7 @@ N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N093: HANDOFF_QUANTITY_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
-N096: DIARY_AND_RECIPE_INPUT_LABELS_SOURCE_ONLY_UNTESTED
+N096: DIARY_RECIPE_MEAL_PLAN_LOCALE_SOURCE_ONLY_UNTESTED
 N097: PRIVACY_MCP_AUTHORITY_STATIC_TRACED_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
@@ -177,7 +177,7 @@ N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
 N105: FORTY_FOUR_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
-N107: FOURTEEN_BROWSER_CASES_AUTHORED_UNTESTED
+N107: FIFTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -628,3 +628,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Exact JSX source audit found three bare Recipe equipment inputs (name, quantity, optional note) in `components/nutrition/recipes/recipe-editor.tsx` labeled only by placeholders, and a bare `<input type="date">` in `components/nutrition/diary/diary-page.tsx` between previous/next buttons with no accessible name. Verified Recipe Home search was **already** inside a visible `<label>` with screen-reader-only text; did not change it or invent a defect. Existing localization keys `nt("equipment")`, `nt("equipmentQuantity")`, `nt("optionalNote")`, `et("date")` already exist.
 - Authored N107 source regressions FIRST, **not run**, at `25d142996f52ca3b66560003376b1e9335a55dab` and `01fc77086a1246de81a3fee6898fc93eab987e0e`. Added three localized `aria-label` bindings for Recipe equipment inputs at `6926acb17af4fbd8bf9de2d7068c534344737c7c` and the Diary date label at `51e56c2300d4ab6b18ae49c4963f129a1d6f5a83`.
 - Final Nutrition-only browser/locale source minimum increased 12→**14** at `d85aec546a29bb8a3d69d9ac0490f2f35362109e`. Total seven-group authored minimum **159 = 25+18+32+44+19+14+7**. Direct code diff includes exactly two components, regression file and runner; no translations added, DB/schema/workflows changed or test run. **SOURCE_AUTHORED_UNTESTED**; true screen-reader keyboard/browser acceptance remains G-11.
+
+
+## N096 Meal Plan five-dialog localization — 2026-11-21
+
+- Confirmed source locale regression in `components/nutrition/meal-plan/meal-plan-page.tsx`: five built-in dialogs (`addingCustomSlot`, `editDraft`, `moveDraft`, `copyDraft`, `bulkCopyDraft`) displayed persistent **hardcoded English** headings, instructions, labels, reminder permission description and action text in DE/AR layouts, despite already available `nt` locale hook. Did not change Meal Plan command semantics, permissions, persisted state or layout.
+- Authored source-contract N107 regression first in `bf725d0e108e981625147f71664a0c852929e47c`, refined malformed test-only regex escape before implementation at `aaaef907c83ebe3b5f74e7112794e7e9b09da7e3`; **no tests executed**. Atomic commit `1d376bcfd960770dc1b05ab57159b6d26a9f39a5` translated **31** exact JSX text occurrences across **5** dialogs with **23** new keyed strings × **3** locales = **69** language values, preserving existing `cancel/save/add/close/name/copyWeek` keys and unchanged event handlers. Both dictionary and component were changed in one Git tree/fast-forward to avoid an intermediate invalid typed locale contract.
+- Direct readback of exact branch verified 19 specified modal translation keys exist in EN/DE/AR and six sampled untranslated modal labels no longer appear literally. Raised N107 scoped final browser/locale minimum **14→15** at `a5234495401dc33810c1f38de5e3459f8da51bef`. Seven-group authored QA minimum now **160 = 25+18+32+44+19+15+7**. No builds/lint/Playwright/actual screen-reader accessibility runs, no Production/CI/migrations/deployments. **SOURCE_AUTHORED_UNTESTED**, independent G-11 locale/browser QA remains mandatory.
