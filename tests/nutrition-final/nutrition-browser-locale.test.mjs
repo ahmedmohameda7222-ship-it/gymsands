@@ -274,3 +274,26 @@ test("Shopping manual draft survives failed save and clears only after acceptanc
   assert.ok(src.includes("return false;")&&src.includes("return true;"),
     "Shopping save must report real success/failure");
 });
+
+// N096: shared Add-To handoff appears in Diary, Meal Plan, Saved Meals and
+// Recipe. One unlocalized modal currently leaks English into every DE/AR path.
+test("Add To Handoff dialog uses localized EN DE AR labels and decimal serving input",()=>{
+  const src=readFileSync(resolve("components/nutrition/handoffs/add-to-handoff-consumer.tsx"),"utf8");
+  const dict=readFileSync(resolve("lib/i18n/nutrition-v1.ts"),"utf8");
+  for(const key of [
+    "handoffAddToDiary","handoffAddToMealPlan","handoffSaveAsMeal","handoffAddFoodToRecipe",
+    "handoffAddToPlan","handoffAddToWorkingDraft","handoffAddToNewRecipe",
+    "handoffResolvingSource","handoffServingQuantity","handoffDiaryDate","handoffPlanDate",
+    "handoffDiaryMeal","handoffChoose","handoffSavedMealName",
+    "handoffRecipeAuthoringTarget","handoffNewRecipeDraft","handoffRecipeTargetHint",
+    "handoffBreakfast","handoffLunch","handoffDinner","handoffSnack"
+  ]){
+    assert.equal(dict.split(key+':').length-1,3,"Missing EN DE AR handoff translation: "+key);
+    assert.ok(src.includes('nt("'+key+'"') || src.includes('"'+key+'"'),
+      "Handoff missing localized copy: "+key);
+  }
+  assert.ok(src.includes("parsePositiveHandoffQueryQuantity(recipeQuantity)"),
+    "Handoff Recipe quantity must not accept arbitrary Number() syntax");
+  assert.equal(src.includes('aria-label="Close Add To"'),false);
+  assert.equal(src.includes("Resolving canonical Nutrition source…"),false);
+});
