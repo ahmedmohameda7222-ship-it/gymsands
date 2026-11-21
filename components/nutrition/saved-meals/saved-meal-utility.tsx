@@ -403,21 +403,27 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
   }
 
   async function searchCandidates(kind: "food" | "recipe") {
+    if (!open || !ownerId) return;
+    const requestScope = activeSavedMealContextRef.current;
+    if (!isCurrentSavedMealContext(requestScope)) return;
     setLoading(true);
     try {
       if (kind === "food") {
         const params = new URLSearchParams({ q: query, limit: "12", locale: language });
         const body = await request<FoodLibraryPage>(`/api/nutrition/v1/foods?${params.toString()}`);
+        if (!isCurrentSavedMealContext(requestScope)) return;
         setFoods(body.items);
       } else {
         const body = await request<{ recipes: RecipeHomeRecord[] }>(`/api/nutrition/v1/recipes?q=${encodeURIComponent(query)}&limit=12`);
+        if (!isCurrentSavedMealContext(requestScope)) return;
         setRecipes(body.recipes.filter((recipe) => recipe.status === "published" && recipe.recipeVersionId));
       }
       setError("");
     } catch (cause) {
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setError(cause instanceof Error ? cause.message : text.loadFailed);
     } finally {
-      setLoading(false);
+      if (isCurrentSavedMealContext(requestScope)) setLoading(false);
     }
   }
 
