@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isUuid } from "@/lib/utils";
-import { requireNonNegativeFoodNumber, optionalPositiveFoodNumber } from "@/lib/nutrition-v1/user-food-write-numbers";
+import { requireNonNegativeFoodNumber, optionalPositiveFoodNumber, requireNonBlankFoodText, requireFoodBasisUnit } from "@/lib/nutrition-v1/user-food-write-numbers";
 import {
   resolveCurrentGenerationFoodForNewUseFromSupabase,
 } from "@/services/food-catalog/server/current-generation-service";
@@ -60,12 +60,9 @@ function checked<T>(result: { data: T | null; error: { message?: string } | null
 }
 
 function normalizeWrite(input: UserFoodWriteInput) {
-  const name = text(input.name);
-  const servingLabel = text(input.servingLabel);
-  if (!name) throw new Error("Food name is required.");
-  if (!servingLabel) throw new Error("Serving basis is required.");
-  const basisUnit = input.basisUnit;
-  if (basisUnit !== null && !["g", "ml", "serving", "piece", "custom"].includes(basisUnit)) throw new Error("Serving basis is invalid.");
+  const name = requireNonBlankFoodText(input.name, "Food name");
+  const servingLabel = requireNonBlankFoodText(input.servingLabel, "Serving basis");
+  const basisUnit = requireFoodBasisUnit(input.basisUnit);
   return {
     food_name: name,
     serving_size: servingLabel,
