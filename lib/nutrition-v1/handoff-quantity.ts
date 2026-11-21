@@ -9,3 +9,10 @@ export function parsePositiveHandoffQuantity(value: unknown): number | null {
 export function parseRecipeHandoffQuantity(value: unknown): number | null {
   return parsePositiveHandoffQuantity(value === undefined ? 1 : value);
 }
+
+/** Query strings may represent measured quantities; only an absent key defaults. */
+export function parseRecipeHandoffQueryQuantity(value: string | null): number | null {
+  if (value === null) return 1;
+  if (value.trim() === "") return null;
+  return parsePositiveHandoffQuantity(Number(value));
+}
