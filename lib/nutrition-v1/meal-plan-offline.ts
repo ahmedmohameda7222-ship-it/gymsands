@@ -53,7 +53,7 @@ function validMutation(value: unknown): value is MealPlanOfflineMutation {
   return (
     validText(mutation.operationId) &&
     validText(mutation.weekId) &&
-    Number.isInteger(mutation.baseRevision) &&
+    Number.isSafeInteger(mutation.baseRevision) &&
     Number(mutation.baseRevision) >= 0 &&
     validTarget(mutation.target) &&
     Boolean(mutation.payload) && typeof mutation.payload === "object" && !Array.isArray(mutation.payload) &&
@@ -114,7 +114,7 @@ export function reconcileMealPlanQueue(
   queue: MealPlanOfflineMutation[],
   reconciliation: MealPlanQueueReconciliation,
 ): MealPlanOfflineMutation[] {
-  if (!Number.isInteger(reconciliation.serverRevision) || reconciliation.serverRevision < 0) {
+  if (!Number.isSafeInteger(reconciliation.serverRevision) || reconciliation.serverRevision < 0) {
     throw new Error("Server Meal Plan revision is invalid.");
   }
   return queue.map((mutation) => {
