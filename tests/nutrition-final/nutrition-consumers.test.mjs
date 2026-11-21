@@ -189,3 +189,96 @@ test("Meal Plan week boundaries are deterministic across locale views",()=>{
   assert.equal(weekContainsDate(start,"2026-11-22"),true);
   assert.equal(weekContainsDate(start,"2026-11-23"),false);
 });
+
+
+// N105 frozen Recipe graph, owner-partitioned media and retry identity.
+const { clonePublishedRecipeGraphForDraft }=
+  await vite.ssrLoadModule("/lib/nutrition-v1/recipe-versioning.ts");
+const {normalizeOwnedRecipeCoverPath}=
+  await vite.ssrLoadModule("/lib/nutrition-v1/recipe-cover-path.ts");
+const {claimPersonalCorrectionOperation,clearPersonalCorrectionOperation}=
+  await vite.ssrLoadModule("/lib/nutrition-v1/personal-correction-operation.ts");
+const {parseCookingVoiceCommand}=
+  await vite.ssrLoadModule("/lib/nutrition-v1/cooking-voice.ts");
+
+function frozenGraph(){
+  return {
+    ingredients:[{id:"ing-1",ingredient_name:"Rice"}],
+    equipment:[{id:"equip-1",name:"Pan"}],
+    instructions:[
+      {id:"action-1",dependency_action_ids:[],ingredient_refs:["ing-1"],
+        equipment_refs:["equip-1"]},
+      {id:"action-2",dependency_action_ids:["action-1"],
+        ingredient_refs:[{ingredientId:"ing-1"}],equipment_refs:[]}
+    ]
+  };
+}
+function correction(foodId="food-A",calories=null){
+  return {foodId,calories,proteinG:null,carbsG:null,fatG:null,
+    saturatedFatG:null,fiberG:null,sugarsG:null,sodiumMg:null,
+    servingLabel:null,note:null};
+}
+test("cloning published Recipe graph allocates fresh IDs and remaps nested references",()=>{
+  const graph=frozenGraph();
+  let i=0;
+  const cloned=clonePublishedRecipeGraphForDraft(graph,()=> "new-"+(++i));
+  assert.equal(cloned.ingredients[0].id,"new-1");
+  assert.equal(cloned.equipment[0].id,"new-2");
+  assert.equal(cloned.instructions[0].id,"new-3");
+  assert.equal(cloned.instructions[1].id,"new-4");
+  assert.deepEqual(cloned.instructions[1].dependency_action_ids,["new-3"]);
+  assert.deepEqual(cloned.instructions[0].ingredient_refs,["new-1"]);
+  assert.deepEqual(cloned.instructions[0].equipment_refs,["new-2"]);
+  assert.deepEqual(cloned.instructions[1].ingredient_refs,[{ingredientId:"new-1"}]);
+  assert.equal(graph.instructions[1].dependency_action_ids[0],"action-1",
+    "published source graph must remain frozen");
+});
+test("cloning a Recipe must reject an unresolved dependency instead of silently dropping it",()=>{
+  const graph=frozenGraph();
+  graph.instructions[1].dependency_action_ids=["unrecognized-action"];
+  let i=0;
+  assert.throws(()=>clonePublishedRecipeGraphForDraft(graph,()=> "new-"+(++i)),
+    /does not resolve inside the published Recipe graph/);
+});
+test("cloning a Recipe rejects duplicate published ingredient identities",()=>{
+  const graph=frozenGraph();
+  graph.ingredients.push({...graph.ingredients[0]});
+  let i=0;
+  assert.throws(()=>clonePublishedRecipeGraphForDraft(graph,()=> "new-"+(++i)),
+    /duplicate child id/);
+});
+test("Recipe cover path is strictly partitioned by the authenticated owner",()=>{
+  const user="owner-a";
+  assert.equal(normalizeOwnedRecipeCoverPath(user,"owner-a/cover/photo.png"),
+    "owner-a/cover/photo.png");
+  assert.throws(()=>normalizeOwnedRecipeCoverPath(user,"owner-b/cover/photo.png"),
+    /authenticated owner/);
+  assert.throws(()=>normalizeOwnedRecipeCoverPath(user,"owner-a/../owner-b/photo.png"),
+    /authenticated owner/);
+});
+test("pending Food correction retry reuses exact operation identity only for same CAS",()=>{
+  const command=correction();
+  const cas={expectedRevisionId:null,expectedPointerRevision:0};
+  const pending=claimPersonalCorrectionOperation(null,command,cas,()=>"op-one");
+  const same=claimPersonalCorrectionOperation(pending,command,cas,()=>"op-two");
+  assert.equal(same.operationId,"op-one");
+  const changed=claimPersonalCorrectionOperation(pending,command,
+    {...cas,expectedPointerRevision:1},()=>"op-two");
+  assert.equal(changed.operationId,"op-two");
+  assert.equal(clearPersonalCorrectionOperation(changed),null);
+});
+test("Food correction semantic identity distinguishes unknown from measured zero",()=>{
+  const cas={expectedRevisionId:"revision-a",expectedPointerRevision:1};
+  const pending=claimPersonalCorrectionOperation(null,correction("food-A",null),cas,
+    ()=>"operation-null");
+  const changed=claimPersonalCorrectionOperation(pending,correction("food-A",0),cas,
+    ()=>"operation-zero");
+  assert.equal(changed.operationId,"operation-zero");
+  assert.notEqual(pending.semanticKey,changed.semanticKey);
+});
+test("cooking voice recognition normalizes known commands without inventing unknown actions",()=>{
+  assert.deepEqual(parseCookingVoiceCommand("  WHAT’S NEXT!?  "),
+    {kind:"command",command:"whats_next"});
+  assert.deepEqual(parseCookingVoiceCommand("add salt"),
+    {kind:"unknown",raw:"add salt"});
+});

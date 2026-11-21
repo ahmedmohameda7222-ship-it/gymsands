@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: FRESH_FOUNDATION_CONTRACT_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
-N105: TWENTY_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
+N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: MCP_PRIVACY_SCOPE_TESTS_AUTHORED_AUTH_INTEGRATION_GAP
 N107: BROWSER_MATRIX_AUTHORED_SYNTHETIC_FIXTURES_ABSENT
 N108: MIGRATION_SOURCE_TESTS_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -255,3 +255,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Inspected actual `services/nutrition-v1/server/food-library.ts` utility code and added checks for NFKD German normalization, Arabic tashkeel/tatweel, exact personal-versus-catalog ranking, locale-specific aliases, Arabic Food-name lookup, NULL-preserving nutrition filters, explicit preset policy, non-mutating personal overlays and namespaced cursor/pagination limits.
 - N104 test group now contains 25 authored cases, minimum independently checked in the Nutrition-only runner. **Not executed.** This is utility-layer evidence only; current-generation DB projection, atomic CAS/rollback and real EN/DE/AR PostgreSQL search still require disposable integration testing under G-11 and actual published generation data.
 - Ruling: no Food Catalog search service, production schema, source data, access controls or launch scope changed; this commit only adds future fail-closed acceptance source and ledger evidence.
+
+## N105 follow-up — frozen graph, personal correction and owner-path contracts
+
+- Added seven isolated Nutrition-owned cases directly against the existing Recipe draft clone, Recipe cover path, personal correction operation and cooking voice helpers: immutable frozen Recipe sources, exact remapping of dependency/ingredient/equipment IDs, duplicate/unresolved link denial, owner-keyed media boundaries, stable correction idempotency tied to semantic payload+CAS, NULL-versus-zero distinction, and explicit unknown voice actions.
+- N105 count is now 27 authored test cases. All use synthetic local values; none touch Production or migrate data. Service/API owner-isolation, Food-to-consumer writes, RLS and actual event replay still lack end-to-end QA. Tests remain **unexecuted** under G-11.
