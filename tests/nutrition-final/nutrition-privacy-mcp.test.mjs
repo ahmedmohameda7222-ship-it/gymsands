@@ -230,3 +230,20 @@ test("Meal Plan async response and offline replay cannot cross owner/week bounda
   assert.ok(replay.includes("syncingContextKeyRef.current === requestContextKey"),
     "Replay mutex must be scoped by owner/week instead of globally blocking new users");
 });
+
+// N095/N106: a mutation or cross-week copy can outlive a changed JWT owner;
+// no cache, queue or screen write belongs under a stale operation's context.
+test("Meal Plan editor and bulk copy never queue prior owner's mutations after a switch",()=>{
+  const src=readFileSync(resolve("components/nutrition/meal-plan/meal-plan-page.tsx"),"utf8");
+  for(const [startMark,endMark] of [
+    ["async function mutateWeek(", "async function mutate("],
+    ["async function writeCopiesToWeek(", "async function saveBulkCopy("]
+  ]){
+    const from=src.indexOf(startMark),to=src.indexOf(endMark,from);
+    assert.ok(from>0&&to>from,"Missing bounded mutation implementation: "+startMark);
+    const handler=src.slice(from,to);
+    assert.ok(handler.includes("sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)"),
+      "Missing exact owner/week context guard: "+startMark);
+    assert.ok(handler.includes("catch"),"Network error path must be explicit: "+startMark);
+  }
+});
