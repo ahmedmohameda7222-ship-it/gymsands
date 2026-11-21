@@ -363,3 +363,16 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Adjusted new Nutrition-only N108 Foundation/FNDDS archive byte-size and SHA-256 verification to stream through the approved Ubuntu SHA256 CLI with `statSync` rather than `readFileSync` potentially large USDA ZIPs. Exact checksum and byte-count equality remains mandatory.
 - The original source archives are absent/unverified and this check was **not executed**. No schema, business logic, review authority or release contract was weakened.
+
+## N002 exact eight-file PR189 patch disposition
+
+- PR: https://github.com/ahmedmohameda7222-ship-it/gymsands/pull/189 ; reviewed HEAD `9da131e24fb9a38d1afa88881e62d7498429d005`, OPEN/UNMERGED at this observation. Read complete eight-file GitHub patch through connected source, not just the PR summary.
+- `.github/workflows/post-deploy-smoke.yml` — **release acceptance/control**, workflow-level quality identity, reviewed PR/base inputs and strict Vercel provenance; G-01/G-02 must decide whether to preserve/replace; not safe to remove as mere CI.
+- `docs/release/README.md` — **release operator documentation** of squash-aware Quality/merge/Production identity evidence; preserve semantics or supersede explicitly.
+- `scripts/authenticated-release-smoke.mjs` — **release runtime evidence sanitization** correction for bounded failure code; not test-only.
+- `scripts/create-release-manifest.mjs` — **immutable release manifest** runtime, reviewed-vs-deployed SHA split, canonical Quality evidence and smoke completeness; indispensable to exact release identity. Never silently drop to satisfy test deletion.
+- `scripts/post-deploy-provenance.mjs` — **indispensable non-test provenance verifier** for GitHub merged PR, squash first parent and matching source trees, canonical run/artifact/provider READY/live markers. Missing from current main; G-01 choice controls its introduction.
+- `scripts/post-deploy-provenance.test.mjs` — **test-only Node assertions**; not runtime, would be deferred/replaced by approved Nutrition/release contract checks under the deletion policy.
+- `scripts/post-deploy-smoke-evidence.mjs` — **fail-closed smoke artifact/runtime validator**: requires every anonymous and authenticated route result, exact source/migration, zero exits. Retain equivalent strict checks.
+- `scripts/premerge-smoke-contracts.test.mjs` — **test-only contract check**; remove/rebuild after approved final QA rather than treating it as release runtime.
+- **Ruling:** PR189 has **two tests, one workflow, one operator doc and four indispensable runtime scripts**; changes cannot be wholesale discarded nor merged into this deletion branch implicitly. G-01 decision to retain runtime patch versus defer/supersede remains external. No PR merge/close, workflow dispatch, runtime deployment or Production action performed.
