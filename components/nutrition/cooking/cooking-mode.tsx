@@ -394,6 +394,9 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
 
   useEffect(() => {
     if (!session || session.status !== "active") return;
+    const requestContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)
+      || (authOwnerId !== null && userId !== authOwnerId)) return;
     const newlyExpired = recoveredTimers.filter((timer) => {
       const original = session.timers.find((item) => item.id === timer.id);
       return timer.expired && timer.status === "completed" && original?.status === "running";
@@ -418,7 +421,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     }
     writeLocal(next);
     setSession(next);
-  }, [recoveredTimers, session, writeLocal]);
+  }, [authOwnerId, recipeId, recoveredTimers, session, userId, writeLocal]);
 
 
   const onResume = useCallback(() => {
