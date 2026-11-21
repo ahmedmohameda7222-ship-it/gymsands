@@ -517,3 +517,22 @@ test("Published Recipe handoff metadata cannot fabricate known-zero nutrition",(
   assert.equal(readPublishedRecipeNutritionFact(0),0);
   assert.equal(readPublishedRecipeNutritionFact(25.5),25.5);
 });
+
+// N095: mutate-week accepts JSON member input, unlike DB numeric text readback.
+// A false boolean must not become a measured 1 serving; null position is not 0.
+const {normalizeOccurrenceForMutation}=await vite.ssrLoadModule("/services/nutrition-v1/server/meal-plan.ts");
+test("Meal Plan occurrence write numbers reject JSON coercion and emit 400",()=>{
+  const base={planDate:"2026-11-20",mealSlotKey:"lunch",sourceType:"placeholder",
+    sourceId:null,sourceVersionId:null,frozenName:"Pending lunch",frozenSnapshot:{},status:"planned"};
+  const invalid=(payload)=>assert.throws(()=>normalizeOccurrenceForMutation(payload),(e)=>
+    e?.status===400 && e?.code==="nutrition_request_invalid");
+  for(const raw of [false,true,"1","",0,-1,Infinity,NaN,{},[]]){
+    invalid({...base,resolvedQuantity:raw});
+  }
+  for(const raw of [null,false,true,"0","2",-1,1.2,NaN,Infinity,Number.MAX_SAFE_INTEGER+1]){
+    invalid({...base,position:raw});
+  }
+  assert.equal(normalizeOccurrenceForMutation({...base,resolvedQuantity:null}).resolvedQuantity,null);
+  assert.equal(normalizeOccurrenceForMutation({...base,resolvedQuantity:2.5,position:0}).resolvedQuantity,2.5);
+  assert.equal(normalizeOccurrenceForMutation(base).position,0);
+});
