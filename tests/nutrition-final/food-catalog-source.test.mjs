@@ -145,3 +145,99 @@ test("Foundation JSON rejects duplicate ID, wrong dataset and wrong type", () =>
   assert.throws(()=>parseUsdaFoundationJson(JSON.stringify({FoundationFoods:[{...food,dataType:"Survey"}]})),/Unexpected USDA dataType/);
   assert.throws(()=>parseUsdaFoundationJson(JSON.stringify({Unknown:[food]})),/FoundationFoods-only/);
 });
+
+
+// Foundation V1A0 adapter-level contracts using a synthetic Food object.
+// Exact archive bytes are NOT included; source archive verification is separate N108.
+const {createUsdaFoundationAdapter,normalizeUsdaFoundationNdbNumber,
+  usdaFoundationSemanticSignature}=
+  await vite.ssrLoadModule("/lib/food-catalog/ingestion/usda-foundation/index.ts");
+const {readFileSync}=await import("node:fs");
+const lock=JSON.parse(readFileSync(
+  "data/food-catalog/source-locks/usda-foundation-2026-04.json","utf8"));
+function fdcFood(overrides={}){
+  return {fdcId:400101,dataType:"Foundation",description:"Rice, raw",
+    foodNutrients:[],foodPortions:[],...overrides};
+}
+function localArtifact(foods){
+  return {sourceZipSha256:lock.sourceChecksumSha256,sourceZipBytes:lock.sourceBytes,foods};
+}
+function adapt(foods){
+  return createUsdaFoundationAdapter(lock).toCandidates(localArtifact(foods));
+}
+test("USDA NDB normalization retains namespace identity but refuses malformed IDs",()=>{
+  assert.deepEqual(normalizeUsdaFoundationNdbNumber("  00123 "),
+    {status:"present",normalized:"00123"});
+  assert.deepEqual(normalizeUsdaFoundationNdbNumber(900),
+    {status:"present",normalized:"00900"});
+  assert.equal(normalizeUsdaFoundationNdbNumber("code-900").status,"malformed");
+  assert.equal(normalizeUsdaFoundationNdbNumber(0).status,"malformed");
+  assert.equal(normalizeUsdaFoundationNdbNumber(null).status,"missing");
+});
+test("same NDB yields stable semantic Food identity despite different FDC record IDs",()=>{
+  const [one,two]=adapt([
+    fdcFood({fdcId:400101,ndbNumber:"00123",description:"Rice, raw"}),
+    fdcFood({fdcId:400102,ndbNumber:123,description:"Rice, uncooked"})
+  ]);
+  assert.equal(one.identityEvidence.semanticSignature,two.identityEvidence.semanticSignature);
+  assert.equal(one.identityEvidence.semanticSignature,
+    usdaFoundationSemanticSignature("00123"));
+  assert.notEqual(one.sourceRecordId,two.sourceRecordId);
+});
+test("NDB missing never invents cross-release semantic matching from the name",()=>{
+  const [row]=adapt([fdcFood({ndbNumber:null})]);
+  assert.equal(row.identityEvidence.semanticSignature,null);
+  assert.equal(row.identityEvidence.structuredEvidenceKey,null);
+});
+test("zero recorded below numeric LOQ is unknown while measured zero is preserved",()=>{
+  const [row]=adapt([fdcFood({foodNutrients:[
+    {nutrient:{id:2048,unitName:"kcal"},amount:0,loq:0.05},
+    {nutrient:{id:1003,unitName:"g"},amount:0,
+      foodNutrientDerivation:{description:"not detected"}},
+    {nutrient:{id:1004,unitName:"g"},amount:0}
+  ]})]);
+  assert.equal(row.nutrition.calories,null);
+  assert.equal(row.nutrition.protein_g,null);
+  assert.equal(row.nutrition.fat_g,0);
+  assert.ok(row.sourceNutrition.numericLoqNutrientIds.includes(2048));
+  assert.ok(row.sourceNutrition.textualLoqNutrientIds.includes(1003));
+});
+test("unsupported USDA source nutrient units are rejected before staging",()=>{
+  assert.throws(()=>adapt([fdcFood({foodNutrients:[
+    {nutrient:{id:1003,unitName:"mg"},amount:10}
+  ]})]),/Unexpected USDA nutrient unit/);
+});
+test("duplicate nutrient IDs fail closed and cannot silently choose one",()=>{
+  assert.throws(()=>adapt([fdcFood({foodNutrients:[
+    {nutrient:{id:1003,unitName:"g"},amount:5},
+    {nutrient:{id:1003,unitName:"g"},amount:10}
+  ]})]),/Ambiguous duplicate nutrient/);
+});
+test("Foundation servings require a measured gram weight and unique portion ID",()=>{
+  const [row]=adapt([fdcFood({foodPortions:[
+    {id:3,amount:1,gramWeight:120,measureUnit:{name:"cup"}},
+    {id:5,amount:1,gramWeight:null,measureUnit:{name:"cup"}},
+    {id:7,amount:0,gramWeight:50,measureUnit:{name:"piece"}}
+  ]})]);
+  assert.equal(row.servings.length,1);
+  assert.equal(row.servings[0].gramWeight,120);
+  assert.equal(row.servings[0].unit,"cup");
+  assert.deepEqual(row.sourceServing.unusablePortionIds,[5,7]);
+});
+test("Foundation import supplies USDA provenance, never invents country relevance",()=>{
+  const [row]=adapt([fdcFood({foodCategory:{description:"Grains",code:"grain"}})]);
+  assert.deepEqual(row.marketScopes,[]);
+  assert.equal(row.globallyRelevant,false);
+  assert.equal(row.category,null);
+  assert.equal(row.taxonomyEvidence[0].taxonomy,"Grains");
+  assert.equal(row.taxonomyEvidence[0].mappedTaxonomyId,null);
+});
+test("the locked Foundation adapter rejects fabricated source ZIP digest or size",()=>{
+  const a=createUsdaFoundationAdapter(lock);
+  assert.throws(()=>a.describeSource({
+    ...localArtifact([]),sourceZipSha256:"f".repeat(64)
+  }),/checksum or byte-size mismatch/);
+  assert.throws(()=>a.describeSource({
+    ...localArtifact([]),sourceZipBytes:lock.sourceBytes+1
+  }),/checksum or byte-size mismatch/);
+});

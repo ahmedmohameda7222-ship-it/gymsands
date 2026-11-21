@@ -172,7 +172,7 @@ N098: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N099: SCOPE_PROVISIONAL_BLOCKED_G11
 N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
-N102: FRESH_FOUNDATION_CONTRACT_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
+N102: TWENTY_ONE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
@@ -295,3 +295,8 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Exact counts: 133 applied migration records; 0 `food_items`, 0 `food_source_records`, 0 `food_ingestion_batches`, 0 `food_ingestion_runs`, 0 `food_catalog_generations`, 0 `food_catalog_search_documents`, 0 `food_catalog_governance_principals`; `food_catalog_current_generation.current_generation_id` is NULL.
 - No production Owner, reviewed batch, active generation, market publication or healthy Plan 9 status can be inferred; in fact these absent counts establish those deployment tasks are outstanding. No live database write was performed.
 - Current authorized code branch remains isolated and unmerged. Newly authored Nutrition tests, CI and fixtures have **not run**, and no release or QA approval was obtained.
+
+## N102 source-adapter expansion (synthetic Foundation facts, no original ZIP)
+
+- Added nine targeted Foundation adapter cases from current `lib/food-catalog/ingestion/usda-foundation/index.ts` and approved lock JSON: exact five-digit NDB normalization, stable NDB-based identity, absence of invented identity, numeric/textual LOQ->NULL versus measured zero, invalid/duplicate nutrient denial, measured portion-only conversion, no invented country relevance, and source-archive digest/byte count guard.
+- Foundation source group now contains 21 authored cases. Synthetic in-memory objects do not prove source ZIP integrity, 1A1/1A2 cross-batch reconciliation, full native USDA data or Plan10 FNDDS import. Original ZIP rehash still missing; G-09/G-11 remain closed, no test suite executed.
