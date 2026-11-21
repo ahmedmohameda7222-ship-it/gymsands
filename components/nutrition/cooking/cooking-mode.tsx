@@ -597,16 +597,20 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
 
   const onEndCooking = useCallback(async () => {
     if (!session) return;
+    const requestContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)
+      || (authOwnerId !== null && userId !== authOwnerId)) return;
     const now = nowIso();
     const ended = endLocalCookingSession(session, now);
     writeLocal(ended);
     setSession(ended);
     if (userId && navigator.onLine) {
       const reconciled = await flushPending(ended, userId);
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       setSession(reconciled);
     }
-    router.back();
-  }, [flushPending, router, session, userId, writeLocal]);
+    if (sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) router.back();
+  }, [authOwnerId, flushPending, recipeId, router, session, userId, writeLocal]);
 
   async function requestMicrophone() {
     setStatusMessage(null);
