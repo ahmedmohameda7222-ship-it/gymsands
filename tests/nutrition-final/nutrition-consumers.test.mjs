@@ -710,3 +710,18 @@ test("Food Library numeric filters reject malformed values rather than silently 
     assert.equal(parseNonNegativeFoodSearchQueryAmount(raw),null);
   }
 });
+
+// N095: even with separate localStorage keys, an old async fetch/queue loop
+// must not act on account B with account A's request closure or week context.
+const {sameMealPlanOwnerWeekContext}=await vite.ssrLoadModule("/lib/nutrition-v1/meal-plan-offline.ts");
+test("Meal Plan async context must match owner and week before replay",()=>{
+  const ownerAWeek="plaivra:meal-plan:owner-A:2026-11-16";
+  const ownerBWeek="plaivra:meal-plan:owner-B:2026-11-16";
+  const ownerANextWeek="plaivra:meal-plan:owner-A:2026-11-23";
+  assert.equal(sameMealPlanOwnerWeekContext(ownerAWeek,ownerAWeek),true);
+  assert.equal(sameMealPlanOwnerWeekContext(ownerBWeek,ownerAWeek),false);
+  assert.equal(sameMealPlanOwnerWeekContext(ownerANextWeek,ownerAWeek),false);
+  assert.equal(sameMealPlanOwnerWeekContext(null,ownerAWeek),false);
+  assert.equal(sameMealPlanOwnerWeekContext(ownerAWeek,null),false);
+  assert.equal(sameMealPlanOwnerWeekContext("",""),false);
+});
