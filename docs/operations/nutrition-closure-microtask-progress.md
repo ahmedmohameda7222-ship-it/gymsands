@@ -176,7 +176,7 @@ N102: FRESH_FOUNDATION_CONTRACT_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
-N106: SIXTEEN_MCP_PRIVACY_CASES_AUTHORED_AUTH_INTEGRATION_GAP
+N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
@@ -282,3 +282,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Added three Nutrition-only release-integrity cases: immutable release-critical script/YAML Git blobs compared to the exact base, source lock structure/CC0-vs-production-authority boundary, and absence of reintroduced legacy `*.test.*` / `*.spec.*` tracked files outside the seven Nutrition-only groups.
 - N108 now has seven scoped tests, but this is unexecuted source. It **does not assert PR #189 merged**, because `scripts/post-deploy-provenance.mjs` remains in PR #189, not `main`. Quality/release evidence integration and full FNDDS original archives remain blocked G-01/G-09/G-11.
+
+## N106 local API authorization denial checks (mock frontend, real private API)
+
+- Authored three further Nutrition-only HTTP tests against exact local `127.0.0.1:3000` server. They issue unauthenticated GET/POST for Food Library, Diary, Meal Plan, Saved Meals, Recipe publishing and Food/Recipe handoff commit, require HTTP 401, private no-store and Authorization vary, and verify JSON errors.
+- Tests are deny-only with no personal data or Production URL. They are designed to use actual Next.js route handlers and `requireNutritionUser`, NOT fake HTTP responses. This still does not prove valid owner token, cross-user RLS isolation, or persistence replay; G-11 integration evidence remains outstanding.
+- Minimum N106 cases increased 16->19. No tests executed; even if these tests eventually pass they are strictly unauthorized HTTP smoke, not full privacy/API acceptance.

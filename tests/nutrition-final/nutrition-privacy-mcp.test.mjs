@@ -139,3 +139,44 @@ test("MCP input validation forbids caller-controlled owner identity",()=>{
   assert.equal(result.success,false);
   assert.ok(result.errors.some(error=>error.includes("server-controlled")));
 });
+
+
+// Actual local Next.js HTTP denial contracts: no real account, no bearer token,
+// no live database and no Production requests. These do not prove owner isolation.
+function isolatedApiOrigin(){
+  const url=new URL(process.env.NUTRITION_E2E_BASE_URL??"");
+  if(url.protocol!=="http:"||
+    !["localhost","127.0.0.1","[::1]"].includes(url.hostname)||
+    url.port!=="3000" || url.pathname!=="/" || url.search || url.hash ||
+    url.username || url.password)
+    throw Error("Nutrition API gate may only target disposable localhost:3000");
+  return url.origin;
+}
+async function unauthenticatedApi(method,path){
+  const response=await fetch(isolatedApiOrigin()+path,{
+    method,headers:{"accept":"application/json",...(method==="POST"?{"content-type":"application/json"}:{})},
+    ...(method==="POST"?{body:JSON.stringify({operation:"synthetic-test-only"})}:{})
+  });
+  assert.equal(response.status,401,method+" "+path+" must reject unauthenticated access");
+  assert.match(response.headers.get("cache-control")??"",/private.*no-store/i);
+  assert.match(response.headers.get("vary")??"",/Authorization/i);
+  const body=await response.json();
+  assert.ok(typeof body.error==="string"&&body.error.length>0);
+}
+test("Food Library read and write reject missing owner token before service access",async()=>{
+  await unauthenticatedApi("GET","/api/nutrition/v1/foods?q=rice");
+  await unauthenticatedApi("POST","/api/nutrition/v1/foods");
+});
+test("Diary and Meal Plan read/write reject missing owner token",async()=>{
+  for(const path of ["/api/nutrition/v1/diary?date=2026-11-20",
+    "/api/nutrition/v1/meal-plan/week?weekStart=2026-11-16"]){
+    await unauthenticatedApi("GET",path);
+    await unauthenticatedApi("POST",path);
+  }
+});
+test("Recipe publishing, Saved Meal write and handoff commit reject anonymous HTTP",async()=>{
+  await unauthenticatedApi("POST",
+    "/api/nutrition/v1/recipes/00000000-0000-4000-8000-000000000001/publish");
+  await unauthenticatedApi("POST","/api/nutrition/v1/saved-meals");
+  await unauthenticatedApi("POST","/api/nutrition/v1/handoffs/commit");
+});
