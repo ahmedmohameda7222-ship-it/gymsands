@@ -165,9 +165,9 @@ N091: AE_MARKET_G10_LICENSE_UNVERIFIED
 N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N093: JSON_AND_URL_HANDOFF_QUANTITIES_STRICT_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
-N095: OWNER_WEEK_OFFLINE_REPLAY_CACHE_AND_COOKING_REVISION_GUARDED_UNTESTED
-N096: DIARY_RECIPE_MEAL_PLAN_FAVORITES_AND_ACTION_LOCALES_SOURCE_UNTESTED
-N097: RLS_RPC_DIARY_AND_COOKING_OWNER_CONTEXT_SOURCE_GUARDED_RUNTIME_UNTESTED
+N095: OWNER_WEEK_SHOPPING_CACHE_AND_COOKING_REVISIONS_GUARDED_UNTESTED
+N096: MEAL_PLAN_FAVORITES_SHOPPING_RECIPE_LOCALES_SOURCE_ONLY_UNTESTED
+N097: RLS_RPC_DIARY_COOKING_RECIPE_SHOPPING_OWNER_CONTEXT_GUARDED_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
 N100: BLOCKED_G11_UNFINISHED_CODE
@@ -175,9 +175,9 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FIFTY_FOUR_CONSUMER_CASES_AUTHORED_UNTESTED
-N106: TWENTY_EIGHT_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
-N107: NINETEEN_BROWSER_CASES_AUTHORED_UNTESTED
+N105: FIFTY_FIVE_CONSUMER_CASES_AUTHORED_UNTESTED
+N106: THIRTY_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
+N107: TWENTY_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -762,3 +762,12 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Authored N106 4 source/pure test cases FIRST (all **NOT RUN**) at `3b776c40f0370c0a051b3b10bdc4fc0b59ccdad1`, `83f55a415fd90fd48195097ca380ed090375f245`, `be6afda99bc63fb79af72bd124926c5b8db7fa10`. Added pure `sameCookingOwnerRecipeContext` at `aa372aff1018acc07212b92c6b6a32b19e2c1bf5`. UI now uses layout-phase context invalidation on auth/Recipe changes; `initialize` discards prior-owner async reads and start/restore results; `flushPending`, `persistAndSync`, Resume, Start Over, Update Action, End Session and automatic timer completion check context before committing local/global UI state. `writeLocal` and `writeLocalForOwner` also reject an old callback's writes to another auth context, without deleting existing owner-scoped recoverable storage. Final complete set of these source edits at `aa70ea4609570e51b4eee8db34cafec3a6bd3ee6`. This is not independently verified in Playwright or with two JWTs.
 - `cooking-local-store.ts` previously accepted unsafe integers beyond JS `Number.MAX_SAFE_INTEGER` in both session and per-action `stateRevision`; exact CAS/recovery cannot be guaranteed. N105 pure regression **first** at `599a0d193a33311b7e84f6648f88b79cfc629651`, NOT RUN. Minimal `Number.isInteger`→`Number.isSafeInteger` at `13b8a5287889f5b050a7294325ca3e468bc718c5` ensures deserializer rejects malformed/unsafe local revisions.
 - Final-only runner now has **183** required source-authored QA cases in 7 groups: **25+18+32+54+28+19+7** (`505becb4bf84dc1769219cc06bd27ce5a9fec0d4`). Direct GitHub readback confirms 54 consumer and 28 privacy/MCP direct test declarations. Diff from prior `7327338aee747f2304ec94ebcfcbe2ab84e92a7a` = **20 commits / 7 paths**, **0 migrations**, **0 workflow YAML changes**, no Production mutations. **SOURCE_AUTHORED_UNTESTED**; two-user auth transition, Cooking local offline sync, red/green tests, React build/typecheck, QA acceptance and cross-owner denial are outstanding. G-11 not satisfied.
+
+
+## N095/N097 Shopping and Recipe published-owner context — 2026-11-21
+
+- Source traced `components/nutrition/recipes/recipe-detail.tsx`: although local published cache keys were already owner-qualified, older in-flight `recipeApi` reads could overwrite newly authenticated owner's detail/error/cache state **after** auth/Recipe change. Added N106 source regression **first**, NOT RUN, at `2e06bbd7055f35596058df7563b7fbc2be31d79f`; UI `useLayoutEffect` clears stale visible data on owner/Recipe key change at `7475c0519dcba301a8083bc0a223a75c810920d4`, and `load` accepts network/offline cache results **only for** the captured current context at `742814890b26a3767c5dbee0f1f11732c0618039`. Existing Recipe cache owner key and frozen history validation were retained, and no cached snapshot was considered new authoritative source.
+- Source traced `components/nutrition/meal-plan/shopping-list.tsx`: read/save/carry POST Promises were not bound to the owner/week, allowing stale async Shopping needs or status updates to cross authentication or week navigation. N106 source regression **first**, NOT RUN, `289dc6838578ed50ef710d43c5f45e1b1185289f`; then shared `sameMealPlanOwnerWeekContext` and `useLayoutEffect` clear stale Shopping state/draft and guard `load`, `saveShopping` and next-week `carryUncheckedItems` before/after awaited requests (commits `3a6609ca1d7e8b3e74818b1f515758fa1e0f6d76`, `bda52daac07e2419b7eba420ecc8bb66bb7051e8`, `9fd7e8a8197357b4ef91d172f8cc22cf7f5e2199`). Network responses are checked against `week.user_id` when provided. No backend meal-plan concurrency contract or source Frozen Need changed.
+- Manual/derived Shopping numeric entry previously accepted blank input via `Number("")→0`. N105 pure regression FIRST `0856e053195e9e23598ebc93c964db08bd9640c9`, NOT RUN; strict nonnegative decimal parser `lib/nutrition-v1/shopping-write-quantity.ts` at `3cda8566504b10bf04cbacd781e60930c8d884e2`, wired at `6ace978b126129bb74c0b4acd8326032c817657d`. Explicit measured **0** remains permitted for Shopping, but blank/hex/malformed no longer silently rewrite measurements.
+- UI `addManual()` previously cleared user-entered manual item draft **before** awaiting server acceptance, losing item details on failure. N107 source regression FIRST at `e805f32270d2f46ceda1e3d0ef39da30118ca5b5`, NOT RUN. `saveShopping` now returns success/failure; only accepted saves clear the form, and only if the user has not edited a **newer** draft during the request (final code `a99e3075d7c153adf97765c71b39c46b56703107`). Failed network writes leave original input visible for retry; auth/week switch explicitly clears the old user's draft.
+- Fresh direct GitHub source comparison `ce6d3a413005c35987fe06faeae6a1008a86fc18` to `a99e3075d7c153adf97765c71b39c46b56703107`: **14** commits / **7** changed paths / **0** migrations / **0** workflows. Final-only scoped QA minimum now **187 = 25+18+32+55+30+20+7**; direct source test count consumer 55, privacy/MCP 30, browser 13 static + generated. **NO QA, browser-auth replay, CI, lint, build, Production mutations, merge or release.** These fixes remain **SOURCE_AUTHORED_UNTESTED** and require actual G-11 acceptance.
