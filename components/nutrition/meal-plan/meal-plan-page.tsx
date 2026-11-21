@@ -435,7 +435,9 @@ export function MealPlanPage() {
   }
 
   async function mutateWeek(rawMutation: MealPlanWeekMutation, explicitTarget?: MealPlanMutationTarget) {
-    if (!data || !ownerId) throw new Error("Meal Plan must be loaded before it can be changed.");
+    if (!data || !ownerId) return;
+    const requestContextKey = cacheKey(ownerId, weekStart);
+    if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
     const mutation = prepareMutation(rawMutation);
     const mutationAuthority = explicitTarget ?? mutationTarget(mutation, weekStart);
     const operationId = crypto.randomUUID();
@@ -447,11 +449,14 @@ export function MealPlanPage() {
         method: "POST",
         body: JSON.stringify({ kind: "mutate", weekId: isLocalWeekId(currentWeekId) ? null : currentWeekId, weekStartDate: weekStart, baseRevision, operationId, mutation }),
       });
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
       if (!result.weekId) throw new Error("Meal Plan mutation was not confirmed.");
       await load();
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
       setSyncState("Saved");
       return;
     } catch (cause) {
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
       const baseSnapshot = targetSnapshot(data, mutationAuthority);
       const queuedBase: MealPlanOfflineMutation = {
         operationId, weekId: currentWeekId ?? localWeekId(weekStart), baseRevision, target: mutationAuthority,
