@@ -153,3 +153,98 @@ test("reviewed checksum mismatch is a blocking integrity finding",()=>{
   const {value}=seal(snapshot());
   assert.ok(findingCodes(value,"c".repeat(64)).includes("GENERATION_CHECKSUM_MISMATCH"));
 });
+
+
+// N104 Food Library search utility contracts. Authoritative generation search
+// also requires separate database RPC/CAS acceptance (not simulated here).
+const {normalizeFoodSearchText,resolveEffectiveFoodNutrition,qualifiesFoodNutrition,
+  rankFoodLibraryCandidates,paginateFoodLibraryResults}=
+  await server.ssrLoadModule("/services/nutrition-v1/server/food-library.ts");
+const libraryNutrition=()=>({
+  calories:null,protein_g:5,carbs_g:25,fat_g:1,saturated_fat_g:null,
+  fiber_g:null,sugars_g:null,sodium_mg:null,basis_amount:100,basis_unit:"g"
+});
+function food(id,overrides={}){
+  return {
+    id,source:"catalog",name:"Rice",brand:null,category:null,cuisine:null,
+    servingLabel:"100 g",verified:false,favorite:false,recentAt:null,
+    frequency:0,locale:"en",aliases:[],nutrition:libraryNutrition(),
+    ...overrides
+  };
+}
+
+test("search normalizer removes German accents and whitespace predictably",()=>{
+  assert.equal(normalizeFoodSearchText("  Äpfel  "), "apfel");
+  assert.equal(normalizeFoodSearchText("  apfel  "), "apfel");
+});
+test("Arabic search removes tashkeel and tatweel without inventing translation",()=>{
+  assert.equal(normalizeFoodSearchText("زَعْتَــر"),"زعتر");
+  assert.equal(normalizeFoodSearchText("زعتر"),"زعتر");
+  assert.notEqual(normalizeFoodSearchText("زيت"),"زعتر");
+});
+test("exact personal Food identity ranks ahead of exact catalog name and favorites",()=>{
+  const list=[
+    food("catalog",{favorite:true}),
+    food("mine",{source:"my_food",favorite:false})
+  ];
+  assert.deepEqual(rankFoodLibraryCandidates(list,{query:"rice"}).map(x=>x.id),
+    ["mine","catalog"]);
+});
+test("locale-specific German alias ranks above equivalent foreign-locale alias",()=>{
+  const list=[
+    food("english-alias",{name:"Apple",aliases:[{locale:"en",value:"Äpfel"}]}),
+    food("german-alias",{name:"Apples",aliases:[{locale:"de",value:"Äpfel"}]})
+  ];
+  assert.deepEqual(rankFoodLibraryCandidates(list,{query:"äpfel",locale:"de"}).map(x=>x.id),
+    ["german-alias","english-alias"]);
+});
+test("Arabic exact alias can find a canonical English-name Food",()=>{
+  const result=rankFoodLibraryCandidates([
+    food("zaatar",{name:"Thyme seasoning",aliases:[{locale:"ar",value:"زَعْتَر"}]}),
+    food("irrelevant",{name:"Rice"})
+  ],{query:"زعتر",locale:"ar"});
+  assert.deepEqual(result.map(x=>x.id),["zaatar"]);
+});
+test("unknown nutrition never qualifies for objective protein filter or inferred policy",()=>{
+  const facts=libraryNutrition();
+  assert.equal(qualifiesFoodNutrition(facts,{protein:{operator:"gte",value:5}}),true);
+  assert.equal(qualifiesFoodNutrition({...facts,protein_g:null},
+    {protein:{operator:"gte",value:5}}),false);
+  assert.equal(qualifiesFoodNutrition(facts,{presets:["high-protein"]}),false);
+});
+test("objective nutrition filter requires explicit versioned thresholds and basis",()=>{
+  const policy={policyVersion:"fixture-v1",highProteinMinGPer100:20,
+    lowCarbMaxGPer100:30};
+  assert.equal(qualifiesFoodNutrition({...libraryNutrition(),protein_g:25},
+    {presets:["high-protein","low-carb"]},policy),true);
+  assert.equal(qualifiesFoodNutrition({...libraryNutrition(),basis_amount:null},
+    {presets:["high-protein"]},policy),false);
+});
+test("personal nutrition overlay updates only known explicitly supplied fields",()=>{
+  const canonical=libraryNutrition();
+  const corrected=resolveEffectiveFoodNutrition(canonical,{protein_g:10});
+  assert.equal(corrected.protein_g,10);
+  assert.equal(corrected.calories,null);
+  assert.equal(corrected.carbs_g,25);
+  assert.equal(canonical.protein_g,5,"canonical Food fact must not be rewritten");
+});
+test("cursor distinguishes same id across catalog and personal namespaces",()=>{
+  const ranked=[food("shared"),food("shared",{source:"my_food"}),food("next")];
+  const a=paginateFoodLibraryResults(ranked,{limit:1});
+  const b=paginateFoodLibraryResults(ranked,{limit:1,cursor:a.nextCursor});
+  const c=paginateFoodLibraryResults(ranked,{limit:1,cursor:b.nextCursor});
+  assert.deepEqual([a.items[0].source,b.items[0].source,c.items[0].id],
+    ["catalog","my_food","next"]);
+  assert.equal(c.nextCursor,null);
+});
+test("utility cursor constrains page limit and cannot skip all results when invalid",()=>{
+  const ranked=Array.from({length:23},(_,i)=>food("id-"+i));
+  const first=paginateFoodLibraryResults(ranked,{limit:100});
+  assert.equal(first.items.length,20);
+  assert.ok(first.nextCursor);
+  const next=paginateFoodLibraryResults(ranked,{limit:100,cursor:first.nextCursor});
+  assert.equal(next.items.length,3);
+  assert.equal(next.nextCursor,null);
+  assert.deepEqual(paginateFoodLibraryResults(ranked,{limit:2,cursor:"invalid"}).items,
+    ranked.slice(0,2));
+});

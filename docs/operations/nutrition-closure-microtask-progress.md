@@ -174,7 +174,7 @@ N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: FRESH_FOUNDATION_CONTRACT_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
-N104: FIFTEEN_GENERATION_TESTS_AUTHORED_REAL_DB_GAP
+N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: MCP_PRIVACY_SCOPE_TESTS_AUTHORED_AUTH_INTEGRATION_GAP
 N107: BROWSER_MATRIX_AUTHORED_SYNTHETIC_FIXTURES_ABSENT
@@ -249,3 +249,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Added seven cases based directly on `20260904100000_food_catalog_ingestion_v2_authority.sql` and `20261013050000_food_catalog_plan9_review_decision_hardening.sql`: nine protected RLS tables, direct-write grant denial for anon/authenticated/service_role, nine immutable before-update/delete triggers, exact operation replay, checksum-conflict rejection, absent Production lease rejection and forged/no-session human review denial.
 - All fixture writes are inside uncommitted disposable transactions, and all SQL connections pass the localhost:54322 guard. Cases deliberately require actual disposable migration replay and are not unit mocks.
 - New N103 count: 13 asserted cases. **No SQL tests or CI run executed**; the G-11 authorization gate and absent runtime remain explicit. Source inspection alone does not establish passing RLS, database runtime or ingestion idempotency.
+
+## N104 follow-up — ten additional Nutrition search utility cases
+
+- Inspected actual `services/nutrition-v1/server/food-library.ts` utility code and added checks for NFKD German normalization, Arabic tashkeel/tatweel, exact personal-versus-catalog ranking, locale-specific aliases, Arabic Food-name lookup, NULL-preserving nutrition filters, explicit preset policy, non-mutating personal overlays and namespaced cursor/pagination limits.
+- N104 test group now contains 25 authored cases, minimum independently checked in the Nutrition-only runner. **Not executed.** This is utility-layer evidence only; current-generation DB projection, atomic CAS/rollback and real EN/DE/AR PostgreSQL search still require disposable integration testing under G-11 and actual published generation data.
+- Ruling: no Food Catalog search service, production schema, source data, access controls or launch scope changed; this commit only adds future fail-closed acceptance source and ledger evidence.
