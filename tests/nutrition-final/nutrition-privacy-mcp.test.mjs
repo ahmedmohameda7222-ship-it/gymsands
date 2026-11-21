@@ -357,3 +357,19 @@ test("Shopping List fetched week and carryover promises never cross owner contex
       "Shopping callback missing owner/week guard: "+startMark);
   }
 });
+
+// N097: handoff idempotency keys are owner-qualified, but UI callbacks must
+// not complete old-owner commands after a new user/session is active.
+test("Add To Handoff ignores old account preview and stale operation acknowledgement",()=>{
+  const src=readFileSync(resolve("components/nutrition/handoffs/add-to-handoff-consumer.tsx"),"utf8");
+  assert.ok(src.includes("activeHandoffContextKeyRef"));
+  assert.ok(src.includes("useLayoutEffect(() => {"),"Owner/source switch must reset Handoff UI before paint");
+  assert.ok(src.includes("if (activeHandoffContextKeyRef.current !== requestContextKey) return;"),
+    "Handoff async responses must be rejected after context switch");
+  const begin=src.indexOf("async function commit()");
+  const end=src.indexOf("\n  const title =",begin);
+  assert.ok(begin>0&&end>begin);
+  const action=src.slice(begin,end);
+  assert.ok(action.includes("if (activeHandoffContextKeyRef.current !== requestContextKey) return;"),
+    "A stale completed operation must not clear idempotency storage or navigate the next owner");
+});
