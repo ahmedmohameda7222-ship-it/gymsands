@@ -249,30 +249,38 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
   }, [text.loadFailed, token]);
 
   const loadActive = useCallback(async () => {
+    const requestScope = activeSavedMealContextRef.current;
+    if (!open || !ownerId || !isCurrentSavedMealContext(requestScope)) return;
     setLoading(true);
     try {
       const body = await request<{ savedMeals: SavedMealListRow[] }>("/api/nutrition/v1/saved-meals");
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setActive(body.savedMeals);
       setError("");
     } catch (cause) {
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setError(cause instanceof Error ? cause.message : text.loadFailed);
     } finally {
-      setLoading(false);
+      if (isCurrentSavedMealContext(requestScope)) setLoading(false);
     }
-  }, [request, text.loadFailed]);
+  }, [isCurrentSavedMealContext, open, ownerId, request, text.loadFailed]);
 
   const loadDeleted = useCallback(async () => {
+    const requestScope = activeSavedMealContextRef.current;
+    if (!open || !ownerId || !isCurrentSavedMealContext(requestScope)) return;
     setLoading(true);
     try {
       const body = await request<{ savedMeals: SavedMealListRow[] }>("/api/nutrition/v1/saved-meals?deleted=true");
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setDeleted(body.savedMeals);
       setError("");
     } catch (cause) {
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setError(cause instanceof Error ? cause.message : text.loadFailed);
     } finally {
-      setLoading(false);
+      if (isCurrentSavedMealContext(requestScope)) setLoading(false);
     }
-  }, [request, text.loadFailed]);
+  }, [isCurrentSavedMealContext, open, ownerId, request, text.loadFailed]);
 
   useEffect(() => {
     if (!open) return;
