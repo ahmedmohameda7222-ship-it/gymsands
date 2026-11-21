@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FORTY_FIVE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FORTY_SIX_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: FIFTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -642,3 +642,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Independently traced `GET /api/nutrition/v1/recipes` → `listRecipeHome` in `services/nutrition-v1/server/recipe-workspace.ts`. Root page is bounded to up to **40** Recipes; draft query is one-per-recipe, but latest published Recipe versions were fetched with a **global** `.order("version_number", descending).limit(limit*12)`. One heavily revised Recipe could consume all rows and starve other published roots, making those entries falsely appear `draft` despite existing versions. Direct read-only Production schema verified no `current_published_version_id` root column to use as a guaranteed shortcut. Query cap remains a performance bound, not a completeness proof.
 - Authored N105 pure regression **first**, NOT RUN, at `9ebf8b3388ea34c5d85f503dec587c5dbea13814`, using a saturating high-version root and several omitted roots to require correct backfill IDs. Created pure `lib/nutrition-v1/recipe-list-page.ts` `recipeVersionBackfillIds` at `4e580a804ae3d2d1f0a0afb27e32629a29205087`. Updated `listRecipeHome` at `19c4c1cff2b907214fe42cdf41f5c30d06f59e1b` to do **owner-scoped, per-root latest-version lookups only when** the original global result actually reaches its `limit*12` cap and a root was missing. Ordinary uncapped listing retains the previous one-query behavior; all fallback queries use both `user_id` and `recipe_id`, select latest version descending and reject mismatched returned root.
 - N105 minimum 44→**45** at `aa67d6629cb25dc4777d88bbd0000747e243c87b`. Total seven-group source test minimum **161 = 25+18+32+45+19+15+7**. This is a **source-only fix pending QA**; no actual DB replay, performance test, lint, build, Nutrition-only test or Production mutation. Fallback has up to 39 additional owner-scoped queries for a saturated global slice; monitor bounded response times in final QA, do not claim performance is proven.
+
+
+## N095 Recipe Home recent-use cap starvation — 2026-11-21
+
+- Independently traced `listRecipeHome` last-used-time projection: the `nutrition_log_groups` source query used a global descending `created_at` and `.limit(Math.min(80,limit*4))`. A single very frequently logged Recipe could occupy the entire cap and make other displayed Recipes' `lastUsedAt` **falsely null**. This is separate from, but analogous to, the previously corrected global published-version cap, and affects stable recently-used ranking.
+- Authored pure N105 regression **first, NOT RUN** at `3c595ad08e82f79dad30159e093f7758e55034ff`. Added `recipeUsageBackfillIds` in existing `lib/nutrition-v1/recipe-list-page.ts` at `48763c56317e4d91230fa049dab0642ec4d479fa`. Wired source-only `listRecipeHome` at `c25d195acef9397a116f904bb16ae29c39eae569`: a **saturated** global log page triggers bounded latest-per-root fallback requests only for missing roots, with `user_id`, `source_type=recipe`, `source_id` restrictions, error checking and ID assertion. On uncapped pages there are no additional queries; maximum fallback fanout is bounded by the 40-root home page.
+- Increased Nutrition consumer final-only minimum 45→**46** in `0a5cbf88c07b08f9b318dc67382982413ed8accd`. Seven-group source minimum **162 = 25+18+32+46+19+15+7**. **SOURCE_AUTHORED_UNTESTED**; database/browser/performance tests, CI, migration and Production write not performed. Final QA must measure saturated-page latency as this trades rare fanout for correctness.
