@@ -311,3 +311,16 @@ test("Cooking resume and completion cannot overwrite a new owner after old async
       "Missing owner/recipe context guard in "+startMark);
   }
 });
+
+// N097: automatic timer expiration is itself a mutation and must not set old
+// owner data after auth context was invalidated by useLayoutEffect.
+test("Cooking automatic expired timer cannot reintroduce prior owner state",()=>{
+  const src=readFileSync(resolve("components/nutrition/cooking/cooking-mode.tsx"),"utf8");
+  const start=src.indexOf("  useEffect(() => {\n    if (!session || session.status !== \"active\") return;");
+  assert.ok(start>0,"Expected active Cooking timer reconciliation effect");
+  const end=src.indexOf("  const onResume = useCallback(",start);
+  assert.ok(end>start);
+  const effect=src.slice(start,end);
+  assert.ok(effect.includes("sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)"),
+    "Expired timer must reject prior owner/Recipe state before setSession");
+});
