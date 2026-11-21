@@ -82,7 +82,7 @@ function isIsoLike(value: unknown) {
 function isActionState(value: unknown): value is CookingLocalActionState {
   if (!isRecord(value)) return false;
   if (typeof value.id !== "string" || typeof value.actionKey !== "string") return false;
-  if (!Number.isInteger(value.stateRevision) || Number(value.stateRevision) < 0) return false;
+  if (!Number.isSafeInteger(value.stateRevision) || value.stateRevision < 0) return false;
   return value.state === "not_available"
     || value.state === "ready"
     || value.state === "active"
@@ -142,7 +142,7 @@ function isLocalSession(value: unknown): value is CookingLocalSession {
   ) return false;
   if (!Number.isFinite(value.servingScale) || Number(value.servingScale) <= 0) return false;
   if (value.status !== "active" && value.status !== "completed" && value.status !== "ended") return false;
-  if (!Number.isInteger(value.stateRevision) || Number(value.stateRevision) < 0) return false;
+  if (!Number.isSafeInteger(value.stateRevision) || value.stateRevision < 0) return false;
   if (value.currentActionKey !== null && typeof value.currentActionKey !== "string") return false;
   if (!Array.isArray(value.actionStates) || !value.actionStates.every(isActionState)) return false;
   if (!Array.isArray(value.timers) || !value.timers.every(isTimer)) return false;
