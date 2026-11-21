@@ -282,3 +282,71 @@ test("cooking voice recognition normalizes known commands without inventing unkn
   assert.deepEqual(parseCookingVoiceCommand("add salt"),
     {kind:"unknown",raw:"add salt"});
 });
+
+
+// Transaction-scoped Nutrition Diary SQL on a disposable Postgres stack.
+// Uses current log_nutrition_group runtime contract, not removed app-wide QA.
+const {spawnSync:spawnDiarySql}=await import("node:child_process");
+const ownerDiary="ed300000-0000-4000-8000-000000000001";
+const otherDiary="ed300000-0000-4000-8000-000000000002";
+const diaryOp="ed300000-0000-4000-8000-000000000050";
+function localDiaryDatabase(){
+  const url=new URL(process.env.NUTRITION_DISPOSABLE_DB_URL??"");
+  if(!["postgresql:","postgres:"].includes(url.protocol) ||
+      !["127.0.0.1","localhost","[::1]"].includes(url.hostname) ||
+      url.port!=="54322" || url.pathname!=="/postgres")
+    throw Error("Refusing external Nutrition Diary database");
+  return process.env.NUTRITION_DISPOSABLE_DB_URL;
+}
+function diarySql(sql){
+  const result=spawnDiarySql("psql",["-X","-q","-A","-t","-v","ON_ERROR_STOP=1",
+    "-d",localDiaryDatabase(),"-c",sql],{encoding:"utf8",
+    timeout:15000,maxBuffer:1024*1024,
+    env:{...process.env,PGCONNECT_TIMEOUT:"5"}});
+  assert.equal(result.error,undefined);
+  assert.equal(result.status,0,String(result.stderr));
+  return String(result.stdout).trim().split(/\r?\n/).at(-1);
+}
+function diarySetup(){
+  const identity=(id,name)=>
+    "('"+id+"','authenticated','authenticated','"+
+    name+"@nutrition-qa.invalid','',"+
+    "'{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,"+
+    "'{}'::jsonb,now(),now())";
+  return "BEGIN; INSERT INTO auth.users "+
+    "(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) "+
+    "VALUES "+identity(ownerDiary,"diary-owner")+","+
+    identity(otherDiary,"diary-foreign")+"; "+
+    "SET LOCAL ROLE authenticated; "+
+    "SELECT set_config('request.jwt.claim.role','authenticated',true); "+
+    "SELECT set_config('request.jwt.claim.sub','"+ownerDiary+"',true); ";
+}
+function diaryCall(){
+  const metadata="'{\"name\":\"Synthetic unknown nutrition bowl\"}'::jsonb";
+  const facts="'[{\"foodName\":\"Synthetic unknown nutrition bowl\","+
+    "\"servingLabel\":\"1 bowl\",\"quantity\":1,\"nutrition\":{"+
+    "\"caloriesKcal\":null,\"proteinG\":null,\"carbsG\":null,\"fatG\":null}}]'::jsonb";
+  return "SELECT public.log_nutrition_group('"+diaryOp+"',"+
+    "date '2026-11-20','Lunch','quick_add',null,null,"+
+    metadata+","+facts+",null); ";
+}
+test("disposable Diary replay preserves exactly one grouped log and unknown macros",()=>{
+  const result=diarySql(diarySetup()+diaryCall()+diaryCall()+
+    "SELECT "+
+    "(SELECT count(*) FROM public.nutrition_log_groups "+
+      "WHERE operation_id='"+diaryOp+"' AND user_id='"+ownerDiary+"'),"+
+    "(SELECT count(*) FROM public.food_logs "+
+      "WHERE user_id='"+ownerDiary+"' AND food_name='Synthetic unknown nutrition bowl' "+
+      "AND calories IS NULL AND protein_g IS NULL "+
+      "AND carbs_g IS NULL AND fat_g IS NULL); "+
+    "ROLLBACK;");
+  assert.equal(result,"1|1");
+});
+test("separate authenticated owner cannot read another member's grouped Diary",()=>{
+  const result=diarySql(diarySetup()+diaryCall()+
+    "SELECT set_config('request.jwt.claim.sub','"+otherDiary+"',true); "+
+    "SELECT count(*) FROM public.nutrition_log_groups "+
+      "WHERE operation_id='"+diaryOp+"'; "+
+    "ROLLBACK;");
+  assert.equal(result,"0");
+});

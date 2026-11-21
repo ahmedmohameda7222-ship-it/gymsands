@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
+N105: TWENTY_NINE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -328,3 +328,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Added two local disposable-DB metadata assertions from `20260902150000_food_catalog_generation_authority.sql`: sealed generation promotion and rollback RPCs executable only by service_role, and the current Generation pointer is RLS-enabled and not INSERT/UPDATE-readable by unauthorized authenticated/anon roles. These are defensive checks, not a simulation of real CAS/rollback controls.
 - N104 now has 30 authored tests including EN/DE/AR synthetic owner search SQL. Real Production Generation promotion, rollback, validated seal and exact authorization must remain separately approved; no tests run until G-11.
+
+## N105 follow-up — actual disposable grouped Diary RPC and owner isolation
+
+- Reviewed applied Nutrition V1 grouped log implementation and historical `supabase/verification/nutrition-v1-plan-diary-targets.sql` as a contract reference (its legacy tests were not restored). Added two new Nutrition-only disposable SQL tests: exact duplicate operation ID log replay yields one grouped log and one unknown-macro source Food log; a second synthetic authenticated owner cannot read the first owner's grouped log.
+- Both user identities and all SQL rows are created inside disposable localhost:54322 transactions and rolled back. No actual OAuth/API token flow, other-user data, live Postgres or Production was used. Tests are **authored but unexecuted until G-11**.
+- N105 now has 29 scoped cases; full Meal Plan/Saved Meal/Recipe handoff and published generation integration remains outstanding.
