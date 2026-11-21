@@ -409,3 +409,18 @@ test("Custom Food required numeric values never coerce unknown calories into zer
       /Calories must be a non-negative number/);
   }
 });
+
+
+const { optionalPositiveFoodNumber }=
+  await vite.ssrLoadModule("/lib/nutrition-v1/user-food-write-numbers.ts");
+test("Custom Food numeric basis rejects non-measured quantities without inventing grams",()=>{
+  for(const input of [null,undefined,""]){
+    assert.equal(optionalPositiveFoodNumber(input,"Basis amount"),null);
+  }
+  for(const input of [false,true,"100",{},[],0,-1,NaN,Infinity]){
+    assert.throws(()=>optionalPositiveFoodNumber(input,"Basis amount"),
+      /Basis amount must be greater than zero/);
+  }
+  assert.equal(optionalPositiveFoodNumber(100,"Basis amount"),100);
+  assert.equal(optionalPositiveFoodNumber(0.5,"Basis amount"),0.5);
+});
