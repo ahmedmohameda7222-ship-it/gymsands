@@ -695,3 +695,18 @@ test("Handoff URL quantity grammar matches server and client without hex or blan
   food.set("quantity","2.5");
   assert.equal(parseAddToHandoff(food,"diary")?.quantity,2.5);
 });
+
+// N095/N104: the Food Library UI displays user-entered objective constraints,
+// but the API previously silently omitted invalid filter numbers and could
+// return unconstrained Foods without a corresponding user-visible warning.
+const {parseNonNegativeFoodSearchQueryAmount}=await vite.ssrLoadModule(
+  "/lib/nutrition-v1/food-search-query-numbers.ts");
+test("Food Library numeric filters reject malformed values rather than silently drop constraints",()=>{
+  assert.equal(parseNonNegativeFoodSearchQueryAmount("0"),0);
+  assert.equal(parseNonNegativeFoodSearchQueryAmount("25.5"),25.5);
+  assert.equal(parseNonNegativeFoodSearchQueryAmount(" 1e2 "),100);
+  for(const raw of [""," ","-1","-0.1","0x10","0b10","0o10","NaN","Infinity","abc","1,5",
+    "1e1000",{},null]){
+    assert.equal(parseNonNegativeFoodSearchQueryAmount(raw),null);
+  }
+});
