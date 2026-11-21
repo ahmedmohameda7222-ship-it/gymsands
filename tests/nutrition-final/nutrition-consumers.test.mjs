@@ -389,3 +389,23 @@ test("same Saved Meal idempotency key with different frozen content is rejected"
   assert.notEqual(result.status,0,"Wrong-semantic retry cannot succeed");
   assert.match(String(result.stderr),/already used with different input/);
 });
+
+
+// Regression N095/N105: typed JSON input may be null/boolean/blank despite
+// TypeScript declarations. Never coerce unknown custom Food calories to zero.
+const { requireNonNegativeFoodNumber }=
+  await vite.ssrLoadModule("/lib/nutrition-v1/user-food-write-numbers.ts");
+test("Custom Food required numeric values never coerce unknown calories into zero",()=>{
+  for(const input of [null,undefined,"", "0",false,true,{},[]]){
+    assert.throws(()=>requireNonNegativeFoodNumber(input,"Calories"),
+      /Calories must be a non-negative number/,
+      "A non-number must not become a fabricated calorie value");
+  }
+  assert.equal(requireNonNegativeFoodNumber(0,"Calories"),0,
+    "Measured, explicit numeric zero remains valid");
+  assert.equal(requireNonNegativeFoodNumber(125.5,"Calories"),125.5);
+  for(const input of [-1,NaN,Infinity,-Infinity]){
+    assert.throws(()=>requireNonNegativeFoodNumber(input,"Calories"),
+      /Calories must be a non-negative number/);
+  }
+});
