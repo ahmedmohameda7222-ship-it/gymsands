@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { NutritionRequestError } from "@/services/nutrition-v1/server/errors";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SOURCE_TYPES = new Set(["food", "recipe", "saved_meal", "placeholder"] as const);
@@ -124,6 +125,23 @@ function nonNegativeInteger(value: unknown, field: string) {
   return result;
 }
 
+/** HTTP JSON mutation values must not be coerced; DB numeric readback uses separate helpers. */
+function mutationPositiveNumber(value: unknown, field: string) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new NutritionRequestError(`${field} must be a positive number or null.`);
+  }
+  return value;
+}
+
+function mutationPosition(value: unknown) {
+  if (value === undefined) return 0;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new NutritionRequestError("Position must be a non-negative integer.");
+  }
+  return value;
+}
+
 function asObject(value: unknown, field: string): JsonObject {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${field} must be an object.`);
   return value as JsonObject;
@@ -209,11 +227,11 @@ export function normalizeOccurrenceForMutation(input: MealPlanOccurrenceMutation
     ...(input.id ? { id: requiredText(input.id, "Occurrence ID") } : {}),
     planDate: requiredIsoDate(input.planDate, "Plan date"),
     mealSlotKey: requiredText(input.mealSlotKey, "Meal slot"),
-    position: nonNegativeInteger(input.position, "Position"),
+    position: mutationPosition(input.position),
     sourceType,
     sourceId,
     sourceVersionId,
-    resolvedQuantity: positiveNumber(input.resolvedQuantity, "Resolved quantity"),
+    resolvedQuantity: mutationPositiveNumber(input.resolvedQuantity, "Resolved quantity"),
     resolvedServingLabel: input.resolvedServingLabel?.trim() || null,
     frozenName,
     frozenSnapshot: cloneJson(frozenSnapshot),
