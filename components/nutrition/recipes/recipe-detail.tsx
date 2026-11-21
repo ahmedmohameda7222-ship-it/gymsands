@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Copy, Pencil, Share2, ShieldCheck, Star, Trash2, UtensilsCrossed } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -42,6 +42,17 @@ export function RecipeDetail({ recipeId }: { recipeId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const requestContextKey = `${ownerId ?? "__signed_out__"}:${recipeId}`;
+  const activeRecipeContextKeyRef = useRef(requestContextKey);
+  useLayoutEffect(() => {
+    activeRecipeContextKeyRef.current = requestContextKey;
+    setDetail(null);
+    setDetailOwnerId(null);
+    setCached(false);
+    setError(null);
+    setShareStatus(null);
+    setLoading(true);
+  }, [requestContextKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
