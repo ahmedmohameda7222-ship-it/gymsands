@@ -159,6 +159,9 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
   }, []);
 
   const flushPending = useCallback(async (candidate: CookingLocalSession, ownerId: string) => {
+    const requestContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)
+      || (authOwnerId !== null && ownerId !== authOwnerId)) return candidate;
     if (!candidate.pendingMutations.length || !supabase || !navigator.onLine) return candidate;
     let next = candidate;
     const stateOperationIds = next.pendingMutations
@@ -173,6 +176,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
           actionStates: actionSyncRows(next),
           timers: timerSyncRows(next),
         });
+        if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return next;
         next = acknowledgeCookingMutations({ ...next, stateRevision: result.stateRevision }, stateOperationIds);
         writeLocalForOwner(ownerId, next);
       } catch {
@@ -184,6 +188,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     if (completeOperation) {
       try {
         await completeCookingSession(supabase, ownerId, next.sessionId, next.completedAt ?? next.lastActiveAt);
+        if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return next;
         next = acknowledgeCookingMutations(next, [completeOperation.operationId]);
         writeLocalForOwner(ownerId, next);
       } catch {
@@ -195,6 +200,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
     if (endOperation) {
       try {
         await endCookingSession(supabase, ownerId, next.sessionId, next.endedAt ?? next.lastActiveAt);
+        if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return next;
         next = acknowledgeCookingMutations(next, [endOperation.operationId]);
         writeLocalForOwner(ownerId, next);
       } catch {
@@ -202,7 +208,7 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       }
     }
     return next;
-  }, [writeLocalForOwner]);
+  }, [authOwnerId, recipeId, writeLocalForOwner]);
 
   const initialize = useCallback(async (authenticatedOwnerId: string | null) => {
     setLoading(true);
