@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: THIRTY_ONE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: THIRTY_TWO_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -403,3 +403,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Fix authored at `e99c5b0dae7b54b77d0902104211f856c07be913`: `scripts/nutrition-final-quality.mjs` now inspects both tracked working tree (`git diff --quiet HEAD --`) and untracked source files in the app/components/data/lib/scripts/services/tests/.github/migration roots. It fails with a BLOCKED manifest before suites if dirty and records post-suite integrity as an additional PASS/FAIL condition.
 - This is not evidence of a passing suite: G-11 has **not** authorized executing tests. No automated tests, migration replay, original USDA archive hashing, CI job, Production writes, merge or deployment have run in this work.
 - Ruling: enforce exact reviewed-worktree identity within future N113 acceptance, without changing any existing Production release controls or moving G-01/G-09/G-11 approval boundaries.
+
+## N095/N105 custom Food fabricated-zero prevention — 2026-11-21
+
+- Independently verified consumer API route `POST /api/nutrition/v1/foods` passes parsed JSON directly to `createUserFood`, while `services/nutrition-v1/server/user-foods.ts` used `Number(value)` for a required caloric fact and optional known macros. JavaScript coerces `null`, empty strings and false to numeric zero, defeating the unknown-NULL policy and the `UserFoodWriteInput` numeric contract.
+- Authored a dedicated Nutrition-only N105 case first (commit `d40baf07ff0ecee401042f5a0e9030c4e0125a99`), covering null, absent, blank, numeric-string, booleans, object/array, NaN/infinite/negative rejection and explicit numeric 0 acceptance. **The test was not executed:** code phase explicitly prohibits automated tests before G-11.
+- Added pure, portable `lib/nutrition-v1/user-food-write-numbers.ts` helper (commit `c8ab7157eda7ef2ea9ddc2c0191d5e3daf7aa237`) and replaced the coercing required-nonnegative check in `services/nutrition-v1/server/user-foods.ts` (commit `598c1f85182b3221952c1bf9234f9a31d8d7469a`). Explicit numeric zero is preserved; missing or non-number calories are rejected rather than fabricated, and nullable macros still remain NULL when absent.
+- Updated Nutrition-only runner N105 minimum from 31 to 32 (commit `bbdc7f25c44ad9d690f81b64d8855f5389c98716`). No migrations, Production code, live database, CI job, or actual validation run were executed. Full red-green acceptance awaits separately authorized G-11.
+- Ruling: a measured-zero vs unknown-input validation defect is within pre-final consumer-code review N095; correcting it is not permission to relax the main Food Catalog unknown/null controls.
