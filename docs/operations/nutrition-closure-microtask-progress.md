@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: THIRTY_FOUR_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: THIRTY_FIVE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -426,3 +426,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Portable pure validator `lib/nutrition-v1/handoff-quantity.ts` added in `c0846a03e4b6857eb2a6fb2abd8c9a4854800009`; route validation before authority/read in `d95f61eed0e3395a388716a717efff086887fcd3` raises `NutritionRequestError` (400). `services/nutrition-v1/server/food-handoff.ts` uses the same strict validator as of `d1584265aeb00187f1dbcdb86248fd890444a85b` for non-HTTP callers.
 - Existing Recipe missing-quantity default of numeric 1 is preserved explicitly; Food handoff still requires an explicit quantity. N105 runner minimum raised to 34 in `d331b0bb286ecb4b77443c409653ac05747a615e`.
 - Code and tests remain **authored but unexecuted** until G-11; no user or Production database rows were touched and no full Nutrition release closure is claimed.
+
+## N095 custom Food invalid-input HTTP classification — 2026-11-21
+
+- Actual service error-path review showed `nutritionErrorResponse` deliberately treats generic service errors as HTTP 500. The newly rejected non-numeric Custom Food payloads would therefore have produced 500 rather than a bounded invalid-input (400) response.
+- Authored N105 error-class contract regression first at `5c80733f1549267318f151a9b88f4feba811e71c`, requiring `InvalidNutritionFoodInputError` to declare `status=400` and `code=nutrition_request_invalid`.
+- Added pure typed input error class to `lib/nutrition-v1/user-food-write-numbers.ts` at `d25c5de8666a2d475912bda2557c0928891305b8`, and narrow handler in `services/nutrition-v1/server/errors.ts` at `6300a8526e43b0d505abbbc18088795c32ea922e`. Only invalid Food number errors are reclassified; actual unexpected failures remain 500 and the public message remains bounded.
+- N105 scoped minimum raised from 34 to **35** at `fcf7e78b213134d5e7d61a8d44862e28997ff4a0`. All work is still untested until G-11 and no live requests/accounts were used.
