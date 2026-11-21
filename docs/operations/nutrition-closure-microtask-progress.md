@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: THIRTY_SEVEN_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: THIRTY_EIGHT_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -474,3 +474,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Authored N105 regression `4740a656723689cbd76531ae61ec70c9d344f3aa` first. It distinguishes `undefined → 1` from `null/string/boolean/nonpositive/infinite → reject`. Added `parseRecipeHandoffQuantity` at `904b4e6e4d3098ed7932b44a5fbc9ba1550b0647` and wired the Recipe route to raise `NutritionRequestError(400)` at `f5ab3e067ed22886901dce9fa6fb0c548b92d9de`.
 - Updated N105 runner minimum to **37** in `4df28c3ca5915fdb159cae4761cc2f0103ccfc8d`, making the seven-group source minimum **149** (25+18+32+37+19+11+7). Direct GitHub comparison over this scoped range reports exactly four modified files: regression, pure helper, route, and final QA runner; zero migrations.
 - Status: **SOURCE_AUTHORED_UNTESTED**, not a proven runtime response. No automated tests/CI, database writes, merges, deployments or Production operations were performed.
+
+
+## N095 optimistic-revision JSON boundary — 2026-11-21
+
+- Source-audited 19 Nutrition V1 HTTP route files after N093/N095. Two write endpoints accepted `Number(body.baseRevision)` / `Number(body.expectedRevision)` for JSON concurrency tokens. JavaScript coerces `null`, `false`, empty string and numeric string `"0"` to revision 0, bypassing the declared typed revision input boundary. This is distinct from legitimate database `numeric` serialization conversions elsewhere.
+- Authored N105 regression first in `b6104f03713769ae134dd0c4f990314685c4a2b8` demanding only nonnegative safe integer JSON numbers, including explicit 0. Added portable `lib/nutrition-v1/write-revision.ts` in `bcd6700e7d56ebb0eb529c7f263f8902ab2acd07` and wired `Meal Plan week POST mutate` in `717bf06e6b40bbf2608dff232f6e3a1ee6b29735` and `Recipe PATCH autosave` in `9219e98a2acc99db5c3f1f9150114454c342e0d2`. Existing invalid revision errors remain HTTP 400 via `NutritionRequestError`; no DB schema, service contracts or accepted nonnegative number semantics changed.
+- Updated N105 future QA runner minimum `37 → 38` at `c48c3fd2c23160944582c9654b2f4395485df457`. Total minimum seven groups **150** (25+18+32+38+19+11+7) authored cases, **0 executed**. Direct GitHub code diff is exactly: `app/api/nutrition/v1/meal-plan/week/route.ts`, `app/api/nutrition/v1/recipes/[recipeId]/route.ts`, `lib/nutrition-v1/write-revision.ts`, `scripts/nutrition-final-quality.mjs`, `tests/nutrition-final/nutrition-consumers.test.mjs`.
+- Disposition `SOURCE_AUTHORED_UNTESTED`; no CI, full app QA, local DB execution, Production write, deployed release or PR merge. Test red/green verification remains a final QA obligation, not a completed claim.
