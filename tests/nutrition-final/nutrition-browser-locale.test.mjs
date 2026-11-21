@@ -177,3 +177,24 @@ test("Diary date input is named with the existing EN DE AR locale text",()=>{
   assert.ok(src.includes('<input type="date" aria-label={et("date")}'),
     "The diary date picker must identify itself to assistive technology");
 });
+
+// N096: all five Meal Plan edit/copy dialogs must render localized copy, never
+// hardcoded English. The en dictionary is the typed key contract for de/ar.
+test("Meal Plan editing and copying dialogs retain EN DE AR translated copy",()=>{
+  const src=readFileSync(resolve("components/nutrition/meal-plan/meal-plan-page.tsx"),"utf8");
+  const dictionary=readFileSync(resolve("lib/i18n/nutrition-v1.ts"),"utf8");
+  for(const key of ["addMealSlotTitle","mealSlotName","mealSlotExample",
+    "editPlannedItem","frozenPlanEditHint","plannedTime","reminderOn",
+    "reminderOff","reminderPermissionHint","enableReminder","disableReminder",
+    "movePlannedItem","mealSlot","copySelectedDays","copySelectedDaysHint",
+    "copyDay","copyDayOrWeekHint","targetDay","dateWithinTargetWeek"]){
+    assert.ok(src.includes('nt("'+key+'")'),"Missing localized modal copy: "+key);
+    assert.equal((dictionary.match(new RegExp('\\\\b'+key+':','g'))||[]).length,3,
+      "Missing an EN/DE/AR translation: "+key);
+  }
+  for(const legacy of [">Add meal slot</h2>",">Edit planned item</h2>",
+    ">Move planned item</h2>",">Copy / repeat to selected days</h2>",
+    ">Enable reminder</button>",">Disable reminder</button>"]){
+    assert.equal(src.includes(legacy),false,"Untranslated Meal Plan modal text: "+legacy);
+  }
+});
