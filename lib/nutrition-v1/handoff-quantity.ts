@@ -10,9 +10,18 @@ export function parseRecipeHandoffQuantity(value: unknown): number | null {
   return parsePositiveHandoffQuantity(value === undefined ? 1 : value);
 }
 
-/** Query strings may represent measured quantities; only an absent key defaults. */
+// URL query values use a decimal/exponent spelling, never JavaScript's
+// hexadecimal, binary, octal or blank-to-zero Number() coercions.
+const DECIMAL_QUERY_QUANTITY = /^(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$/;
+
+export function parsePositiveHandoffQueryQuantity(value: string | null): number | null {
+  if (value === null) return null;
+  const text = value.trim();
+  if (!DECIMAL_QUERY_QUANTITY.test(text)) return null;
+  return parsePositiveHandoffQuantity(Number(text));
+}
+
+/** An absent Recipe key defaults to 1; an explicitly blank key never does. */
 export function parseRecipeHandoffQueryQuantity(value: string | null): number | null {
-  if (value === null) return 1;
-  if (value.trim() === "") return null;
-  return parsePositiveHandoffQuantity(Number(value));
+  return value === null ? 1 : parsePositiveHandoffQueryQuantity(value);
 }
