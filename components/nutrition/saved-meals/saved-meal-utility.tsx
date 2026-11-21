@@ -291,16 +291,20 @@ export function SavedMealUtility({ open, onClose }: { open: boolean; onClose: ()
   }, [loadActive, open]);
 
   async function openDetail(id: string) {
+    const requestScope = activeSavedMealContextRef.current;
+    if (!open || !ownerId || !isCurrentSavedMealContext(requestScope)) return;
     setLoading(true);
     try {
       const body = await request<SavedMealDetail>(`/api/nutrition/v1/saved-meals/${encodeURIComponent(id)}`);
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setDetail(body);
       setMode("detail");
       setError("");
     } catch (cause) {
+      if (!isCurrentSavedMealContext(requestScope)) return;
       setError(cause instanceof Error ? cause.message : text.detailFailed);
     } finally {
-      setLoading(false);
+      if (isCurrentSavedMealContext(requestScope)) setLoading(false);
     }
   }
 
