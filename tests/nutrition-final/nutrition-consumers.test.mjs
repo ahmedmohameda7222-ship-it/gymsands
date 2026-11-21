@@ -667,3 +667,31 @@ test("Handoff scaling keeps known values finite and rejects quantity overflow",(
   assert.throws(()=>scaleFiniteHandoffNutritionFact(Infinity,2),/source nutrition/i);
   assert.throws(()=>scaleFiniteHandoffNutritionFact(1,false),/serving quantity/i);
 });
+
+// N093: URL parameters are decimal measurements, not arbitrary JavaScript
+// Number syntax. A blank Recipe quantity must not silently become one serving.
+const {parsePositiveHandoffQueryQuantity}=await vite.ssrLoadModule(
+  "/lib/nutrition-v1/handoff-quantity.ts");
+test("Handoff URL quantity grammar matches server and client without hex or blank defaults",()=>{
+  assert.equal(parsePositiveHandoffQueryQuantity(null),null);
+  assert.equal(parsePositiveHandoffQueryQuantity("0.5"),0.5);
+  assert.equal(parsePositiveHandoffQueryQuantity(" 2.5 "),2.5);
+  assert.equal(parsePositiveHandoffQueryQuantity("1e2"),100);
+  for(const raw of [""," ","0x10","0b10","0o10","NaN","Infinity","0","-1","true","{}"]){
+    assert.equal(parsePositiveHandoffQueryQuantity(raw),null);
+  }
+  const recipe=new URLSearchParams({destination:"diary",source:"recipe",
+    recipeId:"recipe",recipeVersionId:"version"});
+  assert.equal(parseAddToHandoff(recipe,"diary")?.quantity,1,
+    "Omitted Recipe quantity keeps the existing default");
+  recipe.set("quantity","");
+  assert.equal(parseAddToHandoff(recipe,"diary"),null,
+    "Explicit blank Recipe query must not become one serving");
+  recipe.set("quantity","0x10");
+  assert.equal(parseAddToHandoff(recipe,"diary"),null);
+  const food=new URLSearchParams({destination:"diary",source:"catalog",addFoodId:"food",
+    quantity:"0x10",serving:"100 g",displayName:"Rice"});
+  assert.equal(parseAddToHandoff(food,"diary"),null);
+  food.set("quantity","2.5");
+  assert.equal(parseAddToHandoff(food,"diary")?.quantity,2.5);
+});
