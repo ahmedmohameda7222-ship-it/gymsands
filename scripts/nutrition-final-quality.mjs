@@ -14,9 +14,9 @@ const groups=Object.freeze({
   "food-catalog-source": {file:"tests/nutrition-final/food-catalog-source.test.mjs",minTests:25},
   "governance-ingestion": {file:"tests/nutrition-final/governance-ingestion.test.mjs",minTests:18},
   "activation-generation-search": {file:"tests/nutrition-final/activation-generation-search.test.mjs",minTests:32},
-  "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:54},
-  "nutrition-privacy-mcp": {file:"tests/nutrition-final/nutrition-privacy-mcp.test.mjs",minTests:28},
-  "nutrition-browser-locale": {file:"tests/nutrition-final/nutrition-browser-locale.test.mjs",minTests:19},
+  "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:55},
+  "nutrition-privacy-mcp": {file:"tests/nutrition-final/nutrition-privacy-mcp.test.mjs",minTests:30},
+  "nutrition-browser-locale": {file:"tests/nutrition-final/nutrition-browser-locale.test.mjs",minTests:20},
   "nutrition-migration-release": {file:"tests/nutrition-final/nutrition-migration-release.test.mjs",minTests:7}
 });
 const shaPattern=/^[a-f0-9]{40}$/;
