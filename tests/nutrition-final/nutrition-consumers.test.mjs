@@ -536,3 +536,18 @@ test("Meal Plan occurrence write numbers reject JSON coercion and emit 400",()=>
   assert.equal(normalizeOccurrenceForMutation({...base,resolvedQuantity:2.5,position:0}).resolvedQuantity,2.5);
   assert.equal(normalizeOccurrenceForMutation(base).position,0);
 });
+
+// N095: offline localStorage is untrusted deserialized state, not an integer-safe
+// revision source. Reject unsafe numbers before sending any queued replay.
+test("Offline Meal Plan revision tokens cannot exceed safe integer range",()=>{
+  for(const baseRevision of [Number.MAX_SAFE_INTEGER+1,-1,0.5]){
+    const invalid={...queueEntry,baseRevision};
+    assert.throws(()=>serializeMealPlanQueue([invalid]),/invalid data/i);
+    assert.deepEqual(deserializeMealPlanQueue(JSON.stringify([invalid])),[]);
+  }
+  assert.throws(()=>reconcileMealPlanQueue([queueEntry],{
+    serverRevision:Number.MAX_SAFE_INTEGER+1,changedTargets:[]
+  }),/Server Meal Plan revision is invalid/);
+  const accepted=reconcileMealPlanQueue([queueEntry],{serverRevision:Number.MAX_SAFE_INTEGER,changedTargets:[]});
+  assert.equal(accepted[0].baseRevision,Number.MAX_SAFE_INTEGER);
+});
