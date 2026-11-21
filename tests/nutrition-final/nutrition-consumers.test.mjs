@@ -551,3 +551,22 @@ test("Offline Meal Plan revision tokens cannot exceed safe integer range",()=>{
   const accepted=reconcileMealPlanQueue([queueEntry],{serverRevision:Number.MAX_SAFE_INTEGER,changedTargets:[]});
   assert.equal(accepted[0].baseRevision,Number.MAX_SAFE_INTEGER);
 });
+
+// N095: member Diary logging receives untrusted JSON. Boolean false must remain
+// invalid, not a measured zero; true/numeric strings must not become quantities.
+const {parseDiaryWriteNutritionFact,parseDiaryWriteQuantity}=await vite.ssrLoadModule(
+  "/lib/nutrition-v1/diary-write-numbers.ts");
+test("Diary logged nutrition facts and quantities are never coerced from JSON strings or booleans",()=>{
+  assert.equal(parseDiaryWriteNutritionFact(null),null);
+  assert.equal(parseDiaryWriteNutritionFact(undefined),null);
+  assert.equal(parseDiaryWriteNutritionFact(0),0);
+  assert.equal(parseDiaryWriteNutritionFact(30.25),30.25);
+  for(const raw of [false,true,"","0","25",-1,NaN,Infinity,-Infinity,[],{}]){
+    assert.equal(parseDiaryWriteNutritionFact(raw),undefined);
+  }
+  assert.equal(parseDiaryWriteQuantity(1),1);
+  assert.equal(parseDiaryWriteQuantity(0.5),0.5);
+  for(const raw of [null,undefined,false,true,"","1",0,-1,NaN,Infinity,[],{}]){
+    assert.equal(parseDiaryWriteQuantity(raw),null);
+  }
+});
