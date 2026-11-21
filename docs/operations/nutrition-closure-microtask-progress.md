@@ -131,7 +131,7 @@ N057: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N058: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N059: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N060: CANARY_DECISION_PACKET_PREPARED_G09_UNAPPROVED
-N061: DESIGN_PROPOSAL_ONLY
+N061: POST_CANARY_1B2_PACKET_PREPARED_G09_BLOCKED
 N062: SCHEMA_REVIEWED_LIVE_MARKETS_EMPTY
 N063: DESIGN_PREPARED
 N064: DESIGN_PREPARED
@@ -560,3 +560,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Source-inspected `lib/food-catalog/ingestion/contracts.ts`, `matching.ts`, `services/food-catalog/server/ingestion-command-service.ts`, `activation-service.ts`, and `generation-command-service.ts`, plus refreshed Production 0-Food / 0-Owner / NULL-generation read. Created `docs/operations/nutrition-plan10-fndds-1b1-canary-packet.md` at `79d9948a21a545b9dae97fad9d478c538c417567`.
 - Packet specifies source-record **category coverage**, actual manifest fields, strict quarantine, same-index identity reconciliation, production database dry-run's **actual persisted-write nature**, individually approved draft/activation/grant/generation CAS promotion, verified rollback command prerequisites and the exact evidence that cannot yet be supplied. No fabricated FNDDS IDs, hashes, sizes, Food counts, Owner actor or license for non-USDA content.
 - Status **CANARY_DECISION_PACKET_PREPARED_G09_UNAPPROVED**: source/schema/QA/G09/operations all unresolved; no executed 1B1 or Production changes.
+
+
+## N061 1B2 full FNDDS approval packet — 2026-11-21
+
+- Authored `docs/operations/nutrition-plan10-fndds-1b2-promotion-packet.md` at `25b51365c7c2d9d2745951dafb2b47cf198715e2`. It explicitly requires actual 1B1 acceptance and freshly read **post-canary** source-owner/index/redirect identities before selecting 1B2 records, deterministic two-pass candidate manifest and exact idempotency/conflict classifications, and separate accepted persisted dry-run, approved draft, activation, validated generation CAS promotion and rollback decisions.
+- Tied packet fields to existing `FoodCatalogDryRunManifestContent`, `executeFoodCatalogDatabaseDryRun`, `executeApprovedFoodCatalogDraftMutation`, `createActivationSet`, `grantActivationSet`, `promoteCatalogGeneration`, and `rollbackCatalogGeneration`, with explicit recorded actor/operation/source/validation IDs, not fabricated identities.
+- N061 status **POST_CANARY_1B2_PACKET_PREPARED_G09_BLOCKED**; no actual ZIP SHA, 1B1 canary, 1B2 batch, human approval, CI test, database write or active-generation change.
