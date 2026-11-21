@@ -378,22 +378,28 @@ export function MealPlanPage() {
 
   const load = useCallback(async () => {
     if (!ownerId) return;
+    const requestContextKey = cacheKey(ownerId, weekStart);
+    if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
     setLoading(true);
     try {
       const result = await fetchWeek();
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
       setData(result);
       writeCachedWeek(ownerId, weekStart, result);
       setError("");
       setSyncState(queueState(readQueue(ownerId, weekStart)));
       await flushQueue(result);
     } catch (cause) {
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
       const cached = readCachedWeek(ownerId, weekStart);
       if (cached) {
         setData(cached); setError("");
         const queued = readQueue(ownerId, weekStart);
         setSyncState(queueState(queued) || "Saved on device");
       } else setError(cause instanceof Error ? cause.message : "Meal Plan could not be loaded.");
-    } finally { setLoading(false); }
+    } finally {
+      if (sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) setLoading(false);
+    }
   }, [fetchWeek, flushQueue, ownerId, weekStart]);
 
   useEffect(() => { void load(); }, [load]);
