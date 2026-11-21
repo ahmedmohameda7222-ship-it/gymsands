@@ -751,3 +751,23 @@ test("Offline Meal Plan caches reject unversioned, foreign-owner and malformed p
   assert.equal(deserializeOwnedMealPlanWeekCache(JSON.stringify({version:2,ownerId:owner,
     weekStartDate:weekStart,projection:{}}),owner,weekStart),null);
 });
+
+// N095: JSON local state revisions must be losslessly comparable for CAS.
+const {serializeCookingLocalSession,parseCookingLocalSession}=
+  await vite.ssrLoadModule("/lib/nutrition-v1/cooking-local-store.ts");
+test("Cooking local state revisions must remain safe exact integers",()=>{
+  const now="2026-11-21T00:00:00.000Z";
+  const good={schemaVersion:1,sessionId:"s",recipeId:"r",recipeVersionId:"v",
+    frozenRecipeSnapshot:{schemaVersion:1,recipe:{},ingredients:[],actions:[],equipment:[]},
+    servingScale:1,status:"active",stateRevision:0,currentActionKey:null,
+    actionStates:[],timers:[],pendingMutations:[],startedAt:now,lastActiveAt:now,
+    completedAt:null,endedAt:null};
+  const serialized=serializeCookingLocalSession(good);
+  assert.deepEqual(parseCookingLocalSession(serialized),good);
+  for(const revision of [Number.MAX_SAFE_INTEGER+1,-1,0.5]){
+    assert.throws(()=>serializeCookingLocalSession({...good,stateRevision:revision}),/invalid/i);
+    assert.equal(parseCookingLocalSession(JSON.stringify({...good,stateRevision:revision})),null);
+    const actions=[{id:"a",actionKey:"prep",state:"ready",stateRevision:revision}];
+    assert.equal(parseCookingLocalSession(JSON.stringify({...good,actionStates:actions})),null);
+  }
+});
