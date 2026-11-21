@@ -159,3 +159,13 @@ test("Diary logging input accessible-name source contract",()=>{
     assert.ok(src.includes(label),"Missing accessible input name: "+label);
   }
 });
+
+// N096 / N107 equipment editor input fields need persistent accessible names.
+// Placeholders are not a reliable label when users enter text or use screen readers.
+test("Recipe equipment name, quantity, and note have localized accessible names",()=>{
+  const src=readFileSync(resolve("components/nutrition/recipes/recipe-editor.tsx"),"utf8");
+  for(const key of ["equipment","equipmentQuantity","optionalNote"]){
+    assert.ok(src.includes(`placeholder={nt("${key}")} aria-label={nt("${key}")}`),
+      "Missing localized equipment field label: "+key);
+  }
+});
