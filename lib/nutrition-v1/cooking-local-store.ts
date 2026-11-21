@@ -356,3 +356,11 @@ export function materializeCookingLocalSession(bundle: {
   if (!isLocalSession(local)) throw new Error("Server Cooking Session could not be materialized locally.");
   return local;
 }
+
+/** Reject old Cooking callbacks after user sign-out/switch or Recipe change. */
+export function sameCookingOwnerRecipeContext(
+  activeKey: string | null,
+  requestKey: string | null,
+): activeKey is string {
+  return typeof activeKey === "string" && activeKey.length > 0 && activeKey === requestKey;
+}
