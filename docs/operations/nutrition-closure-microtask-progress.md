@@ -75,7 +75,7 @@ N001: VERIFIED_READ_ONLY
 N002: STATIC_REVIEWED
 N003: DISPOSITION_RETAIN_PR189_UNMERGED_RELEASE_INTEGRITY
 N004: BRANCH_ISOLATED_NO_PREVIEW
-N005: PARTIAL_ADMIN_ACCESS_403
+N005: SOURCE_INVENTORY_READ_ONLY_ADMIN_UNVERIFIED
 N006: TEST_INVENTORY_COMPLETE
 N007: VERIFIED_READ_ONLY
 N008: LEDGER_ACTIVE
@@ -448,3 +448,12 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Exact PR #189 inspected as OPEN/UNMERGED, HEAD `9da131e24fb9a38d1afa88881e62d7498429d005`; its 8-file patch contains four indispensable runtime release-integrity scripts, two test files, one release workflow and one operator document. The current Nutrition branch still lacks a proven source-compatible canonical release-quality bridge.
 - Ruling: choose **preservation, not supersession**, while treating PR #189 integration as release-scope work requiring a proved final-evidence contract. This avoids losing squash-provenance protections to satisfy the legacy-test-removal objective. No PR state or Production mutation is necessary to make this disposition.
 - N003 decision is recorded, but the final integration is **NOT_VERIFIED / NOT_MERGED**; the pending N129 release-evidence compatibility defect and Nutrition-final-QA execution are not waived by a blanket continuation request. No test suite was executed and no claim of production-readiness is made.
+
+
+## N005 automation trigger inventory — 2026-11-21
+
+- Fresh read of all **15** YAML workflow source files on `main` and all **6** on the isolated Nutrition branch. Exactly **10** legacy QA/test CI workflows are absent on the Nutrition branch. Retained: manual Exact Release Quality Validation, manual Release preflight, manual Post-deploy release smoke, scheduled/push Production uptime synthetic, and workflow-run Production owner alert routing. The new sixth `nutrition-final-quality.yml` is scoped to PR `ready_for_review`, not `push`, and requires an exact-SHA owner approval signal; it has not run.
+- `main` still contains the original 15 workflows, including PR-triggered app-wide PR Quality, Phase A Diff, Exercise Detail/Locale, Food Catalog portable/export/Plan7/Plan9, Quality ready-for-review, and limited branch push offline Plan8/Plan9 lanes. Legacy automatic QA on `main` is **not disabled** by deletions on a separate development branch.
+- Main branch-protection GET returned HTTP 403 (`Resource not accessible by integration`), so admin-only required check/webhook settings are not independently attested. Repository rulesets endpoint returned `[]`; isolated development branch reports `protected=false` and no required status checks. The accessible GitHub fetch endpoint does not expose repository webhook inventory. These unknowns must not be misreported as disabled or safe.
+- Independent Vercel provider listing: Production READY deployment `dpl_o1WSQe1TCymQBhJEbGenfH27AJjd` remains on `de7c7ccea943e9b793a2a65b34f2a06a6f33be49`; Nutrition branch currently has zero deployments. No GitHub repo settings, deploy configuration, workflow dispatch, main branch, PR state, CI runner or Production data was changed.
+- N005 is now **SOURCE_INVENTORY_READ_ONLY_ADMIN_UNVERIFIED**. N009/N010 global disablement must not be claimed without admin-level evidence or actual verified changes; future release provenance workflows are retained.
