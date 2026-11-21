@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FORTY_THREE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FORTY_TWO_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: TWELVE_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -603,8 +603,7 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - The **original FNDDS ZIP and data dictionary are not independently available**. No field names/nutrient IDs/portion keys/root JSON/member counts are asserted; Foundation nutrient ID configuration cannot simply be copied to FNDDS. This is a verified canonical **destination** contract, not an implemented source-specific adapter or complete source-field map. Status `CANONICAL_DESTINATION_MAPPED_ORIGINAL_SCHEMA_MISSING` and G-09 blocked; no Production, tests or source data manipulation.
 
 
-## N095 Diary planned execution snapshot validation — 2026-11-21
+## N095 Diary executionSnapshot false-positive correction — 2026-11-21
 
-- Source-traced `app/api/nutrition/v1/log/route.ts` `kind=complete_planned` → `completeDiaryPlannedOccurrence()` → `record(executionSnapshot)`. The HTTP route originally cast any truthy value (including string, array, number or boolean) as a JSON object; the service then raised a **generic Error**, resulting in HTTP 500 instead of a bounded client-input error. Missing or `null` remains valid optional snapshot.
-- Authored N105 pure shape contract first in `tests/nutrition-final/nutrition-consumers.test.mjs` commit `483087c16e2620a6d991ead78150e5c13ba23ee6` (**not executed**). Added pure optional JSON-object type guard `lib/nutrition-v1/diary-execution-input.ts` at `e43b0188b117419a07e6cc00d4ecfbd965d5321b`; wired route at `f30bd795097c49c98e41de0c056202c18df34b3d` to return `NutritionRequestError` 400 for invalid shapes before RPC, no persisted schema or service behavior change.
-- Increased N105 consumer minimum 42→**43** in final runner `fc0b3e6f42c85f43c0b2b63f96d89d60fa5b5f0c`; current seven-group authored minimum **156 = 25+18+32+43+19+12+7**. **SOURCE_AUTHORED_UNTESTED**, not a verified client-response or passing test; no QA command, Production, workflow dispatch, merge or deployment.
+- Follow-up source trace verified `services/nutrition-v1/server/diary.ts` already calls `record(input.executionSnapshot, "Execution snapshot")` and **`record()` throws typed `NutritionRequestError` HTTP 400** for a primitive or array, while missing/null remains accepted. The earlier note claiming invalid snapshot resulted in generic HTTP 500 was **incorrect**; no such bug or observed 500 was established. User-visible runtime behavior did not require a new route guard.
+- Removed the redundant route helper/guard and its regression and restored the pre-change 42-case consumer suite/runner count, retaining all other N095 source improvements. The revert is a corrective follow-up without rewriting previous Git history; treat the earlier 43-case note as superseded by this evidence. **No test run or Production action.**
