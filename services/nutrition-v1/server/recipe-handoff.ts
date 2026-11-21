@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SavedMealRecipeItemSnapshot } from "@/lib/nutrition-v1/contracts";
+import { readPublishedRecipeNutritionFact } from "@/lib/nutrition-v1/recipe-cache";
 import { isUuid } from "@/lib/utils";
 
 export type ResolvedRecipeHandoff = {
@@ -33,12 +34,6 @@ export type ResolvedRecipeHandoff = {
 
 function record(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function nutritionNumber(value: unknown) {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function requiredText(value: unknown, label: string) {
@@ -94,11 +89,11 @@ export async function resolveRecipeHandoff(
   const metadata = record(version.metadata);
   const rawNutrition = record(metadata.nutrition_per_serving ?? metadata.nutritionPerServing);
   const perServingNutrition = {
-    calories: nutritionNumber(rawNutrition.calories),
-    protein_g: nutritionNumber(rawNutrition.protein_g ?? rawNutrition.proteinG),
-    carbs_g: nutritionNumber(rawNutrition.carbs_g ?? rawNutrition.carbsG),
-    fat_g: nutritionNumber(rawNutrition.fat_g ?? rawNutrition.fatG),
-    fiber_g: nutritionNumber(rawNutrition.fiber_g ?? rawNutrition.fiberG),
+    calories: readPublishedRecipeNutritionFact(rawNutrition.calories),
+    protein_g: readPublishedRecipeNutritionFact(rawNutrition.protein_g ?? rawNutrition.proteinG),
+    carbs_g: readPublishedRecipeNutritionFact(rawNutrition.carbs_g ?? rawNutrition.carbsG),
+    fat_g: readPublishedRecipeNutritionFact(rawNutrition.fat_g ?? rawNutrition.fatG),
+    fiber_g: readPublishedRecipeNutritionFact(rawNutrition.fiber_g ?? rawNutrition.fiberG),
   };
   const frozenNutrition = {
     calories: scaled(perServingNutrition.calories, quantity),
