@@ -282,7 +282,8 @@ export function MealPlanPage() {
   useEffect(() => () => { for (const id of reminderTimersRef.current.keys()) cancelMealReminder(id); }, [cancelMealReminder]);
 
   const flushQueue = useCallback(async (serverData: WeekResponse) => {
-    const requestContextKey = ownerId ? cacheKey(ownerId, weekStart) : null;
+    if (!ownerId) return;
+    const requestContextKey = cacheKey(ownerId, weekStart);
     if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)
       || syncingContextKeyRef.current === requestContextKey) return;
     const stored = readQueue(ownerId, weekStart);
@@ -323,7 +324,6 @@ export function MealPlanPage() {
         if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
         if (exact.state === "applied") {
           working = await fetchWeek();
-        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
           if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
           workingWeekId = working.week?.id ?? exact.result.weekId;
           workingRevision = working.week?.revision ?? exact.result.revision;
@@ -351,7 +351,6 @@ export function MealPlanPage() {
           workingWeekId = result.weekId;
           workingRevision = result.revision;
           working = await fetchWeek();
-        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
           if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
           workingWeekId = working.week?.id ?? result.weekId;
           workingRevision = working.week?.revision ?? result.revision;
