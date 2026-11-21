@@ -264,3 +264,33 @@ test("Meal Plan mark-eaten and bulk-copy promises cannot confirm after owner swi
       "Missing owner/week promise guard in "+startMark);
   }
 });
+
+// N097: Cooking restore and pending-sync callbacks can outlive an auth change.
+const { sameCookingOwnerRecipeContext }=await vite.ssrLoadModule(
+  "/lib/nutrition-v1/cooking-local-store.ts");
+test("Cooking recovery and sync reject a previous owner or recipe context",()=>{
+  assert.equal(sameCookingOwnerRecipeContext("owner-A:recipe-1","owner-A:recipe-1"),true);
+  for(const [current,request] of [
+    ["owner-B:recipe-1","owner-A:recipe-1"],
+    ["owner-A:recipe-2","owner-A:recipe-1"],
+    ["", ""],
+    [null,"owner-A:recipe-1"],
+    ["owner-A:recipe-1",null],
+  ]){
+    assert.equal(sameCookingOwnerRecipeContext(current,request),false);
+  }
+});
+test("Cooking async recovery and mutation callbacks validate the active owner/recipe",()=>{
+  const src=readFileSync(resolve("components/nutrition/cooking/cooking-mode.tsx"),"utf8");
+  assert.ok(src.includes("activeCookingContextKeyRef"),"Cooking context ref must be present");
+  for(const marker of ["const initialize = useCallback(", "const flushPending = useCallback(",
+    "const persistAndSync = useCallback("]){
+    const at=src.indexOf(marker);
+    assert.ok(at>0,"Missing Cooking callback "+marker);
+    const end=src.indexOf("\n  }, [",at);
+    const body=src.slice(at,end>at?end:at+12000);
+    assert.ok(body.includes("sameCookingOwnerRecipeContext("),
+      "Async Cooking callback must guard old owner/recipe: "+marker);
+  }
+  assert.ok(src.includes("useLayoutEffect(() => {"),"Auth switching must clear stale Cooking UI before paint");
+});
