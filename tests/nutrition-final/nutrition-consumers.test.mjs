@@ -597,3 +597,15 @@ test("Recipe home pagination backfills roots starved by global version result ca
     ["recipe-b","recipe-unpublished"]);
   assert.throws(()=>recipeVersionBackfillIds(roots,capped,0),/cap must be positive/i);
 });
+
+// N095: globally bounded recent Recipe logs may contain only one heavily
+// consumed Recipe. The others must not wrongly appear unused on the home page.
+const {recipeUsageBackfillIds}=await vite.ssrLoadModule("/lib/nutrition-v1/recipe-list-page.ts");
+test("Recipe recently-used timestamps backfill roots starved by one prolific diary",()=>{
+  const ids=["heavy","other-a","other-b"];
+  const logs=Array.from({length:8},()=>({source_id:"heavy"}));
+  assert.deepEqual(recipeUsageBackfillIds(ids,logs,8),["other-a","other-b"]);
+  assert.deepEqual(recipeUsageBackfillIds(ids,logs.slice(0,7),8),[]);
+  assert.deepEqual(recipeUsageBackfillIds(ids,[...logs.slice(0,7),{source_id:"other-a"}],8),["other-b"]);
+  assert.throws(()=>recipeUsageBackfillIds(ids,logs,-1),/cap must be positive/i);
+});
