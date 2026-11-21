@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: THIRTY_SIX_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: THIRTY_SEVEN_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -466,3 +466,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Added two pure validators in `lib/nutrition-v1/user-food-write-numbers.ts` at `69cbfd97f49ddb64bfb8b831ae0b9f3491ec110b`, then wired only `normalizeWrite` name, serving-label and basis-unit checks at `be61fb078bf50ab70469b8d3c7e4d9942bd3680b`. Existing valid JSON labels and basis units retain their API shape; errors remain bounded by the existing response layer. No database SQL or migration changed.
 - Updated Nutrition final runner minimum N105 `35 → 36` in `0b3b872b703f6a27fb1980a2198145ebcda2fa65`, bringing the **statically declared minimum to 148** cases (25+18+32+36+19+11+7). Independent GitHub comparison confirms exactly 4 changed files and zero migrations over this correction range. No unit, integration, browser, local DB, CI or Production execution occurred.
 - Disposition: `SOURCE_AUTHORED_UNTESTED`; QA red→green, exact release evidence, independent review and publish acceptance remain pending. No claim that a real HTTP response was observed.
+
+
+## N093 Recipe explicit-null handoff correction — 2026-11-21
+
+- Independent source inspection found `raw.quantity ?? 1` in the Recipe handoff route. JavaScript treats explicit JSON `null` as nullish, so a caller could submit `quantity:null` and receive a fabricated single-serving quantity, bypassing the intended finite positive-number gate. An omitted Recipe quantity needs the historical default 1, but explicit null must not use that default.
+- Authored N105 regression `4740a656723689cbd76531ae61ec70c9d344f3aa` first. It distinguishes `undefined → 1` from `null/string/boolean/nonpositive/infinite → reject`. Added `parseRecipeHandoffQuantity` at `904b4e6e4d3098ed7932b44a5fbc9ba1550b0647` and wired the Recipe route to raise `NutritionRequestError(400)` at `f5ab3e067ed22886901dce9fa6fb0c548b92d9de`.
+- Updated N105 runner minimum to **37** in `4df28c3ca5915fdb159cae4761cc2f0103ccfc8d`, making the seven-group source minimum **149** (25+18+32+37+19+11+7). Direct GitHub comparison over this scoped range reports exactly four modified files: regression, pure helper, route, and final QA runner; zero migrations.
+- Status: **SOURCE_AUTHORED_UNTESTED**, not a proven runtime response. No automated tests/CI, database writes, merges, deployments or Production operations were performed.
