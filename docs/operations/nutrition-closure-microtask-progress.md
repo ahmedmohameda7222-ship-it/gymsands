@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FORTY_ONE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FORTY_TWO_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: TWELVE_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -567,3 +567,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Authored `docs/operations/nutrition-plan10-fndds-1b2-promotion-packet.md` at `25b51365c7c2d9d2745951dafb2b47cf198715e2`. It explicitly requires actual 1B1 acceptance and freshly read **post-canary** source-owner/index/redirect identities before selecting 1B2 records, deterministic two-pass candidate manifest and exact idempotency/conflict classifications, and separate accepted persisted dry-run, approved draft, activation, validated generation CAS promotion and rollback decisions.
 - Tied packet fields to existing `FoodCatalogDryRunManifestContent`, `executeFoodCatalogDatabaseDryRun`, `executeApprovedFoodCatalogDraftMutation`, `createActivationSet`, `grantActivationSet`, `promoteCatalogGeneration`, and `rollbackCatalogGeneration`, with explicit recorded actor/operation/source/validation IDs, not fabricated identities.
 - N061 status **POST_CANARY_1B2_PACKET_PREPARED_G09_BLOCKED**; no actual ZIP SHA, 1B1 canary, 1B2 batch, human approval, CI test, database write or active-generation change.
+
+
+## N095 local Meal Plan unsafe integer revision — 2026-11-21
+
+- Source-audited `lib/nutrition-v1/meal-plan-offline.ts`. The `validMutation` localStorage queue reader and `reconcileMealPlanQueue` accepted any `Number.isInteger` revision, including integers beyond JS `Number.MAX_SAFE_INTEGER`, which cannot represent exact CAS revision identity. The API writer had already been hardened with `parseNonNegativeRevision`; offline queue remained weaker.
+- Authored one N105 regression first at `258b903a4ec29f8f34d5b7b7166621741c45083d` requiring serialize/deserialize to reject unsafe base revisions and reconciliation to reject unsafe server revision. **Not executed.** Changed precisely those two offline boundaries to `Number.isSafeInteger` at `d2966a21868f82ce048bd86e16add6386e3e14f2`; no auth, DB or network changes.
+- Raised N105 Nutrition-only consumer minimum from 41 to **42** (`218c7c00fb51a2e66e35559dccea029179f1faab`). Total seven groups minimum **155 = 25+18+32+42+19+12+7**. Status **SOURCE_AUTHORED_UNTESTED**, not proven green; no automated tests or Production operations.
