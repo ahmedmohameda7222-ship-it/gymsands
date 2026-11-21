@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { createSupabaseServerClient } from "@/lib/integrations/env";
 import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
+import { validateSavedMealWriteInput } from "@/lib/nutrition-v1/saved-meal-write-input";
 import { canonicalizeSavedMealItems } from "@/services/nutrition-v1/server/saved-meal-write-authority";
 import {
   resolveSavedMealBundleSnapshot,
@@ -43,8 +44,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sa
   try {
     const { savedMealId } = await params;
     const body = bodyObject(await request.json().catch(() => ({})));
-    if (typeof body.name !== "string") throw new NutritionRequestError("Saved Meal name is required.");
-    if (!Array.isArray(body.items)) throw new NutritionRequestError("Saved Meal items are required.");
+    const invalid = validateSavedMealWriteInput(body);
+    if (invalid) throw new NutritionRequestError(invalid);
     const items = await canonicalizeSavedMealItems(
       context.supabase,
       createSupabaseServerClient(null, true),
