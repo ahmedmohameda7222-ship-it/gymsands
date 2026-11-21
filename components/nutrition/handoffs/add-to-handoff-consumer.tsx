@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
@@ -99,11 +99,23 @@ export function AddToHandoffConsumer({ destination }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const pendingOperationIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
+  const requestContextKey = `${ownerId ?? "__signed_out__"}:${destination}:${search.toString()}`;
+  const activeHandoffContextKeyRef = useRef(requestContextKey);
+  useLayoutEffect(() => {
+    // Never show the preceding account/source preview or use its operation ID.
+    activeHandoffContextKeyRef.current = requestContextKey;
     pendingOperationIdRef.current = null;
-    if (source?.type === "recipe") setRecipeQuantity(String(source.quantity));
-  }, [destination, ownerId, source]);
+    setSourceName("");
+    setDate("");
+    setMeal("");
+    setRecipeQuantity(source?.type === "recipe" ? String(source.quantity) : "1");
+    setSavedMealName("");
+    setNote("");
+    setRecipeChoices([]);
+    setTargetRecipeId("");
+    setLoading(false);
+    setError("");
+  }, [requestContextKey]);
 
   useEffect(() => {
     if (!source) return;
