@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isOptionalDiaryExecutionSnapshot } from "@/lib/nutrition-v1/diary-execution-input";
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { completeDiaryPlannedOccurrence, logDiaryMeal, type LogMealCommand } from "@/services/nutrition-v1/server/diary";
 import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
@@ -13,9 +14,10 @@ export async function POST(request: Request) {
       if (typeof body.occurrenceId !== "string" || typeof body.operationId !== "string") {
         throw new NutritionRequestError("Planned occurrence and operation IDs are required.");
       }
-      const executionSnapshot = body.executionSnapshot == null
-        ? null
-        : body.executionSnapshot as Record<string, unknown>;
+      if (!isOptionalDiaryExecutionSnapshot(body.executionSnapshot)) {
+        throw new NutritionRequestError("Execution snapshot must be a JSON object or null.");
+      }
+      const executionSnapshot = body.executionSnapshot ?? null;
       return nutritionJson(await completeDiaryPlannedOccurrence(context.supabase, {
         occurrenceId: body.occurrenceId,
         operationId: body.operationId,
