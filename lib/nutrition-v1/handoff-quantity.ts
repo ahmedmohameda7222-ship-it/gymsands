@@ -12,7 +12,7 @@ export function parseRecipeHandoffQuantity(value: unknown): number | null {
 
 // URL query values use a decimal/exponent spelling, never JavaScript's
 // hexadecimal, binary, octal or blank-to-zero Number() coercions.
-const DECIMAL_QUERY_QUANTITY = /^(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$/;
+const DECIMAL_QUERY_QUANTITY = /^(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 
 export function parsePositiveHandoffQueryQuantity(value: string | null): number | null {
   if (value === null) return null;
