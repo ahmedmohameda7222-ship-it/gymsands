@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FORTY_TWO_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FORTY_THREE_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: TWELVE_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -607,3 +607,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Follow-up source trace verified `services/nutrition-v1/server/diary.ts` already calls `record(input.executionSnapshot, "Execution snapshot")` and **`record()` throws typed `NutritionRequestError` HTTP 400** for a primitive or array, while missing/null remains accepted. The earlier note claiming invalid snapshot resulted in generic HTTP 500 was **incorrect**; no such bug or observed 500 was established. User-visible runtime behavior did not require a new route guard.
 - Removed the redundant route helper/guard and its regression and restored the pre-change 42-case consumer suite/runner count, retaining all other N095 source improvements. The revert is a corrective follow-up without rewriting previous Git history; treat the earlier 43-case note as superseded by this evidence. **No test run or Production action.**
+
+
+## N095 Diary log JSON nutrient and quantity trust — 2026-11-21
+
+- Source traced `POST /api/nutrition/v1/log` → `logDiaryMeal` → `validateItems`/ `validateFacts` in `services/nutrition-v1/server/diary.ts`. Existing `nullableNutrition` called `Number(value)`: JSON `false` could be accepted as measured nutrient zero, and numeric strings as measured amounts; `positive` also accepted JSON `true`/numeric strings as a serving quantity. More critically, `validateItems` validated those transformations but returned the **original unnormalized JSON items**, then passed them into immutable `log_nutrition_group` input. The existing typed `NutritionRequestError` machinery handles invalid input as 400; this is an actual source validation/data integrity gap unlike the retracted earlier executionSnapshot false positive.
+- Authored N105 pure regression **first** at `01ff8dfa2e9f5c4a7de0a066b2f2c8304139de54` requiring explicit finite nonnegative numeric nutrition fact or `null` and positive numeric item quantity, no JS boolean/string coercion. **Not executed.** Created `lib/nutrition-v1/diary-write-numbers.ts` at `05e0da8f1153d398c77776145cc4758390b960d4`. Service wiring `bce62a088c5243bc6e2e99a4eacbe42a51db9ec0` rejects invalid input with `NutritionRequestError`, normalizes missing fact to `null`, and sends only normalized quantity/nutrition values to existing idempotent RPC; preserved source snapshot, ownership, existing DB numeric readback and SQL.
+- Nutrition-only N105 consumer required minimum 42→**43** at `6cb779c77de64df8a5d7f921581aaeabcbc4109b`. Seven groups' authored minimum now **156 = 25+18+32+43+19+12+7**. Status **SOURCE_AUTHORED_UNTESTED**; no runtime 400 proof, tests, CI, migration, Production write, deployment or merge.
