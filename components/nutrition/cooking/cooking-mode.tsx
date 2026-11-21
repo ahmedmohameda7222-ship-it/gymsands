@@ -435,6 +435,9 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
 
   const onStartOver = useCallback(async () => {
     if (!resumeCandidate) return;
+    const requestContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)
+      || (authOwnerId !== null && userId !== authOwnerId)) return;
     if (!supabase || !navigator.onLine) {
       setError(language === "ar" ? "البدء من جديد يحتاج إلى اتصال لإنهاء الجلسة السابقة بأمان. يمكنك الاستئناف دون اتصال." : language === "de" ? "Neu starten benötigt eine Verbindung, damit die vorherige Sitzung sicher beendet werden kann. Offline kannst du weiterhin fortsetzen." : "Start Over needs a connection so the previous session can be ended safely. You can still Resume offline.");
       return;
@@ -445,13 +448,17 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       let ownerId = userId;
       if (!ownerId) {
         const auth = await supabase.auth.getUser();
+        if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
         if (auth.error) throw auth.error;
         ownerId = auth.data.user?.id ?? null;
         if (!ownerId) throw new Error(nt("cookingSignIn"));
         setUserId(ownerId);
       }
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       const restarted = await startOverCookingSession(supabase, ownerId, resumeCandidate.sessionId);
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       const active = await getActiveCookingSession(supabase, ownerId, recipeId);
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       if (!active) throw new Error(nt("cookingLoadFailed"));
       const fromServer = materialize(active);
       const fresh = fromServer ?? startOverLocalCookingSession(resumeCandidate, restarted.sessionId);
@@ -459,11 +466,12 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       setSession(fresh);
       setResumeCandidate(null);
     } catch (cause) {
+      if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
       setError(cause instanceof Error ? cause.message : nt("cookingStartFailed"));
     } finally {
-      setBusy(false);
+      if (sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) setBusy(false);
     }
-  }, [language, materialize, nt, recipeId, resumeCandidate, userId, writeLocal]);
+  }, [authOwnerId, language, materialize, nt, recipeId, resumeCandidate, userId, writeLocal]);
 
   const updateAction = useCallback(async (state: CookingLocalActionStateValue) => {
     if (!session || !timeline?.now) return;
