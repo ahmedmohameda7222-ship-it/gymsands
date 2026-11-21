@@ -373,3 +373,27 @@ test("Add To Handoff ignores old account preview and stale operation acknowledge
   assert.ok(action.includes("if (activeHandoffContextKeyRef.current !== requestContextKey) return;"),
     "A stale completed operation must not clear idempotency storage or navigate the next owner");
 });
+
+// N097: the Saved Meal utility can reopen after switching accounts while
+// previous HTTP Promises are pending; no old list/detail/save/delete result
+// may update the current user's editor or clear an old idempotency key.
+test("Saved Meals utility read and mutation results are owner/modal scoped",()=>{
+  const src=readFileSync(resolve("components/nutrition/saved-meals/saved-meal-utility.tsx"),"utf8");
+  assert.ok(src.includes("activeSavedMealContextRef"),"Missing owner/modal generation reference");
+  assert.ok(src.includes("useLayoutEffect(() => {"),"Modal must clear old owner data before paint");
+  for(const [from,to] of [
+    ["const loadActive = useCallback(", "const loadDeleted = useCallback("],
+    ["const loadDeleted = useCallback(", "useEffect(() => {\n    if (!open) return;"],
+    ["async function openDetail(", "function beginCreate("],
+    ["async function save()", "async function removeCurrent()"],
+    ["async function removeCurrent()", "async function lifecycle("],
+    ["async function lifecycle(", "async function searchCandidates("],
+    ["async function searchCandidates(", "async function addFood("],
+    ["async function addFood(", "function addRecipe("]
+  ]){
+    const start=src.indexOf(from),end=src.indexOf(to,start);
+    assert.ok(start>0&&end>start,"Missing Saved Meal handler "+from);
+    assert.ok(src.slice(start,end).includes("isCurrentSavedMealContext("),
+      "Owner/modal generation must guard "+from);
+  }
+});
