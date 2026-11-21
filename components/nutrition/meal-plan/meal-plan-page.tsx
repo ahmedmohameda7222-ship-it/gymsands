@@ -282,23 +282,30 @@ export function MealPlanPage() {
   useEffect(() => () => { for (const id of reminderTimersRef.current.keys()) cancelMealReminder(id); }, [cancelMealReminder]);
 
   const flushQueue = useCallback(async (serverData: WeekResponse) => {
-    if (!ownerId || syncingRef.current) return;
+    const requestContextKey = ownerId ? cacheKey(ownerId, weekStart) : null;
+    if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)
+      || syncingContextKeyRef.current === requestContextKey) return;
     const stored = readQueue(ownerId, weekStart);
     if (typeof navigator !== "undefined" && !navigator.onLine) { setSyncState(queueState(stored)); return; }
     if (!stored.some((item) => item.status === "queued")) { setSyncState(queueState(stored)); return; }
-    syncingRef.current = true;
+    syncingContextKeyRef.current = requestContextKey;
     let working = serverData;
     let workingWeekId = serverData.week?.id ?? null;
     let workingRevision = serverData.week?.revision ?? 0;
     const remaining: MealPlanOfflineMutation[] = [];
     let applied = 0;
-    const sendQueued = (command: { weekId: string | null; weekStartDate: string; baseRevision: number; operationId: string; mutation: Record<string, unknown> }) =>
-      mealPlanApi<{ weekId: string; revision: number }>("/api/nutrition/v1/meal-plan/week", {
+    const sendQueued = (command: { weekId: string | null; weekStartDate: string; baseRevision: number; operationId: string; mutation: Record<string, unknown> }) => {
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) {
+        throw new Error("Meal Plan owner/week changed before queued replay.");
+      }
+      return mealPlanApi<{ weekId: string; revision: number }>("/api/nutrition/v1/meal-plan/week", {
         method: "POST",
         body: JSON.stringify({ kind: "mutate", ...command }),
       });
+    };
     try {
       for (let index = 0; index < stored.length; index += 1) {
+        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
         const storedItem = stored[index]!;
         if (storedItem.status !== "queued") { remaining.push(storedItem); continue; }
         const payload = queuePayload(storedItem);
@@ -308,12 +315,16 @@ export function MealPlanPage() {
         try {
           exact = await replayMealPlanMutationExactFirst(storedItem, sendQueued);
         } catch (cause) {
+          if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
           remaining.push(markMealPlanMutationFailed(storedItem, cause instanceof Error ? cause.message : "Meal Plan mutation could not be synchronized."), ...stored.slice(index + 1));
           break;
         }
 
+        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
         if (exact.state === "applied") {
           working = await fetchWeek();
+        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
+          if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
           workingWeekId = working.week?.id ?? exact.result.weekId;
           workingRevision = working.week?.revision ?? exact.result.revision;
           applied += 1;
@@ -321,6 +332,7 @@ export function MealPlanPage() {
         }
 
         working = await fetchWeek();
+        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
         workingWeekId = working.week?.id ?? null;
         workingRevision = working.week?.revision ?? 0;
         const changed = !sameSnapshot(targetSnapshot(working, storedItem.target), payload.baseSnapshot);
@@ -335,26 +347,34 @@ export function MealPlanPage() {
             operationId: candidate.operationId,
             mutation: payload.mutation as Record<string, unknown>,
           });
+          if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
           workingWeekId = result.weekId;
           workingRevision = result.revision;
           working = await fetchWeek();
+        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
+          if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
           workingWeekId = working.week?.id ?? result.weekId;
           workingRevision = working.week?.revision ?? result.revision;
           applied += 1;
         } catch (cause) {
+          if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
           remaining.push(markMealPlanMutationFailed(candidate, cause instanceof Error ? cause.message : "Meal Plan mutation could not be synchronized."), ...stored.slice(index + 1));
           break;
         }
       }
+      if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
       writeQueue(ownerId, weekStart, remaining);
       setSyncState(queueState(remaining));
       if (applied > 0) {
         const refreshed = await fetchWeek();
+        if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
         setData(refreshed);
         writeCachedWeek(ownerId, weekStart, refreshed);
         if (!remaining.length) setSyncState("Saved");
       }
-    } finally { syncingRef.current = false; }
+    } finally {
+      if (syncingContextKeyRef.current === requestContextKey) syncingContextKeyRef.current = null;
+    }
   }, [fetchWeek, ownerId, weekStart]);
 
   const load = useCallback(async () => {
