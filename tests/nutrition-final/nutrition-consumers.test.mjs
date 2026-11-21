@@ -485,3 +485,12 @@ test("Recipe quantity defaults only when absent, never for explicit null",()=>{
     assert.equal(parseRecipeHandoffQuantity(input),null);
   }
 });
+
+// N095: optimistic concurrency must never convert null, booleans or strings to revision zero.
+const {parseNonNegativeRevision}=await vite.ssrLoadModule("/lib/nutrition-v1/write-revision.ts");
+test("Optimistic revisions accept only explicit nonnegative integer numbers",()=>{
+  for(const v of [null,undefined,"","0","1",true,false,{},[],-1,0.5,NaN,Infinity,-Infinity,Number.MAX_SAFE_INTEGER+1]){
+    assert.equal(parseNonNegativeRevision(v),null);
+  }
+  for(const v of [0,1,12,Number.MAX_SAFE_INTEGER])assert.equal(parseNonNegativeRevision(v),v);
+});
