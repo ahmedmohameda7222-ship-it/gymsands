@@ -173,7 +173,7 @@ N099: SCOPE_PROVISIONAL_BLOCKED_G11
 N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
-N103: SIXTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
+N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
@@ -311,3 +311,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Added three disposable-DB-only tests for `public.user_food_items`: RLS flag remains enabled, `user_food_items_own_all` is scoped to `authenticated` with `auth.uid()` ownership in both `USING` and `WITH CHECK`, and no anonymous/public role is included. Assertions are grounded in the final applied definition in `202606290000_clean_initial_schema.sql`.
 - A live two-owner fixture row test is still absent because the database-only migration rehearsal intentionally excludes GoTrue/PostgREST and no approved local multi-identity Auth harness has been prepared. Treat these as schema metadata, not owner isolation proof.
 - The N103 group now has 16 **authored, unexecuted** cases. No migrations, hosted Postgres writes, or CI execution occurred.
+
+## N103 follow-up — real two-owner synthetic disposable RLS cases
+
+- Reviewed the original applied `202606290000_clean_initial_schema.sql` exact auth.users row bootstrap trigger, Food ownership policy and removed historical `supabase/verification/nutrition-v1-plan-diary-targets.sql` fixture from main (reference only). Authored two new disposable SQL transaction tests: create two synthetic auth users and their owner-keyed custom Foods, `SET LOCAL ROLE authenticated` and scoped JWT claims, assert A sees A-only/B sees B-only, and assert cross-user Food insert fails RLS.
+- Each fixture is inside `BEGIN`/`ROLLBACK` on fixed localhost:54322 database. No production user or table is touched; failures rollback on connection close. This tests actual database role-based owner isolation when the final QA executes, unlike previous metadata-only checks.
+- N103 is now 18 authored tests. **Never executed in this coding pass**; real API/Auth token lifecycle, review/activation CAS and multi-tenant auth flows are not yet validated.

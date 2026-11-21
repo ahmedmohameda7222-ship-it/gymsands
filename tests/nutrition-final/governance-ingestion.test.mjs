@@ -200,3 +200,62 @@ test("private Food SQL owner policy does not grant anonymous role authority",()=
   );
   assert.equal(result,"0");
 });
+
+
+// A pair of synthetic Auth users is created inside a disposable transaction.
+// This exercises actual authenticated PostgreSQL RLS (not a policy-text mock).
+const ownerA="ed100000-0000-4000-8000-000000000001";
+const ownerB="ed100000-0000-4000-8000-000000000002";
+const foodA="ed100000-0000-4000-8000-000000000101";
+const foodB="ed100000-0000-4000-8000-000000000102";
+function syntheticOwnersSetup(){
+  const record=(id,label)=>
+    "('"+id+"','authenticated','authenticated','"+
+    label+"@nutrition-qa.invalid','',"+
+    "'{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,"+
+    "'{}'::jsonb,now(),now())";
+  return "BEGIN; "+
+    "INSERT INTO auth.users "+
+      "(id,aud,role,email,encrypted_password,raw_app_meta_data,"+
+      "raw_user_meta_data,created_at,updated_at) VALUES "+
+      record(ownerA,"owner-a")+","+record(ownerB,"owner-b")+"; "+
+    "INSERT INTO public.user_food_items "+
+      "(id,user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g) VALUES "+
+      "('"+foodA+"','"+ownerA+"','Owner A Food','100 g',100,3,4,2),"+
+      "('"+foodB+"','"+ownerB+"','Owner B Food','100 g',200,5,6,3); "+
+    "SET LOCAL ROLE authenticated; "+
+    "SELECT set_config('request.jwt.claim.role','authenticated',true); ";
+}
+function setSyntheticIdentity(id){
+  return "SELECT set_config('request.jwt.claim.sub','"+id+"',true); ";
+}
+function lastSqlLine(result){
+  assert.equal(result.error,undefined,"Local PostgreSQL must start");
+  assert.equal(result.status,0,String(result.stderr));
+  return String(result.stdout).trim().split(/\r?\n/).at(-1);
+}
+test("two real synthetic authenticated owners can only read their own Food rows",()=>{
+  const q=syntheticOwnersSetup()+
+    setSyntheticIdentity(ownerA)+
+    "SELECT count(*) FILTER (WHERE id='"+foodA+"'),"+
+      "count(*) FILTER (WHERE id='"+foodB+"') "+
+      "FROM public.user_food_items "+
+      "WHERE id IN ('"+foodA+"','"+foodB+"'); ROLLBACK;";
+  assert.equal(lastSqlLine(psqlScript(q)),"1|0");
+  const opposite=syntheticOwnersSetup()+
+    setSyntheticIdentity(ownerB)+
+    "SELECT count(*) FILTER (WHERE id='"+foodA+"'),"+
+      "count(*) FILTER (WHERE id='"+foodB+"') "+
+      "FROM public.user_food_items "+
+      "WHERE id IN ('"+foodA+"','"+foodB+"'); ROLLBACK;";
+  assert.equal(lastSqlLine(psqlScript(opposite)),"0|1");
+});
+test("authenticated owner cannot insert a custom Food owned by another member",()=>{
+  const q=syntheticOwnersSetup()+
+    setSyntheticIdentity(ownerA)+
+    "INSERT INTO public.user_food_items "+
+      "(user_id,food_name,serving_size,calories,protein_g,carbs_g,fat_g) "+
+      "VALUES ('"+ownerB+"','Spoofed owner Food','100 g',0,0,0,0);";
+  const result=psqlScript(q);
+  assertFailed(result,/row-level security policy|permission denied/i);
+});

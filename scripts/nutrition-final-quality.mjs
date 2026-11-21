@@ -12,7 +12,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 // Required minimum assertions, not just an exit status from an empty test file.
 const groups=Object.freeze({
   "food-catalog-source": {file:"tests/nutrition-final/food-catalog-source.test.mjs",minTests:25},
-  "governance-ingestion": {file:"tests/nutrition-final/governance-ingestion.test.mjs",minTests:16},
+  "governance-ingestion": {file:"tests/nutrition-final/governance-ingestion.test.mjs",minTests:18},
   "activation-generation-search": {file:"tests/nutrition-final/activation-generation-search.test.mjs",minTests:25},
   "nutrition-consumers": {file:"tests/nutrition-final/nutrition-consumers.test.mjs",minTests:27},
   "nutrition-privacy-mcp": {file:"tests/nutrition-final/nutrition-privacy-mcp.test.mjs",minTests:19},
