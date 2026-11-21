@@ -339,3 +339,21 @@ test("Recipe published cache and late load cannot leak across account switching"
     "Late Recipe API and offline-cache results must be ignored after owner change");
   assert.ok(handler.includes("ownerCacheKey(ownerId, recipeId)"),"Owner-qualified cache must remain in use");
 });
+
+// N097: Shopping loads and cross-week carry can finish after the authenticated
+// user/week switched; old Shopping data must never reach the next user's UI.
+test("Shopping List fetched week and carryover promises never cross owner context",()=>{
+  const src=readFileSync(resolve("components/nutrition/meal-plan/shopping-list.tsx"),"utf8");
+  assert.ok(src.includes("activeShoppingContextKeyRef"));
+  assert.ok(src.includes("useLayoutEffect(() => {"),"Stale Shopping screen must be cleared before paint");
+  for(const [startMark,endMark] of [
+    ["const load = useCallback(", "useEffect(() => { void load();"],
+    ["async function saveShopping(", "function setDerivedState("],
+    ["async function carryUncheckedItems(", "const stateLabel ="]
+  ]){
+    const start=src.indexOf(startMark),end=src.indexOf(endMark,start);
+    assert.ok(start>0&&end>start,"Shopping handler missing "+startMark);
+    assert.ok(src.slice(start,end).includes("sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)"),
+      "Shopping callback missing owner/week guard: "+startMark);
+  }
+});
