@@ -294,3 +294,20 @@ test("Cooking async recovery and mutation callbacks validate the active owner/re
   }
   assert.ok(src.includes("useLayoutEffect(() => {"),"Auth switching must clear stale Cooking UI before paint");
 });
+
+// N097: hidden Cooking continuations (Resume/Start Over/End/Action) must not
+// accept old owner's Promise completion after auth context has changed.
+test("Cooking resume and completion cannot overwrite a new owner after old async result",()=>{
+  const src=readFileSync(resolve("components/nutrition/cooking/cooking-mode.tsx"),"utf8");
+  for(const [startMark,endMark] of [
+    ["const onResume = useCallback(", "const onStartOver = useCallback("],
+    ["const onStartOver = useCallback(", "const updateAction = useCallback("],
+    ["const updateAction = useCallback(", "const startTimer = useCallback("],
+    ["const onEndCooking = useCallback(", "async function requestMicrophone()"]
+  ]){
+    const start=src.indexOf(startMark),end=src.indexOf(endMark,start);
+    assert.ok(start>0&&end>start,"Missing Cooking callback "+startMark);
+    assert.ok(src.slice(start,end).includes("sameCookingOwnerRecipeContext("),
+      "Missing owner/recipe context guard in "+startMark);
+  }
+});
