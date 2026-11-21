@@ -1,5 +1,7 @@
 /** Nutrition-only privacy/permission contract tests; no network or user data. */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { after,test } from "node:test";
 import { createServer } from "vite";
 const vite=await createServer({configFile:false,resolve:{alias:{"@":process.cwd()}},server:{middlewareMode:true},
@@ -195,4 +197,20 @@ test("Diary draft storage cannot write previous account plate into next account 
   assert.equal(canPersistDiaryDraftForHydratedOwner(ownerB,null),false);
   assert.equal(canPersistDiaryDraftForHydratedOwner(null,ownerA),false);
   assert.equal(canPersistDiaryDraftForHydratedOwner("",""),false);
+});
+
+// N097/N106 source contract: a late completion from account A cannot reset
+// the account B plate and an old plate cannot be submitted with account B JWT.
+test("Diary submission rejects stale account plate and ignores late responses",()=>{
+  const src=readFileSync(resolve("components/nutrition/diary/logging-session.tsx"),"utf8");
+  const begin=src.indexOf("async function submitPlate()");
+  const end=src.indexOf("\n  const modes:",begin);
+  assert.ok(begin>0&&end>begin,"Diary submission handler is required");
+  const submit=src.slice(begin,end);
+  assert.ok(submit.includes("if (!canPersistDiaryDraftForHydratedOwner(key, hydratedDraftKey)"),
+    "Submit must reject stale user/date plates");
+  assert.ok(submit.includes("if (activeDraftKeyRef.current !== submitOwnerKey) return;"),
+    "A previous owner's late response must not modify the new owner's UI");
+  assert.ok(src.includes("localStorage.removeItem(key)"),
+    "Deleting the last plate item must remove the old draft from storage");
 });
