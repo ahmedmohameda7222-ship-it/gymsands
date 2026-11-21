@@ -169,3 +169,34 @@ test("authenticated SQL role with no real human identity cannot review a batch",
   const result=psqlScript(script);
   assertFailed(result,/Authenticated Food governance principal is required/);
 });
+
+
+// Nutrition V1 owner-RLS metadata verified against the disposable migration chain.
+// Metadata checks cannot substitute for an authenticated two-owner row-isolation test.
+test("private user Food table remains protected by RLS in the replayed schema",()=>{
+  const result=sql(
+    "SELECT relrowsecurity,relforcerowsecurity "+
+    "FROM pg_class WHERE oid='public.user_food_items'::regclass"
+  );
+  const flags=result.split("|");
+  assert.equal(flags[0],"t");
+});
+test("private Food RLS policy explicitly limits authenticated owner reads and writes",()=>{
+  const result=sql(
+    "SELECT count(*) FROM pg_policies "+
+    "WHERE schemaname='public' AND tablename='user_food_items' "+
+    "AND policyname='user_food_items_own_all' AND cmd='ALL' "+
+    "AND 'authenticated'=ANY(roles) "+
+    "AND qual ILIKE '%user_id%' AND qual LIKE '%auth.uid()%' "+
+    "AND with_check ILIKE '%user_id%' AND with_check LIKE '%auth.uid()%'"
+  );
+  assert.equal(result,"1");
+});
+test("private Food SQL owner policy does not grant anonymous role authority",()=>{
+  const result=sql(
+    "SELECT count(*) FROM pg_policies WHERE schemaname='public' "+
+    "AND tablename='user_food_items' AND "+
+    "('anon'=ANY(roles) OR 'public'=ANY(roles))"
+  );
+  assert.equal(result,"0");
+});

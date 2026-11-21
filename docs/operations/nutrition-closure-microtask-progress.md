@@ -173,7 +173,7 @@ N099: SCOPE_PROVISIONAL_BLOCKED_G11
 N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
-N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
+N103: SIXTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
@@ -305,3 +305,9 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Added four source matching cases based on current canonical matching implementation: redirect-root retention across reviewed source reingestion, no release-version-only auto-merge, explicit same-NDB semantic evidence to preserve canonical ID across releases, qualified alias requiring exact state/preparation/form evidence, and cycle ownership quarantined rather than force-matched.
 - N102 group now contains 25 authored tests. Still no actual original USDA archive bytes, cross-batch database writes, FNDDS adapter or final G-11 run. Source-only tests do not establish Production idempotency or release readiness.
+
+## N103 follow-up — local Nutrition Food ownership RLS metadata
+
+- Added three disposable-DB-only tests for `public.user_food_items`: RLS flag remains enabled, `user_food_items_own_all` is scoped to `authenticated` with `auth.uid()` ownership in both `USING` and `WITH CHECK`, and no anonymous/public role is included. Assertions are grounded in the final applied definition in `202606290000_clean_initial_schema.sql`.
+- A live two-owner fixture row test is still absent because the database-only migration rehearsal intentionally excludes GoTrue/PostgREST and no approved local multi-identity Auth harness has been prepared. Treat these as schema metadata, not owner isolation proof.
+- The N103 group now has 16 **authored, unexecuted** cases. No migrations, hosted Postgres writes, or CI execution occurred.
