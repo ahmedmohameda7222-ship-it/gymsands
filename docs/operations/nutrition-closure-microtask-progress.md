@@ -169,7 +169,7 @@ N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
 N096: DIARY_INPUT_LABELS_FIXED_SOURCE_ONLY_UNTESTED
 N097: PRIVACY_MCP_AUTHORITY_STATIC_TRACED_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
-N099: SCOPE_PROVISIONAL_BLOCKED_G11
+N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
 N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
@@ -574,3 +574,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Source-audited `lib/nutrition-v1/meal-plan-offline.ts`. The `validMutation` localStorage queue reader and `reconcileMealPlanQueue` accepted any `Number.isInteger` revision, including integers beyond JS `Number.MAX_SAFE_INTEGER`, which cannot represent exact CAS revision identity. The API writer had already been hardened with `parseNonNegativeRevision`; offline queue remained weaker.
 - Authored one N105 regression first at `258b903a4ec29f8f34d5b7b7166621741c45083d` requiring serialize/deserialize to reject unsafe base revisions and reconciliation to reject unsafe server revision. **Not executed.** Changed precisely those two offline boundaries to `Number.isSafeInteger` at `d2966a21868f82ce048bd86e16add6386e3e14f2`; no auth, DB or network changes.
 - Raised N105 Nutrition-only consumer minimum from 41 to **42** (`218c7c00fb51a2e66e35559dccea029179f1faab`). Total seven groups minimum **155 = 25+18+32+42+19+12+7**. Status **SOURCE_AUTHORED_UNTESTED**, not proven green; no automated tests or Production operations.
+
+
+## N099 canonical release compatibility source proof — 2026-11-21
+
+- Read exact `scripts/nutrition-final-quality.mjs`, `.github/workflows/nutrition-final-quality.yml`, `scripts/quality-evidence-contract.mjs`, `scripts/create-release-manifest.mjs`, `release/release-manifest.template.json` and `.github/workflows/post-deploy-smoke.yml`. Created `docs/operations/nutrition-release-evidence-compatibility-decision.md` at `78c579e64a451d3d4d41a08cd99111556f0d2f35`.
+- Legacy canonical release producer demands **19 full-app Quality gates**, canonical workout and artifact metadata and `fullReleaseQuality`, plus exact same-commit proof. The Nutrition-only seven-group manifest is distinct in path/schema and missing the app-wide gates by explicit user policy; post-deploy smoke currently downloads the **legacy** artifact name. The Nutrition runner additionally requires an original FNDDS archive, absent from its workflow and source lock; the current workflow is guaranteed to remain **fail-closed** pending G09/verified original ZIP.
+- Explicit decision needed from owner/Planner to retain full Quality by changing QA scope, or approve a versioned Nutrition-only release evidence profile across producer, consumer, deployment, auth smoke and squash provenance without weakening protections. No silent `fullReleaseQuality` flag forgery, synthetic success or PR #189 squash verifier loss.
+- N099 status **CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED**; N129 final signoff remains blocked. No test/build/workflow dispatch/production deploy.
