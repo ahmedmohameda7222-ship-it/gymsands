@@ -166,8 +166,8 @@ N092: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
 N093: JSON_AND_URL_HANDOFF_QUANTITIES_STRICT_SOURCE_ONLY_UNTESTED
 N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: PAGINATION_WRITES_FILTERS_AND_OVERFLOW_SOURCE_ONLY_UNTESTED
-N096: DIARY_RECIPE_MEAL_PLAN_LOCALE_SOURCE_ONLY_UNTESTED
-N097: RLS_AND_RPC_GRANTS_READ_ONLY_TRACED_RUNTIME_UNTESTED
+N096: DIARY_RECIPE_MEAL_PLAN_AND_FAVORITE_UI_SOURCE_ONLY_UNTESTED
+N097: RLS_RPC_AND_DIARY_OWNER_DRAFT_GUARDED_RUNTIME_UNTESTED
 N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: CANONICAL_RELEASE_EVIDENCE_CONTRACT_G11_BLOCKED
 N100: BLOCKED_G11_UNFINISHED_CODE
@@ -176,8 +176,8 @@ N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
 N105: FIFTY_ONE_CONSUMER_CASES_AUTHORED_UNTESTED
-N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
-N107: SIXTEEN_BROWSER_CASES_AUTHORED_UNTESTED
+N106: TWENTY_ONE_PRIVACY_MCP_CASES_AUTHORED_UNTESTED
+N107: SEVENTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -723,3 +723,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Scoped QA runner now requires **168 authored test declarations** across seven groups: `25+18+32+51+19+16+7`. Direct source readback confirmed exactly 51 declarations in the consumer file; browser has 9 statically declared tests plus loop-generated cases. **NO Nutrition tests, CI, build, lint or migrations were executed**. FNDDS original source lock still absent.
 - New direct Production **read-only** `SELECT` at **2026-11-21 03:17:28.874501 UTC** confirmed **133** immutable applied migrations; Food items **0**, source records **0**, catalog generations **0**, ingestion batches/runs **0**, governance principals **0**, current generation **NULL**. RPC grant audit separately verified zero anon-callable SECURITY DEFINER in scoped `public/private` functions and identified 16 authenticated-callable public definer functions without an inline `auth.uid()` string; those require nested authority review, **not a demonstrated exploit**.
 - All **130** task status rows retained; N093/N095/N097 remain source/read-only progress **UNTES​TED**, N099/100/109–115/117–124/128–130 still fail closed on final source/QA/Owner/G-09/G-10/release gates. Cannot truthfully claim 130 completed or safe to publish. Continue only against freshly verified GitHub HEAD, preserving exact source and release provenance.
+
+
+## N096/N097 Favorite and Diary owner-isolated draft guard — 2026-11-21
+
+- UI source trace found Food Library `toggleFavorite` optimistically set `favorite` before awaiting `foodLibraryApi`, then called `load()` only on HTTP non-2xx. A thrown network error left a false unsaved favorite and an unhandled rejected Promise. Wrote N107 static source regression FIRST at `fb3acbef97f73e8e7fa7142259b9f6d4a125c39f`; source change `49a08cb9dbbb06634a66718438f4338a2eb290f0` awaits accepted HTTP result **before** changing rows or details, catches rejected fetch, and surfaces localized Food Library error instead of leaving unsaved optimistic state. **No runtime test run.**
+- Security investigation into `components/nutrition/diary/logging-session.tsx` found two passive React effects: changing `userId/date/meal` started asynchronous `setPlate([])` state reset, but persistence effect could still see **stale prior owner's `plate`/`pendingOperationId`** from the same render, writing those bytes to the new owner-specific localStorage key. This is a plausible cross-account private data leak/race from source ordering (not independently reproduced in browser). Authored N106 pure owner-key negative regression FIRST at `771b7d8402720636fd891858b3fb87772031d867`; implemented pure `canPersistDiaryDraftForHydratedOwner` at `9b79b2108e2e303122d54c6d00f215940ee1468c` and used an explicit `hydratedDraftKey` gate at `6d7bc973e15f750d7cf7ae66f860d0d4303578cc`. New account/date/meal is hydrated first; an old plate cannot be written under an unhydrated new key. An empty hydrated plate removes persisted stale draft; absent user clears in-memory state.
+- Follow-up found a second race: `submitPlate()` could be triggered with the prior account plate while a new JWT was active, and a late async response for account A could reset the newly authenticated B plate. Wrote N106 source guard regression FIRST at `04266c53777a8455606dcca224a1aa92a6fa5db4` (NOT EXECUTED). Hardened submit at `c77164a42b7e0509633e47a235f774141df357bd` to require the current hydrated key before POST or persistence, mark the PlateDock pending while hydration is incomplete, and ignore a response/error from a previous key using a `useLayoutEffect`-refreshed current-key reference. No backend auth contract, migrations or user row changes.
+- Updated Nutrition-only runner at `2cd99e757b0bb51ac9740bdc764462ff8e29e859`: `nutrition-browser-locale` minimum **16→17**, `nutrition-privacy-mcp` **19→21**. Seven-group **171** authored minimum = 25+18+32+51+21+17+7. **SOURCE_AUTHORED_UNTESTED**: the real two-user auth-switch/browser replay, in-flight request simulation and network-failure behavior remain required at G-11; no tests/CI, Production data or deployment changes.
