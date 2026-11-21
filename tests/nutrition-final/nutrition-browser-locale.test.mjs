@@ -189,7 +189,7 @@ test("Meal Plan editing and copying dialogs retain EN DE AR translated copy",()=
     "movePlannedItem","mealSlot","copySelectedDays","copySelectedDaysHint",
     "copyDay","copyDayOrWeekHint","targetDay","dateWithinTargetWeek"]){
     assert.ok(src.includes('nt("'+key+'")'),"Missing localized modal copy: "+key);
-    assert.equal((dictionary.match(new RegExp('\\\\b'+key+':','g'))||[]).length,3,
+    assert.equal(dictionary.split(key+':').length-1,3,
       "Missing an EN/DE/AR translation: "+key);
   }
   for(const legacy of [">Add meal slot</h2>",">Edit planned item</h2>",
