@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isIsoDate } from "@/lib/date-utils";
 import { isUuid } from "@/lib/utils";
-import { parseDiaryWriteNutritionFact, parseDiaryWriteQuantity } from "@/lib/nutrition-v1/diary-write-numbers";
+import { parseDiaryWaterAmountMl, parseDiaryWriteNutritionFact, parseDiaryWriteQuantity } from "@/lib/nutrition-v1/diary-write-numbers";
 import type { NutritionTargetValues } from "@/lib/nutrition-v1/targets";
 import { NutritionRequestError } from "@/services/nutrition-v1/server/errors";
 import { getEffectiveNutritionTarget } from "@/services/nutrition-v1/server/targets";
@@ -293,7 +293,8 @@ export async function addDiaryWater(
 ) {
   requiredId(userId, "Owner");
   const logDate = requireDate(date);
-  const amount = Math.round(positive(amountMl, "Water amount"));
+  const amount = parseDiaryWaterAmountMl(amountMl);
+  if (amount === null) throw new NutritionRequestError("Water amount must round to a positive, safely representable milliliter value.");
   const operation = requiredId(operationId, "Operation ID");
   const result = await supabase.rpc("log_nutrition_water", {
     p_operation_id: operation,
