@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FORTY_SIX_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FORTY_SEVEN_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: SIXTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -671,3 +671,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Last direct **read-only** Production Food census 2026-11-21 02:32 UTC: 133 migrations, 0 Foods, 0 generations, 0 ingestion runs/batches, 0 authorized governance principals and current generation NULL. Six-market 2026-11-21 02:36 UTC: 0 assignments/search documents in each US/DE/GB/EG/SA/AE. 2026-11-21 Production RLS metadata: 17 Nutrition tables, all RLS enabled, 49 authenticated policies with explicit `auth.uid()`; runtime cross-owner denial still untested.
 - Blocking dependencies from the exact source plan `06_ACCEPTANCE_AND_GATES.md` remain: G-01 PR #189 provenance merge disposition, G-02 required CI/workflow controls, G-04 real Owner authorization, G-05–G-08 Foundation source/approved Plan9 data publication, G-09 healthy Plan9 or approved exception **plus original FNDDS ZIP bytes/adapter**, G-10 verified country-specific reuse and market rollout, G-11 completed code/scope + authorized final Nutrition-only QA + reviewed release. The existing full-release quality-evidence validator is incompatible with the seven-group Nutrition-only artifact as described in `docs/operations/nutrition-release-evidence-compatibility-decision.md`; no relaxation or evidence forgery has occurred.
 - **Authoritative state: IN_PROGRESS_GATED_NOT_CLOSED**; all feasible source changes above remain untested. Do not promote archival source metadata into a fabricated SHA, a proposed country search benchmark into published Food data, or an authored regression into a passing run. Subsequent work must resume from GitHub HEAD after this ledger append rather than reapplying completed changes.
+
+
+## N095 Saved Meal untrusted JSON item intake — 2026-11-21
+
+- Source root cause: `POST /api/nutrition/v1/saved-meals` and `PATCH /api/nutrition/v1/saved-meals/[savedMealId]` previously only checked `Array.isArray(body.items)`, then `canonicalizeSavedMealItems` dereferenced `item.kind` in a `flatMap` before any typed error; malicious/malformed `[null]`, `[[]]`, empty/oversize arrays, mismatched Food numeric strings/booleans and invalid Recipe nested snapshots could cause generic HTTP 500 or unnecessary authority lookups. The Saved Meal name whitespace/length and create operation UUID were only validated by service generic Error, not mapped to HTTP 400.
+- Authored one pure N105 regression **first** at `001894b2f44d124034a7746fb658186a3abf9ea6`, **NOT RUN**. Added `lib/nutrition-v1/saved-meal-write-input.ts` at `618805121471022f1aa23eac804827bd68e2e7ea`, checking 1–100 structured Food/Recipe items, source UUID identity, explicit measured quantity, canonical 1-serving Recipe intent, bounded nonblank name, typed optional note/favorite/language, and create idempotency UUID. Preserves canonical owner-specific Food/Recipe re-resolution; never trusts submitted frozen nutrition as authority.
+- Wired the same input boundary before catalog and owner lookups in Saved Meal POST (`aeb303cc30f2879a288b65b98a685061912f77ab`) and PATCH (`07cd0137ed6110779e0903e2dc88d9c0969ee110`) using `NutritionRequestError` 400. No SQL/RPC contract or legitimate item merge behavior changed. N105 consumer minimum **46→47** in final QA runner at `a67ef03698bc51f0a01624f964be0a895f192465`; seven-group **164** authored minimum (=25+18+32+47+19+16+7).
+- **SOURCE_AUTHORED_UNTESTED**, no runtime response, red/green QA, build, CI, Production write, migration, deployment or review acceptance proven.
