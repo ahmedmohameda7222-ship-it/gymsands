@@ -130,7 +130,7 @@ N056: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N057: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N058: BLOCKED_G09_AND_UNVERIFIED_SOURCE
 N059: BLOCKED_G09_AND_UNVERIFIED_SOURCE
-N060: DESIGN_PROPOSAL_ONLY
+N060: CANARY_DECISION_PACKET_PREPARED_G09_UNAPPROVED
 N061: DESIGN_PROPOSAL_ONLY
 N062: SCHEMA_REVIEWED_LIVE_MARKETS_EMPTY
 N063: DESIGN_PREPARED
@@ -553,3 +553,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Queried the linked **PLAIVRA Main Supabase** project `bkwezjxvapaeasfvlhvv` with a single explicit **SELECT-only** statement and `now()` on **2026-11-21 02:32:34.607634 UTC**. Production returned **133 applied migrations**; public Food items **0**, source records **0**, ingestion batches **0**, ingestion runs **0**, catalog generations **0**, search documents **0**, governance principals **0**, and current generation pointer **NULL**.
 - Independent repeat of N007/N116 baseline; therefore **no Plan 9 ingestion, approval, draft, activation or CAS promotion occurred since previous verified zero**. Do not issue duplicate/fabricated ingestion commands. Live operational gates G-04–G-11 remain unresolved; this SELECT is not an operator authorization or a proof of code-branch runtime quality.
 - Status `READ_ONLY_VERIFIED_PLAN9_NOT_PERFORMED`; no database write, deploy, CI, merge or application-state mutation.
+
+
+## N060 exact 1B1 canary decision packet — 2026-11-21
+
+- Source-inspected `lib/food-catalog/ingestion/contracts.ts`, `matching.ts`, `services/food-catalog/server/ingestion-command-service.ts`, `activation-service.ts`, and `generation-command-service.ts`, plus refreshed Production 0-Food / 0-Owner / NULL-generation read. Created `docs/operations/nutrition-plan10-fndds-1b1-canary-packet.md` at `79d9948a21a545b9dae97fad9d478c538c417567`.
+- Packet specifies source-record **category coverage**, actual manifest fields, strict quarantine, same-index identity reconciliation, production database dry-run's **actual persisted-write nature**, individually approved draft/activation/grant/generation CAS promotion, verified rollback command prerequisites and the exact evidence that cannot yet be supplied. No fabricated FNDDS IDs, hashes, sizes, Food counts, Owner actor or license for non-USDA content.
+- Status **CANARY_DECISION_PACKET_PREPARED_G09_UNAPPROVED**: source/schema/QA/G09/operations all unresolved; no executed 1B1 or Production changes.
