@@ -34,6 +34,7 @@ jobs:
       NUTRITION_DISPOSABLE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
       PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
       NUTRITION_FOUNDATION_ARCHIVE_PATH: /tmp/nutrition-foundation-original.zip
+      NUTRITION_E2E_BASE_URL: http://127.0.0.1:3000
       SUPABASE_TELEMETRY_DISABLED: '1'
 
     steps:
@@ -126,6 +127,25 @@ jobs:
               createHash('sha256').update(bytes).digest('hex') !== lock.sourceChecksumSha256)
             throw new Error('Original USDA Foundation archive integrity failure');
           NODE
+
+      - name: Prepare UI-only local mock app (never Production)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXT_PUBLIC_USE_MOCK_AUTH=true
+          export NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000
+          export NEXT_PUBLIC_SUPABASE_URL=''
+          export NEXT_PUBLIC_SUPABASE_ANON_KEY=''
+          npm run dev -- --hostname 127.0.0.1 --port 3000 \
+            > "$NUTRITION_QUALITY_OUTPUT/browser-devserver.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 3 http://127.0.0.1:3000/calories/food-hub >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS --max-time 5 http://127.0.0.1:3000/calories/food-hub >/dev/null
+          node scripts/nutrition-final-browser-fixtures.mjs >> "$GITHUB_ENV"
 
       - name: Execute only new Nutrition-owned final acceptance
         shell: bash

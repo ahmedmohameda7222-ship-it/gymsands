@@ -29,11 +29,28 @@ async function open(locale,kind){
   const base=localServer(),session=syntheticSession(locale,kind);
   if(!browser)browser=await chromium.launch({headless:true});
   const context=await browser.newContext({storageState:session,viewport:{width:390,height:844}});
-  return {base,context,page:await context.newPage()};
+  const page=await context.newPage();
+  // UI-only synthetic results; never trust these as actual Catalog/API or RLS proof.
+  await page.route("**/api/nutrition/v1/foods?**",async route=>{
+    const fixture={
+      id:"00000000-0000-4000-8000-000000000101",source:"catalog",
+      name:"QA Synthetic Rice",brand:null,category:null,cuisine:null,
+      servingLabel:"100 g",verified:false,favorite:false,recentAt:null,
+      frequency:0,locale,aliases:[],tags:[],nutritionLabels:[],
+      nutrition:{calories:null,protein_g:null,carbs_g:null,fat_g:null,
+        saturated_fat_g:null,fiber_g:null,sugars_g:null,sodium_mg:null,
+        basis_amount:null,basis_unit:null}
+    };
+    await route.fulfill({status:200,contentType:"application/json",
+      body:JSON.stringify({
+        items:kind==="populated"?[fixture]:[],nextCursor:null
+      })});
+  });
+  return {base,context,page};
 }
 for(const [locale,expectedDir] of languages){
   for(const kind of ["empty","populated"]){
-    test("Food Library "+locale+" / "+kind+" is authenticated, localized and accessible",async()=>{
+    test("Food Library "+locale+" / "+kind+" is mock-authorized, localized and accessible",async()=>{
       const {base,context,page}=await open(locale,kind);
       const errors=[];
       page.on("pageerror",e=>errors.push(e.message));

@@ -177,7 +177,7 @@ N103: THIRTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: TWENTY_FIVE_GENERATION_SEARCH_TESTS_AUTHORED_REAL_DB_GAP
 N105: TWENTY_SEVEN_CONSUMER_TESTS_AUTHORED_API_INTEGRATION_GAP
 N106: SIXTEEN_MCP_PRIVACY_CASES_AUTHORED_AUTH_INTEGRATION_GAP
-N107: ELEVEN_BROWSER_CASES_AUTHORED_SYNTHETIC_FIXTURES_ABSENT
+N107: ELEVEN_UI_MOCK_BROWSER_CASES_PREPARED_REAL_AUTH_UNTESTED
 N108: MIGRATION_SOURCE_TESTS_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
 N109: BLOCKED_G11_NO_SUITE_RUN
 N110: NOT_STARTED_NO_TEST_FAILURE_OBSERVED
@@ -270,3 +270,10 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 
 - Extended rendered synthetic user/browser matrix to include **3 additional locale-specific offline/reconnection tests** and one local 503 Food API failure test. Required group floor now 11 cases (6 locale/account pairs, one four-destination smoke, three offline-state cases, one API-error case).
 - All flows remain restricted to localhost and supplied isolated synthetic authenticated storage states. Browser app server and six real isolated fixture states are absent, and the tests are **not executed**. A simulated API fault only proves UI error presentation when eventually run, not backend reliability.
+
+## N107 local mock UI fixture source — isolated from real identity
+
+- The previous 11-case browser suite had no declared storageState fixtures and no local web server. Added `scripts/nutrition-final-browser-fixtures.mjs` that generates six EN/DE/AR x empty/populated locale-only storage states and a manifest under ignored `nutrition-quality-reports/browser-fixtures/`.
+- Nutrition-only G11 workflow now starts `next dev` on localhost:3000 with `NEXT_PUBLIC_USE_MOCK_AUTH=true` and no Supabase credentials, verifies local HTTP readiness, then exports exact fixture paths to the Actions job before invoking the scoped runner.
+- Browser page routes only `/api/nutrition/v1/foods?*` to a clearly labeled synthetic Food fixture (or empty page), enabling actual UI layout, locale, offline and error-state assertions without Production dependencies. **Mock auth is not genuine authenticated owner isolation**; all associated screenshots and UI results must be labeled as mock-only, and N107 cannot be marked final QA accepted until separate real disposable API/auth/RLS tests run.
+- No browser test, local server, CI workflow, fixture generator or Production operation was executed here. Authoring is not evidence of passing QA.
