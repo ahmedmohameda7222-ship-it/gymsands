@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parsePositiveHandoffQuantity } from "@/lib/nutrition-v1/handoff-quantity";
+import { parsePositiveHandoffQuantity, parseRecipeHandoffQuantity } from "@/lib/nutrition-v1/handoff-quantity";
 
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { createSupabaseServerClient } from "@/lib/integrations/env";
@@ -44,7 +44,8 @@ async function resolveSource(ownerSupabase: Parameters<typeof resolveFoodHandoff
     }) };
   }
   if (raw.type === "recipe") {
-    const quantity = requiredPositiveQuantity(raw.quantity ?? 1, "Recipe serving quantity");
+    const quantity = parseRecipeHandoffQuantity(raw.quantity);
+    if (quantity === null) throw new NutritionRequestError("Recipe serving quantity must be greater than zero.");
     return { kind: "recipe" as const, value: await resolveRecipeHandoff(
       ownerSupabase,
       userId,
