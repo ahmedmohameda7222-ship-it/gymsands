@@ -771,3 +771,16 @@ test("Cooking local state revisions must remain safe exact integers",()=>{
     assert.equal(parseCookingLocalSession(JSON.stringify({...good,actionStates:actions})),null);
   }
 });
+
+// N095: blank household input is not a measured zero. Saving blank must not
+// accidentally overwrite a derived/manual Shopping quantity with zero.
+const {parseShoppingWriteQuantity}=await vite.ssrLoadModule("/lib/nutrition-v1/shopping-write-quantity.ts");
+test("Shopping write quantities distinguish empty input from measured zero",()=>{
+  assert.equal(parseShoppingWriteQuantity("0"),0);
+  assert.equal(parseShoppingWriteQuantity("1.25"),1.25);
+  assert.equal(parseShoppingWriteQuantity(" 2 "),2);
+  assert.equal(parseShoppingWriteQuantity("1e2"),100);
+  for(const value of ["", " ", "-1", "0x10", "abc", "NaN", "Infinity", "1e1000", "1,5"]){
+    assert.equal(parseShoppingWriteQuantity(value),null);
+  }
+});
