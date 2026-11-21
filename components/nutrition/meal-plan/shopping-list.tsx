@@ -85,10 +85,23 @@ export function ShoppingList() {
   const excludedOccurrenceIds = useMemo(() => shoppingExcludedOccurrenceIds(data?.week ?? null), [data]);
 
   async function saveShopping(next: ShoppingOverride) {
-    if (busy) return; setBusy(true);
-    try { const nextOverride = { ...(data?.week?.week_override_json ?? {}), shopping: next }; await mealPlanApi("/api/nutrition/v1/meal-plan/week", { method: "POST", body: JSON.stringify({ kind: "mutate", weekId: data?.week?.id ?? null, weekStartDate: weekStart, baseRevision: data?.week?.revision ?? 0, operationId: crypto.randomUUID(), mutation: { weekOverride: nextOverride } }) }); await load(); setNotice(""); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : nt("shoppingSaveFailed")); }
-    finally { setBusy(false); }
+    if (busy || !ownerId) return;
+    const requestContextKey = `${ownerId}:${weekStart}`;
+    if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+    setBusy(true);
+    try {
+      const nextOverride = { ...(data?.week?.week_override_json ?? {}), shopping: next };
+      await mealPlanApi("/api/nutrition/v1/meal-plan/week", { method: "POST", body: JSON.stringify({ kind: "mutate", weekId: data?.week?.id ?? null, weekStartDate: weekStart, baseRevision: data?.week?.revision ?? 0, operationId: crypto.randomUUID(), mutation: { weekOverride: nextOverride } }) });
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      await load();
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      setNotice("");
+    } catch (cause) {
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      setError(cause instanceof Error ? cause.message : nt("shoppingSaveFailed"));
+    } finally {
+      if (sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) setBusy(false);
+    }
   }
 
   function setDerivedState(need: ShoppingNeed, state: ShoppingState) { void saveShopping({ ...shoppingOverride, states: { ...shoppingOverride.states, [keyFor(need)]: state } }); }
