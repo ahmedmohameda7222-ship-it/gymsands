@@ -455,3 +455,22 @@ test("Custom Food invalid nutrition numbers carry a client-input HTTP status con
     );
   }
 });
+
+// N095/N105: a malformed Food name, serving label, or basis unit is a bounded
+// 400 client input error, never an unexpected 500 server failure.
+const {requireNonBlankFoodText, requireFoodBasisUnit}=await vite.ssrLoadModule(
+  "/lib/nutrition-v1/user-food-write-numbers.ts");
+test("Custom Food malformed labels and basis units are bounded client input errors",()=>{
+  const invalid=(fn)=>assert.throws(fn,(error)=>
+    error instanceof InvalidNutritionFoodInputError &&
+    error.status===400 && error.code==="nutrition_request_invalid");
+  for(const v of [null,undefined,"","  ",false,0,{},[]]){
+    invalid(()=>requireNonBlankFoodText(v,"Food name"));
+    invalid(()=>requireNonBlankFoodText(v,"Serving basis"));
+  }
+  assert.equal(requireNonBlankFoodText(" Rice ","Food name"),"Rice");
+  assert.equal(requireNonBlankFoodText(" 100 g ","Serving basis"),"100 g");
+  for(const v of [undefined,"","kg",false,0,{},[]])invalid(()=>requireFoodBasisUnit(v));
+  for(const v of ["g","ml","serving","piece","custom"])assert.equal(requireFoodBasisUnit(v),v);
+  assert.equal(requireFoodBasisUnit(null),null);
+});
