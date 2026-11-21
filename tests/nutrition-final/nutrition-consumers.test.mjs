@@ -506,3 +506,14 @@ test("Recipe handoff GET query defaults only when quantity key is absent",()=>{
     assert.equal(parseRecipeHandoffQueryQuantity(input),null);
   }
 });
+
+// N094: published Recipe detail and frozen Recipe handoff must agree on
+// whether a metadata nutrition fact is truly measured (0) or unknown (NULL).
+const {readPublishedRecipeNutritionFact}=await vite.ssrLoadModule("/lib/nutrition-v1/recipe-cache.ts");
+test("Published Recipe handoff metadata cannot fabricate known-zero nutrition",()=>{
+  for(const raw of [null,undefined,"","  ","0","25",false,true,-1,NaN,Infinity,-Infinity,{},[]]){
+    assert.equal(readPublishedRecipeNutritionFact(raw),null);
+  }
+  assert.equal(readPublishedRecipeNutritionFact(0),0);
+  assert.equal(readPublishedRecipeNutritionFact(25.5),25.5);
+});
