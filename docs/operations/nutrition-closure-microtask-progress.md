@@ -168,7 +168,7 @@ N094: RECIPE_METADATA_FACT_BOUNDARY_FIXED_SOURCE_ONLY_UNTESTED
 N095: USER_FOOD_NUMBER_VALIDATION_FIXED_SOURCE_ONLY_UNTESTED
 N096: DIARY_INPUT_LABELS_FIXED_SOURCE_ONLY_UNTESTED
 N097: PRIVACY_MCP_AUTHORITY_STATIC_TRACED_UNTESTED
-N098: STATIC_CONSUMER_AUDIT_NO_RUNTIME_QA
+N098: PORTABLE_BACKEND_BOUNDARY_STATIC_REVIEWED_UNTESTED
 N099: SCOPE_PROVISIONAL_BLOCKED_G11
 N100: BLOCKED_G11_UNFINISHED_CODE
 N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
@@ -531,3 +531,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Source findings: `requireNutritionUser` inherits bearer authentication, live `auth.getUser()`, and account access-state checks; Nutrition JSON emits `private, no-store` plus `Vary: Authorization`. `data-export.ts` enumerates canonical Recipe, Saved Meal, targets, plan, log and Cooking tables with `eq(user_id, user.id)` and separately calls approved owner-scoped source override export RPCs; export route requires account auth. SQL purge authority deletes owner Recipe/Meal Plan/Cooking records and checks they are absent within same transaction; worker checks legal holds and revokes MCP credentials before account deletion. MCP server validates input, enforces each listed tool's scope and sanitizes output; `daily_execution` projection verifies section scopes again before composing results, avoiding the false positive of a front-door `any` scope check alone.
 - Static inspection did **not** establish actual RLS deny checks, owner-escape attempts, provider export revocation, disposable DB purge replay or actual MCP runtime permissions; no new security defect is asserted without reproduction. N106/N109 and final independent security review remain mandatory; no schema revisions or Production operations.
 - **STATIC_SOURCE_TRACED_UNTESTED**; user privacy and least privilege remain unverified at runtime, not marked complete.
+
+
+## N098 Nutrition mobile-portability static boundary — 2026-11-21
+
+- Read all **19** current `app/api/nutrition/v1/**/route.ts` via direct GitHub source, plus `lib/nutrition-v1/http.ts`, `lib/integrations/env.ts`, `components/nutrition/meal-plan/meal-plan-api.ts`, `components/nutrition/food-library/food-library-api.ts`, `lib/nutrition-v1/meal-plan-offline.ts`, `lib/nutrition-v1/cooking-local-store.ts` and `lib/nutrition-v1/week-start.ts`.
+- All 19 API route files call `requireNutritionUser`, return via `nutritionJson` and have no static references to `window`, `document`, `localStorage`, `sessionStorage` or `navigator`. The shared HTTP authority accepts a bearer token and derives owner from authenticated Supabase `getUser()`; browser-only `supabase.auth.getSession()` lives in `components/**` fetch adapters rather than being required in server route contracts. Nutrition queue/timer serialization helpers operate over JSON inputs; browser storage access is in UI ownership layers. This supports native client integration without adding a second canonical backend.
+- Portability caveats: React Native or mobile native shell will require its own bearer-token provider, secure local storage, offline/online event subscription and UUID generator adapter; `crypto.randomUUID()` appears in the client-local Cooking helper and cannot be assumed universal across native runtimes. No iOS/Android client work or platform support is claimed.
+- **STATIC_BOUNDARY_REVIEWED_UNTESTED** only. No mobile request replay, cross-platform runtime tests, CI, Production, security approval or release authorization occurred.
