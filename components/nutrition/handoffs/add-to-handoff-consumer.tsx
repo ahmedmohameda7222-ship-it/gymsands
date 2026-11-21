@@ -120,23 +120,24 @@ export function AddToHandoffConsumer({ destination }: Props) {
   useEffect(() => {
     if (!source) return;
     const current = source;
+    const previewContextKey = requestContextKey;
     let cancelled = false;
     void (async () => {
       try {
         const preview = current.type === "food"
           ? await jsonRequest<{ name: string }>(`/api/nutrition/v1/foods/${encodeURIComponent(current.id)}/handoff?source=${encodeURIComponent(current.source)}&quantity=${encodeURIComponent(String(current.quantity))}&serving=${encodeURIComponent(current.serving)}${current.servingOptionId ? `&servingOptionId=${encodeURIComponent(current.servingOptionId)}` : ""}${current.displayName ? `&displayName=${encodeURIComponent(current.displayName)}` : ""}${current.languageTag ? `&languageTag=${encodeURIComponent(current.languageTag)}` : ""}`)
           : await jsonRequest<{ name: string }>(`/api/nutrition/v1/recipes/${encodeURIComponent(current.id)}/handoff?recipeVersionId=${encodeURIComponent(current.versionId)}&quantity=${encodeURIComponent(String(current.quantity))}`);
-        if (!cancelled) setSourceName(preview.name);
+        if (!cancelled && activeHandoffContextKeyRef.current === previewContextKey) setSourceName(preview.name);
         if (destination === "recipe") {
           const result = await jsonRequest<{ recipes?: RecipeChoice[] }>("/api/nutrition/v1/recipes?limit=100");
-          if (!cancelled) setRecipeChoices((result.recipes ?? []).filter((item) => item.status === "draft"));
+          if (!cancelled && activeHandoffContextKeyRef.current === previewContextKey) setRecipeChoices((result.recipes ?? []).filter((item) => item.status === "draft"));
         }
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "Nutrition handoff could not be loaded.");
+        if (!cancelled && activeHandoffContextKeyRef.current === previewContextKey) setError(cause instanceof Error ? cause.message : "Nutrition handoff could not be loaded.");
       }
     })();
     return () => { cancelled = true; };
-  }, [destination, source]);
+  }, [destination, requestContextKey, source]);
 
   if (!source) return null;
   const currentSource = source;
