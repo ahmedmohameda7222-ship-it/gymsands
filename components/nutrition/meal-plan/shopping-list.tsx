@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, Plus, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { useNutritionV1Translation } from "@/lib/i18n/nutrition-v1";
 import { parseShoppingWriteQuantity } from "@/lib/nutrition-v1/shopping-write-quantity";
+import { sameMealPlanOwnerWeekContext } from "@/lib/nutrition-v1/meal-plan-offline";
 import { localeWeekStartDay, parseMealPlanWeekStartOverride, startOfMealPlanWeek, weekStartOverrideKey, type MealPlanWeekStartOverride } from "@/lib/nutrition-v1/week-start";
 import type { ShoppingNeed, MealPlanWeekRow } from "@/services/nutrition-v1/server/meal-plan";
 import { mealPlanApi } from "./meal-plan-api";
@@ -37,6 +38,7 @@ function shoppingFromWeek(week: MealPlanWeekRow | null): ShoppingOverride {
 export function ShoppingList() {
   const params = useSearchParams();
   const { user } = useAuth();
+  const ownerId = user?.id ?? null;
   const today = useTodayDate();
   const { nt, locale, dir } = useNutritionV1Translation();
   const [weekStartOverride, setWeekStartOverride] = useState<MealPlanWeekStartOverride>("locale");
@@ -50,13 +52,33 @@ export function ShoppingList() {
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState({ name: "", quantity: "1", unit: "item", notes: "" });
   const [editingDerived, setEditingDerived] = useState<string | null>(null);
+  const shoppingContextKey = ownerId ? `${ownerId}:${weekStart}` : null;
+  const activeShoppingContextKeyRef = useRef<string | null>(shoppingContextKey);
+  useLayoutEffect(() => {
+    activeShoppingContextKeyRef.current = shoppingContextKey;
+    setData(null);
+    setError("");
+    setNotice("");
+    setBusy(false);
+  }, [shoppingContextKey]);
 
   useEffect(() => { if (!user?.id) return; setWeekStartOverride(parseMealPlanWeekStartOverride(window.localStorage.getItem(weekStartOverrideKey(user.id)))); }, [user?.id]);
 
   const load = useCallback(async () => {
-    try { setData(await mealPlanApi<ApiResponse>(`/api/nutrition/v1/meal-plan/week?weekStart=${encodeURIComponent(weekStart)}&date=${encodeURIComponent(selectedDate)}`)); setError(""); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : nt("shoppingLoadFailed")); }
-  }, [nt, selectedDate, weekStart]);
+    if (!ownerId) return;
+    const requestContextKey = `${ownerId}:${weekStart}`;
+    if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+    try {
+      const result = await mealPlanApi<ApiResponse>(`/api/nutrition/v1/meal-plan/week?weekStart=${encodeURIComponent(weekStart)}&date=${encodeURIComponent(selectedDate)}`);
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      if (result.week && result.week.user_id !== ownerId) throw new Error("Shopping week owner identity mismatch.");
+      setData(result);
+      setError("");
+    } catch (cause) {
+      if (!sameMealPlanOwnerWeekContext(activeShoppingContextKeyRef.current, requestContextKey)) return;
+      setError(cause instanceof Error ? cause.message : nt("shoppingLoadFailed"));
+    }
+  }, [nt, ownerId, selectedDate, weekStart]);
   useEffect(() => { void load(); }, [load]);
 
   const shoppingOverride = useMemo(() => shoppingFromWeek(data?.week ?? null), [data]);
