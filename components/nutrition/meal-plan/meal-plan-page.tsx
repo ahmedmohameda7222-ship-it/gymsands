@@ -613,7 +613,7 @@ export function MealPlanPage() {
           operationId, weekId: workingWeekId ?? localWeekId(targetWeekStart), baseRevision: workingRevision, target: targetAuthority,
           payload: { weekStartDate: targetWeekStart, mutation, baseSnapshot: targetSnapshot(working, targetAuthority) },
           status: typeof navigator !== "undefined" && navigator.onLine ? "needs_attention" : "queued",
-          ...(typeof navigator !== "undefined" && navigator.onLine ? { error: cause instanceof Error ? cause.message : "Copy needs attention." } : {}),
+          ...(typeof navigator !== "undefined" && navigator.onLine ? { lastError: cause instanceof Error ? cause.message : "Copy needs attention." } : {}),
         };
         writeQueue(ownerId, targetWeekStart, enqueueMealPlanMutation(readQueue(ownerId, targetWeekStart), queued));
         const optimisticWeekId = workingWeekId ?? localWeekId(targetWeekStart);
