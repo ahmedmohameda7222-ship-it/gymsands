@@ -615,7 +615,9 @@ export function MealPlanPage() {
   }
 
   async function saveBulkCopy() {
-    if (!bulkCopyDraft || !data) return;
+    if (!bulkCopyDraft || !data || !ownerId) return;
+    const requestContextKey = cacheKey(ownerId, weekStart);
+    if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
     const sourceRows = bulkCopyDraft.scope === "day" ? selectedOccurrences : data.occurrences;
     if (!sourceRows.length) { setNotice(`There is nothing to copy from this ${bulkCopyDraft.scope}.`); setBulkCopyDraft(null); return; }
     const targetWeekStart = bulkCopyDraft.scope === "week" ? startOfMealPlanWeek(bulkCopyDraft.targetDate, effectiveFirstDay) : startOfMealPlanWeek(bulkCopyDraft.targetDate, effectiveFirstDay);
@@ -624,6 +626,7 @@ export function MealPlanPage() {
       return copyPlannedOccurrences([copySource(item)], [targetDate], () => crypto.randomUUID());
     });
     await writeCopiesToWeek(targetWeekStart, copies);
+    if (!sameMealPlanOwnerWeekContext(activeMealPlanContextKeyRef.current, requestContextKey)) return;
     setNotice(`${bulkCopyDraft.scope === "day" ? "Day" : "Week"} copied with fresh planned-item identities. Execution, reminder, and Shopping state were not copied.`);
     setBulkCopyDraft(null);
   }
