@@ -175,7 +175,7 @@ N101: SCOPED_WORKFLOW_PREPARED_UNEXECUTED_NO_G11
 N102: TWENTY_FIVE_FOUNDATION_SOURCE_TESTS_AUTHORED_FNDDS_ORIGINAL_MISSING
 N103: EIGHTEEN_DISPOSABLE_GOVERNANCE_INGESTION_CASES_AUTHORED_NOT_RUN
 N104: THIRTY_TWO_GENERATION_SEARCH_CASES_AUTHORED_UNTESTED
-N105: FORTY_NINE_CONSUMER_CASES_AUTHORED_UNTESTED
+N105: FIFTY_CONSUMER_CASES_AUTHORED_UNTESTED
 N106: NINETEEN_MCP_PRIVACY_API_CASES_AUTHORED_AUTH_INTEGRATION_GAP
 N107: SIXTEEN_BROWSER_CASES_AUTHORED_UNTESTED
 N108: SEVEN_MIGRATION_RELEASE_CASES_AUTHORED_ORIGINAL_ARCHIVES_ABSENT
@@ -693,3 +693,11 @@ N130: BLOCKED_DEPENDS_ON_FINAL_SIGNOFF
 - Inspected separate frozen Nutrition scaling in `services/nutrition-v1/server/food-handoff.ts` and `recipe-handoff.ts`. Both multiplied individually finite known nutrient values by finite positive serving quantities without checking result finiteness; Recipe shopping ingredients could likewise overflow or underflow to zero after `ingredientQuantity/servings*quantity`. These unsafe results risk silent JSON `Infinity→null` or invalid Shopping values despite valid source nutrient presence.
 - Added pure N105 regression **first, NOT RUN** at `c279b49561e79063ade4070cbd191f44d25626fe`. New `lib/nutrition-v1/handoff-scaling.ts` at `8a93e402b1f44d298f50fb364289a8376b5248d3` enforces nonnegative known finite facts, positive finite quantity, finite scaled results and preserves Food's 0.001 rounding when its multiplier is representable. It returns explicit `null` only for originally unknown values; it never serializes overflow as a fabricated unknown. `NutritionHandoffScaleOverflowError` has a bounded static public error/status 400; `nutritionErrorResponse` handles it at `9748cc6b23786488f63686a5374fe016f9f7b7f3`.
 - Routed Food values at `5a04fa5e39bcc0518af46b79ecb567ec27bd8876`; Recipe frozen values and derived Shopping quantities at `78569e63c37ff3cdcc1fcdd71553efea9d8ea62f`, preserving source identity and owner lookups. N105 consumer minimum **48→49**, seven-group authored minimum **166 = 25+18+32+49+19+16+7** (runner `eda2e2554fb918a71837194d65905af78faa5c9b`). **SOURCE_AUTHORED_UNTESTED**; not a real HTTP 400 pass, no tests/CI, DB changes, merges, deployments or Production writes.
+
+
+## N093 Add-To Food/Recipe URL decimal handoff — 2026-11-21
+
+- Source root cause: client `lib/nutrition-v1/add-to-handoff.ts`, Recipe GET `/api/nutrition/v1/recipes/[recipeId]/handoff` and Food GET `/api/nutrition/v1/foods/[foodId]/handoff` used inconsistent URL quantities. `Number(search.get("quantity"))` silently accepted hex (`0x10`→16), binary and octal spellings as measured quantities. Client Recipe query also treated an **explicit blank** quantity as omitted and synthesized **1 serving**, while the Recipe API already rejected explicit blank; both were inconsistent with the JSON quantity boundary.
+- Authored one N105 regression **first** at `49945d37a123cbe0a58d2b3f1b97fbcd9061cf86`, not executed. Added shared positive decimal/exponent URL query parser to `lib/nutrition-v1/handoff-quantity.ts` at `d5e6fc6aac3af926dced2c6f17ee283a0c8ed0fd`. A same-session source readback identified an incorrect double-backslash literal in that draft; **immediately corrected source** at `acb090828cbb65474d13db8c47993996a119f4dc` and confirmed the regex contains exactly four intended single escapes. No success claimed for the transient draft.
+- Wired client Food/Recipe Add-To consistently at `920881999252ae12d2033786d21a7c2679bdfe5a` and authoritative Food GET at `51e58e29b6e30c1d8479f756f62dbcca81f9066e`. Omitted Recipe quantity still defaults **1**, but explicit blank/hex/binary/octal/nonfinite fails; valid positive decimal and exponent strings remain supported. Authoritative Recipe GET delegates to shared parser already. No Food or Recipe source resolution, owner scope, DB contract or provenance changes.
+- Final-only N105 consumer minimum **49→50** at `d8dba210a8ce1300847e2301c794979212e91e4c`; seven-group source minimum **167 = 25+18+32+50+19+16+7**. **SOURCE_AUTHORED_UNTESTED**, no actual browser/server/CI test, Production data write, release or merge.
