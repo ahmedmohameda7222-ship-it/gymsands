@@ -725,3 +725,29 @@ test("Meal Plan async context must match owner and week before replay",()=>{
   assert.equal(sameMealPlanOwnerWeekContext(ownerAWeek,null),false);
   assert.equal(sameMealPlanOwnerWeekContext("",""),false);
 });
+
+// N095: legacy cache JSON had no owner envelope and could be loaded as an
+// arbitrary WeekResponse after an out-of-order request or local corruption.
+const {serializeOwnedMealPlanWeekCache,deserializeOwnedMealPlanWeekCache}=
+  await vite.ssrLoadModule("/lib/nutrition-v1/meal-plan-offline.ts");
+test("Offline Meal Plan caches reject unversioned, foreign-owner and malformed projections",()=>{
+  const owner="owner-A",weekStart="2026-11-16";
+  const valid={week:{id:"week-A",user_id:owner,week_start_date:weekStart,revision:0,
+    week_override_json:{}},occurrences:[],target:{available:false},
+    pendingChangeRequests:[],shoppingNeeds:[]};
+  const saved=serializeOwnedMealPlanWeekCache(owner,weekStart,valid);
+  assert.deepEqual(deserializeOwnedMealPlanWeekCache(saved,owner,weekStart),valid);
+  assert.equal(deserializeOwnedMealPlanWeekCache(saved,"owner-B",weekStart),null);
+  assert.equal(deserializeOwnedMealPlanWeekCache(saved,owner,"2026-11-23"),null);
+  assert.equal(deserializeOwnedMealPlanWeekCache(JSON.stringify(valid),owner,weekStart),null,
+    "Pre-v2 owner-unbound cache is untrusted and must be discarded");
+  assert.equal(deserializeOwnedMealPlanWeekCache("not JSON",owner,weekStart),null);
+  assert.throws(()=>serializeOwnedMealPlanWeekCache(owner,weekStart,
+    {...valid,week:{...valid.week,user_id:"owner-B"}}),/owner|invalid/i);
+  assert.throws(()=>serializeOwnedMealPlanWeekCache(owner,weekStart,
+    {...valid,occurrences:[{id:"occurrence",user_id:"owner-B"}]}),/owner|invalid/i);
+  assert.throws(()=>serializeOwnedMealPlanWeekCache(owner,weekStart,
+    {...valid,occurrences:null}),/invalid/i);
+  assert.equal(deserializeOwnedMealPlanWeekCache(JSON.stringify({version:2,ownerId:owner,
+    weekStartDate:weekStart,projection:{}}),owner,weekStart),null);
+});
