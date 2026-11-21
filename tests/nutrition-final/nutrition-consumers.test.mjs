@@ -424,3 +424,16 @@ test("Custom Food numeric basis rejects non-measured quantities without inventin
   assert.equal(optionalPositiveFoodNumber(100,"Basis amount"),100);
   assert.equal(optionalPositiveFoodNumber(0.5,"Basis amount"),0.5);
 });
+
+
+// N093: Food→Diary/Meal Plan/Recipe/Saved Meal and Recipe→consumer handoffs
+// must use an actual, finite, positive quantity, never JS numeric coercion.
+const { parsePositiveHandoffQuantity }=
+  await vite.ssrLoadModule("/lib/nutrition-v1/handoff-quantity.ts");
+test("Food and Recipe handoff quantities cannot be fabricated from booleans or strings",()=>{
+  for(const input of [null,undefined,"","1",true,false,0,-1,NaN,Infinity,{},[]]){
+    assert.equal(parsePositiveHandoffQuantity(input),null);
+  }
+  assert.equal(parsePositiveHandoffQuantity(1),1);
+  assert.equal(parsePositiveHandoffQuantity(0.5),0.5);
+});
