@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { canPersistDiaryDraftForHydratedOwner } from "@/lib/nutrition-v1/diary-draft-owner";
 import { PlateDock, type DiaryPlateItem, type DiaryPlateNutrition } from "@/components/nutrition/diary/plate-dock";
 import { normalizeProductBarcode } from "@/lib/barcodes";
 import { useEatTranslation } from "@/lib/i18n/eat";
@@ -151,6 +152,7 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
   const [mode, setMode] = useState<LoggerMode>("search");
   const [plate, setPlate] = useState<DiaryPlateItem[]>([]);
   const [pendingOperationId, setPendingOperationId] = useState<string | null>(null);
+  const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>("editing");
   const [feedback, setFeedback] = useState("");
   const [query, setQuery] = useState("");
@@ -169,22 +171,28 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
   const key = useMemo(() => userId ? draftKey(userId, date, meal, plannedOccurrence?.id) : null, [date, meal, plannedOccurrence?.id, userId]);
 
   useEffect(() => {
+    // Clear the old owner's in-memory plate before enabling writes for this key.
+    // A subsequent write effect must not persist stale plate/operationId data.
+    setHydratedDraftKey(null);
+    setPlate([]);
+    setPendingOperationId(null);
     if (!userId) return;
     const scopedKey = draftKey(userId, date, meal, plannedOccurrence?.id);
     localStorage.removeItem(legacyDraftKey(date, meal, plannedOccurrence?.id));
-    setPlate([]);
-    setPendingOperationId(null);
     const stored = localStorage.getItem(scopedKey);
-    if (!stored) return;
-    try {
-      const draft = JSON.parse(stored) as DraftPayload;
-      if (Date.now() - draft.savedAt <= DIARY_DRAFT_TTL_MS && Array.isArray(draft.plate)) {
-        setPlate(draft.plate);
-        setPendingOperationId(typeof draft.pendingOperationId === "string" && draft.pendingOperationId ? draft.pendingOperationId : null);
-      } else localStorage.removeItem(scopedKey);
-    } catch {
-      localStorage.removeItem(scopedKey);
+    if (stored) {
+      try {
+        const draft = JSON.parse(stored) as DraftPayload;
+        if (Number.isFinite(draft.savedAt) && Date.now() - draft.savedAt >= 0
+          && Date.now() - draft.savedAt <= DIARY_DRAFT_TTL_MS && Array.isArray(draft.plate)) {
+          setPlate(draft.plate);
+          setPendingOperationId(typeof draft.pendingOperationId === "string" && draft.pendingOperationId ? draft.pendingOperationId : null);
+        } else localStorage.removeItem(scopedKey);
+      } catch {
+        localStorage.removeItem(scopedKey);
+      }
     }
+    setHydratedDraftKey(scopedKey);
   }, [date, meal, plannedOccurrence?.id, userId]);
   useEffect(() => {
     if (!plannedOccurrence) return;
@@ -194,9 +202,13 @@ export function LoggingSession({ date, meal, savedMeals, plannedOccurrence = nul
     setPlate((current) => current.length ? current : seed); setFeedback(text.plannedLoaded);
   }, [plannedOccurrence, text.placeholderUnverified, text.plannedLoaded, text.plannedUnresolved]);
   useEffect(() => {
-    if (!userId) return;
-    if (plate.length) localStorage.setItem(draftKey(userId, date, meal, plannedOccurrence?.id), JSON.stringify({ savedAt: Date.now(), plate, pendingOperationId } satisfies DraftPayload));
-  }, [date, meal, pendingOperationId, plannedOccurrence?.id, plate, userId]);
+    if (!canPersistDiaryDraftForHydratedOwner(key, hydratedDraftKey)) return;
+    if (plate.length) {
+      localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), plate, pendingOperationId } satisfies DraftPayload));
+    } else {
+      localStorage.removeItem(key);
+    }
+  }, [hydratedDraftKey, key, pendingOperationId, plate]);
   const clearConfirmedDraft = useCallback(() => { if (key) localStorage.removeItem(key); }, [key]);
 
   useEffect(() => {
