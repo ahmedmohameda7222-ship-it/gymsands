@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parsePositiveHandoffQuantity } from "@/lib/nutrition-v1/handoff-quantity";
 
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { createSupabaseServerClient } from "@/lib/integrations/env";
@@ -22,6 +23,12 @@ function text(value: unknown, label: string) {
   return result;
 }
 
+function requiredPositiveQuantity(value: unknown, label: string) {
+  const quantity = parsePositiveHandoffQuantity(value);
+  if (quantity === null) throw new NutritionRequestError(`${label} must be greater than zero.`);
+  return quantity;
+}
+
 async function resolveSource(ownerSupabase: Parameters<typeof resolveFoodHandoffWithAuthorities>[0], catalogSupabase: Parameters<typeof resolveFoodHandoffWithAuthorities>[1], userId: string, raw: Record<string, unknown>) {
   if (raw.type === "food") {
     const source = raw.source;
@@ -29,7 +36,7 @@ async function resolveSource(ownerSupabase: Parameters<typeof resolveFoodHandoff
     return { kind: "food" as const, value: await resolveFoodHandoffWithAuthorities(ownerSupabase, catalogSupabase, userId, {
       foodId: text(raw.id, "Food"),
       source,
-      quantity: Number(raw.quantity),
+      quantity: requiredPositiveQuantity(raw.quantity, "Food quantity"),
       serving: text(raw.serving, "Serving"),
       servingOptionId: typeof raw.servingOptionId === "string" && raw.servingOptionId.trim() ? raw.servingOptionId.trim() : null,
       displayName: source === "catalog" ? text(raw.displayName, "Food display name") : undefined,
@@ -37,8 +44,7 @@ async function resolveSource(ownerSupabase: Parameters<typeof resolveFoodHandoff
     }) };
   }
   if (raw.type === "recipe") {
-    const quantity = Number(raw.quantity ?? 1);
-    if (!Number.isFinite(quantity) || quantity <= 0) throw new NutritionRequestError("Recipe serving quantity must be greater than zero.");
+    const quantity = requiredPositiveQuantity(raw.quantity ?? 1, "Recipe serving quantity");
     return { kind: "recipe" as const, value: await resolveRecipeHandoff(
       ownerSupabase,
       userId,
