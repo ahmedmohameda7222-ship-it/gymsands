@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { RecipeNutritionPerServing } from "@/lib/nutrition-v1/recipe-cache";
+import { recipeVersionBackfillIds } from "@/lib/nutrition-v1/recipe-list-page";
 import { normalizeOwnedRecipeCoverPath } from "@/lib/nutrition-v1/recipe-cover-path";
 import { clonePublishedRecipeGraphForDraft } from "@/lib/nutrition-v1/recipe-versioning";
 import { getCurrentCatalogTrustStates } from "@/services/nutrition-v1/server/current-food-trust";
@@ -201,7 +202,29 @@ export async function listRecipeHome(
   dbError(usageResult.error);
 
   const drafts = new Map(((draftsResult.data ?? []) as RecipeDraftRow[]).map((row) => [row.recipe_id, row]));
-  const versions = latestVersions((versionsResult.data ?? []) as RecipeVersionRow[]);
+  const versionRows = (versionsResult.data ?? []) as RecipeVersionRow[];
+  const versions = latestVersions(versionRows);
+  // A global limit is a performance bound, not proof every Recipe root was
+  // represented. Resolve only missing roots if the result reached that cap.
+  const missingVersionIds = recipeVersionBackfillIds(ids, versionRows, limit * 12);
+  if (missingVersionIds.length) {
+    const backfills = await Promise.all(missingVersionIds.map((id) =>
+      supabase.from("nutrition_recipe_versions").select("*")
+        .eq("user_id", userId).eq("recipe_id", id)
+        .order("version_number", { ascending: false }).limit(1).maybeSingle(),
+    ));
+    for (let index = 0; index < missingVersionIds.length; index += 1) {
+      const result = backfills[index];
+      dbError(result.error);
+      if (result.data) {
+        const version = result.data as RecipeVersionRow;
+        if (version.recipe_id !== missingVersionIds[index]) {
+          throw new Error("Recipe latest version did not match its owner-scoped root.");
+        }
+        versions.set(missingVersionIds[index], version);
+      }
+    }
+  }
   const lastUsed = new Map<string, string>();
   for (const row of (usageResult.data ?? []) as Array<{ source_id: string | null; created_at: string }>) {
     if (row.source_id && !lastUsed.has(row.source_id)) lastUsed.set(row.source_id, row.created_at);
