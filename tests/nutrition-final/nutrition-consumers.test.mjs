@@ -551,3 +551,16 @@ test("Offline Meal Plan revision tokens cannot exceed safe integer range",()=>{
   const accepted=reconcileMealPlanQueue([queueEntry],{serverRevision:Number.MAX_SAFE_INTEGER,changedTargets:[]});
   assert.equal(accepted[0].baseRevision,Number.MAX_SAFE_INTEGER);
 });
+
+// N095: completion executionSnapshot is optional JSON object; a primitive or
+// array must never be passed through the service as a DB failure / HTTP 500.
+const {isOptionalDiaryExecutionSnapshot}=await vite.ssrLoadModule("/lib/nutrition-v1/diary-execution-input.ts");
+test("Diary planned-occurrence execution snapshot rejects non-object JSON",()=>{
+  assert.equal(isOptionalDiaryExecutionSnapshot(undefined),true);
+  assert.equal(isOptionalDiaryExecutionSnapshot(null),true);
+  assert.equal(isOptionalDiaryExecutionSnapshot({}),true);
+  assert.equal(isOptionalDiaryExecutionSnapshot({quantity:1,nutrition:{calories:null}}),true);
+  for(const raw of [false,true,0,1,"", "{}",[],[{}]]){
+    assert.equal(isOptionalDiaryExecutionSnapshot(raw),false);
+  }
+});
