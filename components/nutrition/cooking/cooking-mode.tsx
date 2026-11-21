@@ -475,6 +475,9 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
 
   const updateAction = useCallback(async (state: CookingLocalActionStateValue) => {
     if (!session || !timeline?.now) return;
+    const requestContextKey = `${authOwnerId ?? "__signed_out__"}:${recipeId}`;
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)
+      || (authOwnerId !== null && userId !== authOwnerId)) return;
     const now = nowIso();
     const actionKey = timeline.now.id;
     const nextRevision = session.stateRevision + 1;
@@ -512,16 +515,18 @@ export function CookingMode({ recipeId }: { recipeId: string }) {
       createdAt: now,
     };
     const persisted = await persistAndSync(next, operation);
+    if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
     if (state === "completed" && !preview.now && !preview.running.length) {
       const completed = completeLocalCookingSession(persisted, now);
       writeLocal(completed);
       setSession(completed);
       if (userId && navigator.onLine) {
         const reconciled = await flushPending(completed, userId);
+        if (!sameCookingOwnerRecipeContext(activeCookingContextKeyRef.current, requestContextKey)) return;
         setSession(reconciled);
       }
     }
-  }, [facts, flushPending, persistAndSync, recoveredTimers, session, timeline, userId, writeLocal]);
+  }, [authOwnerId, facts, flushPending, persistAndSync, recipeId, recoveredTimers, session, timeline, userId, writeLocal]);
 
   const startTimer = useCallback(async () => {
     if (!session || !timeline?.now) return;
