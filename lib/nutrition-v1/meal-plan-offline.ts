@@ -160,3 +160,13 @@ export function deserializeMealPlanQueue(value: string): MealPlanOfflineMutation
     return [];
   }
 }
+
+/** React request/replay callbacks must not commit across an owner/week change. */
+export function sameMealPlanOwnerWeekContext(
+  currentKey: string | null,
+  requestKey: string | null,
+): currentKey is string {
+  return typeof currentKey === "string"
+    && currentKey.length > 0
+    && currentKey === requestKey;
+}
