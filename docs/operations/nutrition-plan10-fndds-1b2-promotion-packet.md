@@ -1,0 +1,32 @@
+# Plaivra Plan 10 — FNDDS 1B2 full reconciliation/promotion packet (N061)
+
+**Status: DESIGN ONLY — G-09 and final QA/Production approvals NOT MET.** Not an ingestion script, not a manifest, not a Production command. This packet operates only **after** a healthy 1A1/1A2 Plan 9 generation and approved 1B1 canary or an explicitly recorded sequencing exception. The 2024-10-31 FNDDS ZIP is officially identified but actual original bytes and SHA-256 are not independently verified. No real FNDDS 1B1 or 1B2 records have been imported.
+
+## 1B1-to-1B2 evidence handover
+
+Record before any 1B2 work: Plan 9 1A1/1A2 publication and member search acceptance, reviewed 1B1 source lock/manifest/checksums, 1B1 review/dry-run/draft/activation/generation promotion event and its exact persisted IDs, canary overlap/duplicate outcomes, previous and new current-generation pointers, validation report checksum, reviewer identity and scope, and explicit outstanding quarantines. If any evidence is missing or contradictory, **STOP**, preserve current-generation authority and do not infer previous success from a document or a mock test.
+
+## Source/index continuity: never replay an old selection
+
+1. Fetch the immutable official FNDDS 2021–2023 archive bytes and verify exact pinned original ZIP SHA; parse under the reviewed FNDDS importer/config checksum and record source rows, nutrient/portion gaps and stable source-record IDs. The `USDA_FDC/FoundationFoods/2026-04-30` 1A1 lock remains unchanged. FNDDS must be a distinct source namespace.
+2. Re-read current **post-1B1** indexed source identities, GTIN owners, semantic owners, aliases, redirects, and possible duplicates; record a fresh deterministic match-index digest. Do **not** reuse 1A1/1A2 or pre-1B1 index. Current latest generation and status must be observed from Production in read-only mode before each separate write decision.
+3. Run full-version reconciliation through existing `lib/food-catalog/ingestion/engine.ts` and `matching.ts`. For the same provider/dataset/version/sourceRecordId, an already persisted 1B1 record must be idempotent; distinct source and survey IDs never collapse solely by common name or `fdcId`. `match` must preserve canonical Food root/redirect lineage. `create` is allowed only for genuinely new approved identity. `possible_duplicate` and `reject` must remain quarantined with exact codes and reviewer disposition. Prevent creation when the source record is already owned by a different canonical root unless explicitly resolved through existing reviewed governance.
+4. Reconcile the 1B2 manifest totals (`input`, `accepted`, `rejected`, `matched`, `created`, `possibleDuplicate`, `quarantined`) to actual accepted rows; check two repeated full offline passes yield identical canonical manifest content digest and selected source-record IDs. Review source-backed servings/grams and all nullable nutrition; no artificial values for energy, macros, measures, brands, locale or market relevance.
+
+## Separate operations; one exact approval each
+
+- **Review only:** source/license, 1B2 complete candidate index, checksum, human review of collisions and quarantines, existing published generation and frozen history. G-09 and G-11 proofs required; no data mutation.
+- **Persisted database dry-run:** `executeFoodCatalogDatabaseDryRun` writes batch/run/source/reconciliation evidence. Must be specifically authorized with exact manifest digest, actor principal, expected rows and operation namespace. Read back and compare; stop on drift.
+- **Draft ingestion:** `executeApprovedFoodCatalogDraftMutation` requires `reviewState=approved` for exact original content; distinct authorization, lease/idempotent operation IDs, source legal acceptance. No direct SQL seed or unreviewed UPDATE.
+- **Activation:** review every Food lifecycle/eligibility, blocked reason and source license; `createActivationSet`/ `grantActivationSet` require their own exact approved actor and manifest. Never activate unresolved duplicates or unverified servings.
+- **Full immutable generation:** include all previously valid 1A1/1A2+1B1 Food roots, accepted 1B2 additions, existing redirects/versions, current-generation search documents and nutrition projections. Do not overwrite historical Diary/Meal Plan/Recipe/Saved Meal frozen source snapshots.
+- **CAS promotion:** `promoteCatalogGeneration` requires real `operationId`, `generationId`, `expectedCurrentGenerationId`, `generationChecksumSha256`, `validationReportId`, `validationReportChecksumSha256`, actor. The expected current pointer must match a freshly observed value; if changed, stop and rerun reconciliation/validation, **never** retry with forced bypass. This is an exact **new** approval, not inherited from 1B1.
+- **Acceptance:** re-read pointer/rows/source mappings, cross-source same-ID idempotency, translated Food search EN/DE/AR, serving behavior and frozen consumer history under legitimate approved accounts. Audit no alias duplicates, no missing published 1B1 Foods, and no owner-crossing. Preserve original manifests, logs and signed decision evidence.
+
+## Recovery and fail-closed decisions
+
+- Before promotion, record current generation ID/checksum, prior promotion event ID, prior validation-report ID/checksum, backup/retention status and actor. `rollbackCatalogGeneration` requires these real IDs and a new exact approval; it uses `expectedCurrentGenerationId` CAS, not a blind pointer UPDATE.
+- On validation or CAS drift: **do not promote**. On observed post-promotion regression: collect immutable evidence, request separate approved rollback to prior proven generation using the canonical command store. Retain all source/grant/review evidence; no destructive cleanup or migration rollback.
+- If 1B1 canary is not in Production, if original ZIP unknown, if FNDDS attribution/licensing/canary source facts incomplete or if Nutrition-only final QA did not pass on the exact reviewed HEAD: **BLOCK 1B2**. Report the missing link instead of constructing synthetic Food identities.
+
+**Fill only from future real execution:** locked ZIP SHA/length, source parser/config digests, 1B1 and 1B2 manifest checksums, fresh source index SHA/time, exact quarantines, real 1B2 run/batch/draft/activation IDs, validation report IDs/checksums, before/after generation IDs and CAS event, actor/Owner decision and member-facing acceptance record. No placeholders here are executable authorization.
