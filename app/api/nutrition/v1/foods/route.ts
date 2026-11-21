@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
+import { parseNonNegativeFoodSearchQueryAmount } from "@/lib/nutrition-v1/food-search-query-numbers";
 import { createSupabaseServerClient } from "@/lib/integrations/env";
-import { nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
+import { NutritionRequestError, nutritionErrorResponse } from "@/services/nutrition-v1/server/errors";
 import {
   listFoodLibrary,
   setFoodFavorite,
@@ -25,26 +26,28 @@ function language(value: string | null): FoodLibraryLocale {
 
 function numberFilter(value: string | null, operator: "gte" | "lte"): FoodLibraryNumericFilter | undefined {
   if (value === null || value.trim() === "") return undefined;
-  const number = Number(value);
-  return Number.isFinite(number) ? { operator, value: number } : undefined;
+  const number = parseNonNegativeFoodSearchQueryAmount(value);
+  if (number === null) throw new NutritionRequestError("Food nutrient filter amount is invalid.");
+  return { operator, value: number };
 }
 
 function numericFilter(params: URLSearchParams, nutrient: "protein" | "carbs" | "fat"): FoodLibraryNumericFilter | undefined {
   const operator = params.get(`${nutrient}Op`);
-  if (operator !== "gt" && operator !== "lt" && operator !== "eq" && operator !== "gte" && operator !== "lte" && operator !== "between") return undefined;
-  const rawValue = params.get(`${nutrient}Value`);
-  if (rawValue === null || rawValue.trim() === "") return undefined;
-  const value = Number(rawValue);
-  if (!Number.isFinite(value)) return undefined;
-  if (operator === "gt") return { operator: "gt", value };
-  if (operator === "lt") return { operator: "lt", value };
-  if (operator === "eq") return { operator: "eq", value };
-  if (operator === "gte") return { operator: "gte", value };
-  if (operator === "lte") return { operator: "lte", value };
-  const rawMax = params.get(`${nutrient}Max`);
-  if (rawMax === null || rawMax.trim() === "") return undefined;
-  const max = Number(rawMax);
-  return Number.isFinite(max) ? { operator: "between", value, max } : undefined;
+  if (operator === null) {
+    if (params.has(`${nutrient}Value`) || params.has(`${nutrient}Max`)) {
+      throw new NutritionRequestError(`${nutrient} filter operator is required.`);
+    }
+    return undefined;
+  }
+  if (operator !== "gt" && operator !== "lt" && operator !== "eq" && operator !== "gte" && operator !== "lte" && operator !== "between") {
+    throw new NutritionRequestError(`${nutrient} filter operator is invalid.`);
+  }
+  const value = parseNonNegativeFoodSearchQueryAmount(params.get(`${nutrient}Value`));
+  if (value === null) throw new NutritionRequestError(`${nutrient} filter amount is invalid.`);
+  if (operator !== "between") return { operator, value };
+  const max = parseNonNegativeFoodSearchQueryAmount(params.get(`${nutrient}Max`));
+  if (max === null) throw new NutritionRequestError(`${nutrient} filter maximum is invalid.`);
+  return { operator: "between", value, max };
 }
 
 export async function GET(request: Request) {
