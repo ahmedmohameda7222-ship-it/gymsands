@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { normalizeOwnedRecipeCoverPath } from "@/lib/nutrition-v1/recipe-cover-path";
+import { parseNonNegativeRevision } from "@/lib/nutrition-v1/write-revision";
 import { createSupabaseServerClient } from "@/lib/integrations/env";
 import { requireNutritionUser, nutritionJson } from "@/lib/nutrition-v1/http";
 import { nutritionErrorResponse, NutritionRequestError } from "@/services/nutrition-v1/server/errors";
@@ -30,9 +31,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ re
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     if (body.operation === "autosave") {
       const draft = body.draft;
-      const expectedRevision = Number(body.expectedRevision);
+      const expectedRevision = parseNonNegativeRevision(body.expectedRevision);
       if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new NutritionRequestError("Recipe Draft payload is required.");
-      if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new NutritionRequestError("Recipe Working Draft expected revision is required.");
+      if (expectedRevision === null) throw new NutritionRequestError("Recipe Working Draft expected revision is required.");
       await autosaveRecipeDraft(context.supabase, context.user.id, recipeId, draft as Parameters<typeof autosaveRecipeDraft>[3], expectedRevision);
       const catalogSupabase = createSupabaseServerClient(null, true);
       return nutritionJson({ recipe: await getRecipeWorkspace(context.supabase, catalogSupabase, context.user.id, recipeId) });
